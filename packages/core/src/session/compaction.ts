@@ -714,7 +714,8 @@ export const layer = Layer.effect(
      *
      * When the whole transcript does not fit, exchanges are shortened oldest first, one level at a time, until it
      * does (see `flattenMessage` for the levels): every exchange reaches a level before any reaches the next, so
-     * detail is lost from the oldest history first and whole exchanges are omitted only as a last resort. The newest
+     * detail is lost from the oldest history first. Within an exchange, tool outputs are clipped largest first,
+     * stopping once the request fits. Whole exchanges are omitted only as a last resort. The newest
      * exchange is never omitted; undefined when the transcript cannot fit even so.
      */
     const flattenAndDropOldest = (request: LLMRequest, context: SessionContext.Loaded, target: number) => {
@@ -733,11 +734,13 @@ export const layer = Layer.effect(
         : request.messages.slice(0, end)
       const recent = summary ? SessionRecentText.kept(summary) : ""
 
-      // A user message and everything after it, up to the next one, is one exchange. Each is rendered at every level
-      // once, so shortening is running arithmetic over these sizes. The previous summary's recent part is already
+      // A user message and everything after it, up to the next one, is one exchange. Keep individual parts for
+      // selective output clipping and render the later levels up front. The previous summary's recent part is already
       // shortened text: whole until it is omitted.
       const exchanges = [
-        ...(recent ? [TRANSCRIPT_LEVELS.map((level) => (level === OMITTED ? "" : recent))] : []),
+        ...(recent
+          ? [{ renders: TRANSCRIPT_LEVELS.map((level) => (level === OMITTED ? "" : recent)), parts: [] }]
+          : []),
         ...request.messages
           .slice(end)
           .reduce<Message[][]>((groups, message) => {
@@ -745,15 +748,23 @@ export const layer = Layer.effect(
             else groups[groups.length - 1].push(message)
             return groups
           }, [])
-          .map((group) =>
-            TRANSCRIPT_LEVELS.map((level) =>
+          .map((group) => ({
+            renders: TRANSCRIPT_LEVELS.map((level) =>
               group
                 .map((message) => flattenMessage(message, level))
                 .filter(Boolean)
                 .join("\n"),
             ),
-          )
-          .filter((renders) => renders[0]),
+            parts: group
+              .flatMap((message) =>
+                message.content.map((part) => ({
+                  whole: flattenMessage(message, 0, [part]),
+                  clipped: flattenMessage(message, OUTPUTS_CLIPPED, [part]),
+                })),
+              )
+              .filter((part) => part.whole),
+          }))
+          .filter((exchange) => exchange.renders[0]),
       ]
       if (exchanges.length === 0) return undefined
       const note = (omitted: number) =>
@@ -766,22 +777,42 @@ export const layer = Layer.effect(
         Token.estimate(note(exchanges.length))
 
       const levels = exchanges.map(() => 0)
-      let total = exchanges.reduce((sum, renders) => sum + size(renders[0]), 0)
+      let total = exchanges.reduce((sum, exchange) => sum + size(exchange.renders[0]), 0)
       const newest = exchanges.length - 1
       for (const level of TRANSCRIPT_LEVELS.slice(1)) {
         for (let index = 0; index < exchanges.length && total > room; index++) {
+          const exchange = exchanges[index]
+          if (level === OUTPUTS_CLIPPED && exchange.parts.length > 0) {
+            const parts = exchange.parts.map((part) => part.whole)
+            const candidates = exchange.parts
+              .map((part, index) => ({ index, saved: size(part.whole) - size(part.clipped) }))
+              .filter((part) => part.saved > 0)
+              .sort((a, b) => b.saved - a.saved)
+            let previous = size(exchange.renders[0])
+            for (const candidate of candidates) {
+              if (total <= room) break
+              parts[candidate.index] = exchange.parts[candidate.index].clipped
+              const text = parts.join("\n")
+              const next = size(text)
+              total += next - previous
+              previous = next
+              exchange.renders[OUTPUTS_CLIPPED] = text
+            }
+            levels[index] = OUTPUTS_CLIPPED
+            continue
+          }
           // The newest exchange is what the summary most needs; it is shortened but never left out.
-          if (index === newest && !exchanges[index][level]) continue
-          total += size(exchanges[index][level]) - size(exchanges[index][levels[index]])
+          if (index === newest && !exchange.renders[level]) continue
+          total += size(exchange.renders[level]) - size(exchange.renders[levels[index]])
           levels[index] = level
         }
       }
       if (total > room) return undefined
 
       // Includes exchanges with no user text, which are already gone at `USER_ONLY`.
-      const omitted = levels.filter((level, index) => !exchanges[index][level]).length
+      const omitted = levels.filter((level, index) => !exchanges[index].renders[level]).length
       const text = exchanges
-        .map((renders, index) => renders[levels[index]])
+        .map((exchange, index) => exchange.renders[levels[index]])
         .filter(Boolean)
         .join("\n\n")
       return { ...request, tools: [], messages: [...lead, Message.user(note(omitted) + text)] }
@@ -1068,10 +1099,10 @@ const oldestToDrop = <T>(items: ReadonlyArray<T>, size: (item: T) => number, bud
 }
 
 /** One request message as transcript lines at a shortening level. Empty for what that level leaves out. */
-const flattenMessage = (message: Message, level: number) => {
+const flattenMessage = (message: Message, level: number, content: ReadonlyArray<ContentPart> = message.content) => {
   if (message.role === "system" || level === OMITTED) return ""
   if (level >= USER_ONLY && message.role !== "user") return ""
-  return message.content
+  return content
     .flatMap((part) => {
       if (part.type === "text") {
         if (!part.text) return []

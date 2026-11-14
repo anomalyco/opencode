@@ -1059,6 +1059,50 @@ const summaryFixture = Effect.fnUntraced(function* (messages: readonly SessionMe
   }
 })
 
+for (const sample of [
+  { sizes: [150_000, 15_000, 15_000], clipped: [0] },
+  { sizes: [15_000, 150_000, 15_000], clipped: [1] },
+  { sizes: [200_000, 190_000, 15_000], clipped: [0, 1] },
+]) {
+  it.effect(`summary shortening preserves smaller tool results (${sample.sizes.join(",")})`, () =>
+    Effect.gen(function* () {
+      const outputs = sample.sizes.map((tokens, index) => `file-${index}\n${tokenText(tokens)}\nend-${index}`)
+      const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: { id: "summary-model", providerID: "test" },
+        content: outputs.map((text, index) => ({
+          type: "tool",
+          id: `call_${index}`,
+          name: "read",
+          state: { status: "completed", input: {}, content: [{ type: "text", text }] },
+          time: { created: 0 },
+        })),
+        time: { created: 0, completed: 1 },
+      })
+      const fixture = yield* summaryFixture([
+        textUser("Read the three files"),
+        assistant,
+        measured("Latest answer", summaryWindow + summaryBuffer),
+      ])
+      expect(yield* fixture.run()).toEqual({ status: "completed" })
+      const transcript = requests
+        .at(-1)!
+        .messages.flatMap((message) => message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])))
+        .join("\n")
+      expect(transcript.match(/characters omitted/g)).toHaveLength(sample.clipped.length)
+      for (const [index, output] of outputs.entries()) {
+        if (!sample.clipped.includes(index)) expect(transcript).toContain(output)
+        expect(transcript).toContain(`file-${index}`)
+        expect(transcript).toContain(`end-${index}`)
+        if (index > 0)
+          expect(transcript.indexOf(`file-${index}`)).toBeGreaterThan(transcript.indexOf(`file-${index - 1}`))
+      }
+    }),
+  )
+}
+
 for (const background of [false, true]) {
   it.effect(`summary cache prefix uses measured input with old reasoning (background=${background})`, () =>
     Effect.gen(function* () {
