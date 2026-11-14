@@ -749,7 +749,10 @@ impl Inner {
         let keys = Keys::read(tui);
         tui.data.read(|state| {
             let visible = Visible::of(state, &session);
-            let positions = self.positions.borrow();
+            // The store may have changed since the last render (the next sync renders that), so the remembered
+            // positions can name messages it no longer shows.
+            let positions =
+                visible.messages.iter().enumerate().map(|(index, message)| (message.id().to_owned(), index)).collect();
             let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
             let specs = self.specs.borrow();
             let rows = self.rows.borrow();
