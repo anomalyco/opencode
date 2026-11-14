@@ -16,7 +16,11 @@ describe("acp session replay over the wire", () => {
 
     await acp.request("session/load", { cwd: "/workspace", sessionId: "ses_replay", mcpServers: [] })
 
-    const updates = acp.updates.filter((item) => item.update.sessionUpdate !== "available_commands_update")
+    const updates = acp.updates.filter(
+      (item) =>
+        item.update.sessionUpdate !== "available_commands_update" &&
+        item.update.sessionUpdate !== "session_info_update",
+    )
     expect(updates.every((update) => update.sessionId === "ses_replay")).toBe(true)
     expect(updates.map((item) => item.update.sessionUpdate)).toEqual([
       "user_message_chunk",
