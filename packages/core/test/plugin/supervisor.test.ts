@@ -85,6 +85,7 @@ const instances = Layer.effect(
                 }),
               ),
             which: () => Effect.undefined,
+            pin: () => Effect.void,
           }),
         ),
       ),

@@ -457,3 +457,85 @@ describe("Npm.check and Npm.update", () => {
     expect(outdated).toBeFalse()
   })
 })
+
+describe("Npm.pin and cache retention", () => {
+  test("cleanup skips a pinned stale generation and reclaims it after the pin is released", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/registry-plugin@latest"
+    const root = await registry.configure(cache, spec)
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      yield* npm.add(spec)
+      // Two stale generations (timestamps from 2001) outside the keep-newest-2 window: cleanup must
+      // skip the pinned one and reclaim the unpinned one.
+      const stale = [path.join(root, "1000000000000"), path.join(root, "1000000000001")]
+      yield* Effect.promise(() => Promise.all(stale.map((dir) => fs.mkdir(dir, { recursive: true }))))
+      registry.state.latest = "1.1.0"
+      const exists = (dir: string) => Effect.promise(() => fs.stat(dir).then(() => true, () => false))
+      const whilePinned = yield* Effect.gen(function* () {
+        yield* npm.pin(stale[0])
+        yield* npm.update(spec)
+        return [yield* exists(stale[0]), yield* exists(stale[1])] as const
+      }).pipe(Effect.scoped)
+      // The lease is gone once its scope closes, so the next cleanup may reclaim the generation.
+      yield* npm.update(spec)
+      return { whilePinned, released: yield* exists(stale[0]) }
+    }).pipe(Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(result.whilePinned[0]).toBeTrue()
+    expect(result.whilePinned[1]).toBeFalse()
+    expect(result.released).toBeFalse()
+  })
+
+  test("cleanup keeps a marker mid-write and a marker from another host", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/registry-plugin@latest"
+    await registry.configure(cache, spec)
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      yield* npm.add(spec)
+      const usage = path.join(cache, "state", "npm-usage")
+      yield* Effect.promise(() => fs.mkdir(usage, { recursive: true }))
+      // A staging marker is a `pin` mid-write: removing it would break the writer's rename and
+      // silently drop the lease it is recording.
+      const staging = path.join(usage, "in-flight.staging")
+      yield* Effect.promise(() => fs.writeFile(staging, "{ broken"))
+      // Another host's process cannot be probed from here, and a state directory shared between
+      // machines makes its lease just as real, so cleanup must leave it alone while it is fresh.
+      const otherHost = path.join(usage, "other-host-marker")
+      yield* Effect.promise(() =>
+        fs.writeFile(
+          otherHost,
+          JSON.stringify({ generation: "unused", pid: 999_999, hostname: "other-host", createdAt: new Date().toISOString() }),
+        ),
+      )
+      // But nothing here could ever reap a foreign marker, so it expires by `createdAt`: a host
+      // killed without cleanup (a SIGKILLed container) must not pin its generation forever.
+      const expired = path.join(usage, "expired-other-host-marker")
+      yield* Effect.promise(() =>
+        fs.writeFile(
+          expired,
+          JSON.stringify({
+            generation: "unused",
+            pid: 999_999,
+            hostname: "other-host",
+            createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000).toISOString(),
+          }),
+        ),
+      )
+      const exists = (file: string) => Effect.promise(() => fs.stat(file).then(() => true, () => false))
+      yield* npm.update(spec)
+      return { staging: yield* exists(staging), otherHost: yield* exists(otherHost), expired: yield* exists(expired) }
+    }).pipe(Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(result.staging).toBeTrue()
+    expect(result.otherHost).toBeTrue()
+    expect(result.expired).toBeFalse()
+  })
+})
