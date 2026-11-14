@@ -44,6 +44,11 @@ pub fn split_hunks(patch: &str) -> Vec<Hunk> {
         .collect()
 }
 
+/// The hunks [`split_hunks`] finds in `patch`, counted without splitting it: at least one.
+pub fn hunk_count(patch: &str) -> usize {
+    patch.lines().filter(|line| is_hunk_header(line)).count().max(1)
+}
+
 /// `@@ -a[,b] +c[,d] @@` followed by anything.
 fn is_hunk_header(line: &str) -> bool {
     let range = |text: &str, sign: char| -> Option<usize> {
@@ -284,13 +289,19 @@ pub fn chunks(patch: &str) -> bool {
 
 /// `VirtualAddedPatch`: an added file over 3,000 lines in chunks of 128 rows, unwrapped so each chunk is exactly its
 /// rows tall. Only the chunks [`Chunked::show`] puts in view are mounted; the others are blank rows of their height.
-/// Each chunk is highlighted on its own (deviation `H06-chunked-diff-highlights`).
+/// Each chunk is highlighted on its own (deviation `H06-chunked-diff-highlights`). A theme restyles the mounted chunks
+/// in place and the ones mounted later take it.
 pub struct Chunked {
     root: View,
+    app: App,
+    filetype: Option<String>,
+    gutter_padding: u32,
     /// Each chunk's slot and patch, and its diff while mounted.
-    chunks: Vec<(View, String)>,
+    chunks: RefCell<Vec<(View, String)>>,
     mounted: RefCell<Vec<Option<Diff>>>,
-    make: Box<dyn Fn(&str) -> Diff>,
+    gutter: std::cell::Cell<DiffGutter>,
+    look: std::cell::Cell<Look>,
+    syntax: RefCell<SyntaxTheme>,
 }
 
 impl Chunked {
@@ -303,60 +314,97 @@ impl Chunked {
         filetype: Option<&str>,
         gutter_padding: u32,
     ) -> Option<Self> {
-        let chunks = split_added(patch, CHUNK_LINES)?;
-        let lines: usize = chunks.iter().map(|chunk| chunk.rows).sum();
-        if lines <= CHUNKED_MIN_LINES {
-            return None;
-        }
-        crate::grammars::register();
-        let gutter = DiffGutter { padding_left: 1 + gutter_padding, min_digits: Some(lines.to_string().len() as u32) };
-        let root = View::new(app).width(Length::Percent(100.0));
-        let chunks: Vec<(View, String)> = chunks
-            .into_iter()
-            .map(|chunk| {
-                let slot = View::new(app).height(chunk.rows as u32).shrink(0.0);
-                root.add(&slot);
-                (slot, chunk.patch)
-            })
-            .collect();
-        let (app, look, syntax, filetype) = (app.clone(), look(theme), syntax.clone(), filetype.map(str::to_owned));
-        let make = Box::new(move |patch: &str| {
-            let diff = Diff::new(&app)
-                .view(DiffView::Unified)
-                .filetype(filetype.as_deref())
-                .syntax_theme(syntax.clone())
-                .wrap(WrapMode::None)
-                .colors(look.colors)
-                .gutter(gutter)
-                .set_diff(patch);
-            let (left, right) = diff.code_views();
-            for code in [left, right] {
-                code.fg(look.text).focusable(false);
-            }
-            diff
-        });
-        let chunked = Self { root, mounted: RefCell::new(vec![None; chunks.len()]), chunks, make };
-        // Until the first `show`, the first chunks, as TS's first frame has them.
-        chunked.show(0, 0);
-        Some(chunked)
+        let chunked = Self {
+            root: View::new(app).width(Length::Percent(100.0)),
+            app: app.clone(),
+            filetype: filetype.map(str::to_owned),
+            gutter_padding,
+            chunks: RefCell::default(),
+            mounted: RefCell::default(),
+            gutter: std::cell::Cell::new(DiffGutter { padding_left: 1 + gutter_padding, min_digits: None }),
+            look: std::cell::Cell::new(look(theme)),
+            syntax: RefCell::new(syntax.clone()),
+        };
+        chunked.set_patch(patch).then_some(chunked)
     }
 
     pub fn root(&self) -> &View {
         &self.root
     }
 
+    /// Shows `patch` instead, in the same root, when it adds one file of more than 3,000 lines; `false`, changing
+    /// nothing, for any other patch.
+    pub fn set_patch(&self, patch: &str) -> bool {
+        let Some(chunks) = split_added(patch, CHUNK_LINES) else { return false };
+        let lines: usize = chunks.iter().map(|chunk| chunk.rows).sum();
+        if lines <= CHUNKED_MIN_LINES {
+            return false;
+        }
+        crate::grammars::register();
+        self.gutter.set(DiffGutter {
+            padding_left: 1 + self.gutter_padding,
+            min_digits: Some(lines.to_string().len() as u32),
+        });
+        self.root.clear();
+        let chunks: Vec<(View, String)> = chunks
+            .into_iter()
+            .map(|chunk| {
+                let slot = View::new(&self.app).height(chunk.rows as u32).shrink(0.0);
+                self.root.add(&slot);
+                (slot, chunk.patch)
+            })
+            .collect();
+        *self.mounted.borrow_mut() = vec![None; chunks.len()];
+        *self.chunks.borrow_mut() = chunks;
+        // Until the first `show`, the first chunks, as TS's first frame has them.
+        self.show(0, 0);
+        true
+    }
+
+    /// Paints the mounted chunks in `theme`, whose syntax theme is `syntax`, and the ones mounted from now on.
+    pub fn restyle(&self, theme: &Theme, syntax: &SyntaxTheme) {
+        let look = look(theme);
+        self.look.set(look);
+        *self.syntax.borrow_mut() = syntax.clone();
+        for diff in self.mounted.borrow().iter().flatten() {
+            diff.syntax_theme(syntax.clone()).colors(look.colors);
+            let (left, right) = diff.code_views();
+            for code in [left, right] {
+                code.fg(look.text);
+            }
+        }
+    }
+
+    fn make(&self, patch: &str) -> Diff {
+        let look = self.look.get();
+        let diff = Diff::new(&self.app)
+            .view(DiffView::Unified)
+            .filetype(self.filetype.as_deref())
+            .syntax_theme(self.syntax.borrow().clone())
+            .wrap(WrapMode::None)
+            .colors(look.colors)
+            .gutter(self.gutter.get())
+            .set_diff(patch);
+        let (left, right) = diff.code_views();
+        for code in [left, right] {
+            code.fg(look.text).focusable(false);
+        }
+        diff
+    }
+
     /// Mounts the chunks that rows `top..top + height` of the file overlap, and one on each side, and unmounts the
     /// others; whether it mounted or unmounted any.
     pub fn show(&self, top: i64, height: i64) -> bool {
         let size = CHUNK_LINES as i64;
-        let (first, last) = (top.div_euclid(size) - 1, (top + height).div_euclid(size) + 1);
+        let (first, last) = (top.div_euclid(size) - 1, top.saturating_add(height).div_euclid(size) + 1);
+        let chunks = self.chunks.borrow();
         let mut mounted = self.mounted.borrow_mut();
         let mut changed = false;
-        for (index, ((slot, patch), diff)) in self.chunks.iter().zip(mounted.iter_mut()).enumerate() {
+        for (index, ((slot, patch), diff)) in chunks.iter().zip(mounted.iter_mut()).enumerate() {
             let near = (first..=last).contains(&(index as i64));
             match (near, diff.is_some()) {
                 (true, false) => {
-                    let made = (self.make)(patch);
+                    let made = self.make(patch);
                     slot.add(&made);
                     *diff = Some(made);
                     changed = true;
