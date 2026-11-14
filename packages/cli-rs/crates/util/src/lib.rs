@@ -10,6 +10,7 @@ pub mod job;
 pub mod page;
 pub mod path;
 pub mod temp;
+pub mod text_boundary;
 pub mod time;
 #[cfg(windows)]
 pub mod win;
