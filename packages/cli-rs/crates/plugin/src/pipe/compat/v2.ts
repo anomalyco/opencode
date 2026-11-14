@@ -24,7 +24,7 @@ import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { homedir } from "node:os"
 import { OpenCode } from "../../../../../../client/src/promise/generated/index"
 import { RGBA, hexToRgb } from "./core"
-import { missing, mount, serialize, type Mounted, type Screen, type VNode } from "./render"
+import { legacy, missing, mount, serialize, type Mounted, type Screen, type VNode } from "./render"
 
 type Json = any
 
@@ -178,7 +178,8 @@ export function context(base: Base, carrier: Carrier) {
         (read(`family:${sessionID}`, { type: "family", id: sessionID })?.members ?? []).map((member: Json) => member.id),
       cost: (sessionID: string): number => read(`family:${sessionID}`, { type: "family", id: sessionID })?.cost ?? 0,
       status: (sessionID: string) => (session(sessionID)?.status === "running" ? "running" : "idle"),
-      pending: { list: () => [], sync: async () => unsupported("data.session.pending"), invalidate() {} },
+      // The host's inbox is not a read: a session has no pending items, quietly, as one whose inbox is empty.
+      pending: { list: () => [], sync: async () => {}, invalidate() {} },
       sync: (sessionID: string) => synced(`session:${sessionID}`, { type: "session", id: sessionID }),
       invalidate() {},
       message: {
@@ -263,14 +264,73 @@ export function context(base: Base, carrier: Carrier) {
   const ask = (dialog: Json) =>
     new Promise<string | undefined>((resolve) => {
       settle()
+      unshow()
       answering = resolve
       void carrier.effect({ type: "dialog", dialog: { ...dialog, action: { type: "command", name: ANSWER } } })
     })
 
+  // `ui.dialog.show`: the plugin's own JSX in the host's live panel dialog (`Dialog::Panel`), the contract's dialog that
+  // shows a node, sent again under its key as the JSX changes. A bare panel: the host draws only the dialog's frame
+  // around it, as TS does; a close of it (escape, the backdrop, another dialog) calls `onClose`, as TS's
+  // `dialog.replace` does.
+  const PANEL = "compat.dialog"
+  let shown: { mounted: Mounted; onClose?: () => void; opened: boolean } | undefined
+  let presentation = { size: "medium", centered: false }
+  let resend = false
+  const unshow = () => {
+    const was = shown
+    shown = undefined
+    if (!was) return
+    was.mounted.dispose()
+    was.onClose?.()
+  }
+  const sendShown = () => {
+    resend = false
+    if (!shown) return
+    const reading = {
+      dropped: new Set<string>(),
+      press(node: VNode, handler: (event: unknown) => unknown) {
+        const name = `${PANEL}/${pressIndex(node)}`
+        presses.set(name, handler)
+        return { type: "command", name: PRESS, input: name }
+      },
+    }
+    let body: Json
+    try {
+      body = legacy(serialize(shown.mounted.root, reading))
+    } catch (error) {
+      void carrier.effect({ type: "toast", variant: "error", title: "Plugin", message: `${id} crashed in dialog: ${error instanceof Error ? error.message : String(error)}` })
+      unshow()
+      return
+    }
+    for (const dropped of reading.dropped) unsupported(dropped)
+    const size = ["large", "xlarge"].includes(presentation.size) ? presentation.size : "medium"
+    void carrier.effect({
+      type: "dialog",
+      dialog: { type: "panel", key: PANEL, size, title: [], body, centered: presentation.centered, bare: true },
+    })
+  }
+  const panelChanged = () => {
+    if (!shown || resend) return
+    resend = true
+    queueMicrotask(sendShown)
+  }
+  carrier.listen((key) => {
+    if (key !== `dialog-open:${PANEL}` || !shown) return
+    const open = carrier.read(key) === true
+    if (open) shown.opened = true
+    else if (shown.opened) unshow()
+  })
+
   // Surfaces: each mount renders its claim's JSX under a Solid root; its view reads that tree.
   const rendered = new Map<string, Mounted & { pending: number; input: Json; setInput: (input: Json) => void }>()
   const size = createRoot(() => createSignal({ width: 0, height: 0 }))
-  const screen: Screen = { width: () => size[0]().width, height: () => size[0]().height, renderer: {} }
+  // What `useTerminalDimensions` reads: the terminal's size, as the host says it.
+  const screen: Screen = {
+    width: () => info()?.size?.[0] || size[0]().width,
+    height: () => info()?.size?.[1] || size[0]().height,
+    renderer: {},
+  }
   let claims = 0
   // A change of a tree asks for one view of the plugin's mounts once the code that changed it returned; a change
   // while a view reads the trees is in that view already.
@@ -359,8 +419,10 @@ export function context(base: Base, carrier: Carrier) {
         return { type: "box" }
       }
     }
+    // No palette input: the colors carry their tokens, so a theme change restyles the last tree in place, and the
+    // context's `theme` follows `Down::Theme`. A surface that read the palette would be viewed again instead, and keep
+    // its old colors, as its tree did not change.
     carrier.surface(name, place, view, {
-      palette: true,
       unmount(mount: Json) {
         const at = `${mount.surface}\u0000${mount.key}\u0000${mount.generation}`
         rendered.get(at)?.dispose()
@@ -595,11 +657,34 @@ export function context(base: Base, carrier: Carrier) {
     },
     ui: {
       dialog: {
-        show() {
-          unsupported("ui.dialog.show")
+        show(render: () => unknown, onClose?: () => void) {
+          settle()
+          unshow()
+          const crashed = (error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error)
+            void carrier.effect({ type: "toast", variant: "error", title: "Plugin", message: `${id} crashed in dialog: ${message}` })
+          }
+          const provided = () =>
+            createComponent(PluginContext.Provider, {
+              value: ctx,
+              get children() {
+                return render()
+              },
+            })
+          shown = { mounted: mount(provided, screen, panelChanged, crashed), onClose, opened: false }
+          untrack(() => read(`dialog-open:${PANEL}`, { type: "dialog-open", key: PANEL }))
+          sendShown()
         },
-        set() {},
-        clear: settle,
+        set(options: Json) {
+          presentation = { size: options?.size ?? "medium", centered: !!options?.centered }
+          if (shown) sendShown()
+        },
+        clear() {
+          settle()
+          if (!shown) return
+          void carrier.effect({ type: "dialog", dialog: { type: "close", key: PANEL } })
+          unshow()
+        },
         alert: (options: Json) =>
           ask({ type: "alert", title: options.title, message: options.message }).then(() => undefined),
         confirm: (options: Json) =>

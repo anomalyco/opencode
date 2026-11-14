@@ -836,6 +836,8 @@ async function handle(message: Json) {
     // A call for an activation that is gone answers with nothing: the host routed it before it ended.
     case "call":
       if (!plugin) return send({ type: "done", seq: message.seq })
+      // The route as the call starts, which the host sends while the plugin does not watch it (P8).
+      if (message.route !== undefined) plugin.snapshots.set("route", message.route)
       return call(message.seq, plugin, message.call)
     case "mount": {
       if (!plugin || !plugin.active) return send({ type: "done", seq: message.seq })

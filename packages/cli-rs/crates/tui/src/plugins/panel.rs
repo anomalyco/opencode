@@ -762,7 +762,12 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         dialog::header(cx, HeaderProps { gap: Some(2), title_view: Some(title.as_any()), ..HeaderProps::default() });
     let scroll = ScrollBox::new(app).scrollbars(false).height(1);
     let content = View::new(app).shrink(0.0);
-    scroll.add(&content);
+    // A bare panel is the dialog's frame and its body, which no box sizes or scrolls (TS `Dialog` around a plugin's
+    // own view); its header and footer are built and never shown.
+    let fitted = !panel.bare;
+    if fitted {
+        scroll.add(&content);
+    }
     // `DialogBleed`: the body's background reaches the dialog's edges, and its padding is inside it.
     let body = match panel.bleed {
         true => {
@@ -772,7 +777,10 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         false => View::new(app).child(&scroll),
     };
     let footer = View::new(app);
-    let layout = dialog::layout_view(cx, &header, &body, Some(&footer), DIALOG_INSET, 1);
+    let layout = match fitted {
+        true => dialog::layout_view(cx, &header, &body, Some(&footer), DIALOG_INSET, 1),
+        false => content.clone(),
+    };
     // A page is the body's most rows, as the screen is now.
     let step = |delta: f64, page: bool| {
         let (scroll, app) = (scroll.clone(), app.clone());
@@ -782,21 +790,23 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         }
     };
     let (top, bottom) = (scroll.clone(), scroll.clone());
-    cx.layer(KeymapLayer::new(vec![
-        TuiCommand::inline("up,k", step(-1.0, false)).group("Dialog"),
-        TuiCommand::inline("down,j", step(1.0, false)).group("Dialog"),
-        TuiCommand::inline("pageup", step(-1.0, true)).group("Dialog"),
-        TuiCommand::inline("pagedown", step(1.0, true)).group("Dialog"),
-        TuiCommand::inline("home", move |_, _| {
-            top.scroll_to(0.0, 0.0);
-        })
-        .group("Dialog"),
-        TuiCommand::inline("end", move |_, _| {
-            bottom.scroll_to(0.0, f64::MAX);
-        })
-        .group("Dialog"),
-    ]));
-    let fit = Rc::new(RefCell::new(Some(Fit {
+    if fitted {
+        cx.layer(KeymapLayer::new(vec![
+            TuiCommand::inline("up,k", step(-1.0, false)).group("Dialog"),
+            TuiCommand::inline("down,j", step(1.0, false)).group("Dialog"),
+            TuiCommand::inline("pageup", step(-1.0, true)).group("Dialog"),
+            TuiCommand::inline("pagedown", step(1.0, true)).group("Dialog"),
+            TuiCommand::inline("home", move |_, _| {
+                top.scroll_to(0.0, 0.0);
+            })
+            .group("Dialog"),
+            TuiCommand::inline("end", move |_, _| {
+                bottom.scroll_to(0.0, f64::MAX);
+            })
+            .group("Dialog"),
+        ]));
+    }
+    let fit = Rc::new(RefCell::new(fitted.then(|| Fit {
         scroll: scroll.clone(),
         content: content.clone(),
         padding: if panel.bleed { 2 } else { 0 },

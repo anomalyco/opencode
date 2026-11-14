@@ -2557,6 +2557,11 @@ pub struct Panel {
     /// The panel sits in the middle of the screen, rather than near its top as a dialog does.
     #[serde(default, skip_serializing_if = "is_false")]
     pub centered: bool,
+    /// P8: only the dialog's frame around the body, as TS draws a plugin's own view (`ui.dialog.show`): no header,
+    /// footer, inset or scroll, and the body lays itself out. The title, actions and keys go unused. An older host
+    /// shows the panel whole.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub bare: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -4807,6 +4812,7 @@ mod tests {
             binds: vec![PanelBind { key: "c".into(), title: "C".into(), action: action.clone() }],
             bleed: true,
             centered: true,
+            bare: false,
         };
         let requests = [
             HostRequest::Fetch(fetch),
@@ -5468,6 +5474,7 @@ mod tests {
             binds: Vec::new(),
             bleed: false,
             centered: false,
+            bare: false,
         };
         host.dialog(Dialog::Panel(panel(PanelSize::XLarge)));
         // A panel whose text says `xlarge` is not one (review bigboi-12).
