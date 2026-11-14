@@ -14,6 +14,34 @@ const model = (packageName: string, modelID: string, output?: number, providerID
 const resolve = (input: Model.Info, supports: readonly Variant.Support[]) =>
   Variant.resolve(input, supports).map((item) => ({ ...item, id: String(item.id) }))
 
+test("spells EVREN's binary thinking control without reasoning effort", () => {
+  expect(
+    resolve(
+      model("@opencode/ai/providers/openai-compatible", "gemma-4-31b", undefined, "evren"),
+      Variant.supports({ supported: true, toggle: true }),
+    ),
+  ).toEqual([
+    { id: "none", body: { thinking: false } },
+    { id: "thinking", body: { thinking: true } },
+  ])
+})
+
+test.each([
+  ["glm-5.3", ["low", "high", "max"]],
+  ["deepseek-v4.1-flash", ["low", "high", "max"]],
+  ["qwen3.8-flash-next", ["low", "medium", "xhigh"]],
+])("spells EVREN's thinking toggle and catalog efforts for %s", (id, effort) => {
+  expect(
+    resolve(
+      model("@opencode/ai/providers/openai-compatible", id, undefined, "evren"),
+      Variant.supports({ supported: true, toggle: true, effort }),
+    ),
+  ).toEqual([
+    { id: "none", body: { thinking: false } },
+    ...effort.map((value) => ({ id: value, settings: { reasoningEffort: value }, body: { thinking: true } })),
+  ])
+})
+
 test("spells Messages variants for each provider", () => {
   expect(
     resolve(model("@opencode/ai/providers/anthropic", "claude-opus-4-5"), [

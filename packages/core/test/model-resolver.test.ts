@@ -628,6 +628,29 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("overrides opposite model thinking defaults for EVREN variants", () =>
+    Effect.gen(function* () {
+      const base = model("@opencode/ai/providers/openai-compatible", {
+        providerID: Provider.ID.make("evren"),
+        modelID: "glm-5.3",
+        settings: { baseURL: "https://evren.example/v1", apiKey: "fixture" },
+        body: { thinking: true },
+      })
+      const catalog = Info.make({
+        ...base,
+        variants: Variant.resolve(base, Variant.supports({ supported: true, toggle: true, effort: ["high"] })),
+      })
+      const off = yield* ModelResolver.resolveModel(catalog, VariantID.make("none"))
+      const high = yield* ModelResolver.resolveModel(
+        Info.make({ ...catalog, body: { thinking: false } }),
+        VariantID.make("high"),
+      )
+
+      expect(off.options?.http?.body).toEqual({ thinking: false })
+      expect(high.options?.http?.body).toEqual({ thinking: true })
+    }),
+  )
+
   it.effect("rejects an explicit unavailable variant during model resolution", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai"), {
