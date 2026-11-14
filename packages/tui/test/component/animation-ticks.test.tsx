@@ -4,8 +4,11 @@ import { RGBA } from "@opentui/core"
 import { ManualClock } from "@opentui/core/testing"
 import { testRender, type JSX } from "@opentui/solid"
 import { createSignal, Show } from "solid-js"
+import { FadeInText } from "../../src/component/fade-in-text"
 import { OneCellSpinner } from "../../src/component/one-cell-spinner"
+import { ShimmerText } from "../../src/component/shimmer-text"
 import { Spinner, SPINNER_FRAMES } from "../../src/component/spinner"
+import "../../src/component/title-shimmer"
 import { ConfigProvider } from "../../src/config"
 import { ThemeProvider } from "../../src/context/theme"
 import { createAnimatable, tween } from "../../src/ui/animation"
@@ -21,12 +24,15 @@ async function mount(view: () => JSX.Element) {
   await using temporary = await tmpdir()
   const clock = new ManualClock()
   const [shown, setShown] = createSignal(true)
+  const [visible, setVisible] = createSignal(true)
   const app = await testRender(
     () => (
       <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
         <ConfigProvider config={createTuiResolvedConfig()}>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <Show when={shown()}>{view()}</Show>
+            <Show when={shown()}>
+              <box visible={visible()}>{view()}</box>
+            </Show>
           </ThemeProvider>
         </ConfigProvider>
       </TestTuiContexts>
@@ -38,12 +44,12 @@ async function mount(view: () => JSX.Element) {
   return Object.assign(app, {
     clock,
     setShown,
-    async run(ms: number, settle = true) {
+    setVisible,
+    async run(ms: number) {
       frames = 0
       for (let elapsed = 5; elapsed <= ms; elapsed += 5) {
         clock.advance(5)
-        if (settle) await app.renderer.idle()
-        else await app.renderOnce()
+        await app.renderer.idle()
       }
       return frames
     },
@@ -56,36 +62,66 @@ function Tween() {
   return <text>{motion.value().x.toFixed(3)}</text>
 }
 
-// A view → frames over 3 s once it runs, with one subscription on the shared clock. Unmounted, it ticks no more.
-const rows: [string, () => JSX.Element, number][] = [
-  ["a spinner at 12.5 fps", () => <Spinner />, 38],
-  ["a one-cell work spinner at 30 fps", () => <OneCellSpinner animation={BLOCK_LOW_COMET} color="#ffffff" />, 90],
-  ["a 10 s tween at 60 fps", () => <Tween />, 180],
+const SHIMMER = RGBA.fromHex("#ffffff")
+
+// A view → frames over 3 s while it runs, its open tickers, and frames over 1 s hidden with visible={false} (after
+// the frame that hides it). Renderables with animationFps stop when not drawn; the Solid hook and tweens are bound to
+// no node, so they keep ticking while hidden (their call sites mount them under <Show>). Unmounted, nothing ticks.
+const rows: [string, () => JSX.Element, number, number, number][] = [
+  ["a spinner at 12.5 fps", () => <Spinner />, 38, 1, 0],
+  [
+    "a one-cell work spinner at 30 fps",
+    () => <OneCellSpinner animation={BLOCK_LOW_COMET} color="#ffffff" />,
+    90,
+    1,
+    30,
+  ],
+  ["a 10 s tween at 60 fps", () => <Tween />, 180, 1, 60],
+  ["shimmer text at 60 fps", () => <ShimmerText shimmer={SHIMMER}>work</ShimmerText>, 180, 1, 0],
+  ["a shimmer spinner: 60 fps text, 12.5 fps glyph", () => <Spinner shimmer={SHIMMER}>work</Spinner>, 180, 2, 12],
+  [
+    "a pending title shimmer at 60 fps",
+    () => <title_shimmer content="Untitled" rename={{ title: "Untitled", pending: true }} />,
+    180,
+    1,
+    0,
+  ],
 ]
 
-for (const [name, view, frames] of rows) {
-  test(`animation ticks: ${name}, and nothing after unmount`, async () => {
+for (const [name, view, frames, open, hidden] of rows) {
+  test(`animation ticks: ${name}; hidden and unmounted`, async () => {
     using tickers = countTickers()
     await using app = await mount(view)
     await app.run(1000)
-    expect([await app.run(3000), tickers()]).toEqual([frames, 1])
+    expect([await app.run(3000), tickers()]).toEqual([frames, open])
+    app.setVisible(false)
+    await app.run(100)
+    expect(await app.run(1000)).toBe(hidden)
+    app.setVisible(true)
+    await app.run(1000)
     app.setShown(false)
     expect([await app.run(1000), tickers(), app.clock.pendingTimerCount]).toEqual([1, 0, 0])
   })
 }
 
-// The shimmer text itself is live, so this view never idles; the glyph still steps by the clock's tick count.
-test("a shimmer spinner steps its glyph by ticks and stops ticking when unmounted", async () => {
-  using tickers = countTickers()
-  await using app = await mount(() => <Spinner shimmer={RGBA.fromHex("#ffffff")}>work</Spinner>)
+test("a shimmer spinner steps its glyph by the tick count", async () => {
+  await using app = await mount(() => <Spinner shimmer={SHIMMER}>work</Spinner>)
   const glyph = () => SPINNER_FRAMES.indexOf(app.captureCharFrame().trim().split(" ")[0]!)
-  await app.run(80, false)
+  await app.run(80)
   const first = glyph()
   // One late frame covers three due ticks.
   app.clock.advance(240)
   await app.renderOnce()
-  expect([(glyph() - first + SPINNER_FRAMES.length) % SPINNER_FRAMES.length, tickers()]).toEqual([3, 1])
-  app.setShown(false)
-  await app.run(80, false)
-  expect(tickers()).toBe(0)
+  expect((glyph() - first + SPINNER_FRAMES.length) % SPINNER_FRAMES.length).toBe(3)
+})
+
+// The 200 ms sweep waits while hidden, runs once shown, then stops.
+test("fade-in text sweeps at 60 fps only while drawn, then idles", async () => {
+  using tickers = countTickers()
+  await using app = await mount(() => <FadeInText>hello</FadeInText>)
+  app.setVisible(false)
+  await app.run(100)
+  expect(await app.run(1000)).toBe(0)
+  app.setVisible(true)
+  expect([await app.run(1000), await app.run(1000), tickers(), app.clock.pendingTimerCount]).toEqual([14, 0, 0, 0])
 })
