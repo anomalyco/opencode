@@ -49,15 +49,22 @@ bun run dev:site
 ### Packages
 
 - `packages/schema`: shared wire and storage contracts
+- `packages/ai`: provider protocols and model request execution
 - `packages/core`: domain behavior and persistence
 - `packages/protocol`: public API definitions
 - `packages/server`: HTTP server and runtime composition
 - `packages/client`: generated TypeScript clients
+- `packages/sdk`: public SDK
 - `packages/cli`: command-line entrypoint and service lifecycle
 - `packages/tui`: terminal interface
 - `packages/app`: shared web interface
+- `packages/ui`: shared UI components and desktop themes
 - `packages/desktop`: Electron desktop application
+- `packages/theme`: TUI theme parsing, migration, and resolution
 - `packages/plugin`: plugin API
+- `packages/util`: shared utilities
+
+Supporting packages under `packages/` cover code execution, HTTP recording, simulation, build scripts, and internal tooling.
 
 ### Verification
 
