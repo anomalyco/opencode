@@ -526,10 +526,9 @@ fn apply(harness: &Harness, reference: &mut Reference, command: &Command) {
                 harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 1, y);
             }
             plugin::settle(harness);
-            // The panel takes the focus; its text selects a word when it may.
-            if !reference.in_panel() {
-                reference.focus(Focus::Panel);
-            }
+            // The panel takes the focus, from a node of it too (the frame focuses the panel on any press in it that no
+            // node takes); its text selects a word when it may.
+            reference.focus(Focus::Panel);
             reference.selection = reference.selectable;
         }
         Command::Selectable(selectable) => {
@@ -904,4 +903,12 @@ fn a_double_click_in_the_panel_selects_only_selectable_text() {
         ];
         assert_eq!(Delivery.run(&trace), None, "selectable: {selectable}");
     }
+}
+
+// Expected: the deep run's seed 1616 (6,000 seeds), as a fixed row. A press on the panel's label, after a node of the
+// panel took the focus, gives the focus to the panel: the node's own layer no longer holds.
+#[test]
+fn a_press_on_the_panel_label_focuses_the_panel() {
+    let trace = [Command::Panel(true), Command::Click, Command::DoubleClickLabel, Command::Keys(vec![Key::Y])];
+    assert_eq!(Delivery.run(&trace), None);
 }
