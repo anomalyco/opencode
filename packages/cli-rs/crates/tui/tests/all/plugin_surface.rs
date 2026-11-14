@@ -442,3 +442,38 @@ fn a_route_of_abi_1_takes_a_new_theme_in_place() {
     assert_eq!(frame.cells[0].bg, theme.background.base);
     assert_eq!(harness.app.widget_at(x, y as u16).unwrap().id(), widget, "the text was built again");
 }
+
+/// A route of ABI 1.x whose node is `deep` levels of boxes, or a text of infinite width.
+fn unbounded(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.route("deep", |_, _| {
+        let deep =
+            (0..300).fold(abi::Node::text([abi::Span::new("bottom")]), |inner, _| abi::Node::column(vec![inner]));
+        abi::Render::Show(abi::Node::column(vec![abi::Node::text([abi::Span::new("deep route")]), deep]))
+    });
+    setup.route("wide", |_, _| {
+        let layout = abi::Layout { width: Some(abi::Width::Percent(f32::INFINITY)), ..abi::Layout::default() };
+        abi::Render::Show(abi::Node::text([abi::Span::new("wide route")]).layout(layout))
+    });
+    Ok(())
+}
+
+// Expected: a route of ABI 1.x whose node nests 300 levels, or has an infinite width, is not drawn, and the TUI goes
+// on; OpenTUI would end it on either.
+#[test]
+fn a_node_the_layout_cannot_take_does_not_end_the_tui() {
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.unbounded", setup: unbounded }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(80, 24, deps);
+    for name in ["deep", "wide"] {
+        harness.tui.navigate(Route::Plugin { id: "test.unbounded".into(), name: name.into() });
+        settle(&harness);
+        let screen = harness.app.render().text();
+        assert!(!screen.contains("route"), "{screen}");
+    }
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    harness.app.render();
+}
