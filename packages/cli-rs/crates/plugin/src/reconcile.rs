@@ -513,6 +513,23 @@ impl Tree {
         out
     }
 
+    /// The ids the tree holds at `id` and under it: what a node that keeps `id` holds again.
+    pub fn held_under(&self, id: &str) -> usize {
+        let under = |key: &String| {
+            let mut at = key.as_str();
+            loop {
+                if at == id {
+                    return true;
+                }
+                match self.ids.get(at).and_then(|held| held.above.as_deref()) {
+                    Some(above) => at = above,
+                    None => return false,
+                }
+            }
+        };
+        self.ids.keys().filter(|key| under(key)).count()
+    }
+
     /// The ids the tree holds.
     pub fn ids(&self) -> impl Iterator<Item = &str> {
         self.ids.keys().map(String::as_str)

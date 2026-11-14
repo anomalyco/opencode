@@ -1646,9 +1646,13 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     );
 }
 
-/// The nodes of `node` that carry an id, kept subtrees included.
-fn keyed(node: &v2::Node) -> usize {
-    usize::from(node.id().is_some()) + node.children().iter().map(keyed).sum::<usize>()
+/// The nodes of `node` that carry an id, with what each keep holds again in the host's tree (`kept`): a library's memo
+/// table keeps a value for each memo inside a kept one.
+fn keyed(node: &v2::Node, kept: &dyn Fn(&str) -> usize) -> usize {
+    match node {
+        v2::Node::Keep { key } => kept(key).max(1),
+        _ => usize::from(node.id().is_some()) + node.children().iter().map(|child| keyed(child, kept)).sum::<usize>(),
+    }
 }
 
 /// A surface's view in a library, through [`Request::View`].
@@ -1663,7 +1667,7 @@ impl Viewer for Remote {
     fn view(&self, _: &dyn Host, viewing: Viewing<'_>) -> Option<Viewed> {
         // The library numbers its content after `next`, from the handle the host would give next, one each.
         let next = surface::next_content() - 1;
-        let (mount, input) = (viewing.mount.clone(), viewing.input.clone());
+        let (mount, input, kept) = (viewing.mount.clone(), viewing.input.clone(), viewing.kept);
         let request = Request::View { surface: self.index, mount, input, next };
         // What the view reads of the input is its mount's.
         let reply: abi::ViewReply = self.guest.owners.as_owner(viewing.owner, || {
@@ -1675,7 +1679,7 @@ impl Viewer for Remote {
                     return Err("content handles that do not follow the host's".to_owned());
                 }
                 // A memo table holds a value for each subtree the view built or kept by key, and no more.
-                let keyed = keyed(&reply.node);
+                let keyed = keyed(&reply.node, kept);
                 match reply.memo <= keyed {
                     true => Ok(()),
                     false => Err(format!("a memo table of {} values for a tree of {keyed} keyed nodes", reply.memo)),
@@ -1744,7 +1748,7 @@ impl crate::claim::Viewer for RemoteClaim {
             if !numbered {
                 return Err("content handles that do not follow the host's".to_owned());
             }
-            let keyed = reply.node.as_ref().map_or(0, keyed);
+            let keyed = reply.node.as_ref().map_or(0, |node| keyed(node, viewing.kept));
             match reply.memo <= keyed || reply.node.is_none() {
                 true => Ok(()),
                 false => Err(format!("a memo table of {} values for a tree of {keyed} keyed nodes", reply.memo)),

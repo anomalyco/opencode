@@ -1424,3 +1424,44 @@ fn each_change_of_the_hosts_state_after_a_view_calls_one() {
         assert_eq!(views() - before, 1, "{carrier:?}: a local change");
     }
 }
+
+thread_local! {
+    static NESTED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// A route whose body is a memo holding a memo, under a line a command changes; no other node has an id.
+fn nesting(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command { name: "nest.bump".into(), ..abi::Command::default() }, |_, _| {
+        NESTED.with(|nested| nested.set(nested.get() + 1))
+    });
+    setup.surface(v2::Surface::new("nest", v2::Place::Route("nest".into()), |cx| {
+        let head = v2::Node::text(vec![abi::Span::new(format!("bumped {}", NESTED.with(std::cell::Cell::get)))]);
+        let body = cx.memo("outer", 1u8, |cx| {
+            v2::Node::column(vec![cx.memo("inner", 2u8, |_| v2::Node::text(vec![abi::Span::new("kept")]))])
+        });
+        v2::Node::column(vec![head, body])
+    }));
+    Ok(())
+}
+
+// Expected (4.2): a view that keeps a memoized subtree holding another memo is valid on both carriers; the library's
+// table holds both values and the tree the host resolves holds both keys, so the plugin stays active.
+#[test]
+fn a_kept_memo_that_holds_a_memo_keeps_a_library_active() {
+    for carrier in CARRIERS {
+        NESTED.with(|nested| nested.set(0));
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![builtin(carrier, abi::Plugin { id: "test.nest", setup: nesting })],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(80, 20, deps);
+        harness.tui.navigate(Route::Plugin { id: "test.nest".into(), name: "nest".into() });
+        settle(&harness);
+        harness.tui.keymap.dispatch("nest.bump", None);
+        settle(&harness);
+        let screen = harness.app.text();
+        assert!(screen.contains("bumped 1") && screen.contains("kept"), "{carrier:?}:\n{screen}");
+        assert_eq!(opencode_plugin::surface::ledger().memo_entries, 2, "{carrier:?}");
+    }
+}

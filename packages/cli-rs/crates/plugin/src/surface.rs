@@ -109,6 +109,8 @@ pub(crate) struct Viewing<'a> {
     pub memo: &'a mut v2::Memo,
     pub give: &'a mut dyn FnMut(ContentRef, Vec<u8>),
     pub release: &'a mut dyn FnMut(ContentRef),
+    /// The keyed nodes the mount's tree holds at a key and under it, which a [`Node::Keep`] of the key holds again.
+    pub kept: &'a dyn Fn(&str) -> usize,
 }
 
 /// What a view returned.
@@ -134,7 +136,7 @@ impl Linked {
 
 impl Viewer for Linked {
     fn view(&self, host: &dyn Host, viewing: Viewing<'_>) -> Option<Viewed> {
-        let Viewing { mount, owner, input, memo, give, release } = viewing;
+        let Viewing { mount, owner, input, memo, give, release, .. } = viewing;
         let mut node = None;
         let called = (self.call)("view", host, owner, &mut |read| {
             let mut content = |bytes: Vec<u8>| {
@@ -547,6 +549,7 @@ impl Surface {
                 });
             }
         };
+        let kept = |key: &str| self.state.borrow().tree.held_under(key);
         let viewing = Viewing {
             mount: &self.id,
             owner: &owner,
@@ -554,6 +557,7 @@ impl Surface {
             memo: &mut memo,
             give: &mut give,
             release: &mut release,
+            kept: &kept,
         };
         let viewed = self.viewer.view(host, viewing);
         let Some(viewed) = viewed else {

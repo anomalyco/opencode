@@ -485,6 +485,7 @@ impl Core {
                 });
             }
         };
+        let kept = |key: &str| self.state.borrow().tree.held_under(key);
         let viewing = Viewing {
             mount: &self.id,
             owner: &self.claim.input,
@@ -492,6 +493,7 @@ impl Core {
             memo: &mut memo,
             give: &mut give,
             release: &mut release,
+            kept: &kept,
         };
         let viewed = self.claim.viewer.view(host, viewing, &part);
         Attempt { viewed, given: staged.take(), memo, held }
