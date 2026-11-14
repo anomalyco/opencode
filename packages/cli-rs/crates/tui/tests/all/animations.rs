@@ -24,7 +24,7 @@ fn tool(id: &str, name: &str, input: Value, metadata: Value) -> Value {
     })
 }
 
-fn routes() -> Vec<MemoryRoute> {
+fn routes(active: &Value) -> Vec<MemoryRoute> {
     // Newest first, as the server pages them.
     let messages = json!([
         {
@@ -54,32 +54,34 @@ fn routes() -> Vec<MemoryRoute> {
         ),
         MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/experimental/migration/v1", 200, &json!({ "status": "completed" })),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/active",
-            200,
-            &json!({ "data": { "ses_a": { "type": "running" }, "ses_b": { "type": "running" } } }),
-        ),
+        MemoryRoute::json("GET", "/api/session/active", 200, &json!({ "data": active })),
     ]);
     routes
 }
 
 fn mount(layout: &str, animations: bool) -> (support::Harness, Memory) {
+    let tabs = json!({ "layout": layout });
+    mount_with(tabs, animations, &json!({ "ses_a": { "type": "running" }, "ses_b": { "type": "running" } }))
+}
+
+fn mount_with(tabs: Value, animations: bool, active: &Value) -> (support::Harness, Memory) {
     // Medium verbosity draws the tool rows; low, the default, folds them into one summary.
     let config = json!({
         "animations": animations,
-        "tabs": { "layout": layout },
+        "tabs": tabs,
         "session": { "sidebar": "hide", "verbosity": "medium" },
     });
-    let memory = Memory::new(routes());
+    let memory = Memory::new(routes(active));
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
         events: true,
         ..support::deps(Arc::new(memory.clone()))
     };
     let h = support::mount(120, 30, deps);
-    h.tui.navigate(support::session_route("ses_b"));
-    h.wait_for("Write docs");
+    if tabs["enabled"] != false {
+        h.tui.navigate(support::session_route("ses_b"));
+        h.wait_for("Write docs");
+    }
     h.tui.navigate(support::session_route("ses_a"));
     h.wait_for("Survey the views");
     h.wait_for("npm test");
@@ -177,5 +179,39 @@ fn turning_animations_off_and_on_takes_effect_at_once() {
         let before = backgrounds(&h);
         frames(&h, Duration::from_millis(400));
         assert!(backgrounds(&h) != before, "{layout}: the tab pulse did not resume");
+    }
+}
+
+// A spinner out of sight costs no frames and no wakeups, after at most two. `TestApp::idle` sleeps as `App::run`
+// does. Tabs are off: a busy tab's indicator animates by design (`tabs.rs`). Only `ses_a` runs, so `ses_b` shows
+// no spinner. The devtools sampler wakes the app every 2 s whatever shows, without a frame.
+#[test]
+fn a_spinner_out_of_sight_costs_no_frames_and_no_wakeups() {
+    for case in ["another session", "animations off", "a dialog beside it"] {
+        let (h, memory) = mount_with(json!({ "enabled": false }), true, &json!({ "ses_a": { "type": "running" } }));
+        // The startup polls, as `settle` waits for them; the spinners keep asking for frames meanwhile.
+        frames(&h, Duration::from_secs(2));
+        h.wait("the startup reads to end", || memory.in_flight() == 0);
+        // The tool rows' spinners at 12.5 a second share the frames of the prompt's at 25 (`spinner.tsx`).
+        let shown = h.app.idle(Duration::from_secs(1));
+        assert!((25..=26).contains(&shown.frames) && shown.wakeups <= shown.frames + 1, "{case}: shown {shown:?}");
+        match case {
+            "another session" => {
+                h.tui.navigate(support::session_route("ses_b"));
+                h.wait_gone("npm test");
+            }
+            "animations off" => h.dispatch("app.toggle.animations"),
+            _ => h.dispatch("command.palette.show"),
+        }
+        let hiding = h.app.idle(Duration::from_secs(1));
+        let hidden = h.app.idle(Duration::from_secs(4));
+        if case == "a dialog beside it" {
+            // The palette leaves the rows in view, so they still move, as in TS.
+            assert!(h.app.text().contains(" npm test"), "{case}:\n{}", h.app.text());
+            assert!((100..=104).contains(&hidden.frames), "{case}: {hidden:?}");
+            continue;
+        }
+        assert!(hiding.frames <= 2 && hiding.wakeups <= 3, "{case}: hiding {hiding:?}");
+        assert!(hidden.frames == 0 && hidden.wakeups <= 2, "{case}: hidden {hidden:?}");
     }
 }
