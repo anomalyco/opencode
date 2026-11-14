@@ -77,6 +77,9 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.open_panel(OpenPanel { surface: "side".into(), session: None, fullscreen: input == Some("full") });
     });
     setup.command(command("input.close"), |host, _| host.close_panel("side"));
+    setup.command(command("input.elsewhere"), |host, _| {
+        host.open_panel(OpenPanel { surface: "side".into(), session: Some("ses_other".into()), fullscreen: false });
+    });
     setup.command(command("input.overlay"), |host, _| {
         host.overlay(Overlay { surface: "menu".into(), anchor: Anchor::Point { x: 4, y: 3 }, width: 24, height: 4 });
     });
@@ -383,6 +386,9 @@ fn composer(harness: &Harness) -> String {
 fn a_panel_surface_docks_takes_keys_and_revokes_them() {
     let harness = open();
     let before = interact::ledger(&*harness.tui);
+    // A panel beside a session that does not show opens nowhere.
+    run(&harness, "input.elsewhere", None);
+    assert!(!harness.app.text().contains("PANEL"), "{}", harness.app.text());
     run(&harness, "input.panel", None);
     let screen = harness.app.text();
     assert!(screen.contains("PANEL full=false focused=true"), "{screen}");
