@@ -437,6 +437,10 @@ impl Host for Tui {
     }
 
     fn open_panel(&self, id: &str, open: &abi::interact::OpenPanel) {
+        if !self.plugins.has_panel(id, &open.surface) {
+            log::warn!("plugin {id}: it has no panel surface {:?}", open.surface);
+            return;
+        }
         // Beside the session it names, or the one on screen, while that session shows.
         let Route::Session { id: shown } = self.route() else {
             log::warn!("plugin {id}: its panel {} opens beside a session, and none shows", open.surface);

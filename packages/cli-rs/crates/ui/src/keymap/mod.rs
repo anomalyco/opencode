@@ -548,7 +548,10 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         let mut binding = Binding::new(key);
         binding.desc = command.title.clone().or_else(|| command.description.clone());
         binding.group = command.group.clone();
-        binding.run(move |_| check(&command.enabled) && (command.run)(None, None) == Outcome::Handled)
+        // The key that ran it, which a binding of several keys (`up,k`) tells apart.
+        binding.run(move |context| {
+            check(&command.enabled) && (command.run)(None, context.event.as_ref()) == Outcome::Handled
+        })
     }
 
     /// How many layers are registered, for a ledger of who holds what.

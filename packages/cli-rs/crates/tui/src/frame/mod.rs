@@ -351,6 +351,10 @@ impl SessionFrame {
         if let Some(pane) = state.terminal.borrow().as_ref() {
             pane.restyle(tui);
         }
+        // A plugin's panel surface takes the theme in place, keeping its mount.
+        if state.host.borrow().as_ref().is_some_and(|host| host.restyle(tui)) {
+            return;
+        }
         let Some(old) = state.host.borrow_mut().take() else { return };
         let target = old.target().clone();
         let width = old.root.rect().width as u16;
