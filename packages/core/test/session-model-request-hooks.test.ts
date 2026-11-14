@@ -2,9 +2,13 @@ import { describe, expect } from "bun:test"
 import { ToolDefinition } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/schema/agent"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
@@ -12,9 +16,13 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { Tool } from "@opencode/core/tool"
+import { WebFetchTool } from "@opencode/core/tool/plugin/webfetch"
+import { WebSearchTool } from "@opencode/core/tool/plugin/websearch"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
+import { registerToolPlugin } from "./lib/tool"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
@@ -38,6 +46,59 @@ const transport = SessionModelTransport.Service.of({
   bind: () => ({ execute: () => Effect.die("unused WebSocket execution") }),
   close: () => Effect.void,
   closeAll: Effect.void,
+})
+
+describe("SessionModelRequest tools", () => {
+  it.effect("hides standalone webfetch only when enabled and execute survives request shaping", () =>
+    Effect.gen(function* () {
+      yield* registerToolPlugin(WebFetchTool.Plugin)
+      yield* registerToolPlugin(WebSearchTool.Plugin)
+      const registry = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      const config = yield* Config.Test
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const names = Effect.fnUntraced(function* (permissions?: Parameters<typeof registry.snapshot>[0]) {
+        const tools = yield* registry.snapshot(permissions)
+        const prepared = yield* requests.primary({
+          session,
+          agent: Agent.ID.make("build"),
+          model,
+          system: [],
+          messages: [],
+          tools,
+        })
+        return prepared.request.tools.map((tool) => tool.name)
+      })
+
+      expect(yield* names()).toEqual(["websearch", "execute"])
+      expect(yield* names([{ action: "execute", resource: "*", effect: "deny" }])).toEqual(["webfetch", "websearch"])
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({ experimental: new ConfigExperimental.Info({ codemode_hide_webfetch: false }) }),
+        }),
+      ])
+      expect(yield* names()).toEqual(["webfetch", "websearch", "execute"])
+      yield* config.setEntries([])
+
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          if (event.tools.execute) event.tools.run = event.tools.execute
+          delete event.tools.execute
+        }),
+      )
+      expect(yield* names()).toEqual(["websearch", "run"])
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          delete event.tools.run
+        }),
+      )
+      expect(yield* names()).toEqual(["webfetch", "websearch"])
+    }).pipe(
+      Effect.provide(Flag.testLayer([], { app: { channel: "dev" } })),
+      Effect.provideService(SessionModelTransport.Service, transport),
+    ),
+  )
 })
 
 describe("SessionModelRequest HTTP hooks", () => {
