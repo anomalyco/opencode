@@ -195,12 +195,14 @@ impl Spinner {
     /// Replaces the motion, which ends the old one, with the one the settings need: a shimmer moves on every frame,
     /// a stepped spinner one interval per tick.
     fn restart(&self) {
-        self.widget.update(|view| {
+        let motion = self.widget.update(|view| {
             let moving =
                 view.animations && (view.shimmer.is_some() || (view.glyphs.len() > 1 && !view.interval.is_zero()));
             let step = view.shimmer.is_none().then_some(view.interval);
             view.motion = Motion::new(&self.app, moving, step, None, view.motion.clock.get());
+            view.motion.clone()
         });
+        motion.follow(&self.widget);
     }
 }
 
