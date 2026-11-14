@@ -862,7 +862,7 @@ const IMAGE_BYTES: usize = 16 << 20;
 const IMAGE_PIXELS: u64 = 4096 * 4096;
 
 /// The image `bytes` decode to, when their header names a PNG, GIF, JPEG or WebP image within the host's bounds.
-fn decode(app: &App, bytes: &[u8]) -> Option<opentui::native::Image> {
+pub(crate) fn decode(app: &App, bytes: &[u8]) -> Option<opentui::native::Image> {
     let Some((width, height)) = image_size(bytes) else {
         log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
         return None;
