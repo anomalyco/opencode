@@ -129,8 +129,31 @@ pub enum Step {
     Claim {
         tool: String,
     },
-    /// Closes the route, or the claimed call.
+    /// Shows Markdown `text` as the transcript does, whose fences the plugins' claims and renderers draw, and draws it.
+    Markdown {
+        text: String,
+    },
+    /// Closes the route, the claimed call, or the Markdown.
     Close,
+    /// The user presses `key` (P2), as the keymap names one (`ctrl+g`); what its handler asked for applies after it.
+    Press {
+        key: String,
+    },
+    /// The user pastes `text` (P2).
+    Paste {
+        text: String,
+    },
+    /// The user clicks the screen cell at `x`, `y` (P2): a press and a release.
+    Click {
+        x: u16,
+        y: u16,
+    },
+    /// A select runs the plugin's search `name` for `query` over `options` (P2); what it answers is recorded as seen.
+    Search {
+        name: String,
+        query: String,
+        options: Vec<abi::SelectOption>,
+    },
     /// Runs the host's deferred work: effects, wakes, the mailbox.
     Advance,
     /// The user disables the plugin, or enables it again.
@@ -293,12 +316,14 @@ pub(crate) fn next_instance() -> u64 {
 
 // Recording.
 
-/// The numbers the host draws from process-wide counters, made the transcript's own: a mount's generation by its first
-/// appearance (1, 2, ...), and content handles by the order the transcript's views gave them, which other hosts in the
+/// The numbers the host draws from process-wide counters, made the transcript's own: a mount's generation and a fence's
+/// mount key (`fence-N`) by their first appearance (1, 2, ...), and content handles by the order the transcript's views gave them, which other hosts in the
 /// process do not shift. A view's `next` is the count given before it.
 #[derive(Default)]
 pub struct Normal {
     generations: Vec<u64>,
+    /// The mount keys of fences (`fence-N`), which the host numbers process-wide too.
+    fences: Vec<String>,
     /// The content handles given so far: the host's, and the transcript's.
     handles: Vec<(u64, u64)>,
     /// The host's `next` of the running view less the transcript's.
@@ -322,6 +347,16 @@ impl Normal {
         match value {
             Value::Object(object) => {
                 for (key, field) in object.iter_mut() {
+                    let fence =
+                        field.as_str().filter(|text| key == "key" && text.starts_with("fence-")).map(str::to_owned);
+                    if let Some(fence) = fence {
+                        let at = self.fences.iter().position(|known| *known == fence).unwrap_or_else(|| {
+                            self.fences.push(fence);
+                            self.fences.len() - 1
+                        });
+                        *field = Value::from(format!("fence-{}", at + 1));
+                        continue;
+                    }
                     match (key.as_str(), field.as_u64()) {
                         ("generation", Some(generation)) => {
                             let at = match self.generations.iter().position(|known| *known == generation) {
@@ -593,7 +628,7 @@ pub fn diff(expected: &[Entry], got: &[Entry]) -> Option<String> {
 ///   surface the manifest lists, and of no mount that ended; a draw or a layout only of a surface that declares one;
 ///   input only to a surface with a handler or a layer of the manifest; a claim's view and a search only of what the
 ///   manifest declares.
-/// - A render of 1.4 on, a view, a claim's view, a draw or a layout reads only: every request of it that asks for something is answered
+/// - A render of 1.4 on, a view, a claim's view, a draw, a layout or a search reads only: every request of it that asks for something is answered
 ///   `ERROR`. A 1.3 render may ask.
 /// - Every request is one the contract names, and so is every host request ([`EFFECTS`], [`READS`]).
 #[derive(Default)]
@@ -734,7 +769,7 @@ const HANDLERS: &[&str] =
     &["command", "event", "reply", "mount", "wake", "route-mount", "fence-gone", "deltas", "unmount", "message"];
 
 /// The requests that read only.
-const RENDERS: &[&str] = &["render-fence", "render", "render-route", "view", "claim", "draw", "layout"];
+const RENDERS: &[&str] = &["render-fence", "render", "render-route", "view", "claim", "draw", "layout", "search"];
 
 impl Protocol {
     /// The first rule broken so far.
