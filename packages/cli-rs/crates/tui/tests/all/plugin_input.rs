@@ -299,18 +299,17 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
         hover: hover.map(abi::Color::from),
         hover_events: pointer,
     };
+    // Its texts select nothing: a double click would select a word, and escape would clear it before any layer.
+    let text = |text: &str| match v2::Node::text(vec![abi::Span::new(text)]) {
+        v2::Node::Text { id, spans, fg, wrap, truncate, hover_fg, layout, on_click, .. } => {
+            v2::Node::Text { id, spans, fg, wrap, truncate, selectable: false, hover_fg, layout, on_click }
+        }
+        node => node,
+    };
     v2::Node::column(vec![
-        v2::Node::text(vec![abi::Span::new(label)]),
-        v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("AAAA")])]).with_id("a").interact(interact(
-            true,
-            true,
-            Some("#ff0000"),
-        )),
-        v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("BBBB")])]).with_id("b").interact(interact(
-            true,
-            probe(|probe| probe.pointer_b),
-            None,
-        )),
+        text(&label),
+        v2::Node::row(vec![text("AAAA")]).with_id("a").interact(interact(true, true, Some("#ff0000"))),
+        v2::Node::row(vec![text("BBBB")]).with_id("b").interact(interact(true, probe(|probe| probe.pointer_b), None)),
     ])
     .with_id("side")
     .interact(interact(true, false, None))
