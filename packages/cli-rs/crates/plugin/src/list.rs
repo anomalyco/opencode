@@ -280,6 +280,11 @@ impl List {
         self.items[..index.min(self.items.len())].iter().map(|item| item.used).sum()
     }
 
+    /// The rows the host assumes item `index` takes.
+    pub fn rows_of(&self, index: usize) -> f32 {
+        self.items.get(index).map_or(0.0, |item| item.used)
+    }
+
     /// The item whose data holds id `id`.
     pub fn owner(&self, id: &str) -> Option<usize> {
         self.owners.get(id).copied()
