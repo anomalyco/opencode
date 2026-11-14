@@ -590,8 +590,11 @@ impl surface::Viewer for Viewer {
                 }
             }
             let mut node = tree.node;
-            rehandle(&mut node, &mount.handles);
-            let node = match serde_json::from_value::<v2::Node>(node) {
+            let node = super::timed(|| {
+                rehandle(&mut node, &mount.handles);
+                serde_json::from_value::<v2::Node>(node)
+            });
+            let node = match node {
                 Ok(node) => node,
                 Err(error) => {
                     drop(mounts);

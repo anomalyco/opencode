@@ -126,6 +126,8 @@ struct Shared {
     watch: Condvar,
     /// The last acknowledged sequence.
     acked: AtomicU64,
+    /// Bytes read from the child.
+    read: AtomicU64,
     closed: AtomicBool,
     /// A wake waits for the UI thread.
     pending: AtomicBool,
@@ -172,6 +174,7 @@ impl Child {
             sent: Mutex::default(),
             watch: Condvar::new(),
             acked: AtomicU64::new(0),
+            read: AtomicU64::new(0),
             closed: AtomicBool::new(false),
             pending: AtomicBool::new(false),
             wake: Box::new(wake),
@@ -237,6 +240,11 @@ impl Child {
         drop(inbox);
         self.shared.room.notify_all();
         events
+    }
+
+    /// The bytes read from the child so far.
+    pub fn read(&self) -> u64 {
+        self.shared.read.load(Ordering::Relaxed)
     }
 
     /// The last acknowledged sequence.
@@ -424,6 +432,7 @@ fn read(shared: &Shared, stdout: ChildStdout) {
             }
         };
         let len = payload.len();
+        shared.read.fetch_add(len as u64 + 5, Ordering::Relaxed);
         let event = match kind {
             wire::TREE => serde_json::from_slice::<Revision>(&payload).map(|tree| Event::Tree(Box::new(tree))),
             _ => serde_json::from_slice::<Up>(&payload).map(|up| Event::Up(Box::new(up))),
