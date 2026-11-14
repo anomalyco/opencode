@@ -108,5 +108,19 @@ it.effect("does not fall back to another provider when the configured default's 
     expect(yield* models.default()).toBeUndefined()
     expect(yield* resolver.fallback()).toBeUndefined()
     expect(yield* resolver.resolve()).toBeUndefined()
+    const runner = yield* SessionRunnerModel.Service
+    const session = Session.Info.make({
+      id: Session.ID.make("ses_missing_provider"),
+      projectID: Project.ID.global,
+      title: "test",
+      cost: Money.USD.zero,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+      location: ref,
+    })
+    const failure = yield* runner
+      .resolve(session, models.available, { kind: "primary", agent: Agent.ID.make("build") })
+      .pipe(Effect.flip)
+    expect(failure.message).toBe("Model unavailable: probe/probe-1")
   }).pipe(Effect.provide(layer)),
 )

@@ -2,7 +2,7 @@ export * as SessionRunnerModel from "./model.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { LanguageModel } from "@opencode/ai/effect"
-import { Model } from "@opencode/schema/model"
+import { Model } from "../../model.js"
 import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
@@ -75,6 +75,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const resolver = yield* ModelResolver.Service
+    const models = yield* Model.Service
     const agents = yield* Agent.Service
     const hooks = yield* PluginHooks.Service
     // Location plugins populate and filter the catalog asynchronously during layer startup.
@@ -96,6 +97,9 @@ const layer = Layer.effect(
       if (preferred) return { info: preferred, variant: agent.variant }
       const info = yield* resolver.fallback()
       if (info) return { info, variant: undefined }
+      // Name the configured model so the user knows which config entry to fix.
+      const configured = yield* models.configured()
+      if (configured) return yield* new ModelUnavailableError(configured)
       return yield* new ModelNotSelectedError({ sessionID: session.id })
     })
     return Service.of({
@@ -126,5 +130,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ModelResolver.node, Agent.node, PluginHooks.node],
+  deps: [ModelResolver.node, Model.node, Agent.node, PluginHooks.node],
 })

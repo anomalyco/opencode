@@ -81,6 +81,8 @@ export interface Interface extends State.Transformable<Editor> {
   /** Enabled models of the given types, chat when none are given. Only chat models are offered for sessions. */
   readonly available: (types?: readonly Model.Type[]) => Effect.Effect<readonly Info[]>
   readonly default: () => Effect.Effect<Info | undefined>
+  /** The default model named by config or a plugin, whether or not it is available. */
+  readonly configured: () => Effect.Effect<{ providerID: Provider.ID; modelID: ID } | undefined>
   readonly small: (providerID: Provider.ID) => Effect.Effect<Info | undefined>
 }
 
@@ -303,11 +305,15 @@ const layer = Layer.effect(
         const value = yield* read()
         const requested = value.data.defaultModel
         if (!requested) return value.available.find(supportsText)
-        // A provider that was never registered (for example, its config entry failed the schema) resolves to nothing,
-        // so prompts never go to a provider the user did not choose. Registered but unavailable providers still fall back.
+        // A configured provider that is not registered (its config entry failed the schema, `disabled_providers` or a
+        // `provider.use` deny removed it, or `model` names an unknown ID) resolves to nothing, so prompts never go to a
+        // provider the user did not choose. Registered providers without a connection still fall back.
         if (!(yield* providers.snapshot()).records.has(requested.providerID)) return undefined
         const model = value.byProvider.get(requested.providerID)?.get(requested.modelID)
         return model?.enabled ? model : value.available.find(supportsText)
+      }),
+      configured: Effect.fn("Model.configured")(function* () {
+        return (yield* read()).data.defaultModel
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
         const value = yield* read()
