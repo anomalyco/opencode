@@ -93,10 +93,11 @@ pub struct Crossed {
     /// Messages and bytes the host sent.
     pub sent: u64,
     pub sent_bytes: u64,
-    /// Messages, trees among them, and bytes the host received.
+    /// Messages, trees among them, and bytes the host received, and of them in trees.
     pub received: u64,
     pub trees: u64,
     pub received_bytes: u64,
+    pub tree_bytes: u64,
     /// Revisions adopted, refused, and dropped as stale or for a mount that ended.
     pub adopted: u64,
     pub refused: u64,
@@ -110,8 +111,8 @@ pub struct Crossed {
 
 thread_local! {
     static CROSSED: Cell<Crossed> = const { Cell::new(Crossed {
-        sent: 0, sent_bytes: 0, received: 0, trees: 0, received_bytes: 0, adopted: 0, refused: 0, dropped: 0, started: 0,
-        host: Duration::ZERO,
+        sent: 0, sent_bytes: 0, received: 0, trees: 0, received_bytes: 0, tree_bytes: 0, adopted: 0, refused: 0,
+        dropped: 0, started: 0, host: Duration::ZERO,
     }) };
 }
 
@@ -204,8 +205,8 @@ pub struct Scripts {
     /// The directory of the written script, while the JS host may run.
     script: RefCell<Option<opencode_util::temp::TempDir>>,
     seq: Cell<u64>,
-    /// The bytes read from the running JS host, as last counted.
-    read: Cell<u64>,
+    /// The bytes read from the running JS host, and of them in trees, as last counted.
+    read: Cell<(u64, u64)>,
     loads: RefCell<HashMap<String, Load>>,
     /// Each plugin's running activation, by ID.
     guests: RefCell<HashMap<String, Weak<Guest>>>,
@@ -252,7 +253,7 @@ impl Scripts {
             child: RefCell::default(),
             script: RefCell::default(),
             seq: Cell::new(0),
-            read: Cell::new(0),
+            read: Cell::new((0, 0)),
             loads: RefCell::default(),
             guests: RefCell::default(),
             early: RefCell::default(),
@@ -458,7 +459,7 @@ impl Scripts {
                 let hello = serde_json::to_vec(&Down::Hello { version: proto::VERSION, after }).unwrap_or_default();
                 let _ = child.send(wire::CONTROL, &hello, None, child::Wait::Ack);
                 *self.child.borrow_mut() = Some(child);
-                self.read.set(0);
+                self.read.set((0, 0));
                 true
             }
             Err(error) => {
@@ -489,8 +490,11 @@ impl Scripts {
     fn woken(self: &Rc<Self>) {
         let taken = timed(|| self.child.borrow().as_ref().map(|child| (child.take(), child.read())));
         let Some((events, read)) = taken else { return };
-        let new = read.saturating_sub(self.read.replace(read));
-        count(|crossed| crossed.received_bytes += new);
+        let (seen, seen_trees) = self.read.replace(read);
+        count(|crossed| {
+            crossed.received_bytes += read.0.saturating_sub(seen);
+            crossed.tree_bytes += read.1.saturating_sub(seen_trees);
+        });
         for event in events {
             log::trace!("js host <- {event:?}");
             match event {
