@@ -14,7 +14,7 @@ use opencode_api::memory::Memory;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_plugin::abi;
 use opencode_plugin::loader::entry_file;
-use opencode_tui::plugins::host::{External, external};
+use opencode_tui::plugins::host::{External, external_with};
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
@@ -109,11 +109,57 @@ fn open_in(
     handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
     stored: bool,
 ) -> Port {
+    open_as(Carrier::Port(name), width, handler, stored, None).unwrap()
+}
+
+/// What a row loads: a port's library, or the published package of the plugin it ports, unmodified, on the JS host
+/// through the V2 compatibility layer (P8: `parity/plugins/npm/<name>.tgz`, a scope's `/` as `__`).
+#[derive(Clone, Copy)]
+enum Carrier<'a> {
+    Port(&'a str),
+    Npm(&'a str),
+}
+
+/// Unpacks the published package `name` from its tarball into `into`.
+pub(crate) fn unpack(name: &str, into: &Path) {
+    let tarball = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../parity/plugins/npm")
+        .join(format!("{}.tgz", name.replace('/', "__")));
+    std::fs::create_dir_all(into).unwrap();
+    let status = Command::new("tar")
+        .arg("-xzf")
+        .arg(&tarball)
+        .arg("-C")
+        .arg(into)
+        .arg("--strip-components=1")
+        .status()
+        .unwrap();
+    assert!(status.success(), "cannot unpack {}", tarball.display());
+}
+
+/// The TUI on `first`, or on session `ses_p`, with `carrier`'s plugin, over `handler`; `None` without Bun for a
+/// package.
+fn open_as(
+    carrier: Carrier<'_>,
+    width: u16,
+    handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
+    stored: bool,
+    first: Option<Route>,
+) -> Option<Port> {
+    let scripts = match carrier {
+        Carrier::Port(_) => None,
+        Carrier::Npm(_) => Some(crate::plugin_pipe::config()?),
+    };
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
-    let plugin = config.join("plugins").join(name);
-    std::fs::create_dir_all(&plugin).unwrap();
-    std::fs::write(plugin.join(entry_file()), build(name)).unwrap();
+    match carrier {
+        Carrier::Port(name) => {
+            let plugin = config.join("plugins").join(name);
+            std::fs::create_dir_all(&plugin).unwrap();
+            std::fs::write(plugin.join(entry_file()), build(name)).unwrap();
+        }
+        Carrier::Npm(name) => unpack(name, &config.join("plugins").join(name.replace('/', "__"))),
+    }
     let server = Server {
         events: Memory::new(Vec::new()),
         log: Log::default(),
@@ -122,14 +168,18 @@ fn open_in(
     };
     let deps = Deps {
         config: support::config(support::still()),
-        route: support::session_route("ses_p"),
+        route: first.unwrap_or_else(|| support::session_route("ses_p")),
         events: true,
         roots: stored.then(|| support::roots(support::home_paths(&root.path().join("home")), "test")).flatten(),
         ..support::deps(Arc::new(server.clone()))
     };
     let harness = support::mount(width, 40, deps);
-    external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() });
-    Port { harness, events: server.events, log: server.log, hold: server.hold, _root: root }
+    let external = External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() };
+    match scripts {
+        Some(scripts) => external_with(&harness.tui, external, Some(scripts)),
+        None => opencode_tui::plugins::host::external(&harness.tui, external),
+    }
+    Some(Port { harness, events: server.events, log: server.log, hold: server.hold, _root: root })
 }
 
 impl Port {
@@ -303,6 +353,36 @@ fn subagents_lists_ten_children_newest_first_and_opens_them() {
     h.wait_gone("▼ Subagents");
 }
 
+// Expected (`carrier-equal` for the V2 layer, P8): the published package, unmodified on the JS host, lists the same
+// rows as its port, in the same colors, once the host has the session's family and statuses as the sidebar mounts (an
+// installed package reads them once, as it mounts, in TS too); its `/subagents` picks from all twelve and opens the pick.
+#[test]
+fn the_published_subagents_sidebar_lists_and_picks_as_its_port_does() {
+    let rows = |carrier| {
+        let h = open_as(carrier, 170, subagents, false, None)?;
+        h.wait_for("+2 more");
+        h.wait("Child 03 runs", || {
+            h.sidebar(120).iter().any(|row| row.starts_with("• Child 03") && row.ends_with(" running"))
+        });
+        let theme = h.tui.page();
+        let colors = (h.fg("• Child 03", 0) == theme.text.feedback.success.base, h.fg("• Child 04", 0) == theme.text.muted);
+        Some((h.sidebar(120), colors, h))
+    };
+    let Some((js, js_colors, h)) = rows(Carrier::Npm("opencode-subagents-sidebar")) else { return };
+    let (port, port_colors, _) = rows(Carrier::Port("subagents-sidebar")).unwrap();
+    assert_eq!(js, port);
+    assert_eq!(js_colors, (true, true));
+    assert_eq!(port_colors, (true, true));
+    let (last, title, _) = by_update().pop().unwrap();
+    h.tui.keymap.dispatch("subagents-sidebar.pick", None);
+    h.wait_for("Child 12");
+    h.app.type_text(&title);
+    h.wait("the filtered list", || h.app.text().lines().filter(|line| line.contains(&title)).count() >= 2);
+    h.app.press("return");
+    let session = Route::Session { id: opencode_api::generated::SessionID(last) };
+    h.wait("the pick opens its child", || h.tui.route() == session);
+}
+
 // Expected (carbon-3, bigboi-3): the fold, a field merge the `cdylib` asks for over the C ABI, sets only its field in
 // the latest stored object, so a field another client wrote before this TUI read it again stays.
 #[test]
@@ -367,6 +447,26 @@ fn force_input_interrupts_then_submits_and_hints_the_keys() {
     h.wait_for("⏎ steer");
     h.tui.navigate(support::session_route("ses_q"));
     h.wait_for("⏎ send");
+}
+
+// Expected (`carrier-equal` and `delivery` for the V2 layer, P8): the published package, unmodified on the JS host,
+// sends what its port sends for ctrl+enter, in the same order: its four dispatches are one call's effects, applied in
+// the order it made them. Its hint is a static render of the package's JSX, as TS draws it from `node_modules`.
+#[test]
+fn the_published_force_input_sends_what_its_port_sends() {
+    let Some(h) = open_as(Carrier::Npm("@mynameistito/opencode-force-input"), 120, running, false, None) else {
+        return;
+    };
+    h.wait("the hint", || h.app.text().contains("⏎ "));
+    h.app.type_text("hello");
+    h.app.press("ctrl+return");
+    h.wait("the prompt is sent", || !h.sent("/api/session/ses_p/prompt").is_empty());
+    assert_eq!(h.wire(), ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
+    let log = h.log.lock().unwrap();
+    let prompts: Vec<&Value> =
+        log.iter().filter(|seen| seen.path.ends_with("/prompt")).map(|seen| &seen.body).collect();
+    assert_eq!(prompts.len(), 1, "{prompts:?}");
+    assert_eq!(prompts[0]["text"], "hello", "ctrl+enter added no newline");
 }
 
 // Expected (bigboi-fixes-1): a prompt reaches the server after every interrupt sent before it, so a late interrupt
@@ -568,8 +668,19 @@ fn usage(grown: Arc<Mutex<bool>>, paged: bool) -> impl Fn(&Seen) -> Option<Reply
 // follows. The meters draw as TS draws them: label, percentage and countdown, then a bar in the severity's color.
 #[test]
 fn session_usage_totals_the_paged_history_and_follows_usage_events() {
+    totals(Carrier::Port("session-usage"));
+}
+
+// Expected (`carrier-equal` for the V2 layer, P8): the published package, unmodified on the JS host, does all of the
+// above as its port does: the same total over the same pages, the same rows and colors, the same follow of the event.
+#[test]
+fn the_published_session_usage_totals_as_its_port_does() {
+    totals(Carrier::Npm("opencode-session-usage"));
+}
+
+fn totals(carrier: Carrier<'_>) {
     let grown = Arc::new(Mutex::new(false));
-    let h = open("session-usage", 170, usage(grown.clone(), false));
+    let Some(h) = open_as(carrier, 170, usage(grown.clone(), false), false, None) else { return };
     h.wait_for("≈ $2.50 session total");
     let pages = h.sent("/api/session/ses_p/message");
     assert!(pages.contains(&"GET /api/session/ses_p/message?limit=100&cursor=page100".to_owned()), "{pages:#?}");

@@ -35,6 +35,7 @@ mod plugin_builtins;
 mod plugin_canvas;
 mod plugin_carriers;
 mod plugin_claim;
+mod plugin_compat;
 mod plugin_contain;
 mod plugin_fetch;
 mod plugin_flood;
