@@ -1872,19 +1872,24 @@ fn a_view_that_ends_the_js_host_fails_its_plugin_alone() {
     lab_fails("lab.exit", "ended the JS host", true);
 }
 
-// Expected (carbon-7): a memo within a kept memo stays known: the inner subtree is built once, though its outer one was
-// kept, then built again.
+// Expected (carbon-7): a memo within a kept memo stays known: the inner subtree is not built again, though its outer one
+// was kept, then built again. Counted from once the slot's size is settled: a first tree that went out before the slot
+// was laid out is refused, and the next is built whole (review bigboi-7).
 #[test]
 fn a_memo_within_a_kept_memo_stays_known() {
     let Some(config) = config() else { return };
     let pipe = lab(config);
     let tui = &pipe.harness.tui;
+    pipe.settle();
+    tui.keymap.dispatch("lab.inner", None);
+    let built = toasted(&pipe, "inner");
+    tui.toasts.dismiss();
     tui.keymap.dispatch("lab.c", None);
     shows(&pipe, "lab c=1");
     tui.keymap.dispatch("lab.a", None);
     shows(&pipe, "lab a=1");
     tui.keymap.dispatch("lab.inner", None);
-    assert_eq!(toasted(&pipe, "inner"), "inner 1");
+    assert_eq!(toasted(&pipe, "inner"), built);
 }
 
 // Expected (carbon-7, carbon-9 CM2): content a view releases goes, and so does what a JS host that ended gave: the host
