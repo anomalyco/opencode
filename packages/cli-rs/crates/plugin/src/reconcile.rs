@@ -1105,7 +1105,7 @@ impl Pass<'_, '_> {
             return self.adopt(held, node).0;
         }
         let mut mounted = self.shell(node);
-        match (node, &mounted.extra) {
+        match (node, &mut mounted.extra) {
             (Node::Box { children, .. }, Extra::Box { view, .. }) => {
                 let view = view.clone();
                 mounted.children = self.children(&view, Vec::new(), children);
@@ -1114,6 +1114,7 @@ impl Pass<'_, '_> {
                 let content = scroll.content_view().clone();
                 mounted.children = self.children(&content, Vec::new(), children);
             }
+            (Node::List { items, .. }, Extra::List(list)) => list.reconcile(self.env, items, false),
             _ => {}
         }
         mounted.dynamic = dynamic(node, &mounted.children);
