@@ -17,6 +17,7 @@ use super::proto::{Down, Revision};
 use super::{Call, Scripts, Waiting, count};
 use crate::activation::{Activation, Wake};
 use crate::interact::{Deliver, Owner};
+use crate::limits;
 use crate::loader::native::{Answers, Ctx, apply, handle};
 use crate::mailbox::Mailbox;
 use crate::surface::{self, Viewed, Viewing};
@@ -98,6 +99,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 activation,
                 viewers: RefCell::default(),
                 watches: RefCell::default(),
+                pushed: RefCell::default(),
                 watcher: RefCell::default(),
                 disposed: Cell::new(false),
             });
@@ -133,6 +135,8 @@ pub(crate) struct Guest {
     viewers: RefCell<Vec<Rc<Viewer>>>,
     /// The reads it watches, by its key, with the value last pushed.
     watches: RefCell<BTreeMap<String, (HostRequest, Option<u64>)>>,
+    /// The bytes of each read last pushed, charged to the plugin's content while it is watched (4.2, phase Pl).
+    pushed: RefCell<BTreeMap<String, u64>>,
     watcher: RefCell<Option<Disposer>>,
     disposed: Cell<bool>,
 }
@@ -325,6 +329,7 @@ impl Guest {
             return;
         }
         crate::fail(&self.host, self.id(), &self.failure, self.revoked.take(), &self.activation, error);
+        self.release_reads();
         self.deactivate();
     }
 
@@ -343,6 +348,7 @@ impl Guest {
         if let Some(watcher) = self.watcher.take() {
             watcher.dispose();
         }
+        self.release_reads();
         if self.failure.borrow().is_none() {
             self.deactivate();
         }
@@ -389,18 +395,36 @@ impl Guest {
         self.push(key, value);
     }
 
-    /// Pushes the value of the read `key` watches: as a failed read when it is over [`READ`] bytes of JSON, which the
-    /// plugin reads as nothing, and can ask why; the plugin goes on (review: bound each read).
+    /// Pushes the value of the read `key` watches: as a failed read when it is over [`READ`] bytes of JSON, or past the
+    /// content its plugin may hold beside what it holds (4.2, phase Pl), which the plugin reads as nothing, and can ask
+    /// why; the plugin goes on (review: bound each read). What it pushes is charged to its content while it watches it.
     fn push(&self, key: String, value: serde_json::Value) {
         let bytes = Measure::of(&value).bytes;
-        let (value, error) = match bytes > READ {
-            true => {
-                log::warn!("plugin {}: the read it watches as {key} is {bytes} bytes, over {READ}", self.id());
-                (serde_json::Value::Null, Some(format!("the read is {bytes} bytes, over {READ}")))
+        let held = self.pushed.borrow().get(&key).copied().unwrap_or(0);
+        let error = if bytes > READ {
+            Some(format!("the read is {bytes} bytes, over {READ}"))
+        } else if bytes as u64 > limits::room(self.id(), limits::Kind::Content, held) {
+            Some(format!("the read is {bytes} bytes, past what the plugin may hold"))
+        } else {
+            None
+        };
+        let charged = if error.is_some() { 0 } else { bytes as u64 };
+        limits::recharge(self.id(), limits::Kind::Content, held, charged);
+        self.pushed.borrow_mut().insert(key.clone(), charged);
+        let value = match &error {
+            Some(error) => {
+                log::warn!("plugin {}: the read it watches as {key}: {error}", self.id());
+                serde_json::Value::Null
             }
-            false => (value, None),
+            None => value,
         };
         self.send(Down::Snapshot { id: self.id().to_owned(), key, value, error }, None);
+    }
+
+    /// Gives back what the reads it watched charged.
+    fn release_reads(&self) {
+        let pushed = std::mem::take(&mut *self.pushed.borrow_mut());
+        limits::release(self.id(), limits::Kind::Content, pushed.values().sum());
     }
 
     /// The read's value now, and a hash of its JSON, which tells a change without keeping the value.
@@ -413,6 +437,9 @@ impl Guest {
 
     pub(crate) fn unwatch(&self, key: &str) {
         self.watches.borrow_mut().remove(key);
+        if let Some(charged) = self.pushed.borrow_mut().remove(key) {
+            limits::release(self.id(), limits::Kind::Content, charged);
+        }
     }
 
     /// Pushes each watched read whose value changed.
