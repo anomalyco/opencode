@@ -2537,3 +2537,42 @@ fn an_overrun_at_a_theme_change_falls_the_fence_back() {
         assert_eq!(ClaimModel { carrier }.run(&commands), None, "{carrier:?}");
     }
 }
+
+/// Claims `probe` fences with P3's `Code` of the fence's code, as Rust, with line numbers.
+fn plugin_code(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::fence("probe", |_, part| {
+        let Part::Fence(fence) = part else { return None };
+        Some(v2::Node::Code {
+            id: Some("code".into()),
+            content: v2::Source::Text(fence.code.clone()),
+            filetype: Some("rust".into()),
+            numbers: true,
+            layout: abi::Layout::default(),
+        })
+    }));
+    Ok(())
+}
+
+// Expected (P3 with Pr): P3's node kinds serve claims as they serve surfaces, with no change to the claims: a fence
+// claim draws its code in P3's `Code` view, with its gutter, while the fence streams and once it closed, on both
+// carriers.
+#[test]
+fn a_fence_claim_draws_its_code_in_p3s_code_view() {
+    for carrier in CARRIERS {
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.code", setup: plugin_code })]);
+        world.emit("session.text.started", json!({ "ordinal": 0 }));
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```probe\nlet a = 1;\n" }));
+        world.settle();
+        let screen = world.frame().text();
+        let numbered = |screen: &str, n: usize, text: &str| {
+            screen.lines().any(|line| line.trim_start().starts_with(&n.to_string()) && line.contains(text))
+        };
+        assert!(numbered(&screen, 1, "let a = 1;"), "{carrier:?}: no numbered code:\n{screen}");
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "let b = 2;\n```\n\nAfter.\n" }));
+        world.settle();
+        let screen = world.frame().text();
+        assert!(numbered(&screen, 2, "let b = 2;") && screen.contains("After."), "{carrier:?}:\n{screen}");
+        assert!(!screen.contains("```"), "{carrier:?}: the host's view shows:\n{screen}");
+        assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{carrier:?}: {:?}", mounted());
+    }
+}
