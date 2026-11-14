@@ -1792,15 +1792,6 @@ pub enum HostRequest {
         key: String,
         value: String,
     },
-    /// P8: writes `value` (JSON text) under `key` only if what is stored is still `expect` (JSON text; `None` when
-    /// nothing is), and answers whether it did. An update made from a value another write changed meanwhile is made
-    /// again from the new one, as TS updates a store under a file lock. A host that does not know it answers an error.
-    StorageSwap {
-        key: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        expect: Option<String>,
-        value: String,
-    },
     OpenRoute {
         name: String,
     },

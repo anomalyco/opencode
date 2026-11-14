@@ -720,26 +720,28 @@ export function context(base: Base, carrier: Carrier) {
           const value = untrack(persisted)
           if (value !== undefined) setStore(reconcile(value))
         })
-        // As TS's, under its lock: one update of the key at a time, each made from what is stored then (bigboi P8-3).
-        // Its write says what it was made from; one another client's write came before is made again from that.
+        // As TS's, under its lock (bigboi P8-3): one update of the key at a time, each made from what the host holds
+        // then, which the last update wrote; what it changed is merged into what is stored as it is written, so a field
+        // another client wrote meanwhile stays. One that removes a field writes the whole value.
         let queue: Promise<unknown> = Promise.resolve()
         const once = async (mutation: (draft: Json) => void) => {
-          for (let attempt = 0; ; attempt++) {
-            if (attempt === 8) throw new Error(`storage ${key}: other writes kept changing it`)
-            const stored = await carrier.effect({ type: "storage-get", key })
-            let draft: Json
-            try {
-              draft = typeof stored === "string" ? JSON.parse(stored) : structuredClone(options.initial)
-            } catch {
-              draft = structuredClone(options.initial)
-            }
-            mutation(draft)
-            const value = JSON.stringify(draft)
-            const expect = typeof stored === "string" ? stored : undefined
-            if ((await carrier.effect({ type: "storage-swap", key, expect, value })) !== true) continue
-            batch(() => setStore(reconcile(draft)))
-            return
+          const stored = await carrier.effect({ type: "storage-get", key })
+          let base: Json
+          try {
+            base = typeof stored === "string" ? JSON.parse(stored) : structuredClone(options.initial)
+          } catch {
+            base = structuredClone(options.initial)
           }
+          const draft = structuredClone(base)
+          mutation(draft)
+          const plain = (value: Json) => !!value && typeof value === "object" && !Array.isArray(value)
+          if (plain(base) && plain(draft) && Object.keys(base).every((field) => field in draft)) {
+            const fields = Object.fromEntries(
+              Object.entries(draft).filter(([field, value]) => JSON.stringify(value) !== JSON.stringify(base[field])),
+            )
+            if (Object.keys(fields).length) await carrier.effect({ type: "storage-merge", key, fields })
+          } else await carrier.effect({ type: "storage-set", key, value: JSON.stringify(draft) })
+          batch(() => setStore(reconcile(draft)))
         }
         const update = (mutation: (draft: Json) => void) => {
           const done = queue.then(() => once(mutation))
