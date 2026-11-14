@@ -61,7 +61,10 @@ pub const LIST_CELLS: usize = 1 << 18;
 /// frame (`OT_SCENE_RECORD_BYTES_MAX`, 64 MiB), the rest left to the host's own widgets.
 pub const FRAME_RECORDING: usize = 32 << 20;
 /// What the renderer records for one drawn operation, a text's bytes aside: a draw head and the largest draw record.
+/// A record of cells costs it too, before its cells.
 pub const RECORD: usize = 128;
+/// What a cell costs a record of cells, and what the canvas holds for each cell of its list once prepared.
+pub const CELL: usize = size_of::<PaintCell>();
 
 /// One draw: `None` when the plugin was not called (it failed, or its activation ended); else the list's bytes, or
 /// `None` to keep the list (also when the call panicked).
@@ -199,10 +202,36 @@ struct State {
 
 enum Shown {
     Empty,
-    /// A list, and what it costs at the size it was last costed for.
-    List(Rc<[u8]>, Cell<((u16, u16), Cost)>),
+    List(Kept),
     /// The last list was over a limit.
     Over,
+}
+
+/// A list the canvas keeps: its bytes, what it costs at the size it was last costed for, and its cells as OpenTUI
+/// records them, each of one column, made by the first paint that replays it.
+struct Kept {
+    bytes: Rc<[u8]>,
+    costed: Cell<((u16, u16), Cost)>,
+    cells: std::cell::OnceCell<Box<[PaintCell]>>,
+}
+
+impl Kept {
+    /// What the canvas holds for it: its bytes and its prepared cells.
+    fn held(&self) -> i64 {
+        held_for(&self.bytes)
+    }
+}
+
+/// What a canvas holds for the list `bytes`: the bytes, and a [`PaintCell`] for each of its cells.
+fn held_for(bytes: &[u8]) -> i64 {
+    let cells: usize = list::ops(bytes)
+        .map(|op| match op {
+            Op::Cell { .. } => 1,
+            Op::Cells { cells, .. } => cells.len(),
+            _ => 0,
+        })
+        .sum();
+    (bytes.len() + cells * CELL) as i64
 }
 
 /// What replaying a list at a size asks of the renderer: its recording, in bytes, and the cells it touches.
@@ -303,10 +332,11 @@ impl State {
         let started = Instant::now();
         let checked = list::check(&bytes).map(|_| cost(&bytes, size));
         let old = match &*self.shown.borrow() {
-            Shown::List(old, _) => old.len() as i64,
+            Shown::List(old) => old.held(),
             _ => 0,
         };
-        let (new, mine, all) = (bytes.len() as i64, held(&drawer.owner) - old, ledger().bytes - old);
+        let new = checked.as_ref().map_or(0, |_| held_for(&bytes));
+        let (mine, all) = (held(&drawer.owner) - old, ledger().bytes - old);
         let next = match checked {
             Ok(cost)
                 if cost.recording <= LIST_RECORDING
@@ -318,7 +348,8 @@ impl State {
                     work.lists += 1;
                     work.bytes += bytes.len() as u64;
                 });
-                Shown::List(Rc::from(bytes), Cell::new((size, cost)))
+                let cells = std::cell::OnceCell::new();
+                Shown::List(Kept { bytes: Rc::from(bytes), costed: Cell::new((size, cost)), cells })
             }
             Ok(_) | Err(list::Error::Over(_)) => {
                 count(|work| work.over += 1);
@@ -333,7 +364,7 @@ impl State {
         let took = started.elapsed().as_nanos() as u64;
         count(|work| work.check_ns += took);
         let kept = match &next {
-            Shown::List(bytes, _) => bytes.len() as i64,
+            Shown::List(kept) => kept.held(),
             _ => 0,
         };
         self.shown.replace(next);
@@ -439,7 +470,7 @@ fn resume(state: &Rc<State>) {
 impl Drop for State {
     fn drop(&mut self) {
         let bytes = match &*self.shown.borrow() {
-            Shown::List(bytes, _) => bytes.len() as i64,
+            Shown::List(kept) => kept.held(),
             _ => 0,
         };
         if let Some(drawer) = &self.drawer {
@@ -478,18 +509,19 @@ impl Component for Board {
         let started = Instant::now();
         match &*state.shown.borrow() {
             Shown::Empty => {}
-            Shown::List(bytes, costed) => {
-                let (at, mut cost) = costed.get();
+            Shown::List(kept) => {
+                let (at, mut cost) = kept.costed.get();
                 if at != size {
-                    cost = self::cost(bytes, size);
-                    costed.set((size, cost));
+                    cost = self::cost(&kept.bytes, size);
+                    kept.costed.set((size, cost));
                 }
                 if !spend(&state.app, cost.recording) {
                     count(|work| work.squeezed += 1);
                     painter.text(0, 0, PLACEHOLDER, Style::new().dim());
                     return;
                 }
-                let ops = replay(painter, &mut list::ops(bytes), size, &mut Widths::default());
+                let cells = kept.cells.get_or_init(|| prepare(painter, &kept.bytes));
+                let ops = replay(painter, &mut list::ops(&kept.bytes), size, &mut &cells[..]);
                 let took = started.elapsed().as_nanos() as u64;
                 count(|work| {
                     work.replays += 1;
@@ -550,12 +582,13 @@ fn cost(bytes: &[u8], size: (u16, u16)) -> Cost {
                 false => (0, 0),
             },
             Op::Cell { x, y, .. } => match inside(x, y, 1, 1, size) {
-                true => (RECORD, 1),
+                true => (RECORD + CELL, 1),
                 false => (0, 0),
             },
             Op::Cells { x, y, width, cells } => {
-                let shown = (0..cells.len()).filter(|index| place(x, y, width, *index, size).is_some()).count();
-                (RECORD * shown, shown)
+                let spans = rows(x, y, width, cells.len(), size);
+                let shown: usize = spans.clone().map(|(_, _, from, to)| to - from).sum();
+                (RECORD * spans.count() + CELL * shown, shown)
             }
             Op::Clip { .. } | Op::Pop => (RECORD / 4, 0),
         };
@@ -565,19 +598,29 @@ fn cost(bytes: &[u8], size: (u16, u16)) -> Cost {
     cost
 }
 
-/// Where entry `index` of a run of cells from `(x, y)` in rows of `width` lands, when it lands inside a canvas of
-/// `size`.
-fn place(x: i16, y: i16, width: u16, index: usize, size: (u16, u16)) -> Option<(i32, i32)> {
+/// The parts of a run of `count` cells from `(x, y)` in rows of `width` that land inside a canvas of `size`, a row
+/// each: the row's first column and its line, and the run's cells `from..to` that it shows.
+fn rows(
+    x: i16,
+    y: i16,
+    width: u16,
+    count: usize,
+    size: (u16, u16),
+) -> impl Iterator<Item = (i32, i32, usize, usize)> + Clone {
     let width = usize::from(width.max(1));
-    let (column, row) = (i32::from(x) + (index % width) as i32, i32::from(y) + (index / width) as i32);
-    let shown = (0..i32::from(size.0)).contains(&column) && (0..i32::from(size.1)).contains(&row);
-    shown.then_some((column, row))
+    let (left, right) = ((-i64::from(x)).max(0) as usize, (i64::from(size.0) - i64::from(x)).max(0) as usize);
+    (0..count.div_ceil(width)).filter_map(move |row| {
+        let line = i32::from(y) + row as i32;
+        let start = row * width;
+        let (from, to) = (start + left.min(width), start + right.min(width).min(count - start));
+        ((0..i32::from(size.1)).contains(&line) && from < to).then_some((i32::from(x) + left as i32, line, from, to))
+    })
 }
 
 /// Which characters are one column wide by OpenTUI's measure, for a cell: the renderer writes a cell's character as
 /// one column, and one of another width (wide, combining, zero-width, a bidirectional control) would move the
-/// terminal's cursor off the row it draws. A direct-mapped cache of the last measures: a full-screen canvas replays
-/// thousands of cells a frame, and a hash a cell cost the replay a sixth.
+/// terminal's cursor off the row it draws. A direct-mapped cache of the last measures, as a list of thousands of cells
+/// is prepared at once and a hash a cell cost that a sixth.
 struct Widths([Option<(char, bool)>; 64]);
 
 impl Default for Widths {
@@ -607,11 +650,34 @@ impl Widths {
 
 /// Paints `ops` up to their end or the `pop` that closes the clip they are in, at `size`, culling what does not reach
 /// into the canvas; returns how many it painted. The one place a list becomes paint calls.
+/// The cells of the list `bytes`, a cell's and each of a run's, in order, as OpenTUI records them: a character of
+/// another width than one column is U+FFFD.
+fn prepare(painter: &Painter<'_>, bytes: &[u8]) -> Box<[PaintCell]> {
+    let mut widths = Widths::default();
+    let mut cell = |style, char| PaintCell::new(widths.single(painter, char), styled(style));
+    list::ops(bytes)
+        .flat_map(|op| match op {
+            Op::Cell { style, char, .. } => vec![cell(style, char)],
+            Op::Cells { cells, .. } => cells.iter().map(|(style, char)| cell(style, char)).collect(),
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+/// The next `count` of `cells`.
+fn take<'c>(cells: &mut &'c [PaintCell], count: usize) -> &'c [PaintCell] {
+    let (taken, rest) = cells.split_at(count);
+    *cells = rest;
+    taken
+}
+
+/// Replays `ops` at `size`, taking the cells of `cells` as its cells and runs come: a run is a record of cells for
+/// each row it shows in. What lands outside the canvas is not recorded. Returns the operations and cells painted.
 fn replay<'a>(
     painter: &mut Painter<'_>,
     ops: &mut impl Iterator<Item = Op<'a>>,
     size: (u16, u16),
-    widths: &mut Widths,
+    cells: &mut &[PaintCell],
 ) -> u64 {
     let mut painted = 0;
     while let Some(op) = ops.next() {
@@ -624,18 +690,18 @@ fn replay<'a>(
                 painter.text(x.into(), y.into(), text, styled(style));
                 painted += 1;
             }
-            Op::Cell { x, y, style, char } if inside(x, y, 1, 1, size) => {
-                let char = widths.single(painter, char);
-                painter.cell(x.into(), y.into(), char, styled(style));
-                painted += 1;
+            Op::Cell { x, y, .. } => {
+                let cell = take(cells, 1);
+                if inside(x, y, 1, 1, size) {
+                    painter.cells(x.into(), y.into(), 1, cell);
+                    painted += 1;
+                }
             }
-            Op::Cells { x, y, width, cells } => {
-                for (index, (style, char)) in cells.iter().enumerate() {
-                    if let Some((column, row)) = place(x, y, width, index, size) {
-                        let char = widths.single(painter, char);
-                        painter.cell(column, row, char, styled(style));
-                        painted += 1;
-                    }
+            Op::Cells { x, y, width, cells: run } => {
+                let run = take(cells, run.len());
+                for (column, line, from, to) in rows(x, y, width, run.len(), size) {
+                    painter.cells(column, line, (to - from) as u32, &run[from..to]);
+                    painted += (to - from) as u64;
                 }
             }
             Op::Rect { x, y, width, height, border, color, background }
@@ -653,7 +719,7 @@ fn replay<'a>(
             }
             Op::Clip { x, y, width, height } => {
                 painter.clip(x.into(), y.into(), width.into(), height.into(), |painter| {
-                    painted += replay(painter, ops, size, widths)
+                    painted += replay(painter, ops, size, cells)
                 });
             }
             Op::Pop => return painted,
