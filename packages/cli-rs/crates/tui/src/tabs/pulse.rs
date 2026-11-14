@@ -27,8 +27,8 @@ const GLOW_RELEASE_ATTACK: f64 = 0.12;
 const GLOW_RELEASE_PEAK: f64 = 1.25;
 pub const GLOW_TAIL: usize = 12;
 const GLOW_OPACITY: f64 = 0.16;
-/// The pulse ticks at 20 fps while it animates.
-pub const FRAME: Duration = Duration::from_millis(50);
+/// The pulse ticks at 20 fps while it animates (`PULSE_FPS`).
+pub const FPS: f64 = 20.0;
 
 fn fade_out(progress: f64) -> f64 {
     1.0 - smootherstep(progress)

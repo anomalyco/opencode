@@ -114,16 +114,10 @@ pub struct Tabs {
     fetched: RefCell<String>,
     prefetch: Cell<Option<opentui::prelude::TimerId>>,
     retention: RefCell<Retention>,
-    epoch: Cell<Option<std::time::Instant>>,
     _watch: RefCell<Option<opencode_local::watch::Watch>>,
 }
 
 impl Tabs {
-    /// When the tabs mounted; spinner frames count from it.
-    pub fn epoch(&self) -> std::time::Instant {
-        self.epoch.get().unwrap_or_else(std::time::Instant::now)
-    }
-
     /// `config.tabs.enabled`.
     pub fn enabled(tui: &Tui) -> bool {
         tui.config().tabs.enabled
@@ -203,7 +197,6 @@ impl Tabs {
 
 /// Loads `tabs.json`, registers the tab commands, and follows the storage directory.
 pub fn install(tui: &Rc<Tui>) {
-    tui.tabs.epoch.set(Some(tui.app.now()));
     *tui.tabs.cwd.borrow_mut() =
         std::env::current_dir().map(|path| path.to_string_lossy().into_owned()).unwrap_or_default();
     if let Some(storage) = tui.storage() {

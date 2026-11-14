@@ -4,12 +4,15 @@
 
 use opencode_store::Location;
 use opencode_ui::theme::tint;
+use opentui::app::{AnimationTick, Tick};
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use unicode_width::UnicodeWidthStr;
 
 use super::model::{self, NEW_SESSION_TAB_TITLE, Tab};
 use super::pulse::{self, Pulse};
-use super::strip::{FADE_WIDTH, MarkerFade, draw_chars, fade, feedback, indicator, paint_pulse, take_width};
+use super::strip::{
+    FADE_WIDTH, MarkerFade, draw_chars, fade, feedback, hold, indicator, paint_pulse, spinner_fps, step, take_width,
+};
 use super::{Status, Unread};
 use crate::frame::layout::SESSION_TABS_COMPACT_BREAKPOINT;
 use crate::prelude::*;
@@ -30,8 +33,11 @@ pub struct Rail {
     rows: RefCell<Vec<(i32, i32, Option<String>)>>,
     pulses: RefCell<HashMap<(String, u8), Pulse>>,
     fades: RefCell<HashMap<String, MarkerFade>>,
-    /// Whether the last paint showed a compact tab's spinner, which no pulse ticks.
-    spinning: Cell<bool>,
+    /// The spinner steps of the painted tabs that run, each from 0 when its spinner shows.
+    spins: RefCell<HashMap<String, u64>>,
+    /// The rail's ticks while a spinner shows and while a pulse moves.
+    spin: RefCell<Option<AnimationTick>>,
+    pulse: RefCell<Option<AnimationTick>>,
 }
 
 pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
@@ -52,7 +58,9 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
             rows: RefCell::default(),
             pulses: RefCell::default(),
             fades: RefCell::default(),
-            spinning: Cell::new(false),
+            spins: RefCell::default(),
+            spin: RefCell::default(),
+            pulse: RefCell::default(),
         },
     )
     .shrink(0.0)
@@ -79,35 +87,24 @@ pub fn leave(rail: &Custom<Rail>) {
     });
 }
 
-pub fn animating(rail: &Custom<Rail>) -> bool {
-    rail.with(|rail| rail.pulses.borrow().values().any(Pulse::live))
-}
-
-pub fn spinning(rail: &Custom<Rail>) -> bool {
-    rail.with(|rail| rail.spinning.get())
-}
-
-/// Drops the pulses and spinners while the rail is hidden, as its tabs unmount.
+/// Drops the pulses and spinners while the rail is hidden, as its tabs unmount. Its ticks park while it is hidden,
+/// and its next paint keeps or drops them.
 pub fn forget(rail: &Custom<Rail>) {
     rail.with(|rail| {
         rail.pulses.borrow_mut().clear();
         rail.fades.borrow_mut().clear();
-        rail.spinning.set(false);
+        rail.spins.borrow_mut().clear();
     });
+}
+
+/// Whether an unread marker on the rail still fades.
+pub fn fading(rail: &Custom<Rail>, now: std::time::Instant) -> bool {
+    rail.with(|rail| rail.fades.borrow().values().any(|marker| marker.moving(now)))
 }
 
 /// Feeds each painted tab's status to its unread marker at a store flush.
 pub fn observe(rail: &Custom<Rail>, tui: &Tui) {
     rail.with(|rail| super::strip::observe_markers(&rail.fades, tui));
-}
-
-/// Turns the pulses' motion on or off (`TabPulse`'s `enabled`).
-pub fn set_animations(rail: &Custom<Rail>, enabled: bool) {
-    rail.with(|rail| rail.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.set_enabled(enabled)));
-}
-
-pub fn tick(rail: &Custom<Rail>, delta: std::time::Duration) {
-    rail.update(|rail| rail.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.advance(delta)));
 }
 
 /// What one tab shows, before it is drawn.
@@ -250,8 +247,9 @@ impl Component for Rail {
         let mut rows = Vec::new();
         let mut pulses = self.pulses.borrow_mut();
         let mut markers = self.fades.borrow_mut();
+        let mut spins = self.spins.borrow_mut();
+        let mut spinning = Vec::new();
         let now = tui.app.now();
-        let mut spinning = false;
 
         if compact {
             let below = items
@@ -313,9 +311,13 @@ impl Component for Rail {
             let marker = markers.entry(session.to_owned()).or_insert_with(|| MarkerFade::new(&status, unread_glyph));
             marker.set(&status, unread_glyph, animations, now);
             let faded = marker.color(&status, pulse_bg, theme.text.base, now);
-            let glyph_text = |idle: &str| {
-                indicator(&status, &label, idle, numbers, animations, faded.is_some(), now, tui.tabs.epoch())
-            };
+            // `TabIndicator` mounts a `<spinner>` while the tab runs with animations on and no numbers.
+            let spinner = runs && animations && !numbers;
+            let step = if spinner { *spins.entry(session.to_owned()).or_insert(0) } else { 0 };
+            if spinner {
+                spinning.push(session.to_owned());
+            }
+            let glyph_text = |idle: &str| indicator(&status, &label, idle, numbers, animations, faded.is_some(), step);
             let unread = glyph_text("").1;
             rows.push((y, if compact { 1 } else { 2 }, Some(session.to_owned())));
             if compact {
@@ -363,7 +365,6 @@ impl Component for Rail {
                     style = style.bold();
                 }
                 painter.text((width as i32 - glyph.width() as i32) / 2, y, &glyph, style);
-                spinning |= runs && animations && !numbers;
                 continue;
             }
 
@@ -376,7 +377,10 @@ impl Component for Rail {
             let mut voice = |slot: u8, input: pulse::Input| {
                 pulses
                     .entry((session.to_owned(), slot))
-                    .and_modify(|pulse| pulse.set(input))
+                    .and_modify(|pulse| {
+                        pulse.set_enabled(animations);
+                        pulse.set(input);
+                    })
                     .or_insert_with(|| Pulse::mount(animations, input))
                     .clone()
             };
@@ -534,11 +538,30 @@ impl Component for Rail {
                 && items.iter().any(|item| item.tab.session_id == *session)
                 && (!matches!(slot, 2 | 3) || last == Some(session.as_str()))
         });
-        self.spinning.set(spinning);
-        if spinning || pulses.values().any(Pulse::live) {
-            crate::frame::wake(&tui);
-        }
-        drop(pulses);
+        spins.retain(|session, _| spinning.contains(session));
+        let (live, spin) = (pulses.values().any(Pulse::live), !spins.is_empty());
+        drop((pulses, spins));
+        // Both tick only while the rail is drawn. The compact rail has no pulses: its spinners tick 12.5 frames a
+        // second. The clock shares the full rail's frames: 20 a second while a tab runs.
+        hold(&self.spin, spin, || {
+            tui.frame.rail.on_animation_tick(
+                spinner_fps(),
+                bind!(tui.weak(), |tui, _, tick: Tick| {
+                    tui.frame.rail.with(|rail| step(&rail.spins, tick.ticks));
+                }),
+            )
+        });
+        hold(&self.pulse, live, || {
+            tui.frame.rail.on_animation_tick(
+                super::pulse::FPS,
+                bind!(tui.weak(), |tui, _, tick: Tick| {
+                    let rail = &tui.frame.rail;
+                    rail.update(|rail| {
+                        rail.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.advance(tick.elapsed))
+                    });
+                }),
+            )
+        });
         markers.retain(|session, _| items.iter().any(|item| item.tab.session_id == *session));
         if markers.values().any(|marker| marker.moving(now)) {
             crate::frame::wake_markers(&tui);

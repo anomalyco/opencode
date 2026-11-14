@@ -310,6 +310,9 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
     let h = mount(100, json!({}));
     h.open("ses_b");
     h.wait_for("Write the docs");
+    // The app at rest, after the startup's one-off timers.
+    h.app.idle(std::time::Duration::from_secs(8));
+    let rest = h.app.idle(std::time::Duration::from_secs(8));
     let event = json!({
         "id": "evt_1", "created": 10_000, "type": "session.execution.started",
         "durable": { "aggregateID": "ses_a", "seq": 1, "version": 1 },
@@ -328,6 +331,11 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
         !h.app.needs_frame()
     });
     assert!(still, "a closed tab still ticks");
+    // The same in `App::run`'s loop: once the close's one-off timers have run, a closed tab costs what the app costs
+    // at rest, or a fixture retry's frame.
+    h.app.idle(std::time::Duration::from_secs(8));
+    let closed = h.app.idle(std::time::Duration::from_secs(8));
+    assert!(closed.frames <= 1 && closed.wakeups <= rest.wakeups + closed.frames, "{closed:?}, at rest {rest:?}");
 }
 
 // A busy tab in the background animates with nothing else going on, and stops once it is idle. The strip and the
@@ -346,7 +354,7 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
     };
     let vertical = json!({ "tabs": { "layout": "vertical" } });
     for (name, config, compact, busy) in [
-        ("strip", json!({ "tabs": { "layout": "horizontal" } }), false, 160),
+        ("strip", json!({ "tabs": { "layout": "horizontal" } }), false, 160usize),
         ("rail", vertical.clone(), false, 160),
         ("compact rail", vertical, true, 100),
         // A still glyph or a number needs no frames.
@@ -366,7 +374,7 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
         assert!(frames(&h).len() <= 1, "{name}: idle");
         // The app's other timers, which wake `App::run`'s loop without a frame.
         let rest = h.app.idle(std::time::Duration::from_secs(8));
-        // Off the spinner's steps, which count from the tabs' epoch.
+        // Off the spinner's steps, which count from the app clock's start.
         h.app.advance(std::time::Duration::from_millis(30));
         h.tui.data.apply(&[execution("started", 1)]);
         if compact && busy > 0 {
@@ -378,37 +386,69 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
             h.app.advance(std::time::Duration::from_millis(80));
             assert!(h.app.needs_frame(), "{name}: no step after 80 ms");
         }
+        // A frame up to half an interval before a due time runs its tick, so the first may fall just before.
         let busy_frames = frames(&h);
-        assert!((busy..=busy + 2).contains(&busy_frames.len()), "{name}: busy, {} frames", busy_frames.len());
+        let range = busy.saturating_sub(1)..=busy + 2;
+        assert!(range.contains(&busy_frames.len()), "{name}: busy, {} frames", busy_frames.len());
         if compact {
-            assert!(busy_frames.iter().all(|at| at % 80 == 0), "{name}: off the spinner's steps, {busy_frames:?}");
+            let steps = busy_frames.windows(2).all(|pair| (pair[1] - pair[0]) % 80 == 0);
+            assert!(steps, "{name}: off the spinner's steps, {busy_frames:?}");
         }
         // The same in `App::run`'s loop, which sleeps until the next timer or frame slot: each paint arms the next
         // tick, and the loop wakes for nothing more than at rest.
         let idle = h.app.idle(std::time::Duration::from_secs(8));
         let busy = busy as u64;
-        assert!((busy..=busy + 2).contains(&idle.frames), "{name}: idle loop, {idle:?}");
+        assert!((busy.saturating_sub(1)..=busy + 2).contains(&idle.frames), "{name}: idle loop, {idle:?}");
         assert!(idle.wakeups <= idle.frames + rest.wakeups, "{name}: idle loop, {idle:?}, at rest {rest:?}");
+        if busy > 0 {
+            // The running tab's glyph is its spinner's summed ticks: a frame late by five steps moves it five.
+            let frames = opencode_ui::motion::SPINNER_FRAMES;
+            let glyph = || {
+                let text = h.app.text();
+                let glyph = text.chars().find(|glyph| ('⠁'..='⣿').contains(glyph));
+                glyph.and_then(|glyph| frames.iter().position(|frame| frame.starts_with(glyph)))
+            };
+            let first = glyph().unwrap_or_else(|| panic!("{name}: no spinner"));
+            h.app.advance(opencode_ui::motion::SPINNER_INTERVAL * 5);
+            assert_eq!(glyph(), Some((first + 5) % frames.len()), "{name}: a late frame");
+            // A strip or rail that hides unmounts its tabs: shown again, a running tab's spinner starts over, as TS
+            // mounts it.
+            if name.contains("rail") {
+                h.app.resize(60, 30);
+                h.app.render();
+                h.app.advance(opencode_ui::motion::SPINNER_INTERVAL * 3);
+                assert_eq!(glyph(), Some(3), "{name}: the strip");
+                h.app.resize(120, 30);
+                assert_eq!(glyph(), Some(0), "{name}: the rail shown again");
+                h.app.resize(60, 30);
+                assert_eq!(glyph(), Some(0), "{name}: the strip shown again");
+                h.app.resize(120, 30);
+            }
+        }
         h.app.resize(60, 30);
         h.tui.data.apply(&[execution("succeeded", 2)]);
         frames(&h);
         assert!(frames(&h).len() <= 1, "{name}: idle again");
+        // An idle tab costs what the app costs at rest (the devtools sampler, every 2 s), or a fixture retry.
+        let again = h.app.idle(std::time::Duration::from_secs(8));
+        assert!(again.frames <= 1 && again.wakeups <= rest.wakeups + again.frames, "{name}: {again:?}, {rest:?}");
     }
 }
 
 /// The frames painted over 8 s without input, one each time the app asks for one, as `App::event_loop` does, in
-/// milliseconds since the tabs' epoch. The requests in flight land first: their replies are output, not idle.
+/// milliseconds from the first. The requests in flight land first: their replies are output, not idle.
 fn frames(h: &Tabs) -> Vec<u128> {
     h.app.wait_until(std::time::Duration::from_millis(300), || {
         h.app.render();
         false
     });
+    let start = h.app.now();
     (0..8000)
         .filter_map(|_| {
             h.app.advance(std::time::Duration::from_millis(1));
             h.app.needs_frame().then(|| {
                 h.app.render();
-                h.tui.app.now().duration_since(h.tui.tabs.epoch()).as_millis()
+                h.app.now().duration_since(start).as_millis()
             })
         })
         .collect()
