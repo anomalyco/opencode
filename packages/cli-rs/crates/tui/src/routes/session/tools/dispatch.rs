@@ -143,9 +143,13 @@ impl Tool {
         let mut claim = self.claim.borrow_mut();
         if claim.is_none() {
             let Some(found) = cx.claims.find(&part.name) else { return false };
-            *claim = Some((found.mount(cx.app, &part.id, cx.content), false));
+            let mount = found.mount(cx.app, &part.id, cx.content);
+            let (switched, message) = (cx.switched.clone(), message.id.0.clone());
+            mount.on_switch(move || switched(&message));
+            *claim = Some((mount, false));
         }
         let Some((mount, shown)) = claim.as_mut() else { return false };
+        mount.width(cx.content);
         let state = match &part.state {
             SessionMessageAssistantToolState::Streaming(_) => Some(claim::State::Pending),
             SessionMessageAssistantToolState::Running(_) => Some(claim::State::Running),

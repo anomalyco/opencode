@@ -1,21 +1,24 @@
 //! The host's side of renderer claims ([`abi::claim`], synthesis 4.11, phase Pr): each part a claim draws is a
 //! [`Mount`] of its own, with a generation, a reconciled tree ([`Tree`]), and the content and memo values its views
-//! gave. The owner of the part (a tool row, or Markdown for a fence) asks [`Mount::show`] with each revision of the
-//! part, and draws its own row whenever that says no.
+//! gave. The owner of the part asks [`Mount::show`] with each revision of the part, and draws its own row whenever
+//! that says no: a tool row draws the host's view of the call, and a fence the claim took keeps its block and shows
+//! the host's code view in it.
 //!
 //! The claim shows a part only while its view accepts it. The host's own row comes back:
 //!
 //! - for a revision the view declines (returns `None`);
 //! - once a view of it took longer than the overrun limit, or returned a tree the host refused twice in a row (once,
-//!   then once more as a whole tree): a tool call for the rest of its mount, a fence for that revision of its code, as
-//!   Markdown keeps no handle to a fence it shows as code;
+//!   then once more as a whole tree): for the rest of the part's mount, which a remount ends, and for a fence a new
+//!   theme too, as Markdown builds the block again;
 //! - for every part of the plugin, once a view panicked: the plugin fails, and the host mounts the route again
 //!   without its claims, as it does when the user disables or reloads it.
 //!
-//! A revision that changes the part's phase ([`abi::claim::Phase`]) is viewed at once, so the owner knows which row
-//! shows it. One that only streams new content is viewed at once too, unless this part had a view in this frame
-//! already: then the newest content waits for the next paint, and the last accepted tree stays until then. So a part
-//! gets at most one view a frame while it streams.
+//! A revision that changes the part's phase ([`abi::claim::Phase`]) is viewed at once, as is a part's first. One that
+//! only streams new content is viewed at once too, unless this part had a view in this frame already, whichever row
+//! shows it: then the newest content waits for the next paint, and the row that shows stays until then. So a part
+//! gets at most one view a frame while it streams, besides its first, a phase change and the whole tree asked for
+//! after a refusal. A view at the paint that changes which row shows the part tells the owner ([`Mount::on_switch`]),
+//! which swaps its rows in that paint.
 //!
 //! A theme change restyles a tool call's tree in place with no call, unless the claim reads the palette: then it is
 //! viewed again, also where it declined the revision. Markdown builds a claimed fence again in the new theme, so a
@@ -141,14 +144,18 @@ pub struct Shown {
 
 /// Every claimed part mounted on this thread, oldest first.
 pub fn mounted() -> Vec<Shown> {
-    LIVE.with(|live| {
-        let mut live = live.borrow_mut();
-        live.retain(|core| core.strong_count() > 0);
+    LIVE.with_borrow(|live| {
         live.iter()
             .filter_map(Weak::upgrade)
             .map(|core| Shown { id: core.id.clone(), rect: core.root.rect(), shows: core.shows.get() })
             .collect()
     })
+}
+
+/// The entries of the registry [`mounted`] reads: one a live part.
+#[doc(hidden)]
+pub fn registered() -> usize {
+    LIVE.with_borrow(Vec::len)
 }
 
 /// One claim of an active plugin, which its parts share.
@@ -243,6 +250,17 @@ impl Mount {
         self.0.show(part)
     }
 
+    /// Runs `switched` when a view at a paint changed whether the claim draws the part: the owner then asks
+    /// [`Self::show`] again, with the part as it has it, and swaps its rows.
+    pub fn on_switch(&self, switched: impl Fn() + 'static) {
+        *self.0.switch.borrow_mut() = Some(Rc::new(switched));
+    }
+
+    /// The width the part's row has while the claim's tree does not show, which its views get then.
+    pub fn width(&self, width: u16) {
+        self.0.hint.set(width);
+    }
+
     /// Takes the page theme in place: the last tree again in it, with no call, unless the claim reads the palette. The
     /// owner asks [`Self::show`] next: which row shows may have changed.
     pub fn restyle(&self) {
@@ -260,9 +278,11 @@ struct Core {
     viewed: Cell<Option<u64>>,
     /// A view of the newest content waits for the next paint.
     waiting: Cell<bool>,
-    /// The width the views get until the part is laid out, and the width the last one got.
-    hint: u16,
+    /// The width the views get while the tree does not show, and the width the last one got.
+    hint: Cell<u16>,
     width: Cell<u16>,
+    /// The owner's word that a view at a paint changed which row shows the part.
+    switch: RefCell<Option<Rc<dyn Fn()>>>,
     /// The part shows the host's row for the rest of its life.
     fallen: Cell<bool>,
     /// The last revision the host decided shows the claim's tree.
@@ -312,8 +332,9 @@ impl Core {
             part: RefCell::default(),
             viewed: Cell::new(None),
             waiting: Cell::new(false),
-            hint,
+            hint: Cell::new(hint),
             width: Cell::new(0),
+            switch: RefCell::default(),
             fallen: Cell::new(false),
             shows: Cell::new(false),
         });
@@ -333,23 +354,36 @@ impl Core {
     }
 
     fn show(self: &Rc<Self>, part: Part) -> bool {
+        // The newest revision is kept also where the host's row draws it: a fence's owner draws it from here.
+        let previous = self.part.replace(Some(part.clone()));
         if self.fallen.get() {
             return false;
         }
         let Some(host) = self.claim.owner.upgrade() else { return false };
-        let previous = self.part.replace(Some(part.clone()));
-        if previous.as_ref() == Some(&part) {
+        // The same part at the width the last view got is answered: a view of it would see nothing new.
+        if previous.as_ref() == Some(&part) && self.input_width() == self.width.get() {
             return self.shows.get();
         }
+        // A part that streams gets one view a frame, whichever row shows it: the newest content waits for the paint.
         let streams = previous.is_some_and(|previous| previous.phase() == part.phase());
-        if streams && self.shows.get() && self.viewed.get() == Some(host.app().frame_number()) {
+        if streams && self.viewed.get() == Some(host.app().frame_number()) {
             self.wait();
-            return true;
+            return self.shows.get();
         }
-        self.draw(&*host, false)
+        self.draw(&*host)
     }
 
-    /// Views the newest revision at the next paint that is not this one's frame.
+    /// The width a view gets now: the tree's, while it shows and is laid out, else the row's.
+    fn input_width(&self) -> u16 {
+        let rect = self.root.rect();
+        match self.shows.get() && rect.width > 0.0 {
+            true => rect.width as u16,
+            false => self.hint.get(),
+        }
+    }
+
+    /// Views the newest revision at the next paint that is not this one's frame. When that changes which row shows
+    /// the part, the owner hears of it in the same paint.
     fn wait(self: &Rc<Self>) {
         if self.waiting.replace(true) {
             return;
@@ -363,16 +397,19 @@ impl Core {
                 return true;
             }
             core.waiting.set(false);
-            if let (true, Some(host)) = (core.shows.get() && !core.fallen.get(), core.claim.owner.upgrade()) {
-                core.draw(&*host, true);
+            if let (false, Some(host)) = (core.fallen.get(), core.claim.owner.upgrade()) {
+                let before = core.shows.get();
+                if core.draw(&*host) != before {
+                    let switch = core.switch.borrow().clone();
+                    switch.iter().for_each(|switched| switched());
+                }
             }
             false
         });
     }
 
-    /// Calls the view on the part and adopts its tree; whether the claim shows the part. A view held back for the
-    /// paint (`waiting`) leaves the last tree up when it cannot show the part: the owner decides at its next revision.
-    fn draw(&self, host: &dyn Host, waited: bool) -> bool {
+    /// Calls the view on the part and adopts its tree; whether the claim shows the part.
+    fn draw(&self, host: &dyn Host) -> bool {
         let theme = host.theme();
         self.viewed.set(Some(host.app().frame_number()));
         let whole = self.state.borrow().last.is_none();
@@ -388,16 +425,22 @@ impl Core {
             };
             let Some((node, remote)) = accepted else {
                 self.state.borrow_mut().memo = attempt.memo;
-                return self.fall(waited);
+                return self.fall();
             };
             let Some(node) = node else {
-                // A declined revision: the host's row draws it, and an accepted one later builds whole.
-                self.state.borrow_mut().memo = attempt.memo;
-                if !waited {
-                    self.wipe();
-                    self.shows.set(false);
-                }
-                return self.shows.get();
+                // A declined revision: the host's row draws it, and an accepted one later builds whole. The memo
+                // values stay, in the host's table as in a library's.
+                let mut memo = attempt.memo;
+                memo.discard();
+                let mut state = self.state.borrow_mut();
+                state.memo = memo;
+                state.remote = remote.unwrap_or(state.remote);
+                let entries = state.memo_entries();
+                drop(state);
+                book(|ledger| ledger.memo_entries += entries - attempt.held);
+                self.wipe();
+                self.shows.set(false);
+                return false;
             };
             let (mut memo, held) = (attempt.memo, attempt.held);
             match self.adopt(host, &theme, vec![*node], &attempt.given, full) {
@@ -422,16 +465,14 @@ impl Core {
                 }
             }
         }
-        self.fall(waited)
+        self.fall()
     }
 
-    /// The part shows the host's row from now on; a view held back for the paint leaves the last tree up until then.
-    fn fall(&self, waited: bool) -> bool {
+    /// The part shows the host's row from now on.
+    fn fall(&self) -> bool {
         self.fallen.set(true);
-        if !waited {
-            self.wipe();
-            self.shows.set(false);
-        }
+        self.wipe();
+        self.shows.set(false);
         false
     }
 
@@ -451,15 +492,14 @@ impl Core {
                 }
             }
             _ => {
-                self.draw(&*host, false);
+                self.draw(&*host);
             }
         }
     }
 
     fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool) -> Attempt {
         let part = self.part.borrow().clone().expect("a part to view");
-        let rect = self.root.rect();
-        let width = if rect.width > 0.0 { rect.width as u16 } else { self.hint };
+        let width = self.input_width();
         self.width.set(width);
         // Only a claim that declares the palette gets it, as a surface (P4): it is most of a request's bytes.
         let palette = match self.claim.entry.palette {
@@ -563,24 +603,28 @@ impl Core {
         Ok(())
     }
 
-    /// Drops the tree and what its views gave.
+    /// Drops the tree and the content its views gave. The memo values stay with the mount, as a library keeps its
+    /// table until the mount ends: a later view builds whole, and may keep what they hold.
     fn wipe(&self) {
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
-        let (content, memo) = (std::mem::take(&mut state.content), state.memo_entries());
-        state.memo.clear();
-        state.remote = 0;
+        let content = std::mem::take(&mut state.content);
         book(|ledger| {
             ledger.content -= content.len() as i64;
             ledger.content_bytes -= content.values().map(|bytes| bytes.len() as i64).sum::<i64>();
-            ledger.memo_entries -= memo;
         });
     }
 }
 
 impl Drop for Core {
     fn drop(&mut self) {
+        // The part leaves the registry as it goes; a part dropped while the registry is read leaves it at the next.
+        LIVE.with(|live| {
+            if let Ok(mut live) = live.try_borrow_mut() {
+                live.retain(|core| core.strong_count() > 0);
+            }
+        });
         if let Some(host) = self.claim.owner.upgrade() {
             self.claim.viewer.forget(&*host, &self.id);
         }
@@ -596,19 +640,14 @@ impl Drop for Core {
     }
 }
 
-/// The Markdown renderer of a fence claim. Each fence it shows is a mount, held by the widget it gives Markdown, so
-/// the mount goes when Markdown drops the block's widget.
+/// The Markdown renderer of a fence claim. Each fence it takes is a mount held by the widget it gives Markdown, so the
+/// mount goes when Markdown drops the block's widget. The block keeps that widget for its life: it shows the claim's
+/// tree, or the host's code view of the fence while the claim does not draw it, so a fence that falls back stays the
+/// same block and keeps its mount.
 pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
-    let mounts: Rc<RefCell<HashMap<u32, Weak<Core>>>> = Rc::default();
-    // Markdown keeps no handle to a fence that shows its code view, and may render one revision more than once: the
-    // revisions that fell back, by their info and code, so each stays with the host. The next revision is claimed
-    // afresh.
-    let fallen: RefCell<std::collections::VecDeque<(String, String)>> = RefCell::default();
-    Rc::new(move |block, _| {
+    let fences: Rc<RefCell<HashMap<u32, Weak<Fence>>>> = Rc::default();
+    Rc::new(move |block, theme| {
         static KEYS: AtomicU64 = AtomicU64::new(1);
-        if fallen.borrow().iter().any(|(info, code)| info == block.info && code == block.code) {
-            return None;
-        }
         let part = Part::Fence(FencePart {
             language: block.language.to_owned(),
             info: block.info.to_owned(),
@@ -617,54 +656,127 @@ pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
             closed: block.closed,
         });
         let held = block.previous.and_then(|previous| {
-            let core = mounts.borrow().get(&previous.id())?.upgrade()?;
-            Some((previous.clone(), core))
+            let fence = fences.borrow().get(&previous.id())?.upgrade()?;
+            Some((previous.clone(), fence))
         });
-        let (widget, core) = match held {
+        let (widget, fence) = match held {
             Some(held) => held,
             None => {
                 let key = format!("fence-{}", KEYS.fetch_add(1, Ordering::Relaxed));
                 let core = Core::new(claim.clone(), block.app, &key, block.app.size().0);
-                // The mount draws inside the widget Markdown holds, whose handler holds the mount: a handler of the
-                // mount's own root would keep that root alive.
-                let widget = View::new(block.app).column().shrink(0.0).child(&core.root);
-                let (held, forget) = (core.clone(), Forget { mounts: Rc::downgrade(&mounts), id: widget.id() });
+                // The fence holds the widget's children and not the widget, whose handlers hold the fence.
+                let slot = View::new(block.app).column().shrink(0.0).visible(false);
+                let widget = View::new(block.app).column().shrink(0.0).child(&core.root).child(&slot);
+                let fence = Rc::new(Fence {
+                    app: block.app.clone(),
+                    slot,
+                    core,
+                    look: RefCell::new((theme.clone(), block.conceal)),
+                    code: RefCell::default(),
+                });
+                let (held, forget) = (fence.clone(), Forget { fences: Rc::downgrade(&fences), id: widget.id() });
                 widget.on_focus(move |_, _| {
                     let _ = (&held, &forget);
                 });
-                mounts.borrow_mut().insert(widget.id(), Rc::downgrade(&core));
-                (widget.as_any(), core)
+                // A view gets the block's width; one the claim declined is asked again at another.
+                let weak = Rc::downgrade(&fence);
+                widget.on_resize(move |_, rect| {
+                    if let Some(fence) = weak.upgrade() {
+                        fence.core.hint.set(rect.width as u16);
+                        if !fence.core.shows.get() && rect.width as u16 != fence.core.width.get() {
+                            fence.core.wait();
+                        }
+                    }
+                });
+                let weak = Rc::downgrade(&fence);
+                fence.core.switch.replace(Some(Rc::new(move || {
+                    if let Some(fence) = weak.upgrade() {
+                        fence.place();
+                    }
+                })));
+                fences.borrow_mut().insert(widget.id(), Rc::downgrade(&fence));
+                (widget.as_any(), fence)
             }
         };
-        if core.show(part) {
-            return Some(widget);
-        }
-        if core.fallen.get() {
-            let mut fallen = fallen.borrow_mut();
-            fallen.push_back((block.info.to_owned(), block.code.to_owned()));
-            if fallen.len() > FALLEN {
-                fallen.pop_front();
-            }
-        }
-        None
+        *fence.look.borrow_mut() = (theme.clone(), block.conceal);
+        fence.core.show(part);
+        fence.place();
+        Some(widget)
     })
 }
 
-/// The fence revisions a claim keeps with the host, newest last.
-const FALLEN: usize = 16;
+/// A fence a claim took: the two children of the widget Markdown holds for the block, the claim's tree and the
+/// host's code view, and what they show.
+struct Fence {
+    app: App,
+    /// Holds the host's code view of the fence while the claim does not draw it.
+    slot: View,
+    core: Rc<Core>,
+    /// The theme and the concealment Markdown last rendered the block in.
+    look: RefCell<(Theme, bool)>,
+    code: RefCell<Option<Code>>,
+}
 
-/// Forgets a fence's mount once the widget that holds it is freed.
+/// The host's code view of a fence: the source it shows, in a theme and a concealment.
+struct Code {
+    markdown: opentui::widget::Markdown,
+    source: String,
+    look: (Theme, bool),
+}
+
+impl Fence {
+    /// Shows the claim's tree while the claim draws the fence, else the host's code view of its newest revision.
+    fn place(&self) {
+        let shows = self.core.shows.get();
+        self.core.root.visible(shows);
+        self.slot.visible(!shows);
+        if shows {
+            if self.code.take().is_some() {
+                self.slot.clear();
+            }
+            return;
+        }
+        let Some(Part::Fence(fence)) = self.core.part.borrow().clone() else { return };
+        // The fence again as Markdown has it, in a document of its own: the host's code view, as the block's own.
+        let close = if fence.closed { "\n```" } else { "" };
+        let source = format!("```{}\n{}{close}", fence.info, fence.code);
+        let look = self.look.borrow().clone();
+        let mut code = self.code.borrow_mut();
+        match code.as_mut() {
+            Some(code) if code.look == look => {
+                if code.source != source {
+                    code.markdown.set_markdown(source.clone());
+                    code.source = source;
+                }
+                code.markdown.streaming(fence.streaming);
+            }
+            _ => {
+                let (theme, conceal) = &look;
+                let syntax = opencode_ui::code::syntax_theme(theme);
+                let renderers = opencode_ui::markdown::CodeBlockRenderers::default();
+                let markdown = opencode_ui::markdown::view(&self.app, theme, &syntax, &renderers, *conceal, true)
+                    .set_markdown(source.clone())
+                    .streaming(fence.streaming);
+                self.slot.clear();
+                self.slot.add(&markdown);
+                *code = Some(Code { markdown, source, look });
+            }
+        }
+    }
+}
+
+/// Forgets a fence once the widget that holds it is freed.
 struct Forget {
-    mounts: Weak<RefCell<HashMap<u32, Weak<Core>>>>,
+    fences: Weak<RefCell<HashMap<u32, Weak<Fence>>>>,
     id: u32,
 }
 
 impl Drop for Forget {
     fn drop(&mut self) {
-        if let Some(mounts) = self.mounts.upgrade()
-            && let Ok(mut mounts) = mounts.try_borrow_mut()
+        if let Some(fences) = self.fences.upgrade()
+            && let Ok(mut fences) = fences.try_borrow_mut()
         {
-            mounts.remove(&self.id);
+            fences.remove(&self.id);
         }
     }
 }

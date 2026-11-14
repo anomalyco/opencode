@@ -87,6 +87,8 @@ struct Inner {
     paint: RefCell<Rc<Paint>>,
     renderers: CodeBlockRenderers,
     claims: ToolClaims,
+    /// Renders a message's rows again, after a claim's view at a paint changed which row shows one of its parts.
+    switched: Rc<dyn Fn(&str)>,
     /// The `session` and `debug` settings the rows show with, as the config has them now.
     view: Cell<RowSettings>,
     groups: Rc<grouping::Settings>,
@@ -209,6 +211,16 @@ impl Transcript {
             paint: RefCell::new(Rc::new(Paint::new(theme))),
             renderers: crate::plugins::host::code_blocks(tui),
             claims: crate::plugins::host::tool_claims(tui),
+            switched: {
+                let weak = this.clone();
+                Rc::new(move |message: &str| {
+                    if let Some(inner) = weak.upgrade()
+                        && let Some(tui) = inner.tui.upgrade()
+                    {
+                        inner.render(&tui, |shown| shown == message);
+                    }
+                })
+            },
             view: Cell::new(RowSettings::read(&tui.config())),
             groups: grouping::Settings::new(&tui.settings.info()),
             session: RefCell::default(),
@@ -832,6 +844,7 @@ impl Inner {
             thinking_syntax: &paint.thinking_syntax,
             renderers: &self.renderers,
             claims: &self.claims,
+            switched: &self.switched,
             conceal: view.conceal,
             hide_thinking: view.hide_thinking,
             groups: &self.groups,
@@ -1189,6 +1202,8 @@ pub struct Context<'a> {
     pub renderers: &'a CodeBlockRenderers,
     /// The plugins' tool claims (Pr).
     pub claims: &'a ToolClaims,
+    /// Renders a message's rows again: a claim's view at a paint changed which row shows one of its parts.
+    pub switched: &'a Rc<dyn Fn(&str)>,
     /// `session.markdown` is `rendered`.
     pub conceal: bool,
     /// `session.thinking` is `hide`.
