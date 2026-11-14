@@ -350,7 +350,7 @@ fn files(run: Run) -> Vec<(&'static str, Seen)> {
 // Expected (`carrier-equal` for P3, synthesis 4.14): the same source's windowed list gives the same frames linked,
 // through the byte shims, and as a real library: a `To` lands its file at the top, steps land on hunks of files that
 // had no widgets and report where, the reads see the steps' last file at the top, `Nearest` and the wheel move the
-// list, and `layout` paints the header from the top file in the frame of each.
+// list, and `layout`, told the header's width, paints the header from the top file in the frame of each.
 #[test]
 fn a_windowed_list_is_equal_on_every_carrier() {
     let linked = files(Run::In(Carrier::Linked));
@@ -358,6 +358,7 @@ fn a_windowed_list_is_equal_on_every_carrier() {
     let to = text(&linked[1].1.0);
     assert!(to.contains("file 40") && !to.contains("file 39 "), "the `To` did not bring file 40 to the top");
     assert!(text(&linked[2].1.0).contains("landed d4"), "the steps reported no landing");
+    assert!(!text(&linked[2].1.0).contains("told -"), "`layout` was told no width");
     assert_ne!(linked[0].1.0, linked[1].1.0, "the `To` changed nothing on screen");
     let near = text(&linked[4].1.0);
     assert!(near.contains(" of 60 top f41"), "the reads read nothing: {near}");
