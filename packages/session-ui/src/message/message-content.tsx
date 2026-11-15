@@ -947,23 +947,27 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
   }
 
   const outcome = () => {
-    if (props.message.status !== "failed")
-      return props.message.status === "completed" && props.message.native?.messages
-        ? "ui.messagePart.providerCompaction"
-        : "ui.messagePart.compaction"
-
-    if (props.message.error.type === "aborted") return "ui.messagePart.compaction.cancelled"
-
-    if (props.message.error.type === "compaction.interrupted") return "ui.messagePart.compaction.interrupted"
-
-    return "ui.messagePart.compaction.failed"
+    if (props.message.status === "failed") {
+      if (props.message.error.type === "aborted") return "ui.messagePart.compaction.cancelled"
+      if (props.message.error.type === "compaction.interrupted") return "ui.messagePart.compaction.interrupted"
+      return "ui.messagePart.compaction.failed"
+    }
+    if (props.message.status === "completed" && props.message.native?.messages)
+      return "ui.messagePart.providerCompaction"
+    if (props.message.reason === "idle") return "ui.messagePart.compaction.idle"
+    return "ui.messagePart.compaction"
   }
 
   const label = createMemo(() => [i18n.t(outcome()), usage()].filter(Boolean).join(" · "))
 
   return (
     <Show
-      when={!data.backgroundCompaction || props.message.reason === "manual" || props.message.status === "failed"}
+      when={
+        !data.backgroundCompaction ||
+        props.message.reason === "manual" ||
+        props.message.reason === "idle" ||
+        props.message.status === "failed"
+      }
       fallback={
         <QuietCompaction
           id={props.message.id}

@@ -26,6 +26,7 @@ import { useServerHealth } from "@/runtime/server/health"
 import { selectServerHostname } from "@/runtime/server/health-machine"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
+import { createServerPresence } from "./presence"
 import { createData, createSessionRetention } from "@opencode/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
@@ -250,6 +251,12 @@ function createServerController(
           )
         : data.session.list().map((session) => session.id),
     limit: 3,
+  })
+
+  createServerPresence({
+    api: () => sdk.api,
+    connected: () => sdk.connection.status() === "connected",
+    server: connKey,
   })
 
   const sync = createServerSyncContext(sdk, data)

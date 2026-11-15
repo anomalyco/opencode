@@ -126,6 +126,7 @@ const source = {
   "ui.messagePart.review.title": "Review your answers",
   "ui.messagePart.questions.dismissed": "Questions dismissed",
   "ui.messagePart.compaction": "Session compacted",
+  "ui.messagePart.compaction.idle": "Session compacted while idle",
   "ui.messagePart.compaction.started": "Session compaction started",
   "ui.messagePart.compaction.queued": "Session compaction queued",
   "ui.messagePart.compaction.running": "Compacting",

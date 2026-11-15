@@ -13,7 +13,7 @@ import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import { newSessionLocation } from "../config/new-session-location"
-import { createSessionRetention } from "@opencode/client/solid"
+import { createSessionRetention, createPresence } from "@opencode/client/solid"
 import { createProgramStatus, type PendingSession } from "./program-status"
 import { anchorKey, type AnchorTarget } from "../routes/session/anchors"
 import {
@@ -143,6 +143,17 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         route.data.type === "session" && route.data.sessionID !== "dummy" ? route.data.sessionID : undefined,
       keep: () => (enabled() ? state().tabs.map((tab) => tab.sessionID) : []),
       limit: 3,
+    })
+    // One identity per process: two TUI instances sharing a persisted id would overwrite each other's sets.
+    const presenceClient = crypto.randomUUID()
+    createPresence({
+      client: presenceClient,
+      api: () => client.api,
+      connected: () => client.connection.status() === "connected",
+      sessions: () => [
+        ...(enabled() ? state().tabs.map((tab) => tab.sessionID) : []),
+        ...(route.data.type === "session" && route.data.sessionID !== "dummy" ? [root(route.data.sessionID)] : []),
+      ],
     })
     const newTab = createMemo((open = false) => {
       if (route.data.type === "home") return true
