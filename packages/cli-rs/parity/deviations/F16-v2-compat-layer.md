@@ -50,12 +50,18 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   opencode-native yet`) and doing nothing (a list answers empty): `markdown.registerCodeBlockRenderer`, `data.listen`, `data.project`,
   `data.shell`, `data.session.permission`, `data.session.form`, the
   location's `agent`, `command`, `mcp.resource`, `reference` and `skill` lists, `renderer` members other than
-  `requestRender`, `width` and `height`, `useKeyboard`, `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`,
+  `requestRender`, `width` and `height` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's returns the
+  renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS with the toast beside), `useKeyboard`, `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`,
   `onAnimationTick`, `useTimeline`, `<input>` and `<textarea>` events, `minWidth` other than 0, `maxWidth`,
   `alignSelf` and `flexBasis`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
   The intrinsics without a contract node (`select`, `tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`)
   and `<Portal>` throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
   (`<id> crashed in slot <path>: …`).
+- **OpenTUI's exports**: the layer exports every name the installed `@opentui/core` and `@opentui/solid` export, so a
+  plugin's import of one links. Beyond the colors, attributes, small data (enums, border sets) and Solid's renderer
+  the layer gives, each is inert: a class constructs, extends and answers its methods with nothing, a function does
+  nothing, and the first use of each warns once in the JS host's log, not in a toast, as the module cannot tell which
+  plugin used it. A renderable a plugin builds itself (`new BoxRenderable(…)`) draws nothing.
 - **Colors**: the context's `theme` leaves are colors that carry their token, so a node the plugin colors from the
   theme follows a theme change without a call, where an installed package's node keeps the color it read in TS. The
   `theme` object has no `hue`, `categorical` or `surface()`, and neither it nor `themeMode` is a signal.

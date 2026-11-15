@@ -595,6 +595,35 @@ fn a_project_plugin_imports_its_own_files_by_relative_paths() {
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("near"));
 }
 
+// Expected (FT-5): a plugin that imports OpenTUI's renderable classes and enums by name links and sets up, as in TS,
+// where Bun failed its module for a name the layer did not export; a class it extends constructs.
+#[test]
+fn a_plugin_importing_opentuis_classes_links_and_sets_up() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().join("config/plugins/linked");
+    std::fs::create_dir_all(&dir).unwrap();
+    let marker = root.path().join("linked.ran");
+    let module = format!(
+        "import {{ BoxRenderable, CliRenderEvents, SyntaxStyle, StyledText, TextRenderable }} from \"@opentui/core\"\n\
+         import {{ RendererContext, createDynamic }} from \"@opentui/solid\"\n\
+         class Fence extends BoxRenderable {{}}\n\
+         const style = SyntaxStyle.fromStyles({{}})\n\
+         export default {{ id: \"example.linked\", setup() {{\n\
+         new Fence({{}}, {{}}).add(new TextRenderable({{}}, {{}}))\n\
+         void [style, StyledText, RendererContext, createDynamic]\n\
+         require(\"node:fs\").writeFileSync({marker:?}, CliRenderEvents.RESIZE)\n\
+         }} }}\n"
+    );
+    std::fs::write(dir.join("tui.ts"), module).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.linked");
+    assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("resize"));
+}
+
 /// A project with the V2 probe as its plugin, unapproved, whose module writes to the file returned last; the pipe's
 /// example plugins `globals` are the user's.
 fn project(globals: &[&str], config: Config) -> (Pipe, PathBuf, PathBuf) {
