@@ -485,6 +485,45 @@ describe("V2 mini transport", () => {
     },
   )
 
+  test("hydrates waiting questions without completing the tool", async () => {
+    const events = feed()
+    events.push(connected())
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        streams: [events],
+        messages: {
+          ses_1: [
+            {
+              id: "msg_question",
+              type: "assistant",
+              agent: "build",
+              model: { providerID: "test", id: "test" },
+              content: [
+                canonicalToolPart("question", {
+                  status: "waiting",
+                  input: { questions: [{ question: "Continue?" }] },
+                  metadata: {},
+                  questionID: "frm_question",
+                  generation: 1,
+                }),
+              ],
+              time: { created: 1 },
+            },
+          ],
+        },
+      }),
+      sessionID: "ses_1",
+      thinking: false,
+      replay: true,
+      footer: ui.api,
+    })
+    expect(ui.commits.filter((commit) => commit.kind === "tool")).toMatchObject([
+      { phase: "start", toolState: "running", text: "waiting for answers" },
+    ])
+    await transport.close()
+  })
+
   test("renders projected compactions as labeled transcript boundaries", async () => {
     const events = feed()
     events.push(connected())

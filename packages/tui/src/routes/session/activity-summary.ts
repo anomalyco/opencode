@@ -97,5 +97,9 @@ export function activitySummary(items: readonly Item[], instructions: number, cl
 function isActive(item: Item, closed: boolean) {
   if (item.part.type === "reasoning")
     return !closed && item.part.time?.completed === undefined && item.message.time.completed === undefined
-  return item.part.state.status === "streaming" || item.part.state.status === "running"
+  return (
+    item.part.state.status === "streaming" ||
+    item.part.state.status === "running" ||
+    item.part.state.status === "waiting"
+  )
 }

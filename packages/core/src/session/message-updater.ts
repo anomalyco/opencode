@@ -47,7 +47,10 @@ const projectTerminalSnapshot = (draft: DraftAssistant, event: SessionEvent.Step
     }
 }
 
-export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
+// Parked is a schema-only foundation; no message or pending-row projection exists yet.
+type ProjectedEvent = Exclude<SessionEvent.DurableEvent, SessionEvent.Step.Parked>
+
+export function update(adapter: Adapter, event: ProjectedEvent) {
   const created = DateTime.makeUnsafe(event.created)
 
   const updateOwnedAssistant = (messageID: SessionMessage.ID, recipe: (draft: DraftAssistant) => void) =>
@@ -84,7 +87,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
     )
 
   const project = pipe(
-    Match.type<SessionEvent.DurableEvent>(),
+    Match.type<ProjectedEvent>(),
     Match.discriminatorsExhaustive("type")({
       "session.created": () => Effect.void,
       "session.viewed": () => Effect.void,

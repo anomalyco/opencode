@@ -474,7 +474,10 @@ function runQuestion(p: ToolProps): ToolInline {
   const total = list(p.frame.input.questions).length
   return {
     icon: "→",
-    title: `Asked ${total} question${total === 1 ? "" : "s"}`,
+    title:
+      p.frame.status === "waiting"
+        ? `Waiting for answers to ${total} question${total === 1 ? "" : "s"}`
+        : `Asked ${total} question${total === 1 ? "" : "s"}`,
   }
 }
 

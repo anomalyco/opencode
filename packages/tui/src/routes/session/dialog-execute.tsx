@@ -67,6 +67,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     const state = props.part.state
     if (state.status === "streaming") return "Receiving code…"
     if (state.status === "running") return "Running"
+    if (state.status === "waiting") return "Waiting for answers"
     const duration = props.part.time.completed
       ? ` · ${Locale.duration(props.part.time.completed - (props.part.time.ran ?? props.part.time.created))}`
       : ""

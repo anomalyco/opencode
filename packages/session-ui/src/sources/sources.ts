@@ -80,7 +80,7 @@ function step(content: SessionMessageAssistant["content"][number]): SourceStep[]
       id: content.id,
       ...page,
       path: path(page.url),
-      status: content.state.status,
+      status: content.state.status === "waiting" ? "running" : content.state.status,
       error: currentToolError(content),
     },
   ]
@@ -91,7 +91,7 @@ function search(tool: SessionMessageAssistantTool): SourceStep {
     type: "search",
     id: tool.id,
     query: Option.match(decodeQuery(currentToolInput(tool)), { onNone: () => "", onSome: (input) => input.query }),
-    status: tool.state.status === "streaming" ? "running" : tool.state.status,
+    status: tool.state.status === "streaming" || tool.state.status === "waiting" ? "running" : tool.state.status,
     results: tool.state.status === "completed" ? results(currentToolOutput(tool) ?? "") : [],
     error: currentToolError(tool),
   }

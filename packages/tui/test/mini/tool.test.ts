@@ -3,6 +3,20 @@ import { normalizeTool, toolInlineInfo, toolOutputText, toolPath, toolScroll } f
 import { canonicalToolPart } from "./fixture/tool-part"
 
 describe("Mini tool presentation", () => {
+  test("presents waiting questions without requiring terminal content", () => {
+    expect(
+      toolInlineInfo(
+        canonicalToolPart("question", {
+          status: "waiting",
+          input: { questions: [{ question: "Continue?" }] },
+          metadata: {},
+          questionID: "frm_question",
+          generation: 1,
+        }),
+      ).title,
+    ).toBe("Waiting for answers to 1 question")
+  })
+
   test("uses V2 shell output without the model-facing status", () => {
     expect(
       toolOutputText("shell", [

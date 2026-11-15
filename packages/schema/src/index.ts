@@ -35,6 +35,7 @@ export { TokenUsage } from "./token-usage.js"
 export { Pty } from "./pty.js"
 export { PersistentPty } from "./persistent-pty.js"
 export { PtyTicket } from "./pty-ticket.js"
+export { QuestionContinuation } from "./question-continuation.js"
 export { Question } from "./question.js"
 export { Workspace } from "./workspace.js"
 export {

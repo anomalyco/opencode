@@ -24,6 +24,8 @@ import { TokenUsage } from "./token-usage.js"
 import { SessionInbox } from "./session-inbox.js"
 import { Project } from "./project.js"
 import { SessionFork } from "./session-fork.js"
+import { Form } from "./form.js"
+import { QuestionContinuation } from "./question-continuation.js"
 import { Permission } from "./permission.js"
 
 const Base = {
@@ -385,6 +387,37 @@ export namespace Step {
   })
   export type Ended = typeof Ended.Type
 
+  /** Version 1 payload: the completed stream and its still-unsettled question calls. */
+  export interface ParkedPayload extends Schema.Schema.Type<typeof ParkedPayload> {}
+  export const ParkedPayload = Schema.Struct({
+    ...Base,
+    assistantMessageID: SessionMessage.ID,
+    /** Sequence of the owning session.step.started event. */
+    generation: PositiveInt,
+    finish: FinishReason,
+    rawFinish: Schema.String.pipe(optional),
+    native: SessionMessage.Native.pipe(optional),
+    cost: Money.USD,
+    tokens: TokenUsage.Info,
+    snapshot: Snapshot.ID.pipe(optional),
+    files: Schema.Array(RelativePath).pipe(optional),
+    questions: Schema.NonEmptyArray(
+      Schema.Struct({
+        callID: Schema.String,
+        questionID: Form.ID,
+        prepared: QuestionContinuation.Prepared,
+      }),
+    ),
+  }).annotate({ identifier: "Session.Step.ParkedPayload" })
+
+  // Internal only: public clients observe projected messages and forms.
+  export const Parked = Event.durable({
+    type: "session.step.parked",
+    ...options,
+    schema: ParkedPayload.fields,
+  })
+  export type Parked = typeof Parked.Type
+
   export const Failed = Event.durable({
     type: "session.step.failed",
     ...options,
@@ -722,6 +755,7 @@ export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
   MessageContentUpdated,
+  Step.Parked,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

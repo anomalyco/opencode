@@ -4,6 +4,7 @@ import {
   finiteNumber,
   primitiveInputSummary,
   toolDisplayMetadata,
+  toolDisplayContent,
   webSearchProviderLabel,
 } from "../../src/util/tool-display"
 
@@ -51,6 +52,7 @@ describe("toolDisplayMetadata", () => {
     const metadata = { provider: "parallel", numResults: 3 }
 
     expect(toolDisplayMetadata({ status: "running", metadata })).toBe(metadata)
+    expect(toolDisplayMetadata({ status: "waiting", metadata })).toBe(metadata)
     expect(toolDisplayMetadata({ status: "completed", metadata })).toBe(metadata)
     expect(toolDisplayMetadata({ status: "error", metadata })).toBe(metadata)
   })
@@ -62,4 +64,16 @@ describe("toolDisplayMetadata", () => {
     expect(toolDisplayMetadata({ status: "completed", metadata: [] })).toEqual({})
     expect(toolDisplayMetadata(undefined)).toEqual({})
   })
+})
+
+test("waiting tools expose metadata without terminal content", () => {
+  expect(
+    toolDisplayContent({
+      status: "waiting",
+      input: { questions: [] },
+      metadata: { original: true },
+      questionID: "frm_question",
+      generation: 1,
+    }),
+  ).toEqual([])
 })

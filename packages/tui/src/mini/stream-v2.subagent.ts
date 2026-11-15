@@ -60,8 +60,13 @@ export function toolCommit(
   const output = status === "streaming" ? "" : toolOutputText(part.name, toolDisplayContent(part.state))
   const partial = status === "error" && phase === "progress" && value !== undefined
   const text =
-    status === "running" || partial
-      ? (value ?? (part.name === "subagent" ? "running subagent" : `running ${part.name}`))
+    status === "running" || status === "waiting" || partial
+      ? (value ??
+        (status === "waiting"
+          ? "waiting for answers"
+          : part.name === "subagent"
+            ? "running subagent"
+            : `running ${part.name}`))
       : status === "completed"
         ? (value ?? output)
         : status === "error"
@@ -310,7 +315,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     }
     const current = child.tools.get(key)
     const output = toolOutputText(part.name, toolDisplayContent(part.state))
-    if (part.state.status === "running") {
+    if (part.state.status === "running" || part.state.status === "waiting") {
       const ready = part.name !== "websearch" || typeof part.state.metadata.provider === "string"
       const awaitingProvider =
         current?.part.name === "websearch" &&

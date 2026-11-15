@@ -57,7 +57,7 @@ export function toolDisplayMetadata(state: unknown): Record<string, unknown> {
 }
 
 export function toolDisplayContent(state: SessionMessageAssistantTool["state"]) {
-  if (state.status === "streaming" || state.status === "running") return []
+  if (state.status === "streaming" || state.status === "running" || state.status === "waiting") return []
   return state.content ?? []
 }
 

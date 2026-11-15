@@ -16,6 +16,7 @@ import { Agent } from "./agent.js"
 import { Skill as SkillSchema } from "./skill.js"
 import { Money } from "./money.js"
 import { Snapshot } from "./snapshot.js"
+import { Form } from "./form.js"
 import { TokenUsage } from "./token-usage.js"
 
 export const ID = Schema.String.check(Schema.isStartingWith("msg_")).pipe(
@@ -145,6 +146,16 @@ export const ToolStateRunning = Schema.Struct({
   metadata: Schema.Record(Schema.String, Schema.Json),
 }).annotate({ identifier: "Session.Message.ToolState.Running" })
 
+export interface ToolStateWaiting extends Schema.Schema.Type<typeof ToolStateWaiting> {}
+export const ToolStateWaiting = Schema.Struct({
+  status: Schema.tag("waiting"),
+  input: Schema.Record(Schema.String, Schema.Unknown),
+  metadata: Schema.Record(Schema.String, Schema.Json),
+  questionID: Form.ID,
+  /** Sequence of the owning session.step.started event. */
+  generation: PositiveInt,
+}).annotate({ identifier: "Session.Message.ToolState.Waiting" })
+
 export interface ToolStateCompleted extends Schema.Schema.Type<typeof ToolStateCompleted> {}
 export const ToolStateCompleted = Schema.Struct({
   status: Schema.tag("completed"),
@@ -162,10 +173,14 @@ export const ToolStateError = Schema.Struct({
   metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
 }).annotate({ identifier: "Session.Message.ToolState.Error" })
 
-export const ToolState = Schema.Union([ToolStateStreaming, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(
-  Schema.toTaggedUnion("status"),
-)
-export type ToolState = ToolStateStreaming | ToolStateRunning | ToolStateCompleted | ToolStateError
+export const ToolState = Schema.Union([
+  ToolStateStreaming,
+  ToolStateRunning,
+  ToolStateWaiting,
+  ToolStateCompleted,
+  ToolStateError,
+]).pipe(Schema.toTaggedUnion("status"))
+export type ToolState = ToolStateStreaming | ToolStateRunning | ToolStateWaiting | ToolStateCompleted | ToolStateError
 
 export interface AssistantTool extends Schema.Schema.Type<typeof AssistantTool> {}
 export const AssistantTool = Schema.Struct({

@@ -604,7 +604,7 @@ function renderer(input: Input) {
         const ordinals = { text: 0, reasoning: 0 }
         for (const item of message.content) {
           if (item.type === "tool") {
-            if (item.state.status === "streaming" || item.state.status === "running") continue
+            if (item.state.status !== "completed" && item.state.status !== "error") continue
             const metadata = { metadata: item.state.metadata, content: item.state.content }
             const done = { ...item, state: item.state }
             await tool(id(`tool-${item.id}`), message.id, done, metadata, timestamp)

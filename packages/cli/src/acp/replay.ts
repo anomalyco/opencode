@@ -123,6 +123,7 @@ export function updates(message: SessionMessage.Info, cwd: string, capabilities:
           },
         ]
       case "streaming":
+      case "waiting":
         return [call]
     }
   })

@@ -77,6 +77,31 @@ type Row = {
 
 const rows: Row[] = [
   {
+    name: "replays a waiting question as pending without a terminal tool update",
+    messages: [
+      assistantMessage("msg_waiting", {
+        content: [
+          {
+            type: "tool",
+            id: "call_question",
+            name: "question",
+            state: {
+              status: "waiting",
+              input: { questions: [{ question: "Continue?" }] },
+              metadata: {},
+              questionID: "frm_question",
+              generation: 1,
+            },
+            time: { created: 1, ran: 1 },
+          },
+        ],
+      }),
+    ],
+    expected: {
+      updates: [{ sessionUpdate: "tool_call", toolCallId: "call_question", status: "pending" }],
+    },
+  },
+  {
     name: "ignores a session's events until its own input is delivered",
     events: [textDelta(root, "msg_early", "early"), delivered(root, "msg_other_input"), succeeded(root)],
     expected: { updates: [], terminal: undefined },

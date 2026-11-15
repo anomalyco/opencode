@@ -111,6 +111,8 @@ export type SessionMessageToolStateRunning = {
   metadata: { [x: string]: JsonValue }
 }
 
+export type FormID = string
+
 export type ToolTextContent = { type: "text"; text: string }
 
 export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string | null }
@@ -124,8 +126,6 @@ export type SessionStructuredError = {
 }
 
 export type SessionInterruptResponse = { interrupted: boolean }
-
-export type FormID = string
 
 export type FormMetadata = { [x: string]: JsonValue }
 
@@ -176,6 +176,13 @@ export type SessionMessageToolStateRunning1 = {
   status: "running"
   input: { [x: string]: any }
   metadata: { [x: string]: JsonValue }
+}
+
+export type QuestionPrompt = {
+  question: string
+  header: string
+  options: Array<{ label: string; description: string }>
+  multiple?: boolean
 }
 
 export type ModelType = "chat" | "decision" | "image" | (string & {})
@@ -568,6 +575,22 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
+export type SessionMessageToolStateWaiting = {
+  status: "waiting"
+  input: { [x: string]: JsonValue }
+  metadata: { [x: string]: JsonValue }
+  questionID: FormID
+  generation: number
+}
+
+export type SessionMessageToolStateWaiting1 = {
+  status: "waiting"
+  input: { [x: string]: any }
+  metadata: { [x: string]: JsonValue }
+  questionID: FormID
+  generation: number
+}
+
 export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
@@ -688,6 +711,8 @@ export type SessionMessageAssistantReasoning1 = {
 }
 
 export type ToolContent1 = ToolTextContent | ToolFileContent1
+
+export type QuestionContinuationInput = { questions: Array<QuestionPrompt> }
 
 export type ModelCompatibility = {
   reasoningField?: ModelReasoningField
@@ -2195,6 +2220,8 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type QuestionContinuationPrepared = { adapter: "question@1"; input: QuestionContinuationInput }
+
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer
   | GenerateChoiceAnswer
@@ -2643,6 +2670,7 @@ export type SessionMessageAssistantTool = {
   state:
     | SessionMessageToolStateStreaming
     | SessionMessageToolStateRunning
+    | SessionMessageToolStateWaiting
     | SessionMessageToolStateCompleted
     | SessionMessageToolStateError
   time: { created: number; ran?: number; completed?: number }
@@ -2665,9 +2693,35 @@ export type SessionMessageAssistantTool1 = {
   state:
     | SessionMessageToolStateStreaming
     | SessionMessageToolStateRunning1
+    | SessionMessageToolStateWaiting1
     | SessionMessageToolStateCompleted1
     | SessionMessageToolStateError1
   time: { created: number; ran?: number; completed?: number }
+}
+
+export type SessionStepParked = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.step.parked"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: SessionID
+    assistantMessageID: SessionMessageID
+    generation: number
+    finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+    rawFinish?: string
+    native?: SessionMessageNative1
+    cost: MoneyUSD
+    tokens: TokenUsageInfo
+    snapshot?: SnapshotID
+    files?: Array<RelativePath>
+    questions: [
+      { callID: string; questionID: FormID; prepared: QuestionContinuationPrepared },
+      ...Array<{ callID: string; questionID: FormID; prepared: QuestionContinuationPrepared }>,
+    ]
+  }
 }
 
 export type GenerateDecisionResult = {
@@ -2885,6 +2939,7 @@ export type SessionEventDurable =
   | SessionRevertCommitted
   | SessionUsageRecorded
   | SessionMessageContentUpdated
+  | SessionStepParked
 
 export type V2Event =
   | LocationShutdown

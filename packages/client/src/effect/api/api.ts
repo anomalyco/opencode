@@ -26,6 +26,7 @@ import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
 import type { Shell } from "@opencode/schema/shell"
+import type { Question } from "@opencode/schema/question"
 import type { Generate } from "@opencode/schema/generate"
 import type { Provider } from "@opencode/schema/provider"
 import type { Integration } from "@opencode/schema/integration"
@@ -1432,6 +1433,51 @@ export type ExperimentalSessionLogOutput =
             readonly sessionID: Session.ID
             readonly messageID: SessionMessage.ID
             readonly content: ReadonlyArray<SessionMessage.AssistantContentEncoded>
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.step.parked"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly assistantMessageID: SessionMessage.ID
+            readonly generation: number
+            readonly finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+            readonly rawFinish?: string | undefined
+            readonly native?: SessionMessage.Native | undefined
+            readonly cost: Money.USD
+            readonly tokens: {
+              readonly input: number
+              readonly output: number
+              readonly reasoning: number
+              readonly cache: { readonly read: number; readonly write: number }
+            }
+            readonly snapshot?: Snapshot.ID | undefined
+            readonly files?: ReadonlyArray<RelativePath> | undefined
+            readonly questions: readonly [
+              {
+                readonly callID: string
+                readonly questionID: Form.ID
+                readonly prepared: {
+                  readonly adapter: "question@1"
+                  readonly input: { readonly questions: ReadonlyArray<Question.Prompt> }
+                }
+              },
+              ...Array<{
+                readonly callID: string
+                readonly questionID: Form.ID
+                readonly prepared: {
+                  readonly adapter: "question@1"
+                  readonly input: { readonly questions: ReadonlyArray<Question.Prompt> }
+                }
+              }>,
+            ]
           }
         }
     )

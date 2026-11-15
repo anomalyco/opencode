@@ -145,6 +145,7 @@ describe("public event manifest", () => {
         "session.step.first-token.1",
         "session.step.streamed.1",
         "session.step.ended.1",
+        "session.step.parked.1",
         "session.step.failed.1",
         "session.text.started.1",
         "session.text.ended.1",
@@ -169,6 +170,7 @@ describe("public event manifest", () => {
       ...SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
       SessionEvent.UsageRecorded,
       SessionEvent.MessageContentUpdated,
+      SessionEvent.Step.Parked,
     ])
     expect(SessionEvent.UsageRecorded.durability).toBe("durable")
     expect(EventManifest.Durable.get("session.usage.recorded.1")).toBe(SessionEvent.UsageRecorded)
@@ -183,6 +185,17 @@ describe("public event manifest", () => {
     expect(EventManifest.Durable.has("session.compaction.delta.1")).toBe(false)
     expect(EventManifest.ServerDefinitions).toContain(SessionEvent.UsageUpdated)
     expect(EventManifest.Definitions.every((definition) => definition.durability !== undefined)).toBe(true)
+  })
+
+  test("keeps parked steps durable version 1 and internal", () => {
+    expect(SessionEvent.Step.Parked.durable).toEqual({ aggregate: "sessionID", version: 1 })
+    expect(EventManifest.Durable.get("session.step.parked.1")).toBe(SessionEvent.Step.Parked)
+    expect(SessionEvent.DurableDefinitions).toContain(SessionEvent.Step.Parked)
+    expect(SessionEvent.Definitions).not.toContain(SessionEvent.Step.Parked)
+    expect(EventManifest.Definitions).not.toContain(SessionEvent.Step.Parked)
+    expect(EventManifest.ServerDefinitions).not.toContain(SessionEvent.Step.Parked)
+    expect(EventManifest.Latest.has("session.step.parked")).toBe(false)
+    expect(EventManifest.Server.has("session.step.parked")).toBe(false)
   })
 
   test("uses the current Session skill event as durable version 1", () => {

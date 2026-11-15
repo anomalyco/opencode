@@ -41,7 +41,7 @@ import { ProjectTable } from "../project/sql.js"
 type DatabaseService = Database.Interface["db"]
 type MessageEvent = Exclude<
   SessionEvent.DurableEvent,
-  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type
+  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type | SessionEvent.Step.Parked
 >
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)

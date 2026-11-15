@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -8,6 +8,7 @@ import { Permission } from "@opencode/core/permission"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
+import { QuestionContinuation } from "@opencode/schema/question-continuation"
 import { QuestionTool } from "@opencode/core/tool/plugin/question"
 import type { Info } from "@opencode/schema/tool"
 import { testEffect } from "./lib/effect"
@@ -85,6 +86,12 @@ const invocation = (input: unknown = questionInput): Parameters<Tool.Snapshot["e
 })
 
 describe("QuestionTool", () => {
+  test("re-exports the exact canonical continuation schemas", () => {
+    expect(QuestionTool.Input).toBe(QuestionContinuation.Input)
+    expect(QuestionTool.Prepared).toBe(QuestionContinuation.Prepared)
+    expect(QuestionTool.Prepared.fields.input).toBe(QuestionTool.Input)
+  })
+
   it.effect("round trips prepared input and preserves ordinary answer conversion without running preparation side effects", () =>
     Effect.gen(function* () {
       assertions.length = 0

@@ -341,7 +341,7 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
 
 function sanitizeToolState(id: string, state: SessionMessage.ToolState): SessionMessage.ToolState {
   if (state.status === "streaming") return { ...state, input: redact("tool-input", id, state.input) }
-  if (state.status === "running")
+  if (state.status === "running" || state.status === "waiting")
     return { ...state, input: { redacted: `tool-input:${id}` }, metadata: { redacted: `tool-metadata:${id}` } }
   const meta = state.metadata === undefined ? undefined : { redacted: `tool-metadata:${id}` }
   if (state.status === "completed")

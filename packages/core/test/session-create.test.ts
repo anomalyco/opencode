@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
+import { Form } from "@opencode/schema/form"
 import { Money } from "@opencode/schema/money"
 import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
@@ -1464,6 +1465,64 @@ describe("SessionTransfer", () => {
         model,
         native: { redacted: `compaction-native:${completedCompactionID}` },
       })
+    }),
+  )
+
+  it.effect("redacts waiting tool state in settled transfer snapshots", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.create({ location })
+      const sessionID = Session.ID.create()
+      const messageID = SessionMessage.ID.create()
+      const questionID = Form.ID.create()
+      const state = {
+        status: "waiting" as const,
+        input: { questions: [{ question: "Private question" }] },
+        metadata: { private: "Private metadata" },
+        questionID,
+        generation: 1,
+      }
+      yield* transfer.import({
+        location,
+        data: {
+          info: { ...template, id: sessionID },
+          messages: [
+            {
+              id: messageID,
+              type: "assistant",
+              agent: Agent.ID.make("build"),
+              model: { providerID: Provider.ID.make("test"), id: Model.ID.make("test") },
+              content: [
+                {
+                  type: "tool",
+                  id: "call_question",
+                  name: "question",
+                  state,
+                  time: { created: DateTime.makeUnsafe(0) },
+                },
+              ],
+              time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
+            },
+          ],
+        },
+      })
+      expect((yield* transfer.export({ sessionID })).messages[0]).toMatchObject({ content: [{ state }] })
+      const sanitized = yield* transfer.export({ sessionID, sanitize: true })
+      expect(sanitized.messages[0]).toMatchObject({
+        content: [
+          {
+            state: {
+              status: "waiting",
+              questionID,
+              generation: 1,
+              input: { redacted: `tool-input:${messageID}` },
+              metadata: { redacted: `tool-metadata:${messageID}` },
+            },
+          },
+        ],
+      })
+      expect(JSON.stringify(sanitized)).not.toContain("Private")
     }),
   )
 

@@ -2752,7 +2752,7 @@ function GenericTool(props: ToolProps) {
       <InlineTool
         icon={props.part.state.status === "error" ? "✗" : "✓"}
         complete={props.part.state.status === "completed"}
-        pending={props.tool}
+        pending={props.part.state.status === "waiting" ? "Waiting for answers…" : props.tool}
         spinner={loading()}
         part={props.part}
         onClick={expandable() ? () => setExpanded((value) => !value) : undefined}
@@ -3696,7 +3696,12 @@ function Question(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="→" pending="Asking questions…" complete={count()} part={props.part}>
+        <InlineTool
+          icon="→"
+          pending={props.part.state.status === "waiting" ? "Waiting for answers…" : "Asking questions…"}
+          complete={props.part.state.status === "waiting" ? false : count()}
+          part={props.part}
+        >
           Asked {count()} question{count() !== 1 ? "s" : ""}
         </InlineTool>
       </Match>

@@ -739,7 +739,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const prefix = current ? output.startsWith(current.output) : false
     const version = current && !prefix ? current.version + 1 : (current?.version ?? 0)
     const delta = current && prefix ? output.slice(current.output.length) : output
-    if (part.state.status === "running") {
+    if (part.state.status === "running" || part.state.status === "waiting") {
       const started = current?.started === true
       const ready = part.name !== "websearch" || typeof part.state.metadata.provider === "string"
       if (render && !started && ready)
