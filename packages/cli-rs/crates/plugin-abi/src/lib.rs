@@ -3765,12 +3765,20 @@ fn storage_merge_whole<H: Host + ?Sized>(host: &H, key: &str, fields: serde_json
 
 /// The host table, as the plugin calls it. It is valid until the host destroys the instance, so it is the plugin's
 /// own: a 1.4 plugin gets it only as the [`Read`] or [`Host`] of one callback.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct HostHandle {
     api: *const HostApi,
+    /// The bounds of the images the host decodes, asked once, on the first [`Read::image_size`]; `None` inside for a
+    /// host that has no [`IMAGE_BOUNDS`] or did not answer. The instance's own: a table at the same address after it
+    /// is another host's (bigboi's final pass).
+    image_bounds: Rc<std::cell::OnceCell<Option<ImageBounds>>>,
 }
 
 impl HostHandle {
+    fn new(api: *const HostApi) -> Self {
+        Self { api, image_bounds: Rc::default() }
+    }
+
     fn request(&self, request: &HostRequest) -> Result<serde_json::Value, String> {
         let json = serde_json::to_vec(request).map_err(|error| error.to_string())?;
         let mut out = Owned::EMPTY;
@@ -4103,28 +4111,13 @@ impl Read for HostHandle {
     }
 }
 
-thread_local! {
-    /// The image bounds each host table stated, asked once, on the first [`Read::image_size`] (calls run on the UI
-    /// thread); `None` for a host that has no [`IMAGE_BOUNDS`] or did not answer.
-    static IMAGE_BOUNDS_OF: std::cell::RefCell<std::collections::HashMap<usize, Option<ImageBounds>>> =
-        std::cell::RefCell::default();
-}
-
 impl HostHandle {
     /// The bounds of the images the host decodes, when it states them ([`IMAGE_BOUNDS`]).
     fn image_bounds(&self) -> Option<ImageBounds> {
-        let key = self.api as usize;
-        if let Some(known) = IMAGE_BOUNDS_OF.with_borrow(|known| known.get(&key).copied()) {
-            return known;
-        }
-        let bounds = self
-            .features()
-            .iter()
-            .any(|feature| feature == IMAGE_BOUNDS)
-            .then(|| self.read::<ImageBounds>(&HostRequest::ImageBounds))
-            .flatten();
-        IMAGE_BOUNDS_OF.with_borrow_mut(|known| known.insert(key, bounds));
-        bounds
+        *self.image_bounds.get_or_init(|| {
+            let stated = self.features().iter().any(|feature| feature == IMAGE_BOUNDS);
+            stated.then(|| self.read::<ImageBounds>(&HostRequest::ImageBounds)).flatten()
+        })
     }
 }
 
@@ -4758,7 +4751,7 @@ impl Registered {
             waker.revoke();
         }
         self.link.revoke();
-        let (disposers, own) = (std::mem::take(&mut self.disposers), self.host);
+        let (disposers, own) = (std::mem::take(&mut self.disposers), self.host.clone());
         let host = host.unwrap_or(&own);
         for run in disposers.into_iter().rev() {
             // What a callback that panics asked for is dropped, and what the others asked for stays.
@@ -4869,15 +4862,15 @@ impl Registered {
     }
 
     fn with_host(id: &str, options: Option<String>, host: *const HostApi) -> Self {
-        let host = HostHandle { api: host };
+        let host = HostHandle::new(host);
         Self {
             manifest: Manifest { id: id.to_owned(), render: RENDER, ..Manifest::default() },
             options,
-            host,
             waker: host.waker(),
             link: host.link().map(mail::Revocable::new).unwrap_or_default(),
             features: host.features(),
             abi: host.core().map(|_| host.abi()),
+            host,
             ..Self::default()
         }
     }
@@ -5443,11 +5436,11 @@ mod tests {
             stopped: None,
             features: Bytes::new(&[]),
         };
-        assert_eq!(HostHandle { api: &current }.mode(), Some(ThemeMode::Light));
+        assert_eq!(HostHandle::new(&current).mode(), Some(ThemeMode::Light));
         let null = HostApi { theme_mode: None, ..current };
-        assert_eq!(HostHandle { api: &null }.mode(), None);
+        assert_eq!(HostHandle::new(&null).mode(), None);
         let old = HostApiV1_1 { size: size_of::<HostApiV1_1>(), major: 1, minor: 1, ctx, call, free };
-        assert_eq!(HostHandle { api: std::ptr::from_ref(&old).cast() }.mode(), None);
+        assert_eq!(HostHandle::new(std::ptr::from_ref(&old).cast()).mode(), None);
     }
 
     unsafe extern "C" fn answer(ctx: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
@@ -5477,13 +5470,13 @@ mod tests {
             stopped: None,
             features: Bytes::new(&[]),
         };
-        let host = HostHandle { api: &api };
+        let host = HostHandle::new(&api);
         assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
         assert_eq!((host.abi_minor(), host.mode(), host.waker().is_none()), (0, None, true));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
-        let older = HostHandle { api: &HostApi { major: 1, minor: 5, ..api } };
+        let older = HostHandle::new(&HostApi { major: 1, minor: 5, ..api });
         assert_eq!(older.abi_minor(), 5);
-        let current = HostHandle { api: &HostApi { major: ABI_MAJOR, minor: 0, ..api } };
+        let current = HostHandle::new(&HostApi { major: ABI_MAJOR, minor: 0, ..api });
         assert_eq!(current.abi_minor(), V1_MINOR);
         struct InProcess;
         impl Read for InProcess {
@@ -5518,14 +5511,14 @@ mod tests {
             stopped: None,
             features: Bytes::new(&[]),
         };
-        let host = HostHandle { api: &api };
+        let host = HostHandle::new(&api);
         assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
         assert_eq!((host.mode(), host.waker().is_none()), (None, true));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
         let bytes = [0u64; 16];
-        let misaligned = HostHandle { api: bytes.as_ptr().cast::<u8>().wrapping_add(1).cast() };
+        let misaligned = HostHandle::new(bytes.as_ptr().cast::<u8>().wrapping_add(1).cast());
         assert_eq!(misaligned.request(&HostRequest::Route), Err("no host".to_owned()));
-        let full = HostHandle { api: &HostApi { size: size_of::<HostApi>(), ..api } };
+        let full = HostHandle::new(&HostApi { size: size_of::<HostApi>(), ..api });
         assert!(full.request(&HostRequest::Route).is_err_and(|error| error.contains("EOF")));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
@@ -5580,7 +5573,7 @@ mod tests {
                 features: Bytes::new(&[]),
             };
             FREED.with(|freed| freed.borrow_mut().clear());
-            let got = HostHandle { api: &api }.request(&HostRequest::Route);
+            let got = HostHandle::new(&api).request(&HostRequest::Route);
             match expected {
                 Ok(value) => assert_eq!(got, Ok(value), "row {index}"),
                 Err(needle) => assert!(got.as_ref().is_err_and(|error| error.contains(needle)), "row {index}: {got:?}"),
@@ -5707,15 +5700,43 @@ mod tests {
                 stopped: None,
                 features: Bytes::new(features),
             };
-            let host = HostHandle { api: &api };
+            let host = HostHandle::new(&api);
             let sizes = [host.image_size(&[0; 200]), host.image_size(&png(11)), host.image_size(&png(9))];
             let bounded = expected.len() == 2;
             let past = if bounded { None } else { Some((4, 3)) };
             assert_eq!(sizes, [past, past, Some((4, 3))], "features {}", String::from_utf8_lossy(features));
             assert_eq!(ASKED.with_borrow(Vec::clone), expected, "features {}", String::from_utf8_lossy(features));
-            IMAGE_BOUNDS_OF.with_borrow_mut(|known| known.remove(&(std::ptr::from_ref(&api) as usize)));
         }
         assert!(FEATURES.contains(&IMAGE_BOUNDS));
+    }
+
+    // Expected (bigboi's final pass): image bounds belong to the instance that asked for them. An instance whose host
+    // states bounds answers 200 bytes with `None`; once it is gone, an instance on a table at the same address whose
+    // host states no bounds asks its host, which decodes them.
+    #[test]
+    fn image_bounds_end_with_their_instance() {
+        let mut api = HostApi {
+            size: size_of::<HostApi>(),
+            major: ABI_MAJOR,
+            minor: ABI_MINOR,
+            ctx: std::ptr::null_mut(),
+            call: Some(bounded_call),
+            free: Some(runtime::free),
+            theme_mode: None,
+            wake: None,
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(br#"["image-bounds"]"#),
+        };
+        ASKED.with_borrow_mut(Vec::clear);
+        let first = Registered::with_host("a", None, &api);
+        assert_eq!(first.host.image_size(&[0; 200]), None);
+        drop(first);
+        api.features = Bytes::new(b"[]");
+        let second = Registered::with_host("b", None, &api);
+        assert_eq!(second.host.image_size(&[0; 200]), Some((4, 3)), "the first instance's bounds outlived it");
+        assert_eq!(ASKED.with_borrow(Vec::clone), ["image-bounds", "image-size"]);
     }
 
     // Expected (carbon-8): borrowed bytes are refused unread when null with a length or over the bound, and `free`
@@ -5766,19 +5787,19 @@ mod tests {
             stopped: None,
             features: Bytes::new(&[]),
         };
-        let waker = HostHandle { api: &api }.waker().unwrap();
+        let waker = HostHandle::new(&api).waker().unwrap();
         std::thread::spawn(move || waker.wake()).join().unwrap();
         assert_eq!(wakes.load(std::sync::atomic::Ordering::SeqCst), 1);
-        assert!(HostHandle { api: &HostApi { wake: None, ..api } }.waker().is_none());
+        assert!(HostHandle::new(&HostApi { wake: None, ..api }).waker().is_none());
         let old = HostApiV1_2 { size: size_of::<HostApiV1_2>(), major: 1, minor: 2, ctx, call, free, theme_mode: None };
-        assert!(HostHandle { api: std::ptr::from_ref(&old).cast() }.waker().is_none());
+        assert!(HostHandle::new(std::ptr::from_ref(&old).cast()).waker().is_none());
     }
 
     // Expected: a C host that passes no table, or leaves `call` or `free` null, gets errors, not a jump to address 0.
     #[test]
     fn a_null_host_or_host_callback_is_an_error() {
         let set = HostRequest::StorageSet { key: "count".into(), value: "{}".into() };
-        let host = HostHandle { api: std::ptr::null() };
+        let host = HostHandle::new(std::ptr::null());
         assert_eq!(host.storage_text("count"), None);
         assert_eq!(host.request(&set), Err("no host".to_owned()));
         assert_eq!(host.mode(), None);
@@ -5798,9 +5819,9 @@ mod tests {
             stopped: None,
             features: Bytes::new(&[]),
         };
-        assert_eq!(HostHandle { api: &api }.request(&set), Err("the host takes no requests".to_owned()));
+        assert_eq!(HostHandle::new(&api).request(&set), Err("the host takes no requests".to_owned()));
         let api = HostApi { call: Some(call), ..api };
-        assert_eq!(HostHandle { api: &api }.request(&set), Err("the host takes no requests".to_owned()));
+        assert_eq!(HostHandle::new(&api).request(&set), Err("the host takes no requests".to_owned()));
     }
 
     // Expected: the 1.3 requests, rows and manifest keep their JSON byte for byte; only a plugin of this crate sets
@@ -6246,7 +6267,7 @@ mod tests {
                 stopped: None,
                 features: Bytes::new(&[]),
             };
-            HostHandle { api: &api }.storage_merge("view", fields.clone());
+            HostHandle::new(&api).storage_merge("view", fields.clone());
         }
         let merge = HostRequest::StorageMerge { key: "view".into(), fields };
         assert_eq!(
@@ -6516,7 +6537,7 @@ mod tests {
             stopped: None,
             features: Bytes::new(&[]),
         };
-        let host = HostHandle { api: &api };
+        let host = HostHandle::new(&api);
         assert_eq!(host.abi_minor(), 4);
         assert_eq!(host.composer(), None);
         host.edit_composer(ComposerEdit::Submit);
@@ -6674,7 +6695,7 @@ mod tests {
             stopped: None,
             features: Bytes::new(&[]),
         };
-        let host = HostHandle { api: &api };
+        let host = HostHandle::new(&api);
         assert_eq!((host.variants(), host.tabs_enabled(), host.tabs()), (Vec::new(), false, Vec::new()));
         assert_eq!((host.keymap_pending(), host.keymap_active()), (Vec::new(), Vec::new()));
         assert_eq!((host.keymap_commands(), host.shortcuts("x")), (Vec::new(), Vec::<String>::new()));
@@ -6716,7 +6737,7 @@ mod tests {
 
         // A 1.6 host gets xlarge, once, also when it refuses the dialog for another reason.
         let current = HostApi { minor: 6, ..api };
-        let host = HostHandle { api: &current };
+        let host = HostHandle::new(&current);
         host.dialog(Dialog::Panel(panel(PanelSize::XLarge)));
         let log = log_of(&current);
         assert_eq!(log.len(), 1, "{log:?}");
@@ -6759,13 +6780,13 @@ mod tests {
             stopped: Some(running),
             features: Bytes::new(features),
         };
-        let host = HostHandle { api: &api };
+        let host = HostHandle::new(&api);
         assert!(host.link().is_some());
         assert_eq!(host.features(), ["terminal"]);
         let mut registered = Registered::with_host("x", None, &api);
         assert_eq!(registered.setup().features(), ["terminal"]);
         let old = HostApi { major: 1, minor: 4, ..api };
-        let host = HostHandle { api: &old };
+        let host = HostHandle::new(&old);
         assert!(host.link().is_none() && host.features().is_empty());
     }
 
