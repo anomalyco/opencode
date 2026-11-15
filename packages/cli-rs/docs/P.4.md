@@ -499,13 +499,16 @@ gets its one reply. The 1.x calls are unchanged, in a 1.x binary and in 1.x sour
 no reply carries that ID.
 
 A fetch or a `foreground` belongs to what asked for it, the same in process, over the C ABI and over the pipe. One a
-mount's call asks for, a command of the route the mount shows or a handler of the mount's events (its input and its
-mount event), is that mount's: once the mount closes, it is not sent (a program does not start), and a reply that
+mount's call asks for, a command of the route the mount shows or a handler of the mount's input, is that mount's:
+once the mount closes, it is not sent, a program queued for the end of the turn does not start, and a reply that
 arrives later is dropped, also when the surface opened again under the same key, whose mount is another. One from
-setup, a global or base command, an event, a wake, a message or a layer of setup is the activation's, and its reply
-comes unless the plugin is disposed first. Over the pipe, the host tells the JS host of each request it cancels, and a
+setup, a global or base command, an event, a wake, a message, a layer of setup, or the mount's begin and end
+(`Event::Mount`) is the activation's, and its reply comes unless the plugin is disposed first. The plugin hears a
+mount begin and end, not the mount: the end has no mount left to own anything, and a read the begin starts is the
+plugin's, which a next mount shows, as the goal footer's is when the prompt mounts its next footer before the last one
+ends. Over the pipe, the host tells the JS host of each request it cancels, at once as the mount closes, and a
 TypeScript `fetch` of a mount that closed rejects with an `AbortError` ("the fetch was cancelled: the mount that asked
-for it closed"), as an aborted web fetch does, and leaves nothing pending. A Rust or C plugin hears nothing of a
+for it closed"), as an aborted web fetch does, and leaves nothing pending, while the server still holds it. A Rust or C plugin hears nothing of a
 cancelled request, as it has no promise that waits.
 
 ### Events
