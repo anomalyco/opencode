@@ -43,6 +43,14 @@ export default {
     carrier.command({ name: "probe.stuck", title: "probe.stuck" }, () => {
       stuck = true
     })
+    // `input` calls of `probe.notes`, each `input` dispatches of the test's recorder in one answer: answers of many
+    // effects that arrive together.
+    carrier.command({ name: "probe.burst", title: "probe.burst" }, (input?: string) => {
+      for (let index = 0; index < Number(input); index++) api.keymap.dispatch("probe.notes", input)
+    })
+    carrier.command({ name: "probe.notes", title: "probe.notes" }, (input?: string) => {
+      for (let index = 0; index < Number(input); index++) api.keymap.dispatch("recorder.note", String(index))
+    })
     carrier.command({ name: "probe.throw", title: "probe.throw" }, () => {
       api.ui.toast.show({ message: "before the throw" })
       throw new Error("the probe threw")
