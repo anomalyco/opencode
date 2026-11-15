@@ -4324,8 +4324,12 @@ impl HostHandle {
 
     /// The ID of the reply to `request`; an error, the host's, when it did not take it.
     fn requested(&self, request: &HostRequest) -> Result<RequestId, String> {
-        serde_json::from_value(self.request(request)?)
-            .map_err(|error| format!("the host answered no request ID: {error}"))
+        match serde_json::from_value(self.request(request)?) {
+            // 0 names no request, so no reply carries it: an answer of 0 is malformed (bigboi's last pass).
+            Ok(RequestId(0)) => Err("the host returned a bad result: request ID 0".to_owned()),
+            Ok(id) => Ok(id),
+            Err(error) => Err(format!("the host answered no request ID: {error}")),
+        }
     }
 }
 
@@ -5705,6 +5709,41 @@ mod tests {
     thread_local! {
         /// The requests the fake host below was sent, by type.
         static ASKED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// A host that answers every request with `0`.
+    unsafe extern "C" fn zero_call(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
+        // SAFETY: `out` is valid for writes.
+        unsafe { *out = Owned::from_vec(b"0".to_vec()) };
+        OK
+    }
+
+    // Expected (bigboi's last pass): a host that answers a fetch or a program OK with the ID 0, which names no
+    // request, gave a malformed answer: the 2.x calls are an error, and the 1.x calls answer `RequestId(0)`, which no
+    // reply carries.
+    #[test]
+    #[allow(deprecated)]
+    fn a_request_id_of_zero_is_a_malformed_answer() {
+        let api = HostApi {
+            size: size_of::<HostApi>(),
+            major: ABI_MAJOR,
+            minor: ABI_MINOR,
+            ctx: std::ptr::null_mut(),
+            call: Some(zero_call),
+            free: Some(runtime::free),
+            theme_mode: None,
+            wake: None,
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(b"[]"),
+        };
+        let host = HostHandle::new(&api);
+        let fetch = || Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned());
+        let program = || Foreground::new("true");
+        assert!(host.try_fetch(fetch()).is_err_and(|error| error.contains("request ID 0")));
+        assert!(host.try_foreground(program()).is_err_and(|error| error.contains("request ID 0")));
+        assert_eq!((host.fetch(fetch()), host.foreground(program())), (RequestId(0), RequestId(0)));
     }
 
     /// A host that states image bounds of 100 bytes and 10 pixels a side, and answers an image's size as [4, 3].

@@ -6060,9 +6060,9 @@
     },
     "RequestId": {
       "type": "integer",
-      "minimum": 0,
+      "minimum": 1,
       "maximum": 18446744073709551615,
-      "description": "What a `fetch` or a `foreground` the host takes answers, which its one reply names. One the host does not take, as when its queue of effects is full, answers an error, and no reply comes."
+      "description": "What a `fetch` or a `foreground` the host takes answers, which its one reply names; never 0, which names no request. One the host does not take, as when its queue of effects is full, answers an error, and no reply comes."
     },
     "Handled": {
       "type": "string",
