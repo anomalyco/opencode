@@ -76,7 +76,11 @@ export const Plugin = define({
     yield* websearch.transform((editor) => {
       const statements = policies()
       for (const provider of editor.list()) {
-        if (integrationDenied(statements, provider.id)) editor.remove(provider.id)
+        if (
+          ManagedPolicy.decision(statements, "websearch.use", provider.id) === "deny" ||
+          integrationDenied(statements, provider.id)
+        )
+          editor.remove(provider.id)
       }
     })
     yield* ctx.mcp.transform((servers) => {

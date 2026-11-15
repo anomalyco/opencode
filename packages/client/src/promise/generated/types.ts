@@ -31,6 +31,8 @@ export type ProviderTransport = "http" | "websocket"
 
 export type ProviderEncoding = "zstd" | "gzip" | "none"
 
+export type ProviderTls = { cert: string; key: string; passphrase?: string }
+
 export type AgentColor = string
 
 export type PermissionEffect = "allow" | "deny" | "ask"
@@ -121,8 +123,6 @@ export type SessionStructuredError = {
   retryAfterMs?: number
 }
 
-export type SessionGenerateResponse = { data: { text: string } }
-
 export type SessionInterruptResponse = { interrupted: boolean }
 
 export type FormID = string
@@ -188,7 +188,7 @@ export type ModelCacheFormat = "anthropic" | "alibaba"
 
 export type ModelMediaInput = "assets" | "state" | "root"
 
-export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string>; temperature?: boolean }
+export type ToolFreeformFormat = "text" | "regex" | "lark"
 
 export type MoneyUSDPerMillionTokens = number
 
@@ -345,6 +345,10 @@ export type ArtifactID = string
 
 export type ArtifactTime = { created: number; updated: number }
 
+export type JobStatus = "running" | "completed" | "error" | "cancelled"
+
+export type JobTime = { started: number; completed?: number }
+
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
 export type VcsBranch = { current?: string; default?: string }
@@ -451,6 +455,8 @@ export type SessionMessageCompactionRunning = {
 }
 
 export type UsageLimitsBudgetModel = { providerID: ProviderID; modelID: string; name: string; spent?: MoneyUSD }
+
+export type SessionGenerateResponse = { data: { text: string; tokens: TokenUsageInfo; cost: MoneyUSD } }
 
 export type FileSystemEntry = { path: RelativePath; type: "file" | "directory" }
 
@@ -709,6 +715,14 @@ export type ProviderCompatibility = {
   mediaInput?: ModelMediaInput
 }
 
+export type ModelCapabilities = {
+  tools: boolean
+  freeform?: Array<ToolFreeformFormat>
+  input: Array<string>
+  output: Array<string>
+  temperature?: boolean
+}
+
 export type ModelCost = {
   tier?: { type: "context"; size: number }
   input: MoneyUSDPerMillionTokens
@@ -765,6 +779,7 @@ export type IntegrationAttempt = {
   url: string
   instructions: string
   mode: "auto" | "code"
+  paste?: true
   time: { created: number; expires: number }
 }
 
@@ -936,6 +951,40 @@ export type ArtifactInfo = {
   time: ArtifactTime
 }
 
+export type JobShell = {
+  kind: "shell"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
+  shellID: string
+  command: string
+}
+
+export type JobSubagent = {
+  kind: "subagent"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
+  childSessionID: SessionID
+  agent: string
+  description: string
+}
+
+export type JobImage = {
+  kind: "image"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
+  path: string
+  model: string
+}
+
 export type VcsInfo = { provider?: string; branch: VcsBranch }
 
 export type WebSearchProvider = { id: WebSearchID; name: string }
@@ -944,6 +993,7 @@ export type UsageLimitsGo = { rolling: UsageLimitsMeter; weekly: UsageLimitsMete
 
 export type ConfigModelCapabilities = {
   tools?: boolean
+  freeform?: Array<ToolFreeformFormat>
   input?: Array<string>
   output?: Array<string>
   temperature?: boolean
@@ -1017,6 +1067,7 @@ export type ProviderSettings = {
   cache?: ProviderCache
   transport?: ProviderTransport
   encoding?: ProviderEncoding
+  tls?: ProviderTls
 } & { [x: string]: any }
 
 export type ModelSettings = { compaction?: ProviderCompaction; cache?: ProviderCache; encoding?: ProviderEncoding } & {
@@ -1031,6 +1082,7 @@ export type ConfigProviderSettings = {
   cache?: ProviderCache
   transport?: ProviderTransport
   encoding?: ProviderEncoding
+  tls?: ProviderTls
 } & { [x: string]: JsonValue | null }
 
 export type ConfigModelSettings = {
@@ -1374,6 +1426,16 @@ export type SessionStepStarted = {
   }
 }
 
+export type SessionStepFirstToken = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.step.first-token"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; assistantMessageID: SessionMessageID }
+}
+
 export type SessionStepStreamed = {
   id: EventID
   created: number
@@ -1612,7 +1674,7 @@ export type SessionUsageRecorded = {
   type: "session.usage.recorded"
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
-  data: { sessionID: SessionID; source: "title" | "compaction"; cost: MoneyUSD; tokens: TokenUsageInfo }
+  data: { sessionID: SessionID; source: "title" | "compaction" | "generate"; cost: MoneyUSD; tokens: TokenUsageInfo }
 }
 
 export type LocationShutdown = {
@@ -1639,7 +1701,7 @@ export type CredentialUpdated = {
   metadata?: { [x: string]: any }
   type: "credential.updated"
   location?: LocationRef
-  data: {}
+  data: { integrationID: IntegrationID; credentialID: CredentialID }
 }
 
 export type CredentialSwitched = {
@@ -2063,6 +2125,24 @@ export type McpResourcesChanged = {
   data: { server: string }
 }
 
+export type ExperimentalMcpEvent = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.mcp.event"
+  location?: LocationRef
+  data: {
+    id: string
+    server: string
+    name: string
+    eventId: string
+    timestamp: string
+    data: JsonValue
+    cursor: string | null
+    truncated?: boolean | undefined
+  }
+}
+
 export type SessionToolSuccess = {
   id: EventID
   created: number
@@ -2192,6 +2272,8 @@ export type FormReplied = {
 export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
+
+export type JobInfo = JobShell | JobSubagent | JobImage
 
 export type SessionInboxMove = {
   id: SessionMessageID
@@ -2347,6 +2429,7 @@ export type ConfigEntry =
             | "mcp.use"
             | "skill.use"
             | "plugin.use"
+            | "websearch.use"
           resource: string
           effect: "allow" | "deny"
         }>
@@ -2406,6 +2489,7 @@ export type ConfigEntry =
                   codemode?: boolean
                   timeout?: { startup?: number; catalog?: number; execution?: number }
                   protocol?: McpProtocol
+                  pool?: boolean
                 }
               | {
                   type: "remote"
@@ -2425,6 +2509,7 @@ export type ConfigEntry =
                   codemode?: boolean
                   timeout?: { startup?: number; catalog?: number; execution?: number }
                   protocol?: McpProtocol
+                  pool?: boolean
                 }
           }
         }
@@ -2501,12 +2586,17 @@ export type ConfigEntry =
         }
         experimental?: {
           portable_shell_scanner?: boolean
+          codemode_vm?: boolean
+          all_flags?: boolean
           todo?: boolean
           background_compaction?: boolean
           media_blob?: boolean
-          image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           schedules?: boolean
           artifacts?: boolean
+          console_watches?: boolean
+          mcp_events?: boolean
+          part_rows?: boolean
+          image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
           location_idle_timeout?: string | false
           policies?: Array<{
@@ -2518,6 +2608,7 @@ export type ConfigEntry =
               | "mcp.use"
               | "skill.use"
               | "plugin.use"
+              | "websearch.use"
             resource: string
             effect: "allow" | "deny"
           }>
@@ -2640,7 +2731,7 @@ export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | Sessio
 export type SessionMessageAssistant = {
   id: SessionMessageID
   metadata?: { [x: string]: JsonValue }
-  time: { created: number; streamed?: number; completed?: number }
+  time: { created: number; firstToken?: number; streamed?: number; completed?: number }
   type: "assistant"
   agent: AgentID
   model: ModelRef
@@ -2772,6 +2863,7 @@ export type SessionEventDurable =
   | SessionShellStarted
   | SessionShellEnded
   | SessionStepStarted
+  | SessionStepFirstToken
   | SessionStepStreamed
   | SessionStepEnded
   | SessionStepFailed
@@ -2830,6 +2922,7 @@ export type V2Event =
   | SessionShellStarted
   | SessionShellEnded
   | SessionStepStarted
+  | SessionStepFirstToken
   | SessionStepStreamed
   | SessionStepEnded
   | SessionStepFailed
@@ -2891,6 +2984,7 @@ export type V2Event =
   | VcsBranchUpdated
   | McpStatusChanged
   | McpResourcesChanged
+  | ExperimentalMcpEvent
   | V2EventRpc
   | V2EventServerConnected
 
@@ -3905,7 +3999,12 @@ export type ExperimentalGenerateDecisionsInput = {
     | { readonly type: "file"; readonly data: string; readonly mime: string; readonly name?: string }
   >
   readonly questions: ReadonlyArray<
-    | { readonly type: "predicate"; readonly name: string; readonly instructions: string }
+    | {
+        readonly type: "predicate"
+        readonly name: string
+        readonly instructions: string
+        readonly criteria?: { readonly true?: string; readonly false?: string }
+      }
     | {
         readonly type: "choice"
         readonly name: string
@@ -4065,6 +4164,7 @@ export type ExperimentalMcpAddInput = {
         readonly codemode?: boolean
         readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
         readonly protocol?: "legacy" | "auto" | "2026-07-28"
+        readonly pool?: boolean
       }
     | {
         readonly type: "remote"
@@ -4084,6 +4184,7 @@ export type ExperimentalMcpAddInput = {
         readonly codemode?: boolean
         readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
         readonly protocol?: "legacy" | "auto" | "2026-07-28"
+        readonly pool?: boolean
       }
 }
 
@@ -4320,6 +4421,7 @@ export type EventSubscribeInput = {
         | "session.shell.started"
         | "session.shell.ended"
         | "session.step.started"
+        | "session.step.first-token"
         | "session.step.streamed"
         | "session.step.ended"
         | "session.step.failed"
@@ -4381,6 +4483,7 @@ export type EventSubscribeInput = {
         | "vcs.branch.updated"
         | "mcp.status.changed"
         | "mcp.resources.changed"
+        | "experimental.mcp.event"
         | `${"rpc."}${string}`
       >
     | undefined
@@ -4644,6 +4747,15 @@ export type ExperimentalArtifactsViewInput = {
 }
 
 export type ExperimentalArtifactsViewOutput = globalThis.Uint8Array
+
+export type ExperimentalJobListInput = {
+  readonly sessionID?: string | undefined
+  readonly kind?: ("shell" | "subagent" | "image") | undefined
+  readonly status?: ("running" | "completed" | "error" | "cancelled") | undefined
+  readonly descendants?: boolean | undefined
+}
+
+export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

@@ -16,7 +16,7 @@ it.effect("lists other model types for plugins only when they ask for them", () 
     const plugins = yield* Plugin.Service
     const catalog = yield* Provider.Service
     yield* agents.transform((editor) => editor.update(Agent.ID.make("build"), () => {}))
-    const host = yield* PluginHost.make(plugins)
+    const host = yield* PluginHost.make(plugins, "test")
     const imageID = Model.ID.make("meta/muse-spark-1.1")
     yield* catalog.transform((editor) => {
       editor.models.update(Provider.ID.make("test"), imageID, (model) => {

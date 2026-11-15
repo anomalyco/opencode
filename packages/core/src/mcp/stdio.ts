@@ -5,6 +5,7 @@ import { Cause, Duration, Effect, Fiber, Option, Queue, Result, Scope, Stream } 
 import { ChildProcess } from "effect/process"
 import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
 import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
 
 /** Mirrors StdioClientTransport: wait this long for a graceful exit after stdin closes. */
 const CLOSE_GRACE = Duration.seconds(2)
@@ -35,6 +36,14 @@ export interface Options {
 }
 
 /**
+ * Resolves a local server's configured `cwd` against the workspace directory, expanding `~` to the
+ * opencode host's home. Environments do not expose their own home, so a workspace-backed location
+ * gets the host's home too.
+ */
+export const resolveCwd = (directory: string, cwd: string | undefined) =>
+  cwd ? FileAccess.resolvePath(directory, cwd) : directory
+
+/**
  * MCP stdio transport that spawns its server through the location's `Environment` instead of the
  * SDK's host-bound `StdioClientTransport`, so a workspace-backed location runs its MCP servers
  * wherever the rest of its execution happens.
@@ -60,8 +69,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   const stop = Effect.fnUntraced(function* (handle: ChildProcessHandle) {
     // Exit completion can precede descendant cleanup after the capture deadline.
     yield* Effect.timeoutOption(handle.exitCode, CLOSE_GRACE).pipe(Effect.ignore)
-    const terminated = yield* Effect.timeoutOption(handle.kill({ killSignal: "SIGTERM" }), FORCE_KILL_AFTER)
-    if (terminated._tag === "None") yield* handle.kill({ killSignal: "SIGKILL" })
+    yield* handle.kill({ killSignal: "SIGTERM", forceKillAfter: FORCE_KILL_AFTER })
   }, Effect.ignore())
 
   const close = () =>
@@ -79,7 +87,14 @@ export const make = Effect.fnUntraced(function* (options: Options) {
       }).pipe(Effect.ensuring(Queue.shutdown(outgoing))),
     ))
 
-  const transport: Transport = {
+  // `pid` and `stderr` match the SDK's StdioClientTransport accessors. The SDK detects stdio by their
+  // presence, and only for stdio does it treat an unanswered server/discover probe as a legacy server.
+  // stderr is drained into the debug log, so no stream is handed out.
+  const transport: Transport & { readonly pid: number | null; readonly stderr: null } = {
+    get pid() {
+      return state.handle?.pid ?? null
+    },
+    stderr: null,
     start: () => {
       if (state.phase !== "ready") return Promise.reject(new Error("Stdio transport already started"))
       state.phase = "starting"

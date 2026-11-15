@@ -1,4 +1,4 @@
-import { emptyInputJsonSchema, type ToolDefinition } from "@opencode/ai/effect"
+import { emptyInputJsonSchema, ToolFailure, type ToolDefinition } from "@opencode/ai/effect"
 import { isRecord } from "@opencode/util/record"
 import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
@@ -24,6 +24,7 @@ export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
   name: effectiveName(tool),
   description: tool.description,
   inputSchema: inputJsonSchema(tool.input),
+  ...(tool.freeform && { freeform: tool.freeform }),
   ...(tool.output === undefined ? {} : { outputSchema: outputJsonSchema(tool.output) }),
 })
 
@@ -285,9 +286,13 @@ export const stringify = (value: unknown) => {
   }
 }
 
-export const normalizedName = (tool: Tool.Info) => tool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+export const normalizedName = (tool: Pick<Tool.Info, "name">) => tool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
 
-export const effectiveName = (tool: Tool.Info) =>
+export const effectiveName = (tool: Pick<Tool.Info, "name" | "options">) =>
   tool.options?.namespace === undefined
     ? normalizedName(tool)
     : `${tool.options.namespace.replaceAll(".", "_")}_${normalizedName(tool)}`
+
+/** For `Effect.mapError`: keep a `ToolFailure` as is, wrap anything else with `message`. */
+export const toolFailure = (message: string) => (error: unknown) =>
+  error instanceof ToolFailure ? error : new ToolFailure({ message, error })

@@ -1,7 +1,7 @@
 import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Stream, Tracer } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
@@ -74,6 +74,18 @@ const setup = Effect.gen(function* () {
   const execution = yield* SessionExecution.Service
   return { tmp, session, created, shell, control, execution }
 })
+
+const recordSpans = () => {
+  const spans: Tracer.NativeSpan[] = []
+  const tracer = Tracer.make({
+    span(options) {
+      const span = new Tracer.NativeSpan(options)
+      spans.push(span)
+      return span
+    },
+  })
+  return { spans, tracer }
+}
 
 const log = (session: Session.Interface, sessionID: Session.ID, follow = false) =>
   session.log({ sessionID, follow }).pipe(Stream.filter((event) => !Bus.isSynced(event)))
@@ -271,8 +283,8 @@ describe("Session.shell", () => {
         expect(completion.payload.text).toContain(command)
         expect(completion.payload.text).toContain("user output")
         expect(completion.payload.text).toContain("user error")
-        if (exit === 0) expect(completion.payload.text).not.toContain("Exited with code")
-        if (exit !== 0) expect(completion.payload.text).toContain(`Exited with code ${exit}`)
+        if (exit === 0) expect(completion.payload.text).not.toContain("Exit code")
+        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</shell>`)
         expect(fixture.control.wakes).toEqual([])
       }),
     )
@@ -285,7 +297,12 @@ describe("Session.shell", () => {
       text: "Cancelled",
       output: "Shell command output is no longer available.",
     },
-    { status: "timeout", state: "completed", text: "Timed out before completion", output: "timeout started" },
+    {
+      status: "timeout",
+      state: "completed",
+      text: "\n\nCommand timed out. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: ",
+      output: "timeout started",
+    },
   ]) {
     it.live(`records a ${outcome.status} shell and admits its completion without waking the model`, () =>
       Effect.gen(function* () {
@@ -315,11 +332,43 @@ describe("Session.shell", () => {
             },
           },
         ])
-        expect(inbox[0]).not.toHaveProperty("payload.metadata.exit")
+        // A timed-out process still exits after the kill, so only a removed shell has no exit code.
+        if (outcome.status === "killed") expect(inbox[0]).not.toHaveProperty("payload.metadata.exit")
         expect(fixture.control.wakes).toEqual([])
       }),
     )
   }
+
+  it.live("names the session, a truncated command and the exit on shell spans outside any turn", () =>
+    Effect.gen(function* () {
+      const { spans, tracer } = recordSpans()
+      const fixture = yield* setup
+      // The emoji's two UTF-16 units sit at indexes 199 and 200, across the 200-unit cut.
+      const command = `exit 3 # ${"x".repeat(190)}😀${"x".repeat(100)}`
+      const truncated = `exit 3 # ${"x".repeat(190)}\uFFFD…`
+      yield* fixture.session.shell({ sessionID: fixture.created.id, command }).pipe(Effect.withTracer(tracer))
+
+      const create = spans.find((span) => span.name === "Shell.create")
+      const result = spans.find((span) => span.name === "Shell.result")
+      const shellID = create?.attributes.get("opencode.shell.id")
+      expect(shellID).toBeString()
+      expect(truncated.isWellFormed()).toBe(true)
+      expect(Object.fromEntries(create?.attributes ?? [])).toEqual({
+        "opencode.shell.id": shellID,
+        "opencode.shell.command": truncated,
+        "session.id": fixture.created.id,
+        "opencode.shell.background": true,
+      })
+      expect(Object.fromEntries(result?.attributes ?? [])).toEqual({
+        "opencode.shell.id": shellID,
+        "opencode.shell.command": truncated,
+        "session.id": fixture.created.id,
+        "opencode.shell.background": true,
+        "opencode.shell.status": "exited",
+        "process.exit.code": 3,
+      })
+    }),
+  )
 
   it.live("admits a spawn failure without waking the model before failing the caller", () =>
     Effect.gen(function* () {

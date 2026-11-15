@@ -11,6 +11,8 @@ import { SpeechClient } from "../src/speech-client.js"
 import { TranscriptionClient } from "../src/transcription-client.js"
 import { DecisionClient } from "../src/decision-client.js"
 import type { Service as DecisionClientService } from "../src/decision-client.js"
+import { EmbeddingClient } from "../src/embedding-client.js"
+import type { Service as EmbeddingClientService } from "../src/embedding-client.js"
 import type { Service as ImageClientService } from "../src/image-client.js"
 import type { Service as VideoClientService } from "../src/video-client.js"
 import type { Service as SpeechClientService } from "../src/speech-client.js"
@@ -34,6 +36,7 @@ type RecordedEnv =
   | SpeechClientService
   | TranscriptionClientService
   | DecisionClientService
+  | EmbeddingClientService
   | Socket.WebSocketConstructor
 
 type RecordedTestsOptions = RecordedGroupOptions & {
@@ -109,6 +112,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         SpeechClient.layer.pipe(Layer.provide(requestExecutor)),
         TranscriptionClient.layer.pipe(Layer.provide(requestExecutor)),
         DecisionClient.layer.pipe(Layer.provide(requestExecutor)),
+        EmbeddingClient.layer.pipe(Layer.provide(requestExecutor)),
         webSocket,
       )
       if (!recording) return layer

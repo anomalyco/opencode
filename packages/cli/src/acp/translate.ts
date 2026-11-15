@@ -25,7 +25,7 @@ export type Terminal = "succeeded" | "failed" | "interrupted"
 export type TurnContext = {
   readonly sessionID: Session.ID
   readonly cwd: string
-  readonly start: TurnStart
+  readonly start?: TurnStart
   readonly childUpdates: boolean
   readonly compaction: boolean
 }
@@ -44,12 +44,14 @@ type RetryStatus = {
   readonly error: SessionError.Error
 }
 
+type Child = ACPChild.Session & { readonly turnID?: string }
+
 export type TurnState = {
   readonly started: boolean
   readonly tools: ReadonlyMap<string, Tool>
   readonly retries: ReadonlyMap<string, RetryStatus>
   readonly compactions: ACPCompaction.Tracked
-  readonly children: ReadonlyMap<string, ACPChild.Session>
+  readonly children: ReadonlyMap<string, Child>
   readonly openChildren: ReadonlySet<string>
   readonly asks: ReadonlySet<string>
   readonly finish?: SessionMessage.Assistant["finish"]
@@ -69,9 +71,9 @@ export type Output =
       readonly _tag: "PermissionAsk"
       readonly event: PermissionEvent
       readonly tool?: Tool
-      readonly child?: ACPChild.Session
+      readonly child?: Child
     }
-  | { readonly _tag: "FormAsk"; readonly form: FormEvent["data"]["form"]; readonly child?: ACPChild.Session }
+  | { readonly _tag: "FormAsk"; readonly form: FormEvent["data"]["form"]; readonly child?: Child }
   | { readonly _tag: "AskSettled"; readonly id: string }
 
 export type Folded = {
@@ -95,20 +97,21 @@ export function fold(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): 
 
   const sessionID = sessionIDFromEvent(event)
   const child = sessionID ? state.children.get(sessionID) : undefined
+  const openChild = child && state.openChildren.has(child.id) ? child : undefined
 
-  if (event.type === "permission.asked" && (event.data.sessionID === ctx.sessionID || child)) {
+  if (event.type === "permission.asked" && (event.data.sessionID === ctx.sessionID || openChild)) {
     const tool = event.data.source?.id
       ? state.tools.get(toolKey(event.data.sessionID, event.data.source.id))
       : undefined
     return {
       state: { ...state, asks: new Set(state.asks).add(event.data.id) },
-      outputs: [{ _tag: "PermissionAsk", event, tool, child }],
+      outputs: [{ _tag: "PermissionAsk", event, tool, child: openChild }],
     }
   }
-  if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || child)) {
+  if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || openChild)) {
     return {
       state: { ...state, asks: new Set(state.asks).add(event.data.form.id) },
-      outputs: [{ _tag: "FormAsk", form: event.data.form, child }],
+      outputs: [{ _tag: "FormAsk", form: event.data.form, child: openChild }],
     }
   }
   const settledID =
@@ -123,15 +126,18 @@ export function fold(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): 
     return { state: { ...state, asks }, outputs: [{ _tag: "AskSettled", id: settledID }] }
   }
   if (!sessionID || (sessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
-  if (event.type === "session.inbox.delivered" && event.data.inboxID === ctx.start.id)
+  if (
+    sessionID === ctx.sessionID &&
+    event.type === "session.inbox.delivered" &&
+    (!ctx.start || event.data.inboxID === ctx.start.id)
+  )
     return { state: { ...state, started: true }, outputs: [] }
-  if (!state.started) return { state, outputs: [] }
+  if (!child && !state.started) return { state, outputs: [] }
   return child ? childEvent(state, event, ctx, child) : rootEvent(state, event, ctx)
 }
 
-export function fromTrackedChild(state: TurnState, event: OpenCodeEvent) {
-  const sessionID = event.type === "session.created" ? event.data.parentID : sessionIDFromEvent(event)
-  return sessionID !== undefined && state.children.has(sessionID)
+export function projectChild(ctx: TurnContext, child: Child) {
+  return !ctx.childUpdates && ctx.start !== undefined && child.turnID === ctx.start.id
 }
 
 export function failure(state: TurnState) {
@@ -202,7 +208,13 @@ function childCreated(state: TurnState, event: CreatedEvent, ctx: TurnContext): 
   if (!parentID) return { state, outputs: [] }
   const parent = parentID === ctx.sessionID ? undefined : state.children.get(parentID)
   if (!parent && parentID !== ctx.sessionID) return { state, outputs: [] }
-  const child = { id: event.data.sessionID, parentID, depth: parent ? parent.depth + 1 : 1, title: event.data.title }
+  const child: Child = {
+    id: event.data.sessionID,
+    parentID,
+    depth: parent ? parent.depth + 1 : 1,
+    title: event.data.title,
+    turnID: parent ? parent.turnID : ctx.start?.id,
+  }
   return {
     state: {
       ...state,
@@ -224,20 +236,27 @@ function rootEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): Fo
       return { state: { ...recorded, stepError: event.data.error }, outputs: [] }
     }
     case "session.execution.succeeded":
-      return { state, outputs: [], terminal: "succeeded" }
+      return { state: { ...state, started: Boolean(ctx.start) }, outputs: [], terminal: "succeeded" }
     case "session.execution.interrupted":
-      return { state, outputs: [], terminal: "interrupted" }
+      return { state: { ...state, started: Boolean(ctx.start) }, outputs: [], terminal: "interrupted" }
     case "session.execution.failed":
-      return { state: { ...state, executionError: event.data.error }, outputs: [], terminal: "failed" }
+      return {
+        state: { ...state, started: Boolean(ctx.start), executionError: event.data.error },
+        outputs: [],
+        terminal: "failed",
+      }
     default:
       return sessionEvent(state, event, ctx, undefined)
   }
 }
 
-function childEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, child: ACPChild.Session): Folded {
+function childEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, child: Child): Folded {
   switch (event.type) {
     case "session.execution.started":
-      return { state, outputs: childStatus(ctx, child, { type: "status", status: "running" }) }
+      return {
+        state: { ...state, openChildren: new Set(state.openChildren).add(child.id) },
+        outputs: childStatus(ctx, child, { type: "status", status: "running" }),
+      }
     case "session.execution.succeeded":
       return childEnded(state, ctx, child, { type: "status", status: "completed" })
     case "session.execution.interrupted":
@@ -249,12 +268,7 @@ function childEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, ch
   }
 }
 
-function sessionEvent(
-  state: TurnState,
-  event: OpenCodeEvent,
-  ctx: TurnContext,
-  child: ACPChild.Session | undefined,
-): Folded {
+function sessionEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, child: Child | undefined): Folded {
   const sessionID = child?.id ?? ctx.sessionID
   const send = (update: SessionUpdate) => route(ctx, child, update)
   switch (event.type) {
@@ -415,11 +429,11 @@ function newTool(sessionID: string, id: string, name = "tool"): Tool {
   return { sessionID, id, name, input: {}, metadata: {} }
 }
 
-function route(ctx: TurnContext, child: ACPChild.Session | undefined, update: SessionUpdate): Output[] {
+function route(ctx: TurnContext, child: Child | undefined, update: SessionUpdate): Output[] {
   if (!child) return [{ _tag: "SessionUpdate", update }]
   const projected = ACPChild.project(update, child)
   if (ctx.childUpdates) return childStatus(ctx, child, { type: "update", update: projected })
-  return [{ _tag: "SessionUpdate", update: projected }]
+  return projectChild(ctx, child) ? [{ _tag: "SessionUpdate", update: projected }] : []
 }
 
 function childStatus(ctx: TurnContext, child: ACPChild.Session, event: ACPChild.Event): Output[] {

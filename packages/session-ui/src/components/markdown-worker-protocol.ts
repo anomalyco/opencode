@@ -2,11 +2,14 @@ import type { Block } from "./markdown-stream"
 
 export type MarkdownToken = [content: string, style: string]
 
+/** Projections and highlight streams keep separate per-key caches, so a disposal names the one it clears. */
+export type MarkdownWorkerLaneTarget = "project" | "highlight"
+
 export type MarkdownWorkerRequest =
   | { type: "parse"; id: number; text: string }
   | { type: "project"; id: number; key: string; text: string; live: boolean }
   | { type: "highlight"; id: number; key: string; text: string; language: string; complete?: boolean }
-  | { type: "dispose"; key: string }
+  | { type: "dispose"; target: MarkdownWorkerLaneTarget; key: string }
 
 export type MarkdownWorkerResponse =
   | { type: "parse"; id: number; html: string }
@@ -21,7 +24,6 @@ export type MarkdownWorkerResponse =
       unstable: MarkdownToken[]
     }
   | { type: "error"; id: number; key?: string; message: string }
-  | { type: "superseded"; id: number; key: string }
 
 export type MarkdownWorkerState = {
   id: number

@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "ยังไม่ได้กำหนดค่าปลั๊กอิน",
   skills: "ทักษะ",
   "skills.empty": "ยังไม่ได้ตั้งค่าทักษะ",
-  lsp: "LSP",
-  "lsp.empty": "ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์ LSP",
   failed: "ล้มเหลว",
   retry: "ลองใหม่",
   connecting: "กำลังเชื่อมต่อ…",

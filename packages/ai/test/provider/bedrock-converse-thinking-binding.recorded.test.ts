@@ -32,7 +32,7 @@ const first = ai.request({
   system: "You are a concise assistant.",
   prompt: question,
   cache: "none",
-  generation: { maxTokens: 12_000 },
+  maxTokens: 12_000,
 })
 
 const recorded = recordedTests({
@@ -55,7 +55,7 @@ describe("Bedrock Converse thinking binding recorded", () => {
           system: "Reply with the single word 'Hello'.",
           prompt: "Say hello.",
           cache: "none",
-          generation: { maxTokens: 1_024 },
+          maxTokens: 1_024,
         }),
       )
 

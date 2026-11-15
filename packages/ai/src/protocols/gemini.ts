@@ -217,6 +217,7 @@ const GeminiUsage = Schema.Struct({
   cachedContentTokenCount: optionalNull(Schema.Number),
   thoughtsTokenCount: optionalNull(Schema.Number),
   promptTokenCount: optionalNull(Schema.Number),
+  toolUsePromptTokenCount: optionalNull(Schema.Number),
   candidatesTokenCount: optionalNull(Schema.Number),
   totalTokenCount: optionalNull(Schema.Number),
   ...ProviderShared.ReportedBilling.fields,
@@ -299,6 +300,9 @@ const lowerContentPart = Effect.fnUntraced(function* (part: TextPart | MediaPart
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
 
+const signatureMetadata = (key: string, signature: string | undefined) =>
+  signature ? providerMetadata(key, { thoughtSignature: signature }) : undefined
+
 const thoughtSignature = (metadata: ProviderMetadata | undefined, key: string) => {
   const value = metadata?.[key]
   return typeof value?.thoughtSignature === "string" ? value.thoughtSignature : undefined
@@ -337,8 +341,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
     if (message.role === "user") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "media"]))
-          return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
         parts.push(yield* lowerContentPart(part))
       }
       contents.push({ role: "user", parts })
@@ -392,8 +394,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
 
     const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Gemini", "tool", ["tool-result"])
       if (part.result.type !== "content") {
         parts.push({
           functionResponse: {
@@ -444,17 +444,16 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const flattened = ProviderShared.flattenToolRequest(request)
   const hasTools = flattened.tools.length > 0
-  const generation = request.generation
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const generationConfig = {
-    maxOutputTokens: generation?.maxTokens,
-    temperature: generation?.temperature,
-    topP: generation?.topP,
-    topK: generation?.topK,
-    frequencyPenalty: generation?.frequencyPenalty,
-    presencePenalty: generation?.presencePenalty,
-    seed: generation?.seed,
-    stopSequences: generation?.stop,
+    maxOutputTokens: request.maxTokens,
+    temperature: request.temperature,
+    topP: request.topP,
+    topK: request.topK,
+    frequencyPenalty: request.frequencyPenalty,
+    presencePenalty: request.presencePenalty,
+    seed: request.seed,
+    stopSequences: request.stop,
     // Gemini accepts a budget above `maxOutputTokens`, but thinking then leaves the answer empty.
     thinkingConfig:
       options.thinkingConfig === undefined
@@ -467,7 +466,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
                 ? undefined
                 : ProviderShared.fitThinkingBudget(
                     options.thinkingConfig.thinkingBudget,
-                    generation?.maxTokens,
+                    request.maxTokens,
                     MIN_THINKING_BUDGET,
                   ),
           },
@@ -497,8 +496,8 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // =============================================================================
 // Stream Parsing
 // =============================================================================
-// Gemini reports `promptTokenCount` (inclusive total) with a
-// `cachedContentTokenCount` subset. `candidatesTokenCount` is *exclusive*
+// Gemini reports `promptTokenCount` with a `cachedContentTokenCount` subset;
+// `toolUsePromptTokenCount` is additional billed input. `candidatesTokenCount` is *exclusive*
 // of `thoughtsTokenCount` — visible-only, not a total — so we sum the two
 // to produce the inclusive `outputTokens` the rest of the contract expects.
 const mapUsage = (
@@ -509,7 +508,10 @@ const mapUsage = (
   if (!usage) return undefined
   // Explicit provider nulls decode as `null`; normalize to `undefined` so the
   // token arithmetic below treats them like absent counts.
-  const promptTokens = usage.promptTokenCount ?? undefined
+  const promptTokens = ProviderShared.sumTokens(
+    usage.promptTokenCount ?? undefined,
+    usage.toolUsePromptTokenCount ?? undefined,
+  )
   const cached = usage.cachedContentTokenCount ?? undefined
   const thoughts = usage.thoughtsTokenCount ?? undefined
   const visible = usage.candidatesTokenCount ?? undefined
@@ -531,15 +533,15 @@ const mapUsage = (
   })
 }
 
-// Each continued request re-bills the output so far as input. Reporting the first request's input with all output keeps
-// input plus output equal to the response's final context size, under-reporting billed input; the summed billed counts
-// remain in provider metadata.
+// Continued requests retain the first request's input instead of summing re-billed prompts.
+// Complete billed counts, including tool-use prompts from later requests, remain in provider metadata.
 const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: string) => {
   const sum = (field: keyof GeminiUsage) =>
     ProviderShared.sumTokens(...requests.map((usage) => usage[field] ?? undefined))
   return mapUsage(
     {
       promptTokenCount: requests[0].promptTokenCount,
+      toolUsePromptTokenCount: requests[0].toolUsePromptTokenCount,
       cachedContentTokenCount: requests[0].cachedContentTokenCount,
       candidatesTokenCount: sum("candidatesTokenCount"),
       thoughtsTokenCount: sum("thoughtsTokenCount"),
@@ -549,6 +551,7 @@ const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: st
     metadataKey,
     {
       promptTokenCount: sum("promptTokenCount"),
+      toolUsePromptTokenCount: sum("toolUsePromptTokenCount"),
       cachedContentTokenCount: sum("cachedContentTokenCount"),
       candidatesTokenCount: sum("candidatesTokenCount"),
       thoughtsTokenCount: sum("thoughtsTokenCount"),
@@ -595,18 +598,14 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
       lifecycle,
       events,
       state.reasoningId,
-      state.reasoningSignature === undefined
-        ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.reasoningSignature }),
+      signatureMetadata(state.providerMetadataKey, state.reasoningSignature),
     )
   if (state.textId !== undefined)
     lifecycle = Lifecycle.textEnd(
       lifecycle,
       events,
       state.textId,
-      state.textSignature === undefined
-        ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.textSignature }),
+      signatureMetadata(state.providerMetadataKey, state.textSignature),
     )
   Lifecycle.finish(lifecycle, events, {
     reason: {
@@ -683,6 +682,19 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
   let nextTextId = nextState.nextTextId
   // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
   const seenCallIds = new Set(nextState.seenCallIds)
+  const signed = (signature: string | undefined) => signatureMetadata(state.providerMetadataKey, signature)
+  const endReasoning = () => {
+    if (reasoningId === undefined) return
+    lifecycle = Lifecycle.reasoningEnd(lifecycle, events, reasoningId, signed(reasoningSignature))
+    reasoningId = undefined
+    reasoningSignature = undefined
+  }
+  const endText = () => {
+    if (textId === undefined) return
+    lifecycle = Lifecycle.textEnd(lifecycle, events, textId, signed(textSignature))
+    textId = undefined
+    textSignature = undefined
+  }
 
   for (const input of candidate.content.parts ?? []) {
     if (
@@ -710,63 +722,27 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
       events.push(
         LLMEvent.media({
           media: Media.base64(part.inlineData.data, part.inlineData.mimeType),
-          providerMetadata: signature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature })
-            : undefined,
+          providerMetadata: signed(signature),
         }),
       )
       continue
     }
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
-        if (textId !== undefined) {
-          lifecycle = Lifecycle.textEnd(
-            lifecycle,
-            events,
-            textId,
-            textSignature
-              ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature })
-              : undefined,
-          )
-          textId = undefined
-          textSignature = undefined
-        }
+        endText()
         if (reasoningId === undefined) {
           reasoningId = `reasoning-${nextReasoningId}`
           nextReasoningId += 1
         }
-        lifecycle = Lifecycle.reasoningDelta(
-          lifecycle,
-          events,
-          reasoningId,
-          part.text,
-          signature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature }) : undefined,
-        )
+        lifecycle = Lifecycle.reasoningDelta(lifecycle, events, reasoningId, part.text, signed(signature))
         continue
       }
-      if (reasoningId !== undefined) {
-        lifecycle = Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          reasoningId,
-          reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
-            : undefined,
-        )
-        reasoningId = undefined
-        reasoningSignature = undefined
-      }
+      endReasoning()
       if (textId === undefined) {
         textId = `text-${nextTextId}`
         nextTextId += 1
       }
-      lifecycle = Lifecycle.textDelta(
-        lifecycle,
-        events,
-        textId,
-        part.text,
-        textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
-      )
+      lifecycle = Lifecycle.textDelta(lifecycle, events, textId, part.text, signed(textSignature))
       textSignature = undefined
       continue
     }
@@ -781,37 +757,15 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
       const duplicate = supplied !== undefined && seenCallIds.has(supplied)
       if (supplied !== undefined) seenCallIds.add(supplied)
       const id = supplied !== undefined && !duplicate ? supplied : `tool_${crypto.randomUUID().replaceAll("-", "")}`
-      if (reasoningId !== undefined) {
-        lifecycle = Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          reasoningId,
-          reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
-            : undefined,
-        )
-        reasoningId = undefined
-        reasoningSignature = undefined
-      }
-      if (textId !== undefined) {
-        lifecycle = Lifecycle.textEnd(
-          lifecycle,
-          events,
-          textId,
-          textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
-        )
-        textId = undefined
-        textSignature = undefined
-      }
+      endReasoning()
+      endText()
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.toolCall({
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata: part.thoughtSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
-            : undefined,
+          providerMetadata: signed(signature),
         }),
       )
       hasToolCalls = true

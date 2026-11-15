@@ -72,14 +72,69 @@ test("no-input methods pass their first argument's abort signal to the bridge", 
   ipcs.dispose()
 })
 
+test("a subscribe main rejects fails the Ipc until main provides it again", async () => {
+  const bridge = fakeBridge()
+  const ipcs = createIpcClients(bridge.value)
+  ipcs.client(token)
+  bridge.fail(new Error("main is busy"))
+  await Bun.sleep(0)
+  const failed = { failed: ipcs.failed(token), client: ipcs.client(token), subscribes: bridge.subscribes() }
+  bridge.emit({ type: "available", ipc: "fixture", available: true })
+  bridge.reply({ available: true, state: { count: 1 } })
+  await Bun.sleep(0)
+
+  expect(failed).toEqual({ failed: true, client: undefined, subscribes: 1 })
+  expect({ failed: ipcs.failed(token), state: ipcs.client(token)?.state(), subscribes: bridge.subscribes() }).toEqual({
+    failed: false,
+    state: { count: 1 },
+    subscribes: 2,
+  })
+  ipcs.dispose()
+})
+
+test("a payload its codec rejects reaches no reader and does not stop the bridge's other listeners", async () => {
+  const bridge = fakeBridge()
+  const Counter = Ipc.define({ id: "fixture", methods: {}, state: Schema.Struct({ count: Schema.Number }) })
+  const ipcs = createIpcClients(bridge.value)
+  const seen: string[] = []
+  ipcs.typed(Counter)
+  bridge.value.on((message) => void seen.push(message.type))
+  bridge.reply({ available: true, state: { count: 1 } })
+  await Bun.sleep(0)
+  bridge.emit({ type: "state", ipc: "fixture", state: { count: "many" } })
+
+  expect({ seen, state: ipcs.typed(Counter)?.state() }).toEqual({ seen: ["state"], state: { count: 1 } })
+  ipcs.dispose()
+})
+
+test("a subscribe reply that lands after dispose changes nothing", async () => {
+  const bridge = fakeBridge()
+  const ipcs = createIpcClients(bridge.value)
+  ipcs.client(token)
+  ipcs.dispose()
+  bridge.reply({ available: true })
+  await Bun.sleep(0)
+
+  expect({ client: ipcs.client(token), generation: ipcs.generation(token) }).toEqual({
+    client: undefined,
+    generation: 0,
+  })
+})
+
 function fakeBridge() {
   const listeners = new Set<(message: BridgeMessage) => void>()
-  const pending = Promise.withResolvers<Reply>()
+  // One reply per subscribe, answered in order.
+  const replies: PromiseWithResolvers<Reply>[] = []
 
   const value: Bridge = {
     packaged: false,
     call: () => Promise.reject(new Error("no calls in this test")),
-    subscribe: () => pending.promise,
+    subscribe: () => {
+      const reply = Promise.withResolvers<Reply>()
+      replies.push(reply)
+
+      return reply.promise
+    },
     on: (listener) => {
       listeners.add(listener)
 
@@ -103,6 +158,9 @@ function fakeBridge() {
   return {
     value,
     emit: (message: BridgeMessage) => listeners.forEach((listener) => listener(message)),
-    reply: (reply: Reply) => pending.resolve(reply),
+    /** Answers the latest subscribe. */
+    reply: (reply: Reply) => replies.at(-1)?.resolve(reply),
+    fail: (cause: unknown) => replies.at(-1)?.reject(cause),
+    subscribes: () => replies.length,
   }
 }

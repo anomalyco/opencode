@@ -28,7 +28,7 @@ for (const effort of [undefined, "low", "high", "max"] as const) {
         const request = ai.request({
           model: ZAI.configure({ apiKey, providerOptions: { reasoningEffort: effort } }).model("glm-5.3"),
           prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-          generation: { maxTokens: 4096 },
+          maxTokens: 4096,
         })
         const compiled = yield* compileRequest(request)
         expect(compiled.body.thinking).toBeUndefined()
@@ -56,7 +56,7 @@ recorded.effect.with(
         prompt:
           "We have a budget of 38000 dollars for 219 trips costing 173 dollars each. Calculate whether that is affordable. If it is, use get_weather to look up the current weather in Paris. After receiving the result, report the weather in one short sentence.",
         tools: [weather],
-        generation: { maxTokens: 4096 },
+        maxTokens: 4096,
       })
       const first = yield* LLMClient.generate(request)
       expect(first.toolCalls).toMatchObject([{ name: "get_weather", input: { city: "Paris" } }])

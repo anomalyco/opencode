@@ -337,7 +337,7 @@
   }
 
   [data-color-scheme="dark"] [data-component="timeline-quote"] {
-    background-color: var(--v2-background-bg-layer-01);
+    background-color: var(--v2-background-bg-layer-02);
   }
 
   :root[data-motion="reduce"] {

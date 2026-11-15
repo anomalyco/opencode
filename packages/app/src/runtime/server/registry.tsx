@@ -4,7 +4,7 @@ import { batch, createMemo } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
-import type { ServerEntry } from "@opencode/plugin/gui"
+import type { PluginServerStatus } from "./plugin-machine"
 import { ServerHttp, ServerHttpBase, ServerKey, ServerState } from "./persistence"
 
 type StoredState = typeof ServerState.Type
@@ -23,7 +23,7 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
 
   if (conn.displayName && !ignoreDisplayName) return conn.displayName
 
-  return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
+  return (ServerConnection.http(conn)?.url ?? "").replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
 /**
@@ -115,7 +115,7 @@ export function resolveServerList(input: {
       deduped.set(key, {
         ...existing,
         ...conn,
-        http: { ...existing.http, ...conn.http },
+        http: { ...ServerConnection.http(existing), ...conn.http },
       })
     else deduped.set(key, conn)
   }
@@ -169,14 +169,16 @@ export namespace ServerConnection {
     type: "plugin"
     key: string
     plugin: string
-    state: ServerEntry["state"]
-    connecting: boolean
-    authenticationRequired: boolean
+    status: PluginServerStatus
     /** The plugin re-resolves the endpoint (e.g. a tunnel), so the connection can drop and come back. */
     managed: boolean
-    http: HttpBase
     reconnect?: (signal: AbortSignal) => Promise<HttpBase>
-    /** Called before opening a server that is not ready. Resolves true once it is. */
+    /**
+     * Starts sign-in while the server waits for it, or joins the one in progress; false when the server does not
+     * wait for sign-in. `onConnected` runs once the server is ready.
+     */
+    authenticate: (onConnected?: () => void) => boolean
+    /** Asks the plugin to connect, e.g. after the server rejected our credentials. Resolves true once it is ready. */
     connect?: () => Promise<boolean>
   } & Base
 
@@ -200,14 +202,15 @@ export namespace ServerConnection {
   export type Key = typeof Key.Type
 
   export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
-  /** Starts sign-in for a server that asks for it; false when it does not. */
-  export const authenticate = (conn: Any, onConnected?: () => void) => {
-    if (conn.type !== "plugin" || !conn.authenticationRequired || !conn.connect) return false
-    void conn.connect().then((ready) => {
-      if (ready) onConnected?.()
-    })
+  /** Starts sign-in for a server that asks for it, or joins the one in progress; false when it does not. */
+  export const authenticate = (conn: Any, onConnected?: () => void) =>
+    conn.type === "plugin" && conn.authenticate(onConnected)
 
-    return true
+  /** The endpoint to probe, show or call; undefined while a contributed server is not ready. */
+  export const http = (conn: Any) => {
+    if (conn.type !== "plugin") return conn.http
+
+    return conn.status.type === "ready" ? conn.status.http : undefined
   }
 
   // The desktop sidecar, or a loopback http connection on the same port as the app's own server. Other loopback
@@ -311,7 +314,12 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     const current = (conn: ServerConnection.Any) =>
       ServerConnection.builtin(conn) || ServerConnection.key(conn) === props.canonicalLocalServer
 
-    const ownUrl = () => props.servers?.find(ServerConnection.builtin)?.http.url ?? props.canonicalLocalServer
+    const ownUrl = () => {
+      const builtin = props.servers?.find(ServerConnection.builtin)
+
+      return (builtin && ServerConnection.http(builtin)?.url) ?? props.canonicalLocalServer
+    }
+
     const local = (conn?: ServerConnection.Any) => ServerConnection.local(conn, ownUrl())
 
     const label = (conn: ServerConnection.Any) =>

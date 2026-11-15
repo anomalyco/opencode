@@ -237,7 +237,8 @@ describe("Amazon Bedrock Mantle recorded", () => {
             region: "us-east-1",
           }).responses("openai.gpt-oss-120b"),
           prompt: "Reply with exactly: hello",
-          generation: { maxTokens: 256, temperature: 0 },
+          maxTokens: 256,
+          temperature: 0,
         }),
       )
 
@@ -288,7 +289,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
             thinking: { type: "adaptive", display: "summarized" },
             effort: "medium",
           },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
         })
         const first = yield* LLMClient.generate(initial)
         expect(first.finishReason.normalized).toBe("tool-calls")
@@ -343,7 +344,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
           providerOptions: {
             thinking: { type: "enabled", budgetTokens: 1024 },
           },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
         })
         const compiled = yield* compileRequest(request)
         expect(compiled.body.thinking).toEqual({ type: "enabled", budget_tokens: 1024 })
@@ -370,7 +371,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
             thinking: { type: "adaptive", display: "summarized" },
             effort: "high",
           },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
         })
         const firstCompiled = yield* compileRequest(firstRequest)
         expect(firstCompiled.body.thinking).toEqual({
@@ -396,7 +397,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
             thinking: { type: "adaptive", display: "summarized" },
             effort: "low",
           },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
         })
         const secondCompiled = yield* compileRequest(secondRequest)
         expect(secondCompiled.body.output_config).toEqual({ effort: "high" })
@@ -428,7 +429,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
             thinking: { type: "adaptive", display: "summarized" },
             effort: "low",
           },
-          generation: { maxTokens: 1024 },
+          maxTokens: 1024,
         })
         const compiled = yield* compileRequest(request)
         expect(compiled.body.output_config).toEqual({ effort: "low" })

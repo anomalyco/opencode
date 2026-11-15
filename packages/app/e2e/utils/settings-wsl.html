@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="margin: 0">
+    <!-- Sized like the app's root, so the app fills the window whatever the route renders. -->
+    <div id="root" style="display: flex; flex-direction: column; height: 100dvh"></div>
     <script type="module">
       import { mount } from "./settings-wsl.fixture.tsx"
       const query = new URLSearchParams(location.search)
@@ -17,6 +18,8 @@
         ssh: query.get("ssh"),
         storage: query.get("storage"),
         hold: query.get("hold"),
+        distros: query.get("distros"),
+        busy: query.get("busy"),
         updater: query.get("updater"),
       })
     </script>

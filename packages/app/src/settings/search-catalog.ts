@@ -120,10 +120,24 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
+    label: "settings.experimental.row.newTimeline.title",
+    target: "settings-new-timeline",
+    description: "settings.experimental.row.newTimeline.description",
+    keywords: "new timeline redesign activity explored edited ran grouping status",
+  },
+  {
+    tab: "experimental",
     label: "settings.experimental.row.newQuestionUI.title",
     target: "settings-new-question-ui",
     description: "settings.experimental.row.newQuestionUI.description",
     keywords: "question answers keyboard dock redesign",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.sidebarOrganize.title",
+    target: "settings-sidebar-organize",
+    description: "settings.experimental.row.sidebarOrganize.description",
+    keywords: "vertical side tabs projects recents organize sidebar",
   },
   {
     tab: "appearance",

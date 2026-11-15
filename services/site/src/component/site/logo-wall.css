@@ -1,0 +1,354 @@
+/* The logo row under the home hero, on the carousel's card grid. The row spans the whole cards
+   that fit (--fit, from LogoWall); the label takes the first card or half card as data-layout
+   says, and the logos fill the rest, justified by their ink: the first starts on the area's left
+   edge, the last ends on its right edge, with equal gaps between. */
+[data-site] [data-component="logo-wall"] {
+  --card: calc((100cqw - var(--gaps) * var(--gutter)) / var(--visible));
+  /* The side of a square logo; logo-soup sizes the others from it. */
+  --logo-size: min(3.025rem, calc(var(--card) * 0.1815));
+  /* Tall enough for the tallest logo (Cisco), so the space around the row starts at the ink. */
+  --logo-row: 2.5rem;
+  /* The subtitle's line box runs about 0.375rem below its baseline; taking that off makes the
+     space from its text to the row's ink (the logos, or the label on phones) match the space from
+     the logos to the carousel. */
+  margin-top: calc(var(--logo-space) - 0.375rem);
+
+  [data-slot="row"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: calc(var(--fit) * var(--card) + (var(--fit) - 1) * var(--gutter));
+    max-width: 100%;
+    height: var(--logo-row);
+  }
+
+  /* One card wide, one gutter in from the left: LogoWall measures it to count whole cards. */
+  [data-slot="probe"] {
+    position: absolute;
+    width: var(--card);
+    height: 0;
+    margin-inline-start: var(--gutter);
+    visibility: hidden;
+  }
+
+  /* Set like the other home section titles ("What is OpenCode?"), in the logos' own colour (the
+     strong text at the logo opacity), so the label reads as part of the row. */
+  [data-slot="label"] {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--title-size);
+    font-weight: 400;
+    line-height: 1.2;
+    -webkit-text-stroke: var(--title-stroke);
+    color: color-mix(in srgb, var(--text-strong) calc(var(--logo-opacity, 1) * 100%), transparent);
+    text-wrap: balance;
+  }
+
+  /* The label's column is the container that picks between the label and its short form
+     (logo-wall.tsx); the number in either never breaks. */
+  [data-slot="label"]:has(> [data-slot="short"]) {
+    container-type: inline-size;
+  }
+
+  [data-slot="label"] > [data-slot="short"] {
+    display: none;
+  }
+
+  [data-slot="label"] [data-slot="number"] {
+    white-space: nowrap;
+  }
+
+  [data-slot="label"][data-size="card"] {
+    flex: 0 0 var(--card);
+    margin-inline-end: var(--gutter);
+  }
+
+  /* A longer label in the half card wraps and runs past the row's height, centred on it. */
+  [data-slot="label"][data-size="half"] {
+    flex: 0 0 calc(var(--card) / 2);
+    padding-inline-end: 1.5rem;
+  }
+
+  &[data-layout="above"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    /* The label's box is its ink, so no line box to take off. */
+    margin-top: var(--logo-space);
+
+    > [data-slot="label"] {
+      text-box: trim-both cap alphabetic;
+    }
+  }
+
+  /* With one card the label card takes its own line above the logos. */
+  &[data-stacked] [data-slot="row"] {
+    flex-wrap: wrap;
+    row-gap: 1rem;
+    height: auto;
+
+    [data-slot="label"] {
+      flex-basis: 100%;
+      margin-inline-end: 0;
+    }
+
+    [data-slot="logos"] {
+      flex-basis: 100%;
+      height: var(--logo-row);
+    }
+  }
+
+  /* Fixed slots, whatever is showing. With --count logos and an average logo --avg wide, slot
+     centres are --pitch apart starting --avg / 2 in, so an average logo's gaps come out even; the
+     first slot's logo sits on the left edge and the last one's on the right edge. */
+  [data-slot="logos"] {
+    --avg: min(calc(var(--average) * var(--logo-size)), calc(var(--card) * 0.41));
+    --pitch: calc((100% - var(--avg)) / max(var(--count) - 1, 1));
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+  }
+
+  [data-slot="slot"] {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: calc(var(--avg) / 2 + (var(--index) - 0.5) * var(--pitch));
+    width: var(--pitch);
+    color: var(--text-strong);
+    opacity: var(--logo-opacity);
+  }
+
+  /* The edge slots run to the area's edges, their logos flush with them. */
+  [data-slot="slot"]:first-child {
+    inset-inline-start: 0;
+    width: calc(var(--avg) / 2 + var(--pitch) / 2);
+
+    [data-slot="brand"] {
+      justify-content: flex-start;
+    }
+  }
+
+  [data-slot="slot"]:last-child:not(:first-child) {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+    width: calc(var(--avg) / 2 + var(--pitch) / 2);
+
+    [data-slot="brand"] {
+      justify-content: flex-end;
+    }
+  }
+
+  /* A single logo beside the half-card label ends on the right edge. */
+  [data-slot="slot"]:only-child {
+    inset: 0;
+    width: auto;
+
+    [data-slot="brand"] {
+      justify-content: flex-end;
+    }
+  }
+
+  /* Logos hand over in place, in the slot's alignment. */
+  [data-slot="brand"] {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  [data-slot="mark"] {
+    flex-shrink: 0;
+    /* Never wider than its slot allows, with room to spare beside the middle slots' neighbours. */
+    width: min(calc(var(--width) * var(--logo-size)), calc(var(--card) * 0.41), 88%);
+    aspect-ratio: var(--aspect);
+    translate: 0 calc(var(--shift) * var(--logo-size));
+    background: currentColor;
+    mask-image: var(--logo);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+  }
+
+  /* An edge logo has its slot's open side to itself, so it may fill the slot. */
+  [data-slot="slot"]:is(:first-child, :last-child) [data-slot="mark"] {
+    width: min(calc(var(--width) * var(--logo-size)), calc(var(--card) * 0.41), 100%);
+  }
+
+  &[data-kind="providers"] {
+    --logo-size: min(2.1175rem, calc(var(--card) * 0.1452));
+  }
+
+  /* Phones: one card shows, so the label takes its own line and the logos run the full content
+     width in rows of three (LogoWall shows six), the outer ones flush with the edges, a little
+     smaller to fit the narrower cells. After the slot rules above, so it outranks their edge
+     positions. */
+  @media (max-width: 39.9375rem) {
+    --logo-size: min(2.5rem, calc(var(--card) * 0.155));
+
+    [data-slot="row"] {
+      width: 100%;
+      flex-wrap: wrap;
+      row-gap: 1rem;
+      height: auto;
+    }
+
+    [data-slot="row"] [data-slot="label"] {
+      flex-basis: 100%;
+      margin-inline-end: 0;
+      padding-inline-end: 0;
+    }
+
+    /* Also over the stacked row's one-row height. */
+    [data-slot="logos"],
+    &[data-stacked] [data-slot="row"] [data-slot="logos"] {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      column-gap: 0.75rem;
+      grid-auto-rows: var(--logo-row);
+      row-gap: 1.25rem;
+      flex-basis: 100%;
+      height: auto;
+    }
+
+    /* :nth-child(n) outranks the edge slots' positions. */
+    [data-slot="logos"] [data-slot="slot"]:nth-child(n) {
+      position: relative;
+      inset: auto;
+      width: auto;
+    }
+
+    [data-slot="logos"] [data-slot="slot"]:nth-child(3n + 1) [data-slot="brand"] {
+      justify-content: flex-start;
+    }
+
+    [data-slot="logos"] [data-slot="slot"]:nth-child(3n + 2) [data-slot="brand"] {
+      justify-content: center;
+    }
+
+    [data-slot="logos"] [data-slot="slot"]:nth-child(3n) [data-slot="brand"] {
+      justify-content: flex-end;
+    }
+
+    /* The server renders four cards' worth of logos. Until LogoWall has measured the row, show the
+       six it will pick (every carousel preset shows one card on phones), so the row doesn't
+       change height under the hero once the page's code runs. */
+    &:not([data-measured]) [data-slot="slot"]:nth-child(n + 7) {
+      display: none;
+    }
+  }
+}
+
+/* With a drawn section spacer (line, dashed, hatch, dot gradient, dither gradient) the row gets the
+   sections' divider between the hero and it: the same space above the line as a section, and the
+   same below it to the logos' ink (the row is a little taller than the logos, so a quarter rem
+   less). The "space" spacer keeps the plain gap. */
+[data-site]:is(
+    [data-spacer="line"],
+    [data-spacer="dashed"],
+    [data-spacer="hatch"],
+    [data-spacer="dot gradient"],
+    [data-spacer="dither gradient"]
+  )
+  [data-component="logo-wall"]:not([data-layout="section"]) {
+  margin-top: 4.5rem;
+  padding-top: calc(4.5rem - 0.25rem);
+  border-top: 1px solid var(--border);
+
+  /* The label above is trimmed to its ink, so it takes the full space. */
+  &[data-layout="above"] {
+    padding-top: 4.5rem;
+  }
+
+  /* Beside the logos the label is centred in the 2.5rem row, its cap height 10px further down than
+     a section title's; and the row runs about 7px below the logos' ink. Both come off, so the space
+     from the carousel's buttons to the label and from the logos to the next section's divider match
+     the sections' 72px. Only where the label sits in the row (wide screens). */
+  @media (min-width: 78.0625rem) {
+    &:is([data-layout="card"], [data-layout="half"]) {
+      padding-top: calc(4.5rem - 0.875rem);
+    }
+  }
+
+  @media (min-width: 40.0625rem) {
+    margin-bottom: -0.4375rem;
+  }
+}
+
+[data-site][data-spacer="dashed"] [data-component="logo-wall"]:not([data-layout="section"]) {
+  border-top-style: dashed;
+  border-top-color: var(--border-strong);
+}
+
+[data-site][data-spacer="hatch"] [data-component="logo-wall"]:not([data-layout="section"]) {
+  border-top: 8px solid;
+  border-image: repeating-linear-gradient(-45deg, var(--border-strong) 0 1px, transparent 1px 4px) 1;
+}
+
+/* "section" layout: the row sits in a home section's body (card columns 2–4), with the block's
+   own spacing and divider. LogoWall counts the whole cards that fit the body. */
+[data-site] [data-component="block"] [data-component="logo-wall"][data-layout="section"] {
+  margin-top: 0;
+}
+
+[data-site] [data-component="block"][data-section="logos"] {
+  /* The logos are a row, not text, so the body runs the full three columns. */
+  [data-slot="body"] {
+    max-width: none;
+  }
+
+  /* Beside the row, the label is vertically centred on it. Below 60rem sections stack. */
+  @media (min-width: 60.0625rem) {
+    [data-slot="label"] {
+      align-self: center;
+    }
+  }
+
+  + [data-component="products"] {
+    margin-top: 4.5rem;
+  }
+}
+
+/* With the "space" spacer the section has no divider and a larger gap above; the carousel below
+   gets the same gap. */
+[data-site][data-spacer="space"] [data-component="block"][data-section="logos"] + [data-component="products"] {
+  margin-top: calc(4.5rem * 2 + 40px);
+
+  @media (max-width: 60rem) {
+    margin-top: calc(4.5rem * 2);
+  }
+}
+
+/* The row replaces the carousel's own top margin. */
+[data-site] {
+  --logo-space: 4rem;
+
+  [data-component="logo-wall"] + [data-component="products"] {
+    margin-top: var(--logo-space);
+  }
+}
+
+/* Until LogoWall has measured how many cards the row spans (the server assumes four), the slots keep
+   their place but stay unseen, so the logos appear where they stay instead of moving into place.
+   Only when the page's code will run (data-js); if it never measures, they show after 4s. */
+[data-site][data-js] [data-component="logo-wall"]:not([data-measured]) [data-slot="logos"] {
+  visibility: hidden;
+  animation: logos-unmeasured 0s 4s forwards;
+}
+
+@keyframes logos-unmeasured {
+  to {
+    visibility: visible;
+  }
+}
+
+/* Tablet portrait (641 to 960px): eight logos across a narrower row, so they're about a third
+   smaller and keep comfortable gaps; logo-soup's per-logo widths keep their weights balanced. */
+@media (min-width: 40.0625rem) and (max-width: 60rem) {
+  [data-site] [data-component="logo-wall"]:not([data-kind="providers"]) {
+    --logo-size: min(2rem, calc(var(--card) * 0.12));
+  }
+}

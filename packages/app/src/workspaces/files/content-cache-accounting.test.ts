@@ -1,55 +1,79 @@
-import { afterEach, describe, expect, test } from "bun:test"
-import { evictContentLru, removeFileContentBytes, resetFileContentLru, touchFileContent } from "./content-cache"
+import { describe, expect, test } from "bun:test"
+import { createFileContentCache } from "./content-cache"
 
 const chunk = 8 * 1024 * 1024
 
-function evict(keep?: Set<string>) {
-  const evicted: string[] = []
-  evictContentLru(keep, (path) => evicted.push(path))
-
-  return evicted
-}
-
 describe("file content eviction", () => {
-  afterEach(() => {
-    resetFileContentLru()
-  })
-
   test("evicts by entry cap using LRU order", () => {
-    Array.from({ length: 41 }, (_, n) => touchFileContent(`f-${n}`, 1))
+    const cache = createFileContentCache()
+    Array.from({ length: 41 }, (_, n) => cache.touch(`f-${n}`, 1))
 
-    expect(evict()).toEqual(["f-0"])
-    expect(evict()).toEqual([])
+    expect(cache.evict()).toEqual(["f-0"])
+    expect(cache.evict()).toEqual([])
   })
 
   test("evicts by byte cap while preserving protected entries", () => {
-    touchFileContent("a", chunk)
-    touchFileContent("b", chunk)
-    touchFileContent("c", chunk)
+    const cache = createFileContentCache()
+    cache.touch("a", chunk)
+    cache.touch("b", chunk)
+    cache.touch("c", chunk)
 
-    expect(evict(new Set(["a"]))).toEqual(["b"])
-    expect(evict(new Set(["a"]))).toEqual([])
+    expect(cache.evict(new Set(["a"]))).toEqual(["b"])
+    expect(cache.evict(new Set(["a"]))).toEqual([])
+  })
+
+  // Protecting files that hold no content (an unloaded active tab) used to end the pass before it evicted anything.
+  test("evicts past protected paths the cache does not hold", () => {
+    const cache = createFileContentCache()
+    cache.touch("a", chunk * 2)
+    cache.touch("b", chunk)
+
+    expect(cache.evict(new Set(["a", "unloaded-1", "unloaded-2"]))).toEqual(["b"])
+  })
+
+  test("stops after one pass when only protected entries remain over budget", () => {
+    const cache = createFileContentCache()
+    cache.touch("a", chunk * 3)
+
+    expect(cache.evict(new Set(["a"]))).toEqual([])
   })
 
   // The byte cap is 20 MiB, so each step shows the running total through what it evicts.
   test("accounts for overwrites, byte-preserving touches, removals, and resets", () => {
-    touchFileContent("a", chunk)
-    touchFileContent("b", chunk)
-    touchFileContent("a", 1)
-    touchFileContent("c", chunk)
-    expect(evict()).toEqual([])
+    const cache = createFileContentCache()
+    cache.touch("a", chunk)
+    cache.touch("b", chunk)
+    cache.touch("a", 1)
+    cache.touch("c", chunk)
+    expect(cache.evict()).toEqual([])
 
-    touchFileContent("b")
-    touchFileContent("d", chunk)
-    expect(evict()).toEqual(["a", "c"])
+    cache.touch("b")
+    cache.touch("d", chunk)
+    expect(cache.evict()).toEqual(["a", "c"])
 
-    removeFileContentBytes("b")
-    touchFileContent("e", chunk)
-    expect(evict()).toEqual([])
+    cache.remove("b")
+    cache.touch("e", chunk)
+    expect(cache.evict()).toEqual([])
 
-    resetFileContentLru()
-    touchFileContent("f", chunk)
-    touchFileContent("g", chunk)
-    expect(evict()).toEqual([])
+    cache.reset()
+    cache.touch("f", chunk)
+    cache.touch("g", chunk)
+    expect(cache.evict()).toEqual([])
+  })
+
+  // Every file provider (session, new session, components lab) used to share one cache, so one provider's directory
+  // change wiped the others' accounting and left their content unevictable.
+  test("keeps each provider's accounting separate", () => {
+    const first = createFileContentCache()
+    const second = createFileContentCache()
+    first.touch("a", chunk)
+    first.touch("b", chunk)
+    second.touch("x", chunk)
+
+    second.reset()
+    first.touch("c", chunk)
+
+    expect(first.evict()).toEqual(["a"])
+    expect(second.evict()).toEqual([])
   })
 })

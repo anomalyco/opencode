@@ -2,6 +2,8 @@
 // warp's brake settles into a ring that the Ripple loop then continues. Every frame is a pure function of art
 // time `t` (ms since the dialog opened), so the reduced-motion still is just one chosen frame.
 
+import { createHeroLoopState, selectHeroRedrawsStill, transitionHeroLoop } from "./go-upsell-hero-machine"
+
 type RGB = readonly [number, number, number]
 
 type HeroPalette = {
@@ -30,6 +32,9 @@ const LOGO_ROWS = 10
 type Kind = 0 | 1 | 2 // G, O, shadow
 
 type LogoCell = { col: number; row: number; kind: Kind }
+
+/** The palette colour each kind of cell starts from. */
+const TONES = ["logoG", "logoO", "shadow"] as const
 
 const LOGO: LogoCell[] = GO.flatMap((line, uy) =>
   Array.from(line).flatMap((ch, ux) => {
@@ -73,31 +78,32 @@ const envelope = (phase: number) => {
   return s * s * (3 - 2 * s)
 }
 
-const mixRGB = (a: RGB, b: RGB, t: number): RGB => {
-  const k = clamp01(t)
+const rgba = (red: number, green: number, blue: number, a: number) =>
+  `rgba(${red | 0},${green | 0},${blue | 0},${clamp01(a).toFixed(3)})`
 
-  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]
-}
-
-const rgba = (c: RGB, a: number) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${clamp01(a).toFixed(3)})`
-
-// Colours repeat from frame to frame, so each CSS colour string is built once.
+// Colours repeat from frame to frame, so each CSS colour string is built once. Channels are scalars, not arrays,
+// because every cell of every frame asks for one.
 const styles = new Map<number, string>()
 
-function style(c: RGB, a: number) {
+function style(red: number, green: number, blue: number, a: number) {
   const alpha = Math.round(clamp01(a) * 255)
-  const key = ((c[0] << 16) | (c[1] << 8) | c[2]) * 256 + alpha
+  const key = ((red << 16) | (green << 8) | blue) * 256 + alpha
   const cached = styles.get(key)
 
   if (cached) return cached
 
   if (styles.size > 4096) styles.clear()
 
-  const value = rgba(c, alpha / 255)
+  const value = rgba(red, green, blue, alpha / 255)
   styles.set(key, value)
 
   return value
 }
+
+// The active rings of one frame: at most the brake ring and four loop rings.
+const ringHead = new Float64Array(6)
+
+const ringAmp = new Float64Array(6)
 
 // ── timeline (art ms) ─────────────────────────────────────────────────────────
 // 0–340 gather · 340–520 warp attack · cruise to 900 · brake (τ 260) · GO arrives 340–1000, lands ~720
@@ -275,9 +281,10 @@ function renderBloom(g: Geometry, pal: HeroPalette) {
   const [x, y] = [g.cx * g.dpr, g.cy * g.dpr]
   const grad = ctx.createRadialGradient(x, y, 0, x, y, LOGO_COLS * g.P * 0.9 * g.dpr)
 
-  grad.addColorStop(0, rgba(pal.accent, 1))
-  grad.addColorStop(0.45, rgba(pal.accent, 0.35))
-  grad.addColorStop(1, rgba(pal.accent, 0))
+  const accent = pal.accent
+  grad.addColorStop(0, rgba(accent[0], accent[1], accent[2], 1))
+  grad.addColorStop(0.45, rgba(accent[0], accent[1], accent[2], 0.35))
+  grad.addColorStop(1, rgba(accent[0], accent[1], accent[2], 0))
   ctx.clearRect(0, 0, g.width, g.height)
   ctx.save()
   ctx.fillStyle = grad
@@ -313,14 +320,18 @@ function draw(ctx: CanvasRenderingContext2D, g: Geometry, pal: HeroPalette, t: n
   const dim = 1 - smoothstep(300, ATTACK_END, t) * (1 - smoothstep(1300, 2300, t)) * 0.8
   const breath = (0.5 + 0.5 * Math.sin(t * 0.0008)) * 0.05 * smoothstep(1800, 2600, t)
 
-  const rings: { head: number; amp: number }[] = []
+  // Every frame runs this, so the active rings go into preallocated buffers rather than new objects.
+  let rings = 0
 
   if (t > BRAKE_RING_START) {
     const phase = brakeRingPhase(t)
     // Strong on the brake, calming to a loop ring's strength, then fading out like one.
     const amp = lerp(1, 0.55, smoothstep(BRAKE, 1700, t)) * smoothstep(BRAKE_RING_START, BRAKE_RING_START + 120, t)
 
-    if (phase < 1) rings.push({ head: phase * R, amp: amp * (phase < 0.5 ? 1 : envelope(phase)) })
+    if (phase < 1) {
+      ringHead[rings] = phase * R
+      ringAmp[rings++] = amp * (phase < 0.5 ? 1 : envelope(phase))
+    }
   }
 
   if (t > LOOP_START) {
@@ -329,7 +340,10 @@ function draw(ctx: CanvasRenderingContext2D, g: Geometry, pal: HeroPalette, t: n
     for (let n = Math.max(2, newest - 3); n <= newest; n++) {
       const phase = (t - RING_ORIGIN - n * SPACING) / PERIOD
 
-      if (phase >= 0 && phase < 1) rings.push({ head: phase * R, amp: envelope(phase) * 0.55 })
+      if (phase >= 0 && phase < 1) {
+        ringHead[rings] = phase * R
+        ringAmp[rings++] = envelope(phase) * 0.55
+      }
     }
   }
 
@@ -340,11 +354,11 @@ function draw(ctx: CanvasRenderingContext2D, g: Geometry, pal: HeroPalette, t: n
     const d = g.dist[i]!
     let level = gather * Math.exp(-d / (P * 4)) * 0.9
 
-    for (const ring of rings) {
-      const delta = d - ring.head
+    for (let ring = 0; ring < rings; ring++) {
+      const delta = d - ringHead[ring]!
       const c = Math.abs(delta) < crest ? 0.5 + 0.5 * Math.cos((delta / crest) * Math.PI) : 0
       const tl = delta < 0 && delta > -tail ? (1 + delta / tail) ** 2.3 : 0
-      level += (c * 0.62 + tl * 0.16) * ring.amp * g.falloff[i]!
+      level += (c * 0.62 + tl * 0.16) * ringAmp[ring]! * g.falloff[i]!
     }
 
     field[i] = level + breath * g.falloff[i]!
@@ -390,7 +404,10 @@ function draw(ctx: CanvasRenderingContext2D, g: Geometry, pal: HeroPalette, t: n
   if (!steady && cool > 0 && t > ATTACK_START) {
     const hw = (LOGO_COLS / 2 + 1) * P
     const hh = (LOGO_ROWS / 2 + 1) * P
-    const color = mixRGB(pal.accent, pal.peak, v * 0.5)
+    const k = clamp01(v * 0.5)
+    const red = pal.accent[0] + (pal.peak[0] - pal.accent[0]) * k
+    const green = pal.accent[1] + (pal.peak[1] - pal.accent[1]) * k
+    const blue = pal.accent[2] + (pal.peak[2] - pal.accent[2]) * k
     ctx.lineCap = "round"
 
     for (const s of STARS) {
@@ -407,7 +424,7 @@ function draw(ctx: CanvasRenderingContext2D, g: Geometry, pal: HeroPalette, t: n
 
       if (alpha < 0.01) continue
       const r0 = Math.max(edge, r - len)
-      ctx.strokeStyle = style(color, alpha)
+      ctx.strokeStyle = style(red, green, blue, alpha)
       ctx.lineWidth = s.width * 1.5 * dpr
       ctx.beginPath()
       ctx.moveTo((g.cx + dx * r0) * dpr, (g.cy + dy * r0) * dpr)
@@ -475,7 +492,8 @@ function draw(ctx: CanvasRenderingContext2D, g: Geometry, pal: HeroPalette, t: n
 
   if (steady) ctx.putImageData(g.pixels, 0, 0)
   else if (maxX > minX && maxY > minY) {
-    const [sw, sh] = [maxX - minX, maxY - minY]
+    const sw = maxX - minX
+    const sh = maxY - minY
     g.grid.ctx.putImageData(g.pixels, 0, 0, minX, minY, sw, sh)
     ctx.drawImage(g.grid.canvas, minX, minY, sw, sh, minX, minY, sw, sh)
   }
@@ -484,11 +502,13 @@ function draw(ctx: CanvasRenderingContext2D, g: Geometry, pal: HeroPalette, t: n
   const maxD = Math.hypot(LOGO_COLS / 2, LOGO_ROWS / 2)
   const shimmer = smoothstep(LOOP_START - 400, LOOP_START + 500, t)
 
-  const heads = [0, 0.5].map((off) => {
-    const ph = ((((t - RING_ORIGIN) / PERIOD + off + 0.71) % 1) + 1) % 1
-
-    return { head: ph * (maxD + 6), amp: envelope(ph) * shimmer }
-  })
+  // Two shimmer heads, half a period apart.
+  const phaseA = shimmerPhase(t, 0)
+  const phaseB = shimmerPhase(t, 0.5)
+  const headA = phaseA * (maxD + 6)
+  const headB = phaseB * (maxD + 6)
+  const ampA = envelope(phaseA) * shimmer
+  const ampB = envelope(phaseB) * shimmer
 
   const scale = arrivalScale(t)
   const gap = Math.max(1, Math.round(P * 0.14 * dpr)) / dpr
@@ -497,31 +517,46 @@ function draw(ctx: CanvasRenderingContext2D, g: Geometry, pal: HeroPalette, t: n
     const d = Math.hypot(cell.col + 0.5 - LOGO_COLS / 2, cell.row + 0.5 - LOGO_ROWS / 2)
     let peak = landing * 0.8
     let glow = (1 - smoothstep(ATTACK_END, 1100, t)) * 0.7 * arrive + landing * 0.3
-
-    for (const h of heads) {
-      const delta = d - h.head
-      peak += Math.exp(-(Math.abs(delta / 1.3) ** 1.8)) * 0.5 * h.amp
-      glow += (delta < 0 && delta > -6 ? (1 + delta / 6) ** 2.6 : 0) * 0.3 * h.amp
-    }
+    const deltaA = d - headA
+    peak += Math.exp(-(Math.abs(deltaA / 1.3) ** 1.8)) * 0.5 * ampA
+    glow += (deltaA < 0 && deltaA > -6 ? (1 + deltaA / 6) ** 2.6 : 0) * 0.3 * ampA
+    const deltaB = d - headB
+    peak += Math.exp(-(Math.abs(deltaB / 1.3) ** 1.8)) * 0.5 * ampB
+    glow += (deltaB < 0 && deltaB > -6 ? (1 + deltaB / 6) ** 2.6 : 0) * 0.3 * ampB
 
     // Shadow cells are counters once they settle: they take only a fraction of the strokes' light.
     const damp = cell.kind === 2 ? lerp(1, COUNTER, smoothstep(0.7, 1, arrive)) : 1
-    const tone = [pal.logoG, pal.logoO, pal.shadow][cell.kind]!
-    const hot = mixRGB(mixRGB(tone, pal.accent, Math.min(1, glow) * damp), pal.peak, Math.min(1, peak) * damp)
-    const color = arrive < 0.3 ? mixRGB(pal.dot, hot, arrive / 0.3) : hot
+    const tone = pal[TONES[cell.kind]]
+    // The tone heats towards the accent, then the peak, and fades in from a resting dot; kept in scalars.
+    const kGlow = clamp01(Math.min(1, glow) * damp)
+    const kPeak = clamp01(Math.min(1, peak) * damp)
+    const glowRed = tone[0] + (pal.accent[0] - tone[0]) * kGlow
+    const glowGreen = tone[1] + (pal.accent[1] - tone[1]) * kGlow
+    const glowBlue = tone[2] + (pal.accent[2] - tone[2]) * kGlow
+    const hotRed = glowRed + (pal.peak[0] - glowRed) * kPeak
+    const hotGreen = glowGreen + (pal.peak[1] - glowGreen) * kPeak
+    const hotBlue = glowBlue + (pal.peak[2] - glowBlue) * kPeak
+    const kArrive = clamp01(arrive / 0.3)
+    const early = arrive < 0.3
+    const red = early ? pal.dot[0] + (hotRed - pal.dot[0]) * kArrive : hotRed
+    const green = early ? pal.dot[1] + (hotGreen - pal.dot[1]) * kArrive : hotGreen
+    const blue = early ? pal.dot[2] + (hotBlue - pal.dot[2]) * kArrive : hotBlue
     const alpha = lerp(pal.dotAlpha * 1.4, 1, smoothstep(0, 0.6, arrive)) * arrive
 
     if (alpha <= 0.002) continue
     const s = lerp(dot, P - gap, arrive ** 1.2) * scale * dpr
     const x = (g.cx + (g.ox + (g.lc + cell.col) * P + P / 2 - g.cx) * scale) * dpr - s / 2
     const y = (g.cy + (g.oy + (g.lr + cell.row) * P + P / 2 - g.cy) * scale) * dpr - s / 2
-    ctx.fillStyle = style(color, alpha)
+    ctx.fillStyle = style(red, green, blue, alpha)
 
     // Snap only at rest on the grid; while GO scales in, cells keep sub-pixel positions.
     if (scale === 1) ctx.fillRect(Math.round(x), Math.round(y), Math.round(s), Math.round(s))
     else ctx.fillRect(x, y, s, s)
   }
 }
+
+/** Where a shimmer head is in its pass through GO, from 0 to 1. */
+const shimmerPhase = (t: number, offset: number) => ((((t - RING_ORIGIN) / PERIOD + offset + 0.71) % 1) + 1) % 1
 
 /** Source-over of a cell colour on a pixel of bloom (accent at `under`/255 alpha), unpremultiplied for ImageData. */
 function over(red: number, green: number, blue: number, alpha: number, accent: RGB, under: number) {
@@ -596,10 +631,23 @@ export function mountGoUpsellHero(canvas: HTMLCanvasElement) {
   let palette = readPalette(canvas, ctx)
   let g: Geometry | undefined
   let raf = 0
-  let last = 0
-  let t = 0
+  // One event object for every frame, so the loop allocates nothing.
+  const frame = { type: "frame" as const, attempt: 0, now: 0 }
 
-  const render = () => {
+  // The app's Reduce Motion setting overrides the system preference, as in @opencode/ui/motion/reduced.
+  const reduced = () => {
+    const value = document.documentElement.getAttribute("data-motion")
+
+    if (value === "reduce") return true
+
+    if (value === "full") return false
+
+    return reduce.matches
+  }
+
+  let loop = createHeroLoopState({ reduced: reduced(), hidden: document.hidden, now: performance.now() })
+
+  const render = (t: number) => {
     const dpr = Math.min(3, window.devicePixelRatio || 1)
     const w = Math.max(1, canvas.clientWidth)
     const h = Math.max(1, canvas.clientHeight)
@@ -610,30 +658,49 @@ export function mountGoUpsellHero(canvas: HTMLCanvasElement) {
       g = geometry(w, h, dpr)
     }
 
-    draw(ctx, g, palette, reduce.matches ? STILL_TIME : t)
+    draw(ctx, g, palette, t)
   }
 
   const tick = (now: number) => {
-    t += Math.min(100, now - last)
-    last = now
-    render()
+    frame.now = now
+    loop = transitionHeroLoop(loop, frame)
+
+    if (loop.status !== "running" || loop.attempt !== frame.attempt) return
+    render(loop.time)
     raf = requestAnimationFrame(tick)
   }
 
-  const run = () => {
+  // Enters the new state's work: the loop schedules its first frame, a still paints once, a pause does nothing.
+  const enter = () => {
     cancelAnimationFrame(raf)
     raf = 0
 
-    if (reduce.matches) return render()
+    if (loop.status === "still") return render(STILL_TIME)
 
-    if (document.hidden) return
-    last = performance.now()
+    if (loop.status !== "running") return
+    frame.attempt = loop.attempt
     raf = requestAnimationFrame(tick)
   }
 
-  // A still has to be redrawn when its size, pixel ratio or theme changes; a running loop picks them up next frame.
+  const sync = () => {
+    const previous = loop
+    loop = transitionHeroLoop(loop, {
+      type: "synced",
+      reduced: reduced(),
+      hidden: document.hidden,
+      now: performance.now(),
+    })
+
+    if (loop === previous) return false
+    enter()
+
+    return true
+  }
+
+  // A still has to be redrawn when its size, pixel ratio or theme changes; a running loop picks them up next frame,
+  // and a hidden page paints nothing until it shows again.
   const redraw = () => {
-    if (!raf) render()
+    if (selectHeroRedrawsStill(loop)) render(STILL_TIME)
   }
 
   // A resolution query matches only the current ratio, so each change re-arms it for the new one.
@@ -650,9 +717,11 @@ export function mountGoUpsellHero(canvas: HTMLCanvasElement) {
     redraw()
   }
 
+  // The root's attributes carry both the theme and the app's Reduce Motion setting.
   const restyle = () => {
     palette = readPalette(canvas, ctx)
-    redraw()
+
+    if (!sync()) redraw()
   }
 
   const resize = new ResizeObserver(redraw)
@@ -660,20 +729,21 @@ export function mountGoUpsellHero(canvas: HTMLCanvasElement) {
   const theme = new MutationObserver(restyle)
   theme.observe(document.documentElement, {
     attributes: true,
-    attributeFilter: ["data-color-scheme", "data-theme", "style", "class"],
+    attributeFilter: ["data-color-scheme", "data-theme", "data-motion", "style", "class"],
   })
-  document.addEventListener("visibilitychange", run)
-  reduce.addEventListener("change", run)
+  document.addEventListener("visibilitychange", sync)
+  reduce.addEventListener("change", sync)
   watchDensity()
-  run()
+  enter()
 
   return () => {
+    loop = transitionHeroLoop(loop, { type: "disposed" })
     cancelAnimationFrame(raf)
     raf = 0
     resize.disconnect()
     theme.disconnect()
-    document.removeEventListener("visibilitychange", run)
-    reduce.removeEventListener("change", run)
+    document.removeEventListener("visibilitychange", sync)
+    reduce.removeEventListener("change", sync)
     density?.removeEventListener("change", onDensity)
   }
 }

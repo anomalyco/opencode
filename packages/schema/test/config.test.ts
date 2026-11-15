@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Config } from "../src/config.js"
 import { ConfigAgent } from "../src/config/agent.js"
+import { ConfigFlag } from "../src/config/flag.js"
 import { ConfigMCP } from "../src/config/mcp.js"
 import { ConfigPolicy } from "../src/config/policy.js"
 import { ConfigProvider } from "../src/config/provider.js"
@@ -28,6 +29,16 @@ describe("Config.Entry", () => {
           experimental: { policies: [{ action, resource: "*", effect: "deny" }] },
         }),
       ).toThrow()
+  })
+
+  test("round-trips websearch.use statements", () => {
+    const input = {
+      policies: [
+        { action: "websearch.use", resource: "*", effect: "deny" },
+        { action: "websearch.use", resource: "opencode", effect: "allow" },
+      ],
+    } as const
+    expect(Schema.encodeSync(Config.Info)(Schema.decodeUnknownSync(Config.Info)(input))).toEqual(input)
   })
 
   test("normalizes legacy prefixed integration.use statements into mcp.use, skill.use and plugin.use", () => {
@@ -175,4 +186,9 @@ describe("Config.Entry", () => {
     expect(encoded.info.providers?.custom).not.toHaveProperty("headers")
     expect(encoded.info.providers?.custom).not.toHaveProperty("canonical")
   })
+})
+
+test("no flag is named after the everything-on switches", () => {
+  expect(ConfigFlag.registry).not.toHaveProperty("all_flags")
+  expect(ConfigFlag.registry).not.toHaveProperty(ConfigFlag.wildcard)
 })

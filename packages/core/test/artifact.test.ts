@@ -4,6 +4,7 @@ import { Effect, Layer, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Artifact } from "@opencode/core/artifact"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Image } from "@opencode/core/image"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
@@ -41,7 +42,16 @@ const buildLayer = (artifactsEnabled: boolean, dir: string) => {
     : []
   const ref = Location.Ref.make({ directory: AbsolutePath.make(dir) })
   return AppNodeBuilder.build(
-    LayerNode.group([Artifact.node, Config.node, Global.node, Location.node, Permission.node, Session.node, Tool.node]),
+    LayerNode.group([
+      Artifact.node,
+      Config.node,
+      Flag.node,
+      Global.node,
+      Location.node,
+      Permission.node,
+      Session.node,
+      Tool.node,
+    ]),
     [
       Config.node.replace(Config.testLayer(entries)),
       Global.node.replace(Global.layerWith({ data: path.join(dir, ".data") })),

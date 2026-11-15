@@ -27,8 +27,8 @@ describe("xAI Images recorded", () => {
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType.startsWith("image/")).toBe(true)
-      expect((yield* response.image.bytes()).length).toBeGreaterThan(0)
+      expect(response.images[0].mediaType.startsWith("image/")).toBe(true)
+      expect((yield* response.images[0].bytes()).length).toBeGreaterThan(0)
     }),
   )
 
@@ -47,8 +47,8 @@ describe("xAI Images recorded", () => {
         resolution: "1K",
       })
 
-      expect(response.image.mediaType).toMatch(/^image\/(jpeg|png)$/)
-      expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1024, height: 1024 })
+      expect(response.images[0].mediaType).toMatch(/^image\/(jpeg|png)$/)
+      expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 1024, height: 1024 })
     }),
   )
 })

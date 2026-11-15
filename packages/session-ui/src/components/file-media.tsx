@@ -1,7 +1,14 @@
 import type { PresentationFileContent } from "../file-presentation"
-import { createEffect, createMemo, Match, on, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { useI18n } from "@opencode/ui/context/i18n"
+import {
+  DISPOSED_FILE_MEDIA_EVENT,
+  INITIAL_FILE_MEDIA_STATE,
+  transitionFileMedia,
+  viewFileMedia,
+  type FileMediaEffect,
+  type FileMediaEvent,
+} from "./file-media-machine"
 import {
   dataUrlFromMediaValue,
   hasMediaValue,
@@ -34,13 +41,9 @@ function mediaValue(cfg: FileMediaOptions, mode: "image" | "audio") {
 export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX.Element }) {
   const i18n = useI18n()
 
-  const [remote, setRemote] = createStore<{
-    key?: string
-    loading?: boolean
-    error?: boolean
-    src?: string
-    mime?: string
-  }>({})
+  let remote = INITIAL_FILE_MEDIA_STATE
+  const [remoteState, setRemoteState] = createSignal(remote)
+  let timer: ReturnType<typeof setTimeout> | undefined
 
   const cfg = () => props.media
 
@@ -107,87 +110,60 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
       kind: k,
       path: media.path,
       readFile: media.readFile,
-      onError: media.onError,
     }
   })
 
-  createEffect(() => {
-    const input = request()
+  const dispatch = (event: FileMediaEvent) => {
+    const next = transitionFileMedia(remote, event)
 
-    if (!input) {
-      setRemote({ key: undefined, loading: false, error: false, src: undefined, mime: undefined })
+    if (next.state === remote) return
+    remote = next.state
+    setRemoteState(remote)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: FileMediaEffect) => {
+    if (effect.type === "clear-timeout") {
+      clearTimeout(timer)
+      timer = undefined
 
       return
     }
 
-    let active = true
+    if (effect.type === "arm-timeout") {
+      timer = setTimeout(() => dispatch({ type: "read.timed-out", attempt: effect.attempt }), effect.delayMs)
 
-    // Keep the previous media visible while re-reading the same file (e.g. a vcs
-    // diff refresh); only a key change resets to the loading placeholder.
-    if (untrack(() => remote.key) === input.key) setRemote({ loading: true, error: false })
-    else setRemote({ key: input.key, loading: true, error: false, src: undefined, mime: undefined })
-    void input.readFile(input.path).then(
-      (result) => {
-        if (!active) return
-        const src = dataUrlFromMediaValue(result, input.kind)
+      return
+    }
 
-        if (!src) {
-          input.onError?.({ kind: input.kind })
-          setRemote({ key: input.key, loading: false, error: true, src: undefined, mime: undefined })
+    if (effect.type === "notify-error") return untrack(cfg)?.onError?.({ kind: effect.kind })
 
-          return
-        }
+    const readFile = untrack(request)?.readFile
 
-        setRemote({
-          key: input.key,
-          loading: false,
-          error: false,
-          src,
-          mime: input.kind === "audio" ? normalizeMimeType(result?.mimeType) : undefined,
-        })
-      },
-      () => {
-        if (!active) return
-        input.onError?.({ kind: input.kind })
-        setRemote({ key: input.key, loading: false, error: true, src: undefined, mime: undefined })
-      },
-    )
+    // A read that throws synchronously, rejects or returns no data URL all settle as a failed read.
+    void Promise.resolve()
+      .then(() => readFile?.(effect.path))
+      .then(
+        (result) => {
+          const src = dataUrlFromMediaValue(result, effect.kind)
 
-    onCleanup(() => {
-      active = false
-    })
-  })
+          if (!src) return dispatch({ type: "read.failed", attempt: effect.attempt })
 
-  const src = createMemo(() => {
+          const mime = effect.kind === "audio" ? normalizeMimeType(result?.mimeType) : undefined
+          dispatch({ type: "read.succeeded", attempt: effect.attempt, media: { src, mime } })
+        },
+        () => dispatch({ type: "read.failed", attempt: effect.attempt }),
+      )
+  }
+
+  createEffect(() => {
     const input = request()
-
-    if (!input || remote.key !== input.key || remote.error) return direct()
-
-    return direct() ?? remote.src
+    dispatch({ type: "request.changed", target: input && { key: input.key, kind: input.kind, path: input.path } })
   })
 
-  const status = createMemo(() => {
-    if (direct()) return "ready" as const
-    const input = request()
+  onCleanup(() => dispatch(DISPOSED_FILE_MEDIA_EVENT))
 
-    if (!input) return "idle" as const
-
-    if (remote.key !== input.key || remote.loading) return "loading" as const
-
-    if (remote.error) return "error" as const
-
-    if (src()) return "ready" as const
-
-    return "idle" as const
-  })
-
-  const audioMime = createMemo(() => {
-    const input = request()
-
-    if (!input || remote.key !== input.key) return
-
-    return remote.mime
-  })
+  const view = createMemo(() => viewFileMedia(remoteState(), direct(), request()?.key))
 
   const svgSource = createMemo(() => {
     const media = cfg()
@@ -235,7 +211,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     <Switch>
       <Match when={kind() === "image" || kind() === "audio"}>
         <Show
-          when={src()}
+          when={view().src}
           fallback={(() => {
             const media = cfg()
             const k = kind()
@@ -251,7 +227,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
               )
             }
 
-            if (status() === "loading") {
+            if (view().status === "loading") {
               return (
                 <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-v2-text-text-faint">
                   {i18n.t("ui.fileMedia.state.loading", { kind: label })}
@@ -259,7 +235,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
               )
             }
 
-            if (status() === "error") {
+            if (view().status === "error") {
               return (
                 <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-v2-text-text-faint">
                   {i18n.t("ui.fileMedia.state.error", { kind: label })}
@@ -295,7 +271,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
             return (
               <div class="flex justify-center bg-background-stronger px-6 py-4">
                 <audio class="w-full max-w-xl" controls preload="metadata" onLoadedMetadata={onLoad}>
-                  <source src={value()} type={audioMime()} />
+                  <source src={value()} type={view().mime} />
                 </audio>
               </div>
             )

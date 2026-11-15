@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use opencode_pty::protocol::AttachmentRole;
 use opencode_pty::service::{
-    StreamEvent, TerminalId, TerminalLifecycle, TerminalService, TerminalSnapshot,
+    ProcessMode, StreamEvent, TerminalId, TerminalLifecycle, TerminalService, TerminalSnapshot,
 };
 use terminal_fixture::{Command, Deadline, Fixture, TempDir};
 
@@ -32,7 +32,7 @@ fn real_child_input_output_unicode_and_snapshots() {
     let _deadline = Deadline::new();
     let fixture = Fixture::new();
     let service = TerminalService::default();
-    let info = service.create(fixture.request()).unwrap();
+    let info = service.create_pty(fixture.request()).unwrap();
     assert!(info.pid.is_some_and(|pid| pid != 0));
     let mut child = fixture.connect();
     child.command(Command::Output(
@@ -88,7 +88,7 @@ fn child_cwd_environment_and_quoted_program_path() {
         .env
         .insert("PTY_FIXTURE_VALUE".into(), "value café 界 = ok".into());
     let expected_args = request.args.clone();
-    let info = service.create(request).unwrap();
+    let info = service.create_pty(request).unwrap();
     let mut child = fixture.connect();
     let context = child.command(Command::Context);
     assert_eq!(
@@ -119,7 +119,7 @@ fn executable_is_resolved_from_child_path() {
     request
         .env
         .insert("PATH".into(), directory.0.to_str().unwrap().into());
-    let info = service.create(request).unwrap();
+    let info = service.create_pty(request).unwrap();
     let mut child = fixture.connect();
     child.command(Command::Output("\r\nPATH_OK".into()));
     wait_text(&service, info.id, "PATH_OK");
@@ -131,7 +131,7 @@ fn resize_updates_real_console_and_parser() {
     let _deadline = Deadline::new();
     let fixture = Fixture::new();
     let service = TerminalService::default();
-    let info = service.create(fixture.request()).unwrap();
+    let info = service.create_pty(fixture.request()).unwrap();
     let mut child = fixture.connect();
     assert_eq!(child.command(Command::Size), serde_json::json!([80, 24]));
     let observer = service
@@ -158,7 +158,13 @@ fn resize_updates_real_console_and_parser() {
             thread::sleep(Duration::from_millis(10));
         }
         let snapshot = service.snapshot(info.id).unwrap();
-        assert_eq!((snapshot.info.cols, snapshot.info.rows), (cols, rows));
+        assert_eq!(
+            (
+                snapshot.info.pty.as_ref().unwrap().cols,
+                snapshot.info.pty.as_ref().unwrap().rows
+            ),
+            (cols, rows)
+        );
         assert_eq!(
             service.read_rows(info.id, None).unwrap().lines.len(),
             rows as usize
@@ -189,7 +195,7 @@ fn terminal_query_response_reaches_child() {
     let _deadline = Deadline::new();
     let fixture = Fixture::new();
     let service = TerminalService::default();
-    let info = service.create(fixture.request()).unwrap();
+    let info = service.create_pty(fixture.request()).unwrap();
     let mut child = fixture.connect();
     child.command(Command::Output("\x1b[2J\x1b[H\x1b[3;7H\x1b[6n".into()));
     let response = b"\x1b[3;7R";
@@ -217,8 +223,8 @@ fn independent_terminals_keep_bounded_replay() {
     let alpha_fixture = Fixture::new();
     let beta_fixture = Fixture::new();
     let service = TerminalService::new(64);
-    let alpha = service.create(alpha_fixture.request()).unwrap();
-    let beta = service.create(beta_fixture.request()).unwrap();
+    let alpha = service.create_pty(alpha_fixture.request()).unwrap();
+    let beta = service.create_pty(beta_fixture.request()).unwrap();
     assert_ne!(alpha.id, beta.id);
     let mut a = alpha_fixture.connect();
     let mut b = beta_fixture.connect();
@@ -241,7 +247,7 @@ fn independent_terminals_keep_bounded_replay() {
         serde_json::json!(b"still-alive")
     );
     service.terminate(beta.id).unwrap();
-    assert!(service.list().unwrap().is_empty());
+    assert!(service.list(ProcessMode::Pty).unwrap().is_empty());
 }
 
 #[test]
@@ -259,7 +265,7 @@ fn check_normal_exit(code: u32) {
     let _deadline = Deadline::new();
     let fixture = Fixture::new();
     let service = TerminalService::default();
-    let info = service.create(fixture.request()).unwrap();
+    let info = service.create_pty(fixture.request()).unwrap();
     let mut child = fixture.connect();
     let observer = service
         .attach(
@@ -294,12 +300,10 @@ fn check_normal_exit(code: u32) {
                 bytes.extend(output);
                 offset = end;
             }
-            StreamEvent::Exited {
-                exit_code,
-                final_offset,
-            } => {
-                assert_eq!(exit_code, Some(code));
-                assert_eq!(final_offset, offset);
+            StreamEvent::Exited(exit) => {
+                assert_eq!(exit.exit_code, Some(code));
+                assert_eq!(exit.final_offset, offset);
+                assert_eq!(exit.output_lines, None);
                 break;
             }
             _ => {}
@@ -314,7 +318,8 @@ fn check_normal_exit(code: u32) {
     assert_eq!(
         snapshot.info.lifecycle,
         TerminalLifecycle::Exited {
-            exit_code: Some(code)
+            exit_code: Some(code),
+            signal: None,
         }
     );
     assert_eq!(snapshot.info.output_tail, offset);
@@ -364,7 +369,7 @@ fn termination_cycles(block_input: bool) {
     let service = TerminalService::default();
     for _ in 0..3 {
         let fixture = Fixture::new();
-        let info = service.create(fixture.request()).unwrap();
+        let info = service.create_pty(fixture.request()).unwrap();
         let _child = fixture.connect();
         let process = ChildProcess::open(info.pid.unwrap());
         // Child waits on the private control channel, never draining PTY stdin.
@@ -373,11 +378,11 @@ fn termination_cycles(block_input: bool) {
         }
         service.terminate(info.id).unwrap();
         process.assert_exited();
-        assert!(service.list().unwrap().is_empty());
+        assert!(service.list(ProcessMode::Pty).unwrap().is_empty());
         assert!(service.terminate(info.id).is_err());
     }
     let fixture = Fixture::new();
-    let info = service.create(fixture.request()).unwrap();
+    let info = service.create_pty(fixture.request()).unwrap();
     let _child = fixture.connect();
     let process = ChildProcess::open(info.pid.unwrap());
     if block_input {
@@ -425,7 +430,7 @@ fn terminating_a_shell_releases_its_console_child() {
         "-EncodedCommand".into(),
         base64::engine::general_purpose::STANDARD.encode(script),
     ];
-    let info = service.create(request).unwrap();
+    let info = service.create_pty(request).unwrap();
     let root = ChildProcess::open(info.pid.unwrap());
     let mut child = fixture.connect();
     let pid = u32::try_from(child.command(Command::Context)["pid"].as_u64().unwrap()).unwrap();
@@ -490,7 +495,7 @@ fn shutdown_drains_conpty_while_a_child_is_producing_output() {
     let _deadline = Deadline::new();
     let fixture = Fixture::new();
     let service = TerminalService::default();
-    let info = service.create(fixture.request()).unwrap();
+    let info = service.create_pty(fixture.request()).unwrap();
     let mut child = fixture.connect();
     let process = ChildProcess::open(info.pid.unwrap());
     child.command(Command::Flood);

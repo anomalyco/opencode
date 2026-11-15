@@ -1,4 +1,5 @@
-import { Toast, showToast } from "./toast"
+import { onCleanup, onMount } from "solid-js"
+import { Toast, showToast, toaster, type ToastRegionProps } from "./toast"
 import { Button } from "@opencode/ui/button"
 
 const docs = `### Overview
@@ -30,6 +31,8 @@ export default {
   title: "UI/Toast",
   id: "ui-toast",
   component: Toast,
+  args: { expand: false, visibleToasts: 3 },
+  argTypes: { visibleToasts: { control: { type: "range", min: 1, max: 4, step: 1 } } },
   tags: ["autodocs"],
   parameters: {
     frameHeight: "320px",
@@ -43,9 +46,9 @@ export default {
 }
 
 export const AllExamples = {
-  render: () => (
+  render: (props: ToastRegionProps) => (
     <div style={{ display: "grid", gap: "12px" }}>
-      <Toast.Region />
+      <Toast.Region {...props} />
       <Button
         class="w-fit"
         variant="neutral"
@@ -147,5 +150,37 @@ export const AllExamples = {
         Show unsaved changes toast
       </Button>
     </div>
+  ),
+}
+
+function StackButton() {
+  const ids = new Set<number>()
+
+  const show = () => {
+    for (const title of ["Download started", "Changes saved", "Upload complete", "Ready to sync"]) {
+      ids.add(showToast({ title, persistent: true }))
+    }
+  }
+
+  // The region subscribes inside its portal after the surrounding story mounts.
+  onMount(() => {
+    const frame = requestAnimationFrame(show)
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
+  onCleanup(() => ids.forEach((id) => toaster.dismiss(id)))
+
+  return (
+    <Button variant="neutral" onClick={show}>
+      Show stack
+    </Button>
+  )
+}
+
+export const Stacked = {
+  render: (props: ToastRegionProps) => (
+    <>
+      <Toast.Region {...props} />
+      <StackButton />
+    </>
   ),
 }

@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Engar viðbætur stilltar",
   skills: "Færni",
   "skills.empty": "Engin færni stillt",
-  lsp: "LSP",
-  "lsp.empty": "Engir LSP netþjónar stilltir",
   failed: "Mistókst",
   retry: "Reyndu aftur",
   connecting: "Tengist…",

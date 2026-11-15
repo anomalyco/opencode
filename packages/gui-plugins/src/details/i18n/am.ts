@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "ምንም ተሰኪዎች አልተዋቀሩ",
   skills: "ችሎታ",
   "skills.empty": "ምንም ችሎታዎች አልተዋቀሩም",
-  lsp: "LSP",
-  "lsp.empty": "ምንም የLSP አገልጋዮች አልተዋቀሩም።",
   failed: "አልተሳካም",
   retry: "እንደገና ሞክር",
   connecting: "በመገናኘት ላይ ...",
