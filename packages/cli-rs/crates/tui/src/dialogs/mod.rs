@@ -10,6 +10,7 @@ pub mod file_changes;
 pub mod fork;
 pub mod free_models;
 pub mod go_upsell;
+pub mod go_upsell_art;
 pub mod highlights;
 pub mod image_preview;
 pub mod integration;

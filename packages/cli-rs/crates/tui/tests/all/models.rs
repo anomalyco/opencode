@@ -223,6 +223,29 @@ fn go_upsell_matches_typescript_when_compact() {
 }
 
 #[test]
+fn go_upsell_art_matches_typescript_when_still() {
+    let kit = kit(90, 34);
+    opencode_ui::motion::set_running(&kit.app, false);
+    go_upsell::show(
+        &kit.local,
+        Offer { reset: Some("3:00 PM".into()), can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) },
+    );
+    kit.wait_for("subscribe");
+    support::wait_fixture(&kit.app, "E.16/go-upsell-art");
+    // Without 24-bit color TS draws the logo's seven full blocks as "█"; Rust cannot tell and keeps its half blocks.
+    let fixtures = opencode_parity::fixtures_dir();
+    let expected = opencode_parity::Fixture::load(fixtures.join("E.16/go-upsell-art-256.json")).unwrap();
+    let comparison = opencode_parity::compare(&expected, &opencode_parity::Fixture::from_capture(&kit.app.render()));
+    assert!(fixtures.join("../deviations/DLG07-go-upsell-art.md").exists());
+    assert_eq!(comparison.differences.len(), 7, "{comparison}");
+    assert!(
+        comparison.differences.iter().all(|&(x, y)| expected.cell(x, y).is_some_and(|cell| cell.symbol == "█")),
+        "{comparison}"
+    );
+    opencode_ui::motion::set_running(&kit.app, true);
+}
+
+#[test]
 fn dialogs_send_reads_only() {
     let kit = kit(90, 34);
     model::show(&kit.local, None);
