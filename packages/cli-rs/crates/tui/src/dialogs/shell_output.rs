@@ -226,6 +226,8 @@ impl Poll {
         if let Some(start) = loaded.start {
             self.omitted.set(start > 0);
         }
+        // A live shell's last character may be incomplete: the server then keeps the cursor, and the next read waits.
+        let advanced = self.cursor.get().or(loaded.start).is_none_or(|cursor| loaded.page.cursor > cursor);
         self.cursor.set(Some(loaded.page.cursor));
         let mut output = self.output.borrow_mut();
         let mut next = output.take().unwrap_or_default();
@@ -238,7 +240,7 @@ impl Poll {
         }
         *output = Some(next);
         self.error.borrow_mut().clear();
-        loaded.page.cursor < loaded.page.size
+        advanced && loaded.page.cursor < loaded.page.size
     }
 
     fn render(&self) {
