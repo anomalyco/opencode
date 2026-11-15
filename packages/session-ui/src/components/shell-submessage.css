@@ -21,4 +21,11 @@
   font-family: var(--v2-font-family-code);
   line-height: inherit;
   white-space: nowrap;
+
+  /* The command is an atomic inline box inside the truncating subtitle, so the subtitle's own ellipsis never
+     reaches its text. Cap it at the subtitle's width and ellipsize it here, so a long command ends in "…" before
+     it reaches the status badge. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
