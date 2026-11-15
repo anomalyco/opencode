@@ -323,6 +323,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const visibleAgents = createMemo(() =>
       normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []).filter((item) => !item.hidden),
     )
+
     const list = createMemo(() => visibleAgents().filter((item) => item.mode !== "subagent"))
 
     createEffect(() => {
