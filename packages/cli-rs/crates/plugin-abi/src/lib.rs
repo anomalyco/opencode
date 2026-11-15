@@ -1936,18 +1936,34 @@ impl<'de> Deserialize<'de> for Blob {
 /// writes [`Image::data`] with it.
 pub mod base64 {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    /// The sextet of each byte, or [`NONE`] for a byte not in [`ALPHABET`]: a lookup a character, as an image of
+    /// megabytes crosses this way (PL-9).
+    const SEXTETS: [u8; 256] = {
+        let mut sextets = [NONE; 256];
+        let mut index = 0;
+        while index < 64 {
+            sextets[ALPHABET[index] as usize] = index as u8;
+            index += 1;
+        }
+        sextets
+    };
+    const NONE: u8 = 0xff;
 
     pub fn encode(bytes: &[u8]) -> String {
-        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-        for chunk in bytes.chunks(3) {
-            let word =
-                chunk.iter().enumerate().fold(0u32, |word, (index, byte)| word | u32::from(*byte) << (16 - 8 * index));
-            for index in 0..4 {
-                let sextet = (word >> (18 - 6 * index)) & 63;
-                out.push(if index <= chunk.len() { char::from(ALPHABET[sextet as usize]) } else { '=' });
-            }
+        let mut out = Vec::with_capacity(bytes.len().div_ceil(3) * 4);
+        let sextets = |word: u32| [18, 12, 6, 0].map(|shift| ALPHABET[(word >> shift & 63) as usize]);
+        let (chunks, rest) = bytes.as_chunks::<3>();
+        for [a, b, c] in chunks {
+            out.extend_from_slice(&sextets(u32::from(*a) << 16 | u32::from(*b) << 8 | u32::from(*c)));
         }
-        out
+        if !rest.is_empty() {
+            let word =
+                rest.iter().enumerate().fold(0u32, |word, (index, byte)| word | u32::from(*byte) << (16 - 8 * index));
+            let mut last = sextets(word);
+            last[rest.len() + 1..].fill(b'=');
+            out.extend_from_slice(&last);
+        }
+        String::from_utf8(out).expect("the alphabet is ASCII")
     }
 
     pub fn decode(text: &str) -> Option<Vec<u8>> {
@@ -1956,17 +1972,30 @@ pub mod base64 {
             return None;
         }
         let mut out = Vec::with_capacity(text.len() / 4 * 3);
-        for (number, chunk) in text.chunks(4).enumerate() {
-            let last = number + 1 == text.len() / 4;
-            let padding = chunk.iter().rev().take_while(|byte| **byte == b'=').count();
-            if padding > 2 || (padding > 0 && !last) {
+        // Padding may end only the last group; in another one `=` is a byte out of the alphabet.
+        let (body, last) = text.split_at(text.len().saturating_sub(4));
+        for chunk in body.as_chunks::<4>().0 {
+            let [a, b, c, d] = chunk.map(|byte| SEXTETS[usize::from(byte)]);
+            // A sextet is under 64; only [`NONE`] has the high bit.
+            if (a | b | c | d) & 0x80 != 0 {
                 return None;
             }
-            let mut word = 0u32;
-            for (index, byte) in chunk[..4 - padding].iter().enumerate() {
-                let sextet = ALPHABET.iter().position(|known| known == byte)? as u32;
-                word |= sextet << (18 - 6 * index);
+            let word = u32::from(a) << 18 | u32::from(b) << 12 | u32::from(c) << 6 | u32::from(d);
+            out.extend_from_slice(&word.to_be_bytes()[1..]);
+        }
+        let padding = last.iter().rev().take_while(|byte| **byte == b'=').count();
+        if padding > 2 {
+            return None;
+        }
+        let mut word = 0u32;
+        for (index, byte) in last[..last.len() - padding].iter().enumerate() {
+            let sextet = SEXTETS[usize::from(*byte)];
+            if sextet == NONE {
+                return None;
             }
+            word |= u32::from(sextet) << (18 - 6 * index);
+        }
+        if !last.is_empty() {
             out.extend_from_slice(&word.to_be_bytes()[1..4 - padding]);
         }
         Some(out)
@@ -3555,7 +3584,8 @@ pub trait Read {
     }
     /// 2.0 (P6c): the width and height of the image `bytes` decode to in the host, or `None` where an image node of
     /// them would show nothing: not a PNG, GIF, JPEG or WebP image, past the host's bounds, or bytes that do not
-    /// decode. [`image_size`] reads only the header.
+    /// decode. [`image_size`] reads only the header. Over the C ABI the bytes cross to the host in base64, and the host
+    /// decodes an image within its bounds: ask once per content and keep the answer, not in each view.
     fn image_size(&self, _bytes: &[u8]) -> Option<(u32, u32)> {
         None
     }
@@ -6672,6 +6702,12 @@ mod tests {
         }
         assert_eq!(base64::decode("Zm9v=Zg="), None);
         assert_eq!(base64::decode("Zm9"), None);
+        assert_eq!(base64::decode("Zm9!"), None, "a byte out of the alphabet");
+        let every: Vec<u8> = (0..=255).chain((0..=255).rev()).collect();
+        assert_eq!(base64::encode(&every[..255]).len(), 340);
+        for len in 0..every.len() {
+            assert_eq!(base64::decode(&base64::encode(&every[..len])).as_deref(), Some(&every[..len]), "{len}");
+        }
         let binary = Blob(vec![0xff, 0x00, 0x89, b'P', b'N', b'G']);
         let json = serde_json::to_string(&binary).unwrap();
         assert_eq!(json, r#"{"base64":"/wCJUE5H"}"#);
