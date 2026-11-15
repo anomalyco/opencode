@@ -480,10 +480,20 @@ pub fn insert_mention(prompt: &crate::prompt::editor::Inner, tui: &Tui, mention:
 }
 
 /// An IDE server to connect to.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Connection {
     pub url: String,
     pub auth_token: Option<String>,
+}
+
+// Keeps the lock file's token out of logs.
+impl std::fmt::Debug for Connection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Connection")
+            .field("url", &self.url)
+            .field("auth_token", &self.auth_token.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 /// The environment's port, else the best lock file for `directory` (`resolveEditorConnection`).
@@ -1148,6 +1158,14 @@ mod tests {
                 end: Position { line: end.0, character: end.1 },
             },
         }
+    }
+
+    #[test]
+    fn debug_redacts_the_auth_token() {
+        let connection = Connection { url: "ws://127.0.0.1:1".into(), auth_token: Some("t0ken".into()) };
+        let shown = format!("{connection:?}");
+        assert!(!shown.contains("t0ken") && shown.contains("auth_token: Some(\"<redacted>\")"), "{shown}");
+        assert!(shown.contains("ws://127.0.0.1:1"), "{shown}");
     }
 
     #[test]
