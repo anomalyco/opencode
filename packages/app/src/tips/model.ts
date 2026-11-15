@@ -34,11 +34,14 @@ export function createTipToasts() {
   const location = () => server()?.data.location
   const [awake, setAwake] = createSignal(false)
   const [hexInstalled, setHexInstalled] = createSignal<boolean>()
+
   const startup = setTimeout(() => {
     setAwake(true)
+
     if (!platform.checkAppExists) return setHexInstalled(false)
     void platform.checkAppExists("hex").then(setHexInstalled, () => setHexInstalled(false))
   }, STARTUP_DELAY)
+
   onCleanup(() => clearTimeout(startup))
   createEffect(() => {
     const ctx = server()

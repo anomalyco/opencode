@@ -5,6 +5,7 @@ import { Effect, FileSystem, Path } from "effect"
 import { detectHex, hexPaths } from "./hex"
 
 const execFilePromise = util.promisify(execFile)
+
 let hex: Promise<boolean> | undefined
 
 export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function* (appName: string) {

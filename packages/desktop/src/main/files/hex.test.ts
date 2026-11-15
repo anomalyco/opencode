@@ -21,6 +21,7 @@ test("uses the Hex installers' per-user layouts and desktop PATH", () => {
 
 test("retained Hex settings alone do not count as an installation", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "hex-detect-"))
+
   try {
     const support = path.join(root, "hex")
     await mkdir(support)
