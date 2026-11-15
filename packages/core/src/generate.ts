@@ -1,7 +1,7 @@
 export * as Generate from "./generate.js"
 
 import { ai, AIError, DecisionClient, ImageClient, LLMClient, Media } from "@opencode/ai/effect"
-import type { DecisionRequest, DecisionResult, ImageRequest, ImageResult } from "@opencode/schema/generate"
+import type { DecisionRequest, DecisionResult, ImageRequest, ImageResult, TextResult } from "@opencode/schema/generate"
 import { Money } from "@opencode/schema/money"
 import { SessionID } from "@opencode/schema/session-id"
 import { Context, Effect, Layer, Schema } from "effect"
@@ -12,6 +12,7 @@ import { Integration } from "./integration.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Model } from "./model.js"
 import { ModelRetry } from "./model-retry.js"
+import { SessionUsage } from "./session/usage.js"
 
 export interface TextInput {
   readonly prompt: string
@@ -72,6 +73,7 @@ export type Error =
 
 export interface Interface {
   readonly text: (input: TextInput) => Effect.Effect<string, Error>
+  readonly textUsage: (input: TextInput) => Effect.Effect<TextResult, Error>
   readonly image: (input: ImageRequest) => Effect.Effect<ImageResult, Error>
   readonly decisions: (input: DecisionRequest) => Effect.Effect<DecisionResult, Error>
 }
@@ -124,7 +126,9 @@ export const layer = Layer.effect(
           ModelRetry.retryOneShot,
           Effect.mapError((error) => providerError(resolved.ref, error)),
         )
-      return response.text
+      const usage =
+        response.usage === undefined ? undefined : SessionUsage.record(response.usage, resolved.cost)
+      return { text: response.text, ...(usage ?? {}) }
     })
 
     // A ref no model of this type has: another type's model (422) or no model at all (404).
@@ -223,7 +227,8 @@ export const layer = Layer.effect(
       )
 
     return Service.of({
-      text: (input) => credentials(runText(input)),
+      text: (input) => credentials(runText(input).pipe(Effect.map((result) => result.text))),
+      textUsage: (input) => credentials(runText(input)),
       image: (input) => credentials(image(input)),
       decisions: (input) => credentials(decisions(input)),
     })

@@ -24,6 +24,14 @@ const generate = makeLocationNode({
               }),
             ),
           ),
+        textUsage: () =>
+          config.entries().pipe(
+            Effect.map((entries) => ({
+              text: JSON.stringify({
+                model: Config.latest(entries, "model"),
+              }),
+            })),
+          ),
         image: () => Effect.die("unused"),
         decisions: () => Effect.die("unused"),
       })

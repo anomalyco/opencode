@@ -26,7 +26,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       function* (request: { readonly payload: { readonly prompt: string; readonly model?: Model.Ref } }) {
         yield* awaitPlugins
         const generate = yield* Generate.Service
-        return { data: { text: yield* generate.text(request.payload).pipe(Effect.mapError(generateError)) } }
+        return { data: yield* generate.textUsage(request.payload).pipe(Effect.mapError(generateError)) }
       },
       Effect.provide(services),
       locationErrors,

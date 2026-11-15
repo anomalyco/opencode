@@ -60,6 +60,7 @@ const it = testEffect(
       Generate.Service,
       Generate.Service.of({
         text: () => Effect.succeed(""),
+        textUsage: () => Effect.die("unused"),
         image: (input) =>
           Effect.sync(() => fixture.requests.push(input)).pipe(
             Effect.andThen(Effect.suspend(() => fixture.gate)),

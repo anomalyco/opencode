@@ -5,6 +5,7 @@ import { Model } from "./model.js"
 import { Money } from "./money.js"
 import { Base64 } from "./prompt.js"
 import { PositiveInt, optional } from "./schema.js"
+import { TokenUsage } from "./token-usage.js"
 
 const description = (text: string) => ({ description: text })
 
@@ -24,6 +25,13 @@ export const Usage = Schema.Struct({
   input: Schema.Finite.pipe(optional),
   output: Schema.Finite.pipe(optional),
 }).annotate({ identifier: "Generate.Usage", description: "Token counts, when the provider reports them" })
+
+export interface TextResult extends Schema.Schema.Type<typeof TextResult> {}
+export const TextResult = Schema.Struct({
+  text: Schema.String,
+  tokens: TokenUsage.Info.pipe(optional),
+  cost: Money.USD.pipe(optional),
+}).annotate({ identifier: "Generate.TextResult" })
 
 export const Native = Schema.Record(Schema.String, Schema.Unknown).annotate({
   identifier: "Generate.Native",

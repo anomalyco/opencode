@@ -28,7 +28,7 @@ const textContract = {
     model: Model.Ref.pipe(Schema.optional),
   }),
   success: Schema.Struct({
-    data: Schema.Struct({ text: Schema.String }),
+    data: Generate.TextResult,
   }).annotate({ identifier: "GenerateTextResponse" }),
   error: errors,
 }

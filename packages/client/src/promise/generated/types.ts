@@ -192,7 +192,7 @@ export type ToolFreeformFormat = "text" | "regex" | "lark"
 
 export type MoneyUSDPerMillionTokens = number
 
-export type GenerateTextResponse = { data: { text: string } }
+export type GenerateTextResponse = { data: { text: string; tokens?: TokenUsageInfo; cost?: MoneyUSD } }
 
 export type GenerateUsage = { input?: number; output?: number }
 

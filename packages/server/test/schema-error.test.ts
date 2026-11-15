@@ -13,6 +13,7 @@ const generate = makeLocationNode({
     Generate.Service,
     Generate.Service.of({
       text: () => Effect.succeed(42 as unknown as string),
+      textUsage: () => Effect.succeed({ text: 42 as unknown as string }),
       image: () => Effect.die("unused"),
       decisions: () => Effect.die("unused"),
     }),
