@@ -205,7 +205,7 @@ static void ui(const opencode_host_api *host) {
     size_t len = strlen(answer);
     if (status == OPENCODE_OK && len >= 2 && answer[0] == '"' && answer[len - 1] == '"') {
         answer[len - 1] = '\0';
-        snprintf(mode, sizeof mode, "%s", answer + 1);
+        snprintf(mode, sizeof mode, "%.63s", answer + 1);
     }
     ask(host, "{\"type\":\"release-keys\"}", NULL, 0);
     ask(host, "{\"type\":\"blur\"}", NULL, 0);
