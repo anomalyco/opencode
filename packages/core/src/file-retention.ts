@@ -15,7 +15,8 @@ export const cleanup = Effect.fn("FileRetention.cleanup")(function* (
       Effect.gen(function* () {
         const info = yield* fs.stat(file).pipe(Effect.orElseSucceed(() => undefined))
         const mtime = info && Option.getOrUndefined(info.mtime)
-        if (!mtime || mtime.getTime() >= cutoff) return
+        // Runtimes without real timestamps (workerd) report the epoch; keep those files.
+        if (!mtime || mtime.getTime() <= 0 || mtime.getTime() >= cutoff) return
         yield* fs.remove(file).pipe(Effect.ignore)
       }),
     { concurrency: 8, discard: true },
