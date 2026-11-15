@@ -185,7 +185,7 @@ fn notice(tui: &Rc<Tui>, crash: &Crash, safe: bool, dropped: bool) {
         None => ToastOptions::new(Variant::Warning, format!("The crash named no plugin.{lost}"))
             .title("opencode-native restarted"),
     };
-    tui.toasts.show(options);
+    tui.toasts.show(options.keep());
 }
 
 /// Enables the plugin of entry `key` again ([`opencode_plugin::Entry::key`]), as the plugin manager does.

@@ -85,7 +85,7 @@ fn show(tui: &Rc<Tui>, focus: Option<String>) {
             view
         },
         None,
-        DialogOptions::new(DialogSize::Large),
+        DialogOptions::new(DialogSize::Large).key(super::host::FALLBACK),
     );
 }
 

@@ -875,6 +875,39 @@ fn a_panel_cannot_take_the_keys_that_close_it() {
     }
 }
 
+/// Toasts on every change of the plugin list, as the C conformance plugin does.
+fn chatty(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.on_plugins(|host| host.toast(abi::Toast::new(abi::Variant::Info, "plugins changed")));
+    Ok(())
+}
+
+/// `boomer.panic` panics.
+fn boomer(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command::default().with_name("boomer.panic".to_owned()), |_, _| panic!("boom"));
+    Ok(())
+}
+
+// Expected (PL-2): a plugin that toasts as the plugin list changes does not hide the host's report of another plugin
+// that failed: the report stays for its time, and the plugin's toast waits behind it.
+#[test]
+fn a_plugin_toast_never_hides_the_report_of_a_failure() {
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "chatty", setup: chatty }.into());
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "boomer", setup: boomer }.into());
+    h.app.render();
+    while h.tui.toasts.current().is_some() {
+        h.tui.toasts.dismiss();
+    }
+    h.tui.keymap.dispatch("boomer.panic", None);
+    h.wait_for("Plugin failed: boomer");
+    h.app.advance(Duration::from_millis(500));
+    let screen = h.wait_for("Plugin failed: boomer");
+    assert!(!screen.contains("plugins changed"), "{screen}");
+    assert!(h.tui.toasts.pending() > 0, "the plugin's toast waits behind it");
+    h.app.advance(opencode_ui::toast::DEFAULT_DURATION);
+    h.wait_for("plugins changed");
+}
+
 /// A command `{id}.panel` that opens a panel with key `panel`, and one `{id}.close` that closes it.
 fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
     let id = if SUB { "owner/sub" } else { "owner" };
