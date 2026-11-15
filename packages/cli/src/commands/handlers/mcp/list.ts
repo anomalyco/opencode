@@ -25,7 +25,7 @@ export default Runtime.handler(
   }),
 )
 
-function icon(status: McpServer["status"]) {
+export function icon(status: McpServer["status"]) {
   switch (status.status) {
     case "connected":
       return "✓"
@@ -38,7 +38,7 @@ function icon(status: McpServer["status"]) {
   }
 }
 
-function describe(status: McpServer["status"]) {
+export function describe(status: McpServer["status"]) {
   switch (status.status) {
     case "needs_auth":
       return "needs authentication"
