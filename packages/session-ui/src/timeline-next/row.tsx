@@ -49,7 +49,7 @@ import { Badge } from "@opencode/ui/badge"
 import { attached } from "../components/message-file"
 import { CompactionMessage, CompactionQueued } from "./compaction"
 import { unwrapErrorMessage } from "./errors"
-import { TimelineEventRow } from "./event-row"
+import { TimelineEventItem, TimelineEventRow } from "./event-row"
 import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
@@ -413,11 +413,11 @@ export function createNextTimelineRowRenderer(input: {
       )
     }
 
-    if (row().group.type === "events") {
+    if (row().group.type === "events" || row().group.type === "subagent") {
       const events = createMemo(() => {
         const group = row().group
 
-        if (group.type !== "events") return []
+        if (group.type !== "events" && group.type !== "subagent") return []
         const contents = indexGroupContents(group.refs)
 
         // A call starts the work; a notice under its message's own ID reports it back.
@@ -435,6 +435,18 @@ export function createNextTimelineRowRenderer(input: {
           return event ? [event] : []
         })
       })
+
+      if (row().group.type === "subagent") {
+        return (
+          <Show when={events()[0]}>
+            {(event) => (
+              <div data-component="timeline-subagent">
+                <TimelineEventItem event={event()} />
+              </div>
+            )}
+          </Show>
+        )
+      }
 
       return (
         <TimelineEventRow
