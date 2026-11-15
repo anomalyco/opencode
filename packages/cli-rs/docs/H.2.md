@@ -60,6 +60,8 @@ export default defineApp({
     `TestApp::click`.
   - `event`: one `/api/event` event. TS emits it on `createEventStream`; Rust sends it on the in-memory event
     stream. The stream starts with `server.connected` on both sides, as the TS fixture does.
+  - `wait`: milliseconds that pass with no input, so the next checkpoint sees what the client does on its own after
+    a screen settled (a plugin's reload closing its dialog, FT-4).
   - `checkpoint`: a named screen, compared cell by cell.
 - **Checkpoint fields**:
   - `until`: text the TS frame must contain before the capture. Rust waits for it too, but at most 2 s, so a

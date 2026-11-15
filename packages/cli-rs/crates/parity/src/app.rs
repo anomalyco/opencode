@@ -127,6 +127,10 @@ pub enum Step {
     Release {
         release: String,
     },
+    /// Lets this many milliseconds pass with no input, so a later checkpoint sees what follows on its own (FT-4).
+    Wait {
+        wait: u64,
+    },
 }
 
 /// A Zed database for the scenario: the SQL that creates it.
