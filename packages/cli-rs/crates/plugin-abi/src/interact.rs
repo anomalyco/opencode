@@ -69,7 +69,9 @@ pub enum Event {
     /// P6a: mount `mount` began (`mounted`), before its first view, or it is ending, for a surface that asks
     /// ([`crate::v2::Surface::mounts`]), as a 1.x claim's `on_mount`. A new mount may begin before the one it replaces
     /// ends, also with the same input: `mount` tells them apart. `slot` is a slot surface's input. The plugin hears it,
-    /// not the mount: what its handler starts is the plugin's and outlives the mount. The answer does not matter.
+    /// not the mount, at the begin as at the end, which has no mount left: what its handler starts is the plugin's and
+    /// outlives the mount, as a fetch of setup is the activation's ([`Host::try_fetch`]). So a read a next mount shows
+    /// survives the mount that asked, which may end first. The answer does not matter.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Mount {
         mount: crate::v2::MountId,

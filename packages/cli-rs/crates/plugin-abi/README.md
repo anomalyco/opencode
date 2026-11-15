@@ -143,9 +143,10 @@ String>`: an `Err` is a request the host did not take, as while the effects that
 comes for it; an ID always gets its one reply.
 
 A request belongs to what asked for it, on every carrier. One a mount's call asks for (a command of the route it
-shows, or a handler of the mount's events) is that mount's: once the mount closes, it is not sent, and its reply is
-dropped, also when the surface opens again under the same key. One from setup, a global command, an event or a wake
-is the activation's, and its reply comes unless the plugin is disposed first.
+shows, or a handler of the mount's input) is that mount's: once the mount closes, it is not sent, a program does not
+start, and its reply is dropped, also when the surface opens again under the same key. One from setup, a global
+command, an event, a wake, or the mount's begin and end (`Event::Mount`, which the plugin hears, not the mount) is the
+activation's, and its reply comes unless the plugin is disposed first.
 
 ### The source promise of 2.x
 

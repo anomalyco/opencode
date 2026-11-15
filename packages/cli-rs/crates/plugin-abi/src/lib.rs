@@ -3677,11 +3677,12 @@ pub trait Host: Read {
     /// 2.0: sends `fetch` to the server. [`Setup::on_reply`] gets the reply, with the ID this returns, while what
     /// owns the fetch lives, on every carrier:
     ///
-    /// - A fetch a mount's call asks for (a command of the route it shows, or a handler of the mount's events: its
-    ///   input and its mount event) is that mount's. Once the mount closes, it is not sent, and its reply is dropped,
-    ///   also when the surface opens again under the same key: a reply never reaches another mount.
-    /// - Any other (setup, a global command, an event, a wake, a message, a layer of setup) is the activation's: its
-    ///   reply comes unless the plugin is disposed first.
+    /// - A fetch a mount's call asks for (a command of the route it shows, or a handler of the mount's input) is that
+    ///   mount's. Once the mount closes, it is not sent, and its reply is dropped, also when the surface opens again
+    ///   under the same key: a reply never reaches another mount.
+    /// - Any other (setup, a global command, an event, a wake, a message, a layer of setup, and the mount's begin and
+    ///   end, [`interact::Event::Mount`], which the plugin hears, not the mount) is the activation's: its reply comes
+    ///   unless the plugin is disposed first.
     ///
     /// An error is a fetch the host did not take, and no reply comes for it: its queue of effects is full, as when a
     /// plugin fans out without end, or it has no server. By default, [`Host::fetch`]'s `RequestId(0)` is that error.
