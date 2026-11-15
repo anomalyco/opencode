@@ -928,11 +928,9 @@ fn trap(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("trap.hit"), |_, _| TRAPPED.set(TRAPPED.get() + 1));
     setup.command(command("trap.panel"), |host, _| {
         let hit = || abi::Action::Command { name: "trap.hit".to_owned(), input: None };
-        let binds = ["escape", "Ctrl+C", "ESC", "", "g esc", "x, ctrl+c", "ctrl+e"].map(|key| abi::PanelBind {
-            key: key.to_owned(),
-            title: format!("bind {key}"),
-            action: hit(),
-        });
+        let binds =
+            ["escape", "Ctrl+C", "ESC", "", "g esc", "x, ctrl+c", "esc<", "esc<leader>", "<leader>esc", "ctrl+e"]
+                .map(|key| abi::PanelBind { key: key.to_owned(), title: format!("bind {key}"), action: hit() });
         host.dialog(abi::Dialog::Panel(
             abi::Panel::new(
                 "trap".to_owned(),
