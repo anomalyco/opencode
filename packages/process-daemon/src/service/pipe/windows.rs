@@ -54,7 +54,7 @@ use windows_sys::Win32::System::Threading::{
     WaitForSingleObject,
 };
 
-use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, Waiter, start_pipe};
+use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, Waiter, create_process_refused_job, start_pipe};
 use crate::service::{CreatePipe, ProcessSignal, TerminalHandle, TerminalId};
 use crate::transport::retained::Retained;
 use crate::transport::windows::{event, owned_handle, security::PrivateSecurity, wide};
@@ -226,7 +226,7 @@ fn spawn(
 ) -> Result<Process> {
     let (created, job) = match create_process(request, job.as_ref(), &client) {
         Ok(created) => (created, job),
-        Err(error) if job.is_some() && error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => {
+        Err(error) if job.is_some() && create_process_refused_job(error.raw_os_error()) => {
             // An outer job with UI restrictions refuses new members. Run the
             // command anyway; only the main process can be killed then.
             let created = create_process(request, None, &client)
