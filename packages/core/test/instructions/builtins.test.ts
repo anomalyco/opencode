@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import fs from "fs"
 import os from "os"
 import path from "path"
@@ -35,6 +35,8 @@ const it = testEffect(
     Global.node.replace(Global.layerWith({ config: temporary, tmp: temporary })),
   ]),
 )
+
+afterAll(() => fs.rmSync(temporary, { recursive: true, force: true }))
 
 describe("InstructionBuiltIns", () => {
   it.effect("loads location-scoped environment and host-local date instructions", () =>
