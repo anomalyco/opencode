@@ -487,6 +487,25 @@ fn frame(harness: &Harness, by: Duration) -> Capture {
     harness.app.render()
 }
 
+/// What may want the frame an idle check found wanted, for the report (the row fails under load alone, flakes-10): the
+/// toast that shows, the plugins not active or slow, whether the views took every store flush, and whether the next
+/// frame wants another too.
+fn wanting(harness: &Harness) -> String {
+    let toast = harness.tui.toasts.current().map(|toast| format!("{:?} {}", toast.title, toast.message));
+    let plugins: Vec<String> = harness
+        .tui
+        .plugins
+        .entries()
+        .into_iter()
+        .filter(|entry| entry.slow.is_some() || entry.status != opencode_plugin::Status::Active)
+        .map(|entry| format!("{} {:?}", entry.id, entry.status))
+        .collect();
+    let synced = harness.tui.synced();
+    frame(harness, Duration::from_millis(16));
+    let again = harness.app.needs_frame();
+    format!("toast {toast:?}, plugins {plugins:?}, synced {synced}, the next frame wants another: {again}")
+}
+
 #[derive(Clone, Debug)]
 enum Command {
     Open,
@@ -755,7 +774,8 @@ impl Model for Canvases {
                 return fail("replay", "still", detail);
             }
             if expected == 0 && harness.app.needs_frame() {
-                return fail("work", "idle", "a frame with nothing to animate wants another".into());
+                let detail = format!("a frame with nothing to animate wants another; {}", wanting(&harness));
+                return fail("work", "idle", detail);
             }
             let bytes = match &reference.held {
                 Some(Held::Art(shapes)) if reference.showing() => Some(held_for(shapes)),
