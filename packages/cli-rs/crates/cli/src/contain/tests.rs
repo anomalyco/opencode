@@ -286,6 +286,35 @@ fn only_the_tui_gets_a_parent() {
     assert_eq!(verdicts, [true, true, false, false, false]);
 }
 
+// Expected (PL-1, review carbon-1): `plugin dev <dir>` runs the TUI, so it gets a parent whatever the plugin targets
+// are (it always runs the native build it makes), and a restart goes back into `plugin dev <dir>` with the TUI's
+// arguments. `plugin dev` with a command, or its help, gets none.
+#[test]
+fn plugin_dev_runs_under_a_parent_and_restarts_into_itself() {
+    let runs = |line: &[&str]| tui(&os(line)).is_some();
+    let verdicts = [
+        runs(&["opencode-native", "plugin", "dev", "crate"]),
+        runs(&["opencode-native", "plugin", "dev", "crate", "-c", "/work"]),
+        runs(&["opencode-native", "plugin", "dev", "crate", "session", "list"]),
+        runs(&["opencode-native", "plugin", "dev", "--help"]),
+        runs(&["opencode-native", "plugin", "test", "lib.so"]),
+    ];
+    assert_eq!(verdicts, [true, true, false, false, false]);
+    let raw = os(&["opencode-native", "plugin", "dev", "crate", "--prompt", "hi", "--auto", "--", "/work"]);
+    if std::env::var(PARENT).as_deref() != Ok("0") {
+        assert!(wanted(&raw).is_some_and(|restart| restart.dev == Some("crate".into())));
+    }
+    let next = arguments(&raw[0], &restart_of(&raw), Some("ses_1"));
+    assert_eq!(next[..4], os(&["opencode-native", "plugin", "dev", "crate"])[..]);
+    let again = parsed(&[&next[..1], &next[4..]].concat());
+    assert_eq!(
+        (again.cli.root.directory.as_deref(), again.cli.root.session.as_deref(), again.cli.root.prompt.as_deref()),
+        (Some("/work"), Some("ses_1"), None)
+    );
+    assert!(again.cli.root.permissions.auto());
+    assert_eq!(tui(&next).unwrap().dev, Some("crate".into()));
+}
+
 // Expected: how a client ended decides the restart. A fatal signal, a kill and the watchdog's and a panic's exit codes
 // are crashes; a signal that asks a process to end, and any other exit code, are the parent's own end.
 #[cfg(unix)]
