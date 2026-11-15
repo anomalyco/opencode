@@ -22,7 +22,7 @@ use opencode_plugin_abi::v2::{AnchorAt, ListItem, Node, Source};
 use opentui::prelude::*;
 
 use crate::behave::visited;
-use crate::reconcile::{Env, Held, Tree, count_kept, weight_of};
+use crate::reconcile::{Env, Held, Tree, count_item, count_kept, weight_of};
 
 /// One item of a list.
 pub(crate) struct Item {
@@ -189,6 +189,7 @@ impl List {
                     held
                 }
                 (Some(mut held), node) => {
+                    count_item();
                     let written = write_out(node, &held.node);
                     if let Some(mounted) = &mut held.mounted {
                         apply(env, mounted, node);
@@ -203,16 +204,19 @@ impl List {
                     held
                 }
                 // Validation refuses a keep of an item the list does not hold.
-                (None, node) => Item {
-                    key: key.clone(),
-                    node: node.clone(),
-                    estimate,
-                    measured: None,
-                    used: f64::from(estimate),
-                    anchors: logical(node, env),
-                    dynamic: reads_output(node),
-                    mounted: None,
-                },
+                (None, node) => {
+                    count_item();
+                    Item {
+                        key: key.clone(),
+                        node: node.clone(),
+                        estimate,
+                        measured: None,
+                        used: f64::from(estimate),
+                        anchors: logical(node, env),
+                        dynamic: reads_output(node),
+                        mounted: None,
+                    }
+                }
             };
             self.items.push(next);
         }
