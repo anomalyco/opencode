@@ -414,6 +414,12 @@ fn settles(message: &Down) -> bool {
     )
 }
 
+/// Whether a result of a call's effects is a scalar: a request's ID, an answer of a verb, nothing. A read's value is
+/// not, and is what a reduced answer drops ([`Scripts::settle`]).
+fn scalar(result: &serde_json::Value) -> bool {
+    matches!(result, serde_json::Value::Number(_) | serde_json::Value::Bool(_) | serde_json::Value::Null)
+}
+
 /// What owns a call's requests: the input owner of a handler's event, and the mount the requests belong to.
 pub(crate) type Owning = (Option<Weak<crate::interact::Owner>>, Option<Weak<()>>);
 
@@ -457,6 +463,10 @@ pub struct Scripts {
     host: Weak<dyn Host>,
     id: u64,
     child: RefCell<Option<Child>>,
+    /// The number of the JS host that runs, counted from 1 at each start, and the one whose end is scheduled ([`Scripts::
+    /// shut`]): an end asked for one child never ends the one that replaced it, and one child ends once.
+    generation: Cell<u64>,
+    ending: Cell<u64>,
     /// The directory of the written script, while the JS host may run.
     script: RefCell<Option<opencode_util::temp::TempDir>>,
     seq: Cell<u64>,
@@ -518,6 +528,8 @@ impl Scripts {
             host: Rc::downgrade(host),
             id,
             child: RefCell::default(),
+            generation: Cell::new(0),
+            ending: Cell::new(0),
             script: RefCell::default(),
             seq: Cell::new(0),
             read: Cell::new((0, 0)),
@@ -857,18 +869,30 @@ impl Scripts {
     /// ownership pass): such a message is never dropped while the JS host runs.
     fn settle(&self, message: &Down, size: usize) {
         let kept = match message {
-            Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route } => {
+            Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route }
+                if !self.sendable(message) =>
+            {
                 let result = Err(format!("the reply is {size} bytes, more than the JS host takes"));
                 let call = Request::Reply { id: *reply, result };
                 Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone() }
             }
-            Down::Answered { id, key, results } if size > wire::CONTROL_CAP => Down::Answered {
+            // A request's ID, a number, is kept: without it the JS host reads an accepted request as refused, which
+            // then runs while its caller retries (bigboi's verification). A read's value goes, as a failed read.
+            Down::Answered { id, key, results } if !self.sendable(message) => Down::Answered {
                 id: id.clone(),
                 key: key.clone(),
-                results: vec![serde_json::Value::Null; results.len()],
+                results: results
+                    .iter()
+                    .map(|result| if scalar(result) { result.clone() } else { serde_json::Value::Null })
+                    .collect(),
             },
             other => other.clone(),
         };
+        // What cannot go even so is never encoded again, which would refuse it again: the JS host ends, which settles
+        // everything it held (bigboi's verification).
+        if !self.sendable(&kept) {
+            return self.shut("what settles the JS host's work is larger than a frame it takes");
+        }
         if self.overflow.borrow().0.is_empty() && self.encode(&kept) {
             return;
         }
@@ -876,22 +900,41 @@ impl Scripts {
         let mut overflow = self.overflow.borrow_mut();
         if overflow.1 + bytes > 2 * self.config.limits.inbox {
             drop(overflow);
-            log::error!("the JS host reads nothing: what settles its work has no room");
-            let (this, host) = (self.this.clone(), self.host.upgrade());
-            if let Some(host) = host {
-                host.app().defer(move |_| {
-                    if let Some(scripts) = this.upgrade() {
-                        scripts.ended(
-                            "the JS host read nothing while its work waited to settle".to_owned(),
-                            Blame::Nobody,
-                        );
-                    }
-                });
-            }
-            return;
+            return self.shut("the JS host read nothing while its work waited to settle");
         }
         overflow.1 += bytes;
         overflow.0.push_back((kept, bytes));
+    }
+
+    /// Whether `message` goes as one frame: under the queue's bound and the wire's cap, the limits [`Child::send`]
+    /// refuses a frame by.
+    fn sendable(&self, message: &Down) -> bool {
+        let payload = serde_json::to_vec(message).map_or(usize::MAX, |bytes| bytes.len());
+        payload <= wire::CONTROL_CAP && wire::encode(wire::CONTROL, &[]).len() + payload <= self.config.limits.queued
+    }
+
+    /// Ends the JS host that runs now, once, after the current turn: a second cause in the same turn is the same end,
+    /// and an end asked for one JS host never ends the one that replaced it (bigboi's verification).
+    fn shut(&self, why: &str) {
+        let generation = self.generation.get();
+        if self.child.borrow().is_none() || self.ending.replace(generation) == generation {
+            return;
+        }
+        log::error!("{why}");
+        let (this, host, why) = (self.this.clone(), self.host.upgrade(), why.to_owned());
+        if let Some(host) = host {
+            host.app().defer(move |_| {
+                if let Some(scripts) = this.upgrade().filter(|scripts| scripts.generation.get() == generation) {
+                    scripts.ended(why, Blame::Nobody);
+                }
+            });
+        }
+    }
+
+    /// Runs `child` as the JS host, a new generation of it.
+    fn adopt(&self, child: Child) {
+        self.generation.set(self.generation.get() + 1);
+        *self.child.borrow_mut() = Some(child);
     }
 
     /// How many bytes wait in the overflow, for the tests.
@@ -946,7 +989,7 @@ impl Scripts {
                     self.fail_loads();
                     return false;
                 }
-                *self.child.borrow_mut() = Some(child);
+                self.adopt(child);
                 self.read.set((0, 0));
                 *self.overflow.borrow_mut() = Default::default();
                 self.started.borrow_mut().clear();
@@ -1224,6 +1267,8 @@ impl Scripts {
     /// of ends, every plugin on it fails.
     fn ended(self: &Rc<Self>, why: String, blame: Blame) {
         drop(self.child.borrow_mut().take());
+        // Its generation is over: an end scheduled for it ends nothing more ([`Scripts::shut`]).
+        self.generation.set(self.generation.get() + 1);
         *self.overflow.borrow_mut() = Default::default();
         log::error!("{why}");
         // A ping on its way is lost with it: answered, as one a tree waits behind, so its sender asks again.
@@ -1542,7 +1587,8 @@ mod tests {
         scripts.overflowed(held.clone(), 512);
         let cancelled = Down::Cancelled { activation: 1, request: opencode_plugin_abi::RequestId(5) };
         let answered = Down::Answered { id: "p".into(), key: "c1".into(), results: vec![serde_json::json!(7)] };
-        let huge = Down::Answered { id: "p".into(), key: "c2".into(), results: vec![serde_json::json!("x"); 2] };
+        let big = serde_json::json!("x".repeat(wire::CONTROL_CAP));
+        let huge = Down::Answered { id: "p".into(), key: "c2".into(), results: vec![big.clone(), big] };
         let call = Down::Call {
             seq: 2,
             id: "p".into(),
@@ -1562,6 +1608,88 @@ mod tests {
         let charged = 512 + expected[1..].iter().map(bytes).sum::<usize>();
         assert_eq!(kept, expected);
         assert_eq!(scripts.overflow_bytes(), charged, "a message kept past the bound is charged its bytes");
+    }
+
+    /// A JS host that says hello and reads all it gets, answering nothing, for `scripts`; and its file.
+    #[cfg(unix)]
+    fn quiet(scripts: &Rc<Scripts>, host: &Rc<crate::tests::TestHost>) -> opencode_util::temp::TempDir {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let file = dir.path().join("hello");
+        let hello = Up::Hello { magic: proto::MAGIC.to_owned(), version: proto::VERSION, pid: 0 };
+        std::fs::write(&file, wire::encode(wire::CONTROL, &serde_json::to_vec(&hello).unwrap())).unwrap();
+        let mut command = std::process::Command::new("sh");
+        command.arg("-c").arg(format!("cat '{}'; cat > /dev/null", file.display()));
+        let proxy = host.app.app().proxy();
+        let id = scripts.id;
+        scripts.adopt(Child::spawn(command, scripts.config.limits, move || post(&proxy, id)).unwrap());
+        dir
+    }
+
+    // Expected (bigboi's verification): a call's answer too large for a frame keeps the IDs of the requests it accepted,
+    // so the JS host never reads an accepted fetch as refused, and drops only what its reads gave. It is measured by the
+    // queue's bound, the limit a send is refused by, not only by the wire's cap: between the two it was resent, refused
+    // and resent again until the UI thread's stack ran out. What cannot go even so ends the JS host, once.
+    #[cfg(unix)]
+    #[test]
+    fn an_answer_too_large_for_a_frame_keeps_its_request_ids() {
+        let mut config = Config::new("sh".into());
+        config.limits.queued = 4 << 10;
+        let host = crate::tests::host();
+        let dynamic: Rc<dyn Host> = host.clone();
+        let scripts = Scripts::new(config, &dynamic);
+        let _dir = quiet(&scripts, &host);
+        let read = serde_json::json!("x".repeat(8 << 10));
+        let results = vec![serde_json::json!(7), read, serde_json::json!(true), serde_json::Value::Null];
+        let answered = Down::Answered { id: "p".into(), key: "c1".into(), results };
+        let reduced = Down::Answered {
+            id: "p".into(),
+            key: "c1".into(),
+            results: vec![
+                serde_json::json!(7),
+                serde_json::Value::Null,
+                serde_json::json!(true),
+                serde_json::Value::Null,
+            ],
+        };
+        // Refused behind what waits, it is kept reduced: the fetch's ID 7 and the verb's answer stay.
+        scripts.overflowed(Down::Ping { seq: 1 }, 16);
+        scripts.refuse(&answered, 8 << 10);
+        assert_eq!(scripts.overflow.borrow().0.back().map(|(message, _)| message.clone()), Some(reduced.clone()));
+        *scripts.overflow.borrow_mut() = Default::default();
+        // Sent as it is, it is refused once, reduced once, and goes once.
+        let (sent, refused) = (crossed().sent, crossed().refused_sends);
+        scripts.send(answered, None);
+        assert_eq!((crossed().sent - sent, crossed().refused_sends - refused), (1, 1), "sent once, reduced once");
+        assert!(scripts.overflow.borrow().0.is_empty());
+        assert!(scripts.sendable(&reduced), "the reduced answer goes as one frame");
+        // Scalars past any frame: nothing goes, nothing loops, and the JS host ends once.
+        let ids = Down::Answered { id: "p".into(), key: "c2".into(), results: vec![serde_json::json!(1); 4 << 10] };
+        let ends = scripts.ends.borrow().len();
+        scripts.send(ids.clone(), None);
+        scripts.send(ids, None);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(scripts.ends.borrow().len() - ends, 1, "one JS host ended twice");
+        assert!(scripts.pid().is_none());
+    }
+
+    // Expected (bigboi's verification): an end scheduled for one JS host is that host's: it never ends the one that
+    // replaced it, and two causes in one turn end it once.
+    #[cfg(unix)]
+    #[test]
+    fn a_scheduled_end_never_ends_the_next_js_host() {
+        let host = crate::tests::host();
+        let dynamic: Rc<dyn Host> = host.clone();
+        let scripts = Scripts::new(Config::new("sh".into()), &dynamic);
+        let _first = quiet(&scripts, &host);
+        scripts.shut("the first");
+        scripts.shut("the first, again");
+        let _second = quiet(&scripts, &host);
+        let pid = scripts.pid();
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!((scripts.ends.borrow().len(), scripts.pid()), (0, pid), "the replacement was ended");
+        scripts.shut("the second");
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!((scripts.ends.borrow().len(), scripts.pid()), (1, None));
     }
 
     // Expected (carbon-1): Bun is found only in an absolute `PATH` entry outside the project the client works in (an
