@@ -56,12 +56,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     function createAgent() {
-      const allAgents = createMemo(() => data.location.agent.list(location.ref) ?? [])
+      const primaryAgents = createMemo(() =>
+        (data.location.agent.list(location.ref) ?? []).filter((agent) => agent.mode !== "subagent"),
+      )
       const agents = createMemo(() =>
-        allAgents().filter((agent) => agent.mode !== "subagent" && !agent.hidden),
+        primaryAgents().filter((agent) => !agent.hidden),
       )
       const visibleAgents = createMemo(() =>
-        allAgents().filter((agent) => !agent.hidden),
+        (data.location.agent.list(location.ref) ?? []).filter((agent) => !agent.hidden),
       )
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
@@ -96,10 +98,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 data.session.get(route.data.sessionID)?.agent ??
                 agentStore.current)
               : agentStore.current
-          return (selected ? allAgents().find((agent) => agent.id === selected) : undefined) ?? agents().at(0)
+          return (selected ? primaryAgents().find((agent) => agent.id === selected) : undefined) ?? agents().at(0)
         },
         set(id: string) {
-          if (!allAgents().some((agent) => agent.id === id))
+          if (!primaryAgents().some((agent) => agent.id === id))
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${id}`,
@@ -127,12 +129,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(id: string) {
-          const agent = allAgents().find((agent) => agent.id === id)
+          const agent = primaryAgents().find((agent) => agent.id === id)
           if (agent?.color) return RGBA.fromHex(agent.color)
           const index = visibleAgents().findIndex((agent) => agent.id === id)
           if (index === -1) {
-            const allIndex = allAgents().findIndex((agent) => agent.id === id)
-            if (allIndex !== -1) return colors()[allIndex % colors().length]
+            const primaryIndex = primaryAgents().findIndex((agent) => agent.id === id)
+            if (primaryIndex !== -1) return colors()[primaryIndex % colors().length]
             return colors()[0]
           }
           return colors()[index % colors().length]

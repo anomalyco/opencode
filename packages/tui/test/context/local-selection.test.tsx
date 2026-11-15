@@ -172,6 +172,16 @@ test("session with hidden agent resolves the hidden agent in current()", async (
   expect(setup.local.agent.current()?.id).toBe("secret")
 })
 
+test("session with subagent does not resolve the subagent in current()", async () => {
+  await using setup = await renderLocal({
+    agents: [agent("build"), { ...agent("explore"), mode: "subagent" }],
+    sessions: [session("ses_subagent", undefined, "explore")],
+  })
+  await setup.data.session.sync("ses_subagent")
+  setup.route.navigate({ type: "session", sessionID: "ses_subagent" })
+  expect(setup.local.agent.current()?.id).toBe("build")
+})
+
 async function publishSelection(
   setup: Awaited<ReturnType<typeof renderLocal>>,
   agent: string,
