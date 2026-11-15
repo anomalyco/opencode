@@ -10,7 +10,9 @@
 //! before it ([`opencode_ui::root::add`]). Arming only flips its width. When a
 //! behavior changes something it reads (an offset, a mounted chunk or list item), the hook arms again and the stepper
 //! solves another round in the same frame. Then geometry is final: the landings of steps, then each surface's
-//! `layout` call when something it named changed.
+//! `layout` call when something it named changed. A view a resize asked for (a mount's root laid out at another size
+//! than its view saw) runs first in a round, with the room that solve gave, and the next round solves its tree, so the
+//! first frame after a resize shows the view of the new size (`settled-first`).
 //!
 //! **Budgets.** A frame runs at most [`ROUNDS`] rounds of the hook (OpenTUI's stepper fails the frame past 8 solves,
 //! and other widgets need some), and a mount gets at most [`DELIVERIES`] `layout` calls a frame, of which only the
@@ -536,16 +538,23 @@ impl Hook {
             });
         }
         self.rounds.set(self.rounds.get() + 1);
+        tally(|counts| counts.resolves += 1);
+        let live = self.live();
+        // The views resizes asked for run first, on the room this solve gave: the next round solves their trees. Past
+        // the rounds they wait for the next frame's first round.
+        let mut owed = live.iter().any(|mount| mount.sized());
+        if owed && self.rounds.get() < ROUNDS {
+            live.iter().for_each(|mount| mount.draw_solved());
+            return self.again();
+        }
         let mut changed = false;
-        for mount in self.live() {
+        for mount in live {
             changed |= mount.resolve();
         }
-        tally(|counts| counts.resolves += 1);
         if changed {
             return self.again();
         }
         // Geometry is final. A mount a call before it ends is not called.
-        let mut owed = false;
         let mounts: Vec<Weak<Surface>> = self.mounts.borrow().clone();
         for mount in mounts {
             // A mount whose root no solve has laid out yet has no geometry to tell: it is told once one does.

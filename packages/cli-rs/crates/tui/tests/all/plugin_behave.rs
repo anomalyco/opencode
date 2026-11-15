@@ -177,11 +177,14 @@ fn text(text: String) -> v2::Node {
     v2::Node::text(vec![abi::Span::new(text)])
 }
 
+/// A card; a wide one's header is in another color, so a resize across 60 columns builds every card again, of the
+/// same rows.
 fn card(cx: &mut v2::View<'_>, card: usize, reviewed: bool) -> v2::Node {
-    cx.memo(format!("card-{card}"), reviewed, |_| {
+    let wide = cx.input.width >= 60;
+    cx.memo(format!("card-{card}"), (reviewed, wide), |_| {
         let head = v2::Node::row(vec![text(format!("file {card:04}"))])
             .with_id(format!("head-{card}"))
-            .bg("background.raised.base")
+            .bg(if wide { "background.raised.base" } else { "background.raised.high" })
             .sticky(v2::Edge::Top);
         let mut children = vec![head];
         if !reviewed {
@@ -231,10 +234,12 @@ fn view_as(cx: &mut v2::View<'_>, list: bool) -> v2::Node {
     if let v2::Node::Scroll { user_scroll, .. } | v2::Node::List { user_scroll, .. } = &mut files {
         *user_scroll = !quiet;
     }
-    let (views, churn) = board(|board| (board.views, board.churn));
+    let (views, churn, again) = board(|board| (board.views, board.churn, board.again));
     let edge_height = abi::Layout::default().height(abi::Width::Cells(if churn { 1 + (views % 2) as u16 } else { 1 }));
+    // The edge names the width the view heard, so a frame that shows the view of another size than its own differs.
+    let width = cx.input.width;
     let edge =
-        v2::Node::row(vec![text(if board(|board| board.again) { format!("edge {views}") } else { "edge".into() })])
+        v2::Node::row(vec![text(if again { format!("edge {views} at {width}") } else { format!("edge at {width}") })])
             .with_id("edge")
             .layout(edge_height);
     v2::Node::column(vec![edge, files]).layout(grow)
@@ -383,6 +388,7 @@ enum Command {
     Gone,
     /// A resize and a step in one batch, with no frame between.
     Batch {
+        width: u16,
         height: u16,
         by: i32,
     },
@@ -486,7 +492,11 @@ impl Model for Behaviors {
                 7 | 8 => Command::Review(rng.below(CARDS)),
                 9 => Command::Forget,
                 10 => Command::Gone,
-                11 => Command::Batch { height: 8 + rng.below(14) as u16, by: *rng.pick(&[1, -1]) },
+                11 => Command::Batch {
+                    width: *rng.pick(&[45, 60, 75]),
+                    height: 8 + rng.below(14) as u16,
+                    by: *rng.pick(&[1, -1]),
+                },
                 12 => Command::Near(rng.below(CARDS)),
                 13 => Command::Page(*rng.pick(&[100, -100, 50, -50, 1, -1, 250])),
                 _ => Command::Edge { bottom: rng.below(2) == 0 },
@@ -544,9 +554,9 @@ impl Model for Behaviors {
                     lands = landing.map(|(anchor, _)| anchor);
                     board_view.dispatch("board.step", Some(by.to_string()));
                 }
-                Command::Batch { height, by } => {
-                    app.resize(size.0, *height);
-                    size.1 = *height;
+                Command::Batch { width, height, by } => {
+                    app.resize(*width, *height);
+                    size = (*width, *height);
                     let most = oracle.most();
                     oracle.viewport = i32::from(*height) - 1;
                     // The step resolves against the last settled frame; the solve then clamps it to the new size. A
@@ -711,22 +721,65 @@ fn a_windowed_list_keeps_the_same_rules() {
     model::check(&Behaviors { list: true }, 16, 24);
 }
 
+// Expected (`work` for a resize; viewer-frames): a resize calls the view once, with the room the solve gave, on a
+// scroll and on a list.
+#[test]
+fn a_resize_calls_the_view_once() {
+    for list in [false, true] {
+        let mounted = mount(CARDS, 60, 16, list);
+        for (width, height) in [(45, 12), (70, 18)] {
+            let views = board(|board| board.views);
+            mounted.harness.app.resize(width, height);
+            mounted.settle();
+            assert_eq!(board(|board| board.views), views + 1, "list {list}: {width}x{height}");
+        }
+    }
+}
+
+// Expected (viewer-frames): a wheel step and a resize across 60 columns in one batch, which builds every card again
+// before the solve's behaviors, leave the reader where the same with a frame between does: the move's reading is
+// taken by the sums the move saw.
+#[test]
+fn a_wheel_step_and_a_resize_in_one_batch_keep_the_reader() {
+    let shown = |frame_between: bool| {
+        board(|board| board.vary = true);
+        let mounted = mount(CARDS, 60, 16, true);
+        let app = &mounted.harness.app;
+        // Far enough that the cards above the view have no widgets: the change gives them their estimates.
+        for _ in 0..40 {
+            app.scroll(10, 5, true);
+            mounted.settle();
+        }
+        app.scroll(10, 5, true);
+        if frame_between {
+            mounted.settle();
+        }
+        app.resize(45, 16);
+        mounted.settle().text()
+    };
+    assert_eq!(shown(false), shown(true));
+}
+
 // Expected (the deep runs' rows, on both kinds, and on a list alone): a step that reaches the end, in a batch with a resize, ends at the end
 // of the new size (seed 17, 2,000 seeds); a step's memory ends once the offset moves, also when it comes back to the
 // offset the step left (seed 7225, 10,000 seeds).
 #[test]
 fn the_deep_runs_rows_hold() {
     let rows = [
-        vec![Command::Resize { width: 70, height: 17 }, Command::To(9), Command::Batch { height: 16, by: 1 }],
+        vec![
+            Command::Resize { width: 70, height: 17 },
+            Command::To(9),
+            Command::Batch { width: 70, height: 16, by: 1 },
+        ],
         vec![
             Command::To(8),
             Command::Resize { width: 52, height: 18 },
-            Command::Batch { height: 12, by: 1 },
+            Command::Batch { width: 52, height: 12, by: 1 },
             Command::Resize { width: 78, height: 18 },
             Command::Step(1),
         ],
         // Seed 35 (2,000 seeds, O-115): `Nearest` for a card taller than the view below the header shows its top.
-        vec![Command::Batch { height: 8, by: 1 }, Command::Near(3)],
+        vec![Command::Batch { width: 60, height: 8, by: 1 }, Command::Near(3)],
         // Seeds 19 and 100 (2,000 seeds, reviews): a step's memory holds across a resize that re-estimates the
         // items above, and a wheel at the end keeps it.
         vec![
@@ -822,7 +875,7 @@ fn the_deep_runs_rows_hold() {
             Command::Review(4),
             Command::Resize { width: 59, height: 13 },
             Command::Edge { bottom: true },
-            Command::Batch { height: 18, by: -1 },
+            Command::Batch { width: 59, height: 18, by: -1 },
             Command::Step(1),
         ],
         vec![
@@ -831,6 +884,34 @@ fn the_deep_runs_rows_hold() {
             Command::Step(-1),
             Command::Step(-1),
             Command::Step(-2),
+        ],
+        // viewer-frames, where a resize across 60 columns builds every card again in its frame: steps at the end with
+        // a resize between, whose memory holds by the rows the list kept (300 and 500 seeds); an item built again and
+        // unmounted before it was laid out takes its estimate in that frame (seed 517, 2,000 seeds); a step that finds
+        // nothing, in a batch with a resize, judges the end by the rows its move saw (seed 1178's first six steps).
+        vec![
+            Command::Resize { width: 71, height: 17 },
+            Command::Review(0),
+            Command::Edge { bottom: true },
+            Command::Step(1),
+            Command::Batch { width: 45, height: 9, by: -1 },
+            Command::Step(1),
+        ],
+        vec![
+            Command::Near(9),
+            Command::Batch { width: 45, height: 19, by: 1 },
+            Command::Batch { width: 60, height: 11, by: 1 },
+            Command::Step(1),
+            Command::Step(1),
+        ],
+        vec![Command::Fold(2), Command::To(4), Command::Batch { width: 45, height: 8, by: -1 }, Command::Near(4)],
+        vec![
+            Command::To(7),
+            Command::Wheel { down: true, steps: 3 },
+            Command::Step(1),
+            Command::Step(1),
+            Command::Step(2),
+            Command::Batch { width: 75, height: 8, by: 1 },
         ],
     ];
     for row in &rows {

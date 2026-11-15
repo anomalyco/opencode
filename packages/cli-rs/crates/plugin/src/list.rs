@@ -83,6 +83,9 @@ pub(crate) struct List {
     /// it), whether it follows the end, and where a verb meant it to go: an offset, or the end (`Some(None)`); a
     /// user's move goes where the first solve after it shows.
     moving: Cell<Option<Moving>>,
+    /// A user's move no solve has seen, as the items were before a change: the reading at its top, and the rows they
+    /// summed to, by which the solve judges whether it is at the end.
+    unsolved: RefCell<Option<(Option<Reading>, f64)>>,
     /// Rows the offset moved to hold the reading position since the behaviors last read it: the view did not move,
     /// so what they keep at an offset (a step's memory) moves with it.
     shifted: Cell<f64>,
@@ -123,6 +126,7 @@ impl List {
             groups: HashSet::new(),
             reading: RefCell::default(),
             moving: Cell::new(None),
+            unsolved: RefCell::default(),
             shifted: Cell::new(0.0),
             clamped: Cell::new(false),
             restored: Cell::new(None),
@@ -142,11 +146,25 @@ impl List {
         over: &HashMap<*const Node, Option<Node>>,
     ) {
         // Where the reader is, before any height changes; a reading an earlier change took and no solve has given
-        // back yet stays, and a move no solve has seen yet sets it.
-        if self.reading.borrow().is_none() && !self.moving.get().is_some_and(|(frame, ..)| frame == u64::MAX) {
-            *self.reading.get_mut() = self.at_top();
-            // A solve may clamp the offset before the restore: the shift counts from where the reading was.
-            self.restored.set(Some(self.top()));
+        // back yet stays. A move no solve has seen yet went by the sums the items have now, which an item built again
+        // gives up for its estimate (a view a resize asked for runs before the solve's behaviors): a verb's row becomes
+        // the reading here, and a user's move keeps the reading and the end it saw for its solve.
+        match self.moving.get() {
+            Some((u64::MAX, _, Some(Some(row)))) => {
+                *self.reading.get_mut() = self.at_row(row).map(|(key, rows, _)| (key, rows, false));
+                self.restored.set(Some(row));
+                self.moving.set(None);
+            }
+            Some((u64::MAX, _, None)) if self.unsolved.get_mut().is_none() => {
+                *self.unsolved.get_mut() = Some((self.at_top(), self.prefix[self.items.len()]));
+            }
+            Some((u64::MAX, ..)) => {}
+            _ if self.reading.borrow().is_none() => {
+                *self.reading.get_mut() = self.at_top();
+                // A solve may clamp the offset before the restore: the shift counts from where the reading was.
+                self.restored.set(Some(self.top()));
+            }
+            _ => {}
         }
         let mut old: HashMap<String, Item> = self.items.drain(..).map(|item| (item.key.clone(), item)).collect();
         for item in items {
@@ -217,8 +235,14 @@ impl List {
             });
         }
         self.groups = self.items.iter().flat_map(|item| item.anchors.iter().map(|(group, _)| group.clone())).collect();
+        // An item with widgets is measured again after the next solve: until then the rows it took stand for it, nearer
+        // than its estimate (a view a resize asked for builds every card again, before the solve's behaviors).
         for item in &mut self.items {
-            item.used = item.measured.unwrap_or(f64::from(item.estimate));
+            item.used = match (&item.mounted, item.measured) {
+                (_, Some(measured)) => measured,
+                (Some(_), None) => item.used,
+                (None, None) => f64::from(item.estimate),
+            };
         }
         self.sum();
         self.window = self.mounted_range();
@@ -290,9 +314,11 @@ impl List {
                     // The end as the move saw it: this solve may already lay out an item it mounted, shorter than
                     // its estimate, and clamp the offset to an end the reader never reached.
                     None => {
-                        let most = self.prefix[self.items.len()] - f64::from(self.scroll.rect().height);
+                        let (top, total) =
+                            self.unsolved.take().unwrap_or_else(|| (self.at_top(), self.prefix[self.items.len()]));
+                        let most = total - f64::from(self.scroll.rect().height);
                         let follows = most > 0.0 && self.top() >= most - 0.5;
-                        (follows, if follows { None } else { self.at_top() })
+                        (follows, if follows { None } else { top })
                     }
                 };
                 self.moving.set(Some((frame, follows, intent)));
@@ -389,6 +415,7 @@ impl List {
     /// A verb or the user moves the list: where it goes is the reading position.
     pub fn moved(&self) {
         self.reading.take();
+        self.unsolved.take();
         self.moving.set(Some((u64::MAX, false, None)));
     }
 
@@ -488,15 +515,25 @@ impl List {
             });
         }
         let mut changed = want != self.window || mounted_now > 0;
+        let mut heights = false;
         visited(self.window.len() + want.len());
         for index in self.window.start.min(want.start)..self.window.end.max(want.end) {
             if want.contains(&index) {
                 continue;
             }
-            if let Some(mounted) = self.items[index].mounted.take() {
+            let item = &mut self.items[index];
+            if let Some(mounted) = item.mounted.take() {
                 unmount(mounted, &mut self.drafts);
                 changed = true;
+                // Built again and not laid out since: without widgets it takes its estimate.
+                if item.measured.is_none() && item.used != f64::from(item.estimate) {
+                    item.used = f64::from(item.estimate);
+                    heights = true;
+                }
             }
+        }
+        if heights {
+            self.sum();
         }
         self.window = want.clone();
         let content = self.scroll.content_view();
