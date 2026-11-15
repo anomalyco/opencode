@@ -594,14 +594,17 @@ thread_local! {
     static OVER_LIST: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
-/// [`received`] for a draw's list, which is admitted by its descriptor's length before a byte of it is copied (review
+/// [`received`] for what a draw answered with `status`. The rules of every buffer come first: a descriptor
+/// [`received`] refuses is refused unread, whatever the status (re-review bigboi). An error or a panic is text, taken
+/// whole as any call's is. Only a list, an OK answer, is admitted by its length before a byte of it is copied (review
 /// bigboi 7): one past [`abi::canvas::MAX_BYTES`] is over its limit, which [`OVER_LIST`] tells and the canvas shows as
 /// its placeholder, if it starts as a list does; else it is malformed, as [`abi::canvas::check`] reads it.
 ///
 /// # Safety
 /// As [`received`].
-unsafe fn received_list(out: Owned, free: unsafe extern "C" fn(Owned)) -> Result<Vec<u8>, String> {
-    if out.ptr.is_null() || out.len > out.cap || out.len <= abi::canvas::MAX_BYTES {
+unsafe fn received_list(out: Owned, free: unsafe extern "C" fn(Owned), status: i32) -> Result<Vec<u8>, String> {
+    let refused = out.ptr.is_null() || out.len > out.cap || out.len > abi::MAX_BUFFER;
+    if status != abi::OK || refused || out.len <= abi::canvas::MAX_BYTES {
         // SAFETY: the caller's.
         return unsafe { received(out, free) };
     }
@@ -738,11 +741,12 @@ impl Instance {
         // SAFETY: `handle` is live until drop; `out` goes back to the library's `free`.
         let (status, bytes) = unsafe {
             let status = crate::contain::catch(|| (self.library.call)(self.handle, Bytes::new(&json), &mut out));
+            let status = status.unwrap_or(abi::PANIC);
             let bytes = match request {
-                Request::Draw { .. } => received_list(out, self.library.free),
+                Request::Draw { .. } => received_list(out, self.library.free, status),
                 _ => received(out, self.library.free),
             };
-            (status.unwrap_or(abi::PANIC), bytes)
+            (status, bytes)
         };
         conformance::tap(Event::Return { status, reply: bytes.as_deref().map_err(String::as_str) });
         let bytes = bytes.map_err(|error| Failed::Refused(format!("returned a bad result: {error}")))?;
