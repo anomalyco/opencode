@@ -805,12 +805,15 @@ impl Scripts {
 
     /// Writes `message` to the JS host, after what waits in the overflow.
     fn write(&self, message: &Down) {
-        if !self.overflow.borrow().0.is_empty() {
-            self.overflowed(message.clone(), serde_json::to_vec(message).map_or(0, |bytes| bytes.len()));
-            return;
+        // One size decision, for the direct send and the overflow alike: what cannot go as one frame is reduced or
+        // refused now, in its place, so nothing past a cap is sent and the overflow never holds a frame the queue would
+        // refuse, which a drain would settle behind what came after it (bigboi's pipe pass).
+        let size = serde_json::to_vec(message).map_or(usize::MAX, |bytes| bytes.len());
+        if !self.fits(size) {
+            return self.refuse(message, size);
         }
-        if !timed(|| self.encode(message)) {
-            self.overflowed(message.clone(), serde_json::to_vec(message).map_or(0, |bytes| bytes.len()));
+        if !self.overflow.borrow().0.is_empty() || !timed(|| self.encode(message)) {
+            self.overflowed(message.clone(), size);
         }
     }
 
@@ -909,7 +912,11 @@ impl Scripts {
     /// Whether `message` goes as one frame: under the queue's bound and the wire's cap, the limits [`Child::send`]
     /// refuses a frame by.
     fn sendable(&self, message: &Down) -> bool {
-        let payload = serde_json::to_vec(message).map_or(usize::MAX, |bytes| bytes.len());
+        self.fits(serde_json::to_vec(message).map_or(usize::MAX, |bytes| bytes.len()))
+    }
+
+    /// Whether a message of `payload` bytes goes as one frame ([`Scripts::sendable`]).
+    fn fits(&self, payload: usize) -> bool {
         payload <= wire::CONTROL_CAP && wire::encode(wire::CONTROL, &[]).len() + payload <= self.config.limits.queued
     }
 
@@ -960,7 +967,11 @@ impl Scripts {
                 crossed.sent_bytes += payload.len() as u64 + 5;
             }),
             Some(Err(child::Refused::Full)) => return false,
-            Some(Err(child::Refused::TooLarge(size))) => self.refuse(message, *size),
+            // `write` sized every message: none is too large here.
+            Some(Err(child::Refused::TooLarge(size))) => {
+                debug_assert!(false, "a message of {size} bytes was not sized before it was sent");
+                self.refuse(message, *size)
+            }
             None => {}
         }
         true
@@ -1690,6 +1701,128 @@ mod tests {
         scripts.shut("the second");
         host.app.advance(Duration::from_millis(1));
         assert_eq!((scripts.ends.borrow().len(), scripts.pid()), (1, None));
+    }
+
+    /// A JS host that says hello, reads nothing for a while, then writes all it reads to `recv`, for `scripts`.
+    #[cfg(unix)]
+    fn recorder(scripts: &Rc<Scripts>, host: &Rc<crate::tests::TestHost>, dir: &Path) {
+        let file = dir.join("hello");
+        let hello = Up::Hello { magic: proto::MAGIC.to_owned(), version: proto::VERSION, pid: 0 };
+        std::fs::write(&file, wire::encode(wire::CONTROL, &serde_json::to_vec(&hello).unwrap())).unwrap();
+        let mut command = std::process::Command::new("sh");
+        let recv = dir.join("recv");
+        command.arg("-c").arg(format!("cat '{}'; sleep 0.3; cat > '{}'", file.display(), recv.display()));
+        let proxy = host.app.app().proxy();
+        let id = scripts.id;
+        scripts.adopt(Child::spawn(command, scripts.config.limits, move || post(&proxy, id)).unwrap());
+    }
+
+    // Expected (bigboi's pipe pass): a model of the pipe's queue. A stream of every kind of message goes to a JS host
+    // that reads nothing at first, so a backlog builds, under a small queue and under the default one: calls, an answer
+    // with a fetch's ID and a large read, its cancellation and a reply behind it, answers and a reply between the queue's
+    // bound and the wire's cap and past the cap, a call past the cap. What the JS host reads is what the written rule
+    // makes of each, in the order they were sent: a message that goes as one frame as it is; one that settles work,
+    // reduced (an answer keeps its scalars, a reply fails); any other, its sequence skipped. Nothing it reads is past
+    // either cap, so an admission answer is never read after its cancellation or reply.
+    #[cfg(unix)]
+    #[test]
+    fn the_queue_keeps_each_message_in_its_place_and_within_both_caps() {
+        let call = |seq: u64, input: usize| Down::Call {
+            seq,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Command { name: "c".into(), input: Some("x".repeat(input)) },
+            route: None,
+        };
+        let read = |bytes: usize| serde_json::json!("r".repeat(bytes));
+        let answered = |key: &str, id: u64, bytes: usize| Down::Answered {
+            id: "p".into(),
+            key: key.into(),
+            results: vec![serde_json::json!(id), read(bytes), serde_json::json!(true)],
+        };
+        let reply = |seq: u64, id: u64, bytes: usize| Down::Call {
+            seq,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Reply { id: opencode_plugin_abi::RequestId(id), result: Ok(read(bytes)) },
+            route: None,
+        };
+        let cancelled = |id: u64| Down::Cancelled { activation: 1, request: opencode_plugin_abi::RequestId(id) };
+        let mut failed = Vec::new();
+        for queued in [4 << 10, 1 << 20] {
+            let mut config = Config::new("sh".into());
+            (config.limits.queued, config.limits.inbox) = (queued, 8 << 20);
+            let host = crate::tests::host();
+            let dynamic: Rc<dyn Host> = host.clone();
+            let scripts = Scripts::new(config, &dynamic);
+            let dir = opencode_util::temp::tempdir().unwrap();
+            recorder(&scripts, &host, dir.path());
+            // A backlog first, as large as the OS pipe and the queue hold and more; then the stream behind it.
+            let mut sent: Vec<Down> = (1..=80).map(|seq| call(seq, 2 << 10)).collect();
+            sent.extend([
+                answered("c1", 7, 8 << 10),
+                cancelled(7),
+                reply(81, 9, 16),
+                answered("c2", 8, 300 << 10),
+                reply(82, 8, 300 << 10),
+                cancelled(8),
+                call(83, 300 << 10),
+                Down::Ping { seq: 84 },
+            ]);
+            sent.iter().for_each(|message| scripts.send(message.clone(), None));
+            // The rule, message by message.
+            let fits = |message: &Down| scripts.sendable(message);
+            let expected: Vec<Down> = sent
+                .iter()
+                .map(|message| match message {
+                    _ if fits(message) => message.clone(),
+                    Down::Answered { id, key, results } => Down::Answered {
+                        id: id.clone(),
+                        key: key.clone(),
+                        results: results
+                            .iter()
+                            .map(|result| if scalar(result) { result.clone() } else { serde_json::Value::Null })
+                            .collect(),
+                    },
+                    Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route } => {
+                        let size = serde_json::to_vec(message).unwrap().len();
+                        let result = Err(format!("the reply is {size} bytes, more than the JS host takes"));
+                        let call = Request::Reply { id: *reply, result };
+                        Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone() }
+                    }
+                    other => Down::Skipped { seq: other.seq().unwrap() },
+                })
+                .collect();
+            let recv = dir.path().join("recv");
+            let read = |bytes: &[u8]| {
+                let mut input = bytes;
+                std::iter::from_fn(|| wire::read(&mut input).ok().flatten()).collect::<Vec<_>>()
+            };
+            let begun = Instant::now();
+            while read(&std::fs::read(&recv).unwrap_or_default()).len() < expected.len()
+                && begun.elapsed() < Duration::from_secs(10)
+            {
+                host.app.advance(Duration::from_millis(1));
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            let frames = read(&std::fs::read(&recv).unwrap_or_default());
+            let over: Vec<usize> =
+                frames.iter().map(|(_, payload)| payload.len()).filter(|len| !scripts.fits(*len)).collect();
+            if !over.is_empty() {
+                failed.push(format!("queued {queued}: frames past a cap: {over:?}"));
+            }
+            let got: Vec<Down> = frames.iter().map(|(_, payload)| serde_json::from_slice(payload).unwrap()).collect();
+            // Each message as its kind and what names it, the stream after the backlog.
+            let brief = |messages: &[Down]| {
+                let brief =
+                    |message: &Down| serde_json::to_string(message).unwrap().chars().take(90).collect::<String>();
+                messages.iter().skip(80).map(brief).collect::<Vec<_>>()
+            };
+            if got != expected {
+                failed.push(format!("queued {queued}: read {:#?}\nthe rule {:#?}", brief(&got), brief(&expected)));
+            }
+        }
+        assert!(failed.is_empty(), "{}", failed.join("\n"));
     }
 
     // Expected (carbon-1): Bun is found only in an absolute `PATH` entry outside the project the client works in (an
