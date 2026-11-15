@@ -401,6 +401,19 @@ struct Call {
     mount: Option<Weak<()>>,
 }
 
+/// Whether `message` settles work the JS host keeps or waits for: a fetch's reply, the answers of a call's or a
+/// batch's effects, which carry a fetch's ID, a cancellation, and a sequence skipped, which lets the stream go on. It is
+/// never dropped while the JS host runs ([`Scripts::settle`]).
+fn settles(message: &Down) -> bool {
+    matches!(
+        message,
+        Down::Call { call: Request::Reply { .. }, .. }
+            | Down::Answered { .. }
+            | Down::Cancelled { .. }
+            | Down::Skipped { .. }
+    )
+}
+
 /// What owns a call's requests: the input owner of a handler's event, and the mount the requests belong to.
 pub(crate) type Owning = (Option<Weak<crate::interact::Owner>>, Option<Weak<()>>);
 
@@ -470,6 +483,8 @@ pub struct Scripts {
     /// The ping last answered, and whether a tree waited then.
     pong: Cell<Option<(u64, bool)>>,
     hold: RefCell<Hold>,
+    /// What the JS host sent while the tests hold it ([`Scripts::hold_answers`]), in order.
+    held: RefCell<Option<Vec<Up>>>,
     /// The fault armed for the next handler's message, and a message a swap holds back.
     fault: Cell<Option<Fault>>,
     swapped: RefCell<Option<Down>>,
@@ -519,6 +534,7 @@ impl Scripts {
             stopped: RefCell::default(),
             pong: Cell::new(None),
             hold: RefCell::default(),
+            held: RefCell::default(),
             fault: Cell::new(None),
             swapped: RefCell::default(),
             tamper: Cell::new(None),
@@ -582,6 +598,22 @@ impl Scripts {
     #[doc(hidden)]
     pub fn waiting(&self) -> usize {
         self.waiting.borrow().len()
+    }
+
+    /// Holds what the JS host sends, unhandled and in order, while `held`; then handles it. A test closes a mount
+    /// before the JS host's answer to its call applies, however fast the JS host answers (bigboi's ownership pass).
+    #[doc(hidden)]
+    pub fn hold_answers(self: &Rc<Self>, held: bool) {
+        let kept = match held {
+            true => self.held.borrow_mut().get_or_insert_default().len(),
+            false => {
+                let kept = self.held.borrow_mut().take().unwrap_or_default();
+                let count = kept.len();
+                kept.into_iter().for_each(|up| self.up(up));
+                count
+            }
+        };
+        log::debug!("js host: {kept} messages held");
     }
 
     /// Arms `fault` for the next handler's message.
@@ -770,10 +802,12 @@ impl Scripts {
         }
     }
 
-    /// Keeps `message`, of `size` bytes, for when the queue has room; past the bound, refuses it.
+    /// Keeps `message`, of `size` bytes, for when the queue has room; past the bound, refuses it. What settles the JS
+    /// host's work ([`settles`]) has a reserve past it ([`Scripts::settle`]).
     fn overflowed(&self, message: Down, size: usize) {
         let mut overflow = self.overflow.borrow_mut();
-        if overflow.1 + size > self.config.limits.inbox {
+        let bound = self.config.limits.inbox * if settles(&message) { 2 } else { 1 };
+        if overflow.1 + size > bound {
             drop(overflow);
             self.refuse(&message, size);
             return;
@@ -797,39 +831,73 @@ impl Scripts {
     }
 
     /// Refuses `message`, of `size` bytes, which no queue holds: it is not sent, its sequence goes so the stream has no
-    /// gap, and a handler's call is answered with nothing, as one that asked for nothing.
+    /// gap, and a handler's call is answered with nothing, as one that asked for nothing. What settles the JS host's
+    /// work goes still ([`Scripts::settle`]).
     fn refuse(&self, message: &Down, size: usize) {
         log::warn!("a message of {size} bytes for the JS host has no room; it is not sent");
         count(|crossed| crossed.refused_sends += 1);
+        if settles(message) {
+            return self.settle(message, size);
+        }
         let seq = message.seq();
-        // A fetch's reply too large to send is answered in its place as a failed one, so what awaits it ends (carbon-5).
-        if let Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route } = message {
-            let result = Err(format!("the reply is {size} bytes, more than the JS host takes"));
-            let call = Request::Reply { id: *reply, result };
-            let answer = Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone() };
-            if !self.overflow.borrow().0.is_empty() || !self.encode(&answer) {
-                self.overflow.borrow_mut().0.push_back((answer, 0));
-            }
-            return;
-        }
-        // A cancellation is all that settles the fetch that waits for it in the JS host (bigboi's freeze pass).
-        if let Down::Cancelled { .. } = message {
-            if !self.overflow.borrow().0.is_empty() || !self.encode(message) {
-                self.overflow.borrow_mut().0.push_back((message.clone(), 0));
-            }
-            return;
-        }
         if let Some(seq) = seq {
             // In the message's place: after what waits before it.
-            let skipped = Down::Skipped { seq };
-            if !self.overflow.borrow().0.is_empty() || !self.encode(&skipped) {
-                self.overflow.borrow_mut().0.push_back((skipped, 0));
-            }
+            self.settle(&Down::Skipped { seq }, 0);
         }
         let call = seq.and_then(|seq| self.waiting.borrow_mut().remove(&seq));
         if let (Some(seq), Some(Waiting::Call(_))) = (seq, call) {
             self.release_hold(seq);
         }
+    }
+
+    /// Sends `message`, which settles the JS host's work ([`settles`]) and could not go as it is, of `size` bytes: one
+    /// too large for a frame in a form that settles its work as failed (a fetch's reply, the answers of a call's
+    /// effects, carbon-5), after what waits in the overflow, in a reserve as large as the overflow's bound and charged
+    /// its bytes. Past the reserve the JS host reads nothing, and it is ended, which settles all it holds (bigboi's
+    /// ownership pass): such a message is never dropped while the JS host runs.
+    fn settle(&self, message: &Down, size: usize) {
+        let kept = match message {
+            Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route } => {
+                let result = Err(format!("the reply is {size} bytes, more than the JS host takes"));
+                let call = Request::Reply { id: *reply, result };
+                Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone() }
+            }
+            Down::Answered { id, key, results } if size > wire::CONTROL_CAP => Down::Answered {
+                id: id.clone(),
+                key: key.clone(),
+                results: vec![serde_json::Value::Null; results.len()],
+            },
+            other => other.clone(),
+        };
+        if self.overflow.borrow().0.is_empty() && self.encode(&kept) {
+            return;
+        }
+        let bytes = serde_json::to_vec(&kept).map_or(0, |bytes| bytes.len());
+        let mut overflow = self.overflow.borrow_mut();
+        if overflow.1 + bytes > 2 * self.config.limits.inbox {
+            drop(overflow);
+            log::error!("the JS host reads nothing: what settles its work has no room");
+            let (this, host) = (self.this.clone(), self.host.upgrade());
+            if let Some(host) = host {
+                host.app().defer(move |_| {
+                    if let Some(scripts) = this.upgrade() {
+                        scripts.ended(
+                            "the JS host read nothing while its work waited to settle".to_owned(),
+                            Blame::Nobody,
+                        );
+                    }
+                });
+            }
+            return;
+        }
+        overflow.1 += bytes;
+        overflow.0.push_back((kept, bytes));
+    }
+
+    /// How many bytes wait in the overflow, for the tests.
+    #[doc(hidden)]
+    pub fn overflow_bytes(&self) -> usize {
+        self.overflow.borrow().1
     }
 
     /// Queues `message`; false when the queue has no room for it now.
@@ -918,7 +986,16 @@ impl Scripts {
             match event {
                 child::Event::Up(up) => {
                     count(|crossed| crossed.received += 1);
-                    self.up(*up);
+                    let up = match &mut *self.held.borrow_mut() {
+                        Some(held) => {
+                            held.push(*up);
+                            None
+                        }
+                        None => Some(*up),
+                    };
+                    if let Some(up) = up {
+                        self.up(up);
+                    }
                 }
                 child::Event::Tree(mut tree) => {
                     match self.tamper.take() {
@@ -1442,21 +1519,41 @@ pub(crate) fn evaluate(
 mod tests {
     use super::*;
 
-    // Expected (bigboi's freeze pass): a cancellation the overflow has no room for is kept in its place, as a fetch's
-    // failed reply is, so the fetch that waits for it in the JS host settles; another message without a sequence goes.
+    // Expected (bigboi's freeze and ownership passes): what settles the JS host's work waits past a full overflow, in a
+    // reserve charged its bytes: a cancellation, the answers that carry a fetch's ID, and a refused call's skipped
+    // sequence, in order. Another message without a sequence goes; the answers of a call too large for a frame go as
+    // failed ones.
     #[test]
-    fn a_cancellation_is_kept_past_a_full_overflow() {
+    fn what_settles_the_js_hosts_work_waits_past_a_full_overflow() {
         let mut config = Config::new("bun".into());
-        config.limits.inbox = 16;
+        config.limits.inbox = 512;
         let host: Rc<dyn Host> = crate::tests::host();
         let scripts = Scripts::new(config, &host);
+        let bytes = |message: &Down| serde_json::to_vec(message).unwrap().len();
         let held = Down::Ping { seq: 1 };
-        scripts.overflowed(held.clone(), 16);
+        scripts.overflowed(held.clone(), 512);
         let cancelled = Down::Cancelled { activation: 1, request: opencode_plugin_abi::RequestId(5) };
-        scripts.overflowed(cancelled.clone(), 64);
-        scripts.overflowed(Down::Answered { id: "p".into(), key: "c1".into(), results: Vec::new() }, 64);
+        let answered = Down::Answered { id: "p".into(), key: "c1".into(), results: vec![serde_json::json!(7)] };
+        let huge = Down::Answered { id: "p".into(), key: "c2".into(), results: vec![serde_json::json!("x"); 2] };
+        let call = Down::Call {
+            seq: 2,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Command { name: "c".into(), input: None },
+            route: None,
+        };
+        scripts.overflowed(cancelled.clone(), bytes(&cancelled));
+        scripts.overflowed(answered.clone(), bytes(&answered));
+        scripts.overflowed(Down::Forget { target: "t".into() }, 64);
+        scripts.overflowed(call, 64);
+        scripts.refuse(&huge, wire::CONTROL_CAP + 1);
+        let failed = Down::Answered { id: "p".into(), key: "c2".into(), results: vec![serde_json::Value::Null; 2] };
+        let skipped = Down::Skipped { seq: 2 };
         let kept: Vec<Down> = scripts.overflow.borrow().0.iter().map(|(message, _)| message.clone()).collect();
-        assert_eq!(kept, [held, cancelled]);
+        let expected = [held, cancelled, answered, skipped, failed];
+        let charged = 512 + expected[1..].iter().map(bytes).sum::<usize>();
+        assert_eq!(kept, expected);
+        assert_eq!(scripts.overflow_bytes(), charged, "a message kept past the bound is charged its bytes");
     }
 
     // Expected (carbon-1): Bun is found only in an absolute `PATH` entry outside the project the client works in (an

@@ -548,8 +548,9 @@ function context(plugin: Plugin) {
         return new Promise((resolve, reject) => plugin.replies.set(id, { resolve, reject }))
       })
     },
-    // The fetches that wait for their reply: none once each settled.
-    pendingFetches: () => plugin.replies.size,
+    // What waits on the host: the answers of calls and batches, which carry a fetch's ID, and the fetches' replies. None
+    // once each settled (bigboi's ownership pass).
+    pendingFetches: () => plugin.answers.size + plugin.replies.size,
   }
   const base = {
     id: plugin.id,

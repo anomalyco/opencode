@@ -6,8 +6,9 @@
 //!
 //! What bounds what (S2):
 //!
-//! - host to child: the queued bytes ([`Limits::queued`]); a send over them is refused, and the host fails the JS
-//!   host rather than block or drop;
+//! - host to child: the queued bytes ([`Limits::queued`]); a send over them waits in the host's overflow, up to
+//!   [`Limits::inbox`] bytes, and past that is refused, but for what settles the JS host's work, which waits in a
+//!   reserve as large again; past the reserve the host ends the JS host rather than block or drop it;
 //! - child to host, ordered messages: their count and bytes unread by the UI thread ([`Limits::ordered`],
 //!   [`Limits::inbox`]); over either, the JS host broke the contract (a flood of effects) and is ended;
 //! - child to host, trees: after [`Limits::trees`] unread ones the reader stops reading, so the child blocks on its own
