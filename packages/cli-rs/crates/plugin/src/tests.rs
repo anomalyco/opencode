@@ -10,7 +10,7 @@ use super::slot::{self, Kind, Placed, Placement, Resolution};
 use super::*;
 
 pub(crate) struct TestHost {
-    app: TestApp,
+    pub(crate) app: TestApp,
     keymap: DialogKeymap,
     /// The registry nested slots mount from.
     registry: std::cell::RefCell<std::rc::Weak<Registry>>,
