@@ -77,6 +77,7 @@ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
+import { SubagentStatus } from "./subagent-status"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
@@ -399,6 +400,17 @@ export function Session(props: {
     if (seeded || !route.prompt || !r) return
     seeded = true
     r.set(route.prompt)
+  }
+  // Escape leaves a subagent only when it means nothing else there: a run keeps it to interrupt, a draft keeps it.
+  const canLeaveChild = () =>
+    !!session()?.parentID &&
+    data.session.status(route.sessionID) === "idle" &&
+    pendingUsers().length === 0 &&
+    prompt()?.mode !== "shell" &&
+    !prompt()?.current.text
+  const leaveChild = () => {
+    const parentID = session()?.parentID
+    if (parentID) navigate({ type: "session", sessionID: parentID })
   }
 
   /** Runs after the next frame's layout and before it paints, unless the transcript was torn down. */
@@ -1422,15 +1434,9 @@ export function Session(props: {
       id: "session.parent",
       group: "Session",
       palette: undefined,
-      enabled: !!session()?.parentID,
+      enabled: canLeaveChild,
       run: () => {
-        const parentID = session()?.parentID
-        if (parentID) {
-          navigate({
-            type: "session",
-            sessionID: parentID,
-          })
-        }
+        leaveChild()
         dialog.clear()
       },
     },
@@ -1600,6 +1606,16 @@ export function Session(props: {
                 <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
               </Show>
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
+              <Show when={!composer.open && session()?.parentID}>
+                {(parentID) => (
+                  <SubagentStatus
+                    sessionID={route.sessionID}
+                    parentID={parentID()}
+                    width={contentWidth()}
+                    onBack={leaveChild}
+                  />
+                )}
+              </Show>
               <Composer
                 sessionID={route.sessionID}
                 open={composer.open}
