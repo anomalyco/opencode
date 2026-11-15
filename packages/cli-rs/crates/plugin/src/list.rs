@@ -92,7 +92,7 @@ pub(crate) struct List {
     /// clamped the offset.
     restored: Cell<Option<f64>>,
     /// What the user typed into the inputs of items that lost their widgets, by input id.
-    drafts: HashMap<String, (String, (u32, u32))>,
+    drafts: crate::reconcile::Drafts,
     /// The offset of the list this one was built again from, until its first solve: the scroll box takes it once it
     /// has laid its content out, and reads 0 until then.
     carried: Option<(f64, f64)>,
@@ -203,6 +203,13 @@ impl List {
                 unmount(mounted, &mut HashMap::new());
             }
         }
+        // A draft goes with its input: once the input's item went, or the plugin gave it another value, which would
+        // replace the text of a mounted input (review carbon-11).
+        let mut values = HashMap::new();
+        for item in &self.items {
+            inputs(&item.node, &mut values);
+        }
+        self.drafts.retain(|id, (given, _)| values.get(id.as_str()) == Some(&given.as_str()));
         self.owners.clear();
         for (index, item) in self.items.iter().enumerate() {
             ids(&item.node, &mut |id| {
@@ -622,7 +629,7 @@ fn apply(env: &Env<'_>, mounted: &mut Mounted, node: &Node) {
 }
 
 /// Drops an item's widgets, keeping what the user typed into its inputs in `drafts`.
-fn unmount(mut mounted: Mounted, drafts: &mut HashMap<String, (String, (u32, u32))>) {
+fn unmount(mut mounted: Mounted, drafts: &mut crate::reconcile::Drafts) {
     mounted.tree.take_drafts(drafts);
     mounted.tree.clear(&mounted.wrapper);
     mounted.wrapper.detach();
@@ -723,6 +730,21 @@ fn write_out(node: &Node, last: &Node) -> Node {
         }
     }
     walk(node, last)
+}
+
+/// The value of each input with an id in `node`'s subtree, nested lists included.
+fn inputs<'a>(node: &'a Node, values: &mut HashMap<&'a str, &'a str>) {
+    if let Node::Input { id: Some(id), value, .. } = node {
+        values.insert(id, value);
+    }
+    for child in node.children() {
+        inputs(child, values);
+    }
+    if let Node::List { items, .. } = node {
+        for item in items {
+            inputs(&item.node, values);
+        }
+    }
 }
 
 /// Calls `f` with every id of `node`'s subtree, nested lists included.

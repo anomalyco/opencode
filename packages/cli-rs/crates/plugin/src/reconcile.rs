@@ -380,6 +380,10 @@ struct Plan {
 /// it. The tree outlives the reconcile, so the addresses stay valid through it.
 type Placeholders = Rc<HashMap<*const Node, Option<Node>>>;
 
+/// What the user typed into inputs whose widgets went, by input id: the value the tree gave the input then, and the
+/// text and selection typed over it.
+pub(crate) type Drafts = HashMap<String, (String, (String, (u32, u32)))>;
+
 /// What a reconcile is doing: the subtrees of the tree before that the new one holds again, not yet placed, the
 /// widgets to drop once every one of them is placed, and whether the theme changed.
 struct Pass<'a, 'b> {
@@ -569,27 +573,30 @@ impl Tree {
         });
     }
 
-    /// Moves what the user typed into the tree's inputs, where it is not the value the tree gave, into `drafts`.
-    pub(crate) fn take_drafts(&self, drafts: &mut HashMap<String, (String, (u32, u32))>) {
+    /// Moves what the user typed into the tree's inputs, where it is not the value the tree gave, into `drafts`,
+    /// with that value.
+    pub(crate) fn take_drafts(&self, drafts: &mut Drafts) {
         each(&self.nodes, &mut |node| {
             if let (Some(id), Extra::Input(field, given)) = (node.node.id(), &node.extra) {
                 let draft = field.draft();
                 if draft.0 != *given.borrow() {
-                    drafts.insert(id.to_owned(), draft);
+                    drafts.insert(id.to_owned(), (given.borrow().clone(), draft));
                 }
             }
         });
     }
 
-    /// Shows in the tree's inputs what the user typed into them before their widgets went, taking it from
-    /// `drafts`.
-    pub(crate) fn restore_drafts(&self, drafts: &mut HashMap<String, (String, (u32, u32))>) {
+    /// Shows in the tree's inputs what the user typed into them before their widgets went, taking it from `drafts`:
+    /// where the tree gives the input the value the draft was typed over. A new value replaces the text, as it does
+    /// in a mounted input (review carbon-11).
+    pub(crate) fn restore_drafts(&self, drafts: &mut Drafts) {
         if drafts.is_empty() {
             return;
         }
         each(&self.nodes, &mut |node| {
-            if let (Some(id), Extra::Input(field, ..)) = (node.node.id(), &node.extra)
-                && let Some(draft) = drafts.remove(id)
+            if let (Some(id), Extra::Input(field, given)) = (node.node.id(), &node.extra)
+                && let Some((over, draft)) = drafts.remove(id)
+                && over == *given.borrow()
             {
                 field.restore(&draft);
             }

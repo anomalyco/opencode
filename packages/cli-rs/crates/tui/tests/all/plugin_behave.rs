@@ -1468,8 +1468,9 @@ struct Shape {
     hunks: Vec<(u16, u16)>,
     /// Each card is inside a box `w{i}` without an anchor.
     wrapped: bool,
-    /// Card 0 holds an input `in0`.
+    /// Card 0 holds an input `in0`, of this value.
     input: bool,
+    input_value: String,
     /// `layout` paints card 0 in this token.
     paint: Option<String>,
     /// Card 0's own background.
@@ -1590,7 +1591,7 @@ fn probe_card(scroll: &str, index: usize, rows: u16, shape: &Shape) -> v2::Node 
         );
     }
     if shape.input && index == 0 {
-        lines.push(v2::Node::input("").with_id(format!("{prefix}in0")));
+        lines.push(v2::Node::input(&shape.input_value).with_id(format!("{prefix}in0")));
     }
     if shape.split {
         let mut row = v2::Node::row(vec![text(format!("L{index}")), text(format!("RIGHT{index}"))]);
@@ -2248,6 +2249,40 @@ fn a_draft_stays_through_its_items_eviction() {
     dispatch(&harness, "p.go", "c0");
     let screen = settled(&harness).text();
     assert!(screen.contains("draft"), "{screen}");
+}
+
+// Expected (review carbon-11): a draft is of the value it was typed over: when the plugin gives the input another value
+// while its item is out of the window, the item comes back with that value, as a mounted input takes it; and when the
+// input goes meanwhile, one that comes back under its id has no draft.
+#[test]
+fn a_draft_goes_once_its_input_changes_or_goes_out_of_the_window() {
+    for change in ["value", "input"] {
+        let harness = probe(Shape { cards: cards(200, 2), list: true, input: true, ..Shape::default() }, 40, 12);
+        harness.app.render();
+        harness.app.click(1, 2);
+        harness.app.type_text("draft");
+        harness.app.advance(Duration::ZERO);
+        assert!(harness.app.render().text().contains("draft"), "{change}");
+        dispatch(&harness, "p.go", "c150");
+        settled(&harness);
+        match change {
+            "value" => {
+                shape(|shape| shape.input_value = "server".into());
+                dispatch(&harness, "p.view", "");
+            }
+            _ => {
+                shape(|shape| shape.input = false);
+                dispatch(&harness, "p.view", "");
+                shape(|shape| shape.input = true);
+                dispatch(&harness, "p.view", "");
+            }
+        }
+        dispatch(&harness, "p.go", "c0");
+        let screen = settled(&harness).text();
+        assert!(!screen.contains("draft"), "{change}: a stale draft came back:\n{screen}");
+        assert_eq!(screen.contains("server"), change == "value", "{change}:\n{screen}");
+        shape(|shape| shape.input_value.clear());
+    }
 }
 
 // A large added file, kept or outside a scroll.
