@@ -1107,7 +1107,7 @@ fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
     let dir = opencode_util::temp::tempdir().unwrap();
     registry.monitor().attach(std::sync::Arc::new(crate::contain::Record::create(dir.path()).unwrap())).unwrap();
-    let target = project.config().join("plugins/long").to_string_lossy().into_owned();
+    let target = project.config().join("plugins").join("long").to_string_lossy().into_owned();
     let loader = project.loader(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     assert_eq!(entry(&registry.entries(), &target).status, Status::Active, "the first load");
@@ -1132,7 +1132,7 @@ fn a_build_whose_quarantine_cannot_be_read_is_not_opened() {
     write(&project.config().join(format!("plugins/global/{}", entry_file())), "id=global");
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
     let loader = project.loader(fake.clone(), Vec::new());
-    let global = project.config().join("plugins/global").to_string_lossy().into_owned();
+    let global = project.global().to_string_lossy().into_owned();
     quarantine::fail_next_read(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
     loader.reconcile(&dynamic(&host), &registry);
     let Status::Failed(error) = entry(&registry.entries(), &global).status.clone() else { panic!() };

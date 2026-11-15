@@ -99,7 +99,9 @@ mod tests {
             script: false,
         };
         let text = question(&target.to_string_lossy(), &artifact(inside.clone()), None);
-        assert!(text.contains(&format!("Library: {}", inside.display())), "{text}");
+        // As a user would type it: on Windows `canonicalize` gives `\\?\C:\…`, which the question leaves out.
+        let shown = opencode_util::path::strip_verbatim(&inside.to_string_lossy()).into_owned();
+        assert!(text.contains(&format!("Library: {shown}")), "{text}");
         assert!(text.contains(&format!("SHA-256: {}…", "ab".repeat(8))), "{text}");
         assert!(!text.contains("outside") && !text.contains("lasts until"), "{text}");
         let text = question(&target.to_string_lossy(), &artifact("/shared/plugin.so".into()), Some("it is shared"));

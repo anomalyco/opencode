@@ -40,6 +40,13 @@ fn scenarios() {
     let both = std::env::var("PARITY_CARRIER").is_ok_and(|carrier| carrier == "both");
     let mut failed = Vec::new();
     for recording in &recordings {
+        // An npm scenario runs its packages on the JS host, so without bun it is skipped, as the JS host's own rows are
+        // (`OPENCODE_RS_REQUIRE_TS=1` makes a missing bun fail instead).
+        let npm = recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "npm");
+        if npm && crate::plugin_pipe::bun().is_none() {
+            eprintln!("skip {} (no bun)", recording.scenario);
+            continue;
+        }
         let carriers: &[bool] = match both || recording.scenario.starts_with("E.14/") {
             true => &[false, true],
             false => &[false],

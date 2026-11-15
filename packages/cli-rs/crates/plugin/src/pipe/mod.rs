@@ -1462,13 +1462,12 @@ mod tests {
             }
         };
         let from = |flag, bun| Config::from_vars(vars(flag, bun), PathBuf::from("/work"), &Server::Remote);
+        // An absolute path on this platform: on Windows one without a drive is not.
+        let absolute = if cfg!(windows) { r"C:\bun\bun.exe" } else { "/opt/bun/bin/bun" };
         for off in [None, Some("0"), Some("true")] {
-            assert!(from(off, "/opt/bun/bin/bun").is_none(), "{off:?}");
+            assert!(from(off, absolute).is_none(), "{off:?}");
         }
-        assert_eq!(
-            from(Some("1"), "/opt/bun/bin/bun").map(|config| config.bun),
-            Some(PathBuf::from("/opt/bun/bin/bun"))
-        );
+        assert_eq!(from(Some("1"), absolute).map(|config| config.bun), Some(PathBuf::from(absolute)));
         assert!(from(Some("1"), "bin/bun").is_none());
         let config = Config { directory: PathBuf::from("/work"), ..Config::new(PathBuf::from("/opt/bun/bin/bun")) };
         let dir = Path::new("/private/js-host");
