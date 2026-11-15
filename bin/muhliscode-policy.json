@@ -1,0 +1,149 @@
+{
+  "policies": [
+    {
+      "action": "provider.use",
+      "resource": "opencode",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "opencode-go",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "alibaba",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "alibaba-*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "moonshot*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "kimi*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "zhipu*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "zai*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "minimax*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "deepseek*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "byteplus*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "volcengine*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "siliconflow*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "stepfun*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "xiaomi*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "iflow*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "modelscope*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "baidu*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "tencent*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "hunyuan*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "qwen*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "doubao*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "*-cn",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "longcat*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "meituan*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "huawei*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "sensenova*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "spark*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "iflytek*",
+      "effect": "deny"
+    }
+  ]
+}

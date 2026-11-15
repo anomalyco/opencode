@@ -11,3 +11,5 @@
 - [ ] TUI غا i18n قوشۇش (ھازىر ھەممە تېكىست ئېنگلىزچە).
 - [ ] «opencode» نامىنى كۆرۈنۈشلۈك جايلاردا (desktop مېنيۇسى قاتارلىق) ئالماشتۇرۇش.
 - [ ] `bun` ئورنىتىپ typecheck ۋە سىناقلارنى ئىجرا قىلىش.
+- [x] خىتاي تەمىنلىگۈچىلىرىنى ۋە `opencode` ھەقسىز تىزىملىكىنى سىياسەت بىلەن چەكلەش.
+- [ ] خىتاي تەمىنلىگۈچى كودلىرىنى (`packages/ai/src/providers/{alibaba,minimax,moonshot,deepseek,zai,volcengine,byteplus}`) ئۆچۈرۈپ، typecheck قىلىش.
