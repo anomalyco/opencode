@@ -288,6 +288,9 @@ pub(crate) struct Surface {
     /// A solve has laid its root out.
     laid: Cell<bool>,
     resized: Cell<u8>,
+    /// A view for the room the solve gave the root waits for the behaviors, which call it in the same frame, after
+    /// the solve that gave it ([`behave`]): the first frame after a resize shows the view of the new size.
+    sized: Cell<bool>,
     pub(crate) state: RefCell<State>,
     live: RefCell<Option<Rc<slot::Live>>>,
     watch: RefCell<Option<Disposer>>,
@@ -628,6 +631,7 @@ impl Surface {
             seen: Cell::new((0, 0)),
             laid: Cell::new(false),
             resized: Cell::new(0),
+            sized: Cell::new(false),
             state: RefCell::default(),
             live: RefCell::new(None),
             watch: RefCell::new(None),
@@ -679,6 +683,12 @@ impl Surface {
         // change of the host's state has seen it: a notice of it, which comes later, calls no view (review bigboi-7).
         let watch = host.watch(Rc::new(move |changed: &abi::Changed| {
             if let (Some(mounted), Some(host)) = (weak.upgrade(), owner.upgrade()) {
+                // A view now would see the room of the last solve: a laid-out mount hears the terminal's size from
+                // the solve that gives it, in the same frame.
+                if changed.size && !changed.local && mounted.laid.get() {
+                    mounted.resized.set(0);
+                    return mounted.draw_when_solved();
+                }
                 let seen = host.local_revision().is_some_and(|now| mounted.revision.get() == Some(now));
                 if changed.size || !seen {
                     mounted.draw(host.as_ref(), changed);
@@ -686,9 +696,9 @@ impl Surface {
             }
         }));
         *mounted.watch.borrow_mut() = watch;
-        // The room the surface is given decides its input: a view runs again, after the frame, once its root is laid
-        // out at another size than the view saw. A slot's root follows its content, so at most two of these run in a
-        // row before another cause draws it.
+        // The room the surface is given decides its input: a view runs again, in the same frame after the solve, once
+        // its root is laid out at another size than the view saw. A slot's root follows its content, so at most two of
+        // these run in a row before another cause draws it.
         let (weak, app) = (Rc::downgrade(&mounted), host.app().clone());
         mounted.root.on_resize(move |_, rect| {
             let Some(mounted) = weak.upgrade() else { return };
@@ -703,12 +713,7 @@ impl Surface {
             }
             mounted.resized.set(mounted.resized.get() + 1);
             mounted.pending.set(false);
-            let weak = Rc::downgrade(&mounted);
-            app.defer(move |_| {
-                if let (Some(mounted), Some(host)) = (weak.upgrade(), mounted_owner(&weak)) {
-                    mounted.draw_sized(host.as_ref(), &abi::Changed { size: true, ..abi::Changed::default() });
-                }
-            });
+            mounted.draw_when_solved();
         });
         // A panel's and an overlay's first view runs as their first layout gives them their room, once the host shows
         // them: it sees how they show (`SurfaceInput::panel`) and their size, so one view draws them.
@@ -1199,6 +1204,27 @@ impl Surface {
             host.app().request_redraw();
         }
         changed
+    }
+
+    /// Calls the view for the room of the next solve, after it in its frame: the behaviors' hook, walked after the
+    /// root, calls [`Surface::draw_solved`].
+    fn draw_when_solved(&self) {
+        self.sized.set(true);
+        behave::arm(&self.app);
+    }
+
+    /// Calls the view a resize asked for, if one did: what the solve gave the root is its input.
+    pub(crate) fn draw_solved(&self) {
+        if self.sized.replace(false)
+            && let Some(host) = self.owner.upgrade()
+        {
+            self.draw_sized(host.as_ref(), &abi::Changed { size: true, ..abi::Changed::default() });
+        }
+    }
+
+    /// Whether a resize asked for a view the behaviors have not called yet.
+    pub(crate) fn sized(&self) -> bool {
+        self.sized.get()
     }
 
     /// Calls the view again, as `layout` asked.

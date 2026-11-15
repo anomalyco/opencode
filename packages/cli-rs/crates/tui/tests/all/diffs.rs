@@ -546,23 +546,44 @@ fn many_files_open_and_reach_the_last() {
 }
 
 // Expected (4.9 "a width change that crosses the split threshold during a jump"): a step and a resize from a split
-// view to a unified one in one frame land where the step lands at the narrower width.
+// view to a unified one in one frame land where the step lands at the narrower width, in that frame.
 #[test]
 fn a_jump_across_the_split_threshold_lands_as_at_the_new_width() {
     on_both(|| {
-        // Settled frames: the first frame after a resize still shows the view of the old size, laid out at the new one,
-        // since a surface hears its size from the layout of that frame (steps/plugins-p6c.md, big-boi's review).
         let jumped = |resize: bool| {
             let h = route(4, 30, if resize { 140 } else { 120 }, 30);
             h.app.press("]");
             if resize {
                 h.app.resize(120, 30);
             }
-            h.settle()
+            let first = h.app.render().text();
+            let settled = h.settle();
+            assert_eq!(first, settled, "the first frame was not the settled one");
+            settled
         };
         let narrow = jumped(false);
         assert!(narrow.contains("+new 1") || narrow.contains("+ new 1"), "{narrow}");
         assert_eq!(jumped(true), narrow);
+    });
+}
+
+// Expected (`settled-first` for a resize; P6c's open item): the first frame after a resize is the settled one, at 1,000
+// files, wide and narrow, after a wheel step and after a hunk step: the viewer's view of the new size, laid out once.
+#[test]
+fn a_resize_shows_the_new_size_in_its_first_frame() {
+    on_both(|| {
+        for (width, height, resized) in [(140, 30, 120), (48, 28, 24)] {
+            let h = route(1000, 30, width, height);
+            h.app.scroll(width - 4, 10, true);
+            h.settle();
+            h.app.press("]");
+            h.settle();
+            let before = h.app.text();
+            h.app.resize(resized, height);
+            let first = h.app.render().text();
+            assert_ne!(first, before, "{width} to {resized}: the resize showed nothing new");
+            assert_eq!(first, h.settle(), "{width} to {resized}: the first frame was not the settled one");
+        }
     });
 }
 
