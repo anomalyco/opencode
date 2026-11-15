@@ -1,5 +1,5 @@
 //! Win32 calls that std does not cover: whether a process is alive, ending one, pointing stdin at the console, and
-//! ignoring Ctrl+C while a child runs; the executable, times and memory of a process, and the OS release; shared
+//! ignoring Ctrl+C while a child runs; the executable, times and memory of a process, a thread's CPU time, and the OS release; shared
 //! libraries; stderr on a pipe; console modes and waits; time zones of Windows' ICU; file indexes and times of
 //! directories.
 //! Windows only.
@@ -38,9 +38,9 @@ use windows_sys::Win32::System::Pipes::{CreatePipe, PeekNamedPipe};
 use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows_sys::Win32::System::SystemInformation::{GetSystemTimeAsFileTime, OSVERSIONINFOW};
 use windows_sys::Win32::System::Threading::{
-    GetCurrentProcess, GetExitCodeProcess, GetProcessTimes, INFINITE, OpenProcess, PROCESS_ACCESS_RIGHTS,
-    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, QueryFullProcessImageNameW,
-    TerminateProcess, WaitForSingleObject,
+    GetCurrentProcess, GetCurrentThread, GetExitCodeProcess, GetProcessTimes, GetThreadTimes, INFINITE, OpenProcess,
+    PROCESS_ACCESS_RIGHTS, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+    QueryFullProcessImageNameW, TerminateProcess, WaitForSingleObject,
 };
 use windows_sys::core::BOOL;
 
@@ -117,6 +117,20 @@ pub fn process_times() -> Option<ProcessTimes> {
     // A FILETIME counts 100 ns intervals.
     let ticks = |time: FILETIME| ((u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime)) as f64;
     Some(ProcessTimes { cpu_seconds: (ticks(kernel) + ticks(user)) / 1e7, age_ms: (ticks(now) - ticks(created)) / 1e4 })
+}
+
+/// The CPU time, user plus kernel, the calling thread has used, from `GetThreadTimes`. It advances by the scheduler's
+/// tick, not continuously.
+pub fn thread_cpu_time() -> Option<Duration> {
+    let [mut created, mut exited, mut kernel, mut user] = [FILETIME::default(); 4];
+    // SAFETY: the current thread's pseudo handle needs no closing; the out-parameters outlive the call.
+    let ok = unsafe { GetThreadTimes(GetCurrentThread(), &mut created, &mut exited, &mut kernel, &mut user) };
+    if ok == 0 {
+        return None;
+    }
+    // A FILETIME counts 100 ns intervals.
+    let ticks = |time: FILETIME| (u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime);
+    Some(Duration::from_nanos((ticks(kernel) + ticks(user)).saturating_mul(100)))
 }
 
 /// This process's working set in bytes, which libuv's `uv_resident_set_memory` reports as the RSS.

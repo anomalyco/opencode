@@ -947,7 +947,8 @@ impl Scope {
         budget(&self.host, &self.monitor, &self.id, &timed, panicked);
         if timed.overrun {
             self.monitor.host_overran();
-            log::error!("plugin {}: {export} took {} ms, a host bug in a built-in", self.id, timed.took.as_millis());
+            let took = timed.cpu.unwrap_or(timed.took).as_millis();
+            log::error!("plugin {}: {export} took {took} ms, a host bug in a built-in", self.id);
         }
         let value = match out {
             Some(Ok(value)) => Some(value),
