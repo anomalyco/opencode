@@ -36,6 +36,7 @@ export const KeyMethod = Schema.Struct({
   type: Schema.Literal("key"),
   label: optional(Schema.String),
   form: optional(Form.Fields),
+  validation: optional(Schema.Struct({ prefix: Schema.String })),
 }).annotate({ identifier: "Integration.KeyMethod" })
 
 /** Saves a reference to credentials managed outside opencode, configured by the form answers. */

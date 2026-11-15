@@ -718,6 +718,15 @@ const layer = Layer.effect(
             .integrations.get(input.integrationID)
             ?.methods.find((method) => method.type === "key")
           if (!method) return yield* Effect.die(new Error(`Key method not found: ${input.integrationID}`))
+          if (!input.key.trim()) {
+            return yield* new AuthorizationError({ cause: new Error("API key cannot be empty.") })
+          }
+          const prefix = method.validation?.prefix
+          if (prefix && (!input.key.startsWith(prefix) || input.key.length === prefix.length)) {
+            return yield* new AuthorizationError({
+              cause: new Error(`API key must start with "${prefix}" and include a value after the prefix.`),
+            })
+          }
           const answer = input.answer ?? {}
           const invalid = answerError(method.form, answer, "Key")
           if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })

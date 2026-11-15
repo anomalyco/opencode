@@ -6,6 +6,11 @@ import { Bus } from "../bus.js"
 import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
 
+// Only enforce formats that the provider documents as stable. Other integrations stay opaque.
+const API_KEY_VALIDATION: Record<string, Integration.KeyMethod["validation"]> = {
+  anthropic: { prefix: "sk-ant-" },
+}
+
 // These catalog entries require inference profiles on Bedrock Runtime.
 // Opus/Sonnet 4.6 and Opus 5.5 support in-region calls in eu-west-2 and must remain available.
 const BEDROCK_PROFILE_ONLY_IDS = [
@@ -45,7 +50,10 @@ export const ModelsDevPlugin = define({
         integrations.update(integrationID, (integration) => (integration.name = provider.info.name))
         integrations.method.update({
           integrationID,
-          method: { type: "key" },
+          method: {
+            type: "key",
+            ...(API_KEY_VALIDATION[integrationID] ? { validation: API_KEY_VALIDATION[integrationID] } : {}),
+          },
         })
         integrations.method.update({
           integrationID,
