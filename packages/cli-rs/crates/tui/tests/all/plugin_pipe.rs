@@ -593,26 +593,42 @@ fn a_plugin_that_exits_fails_alone_and_the_js_host_starts_again() {
 }
 
 // Expected (containment, a plugin that floods): effects sent outside any call past the host's bound of unread messages
-// end the JS host, and the plugin whose effects filled it fails, though no call of it ran.
+// end the JS host, and the plugin whose effects filled it fails, though no call of it ran. The other plugin is set up
+// again on a new JS host, which serves it: it answers. Also when the host's queue is smaller than its hello, which a new
+// JS host takes first whatever the bound (pipe-restart: such a hello was lost, and the JS host that replaced the
+// flooded one exited at once, "the stream skipped from 0 to N", as did each after it).
 #[test]
 fn a_plugin_that_floods_fails_alone_and_the_js_host_starts_again() {
-    let Some(config) = config() else { return };
-    let (pipe, _log) = probe_and_twin(config, false);
-    let pid = pipe.scripts().pid().unwrap();
-    twin_open(&pipe);
-    pipe.harness.tui.keymap.dispatch("probe.flood", Some("5000"));
-    pipe.settle();
-    // The UI thread takes nothing while the flood comes.
-    std::thread::sleep(Duration::from_millis(1500));
-    pipe.harness.wait("the flood ended the JS host", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        failed(&pipe, PROBE).is_some()
-    });
-    pipe.settle();
-    let error = failed(&pipe, PROBE).unwrap();
-    assert!(error.contains("flooded the host with effects"), "{error}");
-    assert!(gone(pid));
-    assert_eq!(pipe.status(twin::ID), Some(Status::Active));
+    for queued in [None, Some(1 << 10)] {
+        let Some(mut config) = config() else { return };
+        if let Some(queued) = queued {
+            config.limits.queued = queued;
+        }
+        let (pipe, _log) = probe_and_twin(config, false);
+        let pid = pipe.scripts().pid().unwrap();
+        twin_open(&pipe);
+        pipe.harness.tui.keymap.dispatch("probe.flood", Some("5000"));
+        pipe.settle();
+        // The UI thread takes nothing while the flood comes.
+        std::thread::sleep(Duration::from_millis(1500));
+        pipe.harness.wait("the flood ended the JS host", || {
+            pipe.harness.app.advance(Duration::from_millis(1));
+            failed(&pipe, PROBE).is_some()
+        });
+        pipe.settle();
+        let error = failed(&pipe, PROBE).unwrap();
+        assert!(error.contains("flooded the host with effects"), "queued {queued:?}: {error}");
+        assert!(gone(pid));
+        pipe.harness.tui.keymap.dispatch("twin.bump", Some("1"));
+        pipe.settle();
+        let screen = pipe.harness.app.text();
+        assert!(
+            screen.contains("twin 1"),
+            "queued {queued:?}: the twin does not answer: {:?}\n{screen}",
+            pipe.status(twin::ID)
+        );
+        assert_eq!(pipe.status(twin::ID), Some(Status::Active), "queued {queued:?}");
+    }
 }
 
 // Expected (review F4): a plugin's prints go to the JS host's standard error and break nothing; raw bytes written past
