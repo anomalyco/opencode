@@ -1049,14 +1049,15 @@ fn ledger(world: &World, twin: &World, reference: &Reference) -> Vec<(&'static s
     if !differences.is_empty() || reference.active().is_some() {
         return differences;
     }
-    // A failure the manager lists shows as a count in the home footer, so the widgets differ and the frame may differ
-    // in that row only.
+    // A failure the manager lists shows as a count in the home footer, and on the plugin's route in place of the
+    // twin's unknown route (PL-8), so the widgets differ and the frame may differ in those rows only.
     let listed = reference.listed.is_some();
     if let Some(difference) = world.observe(!listed).diff(&twin.observe(!listed), !listed) {
         differences.push(("twin", format!("the plugin is {:?}; host and twin: {difference}", reference.life)));
         return differences;
     }
-    let allowed = |row: &str| listed && row.contains("plugin failed");
+    let allowed =
+        |row: &str| listed && (row.contains("plugin failed") || row.contains(&format!("Plugin {ID} failed.")));
     if let Some(row) = frame_diff(&twin.frame(), &world.frame(), world.mask(), allowed) {
         differences.push(("frame", format!("the plugin is {:?}; the frames differ at {row}", reference.life)));
     }

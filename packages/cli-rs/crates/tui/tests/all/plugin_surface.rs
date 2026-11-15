@@ -1517,6 +1517,37 @@ fn a_routes_commands_are_in_the_palette() {
     }
 }
 
+/// A route whose command panics.
+fn doomed(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = abi::Command::default().with_name("doomed.panic".into()).with_scope(abi::Scope::Route("page".into()));
+    setup.command(command, |_, _| panic!("doomed"));
+    setup.surface(v2::Surface::new("page", v2::Place::Route("page".into()), |_| {
+        v2::Node::text(vec![abi::Span::new("a doomed page")])
+    }));
+    Ok(())
+}
+
+// Expected (PL-8, deviation F16-plugin-failed-route): the route of a plugin that failed while it showed says that the
+// plugin failed and points to `/plugins`; a route no plugin has is still unknown.
+#[test]
+fn a_failed_plugins_route_says_it_failed() {
+    for carrier in CARRIERS {
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![builtin(carrier, abi::Plugin { id: "test.doomed", setup: doomed })],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(100, 30, deps);
+        harness.tui.navigate(Route::Plugin { id: "test.doomed".into(), name: "page".into() });
+        harness.wait_for("a doomed page");
+        harness.tui.keymap.dispatch("doomed.panic", None);
+        let screen = harness.wait_for("Plugin test.doomed failed. Run /plugins for details.");
+        assert!(!screen.contains("Unknown"), "{carrier:?}: {screen}");
+        harness.tui.navigate(Route::Plugin { id: "test.none".into(), name: "page".into() });
+        harness.wait_for("Unknown plugin route: test.none/page");
+    }
+}
+
 // Expected (4.3): leaving a 2.0 route over the C ABI tells the library, which drops the mount's memo table: one call
 // crosses, and nothing more.
 #[test]
