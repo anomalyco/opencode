@@ -342,10 +342,16 @@ const GNU_TAGS: &[u64] = &[
     0x6fff_ffff,
 ];
 
-/// Whether dynamic tag `tag` of a file for `machine` is one the policy knows loads no code but what it reads: each
-/// generic tag up to `DT_RELRENT` (37), each of [`GNU_TAGS`], and the processor tags its machine defines (x86-64's
+/// The generic tags the ELF ABI assigns, `DT_NULL` (0) to `DT_RELRENT` (37): every number but 31, which none is.
+const GENERIC_TAGS: &[u64] = &[
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+    32, 33, 34, 35, 36, 37,
+];
+
+/// Whether dynamic tag `tag` of a file for `machine` is one the policy knows loads no code but what it reads: each of
+/// [`GENERIC_TAGS`], each of [`GNU_TAGS`], and the processor tags its machine defines (x86-64's
 /// PLT tags; AArch64's BTI, PAC, variant PCS and memory tags; RISC-V's variant calling convention). A tag in a range
-/// but not named here is refused (final re-review big-boi 2).
+/// but not named here is refused (final re-review big-boi 2, and its final pass: tag 31).
 fn known(tag: u64, machine: u64) -> bool {
     let processor: &[u64] = match machine {
         EM_X86_64 => &[0x7000_0000, 0x7000_0001, 0x7000_0003],
@@ -355,7 +361,7 @@ fn known(tag: u64, machine: u64) -> bool {
         EM_RISCV => &[0x7000_0001],
         _ => &[],
     };
-    tag <= 37 || GNU_TAGS.contains(&tag) || processor.contains(&tag)
+    GENERIC_TAGS.contains(&tag) || GNU_TAGS.contains(&tag) || processor.contains(&tag)
 }
 
 /// An ELF file's `DT_NEEDED` names and `DT_RPATH` and `DT_RUNPATH` entries.
@@ -669,6 +675,7 @@ mod tests {
             (EM_X86_64, 0x6fff_fefa),
             (EM_X86_64, 0x6000_000f),
             (EM_X86_64, 38),
+            (EM_X86_64, 31),
             (EM_X86_64, 0x6fff_fe00),
             (EM_X86_64, 0x6fff_fff5),
             (EM_X86_64, 0x7000_0005),
