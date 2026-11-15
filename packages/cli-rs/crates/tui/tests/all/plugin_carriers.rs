@@ -397,7 +397,7 @@ fn input_is_equal_on_every_carrier() {
         tui.navigate(Route::Plugin { id: ID.to_owned(), name: "board".to_owned() });
         settle(&board.harness);
         let mut seen = Vec::new();
-        for key in ["j", "h", "m", "j", "m", "j", "p"] {
+        for key in ["j", "alt+h", "m", "j", "m", "j", "p"] {
             app.press(key);
             settle(&board.harness);
             let keys =

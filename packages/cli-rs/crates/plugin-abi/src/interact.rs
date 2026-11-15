@@ -262,7 +262,9 @@ pub enum LayerScope {
     Node(String),
     /// While the composer has the focus.
     Composer,
-    /// Always, in the layer's mode; below every dialog the host shows.
+    /// Always, in the layer's mode; below every dialog the host shows. A printable key (one character or `space`, with
+    /// no modifier but Shift) is the text's while the composer or another text input has the focus: it reaches the
+    /// layer only elsewhere.
     Global,
 }
 

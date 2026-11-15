@@ -117,9 +117,10 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         board.values[0] += 1;
     });
     notes(setup, &board);
-    // The plugin's own layer hears the key the route's handler passes.
+    // The plugin's own layer hears the key the route's handler passes. A global bind takes a key with a modifier: a
+    // plain letter is the user's typing in the composer (FT-14).
     let global = board.clone();
-    let layer = Layer::default().with_scope(LayerScope::Global).with_keys(vec![Bind::new("h", "help")]);
+    let layer = Layer::default().with_scope(LayerScope::Global).with_keys(vec![Bind::new("alt+h", "help")]);
     setup.layer(layer, move |_, _| {
         global.borrow_mut().keys.push("global".to_owned());
         Handled::Consume
@@ -127,7 +128,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     let (keyed, viewed, drawn) = (board.clone(), board.clone(), board);
     let base = Layer::default().with_keys(vec![
         Bind::new("j", "bump"),
-        Bind::new("h", "help"),
+        Bind::new("alt+h", "help"),
         Bind::new("m", "move"),
         Bind::new("p", "panic"),
     ]);
