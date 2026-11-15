@@ -1,11 +1,13 @@
 import type {
   JsonValue,
   SessionMessageAssistant,
+  SessionStatus,
   SessionMessageAssistantTool,
   SessionMessageInfo,
 } from "@opencode/client/promise"
 import { createTwoFilesPatch, diffLines } from "diff"
 import type { SessionDocument } from "../../document"
+import { toolEvent } from "../events"
 import {
   CURRENT_SESSION_ID,
   STORY_MODEL,
@@ -736,13 +738,13 @@ const backgroundWork: Beat[] = [
   {
     kind: "report",
     source: "subagent",
-    state: "completed",
+    state: "cancelled",
     description: "Review the toggle",
     agent: "review",
     childID: "session_child_toggle",
-    body: "The toggle reads the scheme in an effect, which is right.",
+    body: "The review was stopped.",
   },
-  { kind: "say", text: "Both checks pass: the docs are accurate and the toggle reads the scheme correctly." },
+  { kind: "say", text: "The docs are accurate. The toggle review was stopped before it finished." },
   { kind: "idle" },
   { kind: "report", source: "shell", state: "cancelled", description: "bun run dev", shellID: "shell_dev" },
 ]
@@ -829,6 +831,8 @@ export function replayScript(script: Beat[], limit: number, start: number) {
   const messages: SessionMessageInfo[] = []
   // SAFETY: no step is open yet; the assertion names the step this holds once one starts.
   const state = { used: 0, busy: false, caption: "Start", assistant: undefined as SessionMessageAssistant | undefined }
+  // Subagent sessions the replay has started, working until they report back.
+  const children: Record<string, SessionStatus> = {}
   const at = () => start + state.used * 1_500
   const id = (prefix: string) => `${prefix}_${messages.length}_${state.used}`
 
@@ -907,6 +911,7 @@ export function replayScript(script: Beat[], limit: number, start: number) {
     if (beat.kind === "report" && beat.source === "subagent") {
       closeStep()
       messages.push(subagentReport(id("msg_report"), at(), beat))
+      children[beat.childID] = { type: "idle" }
       state.busy = true
     }
 
@@ -946,7 +951,13 @@ export function replayScript(script: Beat[], limit: number, start: number) {
     if (beat.kind === "say")
       assistant().content.push({ type: "text", text: done ? beat.text : beat.text.slice(0, beat.text.length / 2) })
 
-    if (beat.kind === "tool") assistant().content.push(tool(id("tool"), beat, done, at()))
+    if (beat.kind === "tool") {
+      const call = tool(id("tool"), beat, done, at())
+      const sessionID = beat.name === "subagent" ? toolEvent(call)?.sessionID : undefined
+      assistant().content.push(call)
+
+      if (sessionID) children[sessionID] = { type: "busy" }
+    }
 
     if (beat.kind === "interrupt" && state.assistant) {
       state.assistant.content = state.assistant.content.map((content) =>
@@ -982,6 +993,7 @@ export function replayScript(script: Beat[], limit: number, start: number) {
       status: { type: state.busy ? "busy" : "idle" },
       diffs: [],
     } satisfies SessionDocument,
+    children: { ...children },
     caption: state.caption,
   }
 }
