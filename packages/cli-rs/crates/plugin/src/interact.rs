@@ -330,22 +330,39 @@ impl Owner {
             }
             // The reserved chord stops every plugin layer before the keymap sees it (`Router::escape`), so a bind of it
             // never runs.
-            let commands: Vec<TuiCommand> =
-                layer.keys.iter().filter(|bind| self.takes(bind)).map(|bind| self.command(bind, deliver)).collect();
-            if commands.is_empty() {
-                continue;
-            }
-            let (owner, scope) = (me.clone(), layer.scope.clone());
-            let enabled = Condition::when(move || owner.upgrade().is_some_and(|owner| owner.holds(&scope)));
-            let declared = KeymapLayer::new(commands)
-                .priority(layer.priority)
-                .enabled(enabled)
-                .mode(self.mode_key(layer.mode.as_deref()));
-            match host.keymap().layer(declared) {
-                Ok(disposer) => self.layers.borrow_mut().push(disposer),
-                Err(error) => log::error!("plugin {} keymap layer: {error}", self.plugin),
+            // A printable key of a global layer is the text's while the composer or another text input has the focus
+            // (FT-14): a plugin's `h` must not take the user's typing. It reaches the plugin everywhere else.
+            let (typed, other): (Vec<&Bind>, Vec<&Bind>) = layer
+                .keys
+                .iter()
+                .filter(|bind| self.takes(bind))
+                .partition(|bind| layer.scope == LayerScope::Global && printable(&bind.key));
+            for (binds, typed) in [(other, false), (typed, true)] {
+                if binds.is_empty() {
+                    continue;
+                }
+                let commands: Vec<TuiCommand> = binds.into_iter().map(|bind| self.command(bind, deliver)).collect();
+                let (owner, scope) = (me.clone(), layer.scope.clone());
+                let enabled = Condition::when(move || {
+                    owner.upgrade().is_some_and(|owner| owner.holds(&scope) && !(typed && owner.typing()))
+                });
+                let declared = KeymapLayer::new(commands)
+                    .priority(layer.priority)
+                    .enabled(enabled)
+                    .mode(self.mode_key(layer.mode.as_deref()));
+                match host.keymap().layer(declared) {
+                    Ok(disposer) => self.layers.borrow_mut().push(disposer),
+                    Err(error) => log::error!("plugin {} keymap layer: {error}", self.plugin),
+                }
             }
         }
+    }
+
+    /// Whether the composer or another text input has the focus.
+    fn typing(&self) -> bool {
+        self.host.upgrade().is_some_and(|host| {
+            host.composer_focused() || host.app().focused().is_some_and(|widget| widget.element().is_editor())
+        })
     }
 
     /// Whether the keymap can take `bind`: one with no key and no name would fail its whole layer, and one named after
@@ -1251,6 +1268,22 @@ pub enum Pasted {
 }
 
 /// Whether the focus is in the widget with id `id`.
+/// Whether `key` (the host's keybind syntax) types text in an input: an alternative whose first stroke is one character
+/// or `space`, with no modifier but Shift.
+fn printable(key: &str) -> bool {
+    key.split(',').filter_map(|alternative| alternative.split_whitespace().next()).any(|stroke| {
+        let (modifiers, name) = match stroke.strip_suffix("++") {
+            Some(modifiers) => (modifiers, "+"),
+            None => stroke.rsplit_once('+').unwrap_or(("", stroke)),
+        };
+        let name = if name.is_empty() { "+" } else { name };
+        let plain = modifiers.split('+').filter(|part| !part.is_empty()).all(|part| part.eq_ignore_ascii_case("shift"));
+        let typed =
+            name.eq_ignore_ascii_case("space") || (name.chars().count() == 1 && !name.chars().any(char::is_control));
+        plain && typed
+    })
+}
+
 fn focus_within(app: &App, id: u32) -> bool {
     std::iter::successors(app.focused(), |widget| widget.parent()).any(|widget| widget.id() == id)
 }
@@ -1414,4 +1447,19 @@ fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &impl Widget, e
         _ => {}
     }
     handled
+}
+
+#[cfg(test)]
+mod tests {
+    // Expected (FT-14): a key types text when one of its alternatives starts with a character or `space` and no
+    // modifier but Shift.
+    #[test]
+    fn a_printable_key_types_text() {
+        for key in ["h", "H", "shift+h", "?", "]", "+", "space", "ctrl+a,h", "g g"] {
+            assert!(super::printable(key), "{key}");
+        }
+        for key in ["ctrl+h", "alt+h", "meta+h", "super+h", "escape", "f6", "return", "<leader>h", "ctrl++", ""] {
+            assert!(!super::printable(key), "{key}");
+        }
+    }
 }
