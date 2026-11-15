@@ -61,8 +61,8 @@ export type Estimate = { readonly measured: number; readonly estimated: number }
 export type Trigger =
   /** `overflow`: the provider just rejected this context as too long. `estimate` is `estimatePrompt(context)`. */
   | { readonly reason: "auto" | "overflow"; readonly context: SessionContext.Loaded; readonly estimate?: Estimate }
-  /** `inputID` is the `/compact` inbox item, whose message shows the outcome. */
-  | { readonly reason: "manual"; readonly context: SessionContext.Loaded; readonly inputID: SessionMessage.ID }
+  /** `inputID` is the `/compact` or idle inbox item, whose message shows the outcome. */
+  | { readonly reason: "manual" | "idle"; readonly context: SessionContext.Loaded; readonly inputID: SessionMessage.ID }
 
 export type Outcome =
   /** Only `auto` skips: the context fits, or automatic compaction is off. */
@@ -302,8 +302,9 @@ export const layer = Layer.effect(
       const settings = state.get()
       const context = trigger.context
 
-      // Only the user compacts when automatic compaction is off, overflow included.
-      if (trigger.reason !== "manual" && !settings.auto) return { status: "skipped" }
+      // Only the user compacts when automatic compaction is off, overflow included. Idle items re-checked
+      // `auto` at admission and delivery, so they run like manual ones here.
+      if ((trigger.reason === "auto" || trigger.reason === "overflow") && !settings.auto) return { status: "skipped" }
       if (
         trigger.reason === "auto" &&
         !due(context, calculateCeiling(context.model.limit, settings.buffer), trigger.estimate)
@@ -320,9 +321,9 @@ export const layer = Layer.effect(
           : model.cap
 
       const selected = model.context === context ? trigger : { ...trigger, context: model.context }
-      // The runner opened the manual compaction's message when it delivered the `/compact` item. An automatic one
-      // opens here, before any wait, so a background summary still being written shows as a running compaction.
-      if (trigger.reason !== "manual")
+      // The runner opened the manual or idle compaction's message when it delivered the inbox item. An automatic
+      // one opens here, before any wait, so a background summary still being written shows as a running compaction.
+      if (trigger.reason === "auto" || trigger.reason === "overflow")
         yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: context.session.id, reason: "auto" })
       const swapped = held ? yield* usePrecomputed(selected, held, budget, settings) : undefined
       const compaction = swapped
@@ -911,14 +912,14 @@ export const layer = Layer.effect(
     ): Effect.fn.Return<Outcome> {
       const context = trigger.context
       const sessionID = context.session.id
-      const reason = trigger.reason === "manual" ? "manual" : "auto"
+      const reason = trigger.reason === "auto" || trigger.reason === "overflow" ? "auto" : trigger.reason
       const usage = spent.get(sessionID)
 
       if ("error" in outcome) {
         yield* bus.publish(SessionEvent.Compaction.Failed, {
           sessionID,
           reason,
-          inputID: trigger.reason === "manual" ? trigger.inputID : undefined,
+          inputID: trigger.reason === "manual" || trigger.reason === "idle" ? trigger.inputID : undefined,
           error: outcome.error,
           ...usage,
         })
@@ -944,11 +945,11 @@ export const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       settings: () => state.get(),
-      // A manual compaction settles through its `/compact` inbox item, which the runner owns.
+      // A manual or idle compaction settles through its inbox item, which the runner owns.
       compact: (trigger) =>
         compact(trigger).pipe(
           Effect.onInterrupt(() =>
-            trigger.reason === "manual"
+            trigger.reason === "manual" || trigger.reason === "idle"
               ? Effect.void
               : publish(trigger, { error: { type: "compaction.interrupted", message: "Compaction was interrupted" } }),
           ),

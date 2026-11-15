@@ -2,15 +2,19 @@ export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode/ai/effect"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
-import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
+import { Cause, Clock, DateTime, Effect, Exit, FiberMap, Layer, Option } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
+import { Config } from "../../config.js"
+import { Flag } from "../../flag.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
+import { SessionIdleCompaction } from "../idle-compaction.js"
 import { SessionInbox } from "../inbox.js"
+import { SessionPresence } from "../presence.js"
 import { SessionBackground } from "../background.js"
 import { Job } from "../../job.js"
 import { SessionHistory } from "../history.js"
@@ -56,9 +60,54 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
+    const presence = yield* SessionPresence.Service
+    const config = yield* Effect.serviceOption(Config.Service)
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
+
+    /** Delivery-time re-check for idle items: epoch identity, interest, and the shared firing laws. */
+    const idleFresh = Effect.fn("SessionRunnerLLM.idleFresh")(function* (
+      item: Extract<SessionInbox.Promotion, { readonly type: "compaction" }>,
+      loaded: SessionContext.Loaded,
+    ) {
+      if (!(yield* Flag.enabled("idle_compaction"))) return false
+      if (!(yield* presence.present(loaded.session.id))) return false
+      const epoch = item.payload.idle
+      if (
+        epoch === undefined ||
+        !loaded.session.time.idle ||
+        DateTime.toEpochMillis(loaded.session.time.idle) !== epoch
+      )
+        return false
+      if (
+        (yield* SessionInbox.list(db, loaded.session.id)).some(
+          (pending) => pending.type === "user" || pending.type === "synthetic",
+        )
+      )
+        return false
+      const enqueued = DateTime.toEpochMillis(item.time.created)
+      if (
+        loaded.messages.some(
+          (message) =>
+            (message.type === "user" || message.type === "synthetic") &&
+            DateTime.toEpochMillis(message.time.created) > enqueued,
+        )
+      )
+        return false
+      const entries = Option.isSome(config) ? yield* config.value.entries() : []
+      const warming = loaded.model.cache?.warming ?? Config.latest(entries, "warming")
+      return (
+        SessionIdleCompaction.historyLaws({
+          session: loaded.session,
+          messages: loaded.messages,
+          model: loaded.model,
+          settings: compaction.settings(),
+          now: yield* Clock.currentTimeMillis,
+          warming: Boolean(warming),
+        }) !== undefined
+      )
+    })
 
     // Each drain is one turn and starts its own trace, whatever fiber woke it.
     const drain = Effect.fn("SessionRunner.drain", { root: true })(function* (input: DrainInput) {
@@ -100,11 +149,16 @@ const layer = Layer.effect(
                     sessionID,
                     entering || !continuing ? "input" : "steer",
                   )
-                  if (next?.type === "compaction")
-                    yield* bus.publishAll([
-                      [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
-                      [SessionEvent.Compaction.Started, { sessionID, reason: "manual", inputID: next.id }],
-                    ])
+                  if (next?.type === "compaction") {
+                    // Idle items re-check their laws before any marker; a stale one is consumed silently.
+                    if ((next.payload.reason ?? "manual") === "idle")
+                      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: next.id })
+                    else
+                      yield* bus.publishAll([
+                        [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
+                        [SessionEvent.Compaction.Started, { sessionID, reason: "manual", inputID: next.id }],
+                      ])
+                  }
                   if (next?.type === "move")
                     yield* restore(
                       Effect.gen(function* () {
@@ -128,6 +182,7 @@ const layer = Layer.effect(
                   stepped: !continuing && stepped ? true : undefined,
                 })
               if (pending?.type === "compaction") {
+                const reason = pending.payload.reason ?? "manual"
                 const compacted = yield* restore(
                   Effect.gen(function* () {
                     yield* plugins.awaitActivation
@@ -135,23 +190,28 @@ const layer = Layer.effect(
                     const model = yield* context.resolveModel(selected.session)
                     // Preview updates without admitting them after the already-delivered compaction marker.
                     const history = yield* SessionHistory.preview(db, sessionID, selected.instructions, model.ref)
-                    return yield* compaction.compact({
-                      reason: "manual",
-                      inputID: pending.id,
-                      context: {
-                        session: selected.session,
-                        agent: selected.agent,
-                        tools: selected.tools,
-                        model,
-                        initial: history.initial,
-                        messages: history.messages,
-                      },
-                    })
+                    const loaded = {
+                      session: selected.session,
+                      agent: selected.agent,
+                      tools: selected.tools,
+                      model,
+                      initial: history.initial,
+                      messages: history.messages,
+                    }
+                    if (reason === "idle") {
+                      if (!(yield* idleFresh(pending, loaded))) return { status: "skipped" } as const
+                      yield* bus.publish(SessionEvent.Compaction.Started, {
+                        sessionID,
+                        reason: "idle",
+                        inputID: pending.id,
+                      })
+                    }
+                    return yield* compaction.compact({ reason, inputID: pending.id, context: loaded })
                   }).pipe(
                     Effect.catch((error) =>
                       bus.publish(SessionEvent.Compaction.Failed, {
                         sessionID,
-                        reason: "manual",
+                        reason,
                         inputID: pending.id,
                         error: toSessionError(error),
                       }),
@@ -161,7 +221,7 @@ const layer = Layer.effect(
                 if (Exit.isFailure(compacted)) {
                   yield* bus.publish(SessionEvent.Compaction.Failed, {
                     sessionID,
-                    reason: "manual",
+                    reason,
                     error: Cause.hasInterruptsOnly(compacted.cause)
                       ? { type: "aborted", message: "Compaction cancelled" }
                       : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
@@ -451,6 +511,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    SessionPresence.node,
     Plugin.node,
     PluginHooks.node,
     Job.node,

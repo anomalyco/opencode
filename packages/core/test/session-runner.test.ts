@@ -45,6 +45,8 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { Money } from "@opencode/schema/money"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionPresence } from "@opencode/core/session/presence"
+import { Flag } from "@opencode/core/flag"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { SessionRunner } from "@opencode/core/session/runner/index"
@@ -221,6 +223,7 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
   return {
     currentModel: model,
     compaction,
+    cache: undefined as SessionRunnerModel.Resolved["cache"],
     modelResolveHook: resolvesModel,
     systemBaseline: "Initial context",
     systemRemoved: false,
@@ -342,6 +345,7 @@ const layer = Layer.unwrap(
               limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
               variant: session.model?.variant,
               compaction: state.compaction,
+              cache: state.cache,
             })
           }),
         ),
@@ -494,6 +498,7 @@ const layer = Layer.unwrap(
         Config.node,
         Snapshot.node,
         SessionCompaction.node,
+        SessionPresence.node,
         LayerNodePlatform.llmClient,
         SessionRunnerLLM.node,
         SessionExecution.node,
@@ -508,7 +513,11 @@ const layer = Layer.unwrap(
       ],
     )
   }),
-).pipe(Layer.provideMerge(Layer.sync(RunnerState, makeRunnerState)), Layer.provideMerge(testLLM))
+).pipe(
+  Layer.provideMerge(Layer.sync(RunnerState, makeRunnerState)),
+  Layer.provideMerge(testLLM),
+  Layer.provideMerge(Layer.succeed(Flag.Overrides, "idle_compaction")),
+)
 const it = testEffect(layer)
 const sessionID = Session.ID.make("ses_runner_test")
 const otherSessionID = Session.ID.make("ses_runner_other")
@@ -7357,5 +7366,161 @@ describe("SessionRunnerLLM", () => {
     expect(defect).toBeInstanceOf(Error)
     if (!(defect instanceof Error)) return
     expect(defect.message).toBe("Tool input delta before start: call-1")
+  })
+})
+
+describe("idle compaction delivery", () => {
+  const idleScenario = (
+    name: string,
+    body: (s: Scenario) => Effect.gen.Return<void, unknown, Layer.Success<typeof layer> | Scope.Scope>,
+  ) =>
+    scenario(name, function* (s) {
+      s.cache = { ttl: "5m" }
+      const presence = yield* SessionPresence.Service
+      yield* presence.report({ client: "test", sessions: [sessionID] })
+      return yield* body(s)
+    })
+
+  // The harness's execution wrapper skips terminal settlement; supply it so time_idle exists.
+  const settle = (s: Scenario) => s.bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
+
+  const admitIdle = Effect.fnUntraced(function* (s: Scenario, epoch?: number) {
+    const info = yield* s.session.get(sessionID)
+    return yield* s.sessionInbox.admitCompaction({
+      id: SessionMessage.ID.create(),
+      sessionID,
+      delivery: "queue",
+      payload: { reason: "idle", idle: epoch ?? (info.time.idle ? DateTime.toEpochMillis(info.time.idle) : 0) },
+    })
+  })
+
+  const eventsOfType = (s: Scenario, type: string) =>
+    s.db
+      .select()
+      .from(EventTable)
+      .where(eq(EventTable.aggregate_id, sessionID))
+      .pipe(
+        Effect.map((rows) => rows.filter((row) => row.type === type || row.type.startsWith(`${type}.`))),
+        Effect.orDie,
+      )
+
+  idleScenario("delivers a fresh idle item with reason idle", function* (s) {
+    yield* s.llm.push(
+      TestLLM.textWithUsage("First answer", "first", 80_000),
+      TestLLM.text("## Objective\n- summary", "idle-summary"),
+    )
+    yield* s.runPrompt("Start")
+    yield* settle(s)
+    yield* admitIdle(s)
+
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(2)
+    expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
+      status: "completed",
+      reason: "idle",
+    })
+    expect(yield* s.inbox).toEqual([])
+    expect(yield* eventsOfType(s, "session.compaction.started")).toHaveLength(1)
+  })
+
+  idleScenario("consumes a stale-epoch idle item without a marker", function* (s) {
+    yield* s.llm.push(TestLLM.textWithUsage("First answer", "first", 80_000))
+    yield* s.runPrompt("Start")
+    yield* settle(s)
+    yield* admitIdle(s, 1)
+
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.messages).some((message) => message.type === "compaction")).toBe(false)
+    expect(yield* s.inbox).toEqual([])
+    expect(yield* eventsOfType(s, "session.compaction.started")).toEqual([])
+    expect(yield* eventsOfType(s, "session.compaction.failed")).toEqual([])
+  })
+
+  idleScenario("consumes an idle item whose anchor went cold without compacting", function* (s) {
+    yield* s.llm.push(TestLLM.textWithUsage("First answer", "first", 80_000))
+    yield* s.runPrompt("Start")
+    yield* settle(s)
+    yield* admitIdle(s)
+    yield* TestClock.adjust("10 minutes")
+
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.messages).some((message) => message.type === "compaction")).toBe(false)
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  idleScenario("a returning steer promotes first and strands the idle item", function* (s) {
+    yield* s.llm.push(
+      TestLLM.textWithUsage("First answer", "first", 80_000),
+      TestLLM.text("Second answer", "second"),
+    )
+    yield* s.runPrompt("Start")
+    yield* settle(s)
+    yield* admitIdle(s)
+    yield* TestClock.adjust("1 second")
+    yield* s.admit("Back again")
+
+    yield* s.resume
+    yield* settle(s)
+
+    expect(s.requests).toHaveLength(2)
+    expect((yield* s.messages).some((message) => message.type === "compaction")).toBe(false)
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  idleScenario("manual compaction cancels a pending idle item and runs as manual", function* (s) {
+    yield* s.llm.push(
+      TestLLM.textWithUsage("First answer", "first", 80_000),
+      TestLLM.text("## Objective\n- summary", "manual-summary"),
+    )
+    yield* s.runPrompt("Start")
+    yield* settle(s)
+    yield* admitIdle(s)
+
+    const manual = yield* s.sessionInbox.admitCompaction({
+      id: SessionMessage.ID.create(),
+      sessionID,
+      delivery: "steer",
+    })
+    expect(yield* s.inbox).toEqual([
+      expect.objectContaining({ id: manual.id, type: "compaction", delivery: "steer" }),
+    ])
+
+    yield* s.resume
+
+
+    expect(s.requests).toHaveLength(2)
+    expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
+      status: "completed",
+      reason: "manual",
+    })
+  })
+
+  idleScenario("a failed idle compaction is terminal for the epoch", function* (s) {
+    yield* s.llm.push(TestLLM.textWithUsage("First answer", "first", 80_000))
+    yield* s.runPrompt("Start")
+    yield* settle(s)
+    yield* admitIdle(s)
+    yield* s.llm.push(TestLLM.failAfter(providerRejected({ message: "summary unavailable" })))
+
+    yield* s.resume
+    yield* settle(s)
+
+    expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
+      status: "failed",
+      reason: "idle",
+    })
+
+    // The epoch moved with the compaction execution, but the failed compaction still blocks a retry.
+    yield* admitIdle(s)
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(2)
+    expect((yield* s.messages).filter((message) => message.type === "compaction")).toHaveLength(1)
+    expect(yield* s.inbox).toEqual([])
   })
 })

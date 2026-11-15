@@ -15,11 +15,54 @@ import { SessionExecution } from "./execution.js"
 import { SessionInbox } from "./inbox.js"
 import { SessionMessage } from "./message.js"
 import { SessionPresence } from "./presence.js"
+import { SessionRunnerModel } from "./runner/model.js"
 import { SessionStore } from "./store.js"
 
 // How far before cache expiry the timer fires. Must stay above SessionCompaction.CACHE_MARGIN so the fire
 // moment is inside the warm window; the anchor, not time_idle, is the cache's clock.
 const FIRE_MARGIN = Duration.seconds(90)
+
+/**
+ * The history/model firing laws, shared by the scheduler and the runner's delivery re-check. Returns the
+ * cache anchor and lifetime when every law holds, undefined otherwise.
+ */
+export const historyLaws = (input: {
+  readonly session: Session.Info
+  readonly messages: ReadonlyArray<SessionMessage.Info>
+  readonly model: SessionRunnerModel.Resolved
+  readonly settings: SessionCompaction.Settings
+  readonly now: number
+  readonly warming: boolean
+}) => {
+  const ttl = input.model.cache?.ttl
+  // Only an explicit TTL gives a known cache clock; warming-configured Sessions are left to warming.
+  if (!ttl || input.model.compaction?.type === "native" || input.warming || !input.settings.auto) return undefined
+  const anchor = SessionCompaction.cacheAnchor(input.messages, input.model.ref)
+  if (anchor?.type !== "assistant" || !anchor.tokens) return undefined
+  const lifetime = SessionCompaction.cacheLifetime(ttl)
+  if (input.now - DateTime.toEpochMillis(anchor.time.created) > lifetime - SessionCompaction.CACHE_MARGIN)
+    return undefined
+
+  const estimate = SessionCompaction.estimatePrompt({
+    session: input.session,
+    messages: input.messages,
+    model: input.model,
+    agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
+    initial: [],
+    tools: { definitions: [], execute: () => Effect.die("idle compaction estimates without tools") },
+  })
+  if (estimate.measured + estimate.estimated < input.settings.idleMinTokens) return undefined
+
+  // Once per idle epoch: a completed or failed compaction since the latest user input blocks another,
+  // so even a fast provider failure that leaves the anchor warm cannot loop.
+  const lastUser = input.messages.findLastIndex((message) => message.type === "user")
+  if (
+    input.messages.slice(lastUser + 1).some((message) => message.type === "compaction" && message.status !== "running")
+  )
+    return undefined
+
+  return { anchor, lifetime }
+}
 
 export interface Interface {
   /** Re-arms the idle timer from durable state. Cheap process-local checks run before any Location load. */
@@ -50,41 +93,18 @@ export const layer = Layer.effect(
     ) {
       const compaction = yield* SessionCompaction.Service
       const context = yield* SessionContext.Service
-      const settings = compaction.settings()
-      if (!settings.auto) return undefined
       const model = yield* context.resolveModel(session).pipe(Effect.option)
       if (Option.isNone(model)) return undefined
-      const ttl = model.value.cache?.ttl
-      // Only an explicit TTL gives a known cache clock; warming-configured Sessions are left to warming.
-      if (!ttl || model.value.compaction?.type === "native") return undefined
       const entries = Option.isSome(config) ? yield* config.value.entries() : []
-      if (model.value.cache?.warming ?? Config.latest(entries, "warming")) return undefined
-
-      const anchor = SessionCompaction.cacheAnchor(messages, model.value.ref)
-      if (anchor?.type !== "assistant" || !anchor.tokens) return undefined
-      const lifetime = SessionCompaction.cacheLifetime(ttl)
-      const age = (yield* Clock.currentTimeMillis) - DateTime.toEpochMillis(anchor.time.created)
-      if (age > lifetime - SessionCompaction.CACHE_MARGIN) return undefined
-
-      const estimate = SessionCompaction.estimatePrompt({
+      const warming = model.value.cache?.warming ?? Config.latest(entries, "warming")
+      return historyLaws({
         session,
         messages,
         model: model.value,
-        agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
-        initial: [],
-        tools: { definitions: [], execute: () => Effect.die("idle compaction estimates without tools") },
+        settings: compaction.settings(),
+        now: yield* Clock.currentTimeMillis,
+        warming: Boolean(warming),
       })
-      if (estimate.measured + estimate.estimated < settings.idleMinTokens) return undefined
-
-      // Once per idle epoch: a completed or failed compaction since the latest user input blocks another,
-      // so even a fast provider failure that leaves the anchor warm cannot loop.
-      const lastUser = messages.findLastIndex((message) => message.type === "user")
-      if (
-        messages.slice(lastUser + 1).some((message) => message.type === "compaction" && message.status !== "running")
-      )
-        return undefined
-
-      return { anchor, lifetime }
     })
 
     /** The firing laws. Returns the admission inputs when every law holds, undefined otherwise. */

@@ -246,7 +246,8 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
           if (existing === incoming) return pending
           // An explicit manual compaction is never absorbed by a pending idle item, which may still be cancelled at delivery.
           if (incoming === "idle") return pending
-          yield* cancel({ sessionID: input.sessionID, id: pending.id })
+          // Already serialized for this Session; the locked cancel would deadlock.
+          yield* cancelMutation({ sessionID: input.sessionID, id: pending.id })
         }
         return yield* admit({
           id: input.id,
@@ -257,14 +258,20 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     )
   })
 
-  const cancel = Effect.fn("SessionInbox.cancel")((input: PendingRef) =>
-    publishMutation(
-      input,
-      bus.publish(SessionEvent.InboxCancelled, {
+  const cancelMutation = (input: PendingRef) =>
+    bus
+      .publish(SessionEvent.InboxCancelled, {
         sessionID: input.sessionID,
         inboxID: input.id,
-      }),
-    ),
+      })
+      .pipe(
+        Effect.asVoid,
+        // Bus projectors abort their transaction through the defect channel.
+        Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
+      )
+
+  const cancel = Effect.fn("SessionInbox.cancel")((input: PendingRef) =>
+    serialized(input.sessionID, cancelMutation(input)),
   )
 
   const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) =>
@@ -487,9 +494,16 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
   return queued ? promotion(queued) : undefined
 })
 
-/** What a boundary decides on: prompts are promoted by id, so only a move's payload is read. */
+/** What a boundary decides on: prompts are promoted by id; control payloads feed delivery. */
 export type Promotion =
-  | { readonly id: SessionMessage.ID; readonly type: "user" | "synthetic" | "compaction"; readonly delivery: Delivery }
+  | { readonly id: SessionMessage.ID; readonly type: "user" | "synthetic"; readonly delivery: Delivery }
+  | {
+      readonly id: SessionMessage.ID
+      readonly type: "compaction"
+      readonly delivery: Delivery
+      readonly payload: CompactionPayload
+      readonly time: { readonly created: DateTime.Utc }
+    }
   | {
       readonly id: SessionMessage.ID
       readonly type: "move"
@@ -500,7 +514,15 @@ export type Promotion =
 const promotion = (row: typeof SessionInboxTable.$inferSelect): Promotion =>
   row.type === "move"
     ? { id: row.id, type: "move", delivery: row.delivery, payload: decodeMove(row.payload) }
-    : { id: row.id, type: row.type, delivery: row.delivery }
+    : row.type === "compaction"
+      ? {
+          id: row.id,
+          type: "compaction",
+          delivery: row.delivery,
+          payload: decodeCompaction(row.payload),
+          time: { created: DateTime.makeUnsafe(row.time_created) },
+        }
+      : { id: row.id, type: row.type, delivery: row.delivery }
 
 /** Which pending rows count: "input" means any item in either delivery mode. */
 export type Scope = "input" | Delivery
