@@ -68,7 +68,11 @@ pub const CELL: usize = size_of::<PaintCell>();
 
 /// One draw: `None` when the plugin was not called (it failed, or its activation ended); else the list's bytes, or
 /// `None` to keep the list (also when the call panicked).
-pub(crate) type Draw = Box<dyn Fn(&str, Frame) -> Option<Option<Vec<u8>>>>;
+pub(crate) type Draw = Box<dyn Fn(&str, Frame) -> Option<Option<Drawn>>>;
+
+/// A list a draw returned: its bytes, or why the host did not take them in, which a carrier that sees a list's
+/// length before its bytes tells without copying them (review bigboi 7).
+pub(crate) type Drawn = Result<Vec<u8>, list::Error>;
 
 /// What the canvases on this thread hold now.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -241,6 +245,13 @@ struct Cost {
     cells: usize,
 }
 
+impl Cost {
+    /// Whether one list may ask this of the renderer.
+    fn fits(self) -> bool {
+        self.recording <= LIST_RECORDING && self.cells <= LIST_CELLS
+    }
+}
+
 struct Board(Rc<State>);
 
 impl Canvas {
@@ -328,22 +339,17 @@ impl State {
     /// Keeps `bytes`, drawn for `size`, once they are checked: a list over a limit (its own, at that size, or what its
     /// plugin or all canvases may hold) shows the placeholder, one the host cannot read fails the plugin and keeps the
     /// list before.
-    fn present(&self, drawer: &Drawer, bytes: Vec<u8>, size: (u16, u16)) {
+    fn present(&self, drawer: &Drawer, drawn: Drawn, size: (u16, u16)) {
         let started = Instant::now();
-        let checked = list::check(&bytes).map(|_| cost(&bytes, size));
+        let checked = drawn.and_then(|bytes| list::check(&bytes).map(|_| (cost(&bytes, size), bytes)));
         let old = match &*self.shown.borrow() {
             Shown::List(old) => old.held(),
             _ => 0,
         };
-        let new = checked.as_ref().map_or(0, |_| held_for(&bytes));
+        let new = checked.as_ref().map_or(0, |(_, bytes)| held_for(bytes));
         let (mine, all) = (held(&drawer.owner) - old, ledger().bytes - old);
         let next = match checked {
-            Ok(cost)
-                if cost.recording <= LIST_RECORDING
-                    && cost.cells <= LIST_CELLS
-                    && mine + new <= PLUGIN_BYTES
-                    && all + new <= TOTAL_BYTES =>
-            {
+            Ok((cost, bytes)) if cost.fits() && mine + new <= PLUGIN_BYTES && all + new <= TOTAL_BYTES => {
                 count(|work| {
                     work.lists += 1;
                     work.bytes += bytes.len() as u64;
@@ -514,6 +520,15 @@ impl Component for Board {
                 if at != size {
                     cost = self::cost(&kept.bytes, size);
                     kept.costed.set((size, cost));
+                    if !cost.fits() {
+                        count(|work| work.over += 1);
+                    }
+                }
+                // A list kept across a resize is held to one list's bounds at the size it shows at, as a new one is
+                // (review bigboi 7): the frame's recording is another bound, not this one.
+                if !cost.fits() {
+                    painter.text(0, 0, PLACEHOLDER, Style::new().dim());
+                    return;
                 }
                 if !spend(&state.app, cost.recording) {
                     count(|work| work.squeezed += 1);
@@ -783,7 +798,7 @@ mod tests {
         let quitting = app.clone();
         let drawer = Rc::new(Drawer {
             owner: Rc::from("test.headless"),
-            draw: Box::new(|_, _| Some(Some(vec![0xff]))),
+            draw: Box::new(|_, _| Some(Some(Ok(vec![0xff])))),
             fail: Box::new(move |_| quitting.defer(|cx| cx.quit())),
         });
         let canvas = Canvas::new(&app, "c", Some(drawer), 0, false);
@@ -797,5 +812,68 @@ mod tests {
         app.run().unwrap();
         assert!(started.elapsed() < Duration::from_secs(2), "the failure waited {:?}", started.elapsed());
         assert_eq!(work().refused, 1);
+    }
+
+    /// A canvas filling a row of `app` whose draw gives `list` first and keeps it after; and its draws.
+    fn keeping(app: &App, row: &View, id: &str, list: list::List) -> (Canvas, Rc<Cell<u32>>) {
+        let counted = Rc::new(Cell::new(0));
+        let first = RefCell::new(Some(list.into_bytes()));
+        let seen = counted.clone();
+        let drawer = Rc::new(Drawer {
+            owner: Rc::from("test.keep"),
+            draw: Box::new(move |_, _| {
+                seen.set(seen.get() + 1);
+                Some(first.borrow_mut().take().map(Ok))
+            }),
+            fail: Box::new(|error| panic!("{error}")),
+        });
+        let canvas = Canvas::new(app, id, Some(drawer), 0, false);
+        row.add(&canvas.widget().width(Length::percent(100.0)).height(Length::percent(100.0)));
+        (canvas, counted)
+    }
+
+    // Expected (P5's bounds, 4.14 `limits`; review bigboi 7): a list the plugin keeps across a resize is held to one
+    // list's bounds at the size it shows at, as a list drawn for that size is, apart from the frame's recording: 32
+    // fills of the whole canvas touch 61,440 cells at 80x24 and 384,000 at 200x60, over 262,144, for 4,096 bytes of
+    // recording. At the larger size it shows the placeholder while a sibling canvas that fits replays; back at the
+    // smaller size the kept list replays again with no draw that gives a list.
+    #[test]
+    fn a_list_kept_across_a_resize_is_held_to_its_bounds_at_the_new_size() {
+        let app = opentui::testing::TestApp::new(80, 24);
+        let column = View::new(app.app()).column().width(Length::percent(100.0)).height(Length::percent(100.0));
+        let (top, bottom) = (View::new(app.app()).height(Length::percent(80.0)), View::new(app.app()).grow(1.0));
+        column.add(&top);
+        column.add(&bottom);
+        app.root().add(&column);
+        let mut fills = list::List::new();
+        for _ in 0..32 {
+            fills.fill(0, 0, 200, 60, abi::Rgba::new(200, 0, 0, 255));
+        }
+        let mut small = list::List::new();
+        small.fill(0, 0, 4, 1, abi::Rgba::new(0, 200, 0, 255));
+        let (_big, big_draws) = keeping(app.app(), &top, "big", fills);
+        let (_small, _) = keeping(app.app(), &bottom, "small", small);
+        let shows = |app: &opentui::testing::TestApp| app.render().text().contains(PLACEHOLDER);
+        assert!(!shows(&app), "the list fits at 80x24");
+        assert_eq!(cost(&_big.state_bytes(), (80, 19)).cells, 32 * 80 * 19);
+        for (size, over) in [((200, 60), true), ((80, 24), false), ((200, 60), true)] {
+            let before = work();
+            app.resize(size.0, size.1);
+            assert_eq!(shows(&app), over, "at {size:?}");
+            let done = work().since(before);
+            assert_eq!(done.replays, if over { 1 } else { 2 }, "at {size:?}: the sibling replays: {done:?}");
+            assert_eq!(done.lists, 0, "at {size:?}: no list was given after the first");
+        }
+        assert!(big_draws.get() >= 4, "each size asked for a draw: {}", big_draws.get());
+    }
+
+    impl Canvas {
+        /// The bytes of the list the canvas keeps.
+        fn state_bytes(&self) -> Vec<u8> {
+            match &*self.state.shown.borrow() {
+                Shown::List(kept) => kept.bytes.to_vec(),
+                _ => Vec::new(),
+            }
+        }
     }
 }
