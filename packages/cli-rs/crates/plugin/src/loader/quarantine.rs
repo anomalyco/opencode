@@ -8,7 +8,29 @@ use std::fs::File;
 
 /// The raw quarantine of `file`, or `None` when it has none.
 pub fn read(file: &File) -> Result<Option<Vec<u8>>, String> {
+    #[cfg(test)]
+    if let Some(error) = FAIL.take() {
+        return Err(unreadable(error));
+    }
     imp::read(file)
+}
+
+/// Why a library whose quarantine cannot be read is refused.
+#[cfg(any(test, target_os = "macos"))]
+fn unreadable(error: impl std::fmt::Display) -> String {
+    format!("cannot read its quarantine: {error}")
+}
+
+#[cfg(test)]
+thread_local! {
+    static FAIL: std::cell::Cell<Option<std::io::Error>> = const { std::cell::Cell::new(None) };
+}
+
+/// Makes the next [`read`] on this thread fail with `error`, as an attribute the system cannot read does on macOS:
+/// what the loader does then runs on every platform (final re-review big-boi 3).
+#[cfg(test)]
+pub(crate) fn fail_next_read(error: std::io::Error) {
+    FAIL.set(Some(error));
 }
 
 /// Puts the quarantine `value` on `copy`.
@@ -52,10 +74,10 @@ mod imp {
 
     /// `None` for an attribute that is not there, or on a file system that holds none; any other error refuses the
     /// library.
-    fn absent(error: Error) -> Result<Option<Vec<u8>>, String> {
+    pub(super) fn absent(error: Error) -> Result<Option<Vec<u8>>, String> {
         match error.raw_os_error() {
             Some(libc::ENOATTR | libc::ENOTSUP) => Ok(None),
-            _ => Err(format!("cannot read its quarantine: {error}")),
+            _ => Err(super::unreadable(error)),
         }
     }
 
@@ -110,5 +132,16 @@ mod tests {
         let copy = File::create(dir.path().join("copy")).unwrap();
         put(&copy, &value).unwrap();
         assert_eq!(read(&copy), Ok(Some(value)));
+    }
+
+    // Expected (final re-review big-boi 3; macOS only): an attribute that is not there, or a file system that holds
+    // none, is no quarantine; every other error is one the library is refused for.
+    #[test]
+    fn only_absence_is_no_quarantine() {
+        for (errno, absent) in [(libc::ENOATTR, true), (libc::ENOTSUP, true), (libc::EACCES, false), (libc::EIO, false)]
+        {
+            let read = imp::absent(std::io::Error::from_raw_os_error(errno));
+            assert_eq!(read.is_ok(), absent, "{errno}: {read:?}");
+        }
     }
 }

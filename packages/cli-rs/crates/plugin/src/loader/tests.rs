@@ -1123,6 +1123,38 @@ fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
     assert_eq!(fake.loads.get(), 2);
 }
 
+// Expected (final re-review big-boi 3, on every platform): a build whose quarantine the system cannot read is not
+// opened: a global one fails with the reason the user sees in the manager, and an approved project one is held back,
+// also once approved; with the attribute readable again, each loads.
+#[test]
+fn a_build_whose_quarantine_cannot_be_read_is_not_opened() {
+    let project = Project::new();
+    write(&project.config().join(format!("plugins/global/{}", entry_file())), "id=global");
+    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let loader = project.loader(fake.clone(), Vec::new());
+    let global = project.config().join("plugins/global").to_string_lossy().into_owned();
+    quarantine::fail_next_read(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+    loader.reconcile(&dynamic(&host), &registry);
+    let Status::Failed(error) = entry(&registry.entries(), &global).status.clone() else { panic!() };
+    assert!(error.contains("cannot read its quarantine"), "{error}");
+    assert_eq!(fake.loads.get(), 0, "the global build was opened");
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(entry(&registry.entries(), &global).status, Status::Active, "readable again");
+    // A project's build: approved, then its attribute cannot be read.
+    let project = Project::new();
+    let target = project.plugin("proj", "id=proj");
+    let (registry, fake) = (Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let loader = project.loader(fake.clone(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    assert!(answer(&loader, &target, approval::Decision::Approved));
+    quarantine::fail_next_read(std::io::Error::other("an I/O error"));
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(entry(&registry.entries(), &target).status, Status::Pending, "an approved build whose quarantine fails");
+    assert_eq!(fake.loads.get(), 0, "the project build was opened");
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(entry(&registry.entries(), &target).status, Status::Active);
+}
+
 // Expected: an approved build that fails is told again when it comes back after a spell as pending, as a new failure.
 #[test]
 fn a_failure_after_a_pending_spell_is_told_again() {
