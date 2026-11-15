@@ -42,7 +42,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         let accent = host.color("categorical.3.300").map_or(Color::from("text.muted"), Color::Rgba);
         let line = vec![
             Span::new("accent ").fg(accent),
-            Span { bg: Some(Rgba::new(255, 255, 255, 20).into()), ..Span::new(fence.code.trim().to_owned()) },
+            Span::new(fence.code.trim().to_owned()).bg(Rgba::new(255, 255, 255, 20)),
         ];
         Fenced::Lines { lines: vec![line], fg: Some(Rgba::new(255, 255, 255, 255).into()), drag: true }
     });

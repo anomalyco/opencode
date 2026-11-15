@@ -59,6 +59,7 @@
 
 #![allow(unsafe_code)]
 
+mod build;
 pub mod canvas;
 pub mod claim;
 pub mod interact;
@@ -272,6 +273,7 @@ pub unsafe fn received(out: Owned, free: unsafe extern "C" fn(Owned)) -> Result<
 /// What the host gives a plugin instance. It stays valid until the host destroys the instance. A plugin reads an
 /// entry only when `size` covers it.
 #[repr(C)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct HostApi {
     /// `size_of::<HostApi>()` of the host's build.
     pub size: usize,
@@ -353,6 +355,7 @@ pub enum ThemeMode {
 /// What a plugin exports. The host reads an entry only when `size` covers it; entries added by later minor versions
 /// go at the end and are optional.
 #[repr(C)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct PluginApi {
     // 1.0: the core, which every plugin of major version 1 has.
     /// `size_of` the struct as the plugin built it.
@@ -394,6 +397,7 @@ pub struct PluginApiV1_0 {
 
 /// What [`PluginApi::describe`] returns (1.1).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Metadata {
     /// The plugin's own version, such as its crate version.
     #[serde(default)]
@@ -410,6 +414,7 @@ pub struct Metadata {
 
 /// Everything a plugin registered in its setup.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Manifest {
     pub id: String,
     pub commands: Vec<Command>,
@@ -464,6 +469,7 @@ pub struct Manifest {
 
 /// A surface of contract 2.0 as the manifest lists it ([`v2::Surface`] without its view).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct SurfaceClaim {
     pub name: String,
     pub place: SurfacePlace,
@@ -493,6 +499,7 @@ pub struct SurfaceClaim {
 /// [`v2::Place`] on the wire.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum SurfacePlace {
     Route {
         name: String,
@@ -621,6 +628,7 @@ impl Command {
 /// Where a [`Command`] runs: everywhere, or while the plugin's route of that name shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Scope {
     #[default]
     Global,
@@ -638,6 +646,7 @@ impl Scope {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum SlotKind {
     Prepend,
     Append,
@@ -647,6 +656,7 @@ pub enum SlotKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct SlotClaim {
     pub kind: SlotKind,
     /// A host slot path, such as `home.footer` or `sidebar.content`.
@@ -664,6 +674,7 @@ pub struct SlotClaim {
 
 /// Where a slot claim of [`Setup::slot`] goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Placement {
     pub kind: SlotKind,
     /// A host slot path, such as `home.footer` or `sidebar.content`.
@@ -689,6 +700,7 @@ impl Placement {
 /// unknown token draws in `text.base`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Color {
     Rgba(Rgba),
     Token(Cow<'static, str>),
@@ -752,6 +764,7 @@ impl<'de> Deserialize<'de> for Rgba {
 
 /// Styled text.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Span {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -806,6 +819,7 @@ pub type Line = Vec<Span>;
 
 /// A fenced Markdown code block, as [`Setup::code_block`] renders it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Fence {
     pub language: String,
     pub info: String,
@@ -826,6 +840,7 @@ pub struct Fence {
 /// What a fence render returns.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Fenced {
     /// The host's plain code view.
     Code,
@@ -847,6 +862,7 @@ pub enum Fenced {
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "node", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Render {
     /// What the claim shows now stays. On a claim that has not drawn yet, it draws nothing.
     Keep,
@@ -859,6 +875,7 @@ pub enum Render {
 /// What a plugin draws: boxes and text.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Node {
     /// A box that lays out its children in a column, or in a row. An empty box still takes its place.
     Box {
@@ -1108,6 +1125,7 @@ impl Node {
 
 /// 1.5: a border of a [`Node::Box`] (TS `border`, `borderStyle`, `borderColor`, `title` and `titleAlignment`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Border {
     /// The sides that draw; all four by default.
     #[serde(default, skip_serializing_if = "Sides::is_all")]
@@ -1183,6 +1201,7 @@ impl Default for Sides {
 /// The lines a [`Border`] draws with.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum BorderStyle {
     #[default]
     Single,
@@ -1200,6 +1219,7 @@ impl BorderStyle {
 /// Where a [`Border`]'s title sits on its top side.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum TitleAlign {
     #[default]
     Left,
@@ -1244,6 +1264,7 @@ fn is_zero_i16(value: &i16) -> bool {
 /// What a [`Node::Box`] does with what does not fit in it (TS `overflow`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Overflow {
     /// It draws outside the box.
     #[default]
@@ -1260,6 +1281,7 @@ impl Overflow {
 
 /// What a click on a node runs.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Click {
     pub action: Action,
     /// On the press of the left button, or on its release.
@@ -1280,6 +1302,7 @@ impl Click {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Press {
     Down,
     Up,
@@ -1288,6 +1311,7 @@ pub enum Press {
 /// What a click asks the host to do, after the event that caused it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Action {
     /// Runs a registered command, the plugin's or the host's, palette or not, as [`Host::dispatch`] does.
     Command {
@@ -1299,6 +1323,7 @@ pub enum Action {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Justify {
     #[default]
     Start,
@@ -1311,6 +1336,7 @@ pub enum Justify {
 /// Where a box's children sit across its row or column.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Align {
     #[default]
     Stretch,
@@ -1333,6 +1359,7 @@ impl Justify {
 
 /// How a node takes space in its parent's row or column.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Layout {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub width: Option<Width>,
@@ -1366,6 +1393,7 @@ pub struct Layout {
 /// 2.0 (P8): where an absolute node sits: cells from its parent's edges, a negative one outside them, and its paint
 /// order among its siblings (TS `top`, `right`, `bottom`, `left` and `zIndex`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Absolute {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top: Option<i16>,
@@ -1432,6 +1460,7 @@ impl Layout {
 /// A length in cells (rows, for a height) or in percent of the parent's.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Width {
     Cells(u16),
     Percent(f32),
@@ -1439,6 +1468,7 @@ pub enum Width {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Wrap {
     #[default]
     Word,
@@ -1470,6 +1500,7 @@ fn is_no_padding(value: &(u16, u16)) -> bool {
 
 /// What a slot passes to the claims that render in it. A path fills what it has.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct SlotInput {
     /// `prompt.footer*`, `session.composer.top` and `sidebar.*`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1494,6 +1525,7 @@ pub struct SlotInput {
 
 /// What the prompt passes to the claims of `prompt.footer*`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct PromptInput {
     /// The prompt is in shell mode.
     pub shell: bool,
@@ -1503,6 +1535,7 @@ pub struct PromptInput {
 
 /// What changed since a claim last rendered. A claim that has not rendered yet gets `all`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Changed {
     /// Anything may have changed.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1555,6 +1588,7 @@ impl Changed {
 
 /// A location: a directory, and a workspace in it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct LocationRef {
     pub directory: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1563,6 +1597,7 @@ pub struct LocationRef {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum SessionStatus {
     #[default]
     Idle,
@@ -1571,6 +1606,7 @@ pub enum SessionStatus {
 
 /// A session, from [`Read::session`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Session {
     pub info: SessionInfo,
     pub status: SessionStatus,
@@ -1578,6 +1614,7 @@ pub struct Session {
 
 /// A session's family, from [`Read::family`]: its root and every known descendant.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Family {
     pub members: Vec<Member>,
     /// A child's own cost, or a root's cost with every known descendant's.
@@ -1590,6 +1627,7 @@ pub struct Family {
 
 /// The host, from [`Read::info`].
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Info {
     pub version: String,
     /// The terminal's columns and rows.
@@ -1610,6 +1648,7 @@ fn is_zero_usize(value: &usize) -> bool {
 /// pick of a [`SelectOption::toggle`] row (synthesis 3.6). What failed is not in it: an error may hold paths, data or
 /// a secret of another plugin, so only the host shows it, to the user ([`ErrorDetails::plugin`]).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct PluginEntry {
     /// The host's name for this entry and no other, which a [`SelectOption::toggle`] names: a held build may share its
     /// ID with a loaded plugin.
@@ -1632,6 +1671,7 @@ pub struct PluginEntry {
 /// Where a [`PluginEntry`] comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum PluginOrigin {
     Builtin,
     /// Added by the host after the built-ins, such as a test plugin.
@@ -1645,6 +1685,7 @@ pub enum PluginOrigin {
 /// What a [`PluginEntry`] is doing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum PluginStatus {
     Active,
     Inactive,
@@ -1659,6 +1700,7 @@ pub enum PluginStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Member {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1672,6 +1714,7 @@ pub struct Member {
 /// `RenderRoute` → [`Render`], `Slot` and `Route` → `Vec<Line>`, everything else `null`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Request {
     /// The fence request of ABI 1.3, sent to a plugin whose manifest has no [`Manifest::render`]. `streaming` is set
     /// while the message streams and the fence is open.
@@ -1803,17 +1846,18 @@ pub enum Request {
 /// the host routed the event to, or a layer's of [`Setup::layer`], which [`Manifest::layers`] names by index.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum InputTo {
     /// A surface's handler, for the mount the event is for (big-boi 4), which [`Read::mount`] names to the handler;
     /// none for [`interact::Event::Mount`], which the plugin hears rather than the mount, and which names its mount.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Surface {
         surface: usize,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mount: Option<v2::MountId>,
     },
-    Layer {
-        layer: usize,
-    },
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
+    Layer { layer: usize },
 }
 
 thread_local! {
@@ -1836,6 +1880,7 @@ fn for_mount<R>(mount: Option<&v2::MountId>, f: impl FnOnce() -> R) -> R {
 /// What [`Request::View`] returns: the tree, the content the view gave the host with its handles, and how many values
 /// the mount's [`v2::Memo`] table holds after the view.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct ViewReply {
     pub node: v2::Node,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1989,6 +2034,7 @@ fn header_size(bytes: &[u8]) -> Option<(u32, u32)> {
 /// (`ts` becomes `typescript`), so the plugin finds its render by `index`. A host that sends no `index` matches by
 /// language.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct RenderFence {
     #[serde(flatten)]
     pub fence: Fence,
@@ -2001,6 +2047,7 @@ pub struct RenderFence {
 /// A host that does not know a request answers it with an error.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum HostRequest {
     Log {
         level: Level,
@@ -2269,6 +2316,7 @@ pub enum HostRequest {
 
 /// 1.5: the composer on screen, from [`Read::composer`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Composer {
     /// The text as the composer shows it: a compact paste is its label, such as `[Pasted ~3 lines]`.
     pub text: String,
@@ -2282,6 +2330,7 @@ pub struct Composer {
 /// input and the TS composer's `ref` do.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum ComposerEdit {
     /// Replaces the text and its attachments, and puts the cursor at the end (TS `ref.set`). The mode stays.
     Set { text: String },
@@ -2294,6 +2343,7 @@ pub enum ComposerEdit {
 
 /// 1.6: a session tab, from [`Read::tabs`] (TS `ui.tabs.list()`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Tab {
     /// The root session the tab shows.
     pub session_id: String,
@@ -2315,6 +2365,7 @@ pub struct Tab {
 /// 1.6: what a [`Tab`] has that the user has not seen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Unread {
     Activity,
     Error,
@@ -2325,6 +2376,7 @@ pub enum Unread {
 /// own ID as TS does. Each answer counts the edits the same call made before it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum TabEdit {
     /// Opens a tab for the session without showing it. `false` while tabs are off.
     Open { session: String },
@@ -2342,6 +2394,7 @@ pub enum TabEdit {
 
 /// 1.6: one stroke of the pending key sequence, from [`Read::keymap_pending`] (TS `keymap.pending()`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct KeymapPending {
     /// As the host shows keys, such as `ctrl+x`.
     pub key: String,
@@ -2353,6 +2406,7 @@ pub struct KeymapPending {
 /// 1.6: a key that does something now, from [`Read::keymap_active`] (TS `keymap.active()`): at the root, or one that
 /// continues the pending sequence.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct KeymapActive {
     pub key: String,
     /// The title of the command it runs.
@@ -2369,6 +2423,7 @@ pub struct KeymapActive {
 
 /// 1.6: a command that can be reached now, from [`Read::keymap_commands`] (TS `keymap.commands()`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct KeymapCommand {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2390,6 +2445,7 @@ pub struct KeymapCommand {
 
 /// 1.6: the slash command of a [`KeymapCommand`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct KeymapSlash {
     pub name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -2402,6 +2458,7 @@ pub struct KeymapSlash {
 /// 1.6: a program to run in the foreground, for [`Host::foreground`] (TS `renderer.suspend()`, then the program, then
 /// `renderer.resume()`): the host gives it the terminal and waits, as it does for `$EDITOR`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Foreground {
     /// The program, found on `PATH` when it has no directory.
     pub command: String,
@@ -2414,6 +2471,7 @@ pub struct Foreground {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Level {
     Debug,
     Info,
@@ -2424,6 +2482,7 @@ pub enum Level {
 /// A toast's kind, which sets its color.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Variant {
     Info,
     Success,
@@ -2434,6 +2493,7 @@ pub enum Variant {
 /// A toast, for [`Host::toast`]. With a `session`, the toast offers to open that session unless the session's
 /// family is on screen.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Toast {
     pub variant: Variant,
     pub title: Option<String>,
@@ -2459,6 +2519,7 @@ impl Toast {
 /// A request for the user's attention, for [`Host::attention`]: a desktop notification through the terminal, a
 /// sound, or both, each when the user's `attention` settings allow it and its focus rule holds.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Attention {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
@@ -2474,6 +2535,7 @@ pub struct Attention {
 /// When a notification or sound goes out, by the terminal's focus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum When {
     Always,
     Focused,
@@ -2481,6 +2543,7 @@ pub enum When {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Sound {
     pub name: SoundName,
     pub when: When,
@@ -2492,6 +2555,7 @@ pub struct Sound {
 /// The sounds of the user's `attention.sounds`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum SoundName {
     Default,
     Question,
@@ -2504,6 +2568,7 @@ pub enum SoundName {
 /// What the host shows, from [`Read::route`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Route {
     #[default]
     Home,
@@ -2598,6 +2663,7 @@ pub struct RequestId(pub u64);
 /// A dialog, for [`Host::dialog`]. It replaces the dialogs that are open, unless it is a [`Panel`] whose key is open.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Dialog {
     /// A one-line text field. Enter closes it and runs `action` with the text as its input; escape closes it.
     Prompt {
@@ -2685,6 +2751,7 @@ impl Image {
 
 /// A [`Dialog::ErrorDetails`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct ErrorDetails {
     pub title: String,
     pub error: String,
@@ -2712,6 +2779,7 @@ pub struct ErrorDetails {
 /// click closes it and runs `action` with `true` for `Confirm` or `false` for `Cancel` as the input, as TS resolves
 /// `true` or `false`. Escape cancels. When another dialog replaces it, nothing runs, as TS resolves `undefined`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Confirm {
     pub title: String,
     /// Muted text under the title.
@@ -2724,6 +2792,7 @@ pub struct Confirm {
 
 /// The labels of a [`Confirm`]'s buttons; `confirm` and `cancel` when unset.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct ConfirmLabel {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confirm: Option<String>,
@@ -2740,6 +2809,7 @@ impl ConfirmLabel {
 /// A [`Dialog::Alert`]. Enter, a click on `ok`, escape, and another dialog that replaces it all close it, and then
 /// `action` runs, once, as TS resolves the alert's promise in each case.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Alert {
     pub title: String,
     /// Muted text under the title.
@@ -3040,6 +3110,7 @@ impl SelectOption {
 /// 2.0: a mark left of a [`SelectOption`]'s title.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Gutter {
     /// The host's spinner, in the row's color.
     Spinner,
@@ -3048,6 +3119,7 @@ pub enum Gutter {
 
 /// 2.0: an action of a [`Select`] on the selected row.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct SelectAction {
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3224,6 +3296,7 @@ impl Panel {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum PanelSize {
     #[default]
     Medium,
@@ -3235,6 +3308,7 @@ pub enum PanelSize {
 
 /// A footer action of a [`Panel`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct PanelAction {
     pub title: String,
     /// The key shown after the title; [`Panel::binds`] binds it.
@@ -3251,6 +3325,7 @@ pub struct PanelAction {
 
 /// A key of a [`Panel`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct PanelBind {
     pub key: String,
     pub title: String,

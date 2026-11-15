@@ -60,6 +60,7 @@ const CELL_BYTES: usize = STYLE + 4;
 /// How a cell is drawn. Without a foreground the terminal's own is used; without a background the cell keeps the one
 /// drawn under it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Style {
     pub fg: Option<Rgba>,
     pub bg: Option<Rgba>,
@@ -150,6 +151,7 @@ impl Style {
 
 /// One operation of a list, as [`ops`] reads it.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Op<'a> {
     Fill { x: i16, y: i16, width: u16, height: u16, color: Rgba },
     Text { x: i16, y: i16, style: Style, text: &'a str },
@@ -182,6 +184,7 @@ impl<'a> Cells<'a> {
 
 /// Why a list is not drawn.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Error {
     /// The bytes are not a list: the host refuses it whole.
     Malformed(String),
@@ -191,6 +194,7 @@ pub enum Error {
 
 /// The limit a list is over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Limit {
     /// Its bytes, of [`MAX_BYTES`].
     Bytes(usize),
@@ -216,6 +220,7 @@ impl std::fmt::Display for Error {
 
 /// What a list holds, once [`check`] read it whole.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Checked {
     pub ops: usize,
 }

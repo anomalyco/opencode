@@ -24,6 +24,7 @@ use crate::{Color, Host};
 /// What a handler did with an event: took it, or passed it on down the host's order (synthesis 4.2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Handled {
     /// The event goes no further: no lower layer, widget or app binding sees it.
     Consume,
@@ -37,37 +38,49 @@ pub type HandlerFn = Rc<dyn Fn(&dyn Host, &Event) -> Handled>;
 /// An event the host routes to a plugin.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Event {
     /// A key one of the plugin's layers takes: a [`Bind`] (with its `bind` name), or any key of an [`Layer::any`]
     /// listener (without).
     Key(Key),
     /// A bracketed paste, for a layer that declares [`Layer::paste`]; otherwise the host's paste route takes it.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Paste { text: String },
     /// A pointer event on a node with [`Interact::pointer`].
     Pointer(Pointer),
     /// The pointer entered (`inside`) or left a node with [`Interact::hover_events`].
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Hover { node: String, inside: bool },
     /// The host closed the plugin's overlay `surface`: escape, a click outside it, or another overlay of the plugin.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Closed { surface: String },
     /// P3: a scroll of the mount: the user moved one that asks with `user_scroll`, or a step of the plugin's own
     /// landed. The answer does not matter.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Scroll { event: crate::v2::ScrollEvent },
     /// P3: the text of the mount's [`crate::v2::Node::Input`] `node` changed, after each edit. The answer does not
     /// matter.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Change { node: String, text: String },
     /// P3: the mount's [`crate::v2::Node::Input`] `node` was submitted: enter on one line, the submit key on many. The
     /// answer does not matter.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Submit { node: String, text: String },
     /// P6a: mount `mount` began (`mounted`), before its first view, or it is ending, for a surface that asks
     /// ([`crate::v2::Surface::mounts`]), as a 1.x claim's `on_mount`. A new mount may begin before the one it replaces
     /// ends, also with the same input: `mount` tells them apart. `slot` is a slot surface's input. The plugin hears it,
     /// not the mount: what its handler starts is the plugin's and outlives the mount. The answer does not matter.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Mount {
         mount: crate::v2::MountId,
         mounted: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         slot: Option<crate::SlotInput>,
     },
+    /// An event a later 2.x adds, which only the SDK's `next` feature has: a plugin's wildcard arm follows it.
+    #[cfg(feature = "next")]
+    #[doc(hidden)]
+    Later {},
 }
 
 impl Event {
@@ -80,12 +93,15 @@ impl Event {
             }
             Event::Scroll { event } => Some(matches!(event, crate::v2::ScrollEvent::UserScroll { .. })),
             Event::Hover { .. } | Event::Closed { .. } | Event::Mount { .. } => None,
+            #[cfg(feature = "next")]
+            Event::Later {} => None,
         }
     }
 }
 
 /// A key as the host names it: a shortcut such as `ctrl+a` or `escape`, and the text it types, if any.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Key {
     /// The [`Bind::name`] that took it; `None` for a listener.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -97,6 +113,7 @@ pub struct Key {
 
 /// A pointer event on a node, at a cell in the node (`x`, `y`) and on the screen.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Pointer {
     pub node: String,
     pub kind: PointerKind,
@@ -114,6 +131,7 @@ pub struct Pointer {
 
 /// Where a dropped drag started: a node of one of the plugin's mounts.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Dragged {
     pub surface: String,
     pub node: String,
@@ -121,6 +139,7 @@ pub struct Dragged {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum PointerKind {
     Down,
     Up,
@@ -134,6 +153,7 @@ pub enum PointerKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Button {
     Left,
     Middle,
@@ -143,6 +163,7 @@ pub enum Button {
 /// What a box does with input, as data on the node: the host wires it, and needs no plugin call for `hover`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Interact {
     /// The node can take the focus, by a click or [`Host::focus`]; it needs an id.
     #[serde(skip_serializing_if = "is_false")]
@@ -230,6 +251,7 @@ impl Layer {
 /// Where a [`Layer`] holds.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum LayerScope {
     /// While the focus is in the mount's surface (a route, a panel, an overlay). A layer of setup has no surface.
     #[default]
@@ -329,6 +351,7 @@ pub struct Rect {
 /// Where the focus is, for the running call's mount: in which of its nodes with an id, and whether it is in the
 /// mount's surface at all.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Focused {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node: Option<String>,
@@ -380,6 +403,7 @@ impl PanelInput {
 
 /// Opens the plugin's panel `surface` beside a session ([`Host::open_panel`]); one panel shows at a time.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct OpenPanel {
     pub surface: String,
     /// The session it shows beside, which must be on screen; without one, the session on screen (TS
@@ -393,6 +417,7 @@ pub struct OpenPanel {
 /// Opens the plugin's overlay `surface` over everything but the host's dialogs ([`Host::overlay`]), where `anchor`
 /// says, at most `width` by `height` cells. It takes the focus; escape and a click outside it close it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Overlay {
     pub surface: String,
     pub anchor: Anchor,
@@ -403,6 +428,7 @@ pub struct Overlay {
 /// Where an overlay's top left corner goes. The host keeps it on the screen.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Anchor {
     /// A screen cell, such as where the pointer was pressed.
     Point { x: u16, y: u16 },
@@ -417,6 +443,7 @@ pub enum Anchor {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Edge {
     Top,
     Bottom,

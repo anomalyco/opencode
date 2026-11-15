@@ -23,6 +23,7 @@ use crate::Color;
 /// An edge of a scroll's viewport.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Edge {
     #[default]
     Top,
@@ -31,6 +32,7 @@ pub enum Edge {
 
 /// A node of a named group of a scroll; `variant` is the plugin's, which reads and `layout` hand back.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Anchor {
     pub group: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -45,6 +47,7 @@ impl Anchor {
 
 /// A row of a box whose first child the user resizes by dragging the column after it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Split {
     /// The first child's width in cells until the user drags it.
     pub at: u16,
@@ -56,6 +59,7 @@ pub struct Split {
 /// How an image takes its node's room.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Fit {
     /// Inside the node, keeping the aspect ratio.
     #[default]
@@ -69,6 +73,7 @@ pub enum Fit {
 /// One item of a [`super::Node::List`]: its node, which must have an id, and the rows the host assumes it takes
 /// until it has been laid out.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct ListItem {
     pub node: super::Node,
     #[serde(default = "one", skip_serializing_if = "is_one")]
@@ -84,6 +89,7 @@ impl ListItem {
 /// Where a node goes when [`Scroll::To`] brings it into view.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum ScrollAlign {
     /// Its top at the viewport's top.
     #[default]
@@ -102,6 +108,7 @@ pub enum ScrollAlign {
 /// estimate until it is laid out. The others name content, and land on it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Scroll {
     /// Brings node `node` into view after the solve, again in each round until it moves nothing.
     To {
@@ -133,6 +140,7 @@ pub enum Scroll {
 /// What a verb or a read names: a scroll of one of the plugin's surfaces, or a viewport the host publishes.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Target {
     /// The scroll (or list) with id `id` in the plugin's live mount of surface `surface`.
     Node { surface: String, id: String },
@@ -149,6 +157,7 @@ impl Target {
 
 /// Where a scroll is, in rows: its offset, its viewport's height and its content's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct ScrollState {
     pub offset: i32,
     pub viewport: i32,
@@ -158,6 +167,7 @@ pub struct ScrollState {
 /// An anchor and its row in its scroll's content. `id` is the anchored node's, or `{diff}#{index}` for a hunk;
 /// `owner` is the anchored node's id, or the diff's.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct AnchorAt {
     pub id: String,
     pub owner: String,
@@ -171,16 +181,20 @@ pub struct AnchorAt {
 /// What the host tells a surface about its scrolls, as a plugin call with effects (a handler).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum ScrollEvent {
     /// Where a [`Scroll::Step`] of scroll `scroll` landed, in the dispatch that asked for it.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Landed { scroll: String, anchor: AnchorAt },
     /// The user moved scroll `scroll` (the wheel, or its keys), when the scroll asks with `user_scroll`.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     UserScroll { scroll: String },
 }
 
 /// What a surface asks its `layout` call to be told about. A scroll's `notify_top` adds its top anchor.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Notify {
     /// The rect of node `id`.
     Node { id: String },
@@ -203,6 +217,7 @@ pub struct Rect {
 
 /// The top anchor of a group in a scroll: the last of the group, in content order, at or above the viewport's top.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Top {
     pub scroll: String,
     pub group: String,
@@ -211,6 +226,7 @@ pub struct Top {
 
 /// What a `layout` call gets: this frame's geometry, after the host's behaviors, for what the surface named.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Geometry {
     /// The mount this call is for (big-boi 4): two mounts of one surface, with the same tree and the same rects, tell
     /// their models apart by it. A 2.0 host names it in every call.
@@ -249,6 +265,7 @@ impl Geometry {
 
 /// A paint-time property `layout` sets on node `node`: a box's background. It changes no size.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Paint {
     pub node: String,
     pub bg: Color,
@@ -256,6 +273,7 @@ pub struct Paint {
 
 /// What a `layout` call returns.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct LayoutReply {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paints: Vec<Paint>,
@@ -274,6 +292,7 @@ impl LayoutReply {
 /// `Viewport::Transcript`: the session transcript's scroll, as the host publishes it. It covers the mounted window,
 /// the tail of the session the transcript has revealed; `above` counts the messages before it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct TranscriptView {
     pub offset: i32,
     pub viewport: i32,
@@ -286,6 +305,7 @@ pub struct TranscriptView {
 
 /// A mounted row of the transcript: its kind (`user`, `assistant`, `tool`, ...), its message, and where it is.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct TranscriptRow {
     pub kind: String,
     pub message: String,

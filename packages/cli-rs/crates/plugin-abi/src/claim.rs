@@ -27,6 +27,7 @@ use crate::v2::{self, Node, PartRef, Source};
 /// `{"type": "tool", "name": "bash"}`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "name", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Target {
     Tool(String),
     Fence(String),
@@ -34,6 +35,7 @@ pub enum Target {
 
 /// A renderer claim as [`crate::Setup::claim`] registers it.
 #[derive(Clone)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Claim {
     pub target: Target,
     /// The view reads [`v2::SurfaceInput::palette`], so a theme change calls it again for each part it shows.
@@ -44,6 +46,7 @@ pub struct Claim {
 /// A claim as [`crate::Manifest::claims`] lists it ([`Claim`] without its view); [`crate::Request::Claim`] names it by
 /// its index there.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Entry {
     pub target: Target,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -59,6 +62,7 @@ impl From<&Claim> for Entry {
 /// What [`crate::Request::Claim`] returns: the view's tree, or `None` where it declines, the content it gave the host with
 /// its handles, the handles it released, and how many values the mount's [`v2::Memo`] table holds after the view.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Reply {
     #[serde(default)]
     pub node: Option<Node>,
@@ -100,6 +104,7 @@ impl Claim {
 /// A claimed part as it is now.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Part {
     Tool(Box<ToolPart>),
     Fence(FencePart),
@@ -118,6 +123,7 @@ impl Part {
 /// What a part's revisions keep while it streams: a tool call's state and whether it waits for a permission, or a
 /// fence's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Phase {
     Tool(State, bool),
     Fence { streaming: bool, closed: bool },
@@ -125,6 +131,7 @@ pub enum Phase {
 
 /// A tool call in an assistant message.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct ToolPart {
     pub session: String,
     pub message: String,
@@ -152,6 +159,7 @@ impl ToolPart {
 /// (`Running`), or it ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum State {
     Pending,
     Running,
@@ -161,6 +169,7 @@ pub enum State {
 
 /// A fenced code block in Markdown the transcript shows.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct FencePart {
     /// The language it was claimed for.
     pub language: String,

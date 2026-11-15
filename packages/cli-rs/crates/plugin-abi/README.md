@@ -131,20 +131,37 @@ A plugin binary carries its ABI version. The host is ABI 2.0, and loads every 1.
 | A 3.x SDK | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" | — |
 
 A plugin of 1.6 rebuilt on the 2.0 SDK keeps every entry and request of 1.6 until 3.0, and what 2.0 adds is in
-`docs/P.4.md`: surfaces of contract 2.0 over the C ABI, and threads that send messages. Its source needs one change:
-the requests a plugin builds are `#[non_exhaustive]` from 2.0 on, so that a field a later 2.x adds breaks no plugin's
-source. A struct literal of one does not compile, also with `..Default::default()`; build it from its constructor and
-set what it needs with its `with_` setters, one a field:
+`docs/P.4.md`: surfaces of contract 2.0 over the C ABI, and threads that send messages.
 
-- `Command`, `Fetch`, `SelectOption`, `Images`, `Image`, `Bind` and `Layer` from `Type::default()` (or
-  `SelectOption::new`, `Bind::new`, `Bind::command`), `Select` from `Select::new` and `Panel` from `Panel::new`:
-  `Command::default().with_name("hello.greet".to_owned()).with_palette(true)`.
-- `Node::Diff` from `Node::diff(content)` and `with_view`, `with_filetype`, `with_hunks`, `with_diff_wrap`,
-  `with_diff_padding` and `with_id`.
-- `interact::PanelInput`, which the host fills, is read as before; a pattern of it needs `..`.
+### The source promise of 2.x
 
-The other types of 1.x stay open to literals until a field they need comes; the next to close are `Toast`, `Alert`,
-`Confirm`, `ErrorDetails`, `Overlay`, `OpenPanel`, `SelectAction`, `PanelAction` and `PanelBind`.
+A plugin's source that builds on the 2.0 SDK builds on every later 2.x SDK (carbon-4, big-boi 14). So every type of
+the contract that a later 2.x may extend is `#[non_exhaustive]` from 2.0 on, to the plugin's crate:
+
+- A struct literal of one does not compile, also with `..Default::default()`. Build it from its constructor or
+  `Default`, and set what it needs with its builders and `with_` setters, one a field:
+  `Command::default().with_name("hello.greet".to_owned()).with_palette(true)`, `Toast::new(..).title(..)`,
+  `Attention::new(..).with_sound(..)`, `PanelAction::new(title, action).with_key(..)`, `OpenPanel::new("notes")`,
+  `Overlay::new(..)`, `Foreground::new("sh").with_args(..)`, `Interact::default().with_focusable(true)`,
+  `Layout::default().width(..).grow()`, `LayoutReply::default().paint(..).again()`.
+- A node of `v2::Node` is built with its constructors (`Node::column`, `row`, `text`, `scroll`, `list`, `input`,
+  `diff`, `code`, `image`, `markdown`, `spinner`, `canvas`, `slot`, `keep`) and its setters (`with_id`, `bg`,
+  `border`, `placeholder`, `numbers`, …); a pattern of a variant needs `..`: `Node::Keep { key, .. }`.
+- A `match` on an enum of the contract (`interact::Event`, `claim::Part`, `v2::Cause`, `SessionStatus`, …) needs a
+  `_` arm, which a kind a later 2.x adds reaches; a pattern of an event's fields needs `..`:
+  `Event::Paste { text, .. }`.
+- What the host fills (`SurfaceInput`, `Geometry`, `Session`, …) is read as before.
+- Struct variants a plugin builds (a scroll verb, a target, a composer edit, an anchor) do not grow: a later 2.x adds
+  a variant for a new form. `Rgba`, `Edges`, `Sides`, the rects and `ThemeMode` are whole and stay open.
+- The table `export_plugin!` exports is built by the SDK (`runtime::table`), so a table entry a later 2.x appends is
+  no break either.
+
+The wire is the other half of the promise: a later 2.x adds only optional fields, request types the host sends only
+to a library of that minor, and node kinds an author lowers for an older host with `v2::View::or` (below). The
+host's own build turns on the crate's `host` feature, which leaves its types exhaustive so the host must handle each
+addition; a plugin never turns it on. `tests/sdk.rs` builds a pinned author crate, `tests/pinned`, against this SDK and
+against the additions a later 2.x makes (the `next` feature), so a change that breaks that source fails the SDK's own
+tests.
 
 ABI 1.6 adds the small reads and verbs: a claim's own size (`Setup::sized`), the streaming deltas (`Setup::on_deltas`),
 the model's variants, the session tabs, the keymap's state, the mouse selection, a program in the foreground, the
@@ -170,8 +187,7 @@ one-time source migration where it spells out the types that grew:
 - A pattern that names every field of `Node::Box` or `Layout` needs `..`, and an exhaustive `match` on `Dialog` or
   `HostRequest` needs the new variants or `_`.
 
-Before the contract freezes at 2.0 these types become `#[non_exhaustive]` or are hidden behind builders, which also
-forbids the literals; that is a decision for 2.0, not a change a later 1.x can make.
+2.0 made these types `#[non_exhaustive]` ("The source promise of 2.x", above).
 
 1.5 adds:
 

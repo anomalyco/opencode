@@ -48,7 +48,8 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
                 Span::new("ctrl+⏎").fg(FORCE),
                 Span::new(" interrupt & send").fg(LABEL),
             ],
-            SessionStatus::Idle => vec![Span::new("⏎ "), Span::new("send").fg(LABEL)],
+            // Idle, and a status a later host adds.
+            _ => vec![Span::new("⏎ "), Span::new("send").fg(LABEL)],
         };
         Render::Show(Node::text(spans).fg(KEY).wrap(Wrap::None).layout(Layout::default().shrink(false)))
     });

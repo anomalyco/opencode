@@ -101,20 +101,14 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
 }
 
 fn confirm(host: &dyn Host) {
-    host.dialog(Dialog::Confirm(Confirm {
-        title: "Delete the draft?".to_owned(),
-        message: "It cannot be undone.".to_owned(),
-        label: ConfirmLabel { confirm: Some("delete".to_owned()), cancel: Some("keep".to_owned()) },
-        action: Action::Command { name: "p0a.answered".to_owned(), input: None },
-    }));
+    let label = ConfirmLabel::default().with_confirm(Some("delete".to_owned())).with_cancel(Some("keep".to_owned()));
+    let action = Action::Command { name: "p0a.answered".to_owned(), input: None };
+    host.dialog(Dialog::Confirm(Confirm::new("Delete the draft?", "It cannot be undone.", action).with_label(label)));
 }
 
 fn alert(host: &dyn Host, then: &str) {
-    host.dialog(Dialog::Alert(Alert {
-        title: "Heads up".to_owned(),
-        message: "The plugin says hello.".to_owned(),
-        action: Some(Action::Command { name: then.to_owned(), input: None }),
-    }));
+    let action = Action::Command { name: then.to_owned(), input: None };
+    host.dialog(Dialog::Alert(Alert::new("Heads up", "The plugin says hello.").with_action(Some(action))));
 }
 
 /// The probe's log.
@@ -147,7 +141,8 @@ pub fn styled() -> Node {
         .padding_sides(Edges::new(0, 1, 0, 2))
         .overflow(Overflow::Hidden)
         .layout(
-            Layout { width: Some(Width::Cells(24)), ..Layout::default() }
+            Layout::default()
+                .width(Width::Cells(24))
                 .height(Width::Cells(5))
                 .max_height(Width::Cells(5))
                 .min_height(Width::Cells(3))

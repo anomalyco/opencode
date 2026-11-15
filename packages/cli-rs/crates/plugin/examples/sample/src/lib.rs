@@ -161,7 +161,7 @@ fn pty(setup: &mut Setup) {
         setup.command(run, move |host, input| {
             for _ in 0..times {
                 let args = vec!["-c".to_owned(), input.unwrap_or_default().to_owned()];
-                let program = opencode_plugin_abi::Foreground { command: "sh".to_owned(), args, cwd: None };
+                let program = opencode_plugin_abi::Foreground::new("sh").with_args(args);
                 asked.borrow_mut().push(host.foreground(program));
             }
         });

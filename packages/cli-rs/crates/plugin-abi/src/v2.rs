@@ -31,8 +31,10 @@ pub use geometry::*;
 /// and place among the siblings without one.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Node {
     /// A box that lays out its children in a column, or in a row.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Box {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -85,6 +87,7 @@ pub enum Node {
         visible: bool,
     },
     /// Styled text; `fg` draws spans without their own, by default `text.base`.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Text {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -109,14 +112,17 @@ pub enum Node {
         hover_events: bool,
     },
     /// The claims of a published slot inside the surface's own, in place.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Slot { path: String },
     /// Markdown, drawn as the host draws a message.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Markdown {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
         source: Source,
     },
     /// A spinner with `label`, in the host's spinner color.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Spinner {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -125,6 +131,7 @@ pub enum Node {
     /// A box the host scrolls: the wheel, and its own keys while it has focus. Its offset is the host's and stays
     /// across revisions while its id does. `height` in cells; without one it takes its layout's room, and with
     /// [`Layout::grow`] the room its siblings leave, never more than its parent has.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Scroll {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -170,6 +177,7 @@ pub enum Node {
     /// P3: a text field whose text and cursor are the host's. With an id, the surface's handler hears
     /// [`crate::interact::Event::Change`] with the text after each edit, and [`crate::interact::Event::Submit`] on
     /// enter (one line) or the submit key. A changed `value` replaces the text.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Input {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -185,6 +193,7 @@ pub enum Node {
     },
     /// P3: a list the host scrolls and windows: only the items near the view have widgets. An item is the unit of
     /// reconcile: a [`Node::Keep`] in a list names one of its items or a node inside the same item.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     List {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -203,6 +212,7 @@ pub enum Node {
         user_scroll: bool,
     },
     /// P3: source code in the host's code view, highlighted as `filetype` with the host's grammars and theme.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Code {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -216,6 +226,7 @@ pub enum Node {
         layout: Layout,
     },
     /// P3: an image from content bytes (PNG, JPEG, WebP or GIF), in the host's image view.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Image {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -227,6 +238,7 @@ pub enum Node {
     },
     /// The subtree last adopted under id `key` in this mount, unchanged ([`View::memo`]). A key the host does not
     /// hold in the last accepted tree is a contract error: the host refuses the tree whole.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Keep { key: String },
     /// Cells the plugin draws itself (P5): its surface's [`Surface::draw`] returns a display list
     /// ([`crate::canvas`]), which the host keeps under the canvas's id while the id stays in the mount and replays on
@@ -234,6 +246,7 @@ pub enum Node {
     /// it first shows, when its size or `version` changed, and once a frame while `animate` is set; never while it is
     /// hidden, out of view or of no size, and what it missed meanwhile it asks for in the frame that shows it. Its
     /// cells cannot be selected or copied. A canvas must have an id.
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Canvas {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -264,6 +277,7 @@ const NEWEST_KIND: u32 = 0;
 const NEWEST_KIND: u32 = 1;
 
 /// What a surface's [`Surface::draw`] gets: the host's reads, the mount, the canvas's id and the frame it draws for.
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Draw<'a> {
     pub read: &'a dyn Read,
     pub mount: &'a MountId,
@@ -273,6 +287,7 @@ pub struct Draw<'a> {
 
 /// The frame a canvas draws for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Frame {
     /// The canvas's size in cells, as laid out in this frame, also where it shows only in part.
     pub width: u16,
@@ -287,6 +302,7 @@ pub struct Frame {
 /// Why the host asks a canvas for a list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Cause {
     /// The canvas shows for the first time.
     First,
@@ -305,6 +321,7 @@ pub type DrawFn = Rc<dyn Fn(&mut Draw<'_>) -> Option<crate::canvas::List>>;
 /// output, which never crosses to the plugin.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Source {
     Text(String),
     Content(ContentRef),
@@ -317,6 +334,7 @@ pub struct ContentRef(pub u64);
 
 /// A part of a session's transcript by its id: a tool call, whose output it names.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct PartRef {
     pub session: String,
     /// The call's id, as the transcript has it (`call_…`).
@@ -325,6 +343,7 @@ pub struct PartRef {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum DiffView {
     #[default]
     Unified,
@@ -333,6 +352,7 @@ pub enum DiffView {
 
 /// What a surface's view gets besides the plugin's own state.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct SurfaceInput {
     /// The surface's own size in cells.
     pub width: u16,
@@ -365,6 +385,7 @@ fn is_unchanged(changed: &Changed) -> bool {
 
 /// Every token of the page theme, by its path (`text.muted`, `background.panel`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Palette {
     pub mode: Mode,
     pub colors: BTreeMap<String, Rgba>,
@@ -397,6 +418,7 @@ impl From<ThemeMode> for Mode {
 /// One showing of one surface: the plugin's surface, the key it chose, and a generation that is new every time. A
 /// surface closed and opened again has the same key and a new generation; what the first showing owned ends with it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct MountId {
     pub surface: String,
     pub key: String,
@@ -406,6 +428,7 @@ pub struct MountId {
 /// Where a surface shows: a route of the plugin, or a slot claim (P1); a docked panel or an overlay, which the plugin
 /// opens with [`crate::Host::open_panel`] and [`crate::Host::overlay`] (P2).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Place {
     Route(String),
     Slot(crate::Placement),
@@ -417,6 +440,7 @@ pub enum Place {
 
 /// A surface as [`crate::Setup::surface`] registers it.
 #[derive(Clone)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Surface {
     pub name: String,
     pub place: Place,
@@ -556,7 +580,7 @@ impl Node {
 /// The first node of `node` whose kind a host of `abi` lacks, with the minor that added it; `None` when the host has
 /// every kind the tree holds. The walk runs only when the SDK has kinds newer than the host's minor.
 pub fn unknown_to(node: &Node, abi: &crate::Abi) -> Option<u32> {
-    if abi.major == crate::ABI_MAJOR && abi.minor >= NEWEST_KIND {
+    if abi.has_minor(NEWEST_KIND) {
         return None;
     }
     fn walk(node: &Node, abi: &crate::Abi) -> Option<u32> {
