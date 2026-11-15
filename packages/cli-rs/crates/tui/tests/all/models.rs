@@ -223,6 +223,20 @@ fn go_upsell_matches_typescript_when_compact() {
 }
 
 #[test]
+fn go_upsell_art_moves_while_animations_run() {
+    let kit = kit(90, 34);
+    go_upsell::show(
+        &kit.local,
+        Offer { reset: Some("3:00 PM".into()), can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) },
+    );
+    kit.wait_for("subscribe");
+    let first = opencode_parity::Fixture::from_capture(&kit.app.render());
+    kit.app.advance(Duration::from_millis(500));
+    let later = opencode_parity::Fixture::from_capture(&kit.app.render());
+    assert!(!opencode_parity::compare(&first, &later).is_equal());
+}
+
+#[test]
 fn go_upsell_art_matches_typescript_when_still() {
     let kit = kit(90, 34);
     opencode_ui::motion::set_running(&kit.app, false);
