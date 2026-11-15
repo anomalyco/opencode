@@ -657,8 +657,9 @@ pub fn date_string(ms: f64) -> String {
     Zone::Local.at(ms as i64).or_else(|| Zone::Local.at(0)).unwrap_or_default().date_string()
 }
 
+/// `Date.now()`, on the sim's clock when it sets one.
 pub fn now_ms() -> f64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |elapsed| elapsed.as_millis() as f64)
+    time::now_ms() as f64
 }
 
 /// `path.basename`.

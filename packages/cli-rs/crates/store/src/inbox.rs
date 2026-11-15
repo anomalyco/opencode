@@ -324,8 +324,9 @@ fn optimistic_files(files: Option<&Vec<PromptInputFileAttachment>>) -> Option<Ve
     (!items.is_empty()).then_some(items)
 }
 
+/// `Date.now()`, on the sim's clock when it sets one.
 pub(crate) fn now() -> f64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |elapsed| elapsed.as_millis() as f64)
+    opencode_util::time::now_ms() as f64
 }
 
 impl Data {
@@ -603,5 +604,27 @@ impl Data {
 fn release_updates(state: &mut State, session: &SessionID, token: u64) {
     if state.pending_updates.get(session).is_some_and(|(current, _)| *current == token) {
         state.pending_updates.remove(session);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Queued prompts and optimistic sessions take their time from the sim's fixed clock (`OPENCODE_DRIVE_NOW`). A
+    /// process reads that once, so a child of this test binary sets it.
+    #[test]
+    fn local_times_read_the_sim_clock() {
+        const FIXED: f64 = 1_600_000_000_000.0;
+        if std::env::var_os("OPENCODE_RS_CLOCK_CHILD").is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "inbox::tests::local_times_read_the_sim_clock"])
+                .env("OPENCODE_RS_CLOCK_CHILD", "1")
+                .env("OPENCODE_DRIVE_NOW", (FIXED as i64).to_string())
+                .output()
+                .unwrap();
+            let (stdout, stderr) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+            assert!(output.status.success() && stdout.contains("1 passed"), "{stdout}\n{stderr}");
+            return;
+        }
+        assert!((super::now() - FIXED).abs() < 60_000.0, "{}", super::now());
     }
 }
