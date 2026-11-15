@@ -886,3 +886,83 @@ fn a_dev_library_survives_a_settings_edit() {
     write_atomic(&library, &build("v2"));
     harness.wait_for("sample plugin v2: home.footer");
 }
+
+thread_local! {
+    /// What `acme` and `acme.cloud` read of their keys, in order.
+    static STORED: RefCell<Vec<(&'static str, Option<Value>)>> = const { RefCell::new(Vec::new()) };
+}
+
+fn named(name: &str) -> abi::Command {
+    abi::Command::default().with_name(name.to_owned())
+}
+
+/// The plugin `acme`, with the dotted key `cloud.token`.
+fn acme(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key("cloud.token");
+    setup.command(named("acme.read"), |host, _| STORED.with_borrow_mut(|read| read.push(("acme", host.storage_get("cloud.token")))));
+    setup.command(named("acme.merge"), |host, _| {
+        host.storage_merge("cloud.token", serde_json::Map::from_iter([("m".to_owned(), json!(1))]));
+    });
+    Ok(())
+}
+
+/// The plugin `acme.cloud`, with the key `token`: TS names both keys `plugin.acme.cloud.token`.
+fn cloud(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key("token");
+    setup.command(named("cloud.read"), |host, _| STORED.with_borrow_mut(|read| read.push(("cloud", host.storage_get("token")))));
+    setup.command(named("cloud.set"), |host, _| host.storage_set("token", json!({ "other": 2 })));
+    Ok(())
+}
+
+// Expected (review carbon-6): two plugins whose keys TS stores under one name keep apart: what the old name held stays
+// readable by both, the dotted key's first write moves it to a name of its own, keeping its fields, and neither reads
+// what the other writes after; a dot-free key keeps TS's name. On both carriers.
+#[test]
+fn storage_keys_of_dotted_ids_and_keys_keep_apart() {
+    for carrier in crate::plugin_surface::CARRIERS {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let paths = support::home_paths(&root.path().join("home"));
+        let storage = opencode_local::storage::Storage::new(&paths.state, "test").unwrap();
+        storage.update("plugin.acme.cloud.token", &json!({}), |value| *value = json!({ "legacy": true })).unwrap();
+        STORED.with_borrow_mut(Vec::clear);
+        let deps = Deps {
+            route: Route::Home,
+            roots: support::roots(paths, "test"),
+            builtins: vec![
+                crate::plugin_surface::builtin(carrier, abi::Plugin { id: "acme", setup: acme }),
+                crate::plugin_surface::builtin(carrier, abi::Plugin { id: "acme.cloud", setup: cloud }),
+            ],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(80, 24, deps);
+        let run = |command: &str| {
+            harness.tui.keymap.dispatch(command, None);
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
+        };
+        for command in ["acme.read", "cloud.read", "acme.merge", "cloud.set", "acme.read", "cloud.read"] {
+            run(command);
+        }
+        opencode_tui::plugins::host::flush_storage(&harness.tui);
+        let legacy = Some(json!({ "legacy": true }));
+        let moved = json!({ "legacy": true, "m": 1 });
+        let migrated = Some(moved.clone());
+        assert_eq!(
+            STORED.take(),
+            [
+                ("acme", legacy.clone()),
+                ("cloud", legacy),
+                ("acme", migrated.clone()),
+                ("cloud", Some(json!({ "other": 2 }))),
+            ],
+            "{carrier:?}"
+        );
+        let file = |key: &str| storage.load(key, &Value::Null).unwrap();
+        assert_eq!(file("plugin.acme..cloud.token"), moved, "{carrier:?}");
+        assert_eq!(
+            file("plugin.acme.cloud.token"),
+            json!({ "other": 2 }),
+            "{carrier:?}: TS's name is the dot-free key's"
+        );
+    }
+}

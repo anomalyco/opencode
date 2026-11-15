@@ -21,6 +21,7 @@ pub mod reconcile;
 mod route;
 pub mod schedule;
 pub mod slot;
+mod storage;
 pub mod surface;
 
 use std::any::Any;
@@ -859,13 +860,13 @@ struct Call {
 pub(crate) type Effect = Box<dyn FnOnce(&dyn Host)>;
 
 impl Scope {
-    /// The host's storage key of `key`, when the plugin declared it.
-    fn stored(&self, key: &str) -> Option<String> {
-        if self.keys.borrow().iter().any(|known| known == key) {
-            return Some(format!("plugin.{}.{key}", self.id));
+    /// The host's names of storage key `key`, when the plugin declared it ([`storage::name`]).
+    fn stored(&self, key: &str) -> Option<storage::Name> {
+        if !self.keys.borrow().iter().any(|known| known == key) {
+            log::warn!("plugin {}: storage key {key} was not declared", self.id);
+            return None;
         }
-        log::warn!("plugin {}: storage key {key} was not declared", self.id);
-        None
+        storage::name(&self.id, key).map_err(|error| log::warn!("plugin {}: {error}", self.id)).ok()
     }
 
     /// Calls `f` as one call of the plugin, `export`, unless it failed or its activation ended, as a claim still mounted
@@ -1057,7 +1058,7 @@ impl abi::Read for Scoped<'_> {
     }
 
     fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
-        let json = self.host.storage_read(&self.scope.stored(key)?)?;
+        let json = storage::read(self.host, &self.scope.stored(key)?)?;
         serde_json::from_str(&json).ok()
     }
 
@@ -1198,20 +1199,30 @@ impl abi::Host for Scoped<'_> {
 
     fn storage_set(&self, key: &str, value: serde_json::Value) {
         let Some(stored) = self.scope.stored(key) else { return };
-        self.written(&stored);
-        // The host shows it to reads at once; the claims hear of it in queue order.
-        match self.host.storage_write(&stored, &value.to_string()) {
+        let json = value.to_string();
+        let written = storage::bounded(json.len()).and_then(|()| {
+            self.written(&stored.now);
+            // The host shows it to reads at once; the claims hear of it in queue order.
+            self.host.storage_write(&stored.now, &json)
+        });
+        match written {
             Ok(()) => self.defer(|host| host.storage_changed()),
-            Err(error) => log::warn!("storage {stored}: {error}"),
+            Err(error) => log::warn!("storage {}: {error}", stored.now),
         }
     }
 
     fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
         let Some(stored) = self.scope.stored(key) else { return };
-        self.written(&stored);
-        match self.host.storage_merge(&stored, fields) {
+        let held = storage::read(self.host, &stored).map_or(0, |json| json.len());
+        let merged = storage::bounded(held + serde_json::Value::Object(fields.clone()).to_string().len())
+            .and_then(|()| {
+                self.written(&stored.now);
+                storage::migrate(self.host, &stored)?;
+                self.host.storage_merge(&stored.now, fields)
+            });
+        match merged {
             Ok(()) => self.defer(|host| host.storage_changed()),
-            Err(error) => log::warn!("storage {stored}: {error}"),
+            Err(error) => log::warn!("storage {}: {error}", stored.now),
         }
     }
 
@@ -1365,9 +1376,8 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn declare_storage_key(&self, key: &str) {
-        let mut keys = self.scope.keys.borrow_mut();
-        if !keys.iter().any(|known| known == key) {
-            keys.push(key.to_owned());
+        if let Err(error) = storage::declare(&mut self.scope.keys.borrow_mut(), key) {
+            log::warn!("plugin {}: {error}", self.scope.id);
         }
     }
 }
