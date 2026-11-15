@@ -489,6 +489,15 @@ impl Guest {
         (!watched).then(|| self.evaluate(&HostRequest::Route).0)
     }
 
+    /// The snapshot of `key` went as a failed read ([`super::Scripts::refuse`]): the plugin holds nothing of it, and
+    /// is charged nothing for it, as for a read [`Guest::push`] fails itself.
+    pub(crate) fn unpushed(&self, key: &str) {
+        let charged = self.pushed.borrow_mut().get_mut(key).map(std::mem::take);
+        if let Some(charged) = charged {
+            limits::release(self.id(), limits::Kind::Content, charged);
+        }
+    }
+
     pub(crate) fn unwatch(&self, key: &str) {
         self.watches.borrow_mut().remove(key);
         if let Some(charged) = self.pushed.borrow_mut().remove(key) {
