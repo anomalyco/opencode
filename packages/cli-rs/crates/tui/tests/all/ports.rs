@@ -849,6 +849,35 @@ fn totals(carrier: Carrier<'_>) {
     h.wait_for("≈ $3.50 session total");
 }
 
+// Expected (FT-7): the published `opencode-sidebar-tokens`, unmodified on the JS host, shows the session's token totals
+// from `data.session.get(id).tokens` as TS's sidebar does, and follows a `session.usage.updated` at once.
+#[test]
+fn the_published_sidebar_tokens_follows_the_sessions_totals() {
+    let Some(h) = open_as(&[Carrier::Npm("opencode-sidebar-tokens")], 170, |_| None, false, None) else { return };
+    h.wait_for("Session tokens");
+    h.events.emit(&json!({
+        "id": "evt_usage", "created": 2, "type": "session.usage.updated",
+        "location": { "directory": DIRECTORY },
+        "data": { "sessionID": "ses_p", "cost": 0.08, "tokens": { "input": 22_870, "output": 100, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
+    }));
+    h.wait_for("22,870");
+    let rows = h.sidebar(120);
+    let start = rows.iter().position(|row| row == "Session tokens").unwrap_or_else(|| panic!("{rows:#?}"));
+    // TS's rows in the field test's capture: label and value at the ends of the sidebar's 37 columns.
+    let spaced = |label: &str, value: &str| format!("{label}{}{value}", " ".repeat(37 - label.len() - value.len()));
+    assert_eq!(
+        rows[start..start + 5],
+        [
+            "Session tokens".to_owned(),
+            spaced("Input", "22,870"),
+            spaced("Output", "100"),
+            spaced("Cache read", "0"),
+            spaced("Cache write", "0")
+        ],
+        "{rows:#?}"
+    );
+}
+
 // Expected: as TS `childIDs`, the panel reads a parent's next page of children only after the page before, and lists
 // the next parent only after the last page: `ses_p`'s children are asked for once per page, and the child found on the
 // second page is in the total.

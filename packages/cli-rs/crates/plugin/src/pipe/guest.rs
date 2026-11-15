@@ -837,7 +837,23 @@ impl surface::Viewer for Viewer {
             self.settle(id, !viewing.input.full);
         }
         // What changed since the last view is not the JS host's input (P6a): its views run again as what they watch
-        // changes, and an input it is told is a new layout epoch, which a tree in flight would be refused for.
+        // changes, and an input it is told is a new layout epoch, which a tree in flight would be refused for. A change
+        // of the host's data reaches the plugin only here, as the host watches only its own state: the reads it
+        // watches go again once the view returned (FT-7).
+        let changed = &viewing.input.changed;
+        let data = changed.all
+            || !changed.sessions.is_empty()
+            || !changed.lists.is_empty()
+            || !changed.messages.is_empty()
+            || !changed.locations.is_empty();
+        if data {
+            let refreshing = Rc::downgrade(&guest);
+            crate::defer(&guest.host, move |_| {
+                if let Some(guest) = refreshing.upgrade() {
+                    guest.refresh();
+                }
+            });
+        }
         let input = v2::SurfaceInput { full: false, changed: Default::default(), ..viewing.input.clone() };
         let (started, sent, real) = {
             let mut mounts = self.mounts.borrow_mut();
