@@ -75,6 +75,41 @@ const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>
   )
 
 describe("Tool", () => {
+  it.effect("does not prepare a name-only question override or Code Mode's synthetic execute", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const executions: string[] = []
+      yield* service.transform((editor) =>
+        editor.add({
+          ...make(),
+          name: "question",
+          options: { codemode: false },
+          execute: ({ text }) =>
+            Effect.sync(() => {
+              executions.push(text)
+              return { output: { text }, content: text }
+            }),
+        }),
+      )
+      const snapshot = yield* service.snapshot()
+      if (!snapshot.prepareQuestion) return yield* Effect.die("Missing Question preparation capability")
+      expect((yield* snapshot.prepareQuestion(call("question")).pipe(Effect.flip)).message).toBe(
+        "Tool is not eligible for question@1 continuation",
+      )
+      expect(
+        (yield* snapshot
+          .prepareQuestion({
+            ...call("execute"),
+            call: { ...call("execute").call, input: { code: "return 1" } },
+          })
+          .pipe(Effect.flip)).message,
+      ).toBe("Tool is not eligible for question@1 continuation")
+      expect(executions).toEqual([])
+      expect((yield* snapshot.execute(call("question"))).output).toEqual({ text: "question" })
+      expect(executions).toEqual(["question"])
+    }),
+  )
+
   it.effect("reads the current editor tools by effective name", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -1159,6 +1194,64 @@ describe("Tool", () => {
           call: { type: "tool-call", id: "call-zod", name: "zod", input: { count: "41" } },
         }),
       ).toMatchObject({ output: { count: 42 } })
+    }),
+  )
+
+  it.effect("preserves raw JSON output, content fallback and output-contract failures", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const raw: Info = {
+        ...make(),
+        input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+        output: { type: "object" },
+        execute: () => Effect.succeed({ output: { count: 1 }, metadata: { source: "raw" } }),
+      }
+      yield* transform(
+        service,
+        {
+          raw,
+          non_json: { ...raw, execute: () => Effect.succeed({ output: 1n }) },
+          no_output: {
+            ...make(),
+            output: undefined,
+            execute: () => Effect.succeed({ content: "plain", metadata: { source: "plain" } }),
+          },
+          undeclared: { ...make(), output: undefined },
+          missing: { ...make(), execute: () => Effect.succeed({ content: "missing" }) },
+          invalid_standard: {
+            ...make(),
+            output: z.object({ count: z.number() }),
+            execute: () => Effect.succeed({ output: { count: "invalid" } }),
+          },
+        },
+        { codemode: false },
+      )
+      const snapshot = yield* service.snapshot()
+      expect(yield* snapshot.execute(call("raw"))).toEqual({
+        output: { count: 1 },
+        content: [{ type: "text", text: '{"count":1}' }],
+        metadata: { source: "raw" },
+      })
+      expect(yield* snapshot.execute(call("no_output"))).toEqual({
+        content: [{ type: "text", text: "plain" }],
+        metadata: { source: "plain" },
+      })
+      expect((yield* snapshot.execute(call("non_json")).pipe(Effect.flip)).message).toContain("non-JSON")
+      expect((yield* snapshot.execute(call("missing")).pipe(Effect.flip)).message).toBe(
+        "Tool did not return its declared output",
+      )
+      expect((yield* snapshot.execute(call("invalid_standard")).pipe(Effect.flip)).message).toContain(
+        "invalid value for its output schema",
+      )
+      expect(yield* snapshot.execute(call("undeclared")).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        "Tool result declared output without an output schema",
+      )
+      expect(
+        yield* snapshot.execute({
+          ...call("raw"),
+          call: { ...call("raw").call, input: { text: 3 } },
+        }).pipe(Effect.flip),
+      ).toBeInstanceOf(Tool.Error)
     }),
   )
 

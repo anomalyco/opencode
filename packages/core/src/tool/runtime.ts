@@ -45,6 +45,11 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
             }),
       ),
     )
+    return yield* finalizeOutput(tool, result)
+  })
+
+export const finalizeOutput = (tool: Pick<Tool.Info, "output">, result: Tool.Result) =>
+  Effect.gen(function* () {
     if (tool.output === undefined) {
       if ("output" in result) return yield* Effect.die("Tool result declared output without an output schema")
       return {
@@ -62,7 +67,7 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
     }
   })
 
-const decodeInput = (tool: Tool.Info<any, any>, value: unknown) =>
+export const decodeInput = (tool: Tool.Info<any, any>, value: unknown) =>
   Effect.gen(function* () {
     const result = yield* validateInput(tool.input, value)
     if (result.issues)

@@ -16,6 +16,7 @@ import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
+import { QuestionTool } from "./tool/plugin/question.js"
 import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
 
@@ -68,6 +69,8 @@ export interface NormalizedResult extends Tool.Result {
 export interface Snapshot {
   readonly definitions: ReadonlyArray<ToolDefinition>
   readonly codeModeCatalog?: CodeModeCatalog.Inventory
+  /** Inert Gate 1 harness: no execution, parking, persistence, or automatic recovery. */
+  readonly prepareQuestion?: (input: Parameters<Snapshot["execute"]>[0]) => Effect.Effect<QuestionTool.Prepared, Tool.Error>
   readonly execute: (input: {
     readonly sessionID: SessionSchema.ID
     readonly agent: Agent.ID
@@ -80,6 +83,8 @@ export interface Snapshot {
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
 }
+
+export const restoreQuestion = QuestionTool.restore
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Tool") {}
 
@@ -291,6 +296,27 @@ const layer = Layer.effect(
               value: codeModeCatalog,
               definition: codeModeDefinition,
             }
+          const resolve = Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
+            const context: Tool.Context = {
+              sessionID: input.sessionID,
+              agent: input.agent,
+              messageID: input.messageID,
+              id: Tool.CallID.make(input.call.id),
+              progress: input.progress ?? (() => Effect.void),
+              cancel: input.cancel,
+            }
+            const event = yield* beforeExecute(input.call.name, input.call.input, context)
+            const requested = input.definitions?.get(event.tool)
+            // Preserve session context removal and alias resolution, now after the repair hook.
+            if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
+              return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
+            const name = requested?.name ?? event.tool
+            const tool = name === "execute" && codeModeTool ? codeModeTool : direct.get(name)
+            if (tool) return { tool, name, input: event.input, context }
+            return yield* new Tool.Error({
+              message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
+            })
+          })
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
@@ -299,28 +325,16 @@ const layer = Layer.effect(
                 .map(([name]) => data.definitions.get(name)!),
               ...(codeModeDefinition ? [codeModeDefinition] : []),
             ],
+            prepareQuestion: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
+              const resolved = yield* resolve(input)
+              // Gate 1 restriction only; this does not freeze future hook registrations.
+              if (yield* hooks.has("tool", "execute.after"))
+                return yield* new Tool.Error({ message: "Question preparation does not support execute.after hooks" })
+              return yield* QuestionTool.prepare(resolved.tool, resolved.input)
+            }),
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
-              const context: Tool.Context = {
-                sessionID: input.sessionID,
-                agent: input.agent,
-                messageID: input.messageID,
-                id: Tool.CallID.make(input.call.id),
-                progress: input.progress ?? (() => Effect.void),
-                cancel: input.cancel,
-              }
-              const event = yield* beforeExecute(input.call.name, input.call.input, context)
-              const requested = input.definitions?.get(event.tool)
-              // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
-                return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
-              const name = requested?.name ?? event.tool
-              if (name === "execute" && codeModeTool)
-                return yield* executeTool(codeModeTool, name, event.input, context)
-              const tool = direct.get(name)
-              if (tool) return yield* executeTool(tool, name, event.input, context)
-              return yield* new Tool.Error({
-                message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
-              })
+              const resolved = yield* resolve(input)
+              return yield* executeTool(resolved.tool, resolved.name, resolved.input, resolved.context)
             }),
           }
         }),

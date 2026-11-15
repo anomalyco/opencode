@@ -6,6 +6,8 @@ import { Effect, Schema } from "effect"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
 import { Question } from "@opencode/schema/question"
+import { Tool } from "@opencode/schema/tool"
+import { decodeInput, finalizeOutput } from "../runtime.js"
 
 export const name = "question"
 
@@ -45,11 +47,106 @@ export const toModelContent = (questions: ReadonlyArray<Question.Prompt>, answer
   return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`
 }
 
+const finalize = (input: typeof Input.Type, state: Form.TerminalState) => {
+  // Deliberate defect tunnel (see Permission.assert): a dismissal must dodge
+  // leaf `mapError` blankets so it never becomes model-facing tool output; it
+  // resurfaces as a typed failure at SessionModelRequest.executeTool.
+  // A dismissal with a message is ordinary model-facing feedback.
+  if (state.status === "cancelled" && state.message !== undefined)
+    return Effect.fail(new ToolFailure({ message: state.message }))
+  if (state.status === "cancelled") return Effect.die(new CancelledError())
+  const output = {
+    answers: input.questions.map((_, index): Question.Answer => {
+      const value = state.answer[`q${index}`]
+      if (value === undefined) return []
+      if (Array.isArray(value)) return Array.from(value)
+      return [String(value)]
+    }),
+  }
+  return Effect.succeed({
+    output,
+    content: toModelContent(input.questions, output.answers),
+    metadata: { answers: output.answers },
+  })
+}
+
+const continuation = Symbol("question continuation")
+const capability = Object.freeze({ adapter: "question@1" as const, finalize })
+const Prepared = Schema.Struct({ adapter: Schema.Literal(capability.adapter), input: Input })
+export type Prepared = typeof Prepared.Encoded
+
+/** Gate 1 only: capture decoded, post-before-hook input without running the tool. */
+export const prepare = (tool: Tool.Info, input: unknown) =>
+  Effect.gen(function* () {
+    const marked = Object.getOwnPropertyDescriptor(tool.execute, continuation)?.value
+    if (
+      marked?.capability !== capability ||
+      marked?.executor !== tool.execute ||
+      tool.name !== name ||
+      tool.input !== Input ||
+      tool.output !== Output ||
+      tool.options?.namespace !== undefined ||
+      tool.options?.codemode !== false
+    )
+      return yield* new Tool.Error({ message: "Tool is not eligible for question@1 continuation" })
+    const decoded = yield* decodeInput(tool, input)
+    const encoded = yield* Schema.encodeUnknownEffect(Input)(decoded).pipe(
+      Effect.mapError((error) => new Tool.Error({ message: error.message })),
+    )
+    return { adapter: capability.adapter, input: encoded }
+  })
+
+/** Repeatable terminal finalization; never re-enters an executor or Location service. */
+export const restore = (envelope: unknown, terminal: unknown) =>
+  Effect.gen(function* () {
+    // The literal resolves exactly one version. There is deliberately no fallback.
+    const prepared = yield* Schema.decodeUnknownEffect(Prepared)(envelope).pipe(
+      Effect.mapError((error) => new Tool.Error({ message: `Invalid Question continuation: ${error.message}` })),
+    )
+    const state = yield* Schema.decodeUnknownEffect(Form.State)(terminal).pipe(
+      Effect.mapError((error) => new Tool.Error({ message: `Invalid Question terminal state: ${error.message}` })),
+    )
+    if (state.status === "pending")
+      return yield* new Tool.Error({ message: "Question continuation requires a terminal Form state" })
+    const result = yield* capability.finalize(prepared.input, state)
+    return yield* finalizeOutput({ output: Output }, result)
+  })
+
 export const Plugin = {
   id: "opencode.tool.question",
   effect: Effect.fn("QuestionTool.Plugin")(function* (ctx: Context) {
     const forms = yield* Form.Service
     const permission = yield* Permission.Service
+
+    const execute = (input: typeof Input.Type, context: Tool.Context) =>
+      permission
+        .assert({
+          action: "question",
+          resources: ["*"],
+          ...Permission.invocation(context),
+        })
+        .pipe(
+          Effect.mapError((error) => new ToolFailure({ message: "Permission denied: question", error })),
+          Effect.andThen(
+            forms
+              .ask({
+                sessionID: context.sessionID,
+                title: "Questions",
+                metadata: {
+                  kind: "question",
+                  tool: { messageID: context.messageID, id: context.id },
+                },
+                fields: [
+                  toField(input.questions[0], 0),
+                  ...input.questions.slice(1).map((question, index) => toField(question, index + 1)),
+                ],
+              })
+              .pipe(Effect.orDie),
+          ),
+          Effect.flatMap((state) => finalize(input, state)),
+        )
+    // Keep the original identity even if a wrapper copies the function's properties.
+    Object.defineProperty(execute, continuation, { value: Object.freeze({ capability, executor: execute }) })
 
     yield* ctx.tool
       .transform((editor) =>
@@ -59,55 +156,7 @@ export const Plugin = {
           description,
           input: Input,
           output: Output,
-          execute: (input, context) =>
-            permission
-              .assert({
-                action: "question",
-                resources: ["*"],
-                ...Permission.invocation(context),
-              })
-              .pipe(
-                Effect.mapError((error) => new ToolFailure({ message: "Permission denied: question", error })),
-                Effect.andThen(
-                  forms
-                    .ask({
-                      sessionID: context.sessionID,
-                      title: "Questions",
-                      metadata: {
-                        kind: "question",
-                        tool: { messageID: context.messageID, id: context.id },
-                      },
-                      fields: [
-                        toField(input.questions[0], 0),
-                        ...input.questions.slice(1).map((question, index) => toField(question, index + 1)),
-                      ],
-                    })
-                    .pipe(Effect.orDie),
-                ),
-                Effect.flatMap((state) => {
-                  // Deliberate defect tunnel (see Permission.assert): a dismissal must dodge
-                  // leaf `mapError` blankets so it never becomes model-facing tool output; it
-                  // resurfaces as a typed failure at SessionModelRequest.executeTool.
-                  // A dismissal with a message (e.g. from a non-interactive client) is ordinary
-                  // model-facing feedback: the model continues instead of the step ending.
-                  if (state.status === "cancelled" && state.message !== undefined)
-                    return Effect.fail(new ToolFailure({ message: state.message }))
-                  if (state.status === "cancelled") return Effect.die(new CancelledError())
-                  const output = {
-                    answers: input.questions.map((_, index): Question.Answer => {
-                      const value = state.answer[`q${index}`]
-                      if (value === undefined) return []
-                      if (Array.isArray(value)) return Array.from(value)
-                      return [String(value)]
-                    }),
-                  }
-                  return Effect.succeed({
-                    output,
-                    content: toModelContent(input.questions, output.answers),
-                    metadata: { answers: output.answers },
-                  })
-                }),
-              ),
+          execute,
         }),
       )
       .pipe(Effect.orDie)
