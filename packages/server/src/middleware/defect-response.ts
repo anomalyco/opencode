@@ -1,17 +1,19 @@
 import { StorageFailure } from "@opencode/core/database/storage-failure"
 import { UnknownError } from "@opencode/protocol/errors"
-import { Cause, Effect } from "effect"
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
+import { Effect } from "effect"
+import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http"
 
-// A defect in a handler otherwise reaches the client as a 500 with an empty body. Answer it like the encoding failure
-// in schema-error.ts instead: the reason when it's one a person can act on (a storage failure), otherwise a ref to
-// find it in the server log. Other causes, such as route-not-found, keep their own responses.
+// Effect answers a failure it has no response for with an empty 500. Replace exactly that response, like the
+// encoding failure in schema-error.ts: the reason when it's one a person can act on (a storage failure), otherwise a
+// ref to find it in the server log. Every cause Effect already answers (declared errors, route-not-found, defects that
+// carry their own response, aborts) keeps its response.
 export const defectResponseLayer = HttpRouter.middleware(
   (effect) =>
     effect.pipe(
       Effect.catchCause((cause) =>
         Effect.gen(function* () {
-          if (!cause.reasons.some(Cause.isDieReason)) return yield* Effect.failCause(cause)
+          const [response] = yield* HttpServerError.causeResponse(cause)
+          if (response.status !== 500 || response.body._tag !== "Empty") return yield* Effect.failCause(cause)
           const request = yield* HttpServerRequest.HttpServerRequest
           const ref = `err_${crypto.randomUUID().slice(0, 8)}`
           yield* Effect.logError("request failed", cause).pipe(
