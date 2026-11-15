@@ -1283,6 +1283,14 @@ fn read(
     value.map_err(|error| error.to_string())
 }
 
+/// Whose handler a delivery calls: a surface's, by index, for the mount the event is routed to; or a layer's of
+/// setup, by index.
+#[derive(Clone, Copy)]
+pub(crate) enum To {
+    Surface(usize),
+    Layer(usize),
+}
+
 /// One activation's instance, as registrations call it.
 struct Guest {
     /// The instance, until the registration's disposal takes it, which destroys it.
@@ -1422,11 +1430,16 @@ impl Guest {
 
     /// What delivers an event to the handler `to` names, as one call of the plugin, for the owner it is routed to; the
     /// plugin's surfaces draw again after it. A failed or busy plugin passes.
-    fn deliver(self: &Rc<Self>, to: abi::InputTo) -> crate::interact::Deliver {
+    fn deliver(self: &Rc<Self>, to: To) -> crate::interact::Deliver {
         let guest = Rc::downgrade(self);
         Rc::new(move |_: &dyn Host, owner: &Rc<crate::interact::Owner>, event: &abi::interact::Event| {
             let Some(guest) = guest.upgrade() else { return abi::interact::Handled::Pass };
-            let request = Request::Input { to: to.clone(), event: event.clone() };
+            // A surface's handler hears which of its mounts the event is for (big-boi 4).
+            let to = match to {
+                To::Surface(surface) => abi::InputTo::Surface { surface, mount: owner.id().cloned() },
+                To::Layer(layer) => abi::InputTo::Layer { layer },
+            };
+            let request = Request::Input { to, event: event.clone() };
             let handled = guest.owners.as_owner(owner, || guest.request("handle", &request));
             if handled.is_some() {
                 guest.activation.invalidate();
@@ -1711,7 +1724,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         setup.registration.searches.push((name.clone(), call));
     }
     for (index, layer) in manifest.layers.iter().enumerate() {
-        let deliver = guest.deliver(abi::InputTo::Layer { layer: index });
+        let deliver = guest.deliver(To::Layer(index));
         guest.owners.input.register(&**setup.host(), std::slice::from_ref(layer), &deliver);
     }
     // 2.0: the surfaces, whose views run through `View`.
@@ -1751,7 +1764,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         };
         let input = Rc::new(surface::Input {
             plugin: manifest.id.clone(),
-            deliver: claim.handler.then(|| guest.deliver(abi::InputTo::Surface { surface: index })),
+            deliver: claim.handler.then(|| guest.deliver(To::Surface(index))),
             layers: claim.layers.clone(),
             panel: matches!(place.at, v2::Place::Panel(_)),
             mounts: claim.mounts,

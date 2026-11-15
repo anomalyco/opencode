@@ -469,7 +469,7 @@ impl Surface {
             mounted.root.clone(),
             (lookup, nearest),
             input.deliver.clone(),
-            mounted.alive(),
+            (mounted.id.clone(), mounted.alive()),
         );
         let deliver: interact::Deliver =
             input.deliver.clone().unwrap_or_else(|| Rc::new(|_, _, _| abi::interact::Handled::Pass));
