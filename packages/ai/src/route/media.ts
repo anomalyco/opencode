@@ -5,7 +5,7 @@ import { Endpoint } from "./endpoint.js"
 import type { Interface } from "./executor-service.js"
 import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
-import { Generation, isTerminal } from "../generation.js"
+import { Generation } from "../generation.js"
 import { isRetryable } from "../provider-error.js"
 import {
   AIError,
@@ -78,6 +78,12 @@ export interface QueuedRoute<Request extends MediaRequest, Response> {
     token: unknown,
     execute: Execute,
   ) => Effect.Effect<Generation<Response>, AIError>
+  /** The status, result and cancel operations for a persisted token, without reading its status first. */
+  readonly attach: (
+    model: MediaRequest["model"],
+    token: unknown,
+    execute: Execute,
+  ) => Effect.Effect<Generation<Response>["route"], AIError>
 }
 
 /** One request whose response parses into events; `generate` runs the same stream and collects it. */
@@ -185,6 +191,11 @@ export const queued = <Request extends MediaRequest, Response, Token>(
   const generationRoute = (token: Token, exchange: Exchange, execute: Execute) => {
     // Only the GET exchange retries: a decoded terminal failure (`output.ended`) can be a `ProviderInternal` too, and
     // re-reading it would spin until the caller's deadline.
+    const get = (path: string) =>
+      transport.call("GET", path, exchange, execute).pipe(
+        Effect.retry({ schedule: READ_RETRY, while: isRetryable }),
+        Effect.map((sent) => sent.response),
+      )
     const poll = <A>(operation: {
       readonly path: (token: Token) => string
       readonly decode: (
@@ -192,23 +203,20 @@ export const queued = <Request extends MediaRequest, Response, Token>(
         context: MediaProtocol.PollContext<Token>,
       ) => Effect.Effect<A, AIError>
     }) =>
-      transport.call("GET", operation.path(token), exchange, execute).pipe(
-        Effect.retry({ schedule: READ_RETRY, while: isRetryable }),
-        Effect.flatMap((sent) => operation.decode(sent.response, { token, auth: sent.auth })),
+      get(operation.path(token)).pipe(
+        Effect.flatMap((response) =>
+          operation.decode(response, { token, get, headers: (url) => transport.headers(url, exchange) }),
+        ),
       )
     const status = poll(protocol.status)
     const cancel = protocol.cancel
-    const send =
-      cancel === undefined
-        ? undefined
-        : transport.call(cancel.method, cancel.path(token), exchange, execute).pipe(Effect.asVoid)
     return {
       status,
       result: poll(protocol.result),
       cancel:
-        send !== undefined && cancel?.activeOnly
-          ? status.pipe(Effect.flatMap((snapshot) => (isTerminal(snapshot.status) ? Effect.void : send)))
-          : send,
+        cancel === undefined
+          ? undefined
+          : transport.call(cancel.method, cancel.path(token), exchange, execute).pipe(Effect.asVoid),
     }
   }
 
@@ -223,12 +231,8 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     return new Generation(route, encodeToken(started.token), started.snapshot)
   })
 
-  const resume = Effect.fn("MediaRoute.resume")(function* (
-    model: MediaRequest["model"],
-    raw: unknown,
-    execute: Execute,
-  ) {
-    const token = yield* decodeToken(raw).pipe(
+  const decode = (raw: unknown) =>
+    decodeToken(raw).pipe(
       Effect.mapError(
         (cause) =>
           new AIError({
@@ -239,11 +243,21 @@ export const queued = <Request extends MediaRequest, Response, Token>(
           }),
       ),
     )
+
+  const attach = (model: MediaRequest["model"], raw: unknown, execute: Execute) =>
+    decode(raw).pipe(Effect.map((token) => generationRoute(token, transport.exchange(model), execute)))
+
+  const resume = Effect.fn("MediaRoute.resume")(function* (
+    model: MediaRequest["model"],
+    raw: unknown,
+    execute: Execute,
+  ) {
+    const token = yield* decode(raw)
     const route = generationRoute(token, transport.exchange(model), execute)
     return new Generation(route, encodeToken(token), yield* route.status)
   })
 
-  return { kind: "queued", id: protocol.id, provider: protocol.provider, protocol: protocol.id, start, resume }
+  return { kind: "queued", id: protocol.id, provider: protocol.provider, protocol: protocol.id, start, resume, attach }
 }
 
 /** Compose a streaming media protocol; `generate` runs the same stream in `generate` mode and folds it with `collect`. */
@@ -313,7 +327,6 @@ const makeTransport = <Request extends MediaRequest>(
 ) => {
   const authorize = Auth.toEffect(input.auth)
   const baseURL = (path: string) => new URL(`${Endpoint.trimBaseUrl(input.endpoint.baseURL ?? "")}${path}`)
-  /** `auth` is only what `Auth` added or changed, never untouched deployment headers. */
   const send = Effect.fn("MediaRoute.send")(function* (
     call: {
       readonly method: AuthInput["method"]
@@ -334,14 +347,11 @@ const makeTransport = <Request extends MediaRequest>(
       body: encoded.text,
       headers: encoded.headers,
     })
-    const response = yield* execute(
+    const response = yield* RequestExecutor.withTls(execute, call.request.http?.tls)(
       encoded.apply(HttpClientRequest.make(call.method)(url).pipe(HttpClientRequest.setHeaders(headers))),
       RequestExecutor.withFetch(fetch),
     )
-    return {
-      response,
-      auth: Object.fromEntries(Object.entries(headers).filter(([key, value]) => encoded.headers[key] !== value)),
-    }
+    return { response }
   })
   return {
     /** Route and model overlays; `start` additionally merges the request's own. */
@@ -365,9 +375,11 @@ const makeTransport = <Request extends MediaRequest>(
         protocol.prepare === undefined
           ? request
           : yield* protocol.prepare(request, (path, body) =>
-              send({ method: "POST", url: baseURL(path), headers, request, body }, request.fetch, execute).pipe(
-                Effect.map((sent) => sent.response),
-              ),
+              send(
+                { method: "POST", url: baseURL(path), headers, request: { ...request, http }, body },
+                request.fetch,
+                execute,
+              ).pipe(Effect.map((sent) => sent.response)),
             )
       // Sanitize after merging so model-level overlays are covered; the model value is restored, not sanitized.
       const resolved: Request = {
@@ -385,6 +397,20 @@ const makeTransport = <Request extends MediaRequest>(
       const sent = yield* send({ method: "POST", url, headers, request: resolved, body }, request.fetch, execute)
       return { response: sent.response, context: { request: resolved, body }, exchange }
     }),
+    /**
+     * The headers a follow-up GET of `url` sends, for result URLs that only download with the same credentials. A URL
+     * on another origin than the route's base URL gets none, so credentials never leave the provider's host.
+     */
+    headers: (url: string, exchange: Exchange) =>
+      URL.canParse(url) && new URL(url).origin === baseURL("").origin
+        ? authorize({
+            request: { http: exchange.http },
+            method: "GET",
+            url,
+            body: "",
+            headers: Headers.fromInput(exchange.headers),
+          }).pipe(Effect.map((headers): Record<string, string> => ({ ...headers })))
+        : Effect.succeed({}),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
     call: (method: AuthInput["method"], path: string, exchange: Exchange, execute: Execute) => {
       // Provider-issued absolute URLs are used as-is; everything else resolves against the base.

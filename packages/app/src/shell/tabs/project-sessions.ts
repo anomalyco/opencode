@@ -25,7 +25,7 @@ export function createProjectSessionActions() {
       if (!ctx) return
       void ctx.data.session.message.sync(session.id).catch(() => undefined)
       void startTransition(() => {
-        ctx.data.session.remember(session)
+        ctx.data.session.remember(ctx.data.session.get(session.id) ?? session)
         ctx.projects.touch(directory)
 
         if (options?.preview) {

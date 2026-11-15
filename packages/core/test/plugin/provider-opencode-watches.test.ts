@@ -1,8 +1,9 @@
 import { describe, expect } from "bun:test"
 import type { Plugin as PluginContext } from "@opencode/plugin/effect"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
+import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -18,7 +19,9 @@ import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
-const it = testEffect(PluginTestLayer)
+const withFlags = (overrides: string) => testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
+const it = withFlags("console_watches")
+const released = withFlags("-console_watches")
 
 type Synthetic = Parameters<PluginContext.Context["session"]["synthetic"]>[0]
 type WatchEvent = ReturnType<typeof watchEvent>
@@ -75,6 +78,8 @@ function fakeConsole(options: { readonly upgrade?: boolean } = {}) {
     requests: new Array<{ method: string; path: string; body?: unknown }>(),
     /** What `GET /api/event-watches/types` lists. */
     types: new Array<Record<string, unknown>>(),
+    /** The status and message Console answers `POST /api/event-watches` with instead of a watch, when set. */
+    refuse: undefined as { status: number; message: string } | undefined,
   }
   const server = Bun.serve({
     port: 0,
@@ -109,6 +114,8 @@ function fakeConsole(options: { readonly upgrade?: boolean } = {}) {
       }
       if (url.pathname === "/api/event-watches/types") return Response.json({ types: state.types })
       if (url.pathname === "/api/event-watches" && request.method === "POST") {
+        if (state.refuse)
+          return Response.json({ _tag: "WatchRefused", message: state.refuse.message }, { status: state.refuse.status })
         const created = body as { sessionID: string; server?: string; event?: string; arguments?: unknown }
         // Another server's event type is keyed by a hash of it, as Console keys it.
         return Response.json({
@@ -223,6 +230,12 @@ const location = Effect.fnUntraced(function* () {
   return { host, wakes, replays }
 })
 
+/** Pushes `event` and waits until the plugin acknowledges it. */
+const deliver = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsole>, event: WatchEvent) {
+  console.push(event)
+  yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes(event.id)))
+})
+
 const watchTools = Effect.gen(function* () {
   const tools = yield* Tool.Service
   return (yield* tools.list()).filter((tool) => tool.options?.namespace === "console_watch").map((tool) => tool.name)
@@ -257,6 +270,17 @@ describe("OpencodePlugin event watches", () => {
         expect(yield* watchTools).toEqual([])
         expect(console.state.opens).toBe(0)
         expect(console.state.requests.filter((request) => request.path.startsWith("/api/event-watches"))).toEqual([])
+      }),
+    ),
+  )
+
+  released.effect("stays dormant without the console_watches flag, even when the Console advertises event watches", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        yield* start(console)
+        yield* Effect.promise(() => Bun.sleep(100))
+        expect(yield* watchTools).toEqual([])
+        expect(console.state.opens).toBe(0)
       }),
     ),
   )
@@ -522,28 +546,142 @@ describe("OpencodePlugin event watches", () => {
       ),
     )
 
-  it.effect("admits the sixth wake in a row without resuming until a person prompts", () =>
+  it.effect(
+    "admits the sixth wake in 10 minutes without resuming, saying so from the fifth, until a person prompts",
+    () =>
+      withConsole({}, (console) =>
+        Effect.gen(function* () {
+          const { host, wakes } = yield* start(console)
+          const hooks = yield* PluginHooks.Service
+          const session = yield* host.session.create({})
+          yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+          for (const index of [1, 2, 3, 4, 5, 6]) yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+          expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, false])
+          expect(wakes.slice(3).map((wake) => wake.description)).toEqual([
+            "acme/app#1 on GitHub",
+            "acme/app#1 on GitHub (further updates wait for your next prompt)",
+            "acme/app#1 on GitHub (further updates wait for your next prompt)",
+          ])
+
+          yield* hooks.trigger("session", "prompt", {
+            sessionID: session.id,
+            messageID: SessionMessage.ID.create(),
+            prompt: { text: "keep going" },
+            delivery: "steer",
+          })
+          yield* deliver(console, watchEvent(session.id, "evt_7"))
+          expect(wakes.at(-1)?.resume).toBe(true)
+        }),
+      ),
+  )
+
+  it.effect("keeps resuming wakes minutes apart until 20 since the person's last prompt", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {
         const { host, wakes } = yield* start(console)
-        const hooks = yield* PluginHooks.Service
         const session = yield* host.session.create({})
         yield* waitUntil(Effect.sync(() => console.state.opens === 1))
-        const deliver = Effect.fnUntraced(function* (id: string) {
-          console.push(watchEvent(session.id, id))
-          yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes(id)))
-        })
-        for (const index of [1, 2, 3, 4, 5, 6]) yield* deliver(`evt_${index}`)
-        expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, false])
+        for (const index of Array.from({ length: 21 }, (_, index) => index)) {
+          yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+          yield* TestClock.adjust("3 minutes")
+        }
+        expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false])
+      }),
+    ),
+  )
 
-        yield* hooks.trigger("session", "prompt", {
-          sessionID: session.id,
-          messageID: SessionMessage.ID.create(),
-          prompt: { text: "keep going" },
-          delivery: "steer",
-        })
-        yield* deliver("evt_7")
-        expect(wakes.at(-1)?.resume).toBe(true)
+  it.effect(
+    "resumes for six CI updates in 10 minutes, which don't fill the window, so a Slack reply after them does too",
+    () =>
+      withConsole({}, (console) =>
+        Effect.gen(function* () {
+          const { host, wakes } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+          for (const index of [1, 2, 3, 4, 5, 6])
+            yield* deliver(console, watchEvent(session.id, `evt_${index}`, { kind: "workflow_run", status: "success" }))
+          yield* deliver(
+            console,
+            watchEvent(session.id, "evt_reply", { source: "slack", kind: "message", status: null }),
+          )
+          expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, true, true])
+        }),
+      ),
+  )
+
+  it.effect("holds the 21st CI update since the person's last prompt", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of Array.from({ length: 21 }, (_, index) => index))
+          yield* deliver(console, watchEvent(session.id, `evt_${index}`, { kind: "workflow_job", status: "failure" }))
+        expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false])
+      }),
+    ),
+  )
+
+  it.effect("counts a batch of CI and a review toward the 10-minute window", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of [1, 2, 3, 4, 5]) {
+          console.push(
+            watchEvent(session.id, `evt_ci_${index}`, { kind: "workflow_run", status: "success" }),
+            watchEvent(session.id, `evt_review_${index}`),
+          )
+          yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes(`evt_review_${index}`)))
+        }
+        yield* deliver(console, watchEvent(session.id, "evt_ci_6", { kind: "workflow_run", status: "success" }))
+        yield* deliver(console, watchEvent(session.id, "evt_review_6"))
+        expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, true, false])
+      }),
+    ),
+  )
+
+  it.effect("resumes a held session with a later wake once 10 minutes pass", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of [1, 2, 3, 4, 5, 6]) yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+        yield* TestClock.adjust("10 minutes")
+        yield* deliver(console, watchEvent(session.id, "evt_later"))
+        expect(wakes.slice(-2).map((wake) => wake.resume)).toEqual([false, true])
+      }),
+    ),
+  )
+
+  it.effect("resumes a held session with the member's own Slack reply, but not with a bot's", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of [1, 2, 3, 4, 5]) yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+        const reply = (id: string, actor: WatchEvent["actor"]) =>
+          watchEvent(session.id, id, { source: "slack", kind: "message", title: "#eng thread", actor, status: null })
+        yield* deliver(console, reply("evt_bot", { id: "B1", login: "ci-bot", bot: true, self: true }))
+        yield* deliver(console, reply("evt_own", { id: "U1", login: "adam", bot: false, self: true }))
+        yield* deliver(console, watchEvent(session.id, "evt_after"))
+        expect(wakes.slice(-3).map((wake) => wake.resume)).toEqual([false, true, true])
+      }),
+    ),
+  )
+
+  it.effect("reads a wake count stored before the 10-minute window as no recent wakes", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* host.storage.set(`watch-streak:${session.id}`, 9)
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        yield* deliver(console, watchEvent(session.id, "evt_1"))
+        expect(wakes[0]?.resume).toBe(true)
       }),
     ),
   )
@@ -797,6 +935,44 @@ describe("OpencodePlugin event watches", () => {
           { sessionID: session.id, target: "https://github.com/Acme/App/pull/42" },
           { sessionID: session.id, target: { _tag: "GitHubBranch", repo: "acme/app", branch: "feature" } },
         ])
+      }),
+    ),
+  )
+
+  it.effect("tells the session once why Console refused a shell command's watch, and skips other failures", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const hooks = yield* PluginHooks.Service
+        const { host, wakes, replays } = yield* start(console)
+        const session = yield* host.session.create({})
+        const created = () =>
+          console.state.requests.filter((request) => request.method === "POST" && request.path === "/api/event-watches")
+        const push = (refuse: { status: number; message: string }, posted: number) =>
+          Effect.gen(function* () {
+            console.state.refuse = refuse
+            yield* hooks.trigger("tool", "execute.after", {
+              tool: "shell",
+              sessionID: session.id,
+              agent: Agent.ID.make("build"),
+              messageID: SessionMessage.ID.create(),
+              id: Tool.CallID.make("call_shell"),
+              input: { command: "gh pr create --fill" },
+              status: "completed",
+              result: { output: { exit: 0, output: "https://github.com/Acme/App/pull/42\n", truncated: false } },
+            })
+            yield* waitUntil(Effect.sync(() => created().length === posted))
+          })
+        const refused = { status: 403, message: "Sign in to GitHub at https://console.test/github first." }
+
+        yield* push({ status: 500, message: "Something went wrong" }, 1)
+        yield* push(refused, 2)
+        yield* waitUntil(Effect.sync(() => wakes.length === 1))
+        yield* push(refused, 3)
+        yield* waitUntil(Effect.sync(() => replays.length === 1))
+
+        expect(wakes).toHaveLength(1)
+        expect(wakes[0]?.sessionID).toBe(session.id)
+        expect(wakes[0]?.text).toContain(refused.message)
       }),
     ),
   )

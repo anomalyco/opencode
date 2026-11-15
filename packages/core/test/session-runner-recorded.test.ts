@@ -247,6 +247,7 @@ describe("SessionRunnerLLM recorded", () => {
         "session.instructions.updated.2",
         "session.inbox.delivered.1",
         "session.step.started.1",
+        "session.step.first-token.1",
         "session.text.started.1",
         "session.text.ended.1",
         "session.step.streamed.1",

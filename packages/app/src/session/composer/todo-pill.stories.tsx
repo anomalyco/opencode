@@ -5,7 +5,7 @@ import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createMemo, onMount } from "solid-js"
 import { SessionPreview } from "@/session/story-model"
 import type { SessionActivityItem } from "./activity-chips"
-import { sessionTodos, type Todo } from "./todos"
+import { sessionTodos, todoFinished, type Todo } from "./todos"
 
 const timelineDetail = timelinePresets[2].value
 
@@ -19,7 +19,7 @@ const plan = [
   "Run the app typecheck",
 ]
 
-type Scenario = "plan" | "cancelled" | "parallel"
+type Scenario = "plan" | "cancelled" | "parallel" | "pending"
 
 // `progress` todos are done, the next one is in progress and the rest are pending. `cancelled` drops the last todo,
 // and `parallel` runs the two after `progress` at once.
@@ -29,7 +29,7 @@ const todosAt = (progress: number, scenario: Scenario): Todo[] =>
     status:
       index < progress
         ? "completed"
-        : index === progress || (scenario === "parallel" && index === progress + 1)
+        : (scenario !== "pending" && index === progress) || (scenario === "parallel" && index === progress + 1)
           ? "in_progress"
           : scenario === "cancelled" && index === plan.length - 1
             ? "cancelled"
@@ -100,6 +100,7 @@ type PreviewArgs = { progress: number; scenario: Scenario; open: boolean; activi
 
 function Preview(props: PreviewArgs) {
   const value = createMemo(() => document(todosAt(props.progress, props.scenario)))
+  const todos = createMemo(() => sessionTodos(value().messages))
 
   onMount(() =>
     setTimeout(() => {
@@ -115,7 +116,7 @@ function Preview(props: PreviewArgs) {
       document={value()}
       timelineDetail={timelineDetail}
       activity={props.activity ? activity : undefined}
-      todos={{ items: sessionTodos(value().messages), open: props.open }}
+      todos={todos().every(todoFinished) ? undefined : { items: todos(), open: props.open }}
     />
   )
 }
@@ -127,7 +128,7 @@ export default {
   args: { progress: 3, scenario: "plan", open: false, activity: true },
   argTypes: {
     progress: { control: { type: "range", min: 0, max: 7, step: 1 } },
-    scenario: { control: { type: "select" }, options: ["plan", "cancelled", "parallel"] },
+    scenario: { control: { type: "select" }, options: ["plan", "cancelled", "parallel", "pending"] },
     open: { control: { type: "boolean" } },
     activity: { control: { type: "boolean" } },
   },
@@ -151,3 +152,7 @@ export const WithoutActivity = { args: { activity: false } }
 export const Cancelled = { args: { scenario: "cancelled", open: true } }
 
 export const SeveralInProgress = { args: { scenario: "parallel", open: true } }
+
+export const PendingPlan = { args: { scenario: "pending", progress: 0 } }
+
+export const FinishedPlan = { args: { progress: plan.length } }

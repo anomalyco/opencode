@@ -1,9 +1,11 @@
 import { createData } from "@opencode/client/solid"
 import { withMediaRefs, type LocationRef } from "@opencode/client"
 import type { Plugin } from "@opencode/plugin/tui"
+import { createEffect, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
+import { useConfig } from "../config"
 
 export { locationKey } from "@opencode/client/solid"
 export type { FormWithLocation } from "@opencode/client/solid"
@@ -12,13 +14,27 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: { directory: string }) => {
     const client = useClient()
+    const config = useConfig()
     const data = createData({
       // Only the transcript store reads stored media as `media:<hash>` refs; plugins and other callers keep inline bytes.
       api: () => withMediaRefs(client.api),
       event: client.event,
       connection: client.connection,
       directory: props.directory,
+      // Live tool events carry screenshots as inline base64, which open tabs would otherwise hold for the whole run.
+      // Read per event, so toggling previews applies to new results without a restart.
+      omitToolFileData: () => !config.data.session?.image_preview,
     })
+    // Turning previews on brings back the screenshots dropped while they were off.
+    createEffect(
+      on(
+        () => config.data.session?.image_preview === true,
+        (preview) => {
+          if (preview) void data.session.message.restoreFiles()
+        },
+        { defer: true },
+      ),
+    )
     data satisfies Plugin.Context["data"]
     const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})
     return {

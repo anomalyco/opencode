@@ -108,7 +108,6 @@ type RunFooterViewProps = {
   onFormCancel: (input: FormCancel) => void | Promise<void>
   onCycle: () => void
   onInterrupt: () => boolean
-  onBackground?: () => void
   onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: string) => Promise<void>
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
@@ -185,7 +184,6 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
-  const foregroundSubagents = createMemo(() => activeTabs().some((item) => !item.background))
   const model = createMemo(() => {
     const current = props.currentModel()
     return current ? modelInfo(props.providers(), current) : undefined
@@ -199,7 +197,6 @@ export function RunFooterView(props: RunFooterViewProps) {
   const command = () => shortcut("command.palette.show")
   const subagentShortcut = () => shortcut("session.child.first")
   const queuedShortcut = () => shortcut("session.queued_prompts")
-  const backgroundShortcut = () => shortcut("session.background")
   const subagentInterruptShortcut = () => shortcut("composer.subagent.interrupt")
   const interrupt = () => shortcut("session.interrupt")
   const variantCycle = () => monoShortcut(shortcuts.all("variant.cycle") ?? "", props.mono)
@@ -452,8 +449,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return []
     }
 
-    const items: Array<{ id: "queued" | "subagents" | "background"; key: string; label: string; expanded?: string }> =
-      []
+    const items: Array<{ id: "queued" | "subagents"; key: string; label: string; expanded?: string }> = []
     if (queuedPrompts().length > 0 && queuedShortcut()) {
       items.push({ id: "queued", key: queuedShortcut(), label: `${queuedPrompts().length} pending` })
     }
@@ -464,9 +460,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         label: `${activeTabs().length} sub`,
         expanded: `${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`,
       })
-    }
-    if (foregroundSubagents() && backgroundShortcut()) {
-      items.push({ id: "background", key: backgroundShortcut(), label: "bg", expanded: "background" })
     }
     return items
   })
@@ -571,19 +564,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         title: "Cycle model variant",
         group: "Model",
         run: props.onCycle,
-      },
-    ],
-  }))
-
-  Keymap.createLayer(() => ({
-    enabled: active().type === "prompt" && route().type === "composer" && foregroundSubagents() && !!props.onBackground,
-    priority: 1,
-    commands: [
-      {
-        id: "session.background",
-        title: "Background subagents",
-        group: "Session",
-        run: () => props.onBackground?.(),
       },
     ],
   }))

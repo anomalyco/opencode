@@ -1,14 +1,5 @@
+/* The Markdown view (markdown-view.tsx), loaded with it. site.css hides the page under it. */
 [data-site] {
-  /* The page stays mounted under the Markdown view, so its state survives a round trip. */
-  [data-component="content"] > [data-slot="page"] {
-    display: contents;
-  }
-
-  &[data-markdown] [data-component="content"] > [data-slot="page"],
-  &[data-markdown-boot] [data-component="content"] > [data-slot="page"] {
-    display: none;
-  }
-
   [data-component="markdown-view"] {
     --line: 1.7;
     min-width: 0;
