@@ -23,6 +23,7 @@
 pub mod child;
 mod guest;
 pub mod proto;
+mod tree;
 pub mod wire;
 
 use std::cell::{Cell, RefCell};
@@ -485,6 +486,9 @@ pub enum Tamper {
 /// Posted by a reader thread: the JS host of `Scripts` sent something.
 struct Woken(u64);
 
+/// Posted by a walk of a plugin tree of `Scripts` that found something new ([`tree::Trees`]): the loader reconciles.
+struct Walked(u64);
+
 /// The JS host and the TypeScript plugins on it, on the UI thread.
 pub struct Scripts {
     this: Weak<Scripts>,
@@ -516,6 +520,8 @@ pub struct Scripts {
     /// The plugin whose code the JS host said it runs outside any sequenced work.
     entered: RefCell<Option<String>>,
     reconcile: RefCell<Option<Rc<dyn Fn()>>>,
+    /// What the TypeScript plugins' directories hold, walked off the UI thread (FT-2).
+    trees: tree::Trees,
     ends: RefCell<VecDeque<Instant>>,
     /// Why the JS host is not started again.
     stopped: RefCell<Option<String>>,
@@ -530,6 +536,7 @@ pub struct Scripts {
     tamper: Cell<Option<Tamper>>,
     kept: RefCell<Option<Box<proto::Revision>>>,
     _handler: Cell<Option<HandlerId>>,
+    _walked: Cell<Option<HandlerId>>,
     _intercepts: RefCell<Vec<Disposer>>,
 }
 
@@ -571,6 +578,12 @@ impl Scripts {
             theme: RefCell::default(),
             entered: RefCell::default(),
             reconcile: RefCell::default(),
+            trees: {
+                let proxy = host.app().proxy();
+                tree::Trees::new(move || {
+                    let _ = proxy.send(Walked(id));
+                })
+            },
             ends: RefCell::default(),
             stopped: RefCell::default(),
             pong: Cell::new(None),
@@ -581,6 +594,7 @@ impl Scripts {
             tamper: Cell::new(None),
             kept: RefCell::default(),
             _handler: Cell::new(None),
+            _walked: Cell::new(None),
             _intercepts: RefCell::default(),
         });
         let weak = Rc::downgrade(&scripts);
@@ -590,6 +604,15 @@ impl Scripts {
             }
         });
         scripts._handler.set(Some(handler));
+        let weak = Rc::downgrade(&scripts);
+        let walked = host.app().on_message(move |_, walked: &Walked| {
+            let scripts = weak.upgrade().filter(|scripts| scripts.id == walked.0);
+            let reconcile = scripts.and_then(|scripts| scripts.reconcile.borrow().clone());
+            if let Some(reconcile) = reconcile {
+                reconcile();
+            }
+        });
+        scripts._walked.set(Some(walked));
         let keymap = host.keymap().keymap();
         let intercepts = [false, true].map(|release| {
             let weak = Rc::downgrade(&scripts);
@@ -699,7 +722,16 @@ impl Scripts {
         if let Some(stopped) = self.stopped.borrow().clone() {
             return Step::Failed(stopped, 0);
         }
-        let digest = digest(dir, options);
+        // A staged copy is named by the hash of what it holds, which never changes; another directory's build comes
+        // from a walk off the UI thread, and the plugin starts once the first walk ended (FT-2).
+        let build = match confined {
+            true => Ok(dir.to_string_lossy().into_owned()),
+            false => match self.trees.light(dir) {
+                Some(build) => build.map(|build| build.to_string()),
+                None => return Step::Starting,
+            },
+        };
+        let digest = digest(&build, options);
         let mut loads = self.loads.borrow_mut();
         if let Some(load) = loads.get_mut(target).filter(|load| load.digest == digest) {
             return match &load.state {
@@ -1572,8 +1604,10 @@ impl Scripts {
 
 impl Drop for Scripts {
     fn drop(&mut self) {
-        if let (Some(host), Some(handler)) = (self.host.upgrade(), self._handler.get()) {
-            host.app().remove_handler(handler);
+        if let Some(host) = self.host.upgrade() {
+            for handler in [self._handler.get(), self._walked.get()].into_iter().flatten() {
+                host.app().remove_handler(handler);
+            }
         }
         self._intercepts.take().into_iter().for_each(Disposer::dispose);
     }
@@ -1594,17 +1628,34 @@ fn post(proxy: &AppProxy, id: u64) {
     }
 }
 
-/// The build of a plugin directory: what its files hold ([`crate::loader::approval::Artifact::tree`], the hash an
-/// approval names), and the options. A save that changes nothing loads nothing, as TS compares a local module's content;
-/// Bun loads a changed module afresh, as a generation of its own.
-fn digest(dir: &Path, options: Option<&str>) -> u64 {
+/// The build of a plugin directory: what its files hold ([`tree::Trees`]), or why they cannot be read, and the options.
+/// A save that changes nothing loads nothing, as TS compares a local module's content; Bun loads a changed module
+/// afresh, as a generation of its own.
+fn digest(build: &Result<String, String>, options: Option<&str>) -> u64 {
     let mut hasher = DefaultHasher::new();
-    match crate::loader::approval::Artifact::tree(dir) {
-        Ok(artifact) => artifact.sha256.hash(&mut hasher),
-        Err(error) => error.hash(&mut hasher),
-    }
+    build.hash(&mut hasher);
     options.unwrap_or_default().hash(&mut hasher);
     hasher.finish()
+}
+
+impl Scripts {
+    /// The approval artifact of the project plugin `dir`, as a walk off the UI thread last found it, or `None` until
+    /// the first walk ended (FT-2).
+    pub(crate) fn tree(&self, dir: &Path) -> Option<Result<crate::loader::approval::Artifact, String>> {
+        self.trees.artifact(dir)
+    }
+
+    /// The bytes of plugin files the walks of the plugins' trees read so far, off the UI thread.
+    #[doc(hidden)]
+    pub fn hashed(&self) -> u64 {
+        self.trees.hashed()
+    }
+
+    /// Whether a walk of a plugin's tree runs, whose end the loader takes in a later turn.
+    #[doc(hidden)]
+    pub fn walking(&self) -> bool {
+        self.trees.walking()
+    }
 }
 
 /// The page theme's colors, which the V2 context's `theme` reads (P8).
@@ -1845,6 +1896,11 @@ mod tests {
             scripts.seq.set(84);
             let plugin = dir.path().join("plugin");
             std::fs::create_dir_all(&plugin).unwrap();
+            // Its build comes from a walk off the UI thread (FT-2), which the first ask starts: the loads go after it.
+            let _ = scripts.trees.light(&plugin);
+            while scripts.walking() {
+                std::thread::sleep(Duration::from_millis(1));
+            }
             let loads =
                 [("small", serde_json::json!({ "o": 1 })), ("large", serde_json::json!({ "o": read(300 << 10) }))];
             for (seq, (target, options)) in (85..).zip(&loads) {

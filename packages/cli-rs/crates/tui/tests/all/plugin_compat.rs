@@ -595,6 +595,47 @@ fn a_project_plugin_imports_its_own_files_by_relative_paths() {
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("near"));
 }
 
+// Expected (bigboi P8-1, FT-2): what runs is what was approved, also when a dependency's file changes after the
+// approval without changing what the walk off the UI thread stamps (its size and time kept): a new JS host sets the
+// plugin up again from the approved copy, and the changed file runs nowhere.
+#[test]
+fn a_dependency_changed_after_approval_runs_nothing_unapproved() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let work = root.path().join("work");
+    let dir = work.join(".opencode/plugins/deps");
+    std::fs::create_dir_all(work.join(".git")).unwrap();
+    std::fs::create_dir_all(dir.join("node_modules/dep")).unwrap();
+    std::fs::write(dir.join("node_modules/dep/package.json"), r#"{ "name": "dep", "main": "index.js" }"#).unwrap();
+    let dep = dir.join("node_modules/dep/index.js");
+    std::fs::write(&dep, "export const made = \"approved\"\n").unwrap();
+    let marker = root.path().join("deps.ran");
+    let module = format!(
+        "import {{ made }} from \"dep\"\nexport default {{ id: \"example.deps\", setup() {{ require(\"node:fs\").appendFileSync({marker:?}, made + \"\\n\") }} }}\n"
+    );
+    std::fs::write(dir.join("tui.ts"), module).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.settle();
+    approve(&pipe, &dir);
+    pipe.active("example.deps");
+    // Past the time a recent change makes the stamp racy, which would hash the tree again and hold the plugin back.
+    std::thread::sleep(Duration::from_millis(2100));
+    let modified = std::fs::metadata(&dep).unwrap().modified().unwrap();
+    std::fs::write(&dep, "export const made = \"replaced\"\n").unwrap();
+    std::fs::File::options().write(true).open(&dep).unwrap().set_modified(modified).unwrap();
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    pipe.settle();
+    pipe.scripts().kill();
+    pipe.harness.wait("the plugin was set up again", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&marker).unwrap_or_default().lines().count() == 2
+    });
+    assert_eq!(std::fs::read_to_string(&marker).unwrap(), "approved\napproved\n");
+}
+
 // Expected (FT-5): a plugin that imports OpenTUI's renderable classes and enums by name links and sets up, as in TS,
 // where Bun failed its module for a name the layer did not export; a class it extends constructs.
 #[test]

@@ -280,6 +280,12 @@ thread_local! {
     pub(crate) static AFTER_HASH: RefCell<Option<Box<dyn Fn()>>> = RefCell::new(None);
 }
 
+/// The SHA-256 in hex of the file at `path`, counted in [`hashed`].
+pub(crate) fn digest_file(path: &Path) -> Result<String, String> {
+    let mut file = File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    sha256(&mut file).map_err(|error| format!("{}: {error}", path.display()))
+}
+
 /// The SHA-256 in hex of what `reader` holds, refused past [`LIMIT`].
 fn sha256(reader: &mut impl Read) -> Result<String, String> {
     let mut context = ring::digest::Context::new(&ring::digest::SHA256);
