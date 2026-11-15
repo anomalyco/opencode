@@ -21,16 +21,18 @@ const ERROR_BYTES = 8 * 1024
 const MAX_SUBMATCHES = 100
 const MAX_LINE_CHARS = 2_000
 
+const RawText = Schema.Union([Schema.Struct({ text: Schema.String }), Schema.Struct({ bytes: Schema.String })])
+
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
   data: Schema.Struct({
-    path: Schema.Struct({ text: Schema.String }),
-    lines: Schema.Struct({ text: Schema.String }),
+    path: RawText,
+    lines: RawText,
     line_number: PositiveInt,
     absolute_offset: NonNegativeInt,
     submatches: Schema.Array(
       Schema.Struct({
-        match: Schema.Struct({ text: Schema.String }),
+        match: RawText,
         start: NonNegativeInt,
         end: NonNegativeInt,
       }),
@@ -38,8 +40,6 @@ const RawMatch = Schema.Struct({
   }),
 })
 const decodeJsonRecord = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
-
-type RawMatchData = (typeof RawMatch.Type)["data"]
 
 export class Error extends Schema.TaggedError<Error>()("Ripgrep.Error", {
   message: Schema.String,
@@ -99,6 +99,26 @@ const normalizePath = (value: string) =>
     .replace(/^(?:\.[\\/])+/u, "")
     .replace(/^[\\/]+/u, "")
     .replaceAll("\\", "/")
+
+const decodeText = (value: typeof RawText.Type) =>
+  "text" in value ? value.text : new TextDecoder().decode(Buffer.from(value.bytes, "base64"))
+
+const normalizeMatch = (match: typeof RawMatch.Type) => {
+  const text = decodeText(match.data.lines)
+  return {
+    ...match.data,
+    lines: {
+      text: text.length > MAX_LINE_CHARS ? TextBoundary.head(text, MAX_LINE_CHARS) + "..." : text,
+    },
+    path: { text: normalizePath(decodeText(match.data.path)) },
+    submatches: match.data.submatches.slice(0, MAX_SUBMATCHES).map((submatch) => ({
+      ...submatch,
+      match: { text: decodeText(submatch.match) },
+    })),
+  }
+}
+
+type RawMatchData = ReturnType<typeof normalizeMatch>
 
 const isInvalidPattern = (stderr: string) =>
   stderr.includes("regex parse error") || stderr.includes("error parsing regex")
@@ -248,17 +268,7 @@ const layer = Layer.effect(
                 if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
                   return Effect.undefined
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
-                  Effect.map((match) => ({
-                    ...match.data,
-                    lines: {
-                      text:
-                        match.data.lines.text.length > MAX_LINE_CHARS
-                          ? TextBoundary.head(match.data.lines.text, MAX_LINE_CHARS) + "..."
-                          : match.data.lines.text,
-                    },
-                    path: { text: normalizePath(match.data.path.text) },
-                    submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
-                  })),
+                  Effect.map(normalizeMatch),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
                 )
               }),

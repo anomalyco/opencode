@@ -94,6 +94,26 @@ describe("Ripgrep", () => {
     ),
   )
 
+  it.live("keeps valid matches when another matching line is not UTF-8", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          Promise.all([
+            fs.writeFile(path.join(tmp.path, "good.txt"), "needle good\n"),
+            fs.writeFile(path.join(tmp.path, "bad.txt"), Buffer.from("needle bad \xff\n", "latin1")),
+          ]),
+        )
+
+        const ripgrep = yield* Ripgrep.Service
+        const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", limit: 10 })
+        const good = matches.find((match) => match.entry.path === RelativePath.make("good.txt"))
+
+        expect(good?.text).toBe("needle good\n")
+        expect(good?.submatches).toEqual([{ text: "needle", start: 0, end: 6 }])
+      }),
+    ),
+  )
+
   it.live("keeps ignored files out of catch-all find results", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {
