@@ -62,7 +62,11 @@ export const makeAuth = Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
         const user = yield* identity.authenticate(payload).pipe(
           Effect.catchTag("ServerIdentity.InvalidCredentialsError", () =>
-            Effect.fail(new UnauthorizedError({ message: "Invalid username or password" })),
+            // Local mode never accepts the shared password, so rejected credentials advertise the same methods
+            // the authorization middleware does on the routes it guards.
+            Effect.fail(
+              new UnauthorizedError({ message: "Invalid username or password", methods: auth.local ? ["local"] : [] }),
+            ),
           ),
           Effect.catchTag("ServerIdentity.AttemptLockedError", (error) =>
             Effect.fail(new InvalidRequestError({ message: error.message })),
