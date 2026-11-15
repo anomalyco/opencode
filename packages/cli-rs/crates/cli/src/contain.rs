@@ -511,7 +511,7 @@ mod sys {
         }
         // SAFETY: the read end `become_client` kept, taken once.
         let lease = unsafe { OwnedFd::from_raw_fd(fd) };
-        let _ = std::thread::Builder::new().name("plugin-parent".into()).spawn(move || {
+        let spawned = std::thread::Builder::new().name("plugin-parent".into()).spawn(move || {
             let mut byte = [0u8; 1];
             // SAFETY: a read into a buffer of its length; the parent never writes, so it returns at end of file.
             while unsafe { libc::read(lease.as_raw_fd(), byte.as_mut_ptr().cast(), 1) } != 0 {
@@ -524,6 +524,9 @@ mod sys {
             std::thread::sleep(GRACE);
             opencode_util::page::exit_now(129);
         });
+        if let Err(error) = spawned {
+            log::warn!("plugin parent: failed to start the thread that watches it ({error}); its end is not noticed");
+        }
     }
 
     extern "C" fn forward(signal: libc::c_int) {

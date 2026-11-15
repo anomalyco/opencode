@@ -212,7 +212,9 @@ fn queue() -> &'static Mutex<mpsc::Sender<Request>> {
                     }
                 }
             };
-            let _ = std::thread::Builder::new().name(format!("plugin-image-{index}")).spawn(work);
+            if let Err(error) = std::thread::Builder::new().name(format!("plugin-image-{index}")).spawn(work) {
+                log::warn!("failed to start plugin-image-{index}: {error}; only the workers that started decode, and with none no image shows");
+            }
         }
         Mutex::new(sender)
     })
