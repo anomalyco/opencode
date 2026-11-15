@@ -2650,6 +2650,82 @@ fn a_late_reply_does_not_reach_a_mount_opened_again_over_the_pipe() {
     assert_eq!(lines(), "route AbortError 0\nglobal Ok 0\n");
 }
 
+// Expected (bigboi's ownership pass): a fetch the host accepts while the JS host reads nothing, whose answer finds the
+// overflow full, settles once the JS host reads again, and leaves nothing waiting in either of its maps: the answer that
+// carries its ID waits in the overflow's reserve, where it was dropped and the fetch never settled.
+#[test]
+fn a_fetch_answered_past_a_full_overflow_settles() {
+    let Some(mut config) = config() else { return };
+    // What the JS host answers as it reads again is no flood here: the row is about what the host sends it.
+    (config.limits.queued, config.limits.inbox, config.limits.ordered) = (1 << 10, 256 << 10, 1 << 16);
+    let root = opencode_util::temp::tempdir().unwrap();
+    let (log, stalled, gate) = (root.path().join("settled"), root.path().join("stalled"), root.path().join("gate"));
+    let plugin = root.path().join("config").join("plugins").join("flooded");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        r#"import {{ appendFileSync, existsSync, writeFileSync }} from "node:fs"
+const [LOG, STALLED, GATE] = {paths}
+const settled = (how) => appendFileSync(LOG, "settled " + how + " " + carrier.pendingFetches() + "\n")
+let carrier
+export default {{ id: "example.flooded", setup(api) {{
+  carrier = api[Symbol.for("opencode.carrier")]
+  carrier.command({{ name: "flooded.go", title: "flooded.go" }}, () => {{
+    carrier.fetch({{ method: "GET", path: "/api/session" }}).then(
+      (result) => settled(Object.keys(result ?? {{}}).join(",")),
+      (error) => settled(error.name),
+    )
+    // Reads of the same call make its answer larger than the room an overflow that refused one call has left.
+    for (let read = 0; read < 50; read++) carrier.effect({{ type: "interactive" }})
+    // Once it answered, the JS host reads nothing until the gate opens.
+    setTimeout(() => {{
+      writeFileSync(STALLED, "")
+      while (!existsSync(GATE)) {{}}
+    }}, 0)
+  }})
+  carrier.command({{ name: "flooded.noop", title: "flooded.noop" }}, () => {{}})
+}} }}
+"#,
+        paths = serde_json::json!([log, stalled, gate]),
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let server = support::Fake::new(|seen| match seen.path.as_str() {
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.flooded");
+    let (h, scripts) = (&pipe.harness, pipe.scripts());
+    // The answer that asks for the fetch waits, so the fetch's own answer goes once the overflow is full.
+    scripts.hold_answers(true);
+    h.tui.keymap.dispatch("flooded.go", None);
+    h.wait("the JS host stalled", || {
+        h.app.advance(Duration::from_millis(1));
+        stalled.exists()
+    });
+    // Calls fill what the JS host's input takes and the overflow, each size until one is refused, then a smaller one:
+    // few enough that their answers are no flood, and the overflow keeps less room than the fetch's answer takes.
+    for size in [200 << 10, 30 << 10, 4 << 10, 512, 0] {
+        let (input, refused) = ("x".repeat(size), pipe::crossed().refused_sends);
+        for _ in 0..1_000 {
+            if pipe::crossed().refused_sends > refused {
+                break;
+            }
+            h.tui.keymap.dispatch("flooded.noop", Some(input.as_str()).filter(|input| !input.is_empty()));
+        }
+        assert!(pipe::crossed().refused_sends > refused, "the overflow never filled");
+    }
+    scripts.hold_answers(false);
+    std::fs::write(&gate, "").unwrap();
+    h.wait("the fetch settled", || {
+        h.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "settled Ok 0\n");
+}
+
 // Expected (bigboi P8-6): `data.session.pending` lists the session's inbox items the server has not delivered, as the
 // host holds them, where it listed none.
 #[test]
