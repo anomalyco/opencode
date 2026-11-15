@@ -27,10 +27,11 @@
 //!
 //! # 2.0
 //!
-//! ABI 2.0 is ABI 1.4 with the contract 2.0 of the rich-plugin design on the C ABI: keyed surfaces ([`v2`],
+//! ABI 2.0 is ABI 1.6 with the contract 2.0 of the rich-plugin design on the C ABI: keyed surfaces ([`v2`],
 //! [`Request::View`]), renderer claims of tool calls and fences ([`claim`], [`Request::Claim`]), and threads that send messages to the UI thread through a bounded mailbox ([`mail`],
-//! [`HostApi::send`]). Every 1.4 request and entry is still there. The host loads 1.x libraries as before, through
-//! [`ENTRY_V1`], and serves them ABI 1.4; they get no surfaces and no mailbox.
+//! [`HostApi::send`]). Every 1.6 request and entry is still there. The host loads 1.x libraries as before, through
+//! [`ENTRY_V1`], and serves them ABI 1.6; they get no surfaces and no mailbox. Every message's schema is
+//! `schema/v2.json`, generated from these types ([`v2::schema`]).
 //!
 //! A plugin written in Rust is a `cdylib` that depends on this crate and calls [`export_plugin!`] with a setup
 //! function. The setup registers the P.1 surface through [`Setup`]: commands, code-fence renderers, slot claims,
@@ -86,8 +87,11 @@ use types::{
 /// plugin.
 pub const ABI_MAJOR: u32 = 2;
 /// The minor version of [`ABI_MAJOR`]. 2.0 adds [`HostApi::send`], [`HostApi::report`], [`HostApi::stopped`] and
-/// [`HostApi::features`], [`Metadata::requires`], [`Manifest::surfaces`], [`Manifest::claims`] and
-/// [`Manifest::messages`], and [`Request::View`], [`Request::Claim`], [`Request::Unmount`] and [`Request::Message`].
+/// [`HostApi::features`], [`Metadata::requires`], [`Manifest::surfaces`], [`Manifest::claims`],
+/// [`Manifest::messages`], [`Manifest::layers`], [`Manifest::searches`] and [`Manifest::plugins`], and the requests
+/// [`Request::View`], [`Request::Draw`], [`Request::Claim`], [`Request::Unmount`], [`Request::Message`],
+/// [`Request::Layout`], [`Request::Input`], [`Request::Search`] and [`Request::Plugins`], with the host requests
+/// of their surfaces (from [`HostRequest::Scroll`] on).
 pub const ABI_MINOR: u32 = 0;
 
 /// The symbol every 2.x plugin exports, of type [`EntryFn`].
