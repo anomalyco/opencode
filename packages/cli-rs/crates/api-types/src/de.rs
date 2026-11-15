@@ -88,6 +88,15 @@ impl Raw<'_> {
     }
 }
 
+/// Decodes a union through its `from_raw`, which is not generic over the deserializer: so the members' decoders are
+/// built once, in this crate, rather than again in every crate and for every deserializer that decodes the union.
+pub fn union<'de, T, D: Deserializer<'de>>(
+    deserializer: D,
+    from_raw: fn(&Raw) -> Result<T, serde_json::Error>,
+) -> Result<T, D::Error> {
+    from_raw(&Raw::deserialize(deserializer)?).map_err(D::Error::custom)
+}
+
 /// The inner error's text without the position inside the member, so that the outer deserializer
 /// reports the error at the member, as it did when members decoded from a `Value`.
 fn custom<E: Error>(error: serde_json::Error) -> E {
