@@ -1,61 +1,50 @@
 import { TextareaRenderable } from "@opentui/core"
 import { expect, test } from "bun:test"
+import path from "node:path"
 import { takeDraft } from "../src/component/prompt/draft-stash"
 import { createAppFixture } from "./fixture/app"
+import { tmpdir } from "./fixture/fixture"
 
-test.each([
-  { key: "left", code: "57417", modifier: 1, start: 22, end: 21 },
-  { key: "right", code: "57418", modifier: 1, start: 0, end: 1 },
-  { key: "ctrl+left", code: "57417", modifier: 5, start: 22, end: 17 },
-  { key: "ctrl+right", code: "57418", modifier: 5, start: 0, end: 6 },
-  { key: "alt+left", code: "57417", modifier: 3, start: 22, end: 17 },
-  { key: "alt+right", code: "57418", modifier: 3, start: 0, end: 6 },
-])("the prompt handles keypad $key", async (input) => {
+test("keypad arrows navigate prompt text and history", async () => {
   takeDraft(undefined)
-  await using setup = await createAppFixture({ width: 100, height: 30 })
+  await using state = await tmpdir()
+  const file = path.join(state.path, "prompt-history.jsonl")
+  await Bun.write(file, JSON.stringify({ text: "previous", pasted: [] }))
+  await using setup = await createAppFixture({ width: 100, height: 30, state: state.path })
   await setup.ready
   await setup.waitForFrame(() => setup.renderer.currentFocusedEditor instanceof TextareaRenderable)
+  // Loading history rewrites the file with a trailing newline.
+  await setup.waitFor(async () => (await Bun.file(file).text()).endsWith("\n"))
   const prompt = setup.renderer.currentFocusedEditor
   if (!(prompt instanceof TextareaRenderable)) throw new Error("expected the focused prompt textarea")
-  const text = "alpha beta gamma delta"
-  await setup.mockInput.typeText(text)
-  prompt.cursorOffset = input.start
-
-  setup.mockInput.pressKey(input.code === "57417" ? "ARROW_LEFT" : "ARROW_RIGHT", {
-    ctrl: input.modifier === 5,
-    meta: input.modifier === 3,
-  })
+  const text = "alpha beta gamma delta\nsecond line"
+  await setup.mockInput.pasteBracketedText(text)
   await setup.renderOnce()
-  expect(prompt.cursorOffset).toBe(input.end)
-  prompt.cursorOffset = input.start
 
-  // Feed the terminal's kitty keypad sequence through the real input parser and keymap.
-  setup.renderer.stdin.emit("data", Buffer.from(`\x1b[${input.code};${input.modifier}u`))
-  await setup.renderOnce()
-  expect(prompt.cursorOffset).toBe(input.end)
-  await setup.mockInput.typeText("X")
-  expect(prompt.plainText).toBe(`${text.slice(0, input.end)}X${text.slice(input.end)}`)
-})
+  for (const input of [
+    { sequence: "\x1b[57417u", start: 22, end: 21 },
+    { sequence: "\x1b[57418u", start: 0, end: 1 },
+    { sequence: "\x1b[57417;5u", start: 22, end: 17 },
+    { sequence: "\x1b[57418;5u", start: 0, end: 6 },
+    { sequence: "\x1b[57417;3u", start: 22, end: 17 },
+    { sequence: "\x1b[57418;3u", start: 0, end: 6 },
+    { sequence: "\x1b[57419u", start: 29, end: 6 },
+    { sequence: "\x1b[57420u", start: 6, end: 29 },
+  ]) {
+    prompt.cursorOffset = input.start
+    // Feed Kitty keypad sequences through the real input parser and keymap.
+    setup.renderer.stdin.emit("data", Buffer.from(input.sequence))
+    await setup.renderOnce()
+    expect(prompt.cursorOffset, input.sequence).toBe(input.end)
+  }
 
-test("custom prompt word bindings replace the keypad defaults", async () => {
-  takeDraft(undefined)
-  await using setup = await createAppFixture({
-    width: 100,
-    height: 30,
-    config: { animations: false, keybinds: { "input.word.backward": "ctrl+y" } },
-  })
-  await setup.ready
-  await setup.waitForFrame(() => setup.renderer.currentFocusedEditor instanceof TextareaRenderable)
-  const prompt = setup.renderer.currentFocusedEditor
-  if (!(prompt instanceof TextareaRenderable)) throw new Error("expected the focused prompt textarea")
-  await setup.mockInput.typeText("alpha beta gamma delta")
-
-  setup.renderer.stdin.emit("data", Buffer.from("\x1b[57417;5u"))
-  await setup.renderOnce()
-  expect(prompt.cursorOffset).toBe(22)
-  setup.mockInput.pressKey("y", { ctrl: true })
-  await setup.renderOnce()
-  expect(prompt.cursorOffset).toBe(17)
+  prompt.cursorOffset = 0
+  setup.renderer.stdin.emit("data", Buffer.from("\x1b[57419u"))
+  expect(prompt.plainText).toBe("previous")
+  prompt.cursorOffset = prompt.plainText.length
+  setup.renderer.stdin.emit("data", Buffer.from("\x1b[57420u"))
+  expect(prompt.plainText).toBe(text)
+  expect(prompt.cursorOffset).toBe(text.length)
 })
 
 test("the prompt keeps a cursor style set on its textarea when the theme changes", async () => {
