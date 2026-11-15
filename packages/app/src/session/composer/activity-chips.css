@@ -95,11 +95,11 @@
   }
 
   /* A row whose Stop is in flight keeps showing its loader until the work leaves the list or the Stop settles. */
-  [data-component="menu-v2-item"][data-stoppable]:is(
-      :hover,
-      [data-highlighted],
-      :has([data-slot="session-activity-stop"][aria-disabled="true"])
-    ) {
+  [data-component="menu-v2-item"]:is(
+    :hover,
+    [data-highlighted],
+    :has([data-slot="session-activity-stop"][aria-disabled="true"])
+  ) {
     [data-slot="session-activity-stop"] {
       visibility: visible;
     }
@@ -126,8 +126,7 @@
     }
 
     [data-slot="session-activity-stop"],
-    [data-component="menu-v2-item"][data-stoppable]:is(:hover, [data-highlighted])
-      [data-slot="session-activity-elapsed"] {
+    [data-component="menu-v2-item"]:is(:hover, [data-highlighted]) [data-slot="session-activity-elapsed"] {
       visibility: visible;
     }
   }

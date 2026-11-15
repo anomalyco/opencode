@@ -839,8 +839,8 @@ function createSchema() {
     // A multiplier on the entrance's timing: 2 plays it in half the time.
     footerWordmarkSpeed: z.number().min(0.5).max(2).catch(1),
     footerWordmarkPlay: z.enum(footerWordmarkPlays).catch("drag"),
-    // window.opencode, its DevTools greeting and OpenCode Lite starting when DevTools opens
-    // (lib/console-api.ts), loaded once the page is idle.
+    // window.opencode, its one-line DevTools hint and OpenCode Lite starting when DevTools opens
+    // (lib/console-stub.ts, lib/console-api.ts).
     consoleApi: z.enum(toggles).catch("on"),
     // The light, dark and system switch at the bottom of the footer.
     themeSwitcher: z.enum(toggles).catch("on"),
@@ -1051,8 +1051,8 @@ function createSchema() {
     consoleCopyColumns: z.enum(sectionColumns).catch("2 columns"),
     docsSwitcher: z.enum(docsSwitchers).catch("lockup"),
     docsSubmenu: z.enum(docsSubmenus).catch("flyout"),
-    docsNav: z.enum(docsNavs).catch("split"),
-    docsVersionNotice: z.enum(docsVersionNotices).catch("frosted top"),
+    docsNav: z.enum(docsNavs).catch("combined"),
+    docsVersionNotice: z.enum(docsVersionNotices).catch("inverted"),
     terminalInstall: z.enum(terminalInstalls).catch("button"),
     carouselPreset: z.enum(carouselPresetNames).catch("four across"),
     carousel: z
@@ -1130,7 +1130,7 @@ const defaults = siteSettingsDefaults
  */
 // Production reads every setting as its default's constant (script/fold-settings.ts, which fails the
 // build on any other read), so its store starts empty and the defaults stay out of the bundle.
-export const [siteSettings, setStore] = createStore<SiteSettings>(
+export const [siteSettings, setStore] = /* @__PURE__ */ createStore<SiteSettings>(
   import.meta.env.DEV ? structuredClone(defaults) : ({} as SiteSettings),
 )
 

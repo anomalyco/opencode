@@ -1,5 +1,5 @@
 import { showToast } from "@opencode/ui/toast"
-import { createRoot, createSignal, lazy, onCleanup, Suspense, untrack, type JSX } from "solid-js"
+import { createMemo, createRoot, createSignal, lazy, on, onCleanup, Suspense, untrack, type JSX } from "solid-js"
 import { Command, createKeyed, MenuItem, Server, Style, type ServerEntry, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Ssh, type SshConfig, type SshItem } from "./contract"
@@ -38,8 +38,16 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   const state = () => client()?.state()
 
+  // IPC updates rows in place; the controller observes list identity.
+  const items = createMemo(
+    on(
+      () => state()?.revision,
+      () => state()?.servers.slice() ?? [],
+    ),
+  )
+
   const ssh = createSshController({
-    items: () => state()?.servers ?? [],
+    items,
     api: client,
     // Resolves once main publishes the revision. Disabling the plugin, the attempt ending, or the main side going away
     // (a restarted main starts its revisions again) resolves it early.

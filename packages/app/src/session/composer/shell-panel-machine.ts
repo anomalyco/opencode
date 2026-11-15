@@ -310,11 +310,10 @@ function running(work: ShellPanelWork, item: SessionActivityItem) {
   return work.shells.some((shell) => shell.key === item.key)
 }
 
-// A subagent can only be interrupted once its child session exists.
 function stoppable(work: ShellPanelWork, item: SessionActivityItem) {
   if (item.type === "shell") return running(work, item)
 
-  return !!item.sessionID && work.subagents.some((subagent) => subagent.key === item.key)
+  return work.subagents.some((subagent) => subagent.key === item.key)
 }
 
 function count(work: ShellPanelWork) {

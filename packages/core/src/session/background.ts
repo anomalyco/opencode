@@ -6,8 +6,33 @@ import type { Job } from "../job.js"
 import type { SessionSchema } from "./schema.js"
 
 export type Lookup = {
-  readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<{ readonly parentID?: SessionSchema.ID } | undefined>
+  readonly get: (
+    sessionID: SessionSchema.ID,
+  ) => Effect.Effect<
+    { readonly parentID?: SessionSchema.ID; readonly agent?: string; readonly title?: string } | undefined
+  >
 }
+
+export type OutstandingItem =
+  | {
+      readonly kind: "shell"
+      readonly sessionID: SessionSchema.ID
+      readonly shellID: string
+      readonly command: string
+    }
+  | {
+      readonly kind: "image"
+      readonly sessionID: SessionSchema.ID
+      readonly model: string
+      readonly path: string
+    }
+  | {
+      readonly kind: "subagent"
+      readonly sessionID: SessionSchema.ID
+      readonly childSessionID: SessionSchema.ID
+      readonly agent: string
+      readonly description: string
+    }
 
 export type ListFilter = {
   readonly sessionID?: SessionSchema.ID
@@ -20,17 +45,22 @@ export type ListFilter = {
  * Background jobs still running for a Session or any of its descendants. A child's own
  * background shell counts even after the child reported to its parent: its notice wakes
  * the child again, so the child's work is not finished.
+ *
+ * `active` adds executions that hold a claim right now, such as a subagent mid-turn
+ * whose Job record already settled. Only descendants are added, and a child already
+ * represented by a running background job is not repeated.
  */
 export const outstanding = Effect.fnUntraced(function* (
-  jobs: Pick<Job.Interface, "runningBackground">,
+  jobs: Pick<Job.Interface, "runningBackground"> & { readonly get?: Job.Interface["get"] },
   store: Lookup,
   sessionID: SessionSchema.ID,
+  active?: ReadonlySet<SessionSchema.ID>,
 ) {
   const parents = new Map<SessionSchema.ID, SessionSchema.ID | null>()
   const owned = yield* Effect.filter(yield* jobs.runningBackground, (recovery) =>
     descends(store, parents, recovery.kind === "subagent" ? recovery.parentSessionID : recovery.sessionID, sessionID),
   )
-  return owned.map((recovery) => {
+  const items: OutstandingItem[] = owned.map((recovery) => {
     if (recovery.kind === "shell")
       return {
         kind: "shell" as const,
@@ -48,6 +78,25 @@ export const outstanding = Effect.fnUntraced(function* (
       description: recovery.description,
     }
   })
+  if (!active || active.size === 0) return items
+  const children = new Set(items.flatMap((item) => (item.kind === "subagent" ? [item.childSessionID] : [])))
+  for (const activeID of active) {
+    if (activeID === sessionID || children.has(activeID)) continue
+    // A cancelled child may still be draining while it cleans up.
+    const tracked = jobs.get ? yield* jobs.get(activeID) : undefined
+    if (tracked?.status === "cancelled") continue
+    if (!(yield* descends(store, parents, activeID, sessionID))) continue
+    const info = yield* store.get(activeID)
+    if (!info?.parentID) continue
+    items.push({
+      kind: "subagent",
+      sessionID: info.parentID,
+      childSessionID: activeID,
+      agent: info.agent ?? "subagent",
+      description: info.title ?? "Subagent",
+    })
+  }
+  return items
 })
 
 /** Active and unconsumed background jobs matching the requested Session, kind, status, and descendant scope. */

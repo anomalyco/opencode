@@ -4,6 +4,7 @@ import { getRequestEvent } from "solid-js/web"
 import { config } from "~/config"
 import { useLanguage } from "~/context/language"
 import { LOCALES, localized, route, tag } from "~/lib/language"
+import { staticRender } from "~/lib/static-render"
 
 function skip(path: string) {
   const evt = getRequestEvent()
@@ -25,7 +26,8 @@ function skip(path: string) {
  */
 export function LocaleLinks(props: { path: string; englishOnly?: boolean }) {
   const language = useLanguage()
-  if (skip(props.path)) return null
+  // A static page renders twice (src/static/render.tsx), and each render is whole: no once per request there.
+  if (!staticRender() && skip(props.path)) return null
   const englishOnly = props.englishOnly || !localized(props.path)
   const canonical = `${config.baseUrl}${route(englishOnly ? "en" : language.locale(), props.path)}`
 

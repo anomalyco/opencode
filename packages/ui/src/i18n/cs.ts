@@ -168,6 +168,7 @@ export const dict = {
   "ui.common.dismiss": "Odmítnout",
   "ui.common.close": "Zavřít",
   "ui.common.next": "Další",
+  "ui.common.continue": "Pokračujte",
   "ui.common.submit": "Odeslat",
   "ui.common.showMore": "Zobrazit více",
   "ui.permission.deny": "Odmítnout",
