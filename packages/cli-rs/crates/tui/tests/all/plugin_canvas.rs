@@ -466,6 +466,12 @@ fn differs(frame: &Capture, held: Option<&Held>, (width, height): (u16, u16)) ->
 fn open_tui(width: u16, height: u16, plugins: Vec<opencode_plugin::Builtin>) -> Harness {
     let deps = Deps { route: Route::Home, builtins: plugins, ..support::deps(Arc::new(support::empty())) };
     let harness = support::mount(width, height, deps);
+    // The budget is not what these rows check. On the wall clock a loaded machine's stall in a plugin call (memory
+    // reclaim, swap), which is no wait on a run queue, is charged: a view or draw over the budget in a paint keeps its
+    // frame open for the paint after, which asks for one more frame at idle, and enough of them make the plugin slow,
+    // whose toast covers the screen and wants frames. A call here takes no time; the containment row sets its own.
+    let now = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || now);
     harness.app.advance(Duration::from_millis(1));
     harness.app.render();
     harness
