@@ -809,6 +809,58 @@ fn a_plugin_ends_only_its_own_dialog() {
     assert_eq!(h.tui.dialogs.key(), None);
 }
 
+thread_local! {
+    /// What `shifting`'s next panel is: 0 a fixed height and no action, 1 an action too, 2 bare.
+    static SHIFT: Cell<u8> = const { Cell::new(0) };
+}
+
+/// A command that shows the panel `panel`, of a set height, as [`SHIFT`] says.
+fn shifting(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command::default().with_name("shifting.panel".to_owned()), |host, _| {
+        let stage = SHIFT.get();
+        let action = abi::PanelAction {
+            title: "Apply".to_owned(),
+            key: Some("a".to_owned()),
+            color: None,
+            close: false,
+            action: abi::Action::Command { name: "shifting.panel".to_owned(), input: None },
+        };
+        let panel = abi::Panel::new(
+            "panel".to_owned(),
+            vec![abi::Span::new("Shifting title")],
+            abi::Node::text([abi::Span::new("shifting body")]),
+        )
+        .with_size(abi::PanelSize::Medium)
+        .with_height(Some(4))
+        .with_actions(if stage >= 1 { vec![action] } else { Vec::new() })
+        .with_bare(stage >= 2);
+        host.dialog(abi::Dialog::Panel(panel));
+    });
+    Ok(())
+}
+
+// Expected (review carbon-12): a panel updated under its key shows what it now is, also where its widgets cannot take
+// it in place: a panel of a set height that gains its first action shows its footer, and one that turns bare drops
+// its header, as a panel opened so does.
+#[test]
+fn a_panel_shown_again_under_its_key_takes_its_footer_and_bareness() {
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "shifting", setup: shifting }.into());
+    SHIFT.set(0);
+    h.tui.keymap.dispatch("shifting.panel", None);
+    let screen = h.wait_for("shifting body");
+    assert!(screen.contains("Shifting title") && !screen.contains("Apply"), "{screen}");
+    SHIFT.set(1);
+    h.tui.keymap.dispatch("shifting.panel", None);
+    let screen = h.wait_for("Apply");
+    assert!(screen.contains("Shifting title"), "{screen}");
+    SHIFT.set(2);
+    h.tui.keymap.dispatch("shifting.panel", None);
+    h.wait_gone("Shifting title");
+    let screen = h.wait_for("shifting body");
+    assert!(!screen.contains("Apply"), "{screen}");
+}
+
 // Expected: an external plugin's `app` claim shows on the last row, under the route, on home and in a session, as
 // TS's `<Slot path="app" />` under the routes (`app.tsx:1466`); disabling the plugin takes it away.
 #[test]
