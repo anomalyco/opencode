@@ -44,7 +44,8 @@ test("navigates to a subagent child session missing from the session list", asyn
 
   await expect(page.getByRole("button", { name: "Toggle review", exact: true })).toBeVisible()
 
-  // Escape returns to the parent session.
+  // The child takes prompts, so its composer takes focus, and Escape from it still returns to the parent session.
+  await expect(page.locator('[data-component="composer-editor"][contenteditable="true"]')).toBeFocused()
   await page.keyboard.press("Escape")
   await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)])
 })

@@ -42,8 +42,8 @@ export function SubagentsTab(props: { sessionID: string }) {
     const current = session()
     if (!current) return []
 
-    const result = sessionFamily<SessionInfo>(data.session.list(), current.id).map(
-      ({ session, prefix }): SubagentEntry => {
+    const subagents = sessionFamily<SessionInfo>(data.session.list(), current.id)
+      .map(({ session, prefix }): SubagentEntry => {
         const title = withTimestampedFallback(session)
         const agentMatch = title.match(/@(\w+) subagent/)
         return {
@@ -58,10 +58,24 @@ export function SubagentsTab(props: { sessionID: string }) {
           current: session.id === route.sessionID,
           prefix,
         }
-      },
-    )
+      })
+      .filter((entry) => (filter.active ? entry.status === "running" : entry.status !== "running"))
+    if (!current.parentID) return subagents
 
-    return result.filter((entry) => (filter.active ? entry.status === "running" : entry.status !== "running"))
+    // Inside a subagent the main session leads the list, so the picker is also the way back to it.
+    const root = data.session.get(data.session.root(current.id))
+    if (!root) return subagents
+    return [
+      {
+        sessionID: root.id,
+        agent: Locale.titlecase(root.agent ?? "main"),
+        title: withTimestampedFallback(root),
+        status: data.session.status(root.id),
+        current: false,
+        prefix: "",
+      },
+      ...subagents,
+    ]
   })
 
   let selectedSessionID = ""

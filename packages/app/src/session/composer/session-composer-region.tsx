@@ -38,7 +38,7 @@ export function SessionComposerRegion(props: {
     const question = controller.state.questionRequest()
     const elicitation = controller.state.elicitationRequest()
     const permission = controller.state.permissionRequest()
-    const composer = controller.showComposer() && !controller.child() && !controller.state.blocked()
+    const composer = controller.showComposer() && !controller.state.blocked()
 
     return { key: composer ? "composer" : "docks", websearch, question, elicitation, permission, composer }
   })
@@ -57,6 +57,7 @@ export function SessionComposerRegion(props: {
         }}
       >
         <div class="relative z-[70] flex flex-col">
+          <Show when={controller.child()}>{props.subagent}</Show>
           {props.above}
           <ComposerMorph
             face={face()}
@@ -64,7 +65,7 @@ export function SessionComposerRegion(props: {
           >
             {(current) => (
               <div class="flex flex-col">
-                <Grow when={current().websearch} fade card class={controller.child() ? "mb-2" : undefined}>
+                <Grow when={current().websearch} fade card>
                   <SessionWebSearchDock model={controller.state.websearch} onSubmit={controller.onResponseSubmit} />
                 </Grow>
                 <Grow
@@ -72,16 +73,15 @@ export function SessionComposerRegion(props: {
                   instant={!settings.general.newQuestionUI() || !questionMotion()}
                   fade
                   card
-                  class={controller.child() ? "mb-2" : undefined}
                 >
                   {(request) => <SessionQuestionDock request={request} onSubmit={controller.onResponseSubmit} />}
                 </Grow>
 
-                <Grow when={current().elicitation} fade card class={controller.child() ? "mb-2" : undefined}>
+                <Grow when={current().elicitation} fade card>
                   {(request) => <SessionElicitationDock request={request} onSubmit={controller.onResponseSubmit} />}
                 </Grow>
 
-                <Grow when={current().permission} fade card class={controller.child() ? "mb-2" : undefined}>
+                <Grow when={current().permission} fade card>
                   {(request) => (
                     <SessionPermissionDock
                       request={request}
@@ -106,7 +106,6 @@ export function SessionComposerRegion(props: {
               </div>
             )}
           </ComposerMorph>
-          <Show when={controller.showComposer() && controller.child()}>{props.subagent}</Show>
         </div>
       </div>
     </div>

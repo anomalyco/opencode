@@ -142,9 +142,7 @@ export function createActiveSessionRegion(input: {
     }, download)
   }
 
-  const focus = () => {
-    if (!input.session.data.isChild()) promptRef?.focus()
-  }
+  const focus = () => promptRef?.focus()
 
   const openParent = () => {
     const id = input.session.data.parentID()
@@ -192,6 +190,15 @@ export function createActiveSessionRegion(input: {
       return
     }
 
+    // A child's composer takes focus when its view opens, so Escape there still goes back to the parent. The composer
+    // has already claimed Escape when it stops a running turn, closes a popover or cancels a queue edit.
+    if (event.key === "Escape" && input.session.data.isChild() && promptRef && active === promptRef) {
+      event.preventDefault()
+      openParent()
+
+      return
+    }
+
     if (
       path.some((item) => item instanceof HTMLElement && item.closest("[data-prevent-autofocus]") !== null) ||
       editable(target) ||
@@ -232,7 +239,7 @@ export function createActiveSessionRegion(input: {
 
     if (event.key.length !== 1 || event.key === "Unidentified" || ((event.ctrlKey || event.metaKey) && !paste)) return
 
-    if (state.blocked() || input.session.data.isChild() || !promptRef) return
+    if (state.blocked() || !promptRef) return
     promptRef.focus()
     setCursorPosition(promptRef, prompt.cursor() ?? promptLength(prompt.current()))
   }
@@ -384,8 +391,8 @@ export function createActiveSessionRegion(input: {
     },
     quote: {
       source: () => prompt.capture().quoteSource,
-      // A child session has no composer to quote into, and a shell command takes no quotes.
-      available: () => !input.session.data.isChild() && prompt.capture().mode.current() !== "shell",
+      // A shell command takes no quotes.
+      available: () => prompt.capture().mode.current() !== "shell",
       add: (text: string, source: QuoteSource, anchor?: ComposerQuoteAnchor) => {
         const item = { type: "quote" as const, text, commentID: uuid() }
         prompt.context.add(item)
@@ -576,7 +583,7 @@ export function ActiveSessionComposerRegion(props: {
         </Show>
       }
       above={
-        <Show when={!missing() && !props.session.data.isChild()}>
+        <Show when={!missing()}>
           <SessionComposerLane>
             <SessionActivityChips
               subagents={subagents()}

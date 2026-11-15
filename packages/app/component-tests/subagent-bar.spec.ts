@@ -1,6 +1,6 @@
 import { expect, story } from "../../stories/playwright/story"
 
-story("a subagent session shows its model where the composer would be", async ({ mount, page }) => {
+story("a subagent session shows its status line above its own composer", async ({ mount, page }) => {
   await mount("app-current-session-surface--child-session")
 
   const bar = page.locator('[data-component="subagent-bar"]')
@@ -8,7 +8,11 @@ story("a subagent session shows its model where the composer would be", async ({
   const model = bar.locator('[data-slot="subagent-model"]')
   await expect(model).toHaveText("Anthropic / Claude Opus 5.5 high")
   await expect(model.getByText("high", { exact: true })).toHaveCSS("opacity", "0.66")
-  await expect(page.locator('[data-component="composer"]')).toHaveCount(0)
+  // The child takes prompts like any session, so its composer sits under the status line.
+  const composer = page.locator('[data-component="composer"]')
+  await expect(composer).toBeVisible()
+  const [barBox, composerBox] = await Promise.all([bar.boundingBox(), composer.boundingBox()])
+  expect(barBox!.y + barBox!.height).toBeLessThanOrEqual(composerBox!.y)
 
   // A status line, not a second composer card.
   await expect(bar).toHaveCSS("border-top-left-radius", "0px")

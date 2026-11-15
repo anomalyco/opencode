@@ -220,20 +220,16 @@ export function createMountedSession(session: SessionModel) {
       write: apply,
     })
 
-  // A subagent's session has no composer, so its draft is never sent.
-  const edit = (apply: (draft: ReturnType<typeof createComposerEditorActions>) => void) => {
-    if (!session.data.isChild()) write((target) => apply(createComposerEditorActions(target.store)))
-  }
+  const edit = (apply: (draft: ReturnType<typeof createComposerEditorActions>) => void) =>
+    write((target) => apply(createComposerEditorActions(target.store)))
 
   const composerRef: Composer = {
     text: () =>
-      session.data.isChild()
-        ? ""
-        : composer
-            .capture()
-            .current()
-            .map((part) => ("content" in part ? part.content : ""))
-            .join(""),
+      composer
+        .capture()
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join(""),
     insert(text) {
       const value = text.replace(/\r\n?/g, "\n")
 
@@ -241,16 +237,16 @@ export function createMountedSession(session: SessionModel) {
     },
     setText: (value) => edit((draft) => draft.setText(value.replace(/\r\n?/g, "\n"))),
     model() {
-      const item = session.data.isChild() ? undefined : local.model.current()
+      const item = local.model.current()
 
       if (!item) return
 
       return { providerID: item.provider.id, modelID: item.id, variant: local.model.variant.current() }
     },
     setModel(model) {
-      const item = session.data.isChild()
-        ? undefined
-        : local.model.list().find((entry) => entry.provider.id === model.providerID && entry.id === model.modelID)
+      const item = local.model
+        .list()
+        .find((entry) => entry.provider.id === model.providerID && entry.id === model.modelID)
 
       if (!item || (model.variant !== undefined && !Object.keys(item.variants ?? {}).includes(model.variant)))
         return false
@@ -262,7 +258,7 @@ export function createMountedSession(session: SessionModel) {
       return true
     },
     setVariant(variant) {
-      if (session.data.isChild() || !local.model.current()) return false
+      if (!local.model.current()) return false
 
       if (variant !== undefined && !local.model.variant.list().includes(variant)) return false
       local.model.variant.set(variant)

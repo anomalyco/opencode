@@ -1405,7 +1405,7 @@ export function Session(props: {
       group: "Session",
       run: (tab?: string) => {
         if (tab === "shell" || tab === "subagents") setComposer({ open: true, tab })
-        else if (composer.open || session()?.parentID) setComposer("open", false)
+        else if (composer.open) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
         dialog.clear()
       },
@@ -1602,21 +1602,14 @@ export function Session(props: {
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
-                open={composer.open || (!!session()?.parentID && forms().length === 0)}
-                defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
-                onClose={() => {
-                  const parent = session()?.parentID
-                  if (parent) {
-                    navigate({ type: "session", sessionID: parent })
-                    return
-                  }
-                  setComposer("open", false)
-                }}
+                open={composer.open}
+                defaultTab={composer.tab}
+                onClose={() => setComposer("open", false)}
                 terminals={props.terminals}
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
-                <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
+                <Match when={composer.open}>{null}</Match>
                 <Match when={promptedPermissions().length > 0}>
                   <Show when={promptedPermissions()[0]?.id} keyed>
                     {(_) => {
