@@ -23,7 +23,8 @@ test("a subagent session takes prompts and reaches its parent through the picker
     width: 100,
     height: 30,
     config: { animations: false, tabs: { mode: "off" } },
-    args: { sessionID: child.id },
+    // A launch `--agent` applies to main sessions, not to the subagent opened here.
+    args: { sessionID: child.id, agent: "build" },
     fetch: async (url, request) => {
       const session = [parent, child].find((item) => url.pathname.startsWith(`/api/session/${item.id}`))
       if (url.pathname === "/api/session") return json({ data: [parent, child], cursor: {} })

@@ -88,14 +88,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         current() {
           const draft = route.data.type === "session" ? agentStore.draftBySession[route.data.sessionID] : undefined
+          const session = route.data.type === "session" ? data.session.get(route.data.sessionID) : undefined
+          const own = session?.agent
           const selected =
             route.data.type === "session"
               ? (draft?.agent ??
-                (draft ? undefined : args.agent) ??
-                data.session.get(route.data.sessionID)?.agent ??
+                // A launch `--agent` picks the main session's agent, never a subagent's.
+                (draft || session?.parentID ? undefined : args.agent) ??
+                own ??
                 agentStore.current)
               : agentStore.current
-          const own = route.data.type === "session" ? data.session.get(route.data.sessionID)?.agent : undefined
           return (
             agents().find((agent) => agent.id === selected) ??
             // A subagent session keeps running its own subagent-mode agent, which the primary list leaves out.
