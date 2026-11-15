@@ -5,6 +5,7 @@
 // render in UTC here; the Rust test shifts each `resetsAt` by its local offset.
 process.env.TZ = "UTC"
 
+import { setRendererCapabilities } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -156,6 +157,8 @@ async function capture(options: {
   dialog: () => JSX.Element
   ready: (frame: string) => boolean
   act?: (setup: Setup) => Promise<void> | void
+  // Whether the terminal reports 24-bit color, which picks the Go upsell art's glyphs (DLG07).
+  rgb?: boolean
 }) {
   const state = await mkdtemp(path.join(tmpdir(), "opencode-e16-"))
   await Bun.write(path.join(state, "model.json"), JSON.stringify(preferences))
@@ -207,6 +210,7 @@ async function capture(options: {
     ),
     { width: options.width, height: options.height, kittyKeyboard: true },
   )
+  if (options.rgb !== undefined) setRendererCapabilities(setup.renderer, { rgb: options.rgb })
   try {
     const started = Date.now()
     while (!local?.model.ready) {
@@ -278,4 +282,20 @@ await capture({
   fixture: "go-upsell",
   dialog: () => <DialogGoUpsell reset="3:00 PM" onSubscribe={() => {}} onDontShowAgain={() => {}} />,
   ready: (f) => f.includes("subscribe"),
+})
+// Tall enough for the art: its still frame with animations off, on a 24-bit color terminal.
+await capture({
+  ...size,
+  fixture: "go-upsell-art",
+  dialog: () => <DialogGoUpsell reset="3:00 PM" onSubscribe={() => {}} onDontShowAgain={() => {}} />,
+  ready: (f) => f.includes("subscribe"),
+  rgb: true,
+})
+// The same frame on a terminal without 24-bit color, where TS draws the logo's full blocks as "█" (DLG07).
+await capture({
+  ...size,
+  fixture: "go-upsell-art-256",
+  dialog: () => <DialogGoUpsell reset="3:00 PM" onSubscribe={() => {}} onDontShowAgain={() => {}} />,
+  ready: (f) => f.includes("subscribe"),
+  rgb: false,
 })
