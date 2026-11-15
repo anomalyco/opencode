@@ -1164,3 +1164,28 @@ fn storage_keys_of_dotted_ids_and_keys_keep_apart() {
         );
     }
 }
+
+// Expected (PL-7): a `plugin dev` build that fails says so in the TUI and names its log, and the next build that passes
+// says that too; a log there before the TUI started tells nothing.
+#[test]
+fn a_failed_dev_build_says_so() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dev = root.path().join("crate").join("target").join("opencode-dev");
+    std::fs::create_dir_all(&dev).unwrap();
+    let library = dev.join(entry_file());
+    std::fs::write(&library, build("")).unwrap();
+    let log = dev.join("build.log");
+    std::fs::write(&log, "an old failure").unwrap();
+    let harness = support::mount(100, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake(String::new()))) });
+    let target = library.to_string_lossy().into_owned();
+    let config_dir = root.path().join("config");
+    external(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: vec![target] });
+    harness.wait_for("sample plugin v1: home.footer");
+    assert!(harness.tui.toasts.current().is_none(), "the old log told");
+    write_atomic(&log, b"error[E0425]: cannot find value");
+    let screen = harness.wait_for("plugin dev: the build failed");
+    assert!(screen.contains("build.log"), "{screen}");
+    harness.tui.toasts.dismiss();
+    write_atomic(&log, b"");
+    harness.wait_for("plugin dev: the build passes again");
+}

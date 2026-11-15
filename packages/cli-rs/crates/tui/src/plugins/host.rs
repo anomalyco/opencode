@@ -4,7 +4,7 @@
 
 use std::cell::OnceCell;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1279,6 +1279,8 @@ pub fn external(tui: &Rc<Tui>, external: External) {
 /// [`external`], with the TypeScript plugins on a JS host that runs as `scripts` says (P7); without one they are listed
 /// as skipped.
 pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode_plugin::pipe::Config>) {
+    let builds: Vec<Build> =
+        external.dev.iter().map(|library| Build::new(Path::new(library).with_file_name("build.log"))).collect();
     let dev = external.dev;
     let targets = move |plugins: &[opencode_local::cli_config::Plugin]| -> Vec<String> {
         plugins.iter().map(target).map(str::to_owned).chain(dev.iter().cloned()).collect()
@@ -1317,6 +1319,7 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
         bind!(tui, |tui, _, _: &PluginsChanged| {
             loader.reconcile(&host(&tui), &tui.plugins);
             watch(&tui, &loader, &watches);
+            builds.iter().for_each(|build| build.tell(&tui));
         })
     });
     // TS reconciles again when `config.data.plugins` changes: new entries, options and directives apply.
@@ -1336,6 +1339,48 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
         // A new entry the loader does not load is listed skipped, with no remount (review carbon-4).
         tell_plugins(&tui);
     }));
+}
+
+/// `plugin dev`'s `build.log` beside its library, which its builds in the background publish in the watched directory:
+/// empty after a build that passed, the compiler's output after one that failed. A failed build keeps the running
+/// version and said so only in the log file (PL-7).
+struct Build {
+    log: PathBuf,
+    /// When the log was written last, and whether a build had failed then.
+    seen: Cell<(Option<std::time::SystemTime>, bool)>,
+}
+
+impl Build {
+    fn new(log: PathBuf) -> Self {
+        let seen = Cell::new(Self::read(&log));
+        Self { log, seen }
+    }
+
+    fn read(log: &Path) -> (Option<std::time::SystemTime>, bool) {
+        let meta = std::fs::metadata(log).ok();
+        (meta.as_ref().and_then(|meta| meta.modified().ok()), meta.is_some_and(|meta| meta.len() > 0))
+    }
+
+    /// Tells a build since the last look: one that failed names its log, and the first to pass after it says so.
+    fn tell(&self, tui: &Tui) {
+        let now = Self::read(&self.log);
+        let (written, failed) = self.seen.replace(now);
+        if now.0 == written {
+            return;
+        }
+        match (now.1, failed) {
+            (true, _) => tui.toasts.show(
+                ToastOptions::new(
+                    Variant::Error,
+                    format!("The running version stays. The compiler's output is in {}.", self.log.display()),
+                )
+                .title("plugin dev: the build failed")
+                .keep(),
+            ),
+            (false, true) => tui.toasts.show(ToastOptions::new(Variant::Success, "plugin dev: the build passes again")),
+            (false, false) => {}
+        }
+    }
 }
 
 /// The build of the project plugin of `target` the user would be asked about, or why it cannot be read, and why
