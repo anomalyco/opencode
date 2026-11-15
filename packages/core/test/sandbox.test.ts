@@ -1,4 +1,5 @@
 import path from "path"
+import fs from "node:fs"
 import os from "os"
 import { afterAll, describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
@@ -141,6 +142,27 @@ describe("Sandbox.request", () => {
         path.join(workspace, item),
       ),
     })
+  })
+
+  test("workspace-write carves out only existing protected paths on Linux", () => {
+    // bwrap cannot bind a read-only source that does not exist, and denying a missing path makes the backend
+    // create it as a stray directory on the host, so missing protected paths are left alone there.
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-sandbox-test-"))
+    try {
+      fs.mkdirSync(path.join(directory, ".claude"))
+      fs.writeFileSync(path.join(directory, "opencode.json"), "{}")
+      const request = Sandbox.request(
+        { mode: "workspace-write", network: "deny", writableRoots: [] },
+        { ...execution, workspace: directory, cwd: directory },
+        "linux",
+      )
+      expect(request.filesystem).toEqual({
+        readwritePaths: [directory, "/tmp"],
+        readonlyPaths: [path.join(directory, "opencode.json"), path.join(directory, ".claude")],
+      })
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   test("quotes the shell and command for POSIX and Windows", () => {

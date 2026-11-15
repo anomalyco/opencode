@@ -1,6 +1,6 @@
 export * as Sandbox from "./sandbox.js"
 
-import { realpathSync } from "node:fs"
+import { realpathSync, statSync } from "node:fs"
 import os from "os"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
@@ -93,6 +93,24 @@ export function request(
   platform: NodeJS.Platform = process.platform,
 ): ContainerRequest {
   const protectedPaths = PROTECTED.map((item) => path.join(input.workspace, item))
+  const writable = [input.workspace, ...input.tmpRoots, ...policy.writableRoots]
+  const filesystem =
+    policy.mode !== "workspace-write"
+      ? { readonlyPaths: [input.workspace] }
+      : platform === "win32"
+        ? // The Windows backend does not enforce read-only carve-outs under writable roots, so protected paths
+          // are denied outright instead; the in-process read tool still reads them.
+          { readwritePaths: writable, deniedPaths: protectedPaths }
+        : platform === "linux"
+          ? {
+              readwritePaths: writable,
+              // bwrap cannot bind a read-only source that does not exist, which would fail the whole launch,
+              // and denying a missing path makes the backend create it as a stray directory on the host. So only
+              // protected paths that already exist are carved out on Linux; protection for the rest waits on an
+              // upstream MXC fix and is documented as a known gap.
+              ...carve(protectedPaths),
+            }
+          : { readwritePaths: writable, readonlyPaths: protectedPaths }
   return {
     command: commandLine(input.shell, input.command, platform),
     containment: { type: "process" },
@@ -100,21 +118,25 @@ export function request(
     timeoutMs: input.timeout,
     environment: input.environment,
     inheritDefaultEnvironment: true,
-    ...(policy.mode === "workspace-write"
-      ? {
-          filesystem:
-            platform === "win32"
-              ? // The Windows backend does not enforce read-only carve-outs under writable roots, so protected
-                // paths are denied outright instead; the in-process read tool still reads them.
-                { readwritePaths: [input.workspace, ...input.tmpRoots, ...policy.writableRoots], deniedPaths: protectedPaths }
-              : { readwritePaths: [input.workspace, ...input.tmpRoots, ...policy.writableRoots], readonlyPaths: protectedPaths },
-        }
-      : { filesystem: { readonlyPaths: [input.workspace] } }),
+    filesystem,
     network:
       policy.network === "deny"
         ? { egress: { default: "deny" }, ingress: { default: "deny", hostLoopback: "deny" } }
         : { egress: { default: "allow" } },
   }
+}
+
+// Reduces protected paths to the read-only carve-outs bwrap can actually bind: the ones that exist.
+function carve(protectedPaths: string[]) {
+  const readonlyPaths = protectedPaths.filter((item) => {
+    try {
+      statSync(item)
+      return true
+    } catch {
+      return false
+    }
+  })
+  return readonlyPaths.length ? { readonlyPaths } : {}
 }
 
 /** Builds the single command line MXC parses, quoting the shell and its arguments for the platform. */

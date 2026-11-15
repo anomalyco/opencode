@@ -289,7 +289,11 @@ Behavior to know:
 - In `workspace-write` mode the workspace files opencode itself reads at
   startup (`opencode.json`, `opencode.jsonc`, `.opencode`, `.claude`, `.agents`)
   stay read-only, so a sandboxed command cannot plant config or plugin files
-  that would run unsandboxed after a restart.
+  that would run unsandboxed after a restart. Per platform: macOS enforces
+  this for existing and not-yet-existing paths; Linux enforces it for paths
+  that exist (bwrap cannot bind a missing read-only source, and the backend's
+  deny fallback creates stray directories on the host, so missing paths are
+  left unprotected until MXC fixes that); Windows denies the paths outright.
 - Approving a sandboxed command never approves running a command unsandboxed:
   the shell tool has a `sandbox` input to request leaving the sandbox, guarded
   by the separate `shell_unsandboxed` permission. Configure whether escaping is
