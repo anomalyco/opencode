@@ -811,6 +811,35 @@ fn first(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
+/// What `featured`'s setup read: `Setup::features`, and `Setup::abi`'s features and its `image-bounds`.
+type Featured = (Vec<String>, Vec<String>, bool);
+
+thread_local! {
+    static FEATURED: RefCell<Vec<Featured>> = const { RefCell::new(Vec::new()) };
+}
+
+fn featured(setup: &mut abi::Setup) -> Result<(), String> {
+    let abi = setup.abi();
+    let read = (setup.features().to_vec(), abi.features.clone(), abi.has_feature(abi::IMAGE_BOUNDS));
+    FEATURED.with_borrow_mut(|seen| seen.push(read));
+    Ok(())
+}
+
+// Expected (bigboi's final pass): a setup reads one list of the host's features, linked and through the C ABI:
+// `Setup::features` and `Setup::abi` agree, and both name `image-bounds`, which this host has.
+#[test]
+fn a_setup_reads_one_list_of_features_on_both_carriers() {
+    let host = host();
+    FEATURED.with_borrow_mut(Vec::clear);
+    let linked = Registry::define(Vec::new(), []);
+    linked.add(abi::Plugin { id: "featured", setup: featured });
+    linked.activate(&dynamic(&host));
+    let _through = loopback(&host, abi::export_plugin!(@loopback "featured", featured));
+    let seen = FEATURED.with_borrow(Vec::clone);
+    let expected = (vec![abi::IMAGE_BOUNDS.to_owned()], vec![abi::IMAGE_BOUNDS.to_owned()], true);
+    assert_eq!(seen, [expected.clone(), expected], "linked, then through the C ABI");
+}
+
 fn second(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_event(&["session.execution.succeeded"], |host, _| {
         host.toast(abi::Toast::new(abi::Variant::Info, "second"))
