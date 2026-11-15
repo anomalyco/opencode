@@ -63,19 +63,19 @@ fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String 
     let elsewhere = if inside { "" } else { "\nIt is outside this plugin directory." };
     let saved =
         unsaved.map(|reason| format!("\nYour answer lasts until opencode exits: {reason}.")).unwrap_or_default();
+    // The real path as a user would type it: Windows' canonical form starts `\\?\` (`\\?\C:\`, `\\?\UNC\`).
+    let path = opencode_util::path::strip_verbatim(&artifact.path.to_string_lossy()).into_owned();
     if artifact.script {
         return format!(
-            "This project wants to run TypeScript code in opencode's JS host:\n\n{target}\nModule directory: {}\
+            "This project wants to run TypeScript code in opencode's JS host:\n\n{target}\nModule directory: {path}\
              {elsewhere}\nSHA-256 of its files: {}…\n\nIt runs with your permissions. Approve it only if you trust this \
              project.{saved}",
-            artifact.path.display(),
             artifact.short(),
         );
     }
     format!(
-        "This project wants to run native code inside opencode:\n\n{target}\nLibrary: {}{elsewhere}\nSHA-256: {}…\n\n\
+        "This project wants to run native code inside opencode:\n\n{target}\nLibrary: {path}{elsewhere}\nSHA-256: {}…\n\n\
          It runs with your permissions. Approve it only if you trust this project.{saved}",
-        artifact.path.display(),
         artifact.short(),
     )
 }
@@ -105,5 +105,27 @@ mod tests {
         let text = question(&target.to_string_lossy(), &artifact("/shared/plugin.so".into()), Some("it is shared"));
         assert!(text.contains("It is outside this plugin directory."), "{text}");
         assert!(text.contains("Your answer lasts until opencode exits: it is shared."), "{text}");
+    }
+
+    // Expected: on Windows the real path is shown as a user would type it, without the verbatim prefix that
+    // `canonicalize` gives, for a drive and for a share, a library and a module directory.
+    #[test]
+    fn the_question_shows_a_windows_path_without_its_verbatim_prefix() {
+        let artifact = |path: &str, script: bool| Artifact {
+            target: r"C:\work\.opencode\plugins\p".into(),
+            path: path.into(),
+            sha256: "ab".repeat(32),
+            script,
+        };
+        let cases = [
+            (r"\\?\C:\work\.opencode\plugins\p\plugin.dll", false, r"Library: C:\work\.opencode\plugins\p\plugin.dll"),
+            (r"\\?\UNC\srv\share\p\plugin.dll", false, r"Library: \\srv\share\p\plugin.dll"),
+            (r"\\?\C:\work\.opencode\plugins\p", true, r"Module directory: C:\work\.opencode\plugins\p"),
+            (r"\\?\UNC\srv\share\p", true, r"Module directory: \\srv\share\p"),
+        ];
+        for (path, script, shown) in cases {
+            let text = question(r"C:\work\.opencode\plugins\p", &artifact(path, script), None);
+            assert!(text.contains(&format!("{shown}\n")) && !text.contains(r"\\?\"), "{path}: {text}");
+        }
     }
 }
