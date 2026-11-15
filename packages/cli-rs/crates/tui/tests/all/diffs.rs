@@ -100,7 +100,14 @@ fn mount_config(route: Route, config: Value) -> Diffs {
 
 /// [`mount_with`], with the built-ins on the C ABI's byte shims when `abi`.
 fn mount_on(route: Route, diff: Value, width: u16, height: u16, abi: bool) -> Diffs {
-    let memory = Memory::new(routes(diff));
+    mount_routes(route, routes(diff), width, height, abi)
+}
+
+/// The session diff's route, which a row may hold.
+const SESSION_DIFF: &str = "/api/session/ses_a/diff";
+
+fn mount_routes(route: Route, routes: Vec<MemoryRoute>, width: u16, height: u16, abi: bool) -> Diffs {
+    let memory = Memory::new(routes);
     let config = json!({ "animations": false, "session": { "sidebar": "hide" }, "diffs": { "source": "turn" } });
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
@@ -166,6 +173,18 @@ impl Diffs {
                 std::thread::sleep(Duration::from_millis(1));
             }
         }
+    }
+
+    /// Waits until the diff loaded after the `before`-th read has landed in the viewer: the read was sent, its reply
+    /// taken, and the content it gives held. A reload releases the content of the load before as it starts, so until its
+    /// reply is drawn the viewer holds none.
+    fn reloaded(&self, before: usize) {
+        let held = || opencode_plugin::surface::ledger_of("opencode.diffs").content_bytes;
+        let landed = self
+            .app
+            .wait_until(support::WAIT, || self.diff_reads() > before && self.memory.in_flight() == 0 && held() > 0);
+        assert!(landed, "the reload did not land: {} reads, {} in flight", self.diff_reads(), self.memory.in_flight());
+        self.settle();
     }
 
     /// A turn of `ses_a` starts and ends.
@@ -1408,14 +1427,53 @@ fn reloads_release_the_content_of_the_load_before() {
         h.tui.keymap.dispatch("diff.open", None);
         h.wait_for("src/main.rs");
         let held = || opencode_plugin::surface::ledger_of("opencode.diffs").content_bytes;
+        let reads = h.diff_reads();
         h.turn();
-        h.settle();
+        h.reloaded(reads);
         let first = held();
         for _ in 0..3 {
+            let reads = h.diff_reads();
             h.turn();
-            h.settle();
+            h.reloaded(reads);
         }
         assert_eq!(held(), first, "the content of earlier loads stayed");
+    });
+}
+
+// Expected (the lane's run `20261115-080955`): between a reload's start and its reply the viewer holds no content,
+// since the reload releases the load before as it starts. A sample taken there reads 0, which is what the row above
+// read when it sampled before the reply landed; once the reply lands the viewer holds what the first load held. The
+// reply is held here, so the window is the same on every run and carrier.
+#[test]
+fn a_reload_holds_no_content_until_its_reply_lands() {
+    on_both(|| {
+        let diff = json!({
+            "file": "src/main.rs", "patch": "@@ -1 +1 @@\n-old\n+new\n", "additions": 1, "deletions": 1,
+            "status": "modified",
+        });
+        let routes = routes(diff)
+            .into_iter()
+            .map(|route| if route.path == SESSION_DIFF { route.held() } else { route })
+            .collect();
+        let h = mount_routes(support::session_route("ses_a"), routes, 140, 30, ABI.with(Cell::get));
+        h.memory.release(SESSION_DIFF);
+        h.wait_for("Review");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("src/main.rs");
+        let held = || opencode_plugin::surface::ledger_of("opencode.diffs").content_bytes;
+        h.reloaded(0);
+        let first = held();
+        assert!(first > 0, "the first load holds no content");
+        h.memory.hold(SESSION_DIFF);
+        let reads = h.diff_reads();
+        h.turn();
+        let asked = h.app.wait_until(support::WAIT, || h.diff_reads() > reads);
+        assert!(asked, "the ended turn did not load the diff again");
+        h.settle();
+        assert_eq!(held(), 0, "the viewer held content while its reload waited");
+        h.memory.release(SESSION_DIFF);
+        h.reloaded(reads);
+        assert_eq!(held(), first, "the reload did not give back what the first load held");
     });
 }
 
