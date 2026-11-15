@@ -749,14 +749,19 @@ impl Shows for Core {
 /// what its view returns. A part the host's row shows for the rest of its mount is not asked. A part viewed in this
 /// frame already, by a revision or another wake, is viewed at the next paint with what is newest then, as a revision
 /// that streams is (review bigboi 12): one view a frame, whichever way it is asked for. A part whose view waits for
-/// the paint already gets the plugin's change there.
+/// the paint already gets the plugin's change there. A handler that ran between paints is viewed as the next paint
+/// starts, as a streaming revision is, so the two share one view in the first paint in either order; a wake drained
+/// at a paint's start is viewed at once, in that paint.
 impl Drawn for Core {
     fn woken(&self, host: &dyn Host) {
         // A view that waits for the paint sees the plugin's state then.
         if self.fallen.get() || self.part.borrow().is_none() || self.waiting.get() {
             return;
         }
-        if self.viewed.get() == Some(host.app().frame_number()) {
+        // Between paints a handler's change waits for the next one too, so a revision that streams before then joins
+        // that one view, whichever came first (re-review final pass, big-boi 12). A wake's drain is the paint's start
+        // already: a view now lands in that paint.
+        if !crate::schedule::draining() || self.viewed.get() == Some(host.app().frame_number()) {
             if let Some(core) = self.this.upgrade() {
                 core.wait();
             }
