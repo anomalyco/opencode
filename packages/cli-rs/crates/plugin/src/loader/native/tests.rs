@@ -3522,6 +3522,49 @@ fn a_setup_whose_error_the_host_refuses_leaves_no_effect() {
     }
 }
 
+// Expected (bigboi's re-review, findings 5 and 7): a draw's answer is held to every buffer's rules before the list's:
+// an OK descriptor past 256 MiB is refused unread, even one that starts as a list does, rather than taken as a list
+// over its bytes; an OK list between the two limits is over its bytes and not copied; an error and a panic between
+// them are text, kept whole as a diagnostic. Each descriptor goes back to `free` once, as it came.
+#[test]
+fn a_draw_is_held_to_every_buffer_s_rules_before_the_list_s() {
+    thread_local! {
+        static FREED: RefCell<Vec<(usize, usize, usize)>> = const { RefCell::new(Vec::new()) };
+    }
+    unsafe extern "C" fn counted(owned: Owned) {
+        FREED.with(|freed| freed.borrow_mut().push((owned.ptr as usize, owned.len, owned.cap)));
+    }
+    let past = abi::canvas::MAX_BYTES + 10;
+    let mut text = vec![b'e'; past];
+    let mut list = [abi::canvas::VERSION];
+    let (text_ptr, list_ptr) = (text.as_mut_ptr(), list.as_mut_ptr());
+    let rows: [(_, _, Result<usize, &str>, _); 6] = [
+        (abi::OK, Owned { ptr: list_ptr, len: abi::MAX_BUFFER + 1, cap: abi::MAX_BUFFER + 1 }, Err("over"), None),
+        (abi::OK, Owned { ptr: list_ptr, len: past, cap: past }, Ok(0), Some(past)),
+        (abi::ERROR, Owned { ptr: text_ptr, len: past, cap: past }, Ok(past), None),
+        (abi::PANIC, Owned { ptr: text_ptr, len: past, cap: past }, Ok(past), None),
+        (abi::ERROR, Owned { ptr: list_ptr, len: abi::MAX_BUFFER + 1, cap: abi::MAX_BUFFER + 1 }, Err("over"), None),
+        (abi::OK, Owned { ptr: std::ptr::null_mut(), len: past, cap: past }, Err("a null buffer"), None),
+    ];
+    for (index, (status, out, expected, over)) in rows.into_iter().enumerate() {
+        let descriptor = (out.ptr as usize, out.len, out.cap);
+        FREED.with(|freed| freed.borrow_mut().clear());
+        OVER_LIST.set(None);
+        // SAFETY: the rows past 256 MiB and the null one are refused before they are read; the list rows read only the
+        // first byte, and the text rows `text`'s bytes.
+        let got = unsafe { received_list(out, counted, status) };
+        match expected {
+            Ok(len) => assert_eq!(got.as_ref().map(Vec::len), Ok(len), "row {index}"),
+            Err(needle) => assert!(got.as_ref().is_err_and(|error| error.contains(needle)), "row {index}: {got:?}"),
+        }
+        if expected == Ok(past) {
+            assert!(got.unwrap().iter().all(|byte| *byte == b'e'), "row {index}: the text changed");
+        }
+        assert_eq!(OVER_LIST.take(), over, "row {index}");
+        assert_eq!(FREED.with(|freed| freed.borrow().clone()), [descriptor], "row {index} was not freed once");
+    }
+}
+
 // Expected (big-boi 5, carbon-8): what a plugin lends the host's entries is checked as what it returns: `call`,
 // `send` and `report` refuse a null pointer with a length, and a length over the bound, before they read it or reach
 // the mailbox; `free` takes back the host's buffer by its pointer and capacity, whatever its length says.
