@@ -1214,8 +1214,8 @@ impl abi::Host for Scoped<'_> {
     fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
         let Some(stored) = self.scope.stored(key) else { return };
         let held = storage::read(self.host, &stored).map_or(0, |json| json.len());
-        let merged = storage::bounded(held + serde_json::Value::Object(fields.clone()).to_string().len())
-            .and_then(|()| {
+        let merged =
+            storage::bounded(held + serde_json::Value::Object(fields.clone()).to_string().len()).and_then(|()| {
                 self.written(&stored.now);
                 storage::migrate(self.host, &stored)?;
                 self.host.storage_merge(&stored.now, fields)

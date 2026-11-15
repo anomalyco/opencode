@@ -128,11 +128,26 @@ mod tests {
                 }
             }
         }
-        assert_eq!(name("opencode.diffs", "view").unwrap(), Name { now: "plugin.opencode.diffs.view".into(), before: None });
+        assert_eq!(
+            name("opencode.diffs", "view").unwrap(),
+            Name { now: "plugin.opencode.diffs.view".into(), before: None }
+        );
         let dotted = name("acme", "cloud.token").unwrap();
         assert_eq!(dotted.before.as_deref(), Some("plugin.acme.cloud.token"));
         assert_ne!(dotted.now, name("acme.cloud", "token").unwrap().now);
-        for (id, key) in [("a.", "k"), (".a", "k"), ("a..b", "k"), ("a", "k."), ("a", ".k"), ("a", "k..j"), ("a", ""), ("", "k"), ("a", "k/j"), ("a", "../k"), ("a b", "k")] {
+        for (id, key) in [
+            ("a.", "k"),
+            (".a", "k"),
+            ("a..b", "k"),
+            ("a", "k."),
+            ("a", ".k"),
+            ("a", "k..j"),
+            ("a", ""),
+            ("", "k"),
+            ("a", "k/j"),
+            ("a", "../k"),
+            ("a b", "k"),
+        ] {
             assert!(name(id, key).is_err(), "{id:?} {key:?}");
         }
     }
