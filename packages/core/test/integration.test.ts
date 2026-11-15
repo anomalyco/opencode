@@ -185,6 +185,51 @@ describe("Integration", () => {
     }),
   )
 
+  it.effect("validates declared key prefixes before persisting credentials", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const constrainedID = Integration.ID.make("anthropic")
+      const opaqueID = Integration.ID.make("custom")
+
+      yield* integrations.transform((editor) => {
+        editor.method.update({
+          integrationID: constrainedID,
+          method: {
+            type: "key",
+            validation: { prefix: "sk-ant-" },
+          } as Integration.KeyMethod & { validation: { prefix: string } },
+        })
+        editor.method.update({
+          integrationID: opaqueID,
+          method: { type: "key" },
+        })
+      })
+
+      yield* integrations.connection.key({
+        integrationID: constrainedID,
+        key: "sk-ant-api03-test-key",
+      })
+      const before = yield* credentials.list(constrainedID)
+
+      const invalid = yield* integrations.connection
+        .key({ integrationID: constrainedID, key: "1" })
+        .pipe(Effect.flip)
+      expect(invalid.cause).toMatchObject({ message: 'API key must start with "sk-ant-".' })
+      expect(yield* credentials.list(constrainedID)).toEqual(before)
+
+      const empty = yield* integrations.connection
+        .key({ integrationID: opaqueID, key: "  \t " })
+        .pipe(Effect.flip)
+      expect(empty.cause).toMatchObject({ message: "API key cannot be empty." })
+      expect(yield* credentials.list(opaqueID)).toEqual([])
+
+      // Providers without a declared format keep accepting opaque deployment-specific tokens.
+      yield* integrations.connection.key({ integrationID: opaqueID, key: "1" })
+      expect(yield* credentials.list(opaqueID)).toHaveLength(1)
+    }),
+  )
+
   it.effect("names unlabeled credentials after the integration", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
