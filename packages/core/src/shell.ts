@@ -1,6 +1,7 @@
 export * as Shell from "./shell.js"
 
 import path from "path"
+import { isUtf8 } from "node:buffer"
 import {
   Context,
   Deferred,
@@ -748,13 +749,23 @@ const layer = () =>
         const command = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
+        const running = command.info.status === "running"
         const size = yield* sizeOf(command)
         if (cursor >= size) return { output: "", cursor: size, size, truncated: false }
         const start = Math.max(0, cursor)
-        const bytes = yield* readRange(command.info.file, start, Math.min(limit, size - start))
+        if (limit <= 0) return { output: "", cursor: start, size, truncated: false }
+        // A UTF-8 character can straddle either edge by up to three bytes.
+        const offset = Math.max(0, start - 3)
+        const bytes = yield* readRange(command.info.file, offset, Math.min(size, start + limit + 3) - offset)
+        const from = start - offset
+        const to = Math.min(bytes.length, from + limit)
+        const first = splitCharacter(bytes, from, running)?.end ?? from
+        const last = splitCharacter(bytes, to, running)
+        // Keep the usual limit unless even the first complete character would not fit.
+        const end = last && last.start === first && last.end !== undefined ? last.end : (last?.start ?? to)
         return {
-          output: bytes.toString("utf8"),
-          cursor: start + bytes.length,
+          output: bytes.toString("utf8", first, end),
+          cursor: offset + Math.max(first, end),
           size,
           truncated: false,
         }
@@ -1122,6 +1133,21 @@ const layer = () =>
       })
     }),
   )
+
+// Find a character crossing this byte offset. A valid prefix at a live EOF has no end yet.
+function splitCharacter(bytes: Buffer, cut: number, running: boolean) {
+  for (let start = cut - 1; start >= Math.max(0, cut - 3); start--) {
+    const lead = bytes[start]
+    if ((lead & 0xc0) === 0x80) continue
+    if (lead < 0xc2 || lead > 0xf4) return
+    const end = start + (lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4)
+    if (end <= cut) return
+    const char = bytes.subarray(start, end)
+    if (end <= bytes.length) return isUtf8(char) ? { start, end } : undefined
+    if (running && new TextDecoder().decode(char, { stream: true }) === "") return { start, end: undefined }
+    return
+  }
+}
 
 // Spans carry only the command text, truncated; never env, stdin or output. Shells outlive the turn that started
 // them, so the session comes from the shell's own metadata rather than the caller's span annotations.
