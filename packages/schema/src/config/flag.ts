@@ -17,6 +17,7 @@ export const registry = {
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
+  console_slack_preview: "Preview Slack message links using the member's OpenCode Console sign-in.",
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
 } as const satisfies Record<string, string>

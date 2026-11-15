@@ -271,6 +271,8 @@ import type {
   ExperimentalArtifactsViewOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalConsoleSlackMessageInput,
+  ExperimentalConsoleSlackMessageOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1701,6 +1703,20 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+      },
+      console: {
+        slackMessage: (input: ExperimentalConsoleSlackMessageInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalConsoleSlackMessageOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/console/slack/message`,
+              query: { location: input["location"], url: input["url"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
       },
       migration: {
         v1: {
