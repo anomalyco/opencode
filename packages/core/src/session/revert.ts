@@ -1,6 +1,6 @@
 export * as SessionRevert from "./revert.js"
 
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, asc, eq, gte } from "drizzle-orm"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
@@ -95,7 +95,7 @@ const plan = Effect.fn("SessionRevert.plan")(function* (db: Database.Interface["
       and(
         eq(SessionMessageTable.session_id, input.sessionID),
         eq(SessionMessageTable.type, "assistant"),
-        gt(SessionMessageTable.seq, boundary.seq),
+        gte(SessionMessageTable.seq, boundary.seq),
       ),
     )
     .orderBy(asc(SessionMessageTable.seq))
@@ -105,8 +105,7 @@ const plan = Effect.fn("SessionRevert.plan")(function* (db: Database.Interface["
   for (const row of rows) {
     const message = SessionHistory.decodeMessageRowSync(row)
     if (message.type !== "assistant" || !message.snapshot?.start) continue
-    for (const file of message.snapshot.files ?? [])
-      if (!files.has(file)) files.set(file, message.snapshot.start)
+    for (const file of message.snapshot.files ?? []) if (!files.has(file)) files.set(file, message.snapshot.start)
   }
   return files
 })

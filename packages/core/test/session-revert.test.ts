@@ -39,7 +39,7 @@ const it = testEffect(
   ),
 )
 
-describe("Session.revert files", () => {
+describe.each(["user", "assistant"] as const)("Session.revert files at %s message", (boundary) => {
   it.live(
     "undoes and restores a file rename without losing either path",
     () =>
@@ -92,7 +92,10 @@ describe("Session.revert files", () => {
           })
 
           yield* Effect.promise(() => Bun.write(path.join(directory, "unrelated.txt"), "Keep this later edit.\n"))
-          const reverted = yield* session.revert.stage({ sessionID: created.id, messageID: prompt.id })
+          const reverted = yield* session.revert.stage({
+            sessionID: created.id,
+            messageID: boundary === "user" ? prompt.id : assistantMessageID,
+          })
           expect({
             original: yield* Effect.promise(() => Bun.file(original).exists()),
             renamed: yield* Effect.promise(() => Bun.file(renamed).exists()),
