@@ -386,7 +386,7 @@ pub fn install(tui: &Rc<Tui>) {
             crate::dialogs::variant::show(local);
         })
         .title("Switch model variant")
-        .palette()
+        .palette_when(opentui::keymap::Condition::when(bind!(local, |local| !local.variants().is_empty())))
         .slash(slash("variants", &["thinking", "effort"])),
         command("agent.cycle.reverse", |local| local.move_agent(-1)).title("Agent cycle reverse"),
     ];
