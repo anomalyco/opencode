@@ -45,6 +45,13 @@ pub struct Work {
 
 thread_local! {
     static WORK: std::cell::Cell<Work> = std::cell::Cell::new(Work::default());
+    /// A drain runs: it is a paint's start, so a view now lands in that paint.
+    static DRAINING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether a drain runs now, at the start of a paint, before its layout.
+pub(crate) fn draining() -> bool {
+    DRAINING.get()
 }
 
 /// What the scheduler did on this thread so far.
@@ -100,7 +107,9 @@ pub(crate) fn arm(app: &App) {
     app.animate(move |cx, _| {
         // From here on a wake asks for another drain.
         drop(token.take());
+        let outer = DRAINING.replace(true);
         drain(cx.app());
+        DRAINING.set(outer);
         false
     });
 }

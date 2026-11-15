@@ -2769,10 +2769,11 @@ fn plugin_coalesce(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.11, 4.14 `work`; review bigboi 12, final re-review big-boi 12): a part's revision and a handler of its
-// plugin before a paint give the part one view, at that first paint, with the newest of both: the command's effect and
-// the newest content, which that paint shows; the paint after views nothing. A view at that paint that declines hands
-// the row back at that paint. On both carriers.
+// Expected (4.11, 4.14 `work`; review bigboi 12, final re-review big-boi 12 and its final pass): a part's revision and a
+// handler of its plugin before a paint give the part one view, at that first paint, with the newest of both: the
+// command's effect and the newest content, which that paint shows; the paint after views nothing. So in either order,
+// also when the handler's redraw is drained before the revision comes. A view at that paint that declines hands the row
+// back at that paint. On both carriers.
 #[test]
 fn a_revision_and_a_handler_in_one_frame_give_a_part_one_view() {
     for carrier in CARRIERS {
@@ -2782,31 +2783,50 @@ fn a_revision_and_a_handler_in_one_frame_give_a_part_one_view() {
         world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "coalesce" }));
         world.settle();
         world.harness.wait_for("coalesced 0");
-        for refuse in [false, true] {
+        let mut typed = String::new();
+        for (handler_first, refuse) in [(false, false), (false, true), (true, false), (true, true)] {
             COALESCED.with_borrow_mut(Vec::clear);
             let views = || COALESCED.with_borrow(Vec::len);
             world.harness.app.advance(Duration::from_millis(20));
-            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": if refuse { "b" } else { "a" } }));
-            assert_eq!(views(), 0, "{carrier:?}: a streaming revision is viewed as the paint starts");
-            DECLINES.set(refuse);
-            world.harness.tui.keymap.dispatch("claim.coalesce", None);
-            assert_eq!(views(), 0, "{carrier:?}: the handler viewed the part before the paint");
+            let delta = ["a", "b", "c", "d"][typed.len()];
+            typed.push_str(delta);
+            let revise = || world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
+            let handle = || {
+                DECLINES.set(refuse);
+                world.harness.tui.keymap.dispatch("claim.coalesce", None);
+                // The effect queue drains the handler's redraw before anything else comes.
+                world.harness.app.advance(Duration::ZERO);
+            };
+            match handler_first {
+                false => {
+                    revise();
+                    handle();
+                }
+                true => {
+                    handle();
+                    revise();
+                }
+            }
+            let order = if handler_first { "handler first" } else { "revision first" };
+            assert_eq!(views(), 0, "{carrier:?} {order}: a view before the paint");
             let first = world.harness.app.render();
             let log = COALESCED.with_borrow(Clone::clone);
-            let input = if refuse { "in ab" } else { "in a" };
+            let input = format!("in {typed}");
             assert_eq!(
                 log,
-                [(BUMPS.get(), input.to_owned())],
-                "{carrier:?}: one view at the first paint, of the newest"
+                [(BUMPS.get(), input.clone())],
+                "{carrier:?} {order}: one view at the first paint, of the newest"
             );
             let drawn = format!("coalesced {} {input}", BUMPS.get());
-            assert_eq!(first.text().contains(&drawn), !refuse, "{carrier:?}: the first paint:\n{}", first.text());
+            assert_eq!(
+                first.text().contains(&drawn),
+                !refuse,
+                "{carrier:?} {order}: the first paint:\n{}",
+                first.text()
+            );
             world.harness.app.render();
-            assert_eq!(views(), 1, "{carrier:?}: the paint after viewed again");
-            let screen = world.frame().text();
-            let drawn = format!("coalesced {} {input}", BUMPS.get());
-            assert_eq!(screen.contains(&drawn), !refuse, "{carrier:?}: refuse {refuse}:\n{screen}");
-            assert_eq!(mounted().iter().any(|shown| shown.shows), !refuse, "{carrier:?}: {:?}", mounted());
+            assert_eq!(views(), 1, "{carrier:?} {order}: the paint after viewed again");
+            assert_eq!(mounted().iter().any(|shown| shown.shows), !refuse, "{carrier:?} {order}: {:?}", mounted());
         }
     }
 }
@@ -2844,5 +2864,45 @@ fn a_claim_view_reads_its_part_s_mount_on_both_carriers() {
         for (read, mount) in seen {
             assert_eq!(read.as_ref(), Some(&mount), "{carrier:?}");
         }
+    }
+}
+
+thread_local! {
+    /// `claim.wake`'s waker, and the state its view draws.
+    static WAKE: RefCell<Option<abi::Waker>> = const { RefCell::new(None) };
+    static WOKEN: Cell<u32> = const { Cell::new(0) };
+    /// The state each view of a `woke` part drew.
+    static WOKE_VIEWS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Claims `woke` calls with a line of [`WOKEN`]; its waker draws its parts again.
+fn plugin_wake(setup: &mut abi::Setup) -> Result<(), String> {
+    WAKE.set(setup.waker());
+    setup.claim(Claim::tool("woke", |_, _| {
+        WOKE_VIEWS.with_borrow_mut(|views| views.push(WOKEN.get()));
+        Some(v2::Node::text(vec![abi::Span::new(format!("woke {}", WOKEN.get()))]))
+    }));
+    Ok(())
+}
+
+// Expected (re-review final pass, big-boi 12): a wake of the plugin is drained as a paint starts, so the part is viewed
+// then, in that paint: the first paint after the wake shows the plugin's new state, with one view. On both carriers.
+#[test]
+fn a_wake_drained_at_the_paint_shows_in_that_paint() {
+    for carrier in CARRIERS {
+        WOKEN.set(0);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.wake", setup: plugin_wake })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "woke" }));
+        world.settle();
+        world.harness.wait_for("woke 0");
+        WOKE_VIEWS.with_borrow_mut(Vec::clear);
+        WOKEN.set(1);
+        WAKE.with_borrow(|waker| waker.as_ref().expect("the plugin's waker").wake());
+        world.harness.app.advance(Duration::from_millis(1));
+        let first = world.harness.app.render().text();
+        assert!(first.contains("woke 1"), "{carrier:?}: the first paint after the wake:\n{first}");
+        assert_eq!(WOKE_VIEWS.with_borrow(Clone::clone), [1], "{carrier:?}");
+        world.harness.app.render();
+        assert_eq!(WOKE_VIEWS.with_borrow(Vec::len), 1, "{carrier:?}: the paint after viewed again");
     }
 }
