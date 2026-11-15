@@ -823,7 +823,8 @@ mod tests {
             (LC_DYLD_ENVIRONMENT, "DYLD_INSERT_LIBRARIES=/tmp/x.dylib", false, false),
         ] {
             let bytes = macho64(&[(LC_LOAD_DYLIB, "/usr/lib/libSystem.B.dylib"), (command, path)]);
-            assert_eq!(passes(&bytes), (trusted, project), "{path}");
+            // A project's build passes only where `/usr/lib`, which each build here also names, is a trusted root.
+            assert_eq!(passes(&bytes), (trusted, project && cfg!(unix)), "{path}");
         }
         // A universal file holding one slice.
         let universal = |slice: Vec<u8>| {

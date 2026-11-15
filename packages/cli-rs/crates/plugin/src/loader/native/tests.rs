@@ -3366,7 +3366,16 @@ fn a_refused_library_is_named_by_its_file_and_old_copies_are_swept() {
         std::fs::write(made.join("plugin.dll"), b"").unwrap();
     }
     let past = std::time::SystemTime::now() - Duration::from_secs(3600);
-    std::fs::File::open(&old).unwrap().set_modified(past).unwrap();
+    // Windows opens a directory only with backup semantics, and changes its times only with write-attributes access.
+    let mut options = std::fs::OpenOptions::new();
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.access_mode(0x100).custom_flags(0x0200_0000);
+    }
+    #[cfg(not(windows))]
+    options.read(true);
+    options.open(&old).unwrap().set_modified(past).unwrap();
     sweep(&base, Duration::from_secs(600));
     assert!(!old.exists() && new.exists());
 }

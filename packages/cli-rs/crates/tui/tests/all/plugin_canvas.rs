@@ -2118,7 +2118,8 @@ fn a_covered_canvas_rests() {
 // canvas that stayed mounted and shown; without the suspend they are.
 #[test]
 fn the_time_the_terminal_is_away_is_not_counted() {
-    for suspend in [false, true] {
+    // Windows has no suspend: the command is never enabled there, as TS's is not, so only the stall half runs.
+    for suspend in [false, true].into_iter().filter(|suspend| !(cfg!(windows) && *suspend)) {
         CHART.with(|cell| *cell.borrow_mut() = Chart::default());
         let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.chart", setup: chart_setup }.into()]);
         harness.tui.navigate(chart_route());
