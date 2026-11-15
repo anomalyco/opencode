@@ -141,6 +141,7 @@ impl Native {
 }
 
 impl Backend for Native {
+    /// Bytes with no quarantine: ones not read through [`Backend::load_read`].
     fn load(
         &self,
         host: &Rc<dyn Host>,
@@ -148,7 +149,18 @@ impl Backend for Native {
         source: &Path,
         options: Option<&str>,
     ) -> Result<(Definition, ErrorFn), String> {
-        define(host, Library::open(library, Some(source), V1_MINOR)?, options)
+        self.load_read(host, library, None, source, options)
+    }
+
+    fn load_read(
+        &self,
+        host: &Rc<dyn Host>,
+        library: &[u8],
+        quarantine: Option<&[u8]>,
+        source: &Path,
+        options: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String> {
+        define(host, Library::open(library, Some((source, quarantine)), V1_MINOR)?, options)
     }
 }
 
@@ -282,18 +294,22 @@ impl Library {
         }
     }
 
-    /// Opens a library, `bytes` read from the file `source`, through a copy, so a new build can replace the file:
-    /// through [`abi::ENTRY`] as ABI 2, else through [`abi::ENTRY_V1`] as ABI 1, for a host that serves ABI 1 up to
-    /// `v1`. On macOS the copy carries the quarantine of the file, so the system checks it as it would the file (review
-    /// carbon-6).
-    fn open(bytes: &[u8], source: Option<&Path>, v1: u32) -> Result<Self, String> {
+    /// Opens a library, `bytes` read from the file `source` with its raw quarantine, through a copy, so a new build
+    /// can replace the file: through [`abi::ENTRY`] as ABI 2, else through [`abi::ENTRY_V1`] as ABI 1, for a host that
+    /// serves ABI 1 up to `v1`. On macOS the copy carries the quarantine the bytes were read with, so the system checks
+    /// it as it would the file (review carbon-6, final review big-boi 3); a copy that cannot carry it is not opened.
+    fn open(bytes: &[u8], source: Option<(&Path, Option<&[u8]>)>, v1: u32) -> Result<Self, String> {
         let dir = staging()?;
         let file = dir.path().join(format!("plugin.{}", std::env::consts::DLL_EXTENSION));
-        std::fs::write(&file, bytes).map_err(|error| format!("{}: {error}", file.display()))?;
-        let quarantined = match source {
-            Some(source) if cfg!(target_os = "macos") => keep_quarantine(source, &file)?,
-            _ => false,
-        };
+        let error = |error: std::io::Error| format!("{}: {error}", file.display());
+        let mut copy = std::fs::File::create(&file).map_err(error)?;
+        std::io::Write::write_all(&mut copy, bytes).map_err(error)?;
+        let quarantined = source.and_then(|(_, quarantine)| quarantine);
+        if let (Some(value), Some((source, _))) = (quarantined, source) {
+            super::quarantine::put(&copy, value).map_err(|error| format!("{}: {error}", source.display()))?;
+        }
+        drop(copy);
+        let (source, quarantined) = (source.map(|(source, _)| source), quarantined.is_some());
         // SAFETY: loading runs the library's initializers; a plugin is code the user chose to run.
         let library = unsafe { dl::Library::open(&file) };
         // The mapping stays after the directory is gone (where the platform allows removing it).
@@ -427,29 +443,6 @@ fn sweep(base: &Path, age: Duration) {
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }
-}
-
-/// Puts the quarantine of `source`, which macOS gives a download, on its copy `copy`; whether there was one. A copy
-/// that cannot carry it is not opened.
-fn keep_quarantine(source: &Path, copy: &Path) -> Result<bool, String> {
-    const XATTR: &str = "/usr/bin/xattr";
-    const QUARANTINE: &str = "com.apple.quarantine";
-    let read = std::process::Command::new(XATTR)
-        .args(["-p", QUARANTINE])
-        .arg(source)
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output()
-        .map_err(|error| format!("{XATTR}: {error}"))?;
-    if !read.status.success() {
-        return Ok(false);
-    }
-    let value = String::from_utf8_lossy(&read.stdout).trim_end_matches('\n').to_owned();
-    let written = std::process::Command::new(XATTR).args(["-w", QUARANTINE, &value]).arg(copy).status();
-    if !written.is_ok_and(|status| status.success()) {
-        return Err(format!("cannot keep the quarantine of {} on the copy the host opens", source.display()));
-    }
-    Ok(true)
 }
 
 /// Why the system refused to open a library, in words a user can act on (4.5, reviews F12, bigboi-13, carbon-6), on

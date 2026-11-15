@@ -3319,7 +3319,7 @@ fn a_refused_library_is_named_by_its_file_and_old_copies_are_swept() {
     let dir = opencode_util::temp::tempdir().unwrap();
     let source = dir.path().join("plugin.so");
     std::fs::write(&source, b"not a library").unwrap();
-    let error = Library::open(b"not a library", Some(&source), V1_MINOR).err().unwrap();
+    let error = Library::open(b"not a library", Some((&source, None)), V1_MINOR).err().unwrap();
     assert!(error.contains(&*source.to_string_lossy()), "{error}");
     // The source's own directory is a temporary one too; the copy's is not named.
     assert_eq!(error.matches(".tmp-").count(), 1, "{error}");
