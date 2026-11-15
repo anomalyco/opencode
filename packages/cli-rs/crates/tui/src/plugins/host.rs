@@ -6,7 +6,7 @@ use std::cell::OnceCell;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use opencode_api::generated::{
     IntegrationInfo, LocationQueryInput, McpServer, ModelInfo, ModelRef, PluginInfo, PluginListInput, PluginSource,
@@ -79,6 +79,15 @@ impl Host for Tui {
     }
 
     fn storage_read(&self, key: &str) -> Option<String> {
+        // A refused write left a value no file holds: the keys are read from disk first, once no write is queued.
+        if self.reads.dirty.load(Ordering::SeqCst) && reload_cache(self) {
+            let weak = self.weak();
+            self.app.defer(move |_| {
+                if let Some(tui) = weak.upgrade() {
+                    tui.reads.changed(&tui);
+                }
+            });
+        }
         if let Some(json) = self.reads.stored.borrow().get(key) {
             return json.clone();
         }
@@ -606,7 +615,7 @@ fn queue(
 ) {
     tui.reads.stored.borrow_mut().insert(key.to_owned(), shown);
     if let Some(storage) = tui.storage() {
-        let pending = tui.reads.pending.clone();
+        let (pending, dirty) = (tui.reads.pending.clone(), tui.reads.dirty.clone());
         pending.fetch_add(1, Ordering::SeqCst);
         let (key, proxy) = (key.to_owned(), tui.app.proxy());
         let writer = tui.reads.writer.get_or_init(|| {
@@ -627,6 +636,11 @@ fn queue(
                     matches!(error, opencode_local::storage::Error::TooLarge(..))
                 }
             };
+            // The flag is set before the write counts as done, so a read that sees no write pending sees it; the
+            // message only hurries the reload, and may be lost to a full queue.
+            if refused {
+                dirty.store(true, Ordering::SeqCst);
+            }
             pending.fetch_sub(1, Ordering::SeqCst);
             if refused {
                 let _ = proxy.send(Refused);
@@ -652,16 +666,24 @@ fn load(storage: &Storage, key: &str) -> Option<String> {
 /// Reads the plugins' stored keys again after the storage directory changed, so another client's writes show. While a
 /// write of this TUI is queued the keys stay; its own change of the directory reads them again after it.
 pub fn reload_storage(tui: &Tui) {
-    let Some(storage) = tui.storage().filter(|_| tui.reads.pending.load(Ordering::SeqCst) == 0) else { return };
+    if reload_cache(tui) {
+        tui.reads.changed(tui);
+    }
+}
+
+/// Reads every cached key from disk, unless a write is queued, and ends a refused write's [`Reads::dirty`]: whether a
+/// value changed.
+fn reload_cache(tui: &Tui) -> bool {
+    let Some(storage) = tui.storage().filter(|_| tui.reads.pending.load(Ordering::SeqCst) == 0) else { return false };
+    // Cleared before the reads, so a refusal that lands meanwhile sets it again.
+    tui.reads.dirty.store(false, Ordering::SeqCst);
     let mut changed = false;
     for (key, json) in tui.reads.stored.borrow_mut().iter_mut() {
         let fresh = load(&storage, key);
         changed |= *json != fresh;
         *json = fresh;
     }
-    if changed {
-        tui.reads.changed(tui);
-    }
+    changed
 }
 
 /// TS's error toast for a failed plugin, which offers to open the plugin manager.
@@ -693,6 +715,11 @@ pub struct Reads {
     writer: OnceCell<Serial>,
     /// The writes queued and not yet on disk.
     pending: Arc<AtomicUsize>,
+    /// A write was refused under the lock since the keys were last read from disk: what `stored` shows for it is no
+    /// file's. It stays set until a reload from disk with no write pending, so neither a correction that could not be
+    /// posted nor one skipped while another write was queued leaves the cache apart from the files (re-review last
+    /// pass).
+    dirty: Arc<AtomicBool>,
     /// The mounted claims' pushes, which a storage write calls with `local` from the effect queue.
     watchers: RefCell<Vec<Weak<Push>>>,
     telling: Cell<bool>,
