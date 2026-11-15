@@ -937,7 +937,15 @@ impl Scripts {
                 *self.theme.borrow_mut() = Some((theme_mode.clone(), host.theme()));
                 let hello = Down::Hello { version: proto::VERSION, after, theme_mode, palette: Some(palette) };
                 let hello = serde_json::to_vec(&hello).unwrap_or_default();
-                let _ = child.send(wire::CONTROL, &hello, None, child::Wait::Ack);
+                // The stream's head goes whatever the queue's bound: a hello lost, as one larger than the bound was,
+                // left the JS host expecting the stream from 0, which a restart's does not start at (pipe-restart).
+                if let Err(refused) = child.send_head(wire::CONTROL, &hello) {
+                    let error = format!("cannot start the JS host: its hello was refused ({refused:?})");
+                    log::error!("{error}");
+                    *self.stopped.borrow_mut() = Some(error);
+                    self.fail_loads();
+                    return false;
+                }
                 *self.child.borrow_mut() = Some(child);
                 self.read.set((0, 0));
                 *self.overflow.borrow_mut() = Default::default();

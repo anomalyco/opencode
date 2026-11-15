@@ -245,6 +245,22 @@ impl Child {
 
     /// Queues one frame; `seq` is the event it carries, whose acknowledgement or answer the watch waits for as `wait`
     /// says. Refused when the queue has no room, or the child ended.
+    /// Queues the head of the stream, the host's hello, whatever the bound of the queued bytes ([`Limits::queued`]):
+    /// without it the JS host follows nothing after it, so a fresh child takes it first. Only a closed child refuses
+    /// it.
+    pub fn send_head(&self, kind: u8, payload: &[u8]) -> Result<(), Refused> {
+        let frame = wire::encode(kind, payload);
+        let mut out = lock(&self.shared.out);
+        if out.closed {
+            return Err(Refused::Full);
+        }
+        out.bytes += frame.len();
+        out.frames.push_back(frame);
+        drop(out);
+        self.shared.out_ready.notify_all();
+        Ok(())
+    }
+
     pub fn send(&self, kind: u8, payload: &[u8], seq: Option<u64>, wait: Wait) -> Result<(), Refused> {
         let frame = wire::encode(kind, payload);
         if frame.len() > self.shared.limits.queued {
