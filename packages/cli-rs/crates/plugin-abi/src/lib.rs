@@ -4627,13 +4627,15 @@ impl Setup<'_> {
         &self.registered.features
     }
 
-    /// 2.0: what the host serves the plugin: its major, minor and features ([`Read::abi`]).
+    /// 2.0: what the host serves the plugin: its major, minor and features ([`Read::abi`]). Its features are
+    /// [`Setup::features`], on every carrier (bigboi's final pass).
     pub fn abi(&self) -> Abi {
-        match self.host {
+        let served = match self.host {
             Some(host) => host.abi(),
             None if self.registered.host.api.is_null() => Abi::current(),
             None => self.registered.host.abi(),
-        }
+        };
+        Abi::new(served.major, served.minor, self.registered.features.clone())
     }
 
     /// 2.0: a search a [`Select`] names (`search`): with the host's reads, the query and the select's enabled options,
@@ -4714,7 +4716,8 @@ impl Registered {
     /// The registrations of a plugin the host runs in process: without an ABI host, so a [`Setup`] of its own
     /// ([`Registered::setup`]) answers every request with an error.
     pub fn new(id: &str, options: Option<String>) -> Self {
-        Self::with_host(id, options, std::ptr::null())
+        // The host in process is this crate's, with its features.
+        Self { features: Abi::current().features, ..Self::with_host(id, options, std::ptr::null()) }
     }
 
     /// The setup that registers here, with the registration's own host.
