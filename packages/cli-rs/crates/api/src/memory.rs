@@ -151,6 +151,11 @@ impl Memory {
         self.inner.release.notify_waiters();
     }
 
+    /// Holds the requests of a held route of `path` that come from now on, until it is released again.
+    pub fn hold(&self, path: &str) {
+        self.inner.released.lock().expect("released lock").remove(path);
+    }
+
     /// Requests answered but whose response the client has not taken yet: a request a held route keeps waiting does
     /// not count until it is released. Zero means the client is idle.
     pub fn in_flight(&self) -> usize {
