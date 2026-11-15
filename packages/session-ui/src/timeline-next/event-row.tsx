@@ -126,9 +126,14 @@ export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?:
         open()
       }}
     >
-      <span data-slot="timeline-event-item-name">{name()}</span>
-      <Show when={props.event.kind === "subagent"}>
-        <span classList={{ "text-v2-state-fg-danger": props.event.failed }}>{status()}</span>
+      <Show
+        when={props.event.kind === "subagent"}
+        fallback={<span data-slot="timeline-event-item-name">{name()}</span>}
+      >
+        <Badge data-slot="timeline-event-item-name" variant="neutral">
+          {name()}
+        </Badge>
+        <span class={props.event.failed ? "text-v2-state-fg-danger" : "text-v2-text-text-muted"}>{status()}</span>
       </Show>
       <Show when={props.event.title}>
         <bdi dir="auto" data-slot="timeline-event-item-title">
