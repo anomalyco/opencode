@@ -657,7 +657,9 @@ It is the second timing tier. No frame waits for the JS host:
 - **Supervision**: the queues are bounded. To the JS host, 1 MiB is queued and what does not fit waits in an overflow
   of 8 MiB that drains as it reads, past which a message is refused (a handler's call answered with nothing); nothing
   ends for it. From it, 512 unread messages and 8 MiB, and 8 unread trees, after which it blocks in its write. A JS host
-  that owes an answer and sends nothing for 1 s (a started load or setup: 10 s) is hung, so a queue that moves is not;
+  that owes an answer and sends nothing for 1 s (a started load or setup: 10 s) is hung, so a queue that moves is not,
+and the time the host's reader waits for the UI thread to take its trees, while what the JS host sent after them waits
+unread, is not the JS host's silence;
   hung, or over a resident set of 512 MiB, it is ended. Its process group is killed with it. It also dies with the
   client however the client ends, and takes what its plugins started with it: when its input ends, on Linux on the
   parent-death signal, and everywhere from a thread of its own that watches its parent (a plugin that spins cannot

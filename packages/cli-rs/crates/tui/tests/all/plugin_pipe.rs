@@ -1528,6 +1528,30 @@ fn a_queue_that_moves_is_not_a_hang() {
     }
 }
 
+// Expected (FT-1, the production limit of 1 s): twelve plugins each send a tree while the UI thread is busy for longer
+// than the limit; the trees past the bound the host keeps unread hold the JS host's answers back unread too, which is
+// the host's time, not the JS host's: it is not ended, and every plugin stays active and draws.
+#[test]
+fn twelve_plugins_behind_a_busy_ui_thread_are_not_a_hang() {
+    let Some(bun) = bun() else { return };
+    let config = Config::new(bun);
+    assert_eq!((config.limits.ack, config.limits.trees), (Duration::from_secs(1), 8));
+    let pipe = probes(12, config);
+    pipe.settle();
+    let (pid, started) = (pipe.scripts().pid(), pipe::crossed().started);
+    for index in 0..12 {
+        pipe.harness.tui.keymap.dispatch(&format!("probe{index}.rows"), Some("2"));
+    }
+    std::thread::sleep(Duration::from_millis(1500));
+    pipe.settle();
+    assert_eq!((pipe.scripts().pid(), pipe::crossed().started), (pid, started), "the JS host was ended");
+    for index in 0..12 {
+        assert_eq!(pipe.status(&format!("example.probe{index}")), Some(Status::Active));
+    }
+    let lines = pipe.harness.app.text().matches("probe line 1").count();
+    assert!(lines >= 1, "{}", pipe.harness.app.text());
+}
+
 // Expected (bigboi-3): a handler's answer comes once the views it made due were sent, so a view that never returns
 // after its command did is a handler that never answered: the JS host is ended at the limit with nothing else sent
 // (no ping), and that plugin fails.
