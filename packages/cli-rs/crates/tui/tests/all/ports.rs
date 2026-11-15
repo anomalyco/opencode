@@ -183,6 +183,11 @@ fn open_as(
         ..support::deps(Arc::new(server.clone()))
     };
     let harness = support::mount(width, 40, deps);
+    // The budget is not what these rows check. On the wall clock a loaded machine's stall in a call (memory reclaim,
+    // swap), which is no wait on a run queue, is charged: one over the overrun fails the port. A call here takes no
+    // time.
+    let now = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || now);
     let external = External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() };
     match scripts {
         Some(scripts) => external_with(&harness.tui, external, Some(scripts)),

@@ -99,6 +99,11 @@ fn open_with(
     std::fs::write(plugin.join(entry_file()), build).unwrap();
     let deps = Deps { route, roots: roots(root.path()), ..support::deps(Arc::new(fake(text.to_owned()))) };
     let harness = support::mount(80, 24, deps);
+    // The budget is not what these rows check. On the wall clock a loaded machine's stall in a call (memory reclaim,
+    // swap), which is no wait on a run queue, is charged: one over the overrun fails the sample, whose fence then shows
+    // its code. A call here takes no time.
+    let now = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || now);
     external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() });
     Plugins { harness, plugin, _root: root }
 }
