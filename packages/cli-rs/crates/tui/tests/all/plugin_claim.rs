@@ -2794,7 +2794,11 @@ fn a_revision_and_a_handler_in_one_frame_give_a_part_one_view() {
             let first = world.harness.app.render();
             let log = COALESCED.with_borrow(Clone::clone);
             let input = if refuse { "in ab" } else { "in a" };
-            assert_eq!(log, [(BUMPS.get(), input.to_owned())], "{carrier:?}: one view at the first paint, of the newest");
+            assert_eq!(
+                log,
+                [(BUMPS.get(), input.to_owned())],
+                "{carrier:?}: one view at the first paint, of the newest"
+            );
             let drawn = format!("coalesced {} {input}", BUMPS.get());
             assert_eq!(first.text().contains(&drawn), !refuse, "{carrier:?}: the first paint:\n{}", first.text());
             world.harness.app.render();
