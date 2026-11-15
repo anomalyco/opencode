@@ -32,7 +32,12 @@ export const SyntheticPayload = Schema.Struct({
 }).annotate({ identifier: "Session.Inbox.SyntheticPayload" })
 
 export interface CompactionPayload extends Schema.Schema.Type<typeof CompactionPayload> {}
-export const CompactionPayload = Schema.Struct({}).annotate({ identifier: "Session.Inbox.CompactionPayload" })
+export const CompactionPayload = Schema.Struct({
+  /** Who admitted the item. Absent means manual; idle items re-check their laws at delivery. */
+  reason: Schema.Literals(["manual", "idle"]).pipe(optional),
+  /** The `time_idle` (epoch millis) observed when an idle item was admitted; delivery requires it unchanged. */
+  idle: Schema.Number.pipe(optional),
+}).annotate({ identifier: "Session.Inbox.CompactionPayload" })
 
 export interface MovePayload extends Schema.Schema.Type<typeof MovePayload> {}
 export const MovePayload = Schema.Struct({

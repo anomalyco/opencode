@@ -18,6 +18,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionInbox } from "@opencode/core/session/inbox"
+import type { CompactionPayload } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
@@ -1309,7 +1310,7 @@ function seedInbox(
           id: SessionMessage.ID.create(),
           session_id: sessionID,
           type: entry.type,
-          payload: entry.type === "user" ? { text: "queued prompt" } : {},
+          payload: entry.type === "user" ? { text: "queued prompt" } : ({} as CompactionPayload),
           delivery: entry.delivery,
           enqueued_seq: index + 1,
         }

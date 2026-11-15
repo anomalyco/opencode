@@ -47,6 +47,8 @@ export type Settings = {
   keep: number
   /** Summarize in the background as the context nears the threshold, so automatic compaction can swap it in. */
   precompute: boolean
+  /** Floor for idle compaction: a smaller idle context is left alone, since the summary would not pay for itself. */
+  idleMinTokens: number
 }
 
 export type Editor = {
@@ -69,6 +71,7 @@ export type Outcome =
   | { readonly status: "failed"; readonly error: SessionError.Error }
 
 export interface Interface extends State.Transformable<Editor> {
+  readonly settings: () => Settings
   readonly compact: (trigger: Trigger) => Effect.Effect<Outcome>
   /**
    * Starts a background summary when the context nears the threshold. Never waits for it. Loads `context` only when
@@ -159,7 +162,7 @@ const PRECOMPUTE_LEAD = 60_000
 /** Prompt caches expire this long after their last use unless the model sets `cache.ttl`. */
 const CACHE_LIFETIME = 5 * 60_000
 /** A background summary starts only while this much of the latest response's cache lifetime is left. */
-const CACHE_MARGIN = 30_000
+export const CACHE_MARGIN = 30_000
 /**
  * The most text a swapped-in summary keeps verbatim beside it, and the tail at which a held summary is replaced, as a
  * share of the budget. Tails are usually far shorter; the limit is there for bursts of large tool inputs or pasted
@@ -266,7 +269,7 @@ export const layer = Layer.effect(
 
     const state = State.create<Settings, Editor>({
       name: "session-compaction",
-      initial: () => ({ auto: true, keep: 15_000, precompute: false }),
+      initial: () => ({ auto: true, keep: 15_000, precompute: false, idleMinTokens: 50_000 }),
       editor: (settings) => ({
         configure: (update) => {
           Object.assign(settings, update)
@@ -940,6 +943,7 @@ export const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
+      settings: () => state.get(),
       // A manual compaction settles through its `/compact` inbox item, which the runner owns.
       compact: (trigger) =>
         compact(trigger).pipe(
@@ -984,7 +988,7 @@ const promptTokens = (tokens: { input: number; cache: { read: number; write: num
 const DURATION_UNITS = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }
 
 /** Milliseconds a prompt cache entry lives, from a `cache.ttl` such as "5m" or "1h". */
-const cacheLifetime = (ttl: string | undefined) => {
+export const cacheLifetime = (ttl: string | undefined) => {
   const match = ttl?.match(/^(\d+)(ms|s|m|h|d)$/)
   return match ? Number(match[1]) * DURATION_UNITS[match[2] as keyof typeof DURATION_UNITS] : CACHE_LIFETIME
 }
@@ -1192,6 +1196,12 @@ const hasMeasuredPrompt = (message: SessionMessage.Info, model: SessionContext.L
   !message.error &&
   message.tokens !== undefined &&
   promptTokens(message.tokens) > 0
+
+/** The newest assistant message whose measured prompt last wrote the provider's cached prefix: the cache's clock. */
+export const cacheAnchor = (
+  messages: ReadonlyArray<SessionMessage.Info>,
+  model: SessionContext.Loaded["model"]["ref"],
+) => messages.findLast((message) => hasMeasuredPrompt(message, model))
 
 /** The prompt size, only while the model, variant and agent that were measured still match; they shape the request. */
 const measuredPrompt = (context: SessionContext.Loaded) => {

@@ -14,6 +14,8 @@ export const registry = {
     "Enable experimental background compaction: summarize the conversation in the background as it nears the compaction threshold, so automatic compaction does not wait for the summary. Background summaries that are never used still cost tokens.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
+  idle_compaction:
+    "Enable experimental idle compaction: compact open sessions shortly before their prompt cache expires, so returning after a break pays only for the summary. Requires client presence reports; never compacts a cold cache.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   codemode_vm: "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter.",
 } as const satisfies Record<string, string>

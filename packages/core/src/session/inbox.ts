@@ -227,6 +227,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
     readonly delivery: Delivery
+    readonly payload?: CompactionPayload
   }) {
     return yield* serialized(
       input.sessionID,
@@ -239,11 +240,18 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
         if (yield* promotedFromMessage(db, input.sessionID, input.id, input.delivery))
           return yield* new LifecycleConflict({ id: input.id })
         const pending = (yield* list(db, input.sessionID)).find((item) => item.type === "compaction")
-        if (pending) return pending
+        if (pending) {
+          const incoming = input.payload?.reason ?? "manual"
+          const existing = pending.payload.reason ?? "manual"
+          if (existing === incoming) return pending
+          // An explicit manual compaction is never absorbed by a pending idle item, which may still be cancelled at delivery.
+          if (incoming === "idle") return pending
+          yield* cancel({ sessionID: input.sessionID, id: pending.id })
+        }
         return yield* admit({
           id: input.id,
           sessionID: input.sessionID,
-          item: { type: "compaction", payload: {}, delivery: input.delivery },
+          item: { type: "compaction", payload: input.payload ?? {}, delivery: input.delivery },
         })
       }),
     )
