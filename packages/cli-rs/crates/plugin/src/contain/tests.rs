@@ -618,6 +618,12 @@ fn a_build_keeps_one_slot_from_its_load_to_its_activation() {
     let long = Artifact::external(&"x".repeat(record::NAME_BYTES), "/p", "0000000000000002");
     assert_eq!(bench.monitor.slot(&long), other);
     assert_eq!(crashed(other, "setup"), Some(Artifact::external("", "/p", "0000000000000002")));
+    // The same build loaded again, before its ID is known: its build names it, so it is admitted (re-review big-boi
+    // 11), and it is the same slot.
+    let again = bench.monitor.slot(&Artifact::external("", "/p", "0000000000000002"));
+    assert_eq!(again, other);
+    assert!(bench.monitor.attributed(again), "the same build is refused on its reload");
+    assert!(bench.monitor.attributed(active), "a build named with its ID");
 }
 
 // Expected (final review big-boi 11): a build whose identity the record cannot hold, by its length or past the record's

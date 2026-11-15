@@ -1095,6 +1095,34 @@ fn a_build_the_crash_record_cannot_name_is_not_opened() {
     assert_eq!(fake.loads.get(), 1, "the deep build was opened");
 }
 
+// Expected (final re-review big-boi 11): a build whose ID is too long for the run record, at a short path, is named
+// there by its target and digest, so it loads; removed and restored with the same bytes, it is the same build and
+// loads again, also while the record keeps its slot from before.
+#[test]
+fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
+    let project = Project::new();
+    let library = project.config().join(format!("plugins/long/{}", entry_file()));
+    let id = format!("id={}", "x".repeat(crate::contain::record::NAME_BYTES));
+    write(&library, &id);
+    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let dir = opencode_util::temp::tempdir().unwrap();
+    registry.monitor().attach(std::sync::Arc::new(crate::contain::Record::create(dir.path()).unwrap())).unwrap();
+    let target = project.config().join("plugins/long").to_string_lossy().into_owned();
+    let loader = project.loader(fake.clone(), Vec::new());
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(entry(&registry.entries(), &target).status, Status::Active, "the first load");
+    // Its activation names its slot with its ID, as a native or linked setup does (`Setup::artifact`); the record
+    // cannot hold it beside the target, and keeps the build's target and digest.
+    let long = crate::contain::Artifact::external(&id["id=".len()..], &target, &build_of(&id));
+    registry.monitor().slot(&long);
+    fs::remove_file(&library).unwrap();
+    loader.reconcile(&dynamic(&host), &registry);
+    write(&library, &id);
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(entry(&registry.entries(), &target).status, Status::Active, "the same bytes again");
+    assert_eq!(fake.loads.get(), 2);
+}
+
 // Expected: an approved build that fails is told again when it comes back after a spell as pending, as a new failure.
 #[test]
 fn a_failure_after_a_pending_spell_is_told_again() {
