@@ -23,10 +23,17 @@
 //! A theme change restyles a tool call's tree in place with no call, unless the claim reads the palette: then it is
 //! viewed again, also where it declined the revision. Markdown builds a claimed fence again in the new theme, once for
 //! each style it sets: the claim takes the last build only, so a fence is a new mount and gets one view.
+//!
+//! What a part holds is its plugin's, as a surface's mount (review bigboi 1, carbon-3): its nodes, its content and its
+//! decoded images are charged to the plugin and to the total ([`crate::limits`]), content past the plugin's share is
+//! not kept, an image decodes on a worker within its reservation and goes with its content's release, and the host's
+//! work for the part is the plugin's host time. Over a limit a node is a placeholder, as in a surface; only a fault of
+//! the view itself falls the part back.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub use opencode_plugin_abi::claim::{FencePart, Part, State, ToolPart};
@@ -37,10 +44,10 @@ use opentui::prelude::*;
 
 use crate::Host;
 use crate::activation::{Activation, Drawn};
-use crate::image::Picture;
+use crate::limits;
 use crate::node::{Act, abi_mode};
 use crate::reconcile::{Env, Tree};
-use crate::surface::{self, Viewing};
+use crate::surface::{self, HostTime, ImageKey, Pictures, Shows, Viewing};
 
 /// Runs a claim's view in process as one call of its plugin.
 pub(crate) type Call = Rc<dyn Fn(&dyn Host, &mut dyn FnMut(&dyn abi::Read)) -> Called>;
@@ -177,6 +184,10 @@ pub fn registered() -> usize {
 pub(crate) struct Registered {
     entry: abi::claim::Entry,
     owner: Weak<dyn Host>,
+    /// The plugin's ID, which what its parts hold is charged to.
+    plugin: Rc<str>,
+    /// Times the host's own work for its parts' nodes, as the plugin's host time.
+    host_time: HostTime,
     /// What a claim's view holds of the input (P2): its plugin's activation's, as a claim has no handler of its own.
     input: Rc<crate::interact::Owner>,
     viewer: Rc<dyn Viewer>,
@@ -190,11 +201,12 @@ impl Registered {
     pub(crate) fn new(
         entry: abi::claim::Entry,
         owner: Weak<dyn Host>,
+        (plugin, host_time): (Rc<str>, HostTime),
         viewer: Rc<dyn Viewer>,
         input: Rc<crate::interact::Owner>,
         activation: Rc<Activation>,
     ) -> Rc<Self> {
-        Rc::new(Self { entry, owner, viewer, input, activation, palette: RefCell::default() })
+        Rc::new(Self { entry, owner, plugin, host_time, viewer, input, activation, palette: RefCell::default() })
     }
 
     fn palette(&self, host: &dyn Host, theme: &Theme) -> v2::Palette {
@@ -288,7 +300,10 @@ struct Core {
     claim: Rc<Registered>,
     id: v2::MountId,
     root: View,
+    this: Weak<Core>,
     state: RefCell<Held>,
+    /// The images its content and inline sources decode to, a source each, as a surface holds them.
+    images: Pictures,
     part: RefCell<Option<Part>>,
     /// The frame of the last view ([`App::frame_number`]).
     viewed: Cell<Option<u64>>,
@@ -309,10 +324,11 @@ struct Core {
 struct Held {
     tree: Tree,
     memo: v2::Memo,
-    /// The content the accepted views gave and did not release.
-    content: HashMap<ContentRef, Rc<[u8]>>,
-    /// The images content decoded to, a handle each, as a surface keeps them (P3).
-    images: RefCell<HashMap<ContentRef, Picture>>,
+    /// The content the accepted views gave and did not release, each charged to the plugin.
+    content: HashMap<ContentRef, Arc<[u8]>>,
+    /// The content the accepted views gave past what the plugin may hold, and did not release: the host keeps none
+    /// of it, and a node that shows it is a placeholder.
+    dropped: HashSet<ContentRef>,
     /// What the content costs, read once a handle.
     measures: crate::reconcile::Measures,
     /// The last accepted tree, keeps as they came.
@@ -331,7 +347,7 @@ impl Held {
 /// What one call of the view returned and asked for; the host takes it only with its tree.
 struct Attempt {
     viewed: Viewed,
-    given: HashMap<ContentRef, Rc<[u8]>>,
+    given: HashMap<ContentRef, Arc<[u8]>>,
     memo: v2::Memo,
     /// The memo values the mount held before the call.
     held: i64,
@@ -342,11 +358,14 @@ impl Core {
         let root = View::new(app).column().shrink(0.0);
         let id =
             v2::MountId { surface: claim.name().to_owned(), key: key.to_owned(), generation: surface::generation() };
-        let core = Rc::new(Self {
+        let images = Pictures::new(claim.plugin.clone());
+        let core = Rc::new_cyclic(|this| Self {
             claim,
             id,
             root,
+            this: this.clone(),
             state: RefCell::default(),
+            images,
             part: RefCell::default(),
             viewed: Cell::new(None),
             waiting: Cell::new(false),
@@ -552,16 +571,19 @@ impl Core {
         };
         book(|ledger| ledger.views += 1);
         let staged = RefCell::new(HashMap::new());
-        let mut give = |handle, bytes: Vec<u8>| drop(staged.borrow_mut().insert(handle, Rc::from(bytes)));
-        // A release holds also when the tree is refused: the plugin forgot the handle either way.
+        let mut give = |handle, bytes: Vec<u8>| drop(staged.borrow_mut().insert(handle, Arc::from(bytes)));
+        // A release holds also when the tree is refused: the plugin forgot the handle either way. Its picture goes
+        // with it.
         let mut release = |handle| {
-            if staged.borrow_mut().remove(&handle).is_none()
-                && let Some(bytes) = self.state.borrow_mut().content.remove(&handle)
-            {
-                book(|ledger| {
-                    ledger.content -= 1;
-                    ledger.content_bytes -= bytes.len() as i64;
-                });
+            self.images.release(ImageKey::Content(handle));
+            if staged.borrow_mut().remove(&handle).is_some() {
+                return;
+            }
+            let mut state = self.state.borrow_mut();
+            state.dropped.remove(&handle);
+            if let Some(bytes) = state.content.remove(&handle) {
+                drop(state);
+                self.release_content(&bytes);
             }
         };
         // Counted once, at the view's first keep.
@@ -596,7 +618,7 @@ impl Core {
         host: &dyn Host,
         theme: &Theme,
         nodes: Vec<Node>,
-        given: &HashMap<ContentRef, Rc<[u8]>>,
+        given: &HashMap<ContentRef, Arc<[u8]>>,
         full: bool,
     ) -> Result<(), crate::reconcile::Refused> {
         let owner = self.claim.owner.clone();
@@ -605,8 +627,12 @@ impl Core {
             log::warn!("claim {} cannot show slot {path}: a part has no slots", self.id.surface);
             None
         };
+        let plugin = &self.claim.plugin;
         let mut state = self.state.borrow_mut();
-        let Held { tree, content, last, images, measures, .. } = &mut *state;
+        // Content past what the plugin may hold is not kept: a node that shows it is a placeholder (4.2).
+        let (admitted, over) = surface::admit_content(plugin, given);
+        let Held { tree, content, last, measures, dropped, .. } = &mut *state;
+        let unheld: HashSet<ContentRef> = dropped.union(&over).copied().collect();
         let bytes = |handle: &ContentRef| content.get(handle).or_else(|| given.get(handle));
         let source = |source: &Source| match source {
             Source::Text(text) => Some(Rc::from(text.as_str())),
@@ -620,21 +646,13 @@ impl Core {
                 crate::surface::part_output(host, part).map(|text| crate::reconcile::measure(&text)).unwrap_or_default()
             }
         };
-        // An image decodes once a handle, as in a surface (P3).
-        let image = |source: &Source| match source {
-            Source::Content(handle) => {
-                if let Some(image) = images.borrow().get(handle) {
-                    return image.clone();
-                }
-                let Some(bytes) = bytes(handle) else { return Picture::Pending };
-                let image = crate::surface::decode(host.app(), bytes);
-                images.borrow_mut().insert(*handle, image.clone());
-                image
-            }
-            Source::Text(text) => crate::surface::decode(host.app(), text.as_bytes()),
-            Source::PartOutput(_) => Picture::Pending,
+        // An image is admitted and decoded on a worker once a source, as in a surface (Pl).
+        let image = |source: &Source| {
+            let mount = self.this.clone() as Weak<dyn Shows>;
+            self.images.of(host.app(), source, |handle| bytes(handle).cloned(), mount)
         };
-        let has = |handle: ContentRef| bytes(&handle).is_some();
+        let has = |handle: ContentRef| bytes(&handle).is_some() || unheld.contains(&handle);
+        let gone = |handle: ContentRef| unheld.contains(&handle);
         // A claim has no draw call (P5): a canvas in its tree draws nothing. It has no handler (P2): a box's pointer
         // and hover events reach none, and its clicks run through `act` (P1).
         let env = Env {
@@ -645,37 +663,78 @@ impl Core {
             source: &source,
             measure: &measure,
             content: &has,
-            dropped: &|_| false,
+            dropped: &gone,
             image: &image,
             full,
             draw: None,
             owner: None,
-            plugin: None,
+            plugin: Some(plugin),
             item: false,
         };
+        let mut applied = Ok(());
         ADOPTING.set(ADOPTING.get() + 1);
-        let applied = tree.apply(&env, &self.root, &nodes);
+        (self.claim.host_time)(&mut || applied = tree.apply(&env, &self.root, &nodes));
         ADOPTING.set(ADOPTING.get() - 1);
-        applied?;
+        let attempt = self.images.take_attempt();
+        if let Err(refused) = applied {
+            // A refused view's content is not the part's: neither are the pictures it started.
+            attempt.into_iter().for_each(|key| self.images.release(key));
+            return Err(refused);
+        }
+        self.images.keep_shown(tree);
         *last = Some(tree.admitted(nodes));
         for (handle, bytes) in given {
+            if over.contains(handle) {
+                dropped.insert(*handle);
+                continue;
+            }
             book(|ledger| {
                 ledger.content += 1;
                 ledger.content_bytes += bytes.len() as i64;
             });
             content.insert(*handle, bytes.clone());
         }
+        limits::recharge(plugin, limits::Kind::Content, 0, admitted);
+        measures.retain(|handle| content.contains_key(handle));
         host.app().request_redraw();
         Ok(())
     }
 
-    /// Drops the tree, so a later view builds whole. The content handles and memo values its views gave stay with
-    /// the mount until it ends or the plugin releases them (4.2), as a library keeps its table: a later view may name
-    /// them again.
+    /// Gives back what content `bytes` held: the ledger's count and the plugin's charge.
+    fn release_content(&self, bytes: &[u8]) {
+        limits::release(&self.claim.plugin, limits::Kind::Content, bytes.len() as u64);
+        book(|ledger| {
+            ledger.content -= 1;
+            ledger.content_bytes -= bytes.len() as i64;
+        });
+    }
+
+    /// Drops the tree, so a later view builds whole, and the pictures of inline images, which only the tree named.
+    /// The content handles and memo values its views gave stay with the mount until it ends or the plugin releases
+    /// them (4.2), as a library keeps its table: a later view may name them again.
     fn wipe(&self) {
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
+        self.images.keep_shown(&state.tree);
+    }
+}
+
+impl Shows for Core {
+    fn pictures(&self) -> &Pictures {
+        &self.images
+    }
+
+    fn host_time(&self) -> &HostTime {
+        &self.claim.host_time
+    }
+
+    fn show(&self, key: ImageKey, image: &opentui::native::Image) {
+        self.state.borrow().tree.each_image(&mut |source, view| {
+            if ImageKey::of(source) == Some(key) {
+                view.image(Some(image.clone()));
+            }
+        });
     }
 }
 
@@ -730,8 +789,10 @@ impl Drop for Core {
         if let Some(host) = self.claim.owner.upgrade() {
             self.claim.viewer.forget(&*host, &self.id);
         }
+        self.images.release_all();
         let state = self.state.get_mut();
         let bytes: usize = state.content.values().map(|bytes| bytes.len()).sum();
+        limits::release(&self.claim.plugin, limits::Kind::Content, bytes as u64);
         let (content, memo) = (state.content.len() as i64, state.memo_entries());
         book(|ledger| {
             ledger.mounts -= 1;

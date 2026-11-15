@@ -2576,3 +2576,175 @@ fn a_fence_claim_draws_its_code_in_p3s_code_view() {
         assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{carrier:?}: {:?}", mounted());
     }
 }
+
+// What a claimed part holds is its plugin's (review bigboi 1, carbon-3).
+
+const SHARE: &str = "claim.share";
+const RIVAL: &str = "claim.rival";
+const PICS: &str = "claim.pics";
+
+thread_local! {
+    /// The handle each part's last view gave, which its next view releases.
+    static GAVE: RefCell<std::collections::HashMap<String, v2::ContentRef>> = RefCell::default();
+    /// The views of `claim.pics`, which number the pictures they give.
+    static PICTURES: Cell<u32> = const { Cell::new(0) };
+}
+
+/// A view that gives 1,000 bytes of content and shows them under a line naming the part, and releases what the part's
+/// last view gave.
+fn giving(plugin: char) -> impl Fn(&mut v2::View<'_>, &Part) -> Option<v2::Node> {
+    move |cx, part| {
+        let key = key(part);
+        if let Some(handle) = GAVE.with_borrow_mut(|gave| gave.remove(&key)) {
+            cx.release(handle);
+        }
+        let handle = cx.content("x".repeat(1_000).into_bytes());
+        GAVE.with_borrow_mut(|gave| gave.insert(key.clone(), handle));
+        Some(v2::Node::column(vec![
+            v2::Node::text(vec![abi::Span::new(format!("{plugin} holds {key}"))]),
+            v2::Node::Markdown { id: Some("body".into()), source: v2::Source::Content(handle) },
+        ]))
+    }
+}
+
+/// Claims `share` calls with [`giving`], and shows 1,000 bytes of content of its own in the `app` slot.
+fn plugin_share(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("share", giving('s')));
+    setup.surface(v2::Surface::new("beside", v2::Place::Slot(abi::Placement::append("app")), |cx| {
+        if let Some(handle) = GAVE.with_borrow_mut(|gave| gave.remove("own")) {
+            cx.release(handle);
+        }
+        let handle = cx.content("y".repeat(1_000).into_bytes());
+        GAVE.with_borrow_mut(|gave| gave.insert("own".to_owned(), handle));
+        // The content is held whether a node shows it or not; one line keeps the transcript in view.
+        v2::Node::text(vec![abi::Span::new("own")])
+    }));
+    Ok(())
+}
+
+fn plugin_rival(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("rival", giving('r')));
+    Ok(())
+}
+
+// Expected (4.2 `limits` with 4.11; review bigboi 1, carbon-3): a claimed part's nodes and content are its plugin's and
+// the total's, beside its plugin's surface: a part whose content its plugin's share cannot hold, or the total, shows
+// the placeholder in its tree and the rest of the tree as it is, while the claim keeps drawing it; what is held never
+// passes either share; and leaving the session gives back what the parts held, the surface's staying. On both
+// carriers.
+#[test]
+fn a_claimed_part_holds_its_plugins_share_beside_its_surface_and_the_total() {
+    for carrier in CARRIERS {
+        GAVE.with_borrow_mut(std::collections::HashMap::clear);
+        let world = World::with(vec![
+            builtin(carrier, abi::Plugin { id: SHARE, setup: plugin_share }),
+            builtin(carrier, abi::Plugin { id: RIVAL, setup: plugin_rival }),
+        ]);
+        let surface = opencode_plugin::limits::held(SHARE);
+        assert_eq!(surface.content, 1_000, "{carrier:?}: the surface's own content");
+        // The plugin may hold its surface's and two parts'; all plugins one more part.
+        let total = opencode_plugin::limits::total().content;
+        // Each read of the monitor's clock moves it on: the host's work for a part takes time.
+        let tick = Rc::new(Cell::new(Duration::ZERO));
+        let (base, now) = (Instant::now(), tick.clone());
+        world.harness.tui.plugins.monitor().set_clock(move || {
+            now.set(now.get() + Duration::from_micros(10));
+            base + now.get()
+        });
+        let _limits = opencode_plugin::limits::set(opencode_plugin::limits::Limits {
+            plugin_content: 3_000,
+            all_content: total + 3_000,
+            ..opencode_plugin::limits::Limits::default()
+        });
+        for (id, name) in [("call_1", "share"), ("call_2", "share"), ("call_3", "share")] {
+            world.emit("session.tool.input.started", json!({ "id": id, "name": name }));
+        }
+        for (id, name) in [("call_4", "rival"), ("call_5", "rival")] {
+            world.emit("session.tool.input.started", json!({ "id": id, "name": name }));
+        }
+        world.settle();
+        let screen = world.frame().text();
+        for id in ["call_1", "call_2", "call_3"] {
+            assert!(screen.contains(&format!("s holds {id}")), "{carrier:?}: {id} is not drawn:\n{screen}");
+        }
+        assert!(screen.contains("r holds call_4") && screen.contains("r holds call_5"), "{carrier:?}:\n{screen}");
+        assert_eq!(
+            screen.matches("⋯ its content is past what the plugin may hold").count(),
+            2,
+            "{carrier:?}: the third part past its plugin's share, the rival's second past the total:\n{screen}"
+        );
+        assert!(mounted().iter().all(|shown| shown.shows), "{carrier:?}: a part fell back: {:?}", mounted());
+        let (share, rival) = (opencode_plugin::limits::held(SHARE), opencode_plugin::limits::held(RIVAL));
+        assert_eq!((share.content, rival.content), (3_000, 1_000), "{carrier:?}: {share:?} {rival:?}");
+        assert!(share.nodes > surface.nodes && rival.nodes > 0, "{carrier:?}: nodes {surface:?} {share:?} {rival:?}");
+        assert!(opencode_plugin::limits::total().content <= total + 3_000, "{carrier:?}: past the total");
+        assert_eq!(ledger().content, 3, "{carrier:?}: the content the parts hold: {:?}", ledger());
+        // The rival has claims alone, and no image: its host time is its parts' adoptions.
+        let host = world.harness.tui.plugins.monitor().host_time(RIVAL);
+        assert!(host > Duration::ZERO, "{carrier:?}: no host time for the rival's parts");
+        world.harness.tui.navigate(opencode_tui::Route::Home);
+        world.settle();
+        let left = (opencode_plugin::limits::held(SHARE), opencode_plugin::limits::held(RIVAL));
+        assert_eq!(left.0.content, 1_000, "{carrier:?}: held once the session left: {left:?}");
+        assert_eq!(left.1, opencode_plugin::limits::Held::default(), "{carrier:?}: held once the session left");
+    }
+}
+
+/// Claims `pics` calls with a 16x16 picture of a color of its own each view, given as content, and releases the one
+/// its last view gave.
+fn plugin_pics(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("pics", |cx, part| {
+        let key = key(part);
+        if let Some(handle) = GAVE.with_borrow_mut(|gave| gave.remove(&key)) {
+            cx.release(handle);
+        }
+        let shade = PICTURES.replace(PICTURES.get() + 1) as u8;
+        let handle = cx.content(crate::plugin_limits::png(16, 16, |_, _| [shade, 0, 0, 255]));
+        GAVE.with_borrow_mut(|gave| gave.insert(key.clone(), handle));
+        let size = |cells| Some(abi::Width::Cells(cells));
+        let layout = abi::Layout { width: size(16), height: size(8), ..abi::Layout::default() };
+        let image = v2::Node::Image { id: None, content: v2::Source::Content(handle), fit: v2::Fit::Contain, layout };
+        Some(v2::Node::column(vec![v2::Node::text(vec![abi::Span::new(format!("pics {key}"))]), image]))
+    }));
+    Ok(())
+}
+
+// Expected (4.2 `limits`, 4.4 host time; review bigboi 1, carbon-3): a claimed part's picture decodes on a worker
+// within its plugin's reservation; a part that replaces and releases its picture on each revision, still mounted,
+// holds one decoded picture and its bytes, not one a revision; the host's work for the part is its plugin's host
+// time; and the part's mount ending gives every picture back. On both carriers.
+#[test]
+fn a_claimed_part_that_replaces_its_picture_holds_only_the_one_it_shows() {
+    for carrier in CARRIERS {
+        GAVE.with_borrow_mut(std::collections::HashMap::clear);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: PICS, setup: plugin_pics })]);
+        // Each read of the monitor's clock moves it on: the host's work for the part takes time.
+        let tick = Rc::new(Cell::new(Duration::ZERO));
+        let (base, now) = (Instant::now(), tick.clone());
+        world.harness.tui.plugins.monitor().set_clock(move || {
+            now.set(now.get() + Duration::from_micros(10));
+            base + now.get()
+        });
+        let app = &world.harness.app;
+        let done = || app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(PICS) == 0);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "pics" }));
+        world.settle();
+        for delta in ["{", "\"q\"", ":", "1", "}"] {
+            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
+            world.settle();
+            assert!(done(), "{carrier:?}: a decode never ended");
+            world.settle();
+            let held = (opencode_plugin::surface::pictures(PICS), opencode_plugin::limits::held(PICS).images);
+            assert_eq!(held, (1, 16 * 16 * 4), "{carrier:?}: after {delta:?}");
+        }
+        assert!(PICTURES.get() >= 6, "{carrier:?}: the part was viewed {} times", PICTURES.get());
+        assert!(world.frame().text().contains("pics call_1"), "{carrier:?}:\n{}", world.frame().text());
+        let host = world.harness.tui.plugins.monitor().host_time(PICS);
+        assert!(host > Duration::ZERO, "{carrier:?}: no host time for the part");
+        world.harness.tui.navigate(opencode_tui::Route::Home);
+        world.settle();
+        assert!(done(), "{carrier:?}");
+        let held = (opencode_plugin::surface::pictures(PICS), opencode_plugin::limits::held(PICS));
+        assert_eq!(held, (0, opencode_plugin::limits::Held::default()), "{carrier:?}: held once the part went");
+    }
+}
