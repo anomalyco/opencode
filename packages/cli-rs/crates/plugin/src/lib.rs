@@ -1228,7 +1228,7 @@ impl abi::Host for Scoped<'_> {
 
     fn dispatch(&self, name: &str, input: Option<&str>) {
         let (name, input) = (name.to_owned(), input.map(str::to_owned));
-        self.defer(move |host| host.dispatch(&name, input.as_deref()));
+        self.defer(move |host| dispatch(host, &name, input.as_deref()));
     }
 
     fn toast(&self, toast: abi::Toast) {
@@ -1385,7 +1385,7 @@ impl abi::Host for Scoped<'_> {
 /// Copies `text`, then runs `then` once it is copied.
 pub(crate) fn copy(host: &dyn Host, text: &str, then: Option<abi::Action>) {
     if let (true, Some(abi::Action::Command { name, input })) = (host.copy(text), then) {
-        host.dispatch(&name, input.as_deref());
+        dispatch(host, &name, input.as_deref());
     }
 }
 
@@ -1595,11 +1595,27 @@ pub(crate) fn fail(
     activation.dispose();
 }
 
+/// A waiting effect, with its host and its depth: how many dispatches of effects led to it ([`dispatch`]).
+type Queued = (Weak<dyn Host>, u32, Effect);
+
 thread_local! {
     /// The plugins' effects that wait, in the order they were asked for, on both paths.
-    static EFFECTS: RefCell<std::collections::VecDeque<(Weak<dyn Host>, Effect)>> = RefCell::default();
+    static EFFECTS: RefCell<std::collections::VecDeque<Queued>> = RefCell::default();
     static FLUSHING: Cell<bool> = const { Cell::new(false) };
+    /// The depth of what runs now: of the effect that runs, one more inside a dispatch it runs, 0 outside effects.
+    static DEPTH: Cell<u32> = const { Cell::new(0) };
+    /// The host and frame the effects run in, how many ran in that frame, and whether the next paint was asked for.
+    static RAN: Cell<((usize, u64), usize, bool)> = const { Cell::new(((0, 0), 0, false)) };
 }
+
+/// An effect asked for under this many dispatches of effects, each by a command the one before ran (a command that
+/// dispatches itself, a copy whose `then` runs it again), is dropped: each call is short, so no limit of a call ends
+/// such a chain, and the UI thread would never read input again (review carbon-2). Other effects, such as a reply a
+/// fetch got at once, keep the depth of the one that asked: only the frame's count bounds them.
+const CHAIN: u32 = 64;
+/// At most this many effects run in a frame without the queue going empty; the rest waits for the next paint, so a
+/// chain that fans out still lets the UI read input and paint (review carbon-2).
+const FRAME_EFFECTS: usize = 1024;
 
 /// Acts on what the budget said of a call of plugin `id`: a plugin that became slow is told once a session, unless the
 /// call `failed` it, which tells its own report; a call that opened a frame has the frames closed at the next paint.
@@ -1645,7 +1661,12 @@ pub(crate) fn close_at_paint(host: &Weak<dyn Host>, monitor: &Rc<contain::Monito
 /// when the host routes its next message ([`flush`]).
 pub(crate) fn defer(host: &Weak<dyn Host>, effect: impl FnOnce(&dyn Host) + 'static) {
     let Some(strong) = host.upgrade() else { return };
-    EFFECTS.with(|effects| effects.borrow_mut().push_back((host.clone(), Box::new(effect))));
+    let depth = DEPTH.get();
+    if depth > CHAIN {
+        log::warn!("a plugin effect asked for under {CHAIN} dispatches of effects was dropped");
+        return;
+    }
+    EFFECTS.with(|effects| effects.borrow_mut().push_back((host.clone(), depth, Box::new(effect))));
     // Each effect asks for a drain of its own, as each was deferred before; a drain finds the queue empty once an
     // earlier one or a message ran it.
     strong.app().defer(|_| flush());
@@ -1659,12 +1680,54 @@ pub fn flush() {
     if FLUSHING.with(|flushing| flushing.replace(true)) {
         return;
     }
-    while let Some((host, effect)) = EFFECTS.with(|effects| effects.borrow_mut().pop_front()) {
+    while let Some((host, depth, effect)) = next_effect() {
         if let Some(host) = host.upgrade() {
+            let outer = DEPTH.replace(depth);
             behave::as_user(false, || effect(&*host));
+            DEPTH.set(outer);
         }
     }
     FLUSHING.with(|flushing| flushing.set(false));
+}
+
+/// Runs command `name` for an effect a plugin asked for: what it asks for in turn is one dispatch deeper ([`CHAIN`]).
+pub(crate) fn dispatch(host: &dyn Host, name: &str, input: Option<&str>) {
+    let outer = DEPTH.get();
+    DEPTH.set(outer + 1);
+    host.dispatch(name, input);
+    DEPTH.set(outer);
+}
+
+/// The next effect to run, unless the queue is empty or [`FRAME_EFFECTS`] ran in this frame while it never was: then
+/// the rest runs as the next paint starts. Work that drains starts the count again, so only a chain that keeps the
+/// queue full waits, and never a run of ordinary turns between two paints.
+fn next_effect() -> Option<Queued> {
+    let Some(next) = EFFECTS.with(|effects| effects.borrow_mut().pop_front()) else {
+        RAN.set(((0, 0), 0, false));
+        return None;
+    };
+    // The effect of a host that is gone runs nothing.
+    let Some(host) = next.0.upgrade() else { return Some(next) };
+    let frame = (Rc::as_ptr(&host).cast::<()>() as usize, host.app().frame_number());
+    let (count, asked) = match RAN.get() {
+        (at, count, asked) if at == frame => (count, asked),
+        _ => (0, false),
+    };
+    if count < FRAME_EFFECTS {
+        RAN.set((frame, count + 1, asked));
+        return Some(next);
+    }
+    EFFECTS.with(|effects| effects.borrow_mut().push_front(next));
+    RAN.set((frame, count, true));
+    if !asked {
+        // Runs before the paint's deferred work: a new budget for the rest of this frame number, and a flush there.
+        host.app().animate(move |cx, _| {
+            RAN.set((frame, 0, false));
+            cx.app().defer(|_| flush());
+            false
+        });
+    }
+    None
 }
 
 /// What a plugin registers while it is active: the host's side of a setup, on either path.

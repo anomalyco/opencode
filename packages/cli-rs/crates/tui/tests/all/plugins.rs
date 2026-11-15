@@ -547,6 +547,67 @@ fn a_dispatch_and_a_storage_write_reach_the_claims_in_call_order() {
     }
 }
 
+thread_local! {
+    /// How often `chain.self` and `chain.fan` ran.
+    static CHAINED: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
+}
+
+/// `chain.self` dispatches itself; `chain.fan` dispatches itself twice, and copies with itself as the `then`.
+fn chain(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    setup.command(command("chain.self"), |host, _| {
+        CHAINED.set((CHAINED.get().0 + 1, CHAINED.get().1));
+        host.dispatch("chain.self", None);
+    });
+    setup.command(command("chain.fan"), |host, _| {
+        CHAINED.set((CHAINED.get().0, CHAINED.get().1 + 1));
+        host.dispatch("chain.fan", None);
+        host.dispatch("chain.fan", None);
+        host.copy("x", Some(abi::Action::Command { name: "chain.fan".to_owned(), input: None }));
+    });
+    setup.slot(abi::Placement::append("home.footer"), |_, _, _| {
+        abi::Render::Show(abi::Node::text([abi::Span::new("chain ready")]))
+    });
+    Ok(())
+}
+
+// Expected (review carbon-2): a command that dispatches itself runs a bounded chain and stops, and one that fans out
+// runs a bounded number of effects before each paint, so the UI still paints and reads input, on both paths.
+#[test]
+fn a_chain_of_dispatches_never_holds_the_ui_thread() {
+    for loopback in [false, true] {
+        let h = home_with(
+            chain,
+            abi::export_plugin!(@loopback "probe", chain),
+            loopback,
+            support::deps(Arc::new(fake(String::new()))),
+        );
+        h.wait_for("chain ready");
+        CHAINED.set((0, 0));
+        h.tui.keymap.dispatch("chain.self", None);
+        h.app.advance(Duration::from_millis(16));
+        let ran = CHAINED.get().0;
+        assert!((2..=100).contains(&ran), "loopback {loopback}: the chain ran {ran} times");
+        h.app.advance(Duration::from_millis(16));
+        assert_eq!(CHAINED.get().0, ran, "loopback {loopback}: the chain went on");
+        h.tui.keymap.dispatch("chain.fan", None);
+        h.app.advance(Duration::from_millis(16));
+        let first = CHAINED.get().1;
+        assert!((2..=2048).contains(&first), "loopback {loopback}: {first} ran before the first paint");
+        // The rest waits for the next paint.
+        h.app.advance(Duration::from_millis(16));
+        assert_eq!(CHAINED.get().1, first, "loopback {loopback}: more ran with no paint");
+        h.app.render();
+        let second = CHAINED.get().1;
+        assert!(second > first && second - first <= 2048, "loopback {loopback}: {first} then {second}");
+        // The UI still takes input: the composer shows what was typed.
+        h.app.type_text("still here");
+        h.wait_for("still here");
+        h.tui.plugins.deactivate_all();
+        h.app.advance(Duration::from_millis(16));
+    }
+}
+
 /// A handler of `rpc.example.updated`, which counts it in plugin state, and a home claim that shows the count.
 fn updates(setup: &mut abi::Setup) -> Result<(), String> {
     let seen = Rc::new(Cell::new(0));
