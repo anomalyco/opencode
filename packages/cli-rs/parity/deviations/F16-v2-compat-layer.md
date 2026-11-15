@@ -33,8 +33,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`) and
   a command's `enabled` are kept; its `priority`, `bindings`, `target` and slash `aliases` are not mapped.
 - **Dialogs**: `select`, `confirm`, `prompt` and `alert` are the host's, each settled once as TS's are (an answer;
-  `undefined` on escape, the backdrop, another plugin's dialog, `clear()` or the plugin's end). A select's `search` and
-  `actions` and a prompt's `value` and `description` are reported, not mapped. `ui.dialog.show` shows the plugin's JSX
+  `undefined` on escape, the backdrop, another plugin's dialog, `clear()` or the plugin's end). A select's `search`
+  lists its rows for each query as TS's does (flat, in its order, the category as the footer), but the rows change
+  once the JS host answered the query, not in the keystroke's own frame (`P.8/select-search`). A select's `actions` and
+  a prompt's `value` and `description` are reported, not mapped. `ui.dialog.show` shows the plugin's JSX
   in the host's panel dialog, bare (only the dialog's frame, as TS's), in the size and place `ui.dialog.set` gives, and
   a render that throws closes it. A panel's body is a node of ABI 1.x: a `<scrollbox>` in it is a box that does not
   scroll (the scroll keys say so, once), an `<input>` in it is its text, and its colors take the dialog's surface.
