@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { makeExternalSpan } from "@effect/opentelemetry/OtelTracer"
 import { baggageEntryMetadataFromString, context, propagation } from "@opentelemetry/api"
-import { Effect, References } from "effect"
+import { Effect, References, Tracer } from "effect"
 import { Otlp } from "../src/observability/otlp.js"
 import { TraceContext } from "../src/observability/trace-context.js"
 
@@ -19,8 +19,9 @@ test("preserves external trace state and unsampled flags without a global propag
   })
 })
 
-test("omits context when absent, disabled, or explicitly non-propagating", async () => {
+test("omits context when absent, built-in only, disabled, or explicitly non-propagating", async () => {
   expect(await Effect.runPromise(TraceContext.current)).toBeUndefined()
+  expect(await Effect.runPromise(TraceContext.current.pipe(Effect.withSpan("MCP.callTool")))).toBeUndefined()
   expect(
     await Effect.runPromise(TraceContext.current.pipe(Effect.withTracerEnabled(false), Effect.withParentSpan(parent))),
   ).toBeUndefined()
@@ -32,6 +33,23 @@ test("omits context when absent, disabled, or explicitly non-propagating", async
       ),
     ),
   ).toBeUndefined()
+})
+
+test("preserves explicitly installed tracing backends that use native spans", async () => {
+  const spans: Tracer.Span[] = []
+  const carrier = await Effect.runPromise(
+    TraceContext.current.pipe(
+      Effect.withSpan("custom-tracing"),
+      Effect.provideService(Tracer.Tracer, Tracer.make({
+        span(options) {
+          const span = new Tracer.NativeSpan(options)
+          spans.push(span)
+          return span
+        },
+      })),
+    ),
+  )
+  expect(carrier?.traceparent).toBe(`00-${spans[0]?.traceId}-${spans[0]?.spanId}-01`)
 })
 
 test("encodes active W3C baggage and bounds it while using the production OTel tracer", async () => {

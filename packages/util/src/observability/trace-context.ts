@@ -8,6 +8,9 @@ export const current: Effect.Effect<Record<string, string> | undefined> = Effect
   const parent = yield* Effect.currentParentSpan.pipe(Effect.option)
   if (Option.isNone(parent) || Context.get(parent.value.annotations, Tracer.DisablePropagation)) return undefined
 
+  // Built-in spans still exist with telemetry off, but the default tracer does not export them.
+  if (parent.value instanceof Tracer.NativeSpan && (yield* Effect.tracer) === Tracer.nativeTracer) return undefined
+
   const [{ context, propagation, trace }, { currentOtelSpan, OtelTraceFlags, OtelTraceState }] = yield* Effect.all([
     Effect.promise(() => import("@opentelemetry/api")),
     Effect.promise(() => import("@effect/opentelemetry/OtelTracer")),

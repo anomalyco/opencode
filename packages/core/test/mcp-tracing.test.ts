@@ -202,6 +202,7 @@ for (const kind of ["attached", "legacy", "modern"] as const) {
       const call = connection.callTool({ name: "echo", sessionID })
       yield* call.pipe(Effect.withParentSpan(parent))
       yield* call
+      yield* call.pipe(Effect.withSpan("MCP.callTool"))
       yield* call.pipe(Effect.withTracerEnabled(false), Effect.withParentSpan(parent))
       yield* call.pipe(Effect.provideService(References.DisablePropagation, true), Effect.withParentSpan(parent))
       expect(fixture.metadata[0]?.meta).toMatchObject({ traceparent })
