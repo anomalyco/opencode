@@ -49,6 +49,8 @@ pub struct Work {
     pub scanned: u64,
     /// Ids visited to count what a library's keeps hold again ([`Tree::held_counts`]).
     pub held: u64,
+    /// List items a view gave whole, not as a keep of the item the list holds: what the plugin built again of a list.
+    pub items: u64,
 }
 
 impl Work {
@@ -65,6 +67,7 @@ impl Work {
             deferred: self.deferred - before.deferred,
             scanned: self.scanned - before.scanned,
             held: self.held - before.held,
+            items: self.items - before.items,
         }
     }
 
@@ -121,6 +124,11 @@ pub(crate) fn weight_of(node: &Node) -> u16 {
 /// Counts a subtree adopted through a keep.
 pub(crate) fn count_kept() {
     count(|work| work.kept += 1);
+}
+
+/// Counts a list item given whole.
+pub(crate) fn count_item() {
+    count(|work| work.items += 1);
 }
 
 /// Counts an image decoded.
