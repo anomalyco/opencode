@@ -49,6 +49,23 @@ describe("acp standard compaction updates over the wire", () => {
       marker(acp.sessionId, { status: "completed", messageId: compacted.id, reason: "manual" }),
     ])
   })
+
+  test("reports idle compaction as automatic in markers", async () => {
+    const compacted = await compactTurn(
+      (sessionID, id) => [
+        durableEvent("session.compaction.started", { sessionID, reason: "idle", inputID: id }),
+        ephemeralEvent("session.compaction.delta", { sessionID, text: summary }),
+        durableEvent("session.compaction.ended", { sessionID, reason: "idle", text: summary }),
+      ],
+      { compaction: null },
+    )
+    await using acp = compacted.acp
+
+    expect(turnUpdates(acp.updates)).toEqual([
+      marker(acp.sessionId, { status: "started", messageId: compacted.id, reason: "auto" }),
+      marker(acp.sessionId, { status: "completed", messageId: compacted.id, reason: "auto" }),
+    ])
+  })
 })
 
 // Holds the compact response so the test can publish the turn's events while the request is in flight.

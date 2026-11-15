@@ -35,6 +35,10 @@ type OpeningEvent = Extract<
 
 const Cancelled = new Set(["aborted", "compaction.interrupted"])
 
+// ACP's marker vocabulary has no idle reason; clients read idle compaction as automatic.
+const acpReason = (reason: SessionMessage.Compaction["reason"]): "auto" | "manual" =>
+  reason === "idle" ? "auto" : reason
+
 // Without child updates, a child's standard update would read as the parent's own.
 export function usesStandardUpdates(
   ctx: { readonly compaction: boolean; readonly childUpdates: boolean },
@@ -57,14 +61,14 @@ export function apply(event: LifecycleEvent, tracked: Tracked, standardUpdates: 
     const completed: Compaction = {
       ...current,
       status: "completed",
-      reason: event.data.reason,
+      reason: acpReason(event.data.reason),
       summary: event.data.text,
     }
     return { tracked: remaining, updates: [update(completed, standardUpdates)] }
   }
   // Auto compaction can fail without a started event; open it first for standard clients.
   const started = current ?? open(event)
-  const failed: Compaction = { ...started, status: "failed", reason: event.data.reason, error: event.data.error }
+  const failed: Compaction = { ...started, status: "failed", reason: acpReason(event.data.reason), error: event.data.error }
   return {
     tracked: remaining,
     updates: [
@@ -89,7 +93,7 @@ export function abandon(started: Started, standardUpdates: boolean) {
 // Nothing on this connection would settle a replayed running compaction.
 export function replay(message: Extract<SessionMessage.Info, { type: "compaction" }>, standardUpdates: boolean) {
   if (message.status === "running") return undefined
-  const base = { messageId: message.id, reason: message.reason }
+  const base = { messageId: message.id, reason: acpReason(message.reason) }
   return update(
     message.status === "failed"
       ? { ...base, status: "failed", error: message.error }
@@ -103,7 +107,7 @@ function open(event: OpeningEvent): Started {
   return {
     status: "started",
     messageId: event.data.inputID ?? SessionMessage.ID.fromEvent(event.id),
-    reason: event.data.reason,
+    reason: acpReason(event.data.reason),
   }
 }
 
