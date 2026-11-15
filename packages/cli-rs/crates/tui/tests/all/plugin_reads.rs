@@ -6,7 +6,6 @@
 use crate::support::{self, Harness};
 
 use std::cell::{Cell, RefCell};
-use std::ffi::c_void;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -234,8 +233,7 @@ fn home_on(
     // (memory reclaim, swap), which is no wait on a run queue, would fail the reader. A call here takes no time.
     let now = std::time::Instant::now();
     h.tui.plugins.monitor().set_clock(move || now);
-    let create: unsafe extern "C" fn(*const abi::HostApi, abi::Bytes, *mut *mut c_void, *mut abi::Owned) -> i32 =
-        abi::export_plugin!(@loopback "p0b", reader);
+    let create = abi::export_plugin!(@loopback "p0b", reader);
     let definition = match loopback {
         true => {
             opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), create).unwrap().0
