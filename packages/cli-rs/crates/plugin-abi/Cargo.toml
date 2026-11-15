@@ -6,6 +6,15 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# The host's own build: it constructs and matches the contract's types whole, so a type a later 2.x extends
+# breaks the host's build until it handles the addition. A plugin never turns it on: without it the types are
+# `#[non_exhaustive]`, and what a later 2.x adds is no break of a plugin's source (carbon-4).
+host = []
+# What a later 2.x adds, for the SDK's own test that a pinned plugin's source builds through it (`tests/sdk.rs`).
+# No plugin and no host turns it on.
+next = []
+
 # A plugin crate depends on this one alone, so it stays free of the TUI and its native libraries.
 [dependencies]
 # The session, message and catalog values renders read.
