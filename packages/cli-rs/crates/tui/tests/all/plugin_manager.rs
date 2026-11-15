@@ -327,6 +327,8 @@ fn fail_shadow(harness: &Harness) {
     harness.wait_for("failed, enter enables it again");
     harness.app.type_text("opencode.plugins");
     settle(harness);
+    // The host's own list, which no plugin's dialog or route replaces (review carbon-9).
+    assert_eq!(harness.tui.dialogs.key().as_deref(), Some("host.plugins"));
 }
 
 fn manager_status(harness: &Harness) -> opencode_plugin::Status {
