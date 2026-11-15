@@ -7,6 +7,7 @@ import type {
 } from "@opencode/client/promise"
 import { createTwoFilesPatch, diffLines } from "diff"
 import type { SessionDocument } from "../../document"
+import { toolEvent } from "../events"
 import {
   CURRENT_SESSION_ID,
   STORY_MODEL,
@@ -950,10 +951,13 @@ export function replayScript(script: Beat[], limit: number, start: number) {
     if (beat.kind === "say")
       assistant().content.push({ type: "text", text: done ? beat.text : beat.text.slice(0, beat.text.length / 2) })
 
-    if (beat.kind === "tool") assistant().content.push(tool(id("tool"), beat, done, at()))
+    if (beat.kind === "tool") {
+      const call = tool(id("tool"), beat, done, at())
+      const sessionID = beat.name === "subagent" ? toolEvent(call)?.sessionID : undefined
+      assistant().content.push(call)
 
-    if (beat.kind === "tool" && beat.name === "subagent" && typeof beat.metadata?.sessionID === "string")
-      children[beat.metadata.sessionID] = { type: "busy" }
+      if (sessionID) children[sessionID] = { type: "busy" }
+    }
 
     if (beat.kind === "interrupt" && state.assistant) {
       state.assistant.content = state.assistant.content.map((content) =>
