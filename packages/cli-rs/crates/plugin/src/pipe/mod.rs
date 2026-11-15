@@ -854,14 +854,36 @@ impl Scripts {
         if settles(message) {
             return self.settle(message, size);
         }
+        // A snapshot goes as a failed read, in its place: the JS host would keep the value before with no error
+        // (P.4.md, reads; bigboi's pipe sign-off).
+        if let Down::Snapshot { id, key, .. } = message {
+            let error = Some(format!("the read's snapshot of {size} bytes does not fit the JS host's queue"));
+            let failed = Down::Snapshot { id: id.clone(), key: key.clone(), value: serde_json::Value::Null, error };
+            return self.settle(&failed, 0);
+        }
         let seq = message.seq();
         if let Some(seq) = seq {
             // In the message's place: after what waits before it.
             self.settle(&Down::Skipped { seq }, 0);
         }
-        let call = seq.and_then(|seq| self.waiting.borrow_mut().remove(&seq));
-        if let (Some(seq), Some(Waiting::Call(_))) = (seq, call) {
-            self.release_hold(seq);
+        let Some(seq) = seq else { return };
+        let waiting = self.waiting.borrow_mut().remove(&seq);
+        // A load or a setup the JS host never reads fails: the JS host runs no skipped sequence, so nothing else would
+        // answer it, and the loader would read it as starting for good (bigboi's pipe sign-off).
+        let why = || format!("the JS host has no room for a load of {size} bytes");
+        match waiting {
+            Some(Waiting::Call(_)) => self.release_hold(seq),
+            Some(Waiting::Load(_)) => self.answered_load(seq, Loading::Failed(why())),
+            // After the turn: the activation that asks for the setup is still at work.
+            Some(Waiting::Activate(guest)) => {
+                let why = why();
+                crate::defer(&self.host, move |_| {
+                    if let Some(guest) = guest.upgrade() {
+                        guest.fail(why);
+                    }
+                });
+            }
+            _ => {}
         }
     }
 
@@ -912,7 +934,13 @@ impl Scripts {
     /// Whether `message` goes as one frame: under the queue's bound and the wire's cap, the limits [`Child::send`]
     /// refuses a frame by.
     fn sendable(&self, message: &Down) -> bool {
-        self.fits(serde_json::to_vec(message).map_or(usize::MAX, |bytes| bytes.len()))
+        self.unsendable(message).is_none()
+    }
+
+    /// The size of `message` when it does not go as one frame ([`Scripts::sendable`]).
+    fn unsendable(&self, message: &Down) -> Option<usize> {
+        let size = serde_json::to_vec(message).map_or(usize::MAX, |bytes| bytes.len());
+        (!self.fits(size)).then_some(size)
     }
 
     /// Whether a message of `payload` bytes goes as one frame ([`Scripts::sendable`]).
@@ -1720,10 +1748,12 @@ mod tests {
     // Expected (bigboi's pipe pass): a model of the pipe's queue. A stream of every kind of message goes to a JS host
     // that reads nothing at first, so a backlog builds, under a small queue and under the default one: calls, an answer
     // with a fetch's ID and a large read, its cancellation and a reply behind it, answers and a reply between the queue's
-    // bound and the wire's cap and past the cap, a call past the cap. What the JS host reads is what the written rule
-    // makes of each, in the order they were sent: a message that goes as one frame as it is; one that settles work,
-    // reduced (an answer keeps its scalars, a reply fails); any other, its sequence skipped. Nothing it reads is past
-    // either cap, so an admission answer is never read after its cancellation or reply.
+    // bound and the wire's cap and past the cap, a call past the cap, a plugin's load and a watched read's snapshot each
+    // under and past the cap (bigboi's pipe sign-off). What the JS host reads is what the written rule makes of each, in
+    // the order they were sent: a message that goes as one frame as it is; one that settles work, reduced (an answer
+    // keeps its scalars, a reply fails); a snapshot, as a failed read; any other, its sequence skipped. Nothing it reads
+    // is past either cap, so an admission answer is never read after its cancellation or reply. A refused load is failed,
+    // as nothing else answers it: the loader reads it failed, not starting.
     #[cfg(unix)]
     #[test]
     fn the_queue_keeps_each_message_in_its_place_and_within_both_caps() {
@@ -1770,6 +1800,31 @@ mod tests {
                 Down::Ping { seq: 84 },
             ]);
             sent.iter().for_each(|message| scripts.send(message.clone(), None));
+            // Two loads as the loader asks for them, 85 and 86, the second's options past the cap; then two snapshots,
+            // the second a read of 262,131 bytes of JSON, under the read's bound and past the frame's cap with its
+            // envelope.
+            scripts.seq.set(84);
+            let plugin = dir.path().join("plugin");
+            std::fs::create_dir_all(&plugin).unwrap();
+            let loads =
+                [("small", serde_json::json!({ "o": 1 })), ("large", serde_json::json!({ "o": read(300 << 10) }))];
+            for (seq, (target, options)) in (85..).zip(&loads) {
+                assert!(matches!(scripts.step(target, &plugin, Some(&options.to_string()), false), Step::Starting));
+                sent.push(Down::Load {
+                    seq,
+                    target: (*target).to_owned(),
+                    dir: plugin.to_string_lossy().into_owned(),
+                    options: Some(options.clone()),
+                    setup: false,
+                    confined: false,
+                    seed: Default::default(),
+                });
+            }
+            for (key, bytes) in [("k1", 16), ("k2", 262_131 - 2)] {
+                let snapshot = Down::Snapshot { id: "p".into(), key: key.into(), value: read(bytes), error: None };
+                scripts.send(snapshot.clone(), None);
+                sent.push(snapshot);
+            }
             // The rule, message by message.
             let fits = |message: &Down| scripts.sendable(message);
             let expected: Vec<Down> = sent
@@ -1789,6 +1844,12 @@ mod tests {
                         let result = Err(format!("the reply is {size} bytes, more than the JS host takes"));
                         let call = Request::Reply { id: *reply, result };
                         Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone() }
+                    }
+                    Down::Snapshot { id, key, .. } => {
+                        let size = serde_json::to_vec(message).unwrap().len();
+                        let error =
+                            Some(format!("the read's snapshot of {size} bytes does not fit the JS host's queue"));
+                        Down::Snapshot { id: id.clone(), key: key.clone(), value: serde_json::Value::Null, error }
                     }
                     other => Down::Skipped { seq: other.seq().unwrap() },
                 })
@@ -1820,6 +1881,18 @@ mod tests {
             };
             if got != expected {
                 failed.push(format!("queued {queued}: read {:#?}\nthe rule {:#?}", brief(&got), brief(&expected)));
+            }
+            // What the loader reads of each load: the one sent waits for its answer, the refused one failed.
+            let stands =
+                loads.map(|(target, options)| match scripts.step(target, &plugin, Some(&options.to_string()), false) {
+                    Step::Starting => "starting".to_owned(),
+                    Step::Failed(error, _) => format!("failed: {error}"),
+                    _ => "other".to_owned(),
+                });
+            let size = serde_json::to_vec(&sent[sent.len() - 3]).unwrap().len();
+            let rule = ["starting".to_owned(), format!("failed: the JS host has no room for a load of {size} bytes")];
+            if stands != rule || scripts.waiting() != 1 {
+                failed.push(format!("queued {queued}: the loads stand {stands:?}, waiting {}", scripts.waiting()));
             }
         }
         assert!(failed.is_empty(), "{}", failed.join("\n"));

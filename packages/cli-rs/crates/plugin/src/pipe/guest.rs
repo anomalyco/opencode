@@ -437,30 +437,35 @@ impl Guest {
         self.push(key, value);
     }
 
-    /// Pushes the value of the read `key` watches: as a failed read when it is over [`READ`] bytes of JSON, or past the
-    /// content its plugin may hold beside what it holds (4.2, phase Pl), which the plugin reads as nothing, and can ask
-    /// why; the plugin goes on (review: bound each read). What it pushes is charged to its content while it watches it.
+    /// Pushes the value of the read `key` watches: as a failed read when it is over [`READ`] bytes of JSON, past the
+    /// content its plugin may hold beside what it holds (4.2, phase Pl), or when its snapshot is larger than a frame the
+    /// JS host takes, which the plugin reads as nothing, and can ask why; the plugin goes on (review: bound each read).
+    /// What it pushes is charged to its content while it watches it.
     fn push(&self, key: String, value: serde_json::Value) {
         let bytes = Measure::of(&value).bytes;
         let held = self.pushed.borrow().get(&key).copied().unwrap_or(0);
+        let snapshot = Down::Snapshot { id: self.id().to_owned(), key: key.clone(), value, error: None };
         let error = if bytes > READ {
             Some(format!("the read is {bytes} bytes, over {READ}"))
         } else if bytes as u64 > limits::room(self.id(), limits::Kind::Content, held) {
             Some(format!("the read is {bytes} bytes, past what the plugin may hold"))
         } else {
-            None
+            // The cap is the frame's, the snapshot whole: a read just under the bound is past it (bigboi's pipe
+            // sign-off). Sent as it is, the frame would be refused, and the plugin would keep the value before.
+            let unsendable = self.scripts.upgrade().and_then(|scripts| scripts.unsendable(&snapshot));
+            unsendable.map(|size| format!("the read's snapshot is {size} bytes, more than the JS host takes"))
         };
         let charged = if error.is_some() { 0 } else { bytes as u64 };
         limits::recharge(self.id(), limits::Kind::Content, held, charged);
         self.pushed.borrow_mut().insert(key.clone(), charged);
-        let value = match &error {
+        let snapshot = match error {
             Some(error) => {
                 log::warn!("plugin {}: the read it watches as {key}: {error}", self.id());
-                serde_json::Value::Null
+                Down::Snapshot { id: self.id().to_owned(), key, value: serde_json::Value::Null, error: Some(error) }
             }
-            None => value,
+            None => snapshot,
         };
-        self.send(Down::Snapshot { id: self.id().to_owned(), key, value, error }, None);
+        self.send(snapshot, None);
     }
 
     /// Gives back what the reads it watched charged.
