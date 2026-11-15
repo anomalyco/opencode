@@ -1,5 +1,6 @@
 export * from "./data"
 export * from "./connection"
 export * from "./pty"
+export * from "./presence"
 export * from "./retention"
 export * from "./usage"
