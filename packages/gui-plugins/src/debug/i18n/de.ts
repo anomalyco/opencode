@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Debug-Leiste ein-/ausblenden",
+  providerAriaLabel: "Leistungsdiagnose des Anbieters",
+  na: "n.v.",
+  "duration.label": "TIME",
+  "duration.tip": "Zeit vom Prompt, der die letzte Runde gestartet hat, bis zum Abschluss der Antwort.",
+  "tps.label": "TPS",
+  "tps.tip": "Ausgabe- und Reasoning-Tokens pro Sekunde über die Modellanfragen der letzten Runde, ohne Werkzeugzeit.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Fokusstile für alle interaktiven Elemente erzwingen",
+  "focus.on": "EIN",
+  "focus.off": "AUS",
+  "direction.label": "DIR",
+  "direction.tip": "Layoutrichtung für die gesamte App erzwingen, ohne die ausgewählte Sprache zu ändern",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

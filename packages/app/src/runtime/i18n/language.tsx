@@ -1,12 +1,13 @@
-import { flatten, resolveTemplate, translator, type Flatten } from "@solid-primitives/i18n"
-import { createEffect, createMemo, createResource, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Option, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
+import { showToast } from "@opencode/ui/toast"
 import {
   I18nProvider,
   type UiI18n,
   pluralCategory,
+  resolveTemplate,
   type UiI18nPluralLookupKey,
   type UiI18nPluralKey,
   type UiPluralCategory,
@@ -25,6 +26,14 @@ import {
   type DesktopNativeBundle,
   type DesktopNativeLocale,
 } from "@/runtime/i18n/desktop-native"
+import {
+  createLanguageState,
+  selectDictionary,
+  selectLocale,
+  transitionLanguage,
+  type LanguageEffect,
+  type LanguageEvent,
+} from "@/runtime/i18n/machine"
 
 export type Locale = DesktopNativeLocale
 
@@ -38,7 +47,7 @@ function localeDirection(locale: Locale): Direction {
 
 type RawDictionary = typeof en & typeof dict
 
-type Dictionary = Flatten<RawDictionary>
+type Dictionary = RawDictionary
 
 type AppI18nKey = Extract<keyof typeof en, string>
 
@@ -96,12 +105,13 @@ const StoredLocaleSchema = Schema.Struct({
 
 const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
-const base = flatten({ ...en, ...dict })
+const base: Dictionary = { ...en, ...dict }
 
 const dicts = new Map<Locale, Dictionary>([["en", base]])
 
 const merge = (app: Promise<Source>, ui: Promise<Source>) =>
-  Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
+  // SAFETY: a locale module exports a flat string map for the keys of the English dictionaries (`language.test.ts`).
+  Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...a.dict, ...b.dict }) as Dictionary)
 
 const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   zh: () => merge(import("@/runtime/i18n/zh"), import("@opencode/ui/i18n/zh")),
@@ -188,6 +198,7 @@ export function loadLocaleDict(locale: Locale) {
 }
 
 function detectLocale(): Locale {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global
   if (typeof navigator !== "object") return "en"
 
   return detectDesktopNativeLocale(navigator.languages?.length ? navigator.languages : [navigator.language])
@@ -202,6 +213,7 @@ export const languageSchema = Persistence.struct({
 })
 
 function readStoredLocale() {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global
   if (typeof localStorage !== "object") return
 
   try {
@@ -239,8 +251,66 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const initial = props.locale ?? readStoredLocale() ?? detectLocale()
     const [store, setStore, _, ready] = persisted(Persist.global("language"), languageSchema, { locale: initial })
 
-    const locale = createMemo(() => store.locale)
+    const stored = untrack(() => store.locale)
+
+    const boot = createLanguageState({
+      initial: stored,
+      cached: dicts.get(stored),
+      fallbackLocale: "en",
+      fallbackDictionary: base,
+    })
+
+    const [machine, setMachine] = createSignal(boot.state)
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const dispatch = (event: LanguageEvent<Dictionary>) =>
+      batch(() => {
+        const prev = untrack(machine)
+        const next = transitionLanguage(prev, event)
+
+        if (next.state !== prev) setMachine(next.state)
+        next.effects.forEach(run)
+      })
+
+    const run = (effect: LanguageEffect) => {
+      if (effect.type === "load")
+        return void Promise.try(() => loadDict(effect.locale)).then(
+          (dictionary) => dispatch({ type: "load.succeeded", attempt: effect.attempt, dictionary }),
+          () => dispatch({ type: "load.failed", attempt: effect.attempt }),
+        )
+
+      if (effect.type === "timer.start") {
+        clearTimeout(timer)
+        timer = setTimeout(() => dispatch({ type: "load.timed-out", attempt: effect.attempt }), effect.timeoutMs)
+
+        return
+      }
+
+      if (effect.type === "timer.stop") {
+        clearTimeout(timer)
+        timer = undefined
+
+        return
+      }
+
+      if (effect.type === "persist") {
+        if (untrack(() => store.locale) !== effect.locale) setStore("locale", effect.locale)
+
+        return
+      }
+
+      showToast({
+        variant: "error",
+        title: t("toast.language.loadFailed.title", { language: label(effect.locale) }),
+      })
+    }
+
+    // The committed pair: every reader switches only once the dictionary for the new locale is in hand, so `t()`
+    // never suspends and the direction never flips ahead of the strings.
+    const locale = createMemo(() => selectLocale(machine()))
+    const dictionary = createMemo(() => selectDictionary(machine()))
     const intl = createMemo(() => INTL[locale()])
+    // SAFETY: widens the initial `undefined` so a direction can be stored later.
     const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
     const direction = createMemo(() => layout.direction ?? localeDirection(locale()))
 
@@ -251,23 +321,23 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       return layout.direction === "rtl" ? "ar" : "en"
     })
 
-    const [dictionary] = createResource(locale, loadDict, {
-      initialValue: dicts.get(initial) ?? base,
-    })
-
-    const t = translator(() => dictionary() ?? base, resolveTemplate) as <
-      Key extends Extract<keyof Dictionary, string>,
-    >(
+    const t = <Key extends Extract<keyof Dictionary, string>>(
       key: TranslationKey<Key>,
       params?: Record<string, string | number | boolean>,
-    ) => string
+    ) => {
+      const template: string | undefined = dictionary()[key]
+
+      // A key outside the dictionary translates to nothing, as it did with the package translator.
+      return template === undefined ? template : resolveTemplate(template, params)
+    }
 
     const pluralForm = (
       key: PluralKey,
       category: UiPluralCategory,
       params?: Record<string, string | number | boolean>,
     ) => {
-      const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
+      // SAFETY: every dictionary value is a string (`language.test.ts`).
+      const current = dictionary() as Record<string, string>
       const candidate = `${key}.${category}`
       const fallback = `${key}.other`
 
@@ -276,6 +346,16 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
 
     const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) =>
       pluralForm(key, pluralCategory(intl(), count), { ...params, count })
+
+    // "2 subagents · 1 shell", or one group alone, as the iOS app's background-work capsule reads.
+    const activitySummary = (counts: { subagents: number; shells: number }) => {
+      const subagents = counts.subagents ? plural("session.activity.subagents", counts.subagents) : undefined
+      const shells = counts.shells ? plural("session.activity.shells", counts.shells) : undefined
+
+      if (subagents && shells) return t("session.activity.summary", { subagents, shells })
+
+      return subagents ?? shells ?? ""
+    }
 
     const tDynamic = <Key extends Extract<keyof Dictionary, string>>(
       key: TranslationKey<Key>,
@@ -287,9 +367,22 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       key: TranslationKey<Key>,
       params: Record<string, JSX.Element>,
     ) => {
-      const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
+      // SAFETY: every dictionary value is a string (`language.test.ts`).
+      const current = dictionary() as Record<string, string>
 
       return richTemplateParts(current[key] ?? key, params)
+    }
+
+    const activitySummaryRich = (
+      counts: { subagents: number; shells: number },
+      render: (label: string) => JSX.Element,
+    ) => {
+      if (!counts.subagents || !counts.shells) return render(activitySummary(counts))
+
+      return rich("session.activity.summary", {
+        subagents: render(activitySummary({ subagents: counts.subagents, shells: 0 })),
+        shells: render(activitySummary({ subagents: 0, shells: counts.shells })),
+      })
     }
 
     const list = (items: readonly JSX.Element[]) => localizedListParts(intl(), items)
@@ -297,6 +390,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
     createEffect(() => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global
       if (typeof document !== "object") return
       const value = locale()
       document.documentElement.lang = intl()
@@ -305,14 +399,25 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     })
 
     createEffect(() => {
-      if (!props.onNativeTranslations || dictionary.loading) return
+      if (!props.onNativeTranslations) return
       const current = dictionary()
 
-      if (!current) return
       props.onNativeTranslations(
         createDesktopNativeBundle(locale(), (key) => current[key] ?? DESKTOP_NATIVE_ENGLISH[key]),
       )
     })
+
+    // Storage hydrating after mount, or another window picking a language.
+    createEffect(
+      on(
+        () => store.locale,
+        (next) => dispatch({ type: "locale.synced", locale: next, cached: dicts.get(next) }),
+        { defer: true },
+      ),
+    )
+
+    onCleanup(() => dispatch({ type: "disposed" }))
+    boot.effects.forEach(run)
 
     return {
       ready,
@@ -326,10 +431,13 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       tDynamic,
       plural,
       pluralForm,
+      activitySummary,
+      activitySummaryRich,
       rich,
       list,
       setLocale(next: Locale) {
-        setStore("locale", normalizeLocale(next))
+        const target = normalizeLocale(next)
+        dispatch({ type: "locale.requested", locale: target, cached: dicts.get(target) })
       },
       setDirection(next: Direction) {
         setLayout("direction", next === localeDirection(locale()) ? undefined : next)
@@ -346,6 +454,7 @@ export function UiI18nBridge(props: { children?: JSX.Element }) {
       value={{
         locale: language.intl,
         layoutLocale: language.layoutLocale,
+        // SAFETY: `t` accepts the UI keys, which are a subset of the app dictionary.
         t: language.t as UiI18n["t"],
         plural: language.plural,
         pluralForm: language.pluralForm,

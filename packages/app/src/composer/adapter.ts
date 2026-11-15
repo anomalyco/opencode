@@ -5,7 +5,7 @@ import type { ModelSelection } from "@/providers/models/selection"
 import type { ServerSDK } from "@/runtime/server/client"
 import type { SessionMessageHandoff } from "@/session/handoff"
 import type { ComposerStateTarget } from "./submission-state"
-import type { createComposerSubmission } from "./submission-state"
+import type { ComposerModelLabel } from "./model-label"
 
 export type ComposerControls = {
   agents: {
@@ -17,8 +17,12 @@ export type ComposerControls = {
   }
   model: {
     selection: ModelSelection
+    providerName?: string
+    label?: ComposerModelLabel
     paid: boolean
     loading: boolean
+    /** While loading, the expected model's names from a catalog already loaded for another Location. */
+    preview?: { provider?: string; model: string; label?: ComposerModelLabel; variant: string; variants: string[] }
   }
 }
 
@@ -47,13 +51,21 @@ export type ComposerQueue = {
   cancelEdit: () => void
   // Loads the first queued prompt into the composer. Returns false when the queue is empty.
   editFirst: () => boolean
+  // Moves an admitted follow-up ahead of the queued prompts, using the queue's serialized reorder.
+  first: (inboxID: string) => void
+  // Steers the next prompt only while the queue is idle; never skips a busy first row.
+  steerFirst: () => void
 }
 
 export type ComposerSession = {
   id: string
   directory: string
+  // The timeline's optimistic prompt: shown on `set` (or `hold` while the send waits for the Location's agents and models),
+  // held after `settle` until its admission echo, removed on `clear`.
   handoff: {
     set: (handoff: SessionMessageHandoff) => void
+    hold: (handoff: SessionMessageHandoff) => void
+    settle: (messageID: string) => void
     clear: (messageID: string) => void
   }
   api: {
@@ -75,11 +87,18 @@ export type ComposerSession = {
       ) => ReturnType<ServerSDK["api"]["session"]["revert"]["commit"]>
     }
   }
+  file: {
+    list: (
+      input: Parameters<ServerSDK["api"]["file"]["list"]>[0],
+    ) => Promise<{ data: readonly { path: string }[] }>
+  }
   data: {
     location: { command: Pick<Data["location"]["command"], "list"> }
     session: {
       prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => ReturnType<Data["session"]["prompt"]>
       setStatus: Data["session"]["setStatus"]
+      // Records an accepted user send so the desktop list promotes the session immediately.
+      acceptSend: (sessionID: string) => void
     }
   }
   current: Accessor<
@@ -91,6 +110,8 @@ export type ComposerSession = {
     | undefined
   >
   admitted: (messageID: string) => boolean
+  // Moves the run's blocking work to the background once a steer is admitted; undefined for another session.
+  background?: () => { move: () => Promise<void> } | undefined
 }
 
 type ComposerAdapterBase = {
@@ -98,6 +119,7 @@ type ComposerAdapterBase = {
   ready: Accessor<boolean>
   controls: Accessor<ComposerControls>
   working: Accessor<boolean>
+  beforeSubmit?: () => void
   submitted: () => void
 }
 
@@ -108,11 +130,18 @@ export type ActiveComposerAdapter = ComposerAdapterBase & {
   setEditor: (element: HTMLDivElement) => void
 }
 
+// The first prompt's draft while its new Session starts. `retarget` moves the draft into the promoted Session's
+// composer; `target` reads the composer that owns it now.
+export type ComposerSubmissionHandle = {
+  target: () => ComposerStateTarget
+  retarget: (next: ComposerStateTarget, options?: { preserveDraft?: boolean }) => void
+}
+
 export type NewSessionComposerAdapter = ComposerAdapterBase & {
   kind: "new-session"
   start: (
     selection: ComposerSelection,
-    submission: ReturnType<typeof createComposerSubmission>,
+    submission: ComposerSubmissionHandle,
     message: SessionMessageUser,
   ) => Promise<{ session: ComposerSession; cleanupReady: Promise<void>; complete?: () => Promise<void> } | undefined>
 }

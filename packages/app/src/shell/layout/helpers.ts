@@ -1,5 +1,4 @@
 import type { SessionInfo } from "@opencode/client/promise"
-import { displayName } from "@opencode/ui/project-avatar"
 import { pathKey } from "@/workspaces/path-key"
 import { isProjectDirectory } from "@/workspaces/paths"
 import type { ServerConnection } from "@/runtime/server/registry"
@@ -13,18 +12,6 @@ export function compareSessionTime(a: SessionInfo, b: SessionInfo) {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
-type ProjectAppearance = {
-  name?: string
-  worktree: string
-  icon?: { color?: string; url?: string; override?: string }
-}
-
-function withProjectAppearance<T extends ProjectAppearance>(metadata: T, appearance?: ProjectAppearance) {
-  if (!appearance || appearance === metadata) return metadata
-
-  return { ...metadata, name: displayName(appearance), icon: appearance.icon }
-}
-
 export function toggleHomeProjectSelection(
   current: HomeProjectSelection | undefined,
   server: ServerConnection.Key,
@@ -33,19 +20,6 @@ export function toggleHomeProjectSelection(
   if (current?.server === server && current.directory === directory) return { server }
 
   return { server, directory }
-}
-
-export function closeHomeProject(
-  selected: HomeProjectSelection | undefined,
-  server: ServerConnection.Key,
-  projects: { close: (directory: string) => void },
-  directory: string,
-) {
-  projects.close(directory)
-
-  if (selected?.server === server && selected.directory === directory) return { server }
-
-  return selected
 }
 
 export function homeProjectDirectories(result: string | string[] | null) {
@@ -89,46 +63,6 @@ export function projectForSession<T extends { id?: string; worktree: string; san
   return projects
     .filter((project) => isProjectDirectory(project, session.location.directory))
     .sort((a, b) => b.worktree.length - a.worktree.length)[0]
-}
-
-export function resolveProjectForSession<
-  T extends { id?: string; worktree: string; sandboxes?: string[] },
-  U extends { id?: string; worktree: string; sandboxes?: string[] },
->(session: SessionInfo, opened: T[], stored: U[]) {
-  const current = projectForSession(session, opened)
-
-  if (current?.id === session.projectID) {
-    const unresolved = opened.find(
-      (project) => !project.id && pathKey(project.worktree) === pathKey(session.location.directory),
-    )
-
-    if (!unresolved) return current
-    const canonical = projectForSession(session, stored)
-
-    if (canonical?.id === session.projectID && pathKey(canonical.worktree) === pathKey(unresolved.worktree))
-      return unresolved
-
-    return current
-  }
-
-  const synced = projectForSession(session, stored)
-
-  if (synced?.id !== session.projectID) return current ?? synced
-
-  if (current && !current.id && pathKey(current.worktree) === pathKey(session.location.directory)) return current
-
-  return synced
-}
-
-export function resolveSessionDetailsProject<
-  T extends ProjectAppearance & { id?: string; sandboxes?: string[] },
-  U extends ProjectAppearance & { id?: string; sandboxes?: string[] },
->(session: SessionInfo, opened: T[], stored: U[]) {
-  const metadata = projectForSession(session, stored)
-
-  if (!metadata) return
-
-  return withProjectAppearance(metadata, resolveProjectForSession(session, opened, stored))
 }
 
 export const errorMessage = (err: unknown, fallback: string) => {

@@ -10,7 +10,7 @@ const caseTimeout = 10_000
 test(
   "/undo waits for the admission of the prompt it withdraws",
   async () => {
-    const world = createWorld("overtake", "ses_overtake")
+    const world = createWorld("overtake")
     await using setup = await createAppFixture({
       width: 100,
       height: 30,
@@ -53,7 +53,7 @@ test(
 test(
   "/undo reverts a prompt the server delivered before the client saw it",
   async () => {
-    const world = createWorld("delivered", "ses_delivered")
+    const world = createWorld("delivered")
     await using setup = await createAppFixture({
       width: 100,
       height: 30,
@@ -103,7 +103,7 @@ test(
 test(
   "/undo of a prompt the server rejected leaves running work alone",
   async () => {
-    const world = createWorld("rejected", "ses_rejected")
+    const world = createWorld("rejected")
     await using setup = await createAppFixture({
       width: 100,
       height: 30,
@@ -138,7 +138,7 @@ test(
 test(
   "queued undo leaves an already delivered prompt alone",
   async () => {
-    const world = createWorld("queued", "ses_queued")
+    const world = createWorld("queued")
     await using setup = await createAppFixture({
       width: 120,
       height: 30,
@@ -178,7 +178,9 @@ test(
 
 type WorldMode = "overtake" | "delivered" | "rejected" | "queued"
 
-function createWorld(mode: WorldMode, sessionID: string) {
+function createWorld(mode: WorldMode) {
+  // A unique Session per invocation keeps the process-wide draft stash from leaking into --rerun-each runs.
+  const sessionID = `ses_${mode}_${crypto.randomUUID()}`
   const pending = new Set<string>()
   const history = new Set<string>()
   const texts = new Map<string, string>()

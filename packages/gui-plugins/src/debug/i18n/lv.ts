@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Rādīt vai paslēpt atkļūdošanas joslu",
+  providerAriaLabel: "Pakalpojumu sniedzēja veiktspējas diagnostika",
+  na: "nav",
+  "duration.label": "TIME",
+  "duration.tip": "Laiks no uzvednes, kas sāka pēdējo gājienu, līdz atbildes pabeigšanai.",
+  "tps.label": "TPS",
+  "tps.tip": "Izvades un spriešanas žetoni sekundē pēdējā gājiena modeļa pieprasījumos, neskaitot rīku laiku.",
+  "focus.label": "FOKUSS",
+  "focus.tip": "Piespiedu kārtā parādīt fokusa stilus visiem interaktīvajiem elementiem",
+  "focus.on": "IESL.",
+  "focus.off": "IZSL.",
+  "direction.label": "VIRZIENS",
+  "direction.tip": "Piespiedu kārtā lietot pilnu lietotnes izkārtojuma virzienu, nemainot izvēlēto valodu",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

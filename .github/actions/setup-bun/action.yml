@@ -58,6 +58,9 @@ runs:
       with:
         path: ${{ steps.cache.outputs.dir }}
         key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ steps.cache.outputs.version }}-${{ hashFiles('bun.lock', 'patches/**') }}
+        # Each dev merge changes beta's bun.lock. Beta falls back to the newest cache for the same Bun version
+        # (Bun's cache stores every package version separately) instead of installing everything from npm.
+        restore-keys: ${{ (github.ref_name == 'beta' && format('{0}-{1}-bun-{2}-', runner.os, runner.arch, steps.cache.outputs.version)) || '' }}
 
     - name: Install setuptools for distutils compatibility
       run: python3 -m pip install setuptools || pip install setuptools || true

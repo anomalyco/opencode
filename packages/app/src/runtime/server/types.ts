@@ -13,30 +13,6 @@ export type FileNode = {
   ignored: boolean
 }
 
-export type FileContent = {
-  type: "text" | "binary"
-  content: string
-  diff?: string
-  patch?: {
-    oldFileName: string
-    newFileName: string
-    oldHeader?: string
-    newHeader?: string
-    hunks: Array<{
-      oldStart: number
-      oldLines: number
-      newStart: number
-      newLines: number
-      lines: string[]
-    }>
-    index?: string
-  }
-  encoding?: "base64"
-  mimeType?: string
-  /** On-disk size when the bytes themselves are not retained. */
-  size?: number
-}
-
 export type Path = {
   home: string
   state: string
@@ -66,7 +42,7 @@ export type Agent = {
   steps?: number
 }
 
-export type Model = {
+type Model = {
   id: string
   providerID: string
   api: {

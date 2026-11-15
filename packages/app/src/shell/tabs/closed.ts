@@ -3,14 +3,14 @@ import type { TabStorage } from "./schema"
 
 export type ClosedTab = typeof TabStorage.ClosedTab.Type
 
-const CLOSED_TAB_LIMIT = 25
+const CLOSED_TAB_LIMIT = 100
 
 // Only session tabs are recorded; closing a draft tab deletes its persisted
 // state, so a reopened draft would come back empty anyway.
 export function pushClosedTab(stack: ClosedTab[], tab: Tab, index: number, info?: TabInfo): ClosedTab[] {
   if (tab.type !== "session") return stack
 
-  const entry: ClosedTab = { tab: { ...tab }, index }
+  const entry: ClosedTab = { tab: { ...tab }, index, closed: Date.now() }
 
   if (info) entry.info = { ...info }
 
@@ -53,6 +53,13 @@ export function takeClosedTab(stack: ClosedTab[], tabs: Tab[], target?: SessionT
   }
 
   return { stack: remaining }
+}
+
+// When the tab takeClosedTab would pop closed; tabs closed before times were recorded count as oldest.
+export function latestClosedTime(stack: ClosedTab[], tabs: Tab[]) {
+  const entry = stack.findLast((item) => !isOpen(tabs, item.tab))
+
+  return entry ? (entry.closed ?? 0) : undefined
 }
 
 export function removeClosedTabs(stack: ClosedTab[], server: SessionTab["server"], sessionIDs: string[]) {

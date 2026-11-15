@@ -17,7 +17,7 @@ import { GlobTool } from "@opencode/core/tool/plugin/glob"
 import { GrepTool } from "@opencode/core/tool/plugin/grep"
 import { Tool } from "@opencode/core/tool"
 import { location } from "./fixture/location"
-import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
@@ -67,6 +67,31 @@ const call = (name: "glob" | "grep", input: unknown) => ({
 })
 
 describe("search tools", () => {
+  for (const name of ["glob", "grep"] as const) {
+    it.live(`${name} distinguishes a malformed filename glob from an empty search`, () =>
+      withTempDir((tmp) =>
+        withTools(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            yield* Effect.promise(() => Bun.write(path.join(tmp.path, "visible.ts"), "needle\n"))
+            const search = (glob: string) =>
+              executeTool(
+                registry,
+                call(name, name === "glob" ? { pattern: glob } : { pattern: "needle", include: glob }),
+              )
+            expect(yield* search("*.txt")).toMatchObject({ status: "completed", output: [] })
+            expect(yield* search("[")).toMatchObject({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: `Invalid glob in ${name === "glob" ? "pattern" : "include"} '[': unclosed character class; missing ']'`,
+              },
+            })
+          }),
+        ),
+      ),
+    )
+  }
+
   for (const hidden of [undefined, false, true]) {
     for (const limit of hidden ? [10] : [1, 10]) {
       it.live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
@@ -107,140 +132,125 @@ describe("search tools", () => {
   }
 
   it.live("bounds omitted glob and grep limits", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            Promise.all(
-              Array.from({ length: FileSystem.DEFAULT_SEARCH_LIMIT + 1 }, (_, index) =>
-                fs.writeFile(path.join(tmp.path, `${index}.txt`), "needle\n"),
-              ),
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          Promise.all(
+            Array.from({ length: FileSystem.DEFAULT_SEARCH_LIMIT + 1 }, (_, index) =>
+              fs.writeFile(path.join(tmp.path, `${index}.txt`), "needle\n"),
             ),
-          )
-          yield* withTools(tmp.path, (registry) =>
-            Effect.gen(function* () {
-              const glob = yield* executeTool(registry, call("glob", { pattern: "*" }))
-              const grep = yield* executeTool(registry, call("grep", { pattern: "needle" }))
+          ),
+        )
+        yield* withTools(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const glob = yield* executeTool(registry, call("glob", { pattern: "*" }))
+            const grep = yield* executeTool(registry, call("grep", { pattern: "needle" }))
 
-              expect(glob.metadata).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
-              expect(grep.metadata).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
-              expect(glob.content).toHaveLength(1)
-              expect(grep.content).toHaveLength(1)
-              const globText = glob.content?.[0]?.type === "text" ? glob.content[0].text : ""
-              const grepText = grep.content?.[0]?.type === "text" ? grep.content[0].text : ""
-              expect(globText.split("\n")).toHaveLength(FileSystem.DEFAULT_SEARCH_LIMIT + 2)
-              expect(globText).toEndWith(
-                `(Results are truncated: showing first ${FileSystem.DEFAULT_SEARCH_LIMIT} results. Consider using a more specific path or pattern.)`,
-              )
-              expect(grepText).toStartWith(`Found ${FileSystem.DEFAULT_SEARCH_LIMIT} matches\n`)
-              expect(grepText).toEndWith(
-                `(Results are truncated: showing first ${FileSystem.DEFAULT_SEARCH_LIMIT} results. Consider using a more specific path or pattern.)`,
-              )
-            }),
-          )
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+            expect(glob.metadata).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
+            expect(grep.metadata).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
+            expect(glob.content).toHaveLength(1)
+            expect(grep.content).toHaveLength(1)
+            const globText = glob.content?.[0]?.type === "text" ? glob.content[0].text : ""
+            const grepText = grep.content?.[0]?.type === "text" ? grep.content[0].text : ""
+            expect(globText.split("\n")).toHaveLength(FileSystem.DEFAULT_SEARCH_LIMIT + 2)
+            expect(globText).toEndWith(
+              `(Results are truncated: showing first ${FileSystem.DEFAULT_SEARCH_LIMIT} results. Consider using a more specific path or pattern.)`,
+            )
+            expect(grepText).toStartWith(`Found ${FileSystem.DEFAULT_SEARCH_LIMIT} matches\n`)
+            expect(grepText).toEndWith(
+              `(Results are truncated: showing first ${FileSystem.DEFAULT_SEARCH_LIMIT} results. Consider using a more specific path or pattern.)`,
+            )
+          }),
+        )
+      }),
     ),
   )
 
   it.live("rejects an empty grep pattern", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        withTools(tmp.path, (registry) =>
-          Effect.gen(function* () {
-            expect(yield* executeTool(registry, call("grep", { pattern: "" }))).toEqual({
-              status: "error",
-              error: {
-                type: "tool.execution",
-                message:
-                  'Invalid arguments for tool "grep":\n- pattern: Pattern must not be empty\n\nArguments provided:\n{\n  "pattern": ""\n}\n\nUpdate the arguments and call the tool again.',
-              },
-            })
-          }),
-        ),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    withTempDir((tmp) =>
+      withTools(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          expect(yield* executeTool(registry, call("grep", { pattern: "" }))).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message:
+                'Invalid arguments for tool "grep":\n- pattern: Pattern must not be empty\n\nArguments provided:\n{\n  "pattern": ""\n}\n\nUpdate the arguments and call the tool again.',
+            },
+          })
+        }),
+      ),
     ),
   )
 
   it.live("handles explicit grep file and directory paths", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.promise(() =>
-          Promise.all([
-            fs.writeFile(path.join(tmp.path, "target.txt"), "needle\n"),
-            fs.writeFile(path.join(tmp.path, "other.txt"), "needle\n"),
-          ]),
-        ).pipe(
-          Effect.andThen(
-            withTools(tmp.path, (registry) =>
-              Effect.gen(function* () {
-                const file = yield* executeTool(registry, call("grep", { path: "target.txt", pattern: "needle" }))
-                expect(file).toMatchObject({
-                  status: "completed",
-                  output: [{ entry: { path: "target.txt" }, line: 1, text: "needle\n" }],
-                  metadata: { matches: 1, truncated: false },
-                })
+    withTempDir((tmp) =>
+      Effect.promise(() =>
+        Promise.all([
+          fs.writeFile(path.join(tmp.path, "target.txt"), "needle\n"),
+          fs.writeFile(path.join(tmp.path, "other.txt"), "needle\n"),
+        ]),
+      ).pipe(
+        Effect.andThen(
+          withTools(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const file = yield* executeTool(registry, call("grep", { path: "target.txt", pattern: "needle" }))
+              expect(file).toMatchObject({
+                status: "completed",
+                output: [{ entry: { path: "target.txt" }, line: 1, text: "needle\n" }],
+                metadata: { matches: 1, truncated: false },
+              })
 
-                const directory = yield* executeTool(registry, call("grep", { path: ".", pattern: "needle" }))
-                expect(directory).toMatchObject({
-                  status: "completed",
-                  metadata: { matches: 2, truncated: false },
-                })
-                if (directory.status !== "completed") return
-                expect(directory.output).toEqual(
-                  expect.arrayContaining([
-                    expect.objectContaining({ entry: expect.objectContaining({ path: "target.txt" }) }),
-                    expect.objectContaining({ entry: expect.objectContaining({ path: "other.txt" }) }),
-                  ]),
-                )
-              }),
-            ),
+              const directory = yield* executeTool(registry, call("grep", { path: ".", pattern: "needle" }))
+              expect(directory).toMatchObject({
+                status: "completed",
+                metadata: { matches: 2, truncated: false },
+              })
+              if (directory.status !== "completed") return
+              expect(directory.output).toEqual(
+                expect.arrayContaining([
+                  expect.objectContaining({ entry: expect.objectContaining({ path: "target.txt" }) }),
+                  expect.objectContaining({ entry: expect.objectContaining({ path: "other.txt" }) }),
+                ]),
+              )
+            }),
           ),
         ),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ),
     ),
   )
 
   it.live("reports no grep matches", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.promise(() => fs.writeFile(path.join(tmp.path, "file.txt"), "haystack\n")).pipe(
-          Effect.andThen(withTools(tmp.path, (registry) => executeTool(registry, call("grep", { pattern: "needle" })))),
-          Effect.tap((result) =>
-            Effect.sync(() => {
-              expect(result).toMatchObject({
-                status: "completed",
-                content: [{ type: "text", text: "No matches found" }],
-                metadata: { matches: 0, truncated: false },
-              })
-            }),
-          ),
+    withTempDir((tmp) =>
+      Effect.promise(() => fs.writeFile(path.join(tmp.path, "file.txt"), "haystack\n")).pipe(
+        Effect.andThen(withTools(tmp.path, (registry) => executeTool(registry, call("grep", { pattern: "needle" })))),
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            expect(result).toMatchObject({
+              status: "completed",
+              content: [{ type: "text", text: "No matches found" }],
+              metadata: { matches: 0, truncated: false },
+            })
+          }),
         ),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ),
     ),
   )
 
   it.live("reports invalid grep regex details", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        withTools(tmp.path, (registry) =>
-          Effect.gen(function* () {
-            const result = yield* executeTool(registry, call("grep", { pattern: "[" }))
-            expect(result).toMatchObject({
-              status: "error",
-              error: { type: "tool.execution" },
-            })
-            if (result.status !== "error" || !result.error) return
-            expect(result.error.message).toStartWith("Invalid regex pattern:")
-            expect(result.error.message).toContain("unclosed character class")
-          }),
-        ),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    withTempDir((tmp) =>
+      withTools(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const result = yield* executeTool(registry, call("grep", { pattern: "[" }))
+          expect(result).toMatchObject({
+            status: "error",
+            error: { type: "tool.execution" },
+          })
+          if (result.status !== "error" || !result.error) return
+          expect(result.error.message).toStartWith("Invalid regex pattern:")
+          expect(result.error.message).toContain("unclosed character class")
+        }),
+      ),
     ),
   )
 
@@ -292,44 +302,38 @@ describe("search tools", () => {
 
   for (const name of ["glob", "grep"] as const) {
     it.live(`${name} reports a missing search path`, () =>
-      Effect.acquireUseRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) =>
-          withTools(tmp.path, (registry) =>
-            Effect.gen(function* () {
-              const result = yield* executeTool(
-                registry,
-                call(name, { path: "missing", pattern: name === "glob" ? "*" : "needle" }),
-              )
-              expect(result).toEqual({
-                status: "error",
-                error: { type: "tool.execution", message: "Search path does not exist: missing" },
-              })
-            }),
-          ),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      withTempDir((tmp) =>
+        withTools(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const result = yield* executeTool(
+              registry,
+              call(name, { path: "missing", pattern: name === "glob" ? "*" : "needle" }),
+            )
+            expect(result).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: "Search path does not exist: missing" },
+            })
+          }),
+        ),
       ),
     )
   }
 
   it.live("reports a file used as the glob search path", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.promise(() => fs.writeFile(path.join(tmp.path, "file.txt"), "content\n")).pipe(
-          Effect.andThen(
-            withTools(tmp.path, (registry) => executeTool(registry, call("glob", { path: "file.txt", pattern: "*" }))),
-          ),
-          Effect.tap((result) =>
-            Effect.sync(() => {
-              expect(result).toEqual({
-                status: "error",
-                error: { type: "tool.execution", message: "Search path is not a directory: file.txt" },
-              })
-            }),
-          ),
+    withTempDir((tmp) =>
+      Effect.promise(() => fs.writeFile(path.join(tmp.path, "file.txt"), "content\n")).pipe(
+        Effect.andThen(
+          withTools(tmp.path, (registry) => executeTool(registry, call("glob", { path: "file.txt", pattern: "*" }))),
         ),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            expect(result).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: "Search path is not a directory: file.txt" },
+            })
+          }),
+        ),
+      ),
     ),
   )
 

@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Preklopi vrstico za razhroščevanje",
+  providerAriaLabel: "Diagnostika učinkovitosti ponudnika",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "Čas od poziva, ki je začel zadnjo potezo, do dokončanja odgovora.",
+  "tps.label": "TPS",
+  "tps.tip": "Izhodni žetoni in žetoni sklepanja na sekundo v zahtevah za model v zadnji potezi, brez časa orodij.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Vsili sloge fokusa na vse interaktivne elemente",
+  "focus.on": "ON",
+  "focus.off": "OFF",
+  "direction.label": "DIR",
+  "direction.tip": "Vsili celotno smer postavitve aplikacije brez spreminjanja izbranega jezika",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

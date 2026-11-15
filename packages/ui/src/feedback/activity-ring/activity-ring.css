@@ -1,0 +1,5 @@
+[data-component="activity-ring"] {
+  display: block;
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}

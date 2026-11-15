@@ -11,5 +11,5 @@ export function pluginLabel(plugin: PluginInfo) {
 }
 
 export function pluginLabels(plugins: readonly PluginInfo[]) {
-  return plugins.filter((plugin) => plugin.source.type !== "builtin").map(pluginLabel)
+  return plugins.flatMap((plugin) => (plugin.source.type === "builtin" ? [] : [pluginLabel(plugin)]))
 }

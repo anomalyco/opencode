@@ -60,7 +60,14 @@ mock.module("@/runtime/server/client", () => ({ useServerSDK: () => active.sdk }
 
 mock.module("@/runtime/server/runtime", () => ({ useGlobal: () => ({ models: active.preferences }) }))
 
-mock.module("@/workspaces/location", () => ({ useWorkspaceLocation: () => () => ({ directory: active.directory }) }))
+// Like the real provider, every read builds a new location object, and loading its info builds another.
+mock.module("@/workspaces/location", () => ({
+  useWorkspaceLocation: () => {
+    const owner = active
+
+    return () => ({ directory: owner.directory, loaded: owner.state.locationLoads })
+  },
+}))
 
 mock.module("@/settings/model", () => ({
   useSettings: () => ({ visibility: { customAgents: () => active.state.visible } }),
@@ -106,6 +113,7 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
     visible: true,
     configLoaded: true,
     connection: "connected",
+    locationLoads: 0,
     route: { id: "ses_a" as string | undefined },
     agents: input.agents ?? [agent("build"), agent("plan")],
     config: input.config,
@@ -132,6 +140,7 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
   const [preferences, setPreferences] = createStore({
     user: [] as Array<ModelKey & { visibility: "show" | "hide" }>,
     recent: [] as ModelKey[],
+    favorite: [] as ModelKey[],
     variant: (input.preferred ? { "provider/a": input.preferred } : {}) as Record<string, string>,
   })
 
@@ -144,11 +153,17 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
     state,
     set,
     setPreferences,
-    preferences: { store: preferences, set: setPreferences, ready: () => true, recent: () => preferences.recent },
+    preferences: {
+      store: preferences,
+      set: setPreferences,
+      ready: () => true,
+      recent: () => preferences.recent,
+      favorite: () => preferences.favorite,
+    },
     data: {
       session: { get: (id: string) => state.sessions[id] },
       location: {
-        agent: { list: () => state.agents },
+        agent: { list: () => state.agents, sync: async () => undefined },
         config: {
           list: () => (state.configLoaded ? [{ type: "document", info: { model: state.config } }] : undefined),
           sync: async () => {
@@ -213,6 +228,13 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
   return result
 }
 
+function stored(directory: string) {
+  const target = Persist.serverWorkspace(ServerScope.local, directory, "model-selection")
+  const raw = localStorage.getItem(`${target.storage}:${target.key}`)
+
+  return raw === null ? undefined : JSON.parse(raw)
+}
+
 function selection(local: ReturnType<typeof useLocal>) {
   return {
     agent: local.agent.current()?.name,
@@ -246,7 +268,7 @@ test("waits for initial configuration and reloads it after reconnecting", () => 
 test("new-session promotion does not mask a command's durable overrides", () => {
   const f = fixture({ session: durable("a", "low") })
   const { local } = f.mount()
-  local.session.promote(f.directory, "ses_a", { agent: "build", model: key("a"), variant: "low" })
+  local.session.promote(f.directory, "ses_a", { agent: "build", model: key("a"), variant: "low", choices: {} })
   f.set("sessions", "ses_a", durable("b", "high", "plan"))
   expect(selection(local)).toEqual({ agent: "plan", model: "b", variant: "high" })
 })
@@ -268,10 +290,61 @@ test("new-session drafts remember each agent's model and hand off inactive choic
   local.agent.set("plan")
   const choices = composer.remembered()
   f.set("sessions", "ses_a", durable("b", undefined, "plan"))
-  local.session.promote(f.directory, "ses_a", { agent: "plan", model: key("b"), choices })
+  local.session.promote(f.directory, "ses_a", { agent: "plan", model: key("b"), variant: undefined, choices })
   f.set("route", "id", "ses_a")
   local.agent.set("build")
   expect(local.model.current()?.id).toBe("c")
+})
+
+test("a promoted draft leaves the next draft empty even when its Session is never opened", () => {
+  const f = fixture()
+  f.set("route", "id", undefined)
+  const { local } = f.mount()
+  local.agent.set("plan")
+  local.model.set(key("b"))
+  local.model.variant.set("high")
+  local.session.promote(f.directory, "ses_a", { agent: "plan", model: key("b"), variant: "high", choices: {} })
+  expect(selection(local)).toEqual({ agent: "build", model: "a", variant: undefined })
+  f.set("route", "id", "ses_a")
+  expect(selection(local)).toEqual({ agent: "plan", model: "b", variant: "high" })
+})
+
+test("promoting into a workspace no provider shows writes it there and only there", () => {
+  const draft = fixture()
+  const worktree = fixture()
+  draft.set("route", "id", undefined)
+  const { local } = draft.mount()
+  const choices = { plan: { providerID: "provider", modelID: "c", variant: { type: "named", value: "low" } } } as const
+  local.session.promote(worktree.directory, "ses_wt", { agent: "build", model: key("b"), variant: "high", choices })
+  local.session.promote(worktree.directory, "ses_other", {
+    agent: "build",
+    model: key("a"),
+    variant: undefined,
+    choices,
+  })
+  expect(stored(worktree.directory).session).toEqual({
+    ses_wt: {
+      agent: "build",
+      choice: { providerID: "provider", modelID: "b", variant: { type: "named", value: "high" } },
+      choices,
+    },
+    ses_other: {
+      agent: "build",
+      choice: { providerID: "provider", modelID: "a", variant: { type: "default" } },
+      choices,
+    },
+  })
+  expect(stored(draft.directory)).toBeUndefined()
+
+  worktree.set("route", "id", "ses_wt")
+  const opened = worktree.mount().local
+  expect(selection(opened)).toEqual({ agent: "build", model: "b", variant: "high" })
+  opened.agent.set("plan")
+  expect(selection(opened)).toEqual({ agent: "plan", model: "c", variant: "low" })
+  worktree.set("route", "id", "ses_other")
+  expect(selection(opened)).toEqual({ agent: "build", model: "a", variant: undefined })
+  opened.agent.set("plan")
+  expect(selection(opened)).toEqual({ agent: "plan", model: "c", variant: "low" })
 })
 
 test("session model picks snapshot the variant rather than following another session's preferences", () => {
@@ -463,6 +536,19 @@ test("a commit received while its session is inactive does not discard its local
   f.set("sessions", "ses_a", durable("c", "low"))
   f.set("route", "id", "ses_a")
   expect(selection(local)).toEqual({ agent: "build", model: "a", variant: "high" })
+})
+
+test("a commit keeps waiting for its echo when the same folder's location reloads", () => {
+  const f = fixture()
+  const { local } = f.mount()
+  local.model.set(key("a"))
+  local.model.variant.set("high")
+  local.model.trackSessionCommit("ses_a", { agent: "build", model: key("a"), variant: "high" })
+  f.set("locationLoads", 1)
+  f.set("sessions", "ses_a", durable("a", "high"))
+  f.emit("session.model.selected")
+  f.set("sessions", "ses_a", durable("c", "low"))
+  expect(selection(local)).toEqual({ agent: "build", model: "c", variant: "low" })
 })
 
 test("cancelling a failed commit retains the draft and does not cancel a newer commit", () => {

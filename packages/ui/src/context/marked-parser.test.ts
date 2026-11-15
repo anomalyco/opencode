@@ -18,6 +18,14 @@ test.each([
   expect(parseSmallMarkdown(markdown)).toBe(expected)
 })
 
+test("keeps fragment links in the page", async () => {
+  const markdown = "See [Host services](#host-services)"
+  const expected = '<p>See <a href="#host-services">Host services</a></p>\n'
+
+  expect(await parser.parse(markdown)).toBe(expected)
+  expect(parseSmallMarkdown(markdown)).toBe(expected)
+})
+
 test("renders inline and block math", async () => {
   expect(await parser.parse("\\(x^2\\)")).toContain('<span class="katex">')
   expect(await parser.parse("$$\nx^2\n$$\n")).toContain('<span class="katex-display">')

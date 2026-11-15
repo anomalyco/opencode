@@ -1,14 +1,18 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { Option, Schema } from "effect"
 import electron from "electron"
 
 import { SETTINGS_STORE } from "./keys"
+
+/** The file: one JSON object, each key a setting whose reader decodes its value. */
+const SettingsFile = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json))
 
 const cache = new Map<string, SettingsStore>()
 
 export type SettingsStore = ReturnType<typeof createSettingsStore>
 
-// Main-process settings only (onboarding, default server, window list, appearance, extension storage).
+// Main-process settings only (onboarding, default server, window list, appearance, plugin storage).
 // These are read synchronously before the storage layer exists and written on user action, so a
 // synchronous whole-file write is acceptable here. Renderer state goes through DesktopStorage.
 //
@@ -40,8 +44,8 @@ export function createSettingsStore(file: string) {
 
   return {
     path: file,
-    get: (key: string): unknown => data[key],
-    set: (key: string, value: unknown) => {
+    get: (key: string): Schema.Json | undefined => data[key],
+    set: (key: string, value: Schema.Json) => {
       if (value === undefined) throw new TypeError(`Use \`delete()\` to clear values: ${key}`)
       data = { ...data, [key]: value }
       write()
@@ -53,17 +57,14 @@ export function createSettingsStore(file: string) {
   }
 }
 
-// A missing file is an empty store. An unreadable one is set aside instead of blocking startup.
-function read(file: string): Record<string, unknown> {
+// A missing file is an empty store. One that is not a JSON object is set aside instead of blocking startup.
+function read(file: string): typeof SettingsFile.Type {
   if (!existsSync(file)) return {}
 
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"))
+  const parsed = Schema.decodeUnknownOption(SettingsFile)(readFileSync(file, "utf8"))
 
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
-  } catch {
-    renameSync(file, `${file}.corrupt`)
+  if (Option.isSome(parsed)) return parsed.value
+  renameSync(file, `${file}.corrupt`)
 
-    return {}
-  }
+  return {}
 }

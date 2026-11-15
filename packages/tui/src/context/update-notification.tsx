@@ -5,6 +5,7 @@ import { useStorage } from "./storage"
 import { useEvent } from "./event"
 import { errorMessage } from "../util/error"
 import { useExit } from "./exit"
+import { useEpilogue } from "./epilogue"
 import { useDialog } from "../ui/dialog"
 import { DialogUpdate } from "../component/dialog-update"
 
@@ -30,6 +31,7 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
   init: (props: { updater?: UpdateSource }) => {
     const event = useEvent()
     const exit = useExit()
+    const epilogue = useEpilogue()
     const dialog = useDialog()
     const log = useLog({ component: "update-notification" })
     const [state, setState] = createSignal<UpdateState>()
@@ -40,6 +42,9 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
 
     const notify = (notice: Notice) => {
       if (!props.updater) return
+      // Every way out of the TUI after a local install tells the user to start the new version.
+      if (notice.type === "installed" && !(notice.source === "server" && notice.remote))
+        epilogue.updatedVersion(notice.version)
       if (
         notifications.versions.includes(`${notice.source}:${notice.version}`) ||
         (notice.source === "client" && notifications.versions.includes(notice.version))
@@ -67,7 +72,10 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       if (!updater || !current || current.type !== "available") return
       setState({ type: "installing", version: current.version })
       await updater.apply(current.version).then(
-        () => setState({ type: "installed", version: current.version }),
+        () => {
+          epilogue.updatedVersion(current.version)
+          setState({ type: "installed", version: current.version })
+        },
         (error) => setState({ type: "failed", message: errorMessage(error) }),
       )
     }
@@ -84,6 +92,7 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
         })
       if (signal.aborted) return
       if (result?.type === "unavailable") return result.message
+      if (result?.type === "installed") epilogue.updatedVersion(result.version)
       setState(result)
     }
 

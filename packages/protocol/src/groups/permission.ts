@@ -30,6 +30,7 @@ export const makePermissionGroup = <
         query: LocationQuery,
         success: Location.response(Schema.Array(Permission.Request)),
       })
+        .middleware(locationMiddleware)
         .annotateMerge(locationQueryOpenApi)
         .annotateMerge(
           OpenApi.annotations({
@@ -43,13 +44,15 @@ export const makePermissionGroup = <
       HttpApiEndpoint.get("permission.saved.list", "/api/permission/saved", {
         query: Schema.Struct({ projectID: Project.ID.pipe(Schema.optional) }),
         success: Schema.Struct({ data: Schema.Array(PermissionSaved.Info) }),
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "permission.saved.list",
-          summary: "List saved permissions",
-          description: "Retrieve saved permissions, optionally filtered by project.",
-        }),
-      ),
+      })
+        .middleware(locationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "permission.saved.list",
+            summary: "List saved permissions",
+            description: "Retrieve saved permissions, optionally filtered by project.",
+          }),
+        ),
     )
     .add(
       HttpApiEndpoint.patch("permission.saved.update", "/api/permission/saved/:id", {
@@ -81,8 +84,6 @@ export const makePermissionGroup = <
         }),
       ),
     )
-    // Effect applies group middleware only to endpoints already added; session endpoints use session placement below.
-    .middleware(locationMiddleware)
     .add(
       HttpApiEndpoint.post("session.permission.create", "/api/session/:sessionID/permission", {
         params: { sessionID: Session.ID },

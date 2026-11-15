@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { Image, ImageEvent, Media } from "../../src/index.js"
+import { ai, ImageEvent, Media } from "../../src/effect.js"
 import { OpenAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -19,18 +19,17 @@ const recorded = recordedTests({
 describe("OpenAI Images recorded", () => {
   recorded.effect("generates an image", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt: "A simple flat black circle centered on a plain white background.",
-        size: "1024x1024",
-        format: "jpeg",
-        providerOptions: { quality: "low", outputCompression: 10 },
+        aspect: "1:1",
+        providerOptions: { outputFormat: "jpeg", quality: "low", outputCompression: 10 },
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toBe("image/jpeg")
-      expect(response.image.info).toEqual({ format: "jpeg", width: 1024, height: 1024 })
-      expect((yield* response.image.bytes()).length).toBeGreaterThan(0)
+      expect(response.images[0].mediaType).toBe("image/jpeg")
+      expect(response.images[0].info).toEqual({ format: "jpeg", width: 1024, height: 1024 })
+      expect((yield* response.images[0].bytes()).length).toBeGreaterThan(0)
       expect(response.providerMetadata).toEqual({
         openai: { outputFormat: "jpeg", size: "1024x1024", quality: "low", background: "opaque" },
       })
@@ -46,7 +45,7 @@ describe("OpenAI Images recorded", () => {
     },
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model,
           prompt: "Keep the simple shape and change it from black to bright green.",
           images: [
@@ -55,26 +54,26 @@ describe("OpenAI Images recorded", () => {
               "image/jpeg",
             ),
           ],
-          size: "1024x1024",
-          format: "jpeg",
-          providerOptions: { quality: "low", outputCompression: 10 },
+          providerOptions: { size: "1024x1024", outputFormat: "jpeg", quality: "low", outputCompression: 10 },
         })
 
-        expect(response.image.mediaType).toBe("image/jpeg")
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1024, height: 1024 })
+        expect(response.images[0].mediaType).toBe("image/jpeg")
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 1024, height: 1024 })
       }),
   )
 
   recorded.effect("streams a partial image before the final image", () =>
     Effect.gen(function* () {
       const events = Array.from(
-        yield* Image.stream({
-          model,
-          prompt: "A simple flat black circle centered on a plain white background.",
-          size: "1024x1024",
-          format: "jpeg",
-          providerOptions: { quality: "low", outputCompression: 10, partialImages: 1 },
-        }).pipe(Stream.runCollect),
+        yield* ai.image
+          .stream({
+            model,
+            prompt: "A simple flat black circle centered on a plain white background.",
+            aspect: "1:1",
+            resolution: "1K",
+            providerOptions: { outputFormat: "jpeg", quality: "low", outputCompression: 10, partialImages: 1 },
+          })
+          .pipe(Stream.runCollect),
       )
 
       expect(events.map((event) => event.type)).toEqual(["image-partial", "image", "finish"])

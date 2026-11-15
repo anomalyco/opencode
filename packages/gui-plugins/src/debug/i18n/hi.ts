@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "डीबग बार टॉगल करें",
+  providerAriaLabel: "प्रोवाइडर के प्रदर्शन का निदान",
+  na: "एन/ए",
+  "duration.label": "TIME",
+  "duration.tip": "नवीनतम टर्न शुरू करने वाले प्रॉम्प्ट से उसके उत्तर के पूरा होने तक का समय।",
+  "tps.label": "TPS",
+  "tps.tip": "नवीनतम टर्न के मॉडल अनुरोधों में प्रति सेकंड आउटपुट और रीज़निंग टोकन, टूल के समय को छोड़कर।",
+  "focus.label": "FOCUS",
+  "focus.tip": "सभी इंटरैक्टिव एलिमेंट पर फ़ोकस स्टाइल ज़बरदस्ती लागू करें",
+  "focus.on": "चालू",
+  "focus.off": "बंद",
+  "direction.label": "DIR",
+  "direction.tip": "चुनी गई भाषा बदले बिना पूरे ऐप की लेआउट दिशा ज़बरदस्ती सेट करें",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

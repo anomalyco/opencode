@@ -1,5 +1,10 @@
 import { AIError, TransportError } from "../schema/index.js"
-import type { ChannelCheckpoint, ChannelObservation, WebSocketChannelDriver } from "../route/transport/index.js"
+import type {
+  ChannelCheckpoint,
+  ChannelCreate,
+  ChannelObservation,
+  WebSocketChannelDriver,
+} from "../route/transport/index.js"
 import { Effect, Option, Schema } from "effect"
 import * as ProviderShared from "./shared.js"
 import { OpenResponses } from "./open-responses.js"
@@ -24,8 +29,11 @@ export interface DriverInput {
   readonly id: string
   readonly name: string
   readonly request: Readonly<Record<string, unknown>>
-  readonly message: string
-  readonly base: WebSocketChannelDriver
+  readonly base: (
+    create: ChannelCreate,
+    frame: string,
+    event: OpenResponses.Event,
+  ) => Effect.Effect<ChannelObservation, AIError>
   readonly continuation?: Shape
 }
 
@@ -157,7 +165,7 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
             ProviderShared.eventError(input.id, `Invalid ${input.name} WebSocket event`, frame, cause),
           ),
         )
-        const observation = yield* input.base.observe(create, frame)
+        const observation = yield* input.base(create, frame, event)
         if (event.type === "response.output_item.done" && event.item) output.push(event.item)
         if (observation.type === "provider-failure") {
           const rejection = code(event)

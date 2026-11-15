@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
+import { SpeechModel, type SpeechEvent, type SpeechRequest } from "../speech.js"
 import { MediaInput } from "./utils/media-input.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
@@ -25,7 +25,7 @@ export type DeepgramSpeechOptions = {
   readonly tag?: string
 } & Record<string, unknown>
 
-export type Request = SpeechRequestFor<DeepgramSpeechOptions>
+export type Request = SpeechRequest<SpeechModel<DeepgramSpeechOptions>>
 
 // ---------------------------------------------------------------------------
 // 4. Parser state

@@ -11,7 +11,6 @@ export const SapAICorePlugin = define({
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.make("sap-ai-core")) return
         const serviceKey =
           process.env.AICORE_SERVICE_KEY ??
           (typeof evt.options.serviceKey === "string" ? evt.options.serviceKey : undefined)
@@ -27,13 +26,14 @@ export const SapAICorePlugin = define({
             : {},
         )
       }),
+      { providerID: Provider.ID.make("sap-ai-core") },
     )
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.make("sap-ai-core")) return
         evt.language = evt.sdk(evt.model.modelID ?? evt.model.id)
       }),
+      { providerID: Provider.ID.make("sap-ai-core") },
     )
   }),
 })

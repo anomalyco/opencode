@@ -8,7 +8,7 @@ import {
   type GenerationRoute,
   type GenerationSnapshot,
   type GenerationStatus,
-} from "../src/index.js"
+} from "../src/effect.js"
 import { it } from "./lib/effect.js"
 
 /** In-memory generation route whose status advances through `statuses` on every poll. */
@@ -97,7 +97,9 @@ describe("Generation", () => {
       const generation = new Generation(route, "t", { id: "gen_1", status: "queued" })
 
       const fiber = yield* Effect.forkChild(
-        generation.events({ poll: { interval: "1 second", timeout: "5 seconds" } }).pipe(Stream.runCollect, Effect.flip),
+        generation
+          .events({ poll: { interval: "1 second", timeout: "5 seconds" } })
+          .pipe(Stream.runCollect, Effect.flip),
       )
       yield* TestClock.adjust("6 seconds")
       const error = yield* Fiber.join(fiber)

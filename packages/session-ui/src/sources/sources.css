@@ -1,0 +1,266 @@
+[data-component="site-icon"] {
+  --site-icon-size: 16px;
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--site-icon-size);
+  height: var(--site-icon-size);
+  overflow: hidden;
+  border-radius: 9999px;
+  background-color: var(--site-icon-bg);
+  box-shadow: inset 0 0 0 0.5px var(--v2-alpha-dark-12);
+  color: var(--v2-avatar-fg);
+  font-family: var(--font-family-sans);
+  font-size: 9px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  user-select: none;
+
+  &[data-state] {
+    background-color: var(--v2-background-bg-layer-02);
+  }
+
+  [data-slot="site-icon-image"] {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 150ms ease-out;
+  }
+
+  &[data-state="loaded"] [data-slot="site-icon-image"] {
+    opacity: 1;
+  }
+}
+
+:root[data-motion="reduce"] [data-component="site-icon"] [data-slot="site-icon-image"] {
+  transition: none;
+}
+
+[data-component="sources-chip"] {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding-inline: 2px 8px;
+  border-radius: 9999px;
+  background-color: var(--v2-overlay-simple-overlay-hover);
+  color: var(--v2-text-text-muted);
+  font-family: var(--v2-font-family-sans);
+  font-size: 12px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: 0.05px;
+  white-space: nowrap;
+  cursor: default;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+
+  &:hover,
+  &:focus-visible {
+    background-color: var(--v2-overlay-simple-overlay-pressed);
+    color: var(--v2-text-text-base);
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--v2-border-border-focus);
+    outline-offset: 1px;
+  }
+
+  [data-slot="sources-chip-icons"] {
+    display: inline-flex;
+    align-items: center;
+
+    > [data-slot="icon-svg"] {
+      margin-inline-start: 4px;
+      color: var(--v2-text-text-faint);
+    }
+  }
+
+  /* Each later site tucks under the one before it, cut by a mask so the gap shows whatever is behind the chip. */
+  [data-component="site-icon"] + [data-component="site-icon"] {
+    margin-inline-start: -3px;
+    mask-image: radial-gradient(circle at -5px 50%, transparent 9.5px, #000 10px);
+  }
+}
+
+:root[data-motion="reduce"] [data-component="sources-chip"] {
+  transition: none;
+}
+
+/* The turn's footer, set off from the reply by the same gap as its changed-files footer (`session-turn-diffs`). */
+[data-component="text-part"] [data-slot="text-part-footer"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  margin-top: 16px;
+
+  > [data-slot="text-part-copy-wrapper"] {
+    flex: 1;
+    min-width: 0;
+    margin-top: 0;
+  }
+}
+
+[data-component="sources-panel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+
+  [data-slot="sources-step-row"] {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    column-gap: 10px;
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    color: inherit;
+    text-align: start;
+    text-decoration: none;
+    cursor: default;
+    transition: background-color 150ms ease-out;
+
+    &:not(:disabled):hover,
+    &:focus-visible {
+      background-color: var(--v2-overlay-simple-overlay-hover);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-border-border-focus);
+      outline-offset: -1px;
+    }
+  }
+
+  [data-slot="sources-step-icon"] {
+    display: flex;
+    align-items: center;
+    height: 16px;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="sources-step-text"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  [data-slot="sources-step-label"] {
+    font-size: 12px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="sources-step-detail"],
+  [data-slot="sources-result-title"],
+  [data-slot="sources-result-site"] {
+    overflow: hidden;
+    white-space: nowrap;
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+
+  [data-slot="sources-step-detail"] {
+    font-family: var(--font-family-mono);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="sources-step-path"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="sources-step-error"] {
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    color: var(--v2-state-fg-danger);
+  }
+
+  [data-slot="sources-step-count"] {
+    align-self: start;
+    height: 16px;
+    font-size: 12px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    font-variant-numeric: tabular-nums;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="sources-step"][data-open] [data-slot="sources-step-count"] {
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="sources-step-results"] {
+    overflow: clip;
+
+    &[data-moving] {
+      mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+    }
+  }
+
+  [data-slot="sources-step-list"] {
+    display: flex;
+    flex-direction: column;
+    padding-block: 2px 6px;
+  }
+
+  /* The site icon sits on the step's text edge; the row's highlight bleeds out past it. */
+  [data-slot="sources-result"] {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    column-gap: 10px;
+    margin-inline-start: 26px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+    cursor: default;
+    transition: background-color 150ms ease-out;
+
+    &:hover,
+    &:focus-visible {
+      background-color: var(--v2-overlay-simple-overlay-hover);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-border-border-focus);
+      outline-offset: -1px;
+    }
+  }
+
+  [data-slot="sources-result-text"] {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  [data-slot="sources-result-title"] {
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="sources-result-site"] {
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-faint);
+  }
+}
+
+:root[data-motion="reduce"] [data-component="sources-panel"] {
+  [data-slot="sources-step-row"],
+  [data-slot="sources-result"] {
+    transition: none;
+  }
+}

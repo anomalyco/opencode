@@ -1,0 +1,8 @@
+/* Reached budgets use the design's deep red; it is too dark to read on dark surfaces, where the danger foreground is. */
+[data-component="usage-dialog"] {
+  --usage-reached: var(--v2-red-900);
+}
+
+[data-color-scheme="dark"] [data-component="usage-dialog"] {
+  --usage-reached: var(--v2-state-fg-danger);
+}

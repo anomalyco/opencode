@@ -24,6 +24,14 @@ export function consoleProviderGroup<T extends Provider>(providers: readonly T[]
   }
 }
 
+// A signed-in Console workspace adds its own providers next to the free `opencode` catalog.
+export function consoleCatalogLoaded(providers: readonly Provider[]) {
+  return (
+    consoleProviderGroup(providers) !== undefined ||
+    providers.some((provider) => provider.integrationID === "opencode" && provider.id !== "opencode")
+  )
+}
+
 export function consoleProviderName(group: { prefix: string }, name: string) {
   return name.startsWith(group.prefix) ? name.slice(group.prefix.length) : name
 }

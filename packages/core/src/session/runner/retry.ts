@@ -1,6 +1,6 @@
 export * as SessionRunnerRetry from "./retry.js"
 
-import { AIError, isRetryable } from "@opencode/ai"
+import { AIError, isRetryable } from "@opencode/ai/effect"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
 import { SessionError } from "@opencode/schema/session-error"

@@ -1,0 +1,196 @@
+---
+title: Narzędzia specjalistyczne
+description: Twórz narzędzi, które LLM mogą być uruchamiane w otwartym kodzie.
+---
+
+Narzędzia specjalistyczne to funkcje, które tworzysz i które LLM może wywoływać podczas rozmów. Współpracują one z [wbudowanymi narzędziami](/docs/tools) opencode, takimi jak `read`, `write` i `bash`.
+
+---
+
+## Tworzenie narzędzia
+
+Narzędzia tworzą pliki **TypeScript** lub **JavaScript**. Definicja narzędzia może być odwoływana do skryptów napisanych w **dowolnym języku** — TypeScript lub JavaScript są używane tylko w tym samym narzędziu.
+
+---
+
+### Lokalizacja
+
+Można je uruchomić:
+
+- Lokalnie, umieszczając je w katalogu `.opencode/tools/` swojego projektu.
+- Lub globalnie, umieszczając je w `~/.config/opencode/tools/`.
+
+---
+
+### Struktura
+
+Najłatwiejszym sposobem tworzenia narzędzia jest pomocnika `tool()`, który zapewnia bezpieczeństwo i sprawdzanie poprawności.
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+**Nazwa pliku** staje się **nazwą narzędzia**. Pierwotne narzędzie `database`.
+
+---
+
+#### Wiele narzędzi na plik
+
+Można także eksportować wiele narzędzi z jednego pliku. Każdy eksport staje się **oddzielnym językiem** o nazwie **`<filename>_<exportname>`**:
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+Tworzy to dwa narzędzia: `math_add` i `math_multiply`.
+
+---
+
+#### Kolizje nazw z wbudowanymi narzędziami
+
+Niestandardowe narzędzia są identyfikowane według nazwy narzędzia. Jeśli niestandardowe narzędzie używa tej samej nazwy co wbudowane narzędzie, niestandardowe narzędzie ma pierwszeństwo.
+
+Na przykład ten plik zastępuje wbudowane narzędzie `bash`:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+Preferuj unikalne nazwy, chyba że celowo chcesz zastąpić wbudowane narzędzie. Jeśli chcesz wyłączyć wbudowane narzędzie, ale go nie nadpisywać, użyj [uprawnień](/docs/permissions).
+:::
+
+---
+
+### Argumenty
+
+Do zdefiniowania argumentów można zastosować `tool.schema`, czyli po prostu [Zod](https://zod.dev).
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+Można także bezpośrednio zaimportować [Zod](https://zod.dev) i zwyczajowo zwykły obiekt:
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### Kontekst
+
+Narzędzia kontekstowe charakterystycznej sesji:
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+`context.directory` jako katalogowy pracodawczy.
+`context.worktree` dla katalogu głównego zwalczającego git.
+
+---
+
+## Przykład
+
+### Napisz narzędzie w Pythonie
+
+Możesz pisać swoje narzędzia w dowolnym języku. Oto przykład dodania dwóch liczb przy użyciu języka Python.
+
+Najpierw utwórz narzędzie jako skrypt w języku Python:
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+Następnie utwórz definicję narzędzia, która go wywołuje:
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+Tutaj używamy narzędzia [`Bun.$`](https://bun.com/docs/runtime/shell) do uruchomienia skryptu w języku Python.

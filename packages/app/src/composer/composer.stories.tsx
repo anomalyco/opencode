@@ -1,16 +1,18 @@
-import { Show, createMemo, onMount, type JSX } from "solid-js"
+import { Show, createEffect, createMemo, on, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ModelSelection } from "@/providers/models/selection"
 import { STORY_MODEL, emptySessionDocument, pendingAndQueuedDocument } from "@opencode/session-ui/storybook"
 import { Composer } from "./composer"
 import type { ComposerModel } from "./model"
 import { createComposerEditor } from "./editor/interaction"
-import type { ComposerPersistedState, ComposerSuggestion } from "./types"
+import type { ComposerHistory, ComposerPersistedState, ComposerSuggestion } from "./types"
 import { buildPromptRequest } from "./request"
 import { promptLength } from "./prompt-parts"
 import { SessionPreview } from "@/session/story-model"
 import { Skill } from "@opencode/schema/skill"
 import { resolveSessionComposerSelection } from "@/session/composer/selection"
+
+const pixel = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
 
 const selectedModel = {
   id: STORY_MODEL.id,
@@ -50,16 +52,24 @@ function ComposerStory(props: {
   comments?: ComposerPersistedState["context"]["items"]
   working?: boolean
   stopping?: boolean
-  suggestions?: "command" | "context"
+  sending?: boolean
+  suggestions?: "command" | "context" | "none"
   failure?: boolean
   label?: string
   inspectRequest?: boolean
   continueOnStop?: boolean
   longLabels?: boolean
-  alternate?: "queue" | "steer"
+  alternate?: "none" | "queue" | "steer"
   manySuggestions?: boolean
+  history?: boolean
+  many?: boolean
+  /** File search waits for the story's "Return files" button, like a slow server. */
+  fileSearch?: boolean
   suggestionBoundary?: () => HTMLElement | undefined
 }) {
+  const [fileSearch, setFileSearch] = createStore<{ pending?: string }>({})
+  let returnFiles: (() => void) | undefined
+
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt: props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }],
     cursor: props.prompt ? promptLength(props.prompt) : 0,
@@ -79,8 +89,10 @@ function ComposerStory(props: {
 
   const modelSelection = {
     ready: Object.assign(() => true, { promise: undefined }),
+    key: () => ({ providerID: modelOption().provider.id, modelID: modelOption().id }),
     current: () => modelOption(),
     recent: () => [modelOption()],
+    favorite: { list: () => [], toggle() {} },
     list: () => [modelOption()],
     cycle() {},
     set() {},
@@ -88,7 +100,6 @@ function ComposerStory(props: {
     setVisibility() {},
     variant: {
       configured: () => STORY_MODEL.variant,
-      selected: () => story.variant,
       current: () => story.variant,
       list: () => ["balanced", "high"],
       set: (variant: string | undefined) => setStory("variant", variant ?? "balanced"),
@@ -144,7 +155,63 @@ function ComposerStory(props: {
     store: [draft, setDraft],
     commands: () => commands,
     context: () => context,
-    searchContextFiles: () => [],
+    searchContextFiles: (query, signal) => {
+      if (!props.fileSearch) return []
+
+      return new Promise<ComposerSuggestion[]>((resolve) => {
+        returnFiles = () => resolve(query.includes("z") ? [] : storyFiles(query))
+        setFileSearch("pending", query)
+        signal?.addEventListener("abort", () => setFileSearch("pending", undefined), { once: true })
+      })
+    },
+    get history(): ComposerHistory | undefined {
+      if (!props.history && !props.many) return undefined
+
+      return {
+        entries: (mode) =>
+          mode === "shell"
+            ? [{ prompt: text("bun typecheck") }]
+            : [
+                { prompt: text("Explain the latest changes") },
+                {
+                  prompt: [
+                    ...text("Review the composer layout\nKeep keyboard navigation accessible"),
+                    {
+                      type: "path",
+                      id: "history-layout",
+                      filename: "layout.png",
+                      mime: "image/png",
+                      path: "C:/shots/layout.png",
+                    },
+                  ],
+                  metadata: "review",
+                },
+                { prompt: text("Run the focused tests") },
+                ...(props.many
+                  ? Array.from({ length: 16 }, (_, index) => ({ prompt: text(`Earlier prompt ${index + 1}`) }))
+                  : []),
+              ],
+        add() {},
+        capture: () => (draft.context.items.some((item) => item.key === "history-comment") ? "review" : undefined),
+        restore: (metadata) =>
+          setDraft(
+            "context",
+            "items",
+            metadata === "review"
+              ? [
+                  {
+                    type: "file",
+                    key: "history-comment",
+                    path: "src/composer.tsx",
+                    selection: { startLine: 12, startChar: 0, endLine: 14, endChar: 0 },
+                    comment: "Keep the search separate from the draft",
+                  },
+                ]
+              : [],
+          ),
+      }
+    },
+    readImage: async () => pixel,
     view: {
       placeholder: () => "Ask anything, / for commands, @ for context...",
       agent: {
@@ -167,18 +234,25 @@ function ComposerStory(props: {
       submit: {
         stopping: () => !!props.stopping,
         working: () => !!props.working,
-        queue: props.alternate
-          ? {
-              count: () => 0,
-              delivery: () => (props.alternate === "queue" ? "steer" : "queue"),
-              alternate: () => props.alternate,
-              editing: () => undefined,
-              confirmEdit() {},
-              undoing: () => false,
-              cancelEdit() {},
-              editFirst: () => false,
-            }
-          : undefined,
+        busy: () => !!props.sending,
+        get queue() {
+          const alternate = props.alternate
+
+          if (!alternate || alternate === "none") return undefined
+
+          return {
+            count: () => 0,
+            delivery: () => (alternate === "queue" ? "steer" : "queue"),
+            alternate: () => alternate,
+            editing: () => undefined,
+            confirmEdit() {},
+            undoing: () => false,
+            cancelEdit() {},
+            editFirst: () => false,
+            first() {},
+            steerFirst() {},
+          }
+        },
         onSubmit: () => {
           const value = draft.prompt.map((part) => ("content" in part ? part.content : `[${part.filename}]`)).join("")
 
@@ -209,8 +283,7 @@ function ComposerStory(props: {
               : `Submitted: ${value}`,
           )
         },
-        onStop: () =>
-          setStory("activity", props.continueOnStop ? "POST /interrupt · resume: true" : "Stop requested"),
+        onStop: () => setStory("activity", props.continueOnStop ? "POST /interrupt · resume: true" : "Stop requested"),
       },
     },
   })
@@ -220,18 +293,65 @@ function ComposerStory(props: {
     model: { selection: modelSelection, paid: true, loading: false },
   } satisfies ComposerModel
 
-  onMount(() => {
-    if (props.suggestions === "command") model.openCommands()
+  const suggest = (kind: typeof props.suggestions) => {
+    if (kind === "command") return model.openCommands()
 
-    if (props.suggestions === "context") model.openContext()
+    if (kind === "context") return model.openContext()
+
+    model.dispatch({ type: "popover.close" })
+  }
+
+  onMount(() => {
+    if (props.suggestions === "command" || props.suggestions === "context") suggest(props.suggestions)
   })
 
+  // The components lab keeps this story mounted across states that differ only in args, so the composer follows them
+  // in place and its own transitions play. The prompt is compared by value: the lab updates its args store in place.
+  // One effect, so the prompt lands before the suggestions open on it: an empty draft opens them inline, typing the
+  // trigger, so a change of either starts over from the state's prompt.
+  createEffect(
+    on(
+      () => [JSON.stringify(props.prompt ?? null), props.suggestions] as const,
+      ([json, kind]) => {
+        const prompt: ComposerPersistedState["prompt"] = JSON.parse(json) ?? text("")
+
+        setDraft({ prompt, cursor: promptLength(prompt) })
+        suggest(kind)
+      },
+      { defer: true },
+    ),
+  )
+  createEffect(
+    on(
+      () => props.label,
+      (label) => setStory("activity", label ?? "Ready"),
+      { defer: true },
+    ),
+  )
+
   return (
-    <div class="mx-auto flex min-h-80 w-full max-w-200 flex-col justify-end gap-3 rounded-xl bg-v2-background-bg-deep p-6">
+    <div
+      class="mx-auto flex min-h-80 w-full max-w-200 flex-col justify-end gap-3 rounded-xl bg-v2-background-bg-deep p-6"
+      style={{ "min-height": props.many ? "512px" : undefined }}
+    >
       <output class="text-12-regular text-text-weak" aria-live="polite">
         {story.activity}
       </output>
       <Composer model={model} borderUnderlay suggestionBoundary={props.suggestionBoundary} />
+      <Show when={props.fileSearch}>
+        <button
+          type="button"
+          class="self-start text-12-regular text-text-weak"
+          disabled={!fileSearch.pending}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setFileSearch("pending", undefined)
+            returnFiles?.()
+          }}
+        >
+          {fileSearch.pending === undefined ? "No file search pending" : `Return files for ${fileSearch.pending}`}
+        </button>
+      </Show>
     </div>
   )
 }
@@ -240,23 +360,72 @@ const text = (content: string): ComposerPersistedState["prompt"] => [
   { type: "text", content, start: 0, end: content.length },
 ]
 
+const storyFiles = (query: string): ComposerSuggestion[] =>
+  ["plan.md", "notes.md", "capture.ts", "corpus.ts", "cursor.png", "claude.png"].map((name) => {
+    const path = `${query}/${name}`
+
+    return {
+      id: `file:${path}`,
+      kind: "file",
+      label: path,
+      path,
+      mention: { type: "file", path, content: `@${path}`, start: 0, end: 0 },
+    }
+  })
+
+type FlowArgs = {
+  prompt?: ComposerPersistedState["prompt"]
+  working: boolean
+  stopping: boolean
+  failure: boolean
+  sending: boolean
+  label: string
+  suggestions: "command" | "context" | "none"
+  alternate: "none" | "queue" | "steer"
+  many: boolean
+}
+
 export default {
   title: "OpenCode/Composer/Flow",
   component: Composer,
   parameters: { layout: "centered" },
+  // States that only change the composer's props share this render, so moving between them keeps one composer.
+  args: {
+    working: false,
+    stopping: false,
+    failure: false,
+    sending: false,
+    label: "Ready",
+    suggestions: "none",
+    alternate: "none",
+    many: false,
+  },
+  argTypes: {
+    suggestions: { control: "select", options: ["none", "command", "context"] },
+    alternate: { control: "select", options: ["none", "queue", "steer"] },
+  },
+  render: (args: FlowArgs) => <ComposerStory {...args} />,
 }
 
-export const EmptyDraft = { render: () => <ComposerStory /> }
+export const EmptyDraft = {}
 
-export const TextDraft = { render: () => <ComposerStory prompt={text("Explain this change")} /> }
-
-export const MultilineDraft = {
-  render: () => <ComposerStory prompt={text("Review the implementation\nThen run the focused tests")} />,
+export const PromptHistory = {
+  args: { many: false },
+  render: (args: FlowArgs) => (
+    <div class="w-[min(640px,calc(100vw-32px))]">
+      <ComposerStory {...args} history />
+    </div>
+  ),
 }
+
+export const TextDraft = { args: { prompt: text("Explain this change") } }
+
+export const MultilineDraft = { args: { prompt: text("Review the implementation\nThen run the focused tests") } }
 
 export const MixedAttachments = {
-  render: () => (
+  render: (args: FlowArgs) => (
     <ComposerStory
+      {...args}
       prompt={[
         { type: "text", content: "Review ", start: 0, end: 7 },
         { type: "file", path: "src/app.tsx", content: "@src/app.tsx", start: 7, end: 19 },
@@ -276,7 +445,14 @@ export const MixedAttachments = {
           id: "image-story",
           filename: "layout.png",
           mime: "image/png",
-          blob: { id: "image-story", url: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" },
+          blob: { id: "image-story", url: pixel },
+        },
+        {
+          type: "path",
+          id: "path-image-story",
+          filename: "screenshot.png",
+          mime: "image/png",
+          path: "C:/shots/screenshot.png",
         },
       ]}
       comments={[
@@ -293,8 +469,9 @@ export const MixedAttachments = {
 }
 
 export const BrowserElementComment = {
-  render: () => (
+  render: (args: FlowArgs) => (
     <ComposerStory
+      {...args}
       prompt={text("Tidy up the settings page")}
       comments={[
         {
@@ -320,102 +497,101 @@ export const BrowserElementComment = {
   ),
 }
 
-export const ModelAndVariant = { render: () => <ComposerStory prompt={text("Compare both variants")} /> }
+export const ModelAndVariant = { args: { prompt: text("Compare both variants") } }
 
-export const SlashSuggestions = { render: () => <ComposerStory suggestions="command" /> }
+export const SlashSuggestions = { args: { suggestions: "command" } }
 
-export const ContextSuggestions = { render: () => <ComposerStory suggestions="context" /> }
+export const ContextSuggestions = { args: { suggestions: "context" } }
 
-function ConstrainedCommandSuggestionsStory() {
+export const SlowFileSearch = { render: (args: FlowArgs) => <ComposerStory {...args} fileSearch /> }
+
+function ConstrainedCommandSuggestionsStory(props: FlowArgs) {
   let boundary: HTMLDivElement | undefined
 
   return (
     <div class="mx-auto w-full max-w-200">
       <div ref={boundary} data-slot="composer-suggestion-boundary-story" class="h-60" />
-      <ComposerStory suggestions="command" manySuggestions suggestionBoundary={() => boundary} />
+      <ComposerStory {...props} manySuggestions suggestionBoundary={() => boundary} />
     </div>
   )
 }
 
-export const ConstrainedCommandSuggestions = { render: () => <ConstrainedCommandSuggestionsStory /> }
+export const ConstrainedCommandSuggestions = {
+  args: { suggestions: "command" },
+  render: (args: FlowArgs) => <ConstrainedCommandSuggestionsStory {...args} />,
+}
 
 export const DetachedCommandSuggestionBoundary = {
-  render: () => {
+  args: { suggestions: "command" },
+  render: (args: FlowArgs) => {
     const detached = document.createElement("div")
 
-    return <ComposerStory suggestions="command" manySuggestions suggestionBoundary={() => detached} />
+    return <ComposerStory {...args} manySuggestions suggestionBoundary={() => detached} />
   },
 }
 
-export const RunningAndStopping = { render: () => <ComposerStory working stopping label="Session is running" /> }
+export const RunningAndStopping = { args: { working: true, stopping: true, label: "Session is running" } }
 
-export const SteeringFollowUp = {
-  render: () => <ComposerStory prompt={text("Use this correction at the next boundary")} working />,
-}
+export const SteeringFollowUp = { args: { prompt: text("Use this correction at the next boundary"), working: true } }
 
-export const FailedSubmissionRestoration = {
-  render: () => <ComposerStory prompt={text("Preserve this draft on failure")} failure />,
-}
+export const FailedSubmissionRestoration = { args: { prompt: text("Preserve this draft on failure"), failure: true } }
+
+export const Sending = { args: { prompt: text("Run the focused tests"), sending: true } }
 
 export const NewSessionFirstPrompt = {
-  render: () => (
-    <ComposerStory prompt={text("Create the Session and implement the change")} label="New Session draft" />
-  ),
+  args: { prompt: text("Create the Session and implement the change"), label: "New Session draft" },
 }
 
 export const ActiveSessionFollowUp = {
-  render: () => <ComposerStory prompt={text("Now add focused coverage")} label="Active Session follow-up" />,
+  args: { prompt: text("Now add focused coverage"), label: "Active Session follow-up" },
 }
 
 export const RightToLeft = {
   globals: { direction: "rtl" },
-  render: () => <ComposerStory prompt={text("راجع src/app.tsx ثم شغّل bun test")} />,
+  args: { prompt: text("راجع src/app.tsx ثم شغّل bun test") },
 }
 
 export const NarrowLayout = {
   parameters: { viewport: { defaultViewport: "mobile1" } },
-  render: () => (
+  args: { prompt: text("Verify the narrow Composer") },
+  render: (args: FlowArgs) => (
     <div class="w-[340px]">
-      <ComposerStory prompt={text("Verify the narrow Composer")} />
+      <ComposerStory {...args} />
     </div>
   ),
 }
 
 export const ToolbarOverflow = {
-  args: { alternate: "queue" },
-  argTypes: { alternate: { control: "select", options: ["none", "queue", "steer"] } },
-  render: (args: { alternate: "none" | "queue" | "steer" }) => (
+  args: { alternate: "queue", working: true, prompt: text("Keep all controls reachable when the toolbar overflows") },
+  render: (args: FlowArgs) => (
     <div class="w-[min(420px,calc(100vw-80px))]">
-      <ComposerStory
-        longLabels
-        working
-        prompt={text("Keep all controls reachable when the toolbar overflows")}
-        alternate={args.alternate === "none" ? undefined : args.alternate}
-      />
+      <ComposerStory {...args} longLabels />
     </div>
   ),
 }
 
 export const DemoFirstClassSkillIDs = {
   name: "Demo: First-class skill IDs",
-  render: () => (
+  args: { suggestions: "context", label: "Select a skill from the context menu" },
+  render: (args: FlowArgs) => (
     <DemoFrame
       title="First-class skill IDs"
       description="Choose @effect, then Send. The output shows the durable skill ID sent to the prompt API."
     >
-      <ComposerStory suggestions="context" inspectRequest label="Select a skill from the context menu" />
+      <ComposerStory {...args} inspectRequest />
     </DemoFrame>
   ),
 }
 
 export const DemoStructuredCustomCommand = {
   name: "Demo: Structured custom command",
-  render: () => (
+  render: (args: FlowArgs) => (
     <DemoFrame
       title="Structured custom-command input"
       description="Send the draft. Files, agents, and skills remain structured instead of becoming plain command text."
     >
       <ComposerStory
+        {...args}
         inspectRequest
         prompt={[
           { type: "text", content: "/review ", start: 0, end: 8 },
@@ -449,17 +625,19 @@ export const DemoServerOwnedExecutionStatus = {
 
 export const DemoDurableSelectionPrecedence = {
   name: "Demo: Durable selection precedence",
-  render: () => <SelectionPrecedenceDemo />,
+  args: { label: "Composer is ready", prompt: text("Continue with the resolved Session selection") },
+  render: (args: FlowArgs) => <SelectionPrecedenceDemo {...args} />,
 }
 
 export const DemoContinueOnStop = {
   name: "Demo: Continue on Stop",
-  render: () => (
+  args: { working: true, stopping: true, label: "Session execution is running" },
+  render: (args: FlowArgs) => (
     <DemoFrame
       title="Continue admitted work after Stop"
       description="Press Stop. The output shows the interrupt request used by the active Session adapter."
     >
-      <ComposerStory working stopping continueOnStop label="Session execution is running" />
+      <ComposerStory {...args} continueOnStop />
     </DemoFrame>
   ),
 }
@@ -547,7 +725,7 @@ function ServerStatusDemo() {
   )
 }
 
-function SelectionPrecedenceDemo() {
+function SelectionPrecedenceDemo(props: FlowArgs) {
   const [store, setStore] = createStore({ durable: true })
 
   const selection = createMemo(() =>
@@ -580,7 +758,7 @@ function SelectionPrecedenceDemo() {
         >
           {store.durable ? "Remove durable Session state" : "Restore durable Session state"}
         </button>
-        <ComposerStory prompt={text("Continue with the resolved Session selection")} label="Composer is ready" />
+        <ComposerStory {...props} />
       </div>
     </DemoFrame>
   )

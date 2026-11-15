@@ -1,0 +1,25 @@
+.truncated-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.truncated-text > [data-slot="truncated-text-label"] {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.truncated-text-tooltip {
+  max-width: min(360px, calc(100vw - 32px));
+  overflow-wrap: anywhere;
+  line-height: var(--line-height-compact);
+}
+
+@media (max-width: 639px), (hover: none) {
+  .truncated-text > [data-slot="truncated-text-label"] {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

@@ -5,7 +5,6 @@ import { StorageChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import { IpcPortHandoff } from "../ipc-transport"
 import { DesktopStorage } from "../storage"
-import { sender } from "./context"
 
 export const storageHandlers = StorageRpcs.toLayer(
   Effect.gen(function* () {
@@ -17,12 +16,12 @@ export const storageHandlers = StorageRpcs.toLayer(
       StorageUpdate: ({ name, insert, remove }, context) =>
         Effect.sync(() => {
           const revision = storage.state.update(name, insert, remove)
-          // Other windows hold their own copy of this namespace; tell them what moved.
-          const origin = sender(handoff, context)
+          // Other windows hold their own copy of this namespace; tell them what moved. A reloading
+          // window's new document is another copy too: an unloading document's flush reaches it.
           const event = new StorageChanged({ name, insert, remove, revision })
 
           for (const win of BrowserWindow.getAllWindows()) {
-            if (win.webContents !== origin) emitIpcEvent(win.webContents, event)
+            if (!handoff.isCurrentClient(win.webContents, context.client.id)) emitIpcEvent(win.webContents, event)
           }
 
           return revision

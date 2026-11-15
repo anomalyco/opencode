@@ -10,7 +10,7 @@ import {
   type WebSocketConnection,
   type WebSocketConnector,
 } from "@opencode/ai/route"
-import { AIError, AIErrorReason, TransportError, type TransportOperation } from "@opencode/ai"
+import { AIError, AIErrorReason, TransportError, type TransportOperation } from "@opencode/ai/effect"
 import { Hash } from "@opencode/util/hash"
 import { Cause, Clock, Context, Duration, Effect, Fiber, Layer, Metric, Queue, Scope, Semaphore, Stream } from "effect"
 import { Headers } from "effect/http"

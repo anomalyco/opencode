@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/composer/state"
-import { prependHistoryEntry, removeHistoryEntry, type PromptHistoryComment } from "./entry"
+import { prependHistoryEntry, removeHistoryEntry, type PromptHistoryComment, type PromptHistoryEntry } from "./entry"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
@@ -51,6 +51,27 @@ describe("Composer history", () => {
 
     const removed = removeHistoryEntry(entries, image, [comment("c1")])
     expect(removed).toEqual(prependHistoryEntry([], text("earlier")))
+  })
+
+  test("prependHistoryEntry keeps 100 recent entries and up to 100 older attachment-free ones", () => {
+    const attached = (index: number): Prompt => [
+      ...text(`shot ${index}`),
+      index % 2
+        ? { type: "image", id: `img${index}`, filename: "a.png", mime: "image/png", blob: { id: `h${index}`, url: "" } }
+        : { type: "path", id: `att${index}`, filename: "a.mp4", mime: "video/mp4", path: `/tmp/${index}.mp4` },
+    ]
+
+    const sent = Array.from({ length: 300 }, (_, index) => (index % 3 ? text(`prompt ${index}`) : attached(index)))
+    const mixed = sent.reduce<PromptHistoryEntry[]>((entries, prompt) => prependHistoryEntry(entries, prompt), [])
+    const newest = sent.toReversed()
+
+    expect(mixed.slice(0, 100).map((entry) => entry.prompt)).toEqual(newest.slice(0, 100))
+    expect(mixed.slice(100).map((entry) => entry.prompt)).toEqual(
+      newest
+        .slice(100)
+        .filter((prompt) => prompt.length === 1)
+        .slice(0, 100),
+    )
   })
 
   test("insertion isolates canonical entries from source mutations", () => {

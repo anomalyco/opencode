@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "تغییر وضعیت نوار اشکال‌زدایی",
+  providerAriaLabel: "عیب‌یابی عملکرد ارائه‌دهنده",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "زمان از درخواستی که آخرین نوبت را آغاز کرد تا تکمیل پاسخ آن.",
+  "tps.label": "TPS",
+  "tps.tip": "توکن‌های خروجی و استدلال در ثانیه در درخواست‌های مدل در آخرین نوبت، بدون احتساب زمان ابزارها.",
+  "focus.label": "FOCUS",
+  "focus.tip": "سبک های فوکوس اجباری بر روی تمام عناصر تعاملی",
+  "focus.on": "ON",
+  "focus.off": "OFF",
+  "direction.label": "مدیر",
+  "direction.tip": "بدون تغییر زبان انتخابی، جهت طرح بندی کامل برنامه را اجباری کنید",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

@@ -1,22 +1,21 @@
 import { createMemo } from "solid-js"
+import { useRenderer } from "@opentui/solid"
 import { useData } from "../../context/data"
 import { DialogSelect } from "../../ui/dialog-select"
 import { useClipboard } from "../../context/clipboard"
 import { useToast } from "../../ui/toast"
 import { errorMessage } from "../../util/error"
 import { DialogFork } from "./dialog-fork"
-import type { PromptInfo } from "../../prompt/history"
-import { projectedPromptInput } from "../../prompt/codec"
+import { usePromptRestore } from "../../prompt/restore"
 import { useNewDesigns } from "../../config"
+import { appendToSessionPrompt } from "../../component/prompt/draft-stash"
 
-export function DialogMessage(props: {
-  messageID: string
-  sessionID: string
-  setPrompt?: (prompt: PromptInfo) => void
-}) {
+export function DialogMessage(props: { messageID: string; sessionID: string }) {
   const data = useData()
   const clipboard = useClipboard()
   const toast = useToast()
+  const renderer = useRenderer()
+  const restorePrompt = usePromptRestore()
   const newDesigns = useNewDesigns()
   const message = createMemo(() => data.session.message.get(props.sessionID, props.messageID))
 
@@ -37,16 +36,13 @@ export function DialogMessage(props: {
           description: "undo messages and file changes",
           onSelect: (dialog) => {
             const value = message()
-            void data.session
-              .undo({ sessionID: props.sessionID, messageID: props.messageID })
-              .then(() => {
-                if (value?.type !== "user") return
-                props.setPrompt?.({
-                  ...projectedPromptInput(value),
-                  pasted: [],
-                })
-              })
-              .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
+            const { sessionID, messageID } = props
+            // The composer changes only once the revert is staged, so a failed revert leaves the draft alone.
+            void (async () => {
+              const restored = value?.type === "user" ? await restorePrompt(value) : undefined
+              await data.session.undo({ sessionID, messageID })
+              if (restored) appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
+            })().catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
             dialog.clear()
           },
         },

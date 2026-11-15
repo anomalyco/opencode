@@ -46,7 +46,7 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
   events.emit({ ...event, location: { directory } })
 }
 
-const config = createTuiResolvedConfig()
+const config = createTuiResolvedConfig({ session: { verbosity: "medium" } })
 
 function DataProvider(props: ParentProps) {
   return (
@@ -113,13 +113,14 @@ test("does not preload session summaries into the data context", async () => {
   }
 })
 
-test("syncs VCS info and applies branch updates", async () => {
+test("syncs VCS info and reloads it on branch updates", async () => {
   const events = createEventStream()
+  let branch = "main"
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/vcs") return undefined
     return json({
       location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
-      data: { branch: { current: "main", default: "main" } },
+      data: { branch: { current: branch, default: "main" } },
     })
   }, events)
   let data!: ReturnType<typeof useData>
@@ -143,6 +144,7 @@ test("syncs VCS info and applies branch updates", async () => {
 
   try {
     await wait(() => data.location.vcs.info()?.branch.current === "main")
+    branch = "feature"
     emitEvent(events, {
       id: "evt_vcs_branch",
       created: Date.now(),

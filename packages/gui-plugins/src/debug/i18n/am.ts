@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "የማረሚያ አሞሌን ቀይር",
+  providerAriaLabel: "የአቅራቢ አፈጻጸም ምርመራ",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "የመጨረሻውን ዙር ከጀመረው ጥያቄ እስከ ምላሹ መጠናቀቅ ድረስ ያለው ጊዜ።",
+  "tps.label": "TPS",
+  "tps.tip": "በመጨረሻው ዙር የሞዴል ጥያቄዎች ውስጥ በሰከንድ የሚወጡ የውጤት እና የማሰብ ቶከኖች፣ የመሳሪያ ጊዜን ሳይጨምር።",
+  "focus.label": "ትኩረት",
+  "focus.tip": "በሁሉም በይነተገናኝ አካላት ላይ የማተኮር ቅጦችን አስገድድ",
+  "focus.on": "በርቷል",
+  "focus.off": "ጠፍቷል",
+  "direction.label": "DIR",
+  "direction.tip": "የተመረጠውን ቋንቋ ሳይቀይሩ ሙሉውን የመተግበሪያ አቀማመጥ አቅጣጫ ያስገድዱ",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

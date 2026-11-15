@@ -21,7 +21,7 @@ export type SettingsSearchResult = {
   view: SettingsView
 }
 
-export function rankSettings(query: string, items: SettingsSearchResult[], origin: SettingsView) {
+export function rankSettings(query: string, items: SettingsSearchResult[]) {
   const value = normalize(query)
 
   if (!value) return []
@@ -59,20 +59,12 @@ export function rankSettings(query: string, items: SettingsSearchResult[], origi
 
       if (!score) return []
 
-      const proximity =
-        origin.type === "project" && origin.server === item.server && origin.project === item.project
-          ? 2
-          : origin.type !== "root" && origin.server === item.server
-            ? 1
-            : 0
-
-      return [{ item, score, proximity }]
+      return [{ item, score }]
     })
     .sort(
       (a, b) =>
         Number(!!b.item.topLevel) - Number(!!a.item.topLevel) ||
         b.score - a.score ||
-        b.proximity - a.proximity ||
         a.item.title.localeCompare(b.item.title),
     )
     .map((result) => result.item)

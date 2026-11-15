@@ -286,4 +286,30 @@ describe("LocationActivity eviction", () => {
         )
       }),
     )
+
+  it.effect("refreshes inactivity deadline for session events with non-canonical location refs", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const map = yield* LocationServiceMap.Service
+      const raw = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+      const ref = LocationServiceMap.canonical(raw)
+
+      yield* Location.Service.pipe(Effect.provide(map.get(raw)), Effect.scoped)
+      expect(yield* RcMap.has(map.rcMap, raw)).toBe(false)
+      expect(yield* RcMap.has(map.rcMap, ref)).toBe(true)
+
+      yield* TestClock.adjust("31 minutes")
+      yield* bus.publish(
+        SessionEvent.Execution.Started,
+        { sessionID: Session.ID.make("ses_activity") },
+        { location: raw },
+      )
+
+      yield* TestClock.adjust("32 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
+
+      yield* TestClock.adjust("30 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+    }),
+  )
 })

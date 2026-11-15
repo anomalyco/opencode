@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "ডিবাগ বার টগল করুন",
+  providerAriaLabel: "প্রদানকারীর কর্মক্ষমতা নির্ণয়",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "সর্বশেষ টার্ন শুরু করা প্রম্পট থেকে তার উত্তর সম্পূর্ণ হওয়া পর্যন্ত সময়।",
+  "tps.label": "TPS",
+  "tps.tip": "সর্বশেষ টার্নের মডেল অনুরোধগুলিতে প্রতি সেকেন্ডে আউটপুট ও রিজনিং টোকেন, টুলের সময় বাদে।",
+  "focus.label": "FOCUS",
+  "focus.tip": "সমস্ত ইন্টারেক্টিভ উপাদানের উপর ফোকাস শৈলী জোর করুন",
+  "focus.on": "চালু",
+  "focus.off": "বন্ধ",
+  "direction.label": "DIR",
+  "direction.tip": "নির্বাচিত ভাষা পরিবর্তন না করে সম্পূর্ণ অ্যাপ লেআউটের দিকনির্দেশ জোর করে",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

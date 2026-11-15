@@ -8,7 +8,7 @@ import { setStorageSnapshotProvider } from "./snapshot"
 import { createDraftStore } from "./drafts"
 import { importLegacyStores } from "./legacy"
 import { createStateStore } from "./state"
-import { readEnableState } from "../extension/enable-state"
+import { readEnableState } from "../plugin/enable-state"
 
 export type Interface = ReturnType<typeof make>
 
@@ -47,7 +47,7 @@ export const layer = Layer.effect(
     )
     setStorageSnapshotProvider((names) => ({
       storage: Object.fromEntries(names.map((name) => [name, storage.state.items(name)])),
-      extensions: readEnableState(storage.db.$client),
+      plugins: readEnableState(storage.db.$client),
     }))
     marks.storage = Date.now()
 

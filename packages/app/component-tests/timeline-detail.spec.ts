@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("maps grouped and collapsed switches to the timeline settings", async ({ mount }) => {
   const component = await mount("settings-timeline-detail--interactive")
@@ -8,7 +8,7 @@ story("maps grouped and collapsed switches to the timeline settings", async ({ m
   const collapsed = shell.getByRole("switch", { name: "Shell collapsed", exact: true })
   const value = component.locator('[data-slot="timeline-detail-fixture-value"]')
 
-  await expect(component.getByRole("switch")).toHaveCount(9)
+  await expect(component.getByRole("switch")).toHaveCount(10)
   await expect(component.getByText("Activity", { exact: true })).toHaveCount(0)
   await expect(grouped).toBeChecked()
   await expect(collapsed).toBeChecked()
@@ -138,7 +138,8 @@ story("keeps visibility and switches in sync with the preset slider", async ({ m
   await slider.focus()
   await slider.press("Home")
   await expect(slider).toHaveAttribute("aria-valuetext", "Messages only")
-  await expect(component.getByRole("switch")).toHaveCount(0)
+  // Messages only hides every activity but keeps commentary, which is text.
+  await expect(component.getByRole("switch")).toHaveAccessibleName("Commentary grouped")
   await expect(component.locator('[data-slot="timeline-detail-unavailable"]')).toHaveCount(9)
   await expect(component.locator('[data-action="timeline-detail-visibility"][aria-pressed="false"]')).toHaveCount(6)
   await component.getByRole("button", { name: "Shell visibility" }).click()
@@ -147,9 +148,9 @@ story("keeps visibility and switches in sync with the preset slider", async ({ m
   await slider.focus()
   await slider.press("End")
   await expect(slider).toHaveAttribute("aria-valuetext", "Everything")
-  await expect(component.getByRole("switch")).toHaveCount(9)
+  await expect(component.getByRole("switch")).toHaveCount(10)
   await expect(component.locator('[data-slot="timeline-detail-unavailable"]')).toHaveCount(0)
-  await expect(component.locator('[data-action="timeline-detail-visibility"][aria-pressed="true"]')).toHaveCount(6)
+  await expect(component.locator('[data-action="timeline-detail-visibility"][aria-pressed="true"]')).toHaveCount(7)
   await expect(component.getByRole("switch", { checked: true })).toHaveCount(0)
 })
 

@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "デバッグバーを切り替え",
+  providerAriaLabel: "プロバイダーのパフォーマンス診断",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "直近のターンを開始したプロンプトから応答が完了するまでの時間。",
+  "tps.label": "TPS",
+  "tps.tip": "直近のターンのモデルリクエスト全体での1秒あたりの出力・推論トークン数（ツールの実行時間を除く）。",
+  "focus.label": "FOCUS",
+  "focus.tip": "すべてのインタラクティブ要素にフォーカススタイルを強制適用",
+  "focus.on": "オン",
+  "focus.off": "オフ",
+  "direction.label": "DIR",
+  "direction.tip": "選択中の言語を変更せずに、アプリ全体のレイアウト方向を強制設定",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

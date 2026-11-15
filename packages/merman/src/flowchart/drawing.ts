@@ -29,6 +29,7 @@ import {
 import type {
   FlowchartDiagram,
   FlowchartEdgeRoute,
+  FlowchartEndpointBounds,
   FlowchartNode,
   FlowchartNodeBounds,
   FlowchartPoint,
@@ -256,7 +257,7 @@ function fadeSourcePath(
 function drawSourceConnectors(
   grid: FlowchartGrid,
   diagram: FlowchartDiagram,
-  bounds: Map<string, FlowchartNodeBounds>,
+  endpoints: ReadonlyMap<string, FlowchartEndpointBounds>,
   routes: readonly FlowchartEdgeRoute[],
 ): void {
   const nodesById = new Map(diagram.nodes.map((node) => [node.id, node]))
@@ -275,7 +276,7 @@ function drawSourceConnectors(
   }
 
   for (const route of routes) {
-    const from = bounds.get(route.edge.from)
+    const from = endpoints.get(route.edge.from)
     const sourcePoint = route.points[0]
     if (!from || !sourcePoint) continue
     const styles = sourceFadeStyles(flowchartNodeStyle(nodesById.get(route.edge.from)))
@@ -328,7 +329,8 @@ export function drawFlowchartDiagramGrid(
     const bound = bounds.get(node.id)
     if (bound) drawNode(grid, node, bound, borderStyle)
   }
-  drawSourceConnectors(grid, diagram, bounds, routes)
+  const endpoints = new Map<string, FlowchartEndpointBounds>([...subgraphBounds, ...bounds])
+  drawSourceConnectors(grid, diagram, endpoints, routes)
   for (const subgraph of diagram.subgraphs ?? []) {
     const bound = subgraphBounds.get(subgraph.id)
     if (bound) drawSubgraphLabel(grid, bound)

@@ -9,8 +9,8 @@
   --font-size-base: 14px;
   --font-size-large: 16px;
   --font-size-x-large: 20px;
-  --font-weight-regular: 400;
-  --font-weight-medium: 500;
+  --font-weight-regular: 440;
+  --font-weight-medium: 530;
   --font-weight-bold: 670;
   --line-height-normal: 130%;
   --line-height-large: 150%;
@@ -629,4 +629,12 @@
     --avatar-text-lime: #c4f042;
     --text-stronger: rgba(255, 255, 255, 0.936);
   }
+}
+
+/* CJK system fonts ship fixed weights, so 440 and 530 snap up to Medium and Semibold. */
+:lang(zh),
+:lang(ja),
+:lang(ko) {
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
 }

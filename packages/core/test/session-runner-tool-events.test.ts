@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { eq } from "drizzle-orm"
-import { LLMEvent } from "@opencode/ai"
+import { LLMEvent } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
@@ -21,6 +21,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Snapshot } from "@opencode/core/snapshot"
 import { createLLMEventPublisher } from "@opencode/core/session/runner/publish-llm-event"
+import { SessionUsage } from "@opencode/core/session/usage"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { it, testEffect } from "./lib/effect"
 import { TestClock } from "effect/testing"
@@ -398,7 +399,7 @@ it.effect("publishes batched deltas before the next block starts", () =>
     const types = () =>
       published
         .map((event) => event.type)
-        .filter((type) => type !== "session.step.started.1" && type !== "session.step.streamed")
+        .filter((type) => type !== "session.step.started.1" && type !== "session.step.first-token.1")
     yield* Effect.forEach(
       [
         LLMEvent.reasoningStart({ id: "reasoning" }),
@@ -417,6 +418,8 @@ it.effect("publishes batched deltas before the next block starts", () =>
       "session.text.delta",
       "session.tool.input.started.1",
     ])
+    // The first generated token is recorded once, before any of the blocks it belongs to.
+    expect(published.filter((event) => event.type === "session.step.first-token.1")).toHaveLength(1)
 
     // Blocks stay open: later chunks still batch, and nothing is published twice.
     yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " more" }))
@@ -638,13 +641,13 @@ test("content-filter finish retains failure evidence until step closeout", async
     native: {
       stopDetails: { type: "refusal", category: "safety", explanation: "Blocked" },
     },
-    tokens: { input: 8, output: 2, reasoning: 1 },
+    usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1 },
   })
   if (!settlement) throw new Error("Expected content-filter settlement")
   await Effect.runPromise(
     publisher.publishStepFailure({
       cost: Money.USD.make(1.25),
-      tokens: settlement.tokens,
+      tokens: SessionUsage.tokens(settlement.usage),
       snapshot: Snapshot.ID.make("tree-end"),
       files: [RelativePath.make("src/changed.ts")],
     }),
