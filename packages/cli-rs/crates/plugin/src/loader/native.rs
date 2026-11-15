@@ -703,7 +703,7 @@ impl Instance {
             Ok(manifest) => {
                 let mut ctx = context.ctx.borrow_mut();
                 ctx.id = manifest.id.clone();
-                ctx.keys = manifest.storage.clone();
+                ctx.keys = manifest.storage.iter().take(crate::storage::KEYS).cloned().collect();
                 drop(ctx);
                 Ok((instance, manifest))
             }
@@ -958,15 +958,15 @@ unsafe extern "C" fn host_free(owned: Owned) {
 }
 
 pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, String> {
+    // The host's names of a declared key, which no other plugin's key shares (review carbon-6).
     let key = |ctx: &Ctx, key: &str| {
         if ctx.id.is_empty() {
             return Err("the plugin ID is not known during setup".to_owned());
         }
-        ctx.keys
-            .iter()
-            .any(|known| known == key)
-            .then(|| format!("plugin.{}.{key}", ctx.id))
-            .ok_or_else(|| format!("storage key {key} was not declared"))
+        if !ctx.keys.iter().any(|known| known == key) {
+            return Err(format!("storage key {key} was not declared"));
+        }
+        crate::storage::name(&ctx.id, key)
     };
     if ctx.read_only && effect(&request) {
         return Err("a render or a view reads the host and asks for no effect".to_owned());
@@ -988,21 +988,25 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::StorageSet { .. } | HostRequest::StorageMerge { .. } if ctx.quiet => {}
         HostRequest::StorageGet { key: name } => {
             let stored = key(ctx, &name)?;
-            let value = ctx.host.upgrade().and_then(|host| host.storage_read(&stored));
+            let value = ctx.host.upgrade().and_then(|host| crate::storage::read(&*host, &stored));
             return Ok(serde_json::to_value(value).unwrap_or_default());
         }
         HostRequest::StorageSet { key: name, value } => {
             let stored = key(ctx, &name)?;
+            crate::storage::bounded(value.len())?;
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
-            ctx.undo.record(&*host, &stored);
-            host.storage_write(&stored, &value)?;
+            ctx.undo.record(&*host, &stored.now);
+            host.storage_write(&stored.now, &value)?;
             ctx.effects.push(Effect::Stored);
         }
         HostRequest::StorageMerge { key: name, fields } => {
             let stored = key(ctx, &name)?;
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
-            ctx.undo.record(&*host, &stored);
-            host.storage_merge(&stored, fields)?;
+            let held = crate::storage::read(&*host, &stored).map_or(0, |json| json.len());
+            crate::storage::bounded(held + serde_json::Value::Object(fields.clone()).to_string().len())?;
+            ctx.undo.record(&*host, &stored.now);
+            crate::storage::migrate(&*host, &stored)?;
+            host.storage_merge(&stored.now, fields)?;
             ctx.effects.push(Effect::Stored);
         }
         HostRequest::OpenRoute { name } => ctx.effects.push(Effect::Route(name)),
@@ -1010,11 +1014,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             let color = ctx.host.upgrade().and_then(|host| theme_color(&host.theme(), &token));
             return Ok(serde_json::to_value(color).unwrap_or_default());
         }
-        HostRequest::StorageKey { key } => {
-            if !ctx.keys.contains(&key) {
-                ctx.keys.push(key);
-            }
-        }
+        HostRequest::StorageKey { key } => crate::storage::declare(&mut ctx.keys, &key)?,
         HostRequest::Session { id } => return read(ctx, |read| serde_json::to_value(read.session(&id))),
         HostRequest::Family { id } => return read(ctx, |read| serde_json::to_value(read.family(&id))),
         HostRequest::Sessions => return read(ctx, |read| serde_json::to_value(read.sessions())),
