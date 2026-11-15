@@ -6,6 +6,9 @@ export type TreeRefreshScope = { readonly serverID: string; readonly root: strin
 
 type TreeRefreshRunningState = Extract<TreeRefreshState, { status: "running" }>
 
+/** The transition `startTargets` always produces: its state is running by construction. */
+type TreeRefreshRunningTransition = { state: TreeRefreshRunningState; effects: readonly TreeRefreshEffect[] }
+
 export type TreeRefreshState =
   | { readonly status: "idle"; readonly attempt: number }
   /** The click's targets are captured and the action's config is being read; duplicate clicks do nothing. */
@@ -154,7 +157,7 @@ function startTargets(
   pending: readonly TreeRefreshTarget[],
   active: ReadonlySet<string>,
   errors: readonly string[],
-): { state: TreeRefreshRunningState; effects: readonly TreeRefreshEffect[] } {
+): TreeRefreshRunningTransition {
   const slots = Math.max(concurrency - active.size, 0)
   const begin = pending.slice(0, slots)
   const rest = pending.slice(slots)
@@ -166,5 +169,5 @@ function startTargets(
   return {
     state: { status: "running", attempt, scope, concurrency, pending: rest, active: nextActive, errors },
     effects: begin.map((target) => ({ type: "sync", attempt, target })),
-  }
+  } satisfies TreeRefreshRunningTransition
 }

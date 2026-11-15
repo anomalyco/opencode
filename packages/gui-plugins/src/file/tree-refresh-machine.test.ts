@@ -213,6 +213,7 @@ describe("transitionTreeRefresh", () => {
       attempt: 1,
       concurrency: 1,
     })
+
     const failed = play(begin.state, settled(1, "", "root unreachable"))
 
     expect(failed.state.status).toBe("running")
@@ -236,6 +237,7 @@ describe("transitionTreeRefresh", () => {
       attempt: 1,
       concurrency: 4,
     })
+
     const disposed = transitionTreeRefresh(begin.state, { type: "disposed" })
 
     expect(disposed.state).toMatchObject({ status: "disposed", attempt: 1 })

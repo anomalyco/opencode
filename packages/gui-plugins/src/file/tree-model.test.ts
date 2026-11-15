@@ -92,6 +92,7 @@ describe("collectRefreshTargets", () => {
       ["src", [{ name: "lib", path: "src\\lib", absolute: "/repo/src/lib", type: "directory", ignored: false }]],
       ["src/lib", []],
     ])
+
     const loaded = new Set(["src", "src/lib"])
 
     const targets = collectRefreshTargets((path) => nodes.get(path) ?? [], (dir) => ({
@@ -116,6 +117,7 @@ describe("collectRefreshTargets", () => {
       ],
       ["vendor", [{ name: "deep", path: "vendor/deep", absolute: "/repo/vendor/deep", type: "directory", ignored: false }]],
     ])
+
     const loaded = new Set<string>()
 
     const targets = collectRefreshTargets((path) => nodes.get(path) ?? [], (dir) => ({ loaded: loaded.has(dir) }))

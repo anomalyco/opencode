@@ -46,6 +46,7 @@ export default function TreeRefreshButton(props: { session: MountedSession; scre
     }
 
     const { attempt, target } = effect
+
     // A directory pruned while it waited is not reloaded; the root always syncs.
     if (target.dir !== "" && !file.tree.state(target.dir)?.loaded) {
       dispatch({ type: "sync.skipped", attempt, dir: target.dir })
