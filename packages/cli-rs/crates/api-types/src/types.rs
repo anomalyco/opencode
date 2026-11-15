@@ -253,7 +253,12 @@ pub enum ProviderSettingsTimeout {
 
 impl<'de> Deserialize<'de> for ProviderSettingsTimeout {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ProviderSettingsTimeout {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Number(member));
         }
@@ -286,7 +291,12 @@ pub enum ProviderCompaction {
 
 impl<'de> Deserialize<'de> for ProviderCompaction {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ProviderCompaction {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("summary") => raw.variant().map(Self::Summary),
             Some("native") => raw.variant().map(Self::Native),
@@ -361,7 +371,12 @@ pub enum ProviderCacheWarming {
 
 impl<'de> Deserialize<'de> for ProviderCacheWarming {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ProviderCacheWarming {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
@@ -756,7 +771,12 @@ pub enum PluginSource {
 
 impl<'de> Deserialize<'de> for PluginSource {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl PluginSource {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("builtin") => raw.variant().map(Self::Builtin),
             Some("package") => raw.variant().map(Self::Package),
@@ -817,7 +837,12 @@ pub enum PluginState {
 
 impl<'de> Deserialize<'de> for PluginState {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl PluginState {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("active") => raw.variant().map(Self::Active),
             Some("failed") => raw.variant().map(Self::Failed),
@@ -1112,7 +1137,12 @@ pub enum SessionForkBoundary {
 
 impl<'de> Deserialize<'de> for SessionForkBoundary {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionForkBoundary {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("before") => raw.variant().map(Self::Before),
             Some("through") => raw.variant().map(Self::Through),
@@ -1527,7 +1557,12 @@ pub enum PromptFileSource {
 
 impl<'de> Deserialize<'de> for PromptFileSource {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl PromptFileSource {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("inline") => raw.variant().map(Self::Inline),
             Some("uri") => raw.variant().map(Self::Uri),
@@ -2068,7 +2103,12 @@ pub enum SessionMessageShellExit {
 
 impl<'de> Deserialize<'de> for SessionMessageShellExit {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionMessageShellExit {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Number(member));
         }
@@ -2182,7 +2222,12 @@ pub enum ToolContent {
 
 impl<'de> Deserialize<'de> for ToolContent {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ToolContent {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("file") => raw.variant().map(Self::File),
@@ -2252,7 +2297,12 @@ pub enum SessionMessageAssistantToolState {
 
 impl<'de> Deserialize<'de> for SessionMessageAssistantToolState {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionMessageAssistantToolState {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("streaming") => raw.variant().map(Self::Streaming),
             Some("running") => raw.variant().map(Self::Running),
@@ -2311,7 +2361,12 @@ pub enum SessionMessageAssistantContentItem {
 
 impl<'de> Deserialize<'de> for SessionMessageAssistantContentItem {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionMessageAssistantContentItem {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("reasoning") => raw.variant().map(Self::Reasoning),
@@ -2551,7 +2606,12 @@ pub enum SessionMessageCompaction {
 
 impl<'de> Deserialize<'de> for SessionMessageCompaction {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionMessageCompaction {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("running") => raw.variant().map(Self::Running),
             Some("completed") => raw.variant().map(Self::Completed),
@@ -2695,7 +2755,12 @@ pub enum SessionMessageInfo {
 
 impl<'de> Deserialize<'de> for SessionMessageInfo {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionMessageInfo {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("agent-switched") => raw.variant().map(Self::AgentSwitched),
             Some("model-switched") => raw.variant().map(Self::ModelSwitched),
@@ -3024,7 +3089,12 @@ pub enum SessionInboxInfo {
 
 impl<'de> Deserialize<'de> for SessionInboxInfo {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionInboxInfo {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("user") => raw.variant().map(Self::User),
             Some("synthetic") => raw.variant().map(Self::Synthetic),
@@ -3265,7 +3335,12 @@ pub enum FormWhenValue {
 
 impl<'de> Deserialize<'de> for FormWhenValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl FormWhenValue {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
@@ -3486,7 +3561,12 @@ pub enum FormField {
 
 impl<'de> Deserialize<'de> for FormField {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl FormField {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("string") => raw.variant().map(Self::String),
             Some("number") => raw.variant().map(Self::Number),
@@ -3672,7 +3752,12 @@ pub enum FormValue {
 
 impl<'de> Deserialize<'de> for FormValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl FormValue {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
@@ -3718,7 +3803,12 @@ pub enum FormState {
 
 impl<'de> Deserialize<'de> for FormState {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl FormState {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("answered") => raw.variant().map(Self::Answered),
@@ -3901,7 +3991,12 @@ pub enum SessionStatsTools {
 
 impl<'de> Deserialize<'de> for SessionStatsTools {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionStatsTools {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("mode").as_str() {
             Some("none") => raw.variant().map(Self::None),
             Some("summary") => raw.variant().map(Self::Summary),
@@ -4602,7 +4697,12 @@ pub enum SessionInboxItem {
 
 impl<'de> Deserialize<'de> for SessionInboxItem {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionInboxItem {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("user") => raw.variant().map(Self::User),
             Some("synthetic") => raw.variant().map(Self::Synthetic),
@@ -5552,7 +5652,12 @@ pub enum SessionMessageAssistantContentEncoded {
 
 impl<'de> Deserialize<'de> for SessionMessageAssistantContentEncoded {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionMessageAssistantContentEncoded {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("reasoning") => raw.variant().map(Self::Reasoning),
@@ -5674,7 +5779,12 @@ pub enum SessionEventDurable {
 
 impl<'de> Deserialize<'de> for SessionEventDurable {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionEventDurable {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("session.created") => raw.variant().map(Self::SessionCreated),
             Some("session.agent.selected") => raw.variant().map(Self::SessionAgentSelected),
@@ -6255,7 +6365,12 @@ pub enum SessionLogItem {
 
 impl<'de> Deserialize<'de> for SessionLogItem {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionLogItem {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("session.created")
             | Some("session.agent.selected")
@@ -6980,7 +7095,12 @@ pub enum GenerateDecisionPart {
 
 impl<'de> Deserialize<'de> for GenerateDecisionPart {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl GenerateDecisionPart {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("json") => raw.variant().map(Self::Json),
@@ -7031,7 +7151,12 @@ pub enum GenerateChoiceValue {
 
 impl<'de> Deserialize<'de> for GenerateChoiceValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl GenerateChoiceValue {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
@@ -7085,7 +7210,12 @@ pub enum GenerateDecisionQuestion {
 
 impl<'de> Deserialize<'de> for GenerateDecisionQuestion {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl GenerateDecisionQuestion {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("predicate") => raw.variant().map(Self::Predicate),
             Some("choice") => raw.variant().map(Self::Choice),
@@ -7202,7 +7332,12 @@ pub enum GenerateDecisionAnswer {
 
 impl<'de> Deserialize<'de> for GenerateDecisionAnswer {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl GenerateDecisionAnswer {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("predicate") => raw.variant().map(Self::Predicate),
             Some("choice") => raw.variant().map(Self::Choice),
@@ -7341,7 +7476,12 @@ pub enum VoiceTransportInput {
 
 impl<'de> Deserialize<'de> for VoiceTransportInput {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl VoiceTransportInput {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("webrtc") => raw.variant().map(Self::Webrtc),
             Some("websocket") => raw.variant().map(Self::Websocket),
@@ -7396,7 +7536,12 @@ pub enum VoiceTransport {
 
 impl<'de> Deserialize<'de> for VoiceTransport {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl VoiceTransport {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("webrtc") => raw.variant().map(Self::Webrtc),
             Some("websocket") => raw.variant().map(Self::Websocket),
@@ -7663,7 +7808,12 @@ pub enum IntegrationMethod {
 
 impl<'de> Deserialize<'de> for IntegrationMethod {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl IntegrationMethod {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("oauth") => raw.variant().map(Self::Oauth),
             Some("command") => raw.variant().map(Self::Command),
@@ -7825,7 +7975,12 @@ pub enum ConnectionInfo {
 
 impl<'de> Deserialize<'de> for ConnectionInfo {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConnectionInfo {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("credential") => raw.variant().map(Self::Credential),
             Some("env") => raw.variant().map(Self::Env),
@@ -8061,7 +8216,12 @@ pub enum IntegrationAttemptStatus {
 
 impl<'de> Deserialize<'de> for IntegrationAttemptStatus {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl IntegrationAttemptStatus {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("complete") => raw.variant().map(Self::Complete),
@@ -8222,7 +8382,12 @@ pub enum IntegrationCommandAttemptStatus {
 
 impl<'de> Deserialize<'de> for IntegrationCommandAttemptStatus {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl IntegrationCommandAttemptStatus {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("complete") => raw.variant().map(Self::Complete),
@@ -8347,7 +8512,12 @@ pub enum McpServerStatus {
 
 impl<'de> Deserialize<'de> for McpServerStatus {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl McpServerStatus {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("connected") => raw.variant().map(Self::Connected),
             Some("pending") => raw.variant().map(Self::Pending),
@@ -8540,7 +8710,12 @@ pub enum ExperimentalMcpAddInputConfigRemoteOauth {
 
 impl<'de> Deserialize<'de> for ExperimentalMcpAddInputConfigRemoteOauth {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ExperimentalMcpAddInputConfigRemoteOauth {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
@@ -8582,7 +8757,12 @@ pub enum ExperimentalMcpAddInputConfig {
 
 impl<'de> Deserialize<'de> for ExperimentalMcpAddInputConfig {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ExperimentalMcpAddInputConfig {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("local") => raw.variant().map(Self::Local),
             Some("remote") => raw.variant().map(Self::Remote),
@@ -8738,7 +8918,12 @@ pub enum CredentialValue {
 
 impl<'de> Deserialize<'de> for CredentialValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl CredentialValue {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("oauth") => raw.variant().map(Self::Oauth),
             Some("key") => raw.variant().map(Self::Key),
@@ -10321,7 +10506,12 @@ pub enum SessionStatus {
 
 impl<'de> Deserialize<'de> for SessionStatus {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl SessionStatus {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("idle") => raw.variant().map(Self::Idle),
             Some("retry") => raw.variant().map(Self::Retry),
@@ -10739,7 +10929,12 @@ pub enum V2Event {
 
 impl<'de> Deserialize<'de> for V2Event {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl V2Event {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("location.shutdown") => raw.variant().map(Self::LocationShutdown),
             Some("models-dev.refreshed") => raw.variant().map(Self::ModelsDevRefreshed),
@@ -11933,7 +12128,12 @@ pub enum ScheduleWhenInput {
 
 impl<'de> Deserialize<'de> for ScheduleWhenInput {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ScheduleWhenInput {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
@@ -11978,7 +12178,12 @@ pub enum ScheduleConditionInput {
 
 impl<'de> Deserialize<'de> for ScheduleConditionInput {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ScheduleConditionInput {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
@@ -12092,7 +12297,12 @@ pub enum ScheduleWhen {
 
 impl<'de> Deserialize<'de> for ScheduleWhen {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ScheduleWhen {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("in") => raw.variant().map(Self::In),
             Some("at") => raw.variant().map(Self::At),
@@ -12157,7 +12367,12 @@ pub enum ScheduleCondition {
 
 impl<'de> Deserialize<'de> for ScheduleCondition {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ScheduleCondition {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("shell") => raw.variant().map(Self::Shell),
             Some("code") => raw.variant().map(Self::Code),
@@ -12780,7 +12995,12 @@ pub enum JobInfo {
 
 impl<'de> Deserialize<'de> for JobInfo {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl JobInfo {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("kind").as_str() {
             Some("shell") => raw.variant().map(Self::Shell),
             Some("subagent") => raw.variant().map(Self::Subagent),
@@ -12972,7 +13192,12 @@ pub enum ReferenceSource {
 
 impl<'de> Deserialize<'de> for ReferenceSource {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ReferenceSource {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("local") => raw.variant().map(Self::Local),
             Some("git") => raw.variant().map(Self::Git),
@@ -13406,7 +13631,12 @@ pub enum ExperimentalMigrationV1StatusOutput2 {
 
 impl<'de> Deserialize<'de> for ExperimentalMigrationV1StatusOutput2 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ExperimentalMigrationV1StatusOutput2 {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("required") | Some("completed") => raw.variant().map(Self::Variant1),
             Some("running") => raw.variant().map(Self::Running),
@@ -13749,7 +13979,12 @@ pub enum ConfigEntryDocumentInfoModel {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoModel {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoModel {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
@@ -14018,7 +14253,12 @@ pub enum ConfigEntryDocumentInfoFormatter {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoFormatter {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoFormatter {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
@@ -14058,7 +14298,12 @@ pub enum ConfigEntryDocumentInfoLspObjectValue {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoLspObjectValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoLspObjectValue {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if raw.field("disabled").as_bool() == Some(true) {
             if let Ok(member) = raw.decode() {
                 return Ok(Self::Object(member));
@@ -14082,7 +14327,12 @@ pub enum ConfigEntryDocumentInfoLsp {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoLsp {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoLsp {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
@@ -14179,7 +14429,12 @@ pub enum ConfigEntryDocumentInfoCompactionBuffer {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoCompactionBuffer {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoCompactionBuffer {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
@@ -14247,7 +14502,12 @@ pub enum ConfigEntryDocumentInfoReferencesValue {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoReferencesValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoReferencesValue {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
@@ -14277,7 +14537,12 @@ pub enum ConfigEntryDocumentInfoWebsearch {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoWebsearch {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoWebsearch {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
@@ -14306,7 +14571,12 @@ pub enum ConfigEntryDocumentInfoPluginsItem {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoPluginsItem {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoPluginsItem {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
@@ -14343,7 +14613,12 @@ pub enum ConfigEntryDocumentInfoWarming {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoWarming {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoWarming {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
@@ -14424,7 +14699,12 @@ pub enum ConfigModelReasoning {
 
 impl<'de> Deserialize<'de> for ConfigModelReasoning {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigModelReasoning {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("supported").as_bool() {
             Some(false) => raw.variant().map(Self::False),
             Some(true) => raw.variant().map(Self::True),
@@ -14501,7 +14781,12 @@ pub enum ConfigEntryDocumentInfoProvidersValueModelsValueCost {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoProvidersValueModelsValueCost {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoProvidersValueModelsValueCost {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
@@ -14595,7 +14880,12 @@ pub enum ConfigEntryDocumentInfoExperimentalImageGenerate {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoExperimentalImageGenerate {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntryDocumentInfoExperimentalImageGenerate {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
@@ -14730,7 +15020,12 @@ pub enum ConfigEntry {
 
 impl<'de> Deserialize<'de> for ConfigEntry {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = crate::de::Raw::deserialize(deserializer)?;
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl ConfigEntry {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("document") => raw.variant().map(Self::Document),
             Some("directory") => raw.variant().map(Self::Directory),

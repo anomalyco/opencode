@@ -520,7 +520,7 @@ export class Types {
     const tagMethod = methods.length === 0 ? "" : `\n\nimpl ${name} {\n${methods.join("\n\n")}\n}`
     const doc = ref === undefined ? "" : `/// \`${ref}\`, tagged by \`${tag.key}\`.\n`
     this.items.push(
-      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let raw = crate::de::Raw::deserialize(deserializer)?;\n        match raw.field(${JSON.stringify(tag.key)}).${access}() {\n${ordered.join("\n")}\n            _ => raw.unknown().map(Self::Unknown),\n        }\n    }\n}${tagMethod}`,
+      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        crate::de::union(deserializer, Self::from_raw)\n    }\n}\n\nimpl ${name} {\n    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {\n        match raw.field(${JSON.stringify(tag.key)}).${access}() {\n${ordered.join("\n")}\n            _ => raw.unknown().map(Self::Unknown),\n        }\n    }\n}${tagMethod}`,
     )
     return name
   }
@@ -682,7 +682,7 @@ export class Types {
     })
     const doc = ref === undefined ? "" : `/// \`${ref}\`\n`
     this.items.push(
-      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${[...seen].map(([variant, type]) => `    ${variant}(${this.floats.has(type) ? '#[serde(serialize_with = "crate::ser::number")] ' : ""}${type}),`).join("\n")}\n    /// A shape this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let raw = crate::de::Raw::deserialize(deserializer)?;\n${attempts.join("\n")}\n        raw.unknown().map(Self::Unknown)\n    }\n}`,
+      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${[...seen].map(([variant, type]) => `    ${variant}(${this.floats.has(type) ? '#[serde(serialize_with = "crate::ser::number")] ' : ""}${type}),`).join("\n")}\n    /// A shape this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        crate::de::union(deserializer, Self::from_raw)\n    }\n}\n\nimpl ${name} {\n    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {\n${attempts.join("\n")}\n        raw.unknown().map(Self::Unknown)\n    }\n}`,
     )
     return name
   }
