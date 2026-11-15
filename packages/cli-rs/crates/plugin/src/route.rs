@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
 use opencode_ui::dialog::FocusId;
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
@@ -81,12 +81,39 @@ impl View {
     }
 }
 
-/// The keymap layer of a route's `commands`. A surface's route makes it before its first view, which may read the
-/// keymap (ABI 1.6), so the layer's arrival does not call the view again (review bigboi-7).
+/// The keymap layers of a route's `commands`, as the host's own routes make theirs: the commands in a global layer, so
+/// the palette, which opens in the dialog's mode, lists them as TS does, and runs them there (PL-3); their keys in a
+/// base-mode layer, so a key runs one only while no dialog is over the route. A surface's route makes them before its
+/// first view, which may read the keymap (ABI 1.6), so their arrival does not call the view again (review bigboi-7).
 pub(crate) fn layer(host: &dyn Host, commands: Vec<TuiCommand>) -> Option<Disposer> {
-    (!commands.is_empty())
-        .then(|| host.keymap().layer(KeymapLayer::<FocusId>::new(commands)))
-        .and_then(|layer| layer.map_err(|error| log::error!("plugin route keymap layer: {error}")).ok())
+    if commands.is_empty() {
+        return None;
+    }
+    let (mut names, mut keys) = (Vec::new(), Vec::new());
+    let (named, inline): (Vec<_>, Vec<_>) = commands.into_iter().partition(|command| command.id.is_some());
+    let named = named
+        .into_iter()
+        .map(|command| {
+            let id = command.id.clone().unwrap_or_default();
+            match &command.bind {
+                Bind::Off => {}
+                Bind::Default => names.push(id),
+                Bind::Key(key) => {
+                    keys.push((key.clone(), id.clone()));
+                    names.push(id);
+                }
+            }
+            command.bind(Bind::Off)
+        })
+        .collect();
+    let layers = [KeymapLayer::<FocusId>::global(named), KeymapLayer::new(inline).bindings(names).keys(keys)];
+    let disposers: Vec<Disposer> = layers
+        .into_iter()
+        .filter_map(|layer| {
+            host.keymap().layer(layer).map_err(|error| log::error!("plugin route keymap layer: {error}")).ok()
+        })
+        .collect();
+    Some(Disposer::new(move || drop(disposers)))
 }
 
 impl Claimed for View {
