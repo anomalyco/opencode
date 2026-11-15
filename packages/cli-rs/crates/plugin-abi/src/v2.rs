@@ -245,7 +245,23 @@ pub enum Node {
         #[serde(default, skip_serializing_if = "is_false")]
         animate: bool,
     },
+    /// A kind a later 2.x minor adds, which only the SDK's own tests and its `next` feature have: what an author's
+    /// fallback for an older host is checked against (big-boi 13). No host knows it.
+    #[cfg(any(test, feature = "next"))]
+    #[doc(hidden)]
+    Later {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        text: String,
+    },
 }
+
+/// The newest minor of [`crate::ABI_MAJOR`] whose node kinds the SDK has ([`Node::since`]): above a host's minor, a
+/// view's tree is checked for kinds the host lacks before it is encoded.
+#[cfg(not(any(test, feature = "next")))]
+const NEWEST_KIND: u32 = 0;
+#[cfg(any(test, feature = "next"))]
+const NEWEST_KIND: u32 = 1;
 
 /// What a surface's [`Surface::draw`] gets: the host's reads, the mount, the canvas's id and the frame it draws for.
 pub struct Draw<'a> {
@@ -514,6 +530,49 @@ impl<'a> View<'a> {
         (self.release)(handle)
     }
 
+    /// `node`, when the host serving the plugin has its kind, else what `fallback` builds (synthesis 4.6, big-boi 13):
+    /// a kind a later 2.x minor adds is lowered here, by the author, so the tree the SDK encodes for an older host
+    /// holds no kind that host does not know. A tree that still holds one is refused by the SDK before it crosses
+    /// ([`unknown_to`]).
+    pub fn or(&mut self, node: Node, fallback: impl FnOnce(&mut Self) -> Node) -> Node {
+        match self.read.abi().has_minor(node.since()) {
+            true => node,
+            false => fallback(self),
+        }
+    }
+}
+
+impl Node {
+    /// The minor of [`crate::ABI_MAJOR`] that added the node's kind: 0 for every kind of 2.0.
+    pub fn since(&self) -> u32 {
+        match self {
+            #[cfg(any(test, feature = "next"))]
+            Node::Later { .. } => 1,
+            _ => 0,
+        }
+    }
+}
+
+/// The first node of `node` whose kind a host of `abi` lacks, with the minor that added it; `None` when the host has
+/// every kind the tree holds. The walk runs only when the SDK has kinds newer than the host's minor.
+pub fn unknown_to(node: &Node, abi: &crate::Abi) -> Option<u32> {
+    if abi.major == crate::ABI_MAJOR && abi.minor >= NEWEST_KIND {
+        return None;
+    }
+    fn walk(node: &Node, abi: &crate::Abi) -> Option<u32> {
+        if !abi.has_minor(node.since()) {
+            return Some(node.since());
+        }
+        let items = match node {
+            Node::List { items, .. } => items.iter().find_map(|item| walk(&item.node, abi)),
+            _ => None,
+        };
+        items.or_else(|| node.children().iter().find_map(|child| walk(child, abi)))
+    }
+    walk(node, abi)
+}
+
+impl View<'_> {
     /// The subtree `build` makes, with id `key`; or, when `value` equals the one it was last built from in this
     /// mount, [`Node::Keep`] of `key`, and `build` does not run (Elm's `lazy`). The host then neither compares nor
     /// touches that subtree. The value is remembered only once the host accepts a tree that holds what `build` made
@@ -891,6 +950,8 @@ impl Node {
             | Node::List { id, .. }
             | Node::Code { id, .. }
             | Node::Image { id, .. } => id.as_deref(),
+            #[cfg(any(test, feature = "next"))]
+            Node::Later { id, .. } => id.as_deref(),
             Node::Keep { key } => Some(key),
             Node::Slot { .. } => None,
         }
@@ -909,6 +970,8 @@ impl Node {
             | Node::List { id, .. }
             | Node::Code { id, .. }
             | Node::Image { id, .. } => Some(id),
+            #[cfg(any(test, feature = "next"))]
+            Node::Later { id, .. } => Some(id),
             Node::Keep { .. } | Node::Slot { .. } => None,
         }
     }

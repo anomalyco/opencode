@@ -51,8 +51,9 @@
 //!
 //! Renders in this form (ABI 1.4) are opt-in on the wire: [`Setup`] sets [`Manifest::render`], and the host sends
 //! [`Request::RenderFence`] and [`Request::Render`] only to a plugin that sets it. A 1.3 plugin gets the old requests
-//! and answers in the old format. A plugin built with this crate sets [`PluginApi::requires_minor`] to 4, so a 1.3
-//! host refuses it.
+//! and answers in the old format. A 1.x plugin built with this crate (`export_plugin!(abi1, ..)`) sets
+//! [`PluginApi::requires_minor`] to at least 4, so a 1.3 host refuses it; a 2.x plugin sets the minimum of ABI 2 it
+//! asks for with `requires_minor` on [`plugin!`] or [`export_plugin!`], 0 by default.
 //!
 //! Session and catalog values are the HTTP API's generated types, re-exported as [`types`].
 
@@ -112,6 +113,36 @@ pub const ENTRY_V1: &str = "opencode_plugin_v1";
 
 /// The optional features this crate's host side knows. None in 2.0: everything 2.0 has is in every 2.0 host.
 pub const FEATURES: &[&str] = &[];
+
+/// The version a host serves a plugin ([`Read::abi`]): its major, its minor of that major, and its optional features.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
+pub struct Abi {
+    pub major: u32,
+    pub minor: u32,
+    pub features: Vec<String>,
+}
+
+impl Abi {
+    /// What a host of this crate serves: [`ABI_MAJOR`].[`ABI_MINOR`] with [`FEATURES`].
+    pub fn current() -> Self {
+        Self::new(ABI_MAJOR, ABI_MINOR, FEATURES.iter().map(|feature| (*feature).to_owned()).collect())
+    }
+
+    pub fn new(major: u32, minor: u32, features: Vec<String>) -> Self {
+        Self { major, minor, features }
+    }
+
+    /// Whether the host has what minor `minor` of [`ABI_MAJOR`] added.
+    pub fn has_minor(&self, minor: u32) -> bool {
+        self.major == ABI_MAJOR && self.minor >= minor
+    }
+
+    /// Whether the host has the optional feature `name`.
+    pub fn has_feature(&self, name: &str) -> bool {
+        self.features.iter().any(|feature| feature == name)
+    }
+}
 
 /// Status codes of [`PluginApi::create`], [`PluginApi::call`], and [`HostApi::call`]. With [`OK`] the output buffer
 /// holds the JSON result; otherwise it holds the error text.
@@ -3343,6 +3374,13 @@ pub trait Read {
     fn abi_minor(&self) -> u32 {
         V1_MINOR
     }
+    /// 2.0: what the host serves the plugin, as it stated at load: its major, its minor of that major, and its
+    /// optional features (big-boi 13). A plugin of this SDK that uses what a later 2.x minor adds checks it here, or
+    /// lowers it with [`v2::View::or`]; one that cannot work without it sets `requires_minor` on [`plugin!`] instead,
+    /// and an older host refuses it. In process the host is this crate's own.
+    fn abi(&self) -> Abi {
+        Abi::current()
+    }
     /// 1.6: the variant IDs of the model the next prompt uses (TS `ui.model.variant.list()`); its variant is
     /// [`Read::model`]'s.
     fn variants(&self) -> Vec<String> {
@@ -3849,6 +3887,10 @@ impl Read for HostHandle {
 
     fn abi_minor(&self) -> u32 {
         self.core().map_or(0, |core| if core.major >= 2 { V1_MINOR } else { core.minor })
+    }
+
+    fn abi(&self) -> Abi {
+        self.core().map_or(Abi::new(0, 0, Vec::new()), |core| Abi::new(core.major, core.minor, self.features()))
     }
 
     fn variants(&self) -> Vec<String> {
@@ -4426,6 +4468,15 @@ impl Setup<'_> {
         &self.registered.features
     }
 
+    /// 2.0: what the host serves the plugin: its major, minor and features ([`Read::abi`]).
+    pub fn abi(&self) -> Abi {
+        match self.host {
+            Some(host) => host.abi(),
+            None if self.registered.host.api.is_null() => Abi::current(),
+            None => self.registered.host.abi(),
+        }
+    }
+
     /// 2.0: a search a [`Select`] names (`search`): with the host's reads, the query and the select's enabled options,
     /// it returns the values of the options to list, in order (TS `dialog.select`'s `search`). It runs as one call of
     /// the plugin, with no effects, while the user types; over the C ABI, as [`Request::Search`].
@@ -4491,6 +4542,8 @@ pub struct Registered {
     layers: Vec<(interact::Layer, interact::HandlerFn)>,
     searches: Vec<(String, SearchFn)>,
     claims: Vec<claim::Claim>,
+    /// What the host of the C ABI serves the plugin, read once; `None` in process.
+    abi: Option<Abi>,
 }
 
 /// A registered handler of [`Setup::messages`].
@@ -4658,6 +4711,7 @@ impl Registered {
             waker: host.waker(),
             link: host.link().map(mail::Revocable::new).unwrap_or_default(),
             features: host.features(),
+            abi: host.core().map(|_| host.abi()),
             ..Self::default()
         }
     }
@@ -4669,6 +4723,16 @@ impl Registered {
         let draw = surface.draw.as_ref().ok_or("the surface has no draw")?;
         let list = for_mount(Some(mount), || draw(&mut v2::Draw { read: &self.host, mount, canvas, frame }));
         Ok(list.map(canvas::List::into_bytes).unwrap_or_default())
+    }
+
+    /// Refuses a tree that holds a node kind the host lacks, before it crosses: the author lowers it with
+    /// [`v2::View::or`] (big-boi 13).
+    fn lowered(&self, node: &v2::Node) -> Result<(), String> {
+        let Some(minor) = self.abi.as_ref().and_then(|abi| v2::unknown_to(node, abi)) else { return Ok(()) };
+        let host = self.abi.as_ref().map_or_else(String::new, |abi| format!("{}.{}", abi.major, abi.minor));
+        Err(format!(
+            "the view returned a node of ABI {ABI_MAJOR}.{minor}, which this host ({host}) lacks; lower it with View::or"
+        ))
     }
 
     fn handle(&self, request: Request) -> Result<serde_json::Value, String> {
@@ -4751,6 +4815,7 @@ impl Registered {
                 let node = for_mount(Some(&mount), || {
                     (surface.view)(&mut v2::View::new(&self.host, &input, &mount, &mut memo, &mut give, &mut release))
                 });
+                self.lowered(&node)?;
                 // The table keeps what the returned tree holds. A tree the host refuses is followed by a request for a
                 // whole one, whose view starts with an empty table.
                 memo.finish(std::slice::from_ref(&node));
@@ -4775,6 +4840,9 @@ impl Registered {
                         &part,
                     )
                 });
+                if let Some(node) = &node {
+                    self.lowered(node)?;
+                }
                 // A declined part keeps its table: the host asks for a whole tree when it next shows the part.
                 match &node {
                     Some(node) => memo.finish(std::slice::from_ref(node)),
@@ -4827,11 +4895,27 @@ pub struct Plugin {
 /// crate's package name as the plugin's ID, or `plugin!(id = "my.plugin", setup)`. The macro holds every `unsafe` the
 /// C ABI needs: it exports [`ENTRY`] with the current [`PluginApi`], catches every panic at the edge, and describes
 /// the plugin with the crate's version, so the author writes none.
+///
+/// A plugin that cannot work without what a later 2.x minor adds asks for that host with `requires_minor`, and an older
+/// host refuses it at load with a message naming both versions; one that can do without reads [`Read::abi`] and falls
+/// back ([`v2::View::or`]). One that needs an optional host feature names it with `requires`:
+///
+/// ```ignore
+/// plugin!(id = "my.plugin", requires_minor = 1, setup);
+/// plugin!(id = "my.plugin", requires_minor = 1, requires = ["terminal"], setup);
+/// ```
 #[macro_export]
 macro_rules! plugin {
     // A plugin that cannot work without the optional host features it names (`Metadata::requires`).
     (id = $id:expr, requires = [$($feature:expr),* $(,)?], $setup:path) => {
-        $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, 0, $id, $setup, [$($feature),*]);
+        $crate::plugin!(id = $id, requires_minor = 0, requires = [$($feature),*], $setup);
+    };
+    // A plugin that cannot work without what host minor `requires_minor` of ABI 2 added (big-boi 13, carbon-4).
+    (id = $id:expr, requires_minor = $requires:expr, requires = [$($feature:expr),* $(,)?], $setup:path) => {
+        $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, $requires, $id, $setup, [$($feature),*]);
+    };
+    (id = $id:expr, requires_minor = $requires:expr, $setup:path) => {
+        $crate::plugin!(id = $id, requires_minor = $requires, requires = [], $setup);
     };
     (id = $id:expr, $setup:path) => {
         $crate::export_plugin!($id, $setup);
@@ -4842,13 +4926,14 @@ macro_rules! plugin {
 }
 
 /// Exports a plugin: `export_plugin!("my.plugin", setup)`, which [`plugin!`] calls. It exports the current
-/// [`PluginApi`] as [`ENTRY`], with the crate's version as its [`Metadata`].
+/// [`PluginApi`] as [`ENTRY`], with the crate's version as its [`Metadata`]. `export_plugin!("my.plugin", setup,
+/// requires_minor = 1)` asks for host 2.1 or newer, as [`plugin!`]'s `requires_minor` does.
 ///
 /// A plugin of ABI 1.x that cannot work without what a newer 1.x minor adds, such as the composer of 1.5, asks for that
 /// host, and an older host refuses it with a message naming both versions rather than run it with its requests refused:
 ///
 /// ```ignore
-/// export_plugin!("my.plugin", setup, requires_minor = 5);
+/// export_plugin!(abi1, "my.plugin", setup, requires_minor = 5);
 /// ```
 ///
 /// That form exports [`ENTRY_V1`] at [`V1_MINOR`]; below 4 it requires 4. A plugin that can do without reads
@@ -4859,6 +4944,10 @@ macro_rules! export_plugin {
         $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, 0, $id, $setup, []);
     };
     ($id:expr, $setup:path, requires_minor = $requires:expr) => {
+        $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, $requires, $id, $setup, []);
+    };
+    // A plugin of ABI 1.x that needs host 1.`requires_minor`: the meaning the form above had before 2.0 froze.
+    (abi1, $id:expr, $setup:path, requires_minor = $requires:expr) => {
         $crate::export_plugin!(@version 1, $crate::V1_MINOR, $crate::runtime::requires($requires), $id, $setup);
     };
     // A plugin built against ABI 1.x, or that pretends to be built against another version, for the loader's tests.
@@ -4879,17 +4968,7 @@ macro_rules! export_plugin {
             unsafe extern "C" fn describe(out: *mut $crate::Owned) -> i32 {
                 unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), &[$($feature),*], out) }
             }
-            static API: $crate::PluginApi = $crate::PluginApi {
-                size: ::std::mem::size_of::<$crate::PluginApi>(),
-                major: $major,
-                minor: $minor,
-                requires_minor: $requires,
-                create: Some(create),
-                call: Some($crate::runtime::call),
-                destroy: Some($crate::runtime::destroy),
-                free: Some($crate::runtime::free),
-                describe: Some(describe),
-            };
+            static API: $crate::PluginApi = $crate::runtime::table($major, $minor, $requires, create, describe);
             &API
         }
     };
@@ -4971,6 +5050,28 @@ pub mod runtime {
     /// SDK answers.
     pub const fn requires(minor: u32) -> u32 {
         if minor < 4 { 4 } else { minor }
+    }
+
+    /// The table [`export_plugin!`] exports, built here rather than in the plugin's crate, so an entry a later 2.x
+    /// appends to [`PluginApi`] is no break of the plugin's source (carbon-4).
+    pub const fn table(
+        major: u32,
+        minor: u32,
+        requires_minor: u32,
+        create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
+        describe: unsafe extern "C" fn(*mut Owned) -> i32,
+    ) -> PluginApi {
+        PluginApi {
+            size: size_of::<PluginApi>(),
+            major,
+            minor,
+            requires_minor,
+            create: Some(create),
+            call: Some(call),
+            destroy: Some(destroy),
+            free: Some(free),
+            describe: Some(describe),
+        }
     }
 
     /// The entries `export_plugin!(@loopback ..)` makes of a setup, for the loader's tests.
@@ -5315,6 +5416,69 @@ mod tests {
                 "row {index} was not freed once, as it came"
             );
         }
+    }
+
+    unsafe extern "C" fn null_call(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
+        // SAFETY: the SDK passes an `out` valid for writes.
+        unsafe { *out = Owned::from_vec(b"null".to_vec()) };
+        OK
+    }
+
+    // Expected (big-boi 13, synthesis 4.6): a node kind of a later 2.x minor with its author's fallback is lowered for
+    // an older host before the SDK encodes the tree: the reply equals that of a plugin that wrote the fallback, and no
+    // tag of the newer kind crosses. A newer host gets the kind. A view that gives no fallback is refused by the SDK
+    // before anything crosses. The SDK reads the negotiated major, minor and features the host stated.
+    #[test]
+    fn a_later_node_lowers_to_its_fallback_on_an_older_host() {
+        fn text() -> v2::Node {
+            v2::Node::text(vec![Span::new("hi")]).with_id("n")
+        }
+        fn later() -> v2::Node {
+            v2::Node::Later { id: Some("n".into()), text: "hi".into() }
+        }
+        fn lowering(setup: &mut Setup) -> Result<(), String> {
+            setup.surface(v2::Surface::new("s", v2::Place::Route("r".into()), |cx| cx.or(later(), |_| text())));
+            Ok(())
+        }
+        fn fallback(setup: &mut Setup) -> Result<(), String> {
+            setup.surface(v2::Surface::new("s", v2::Place::Route("r".into()), |_| text()));
+            Ok(())
+        }
+        fn forgetting(setup: &mut Setup) -> Result<(), String> {
+            setup.surface(v2::Surface::new("s", v2::Place::Route("r".into()), |_| later()));
+            Ok(())
+        }
+        let features = br#"["f"]"#;
+        let viewed = |setup: fn(&mut Setup) -> Result<(), String>, minor: u32| {
+            let api = HostApi {
+                size: size_of::<HostApi>(),
+                major: ABI_MAJOR,
+                minor,
+                ctx: std::ptr::null_mut(),
+                call: Some(null_call),
+                free: Some(runtime::free),
+                theme_mode: None,
+                wake: None,
+                send: None,
+                report: None,
+                stopped: None,
+                features: Bytes::new(features),
+            };
+            let mut registered = Registered::with_host("t", None, &api);
+            setup(&mut registered.setup()).unwrap();
+            assert_eq!(registered.setup().abi(), Abi::new(ABI_MAJOR, minor, vec!["f".to_owned()]));
+            let mount = v2::MountId { surface: "s".into(), key: "s".into(), generation: 1 };
+            let request = Request::View { surface: 0, mount, input: v2::SurfaceInput::default(), next: 0 };
+            registered.handle(request).map(|reply| serde_json::to_string(&reply).unwrap())
+        };
+        let old = viewed(lowering, 0).unwrap();
+        assert_eq!(old, viewed(fallback, 0).unwrap(), "the older host's tree is not the fallback's");
+        assert!(!old.contains("later"), "{old}");
+        assert!(viewed(lowering, 1).unwrap().contains(r#""type":"later""#));
+        let refused = viewed(forgetting, 0).unwrap_err();
+        assert!(refused.contains("ABI 2.1") && refused.contains("(2.0) lacks"), "{refused}");
+        assert!(viewed(forgetting, 1).is_ok());
+        assert_eq!(Registered::new("t", None).setup().abi(), Abi::current());
     }
 
     // Expected (carbon-8): borrowed bytes are refused unread when null with a length or over the bound, and `free`

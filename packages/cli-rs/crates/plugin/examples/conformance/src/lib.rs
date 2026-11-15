@@ -7,4 +7,4 @@ mod conformance;
 opencode_plugin_abi::plugin!(id = "conformance", conformance::setup);
 
 #[cfg(feature = "v1")]
-opencode_plugin_abi::export_plugin!("conformance", conformance::setup, requires_minor = 4);
+opencode_plugin_abi::export_plugin!(abi1, "conformance", conformance::setup, requires_minor = 4);

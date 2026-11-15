@@ -42,7 +42,7 @@ Versions only grow by appending:
   it, below). The host sends a library no request newer than the minor its table states. A plugin that cannot work without a newer host sets
   `requires_minor`, and the host refuses it: "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update
   opencode-native". `export_plugin!` sets `requires_minor` to 4, because only a 1.4 host sends the render requests the
-  SDK answers; `export_plugin!(id, setup, requires_minor = 5)` asks for a newer host, and `Read::abi_minor()` reads the
+  SDK answers; `export_plugin!(abi1, id, setup, requires_minor = 5)` asks for a newer host, and `Read::abi_minor()` reads the
   host's minor. So a 1.5 plugin loads on a 1.4 host, which answers the 1.5 requests with an error: there `composer()`
   reads `None`, and an `edit_composer`, a `Confirm` and an `Alert` do nothing. A 1.4 host draws a 1.5 box without its
   1.5 properties, which it does not read.
@@ -69,7 +69,7 @@ Versions only grow by appending:
   signature, the quarantine of a download, a missing or invalid signature) and what to do.
 - 1.5 is P0a's (dialogs, box styling, the composer). 1.6 adds the small reads and verbs (below), as new
   `HostRequest`s, one `Request` (`Deltas`) and optional fields, and no table entry. A 1.x plugin
-  (`export_plugin!(.., requires_minor = N)`) requires 1.4: on an older host a 1.6 read returns its default (`None`,
+  (`export_plugin!(abi1, .., requires_minor = N)`) requires 1.4: on an older host a 1.6 read returns its default (`None`,
   empty, `false`), a verb does nothing and answers `false`, `Setup::sized` gives 0, `on_deltas` is never called, a
   span's link is dropped, and an `xlarge` panel is sent again as `large`.
 
