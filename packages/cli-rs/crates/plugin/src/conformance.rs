@@ -129,6 +129,11 @@ pub enum Step {
     Claim {
         tool: String,
     },
+    /// The claimed call of tool `tool` completes with its output, which the host keeps from the claim's view, and
+    /// draws.
+    Complete {
+        tool: String,
+    },
     /// Shows Markdown `text` as the transcript does, whose fences the plugins' claims and renderers draw, and draws it.
     Markdown {
         text: String,
