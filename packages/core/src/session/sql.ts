@@ -28,6 +28,8 @@ import type { CompactionPayload, MovePayload, SyntheticPayload } from "@opencode
 import type { RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
 import type { Form } from "@opencode/schema/form"
+import type { SessionEvent } from "@opencode/schema/session-event"
+import type { QuestionContinuation } from "@opencode/schema/question-continuation"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 type SessionMessageData = DistributiveOmit<
@@ -124,6 +126,7 @@ export const SessionPendingStepTable = sqliteTable(
     session_id: text().$type<SessionSchema.ID>().notNull(),
     assistant_message_id: text().$type<SessionMessage.ID>().notNull(),
     generation: integer().notNull(),
+    data: text({ mode: "json" }).$type<typeof SessionEvent.Step.ParkedPayload.Encoded>().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.session_id] }),
@@ -137,17 +140,26 @@ export const SessionPendingStepTable = sqliteTable(
 export const SessionQuestionTable = sqliteTable(
   "session_question",
   {
-    id: text().$type<Form.ID>().primaryKey(),
+    id: text().$type<Form.ID>().notNull(),
     session_id: text().$type<SessionSchema.ID>().notNull(),
     assistant_message_id: text().$type<SessionMessage.ID>().notNull(),
     generation: integer().notNull(),
+    call_id: text().notNull(),
+    prepared: text({ mode: "json" }).$type<typeof QuestionContinuation.Prepared.Encoded>().notNull(),
   },
   (table) => [
+    primaryKey({ columns: [table.id] }),
     foreignKey({
       columns: [table.session_id, table.assistant_message_id, table.generation],
       foreignColumns: [SessionMessageTable.session_id, SessionMessageTable.id, SessionMessageTable.step_started_seq],
     }).onDelete("cascade"),
     index("session_question_step_owner_idx").on(table.session_id, table.assistant_message_id, table.generation),
+    uniqueIndex("session_question_step_call_unique").on(
+      table.session_id,
+      table.assistant_message_id,
+      table.generation,
+      table.call_id,
+    ),
   ],
 )
 

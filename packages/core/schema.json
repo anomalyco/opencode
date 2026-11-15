@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "c2e6ab2b-a125-4693-86c7-dd449d8949ce",
-  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
+  "id": "17fff8ee-c991-44d2-ae31-f7ef580519a1",
+  "prevIds": ["c2e6ab2b-a125-4693-86c7-dd449d8949ce"],
   "ddl": [
     {
       "name": "account_state",
@@ -1596,7 +1596,17 @@
     },
     {
       "type": "text",
-      "notNull": false,
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "data",
+      "entityType": "columns",
+      "table": "session_pending_step"
+    },
+    {
+      "type": "text",
+      "notNull": true,
       "autoincrement": false,
       "default": null,
       "generated": null,
@@ -1631,6 +1641,26 @@
       "default": null,
       "generated": null,
       "name": "generation",
+      "entityType": "columns",
+      "table": "session_question"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "call_id",
+      "entityType": "columns",
+      "table": "session_question"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "prepared",
       "entityType": "columns",
       "table": "session_question"
     },
@@ -2324,6 +2354,13 @@
       "table": "session_pending_step"
     },
     {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "session_question_pk",
+      "entityType": "pks",
+      "table": "session_question"
+    },
+    {
       "columns": ["project_id", "directory"],
       "nameExplicit": false,
       "name": "worktree_pk",
@@ -2433,13 +2470,6 @@
       "nameExplicit": false,
       "name": "session_message_pk",
       "table": "session_message",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "session_question_pk",
-      "table": "session_question",
       "entityType": "pks"
     },
     {
@@ -2799,6 +2829,32 @@
       "where": null,
       "origin": "manual",
       "name": "session_question_step_owner_idx",
+      "entityType": "indexes",
+      "table": "session_question"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "assistant_message_id",
+          "isExpression": false
+        },
+        {
+          "value": "generation",
+          "isExpression": false
+        },
+        {
+          "value": "call_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "session_question_step_call_unique",
       "entityType": "indexes",
       "table": "session_question"
     },

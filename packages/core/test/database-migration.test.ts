@@ -23,6 +23,7 @@ import sessionViewedStateMigration from "@opencode/core/database/migration/20260
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
 import stepOwnershipMigration from "@opencode/core/database/migration/20261115165607_step-ownership"
+import stepParkingMigration from "@opencode/core/database/migration/20261115180731_step-parking"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -95,6 +96,32 @@ describe("DatabaseMigration", () => {
           yield* db.run(sql`INSERT INTO session_pending_step VALUES ('session', 'assistant', 10)`).pipe(Effect.exit),
         ).toMatchObject({ _tag: "Failure" })
         expect(yield* db.all(sql`PRAGMA foreign_key_check`)).toEqual([])
+      }),
+    )
+  })
+
+  test("rejects populated pre-parking tables without changing their schema or data", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session_pending_step (
+          session_id text PRIMARY KEY, assistant_message_id text NOT NULL, generation integer NOT NULL
+        )`)
+        yield* db.run(sql`CREATE TABLE session_question (
+          id text PRIMARY KEY, session_id text NOT NULL,
+          assistant_message_id text NOT NULL, generation integer NOT NULL
+        )`)
+        yield* db.run(sql`INSERT INTO session_pending_step VALUES ('session', 'assistant', 1)`)
+
+        const beforePending = yield* db.all(sql`SELECT * FROM session_pending_step`)
+        const beforePendingColumns = yield* db.all(sql`PRAGMA table_info(session_pending_step)`)
+        const beforeQuestionColumns = yield* db.all(sql`PRAGMA table_info(session_question)`)
+
+        const result = yield* DatabaseMigration.applyOnly(db, [stepParkingMigration]).pipe(Effect.exit)
+        expect(result._tag).toBe("Failure")
+        expect(yield* db.all(sql`SELECT * FROM session_pending_step`)).toEqual(beforePending)
+        expect(yield* db.all(sql`PRAGMA table_info(session_pending_step)`)).toEqual(beforePendingColumns)
+        expect(yield* db.all(sql`PRAGMA table_info(session_question)`)).toEqual(beforeQuestionColumns)
       }),
     )
   })

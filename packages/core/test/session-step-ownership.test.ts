@@ -17,6 +17,7 @@ import {
   SessionTable,
 } from "@opencode/core/session/sql"
 import { Model } from "@opencode/schema/model"
+import { Money } from "@opencode/schema/money"
 import { Project } from "@opencode/schema/project"
 import { Provider } from "@opencode/schema/provider"
 import { AbsolutePath } from "@opencode/schema/schema"
@@ -34,6 +35,23 @@ const otherSessionID = Session.ID.make("ses_other_ownership")
 const assistantMessageID = SessionMessage.ID.make("msg_step_owner")
 const otherMessageID = SessionMessage.ID.make("msg_other_owner")
 const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }
+
+const prepared = {
+  adapter: "question@1" as const,
+  input: {
+    questions: [{ question: "Continue?", header: "Continue", options: [{ label: "Yes", description: "Continue" }] }],
+  },
+}
+
+const parkedData = (session: Session.ID, assistant: SessionMessage.ID, generation: number): SessionEvent.Step.ParkedPayload => ({
+  sessionID: session,
+  assistantMessageID: assistant,
+  generation,
+  finish: "tool-calls" as const,
+  cost: Money.USD.make(0),
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  questions: [{ callID: "call_owner", questionID: Form.ID.make("frm_owner"), prepared }],
+})
 
 const seed = Effect.gen(function* () {
   const db = (yield* Database.Service).db
@@ -89,16 +107,16 @@ describe("Step ownership", () => {
           expect(
             yield* fixture.db
               .run(
-                sql`INSERT INTO session_pending_step (session_id, assistant_message_id, generation)
-              VALUES (${owner[0]}, ${owner[1]}, ${owner[2]})`,
+                sql`INSERT INTO session_pending_step (session_id, assistant_message_id, generation, data)
+              VALUES (${owner[0]}, ${owner[1]}, ${owner[2]}, ${JSON.stringify(parkedData(sessionID, assistantMessageID, fixture.generation))})`,
               )
               .pipe(Effect.exit),
           ).toMatchObject({ _tag: "Failure" })
           expect(
             yield* fixture.db
               .run(
-                sql`INSERT INTO session_question (id, session_id, assistant_message_id, generation)
-              VALUES ('question', ${owner[0]}, ${owner[1]}, ${owner[2]})`,
+                sql`INSERT INTO session_question (id, session_id, assistant_message_id, generation, call_id, prepared)
+              VALUES ('question', ${owner[0]}, ${owner[1]}, ${owner[2]}, 'call_owner', ${JSON.stringify(prepared)})`,
               )
               .pipe(Effect.exit),
           ).toMatchObject({ _tag: "Failure" })
@@ -112,6 +130,8 @@ describe("Step ownership", () => {
         session_id: sessionID,
         assistant_message_id: assistantMessageID,
         generation: fixture.generation,
+        call_id: "call_owner",
+        prepared,
       })
       expect(yield* fixture.db.all(sql`PRAGMA foreign_key_check`)).toEqual([])
     }),
@@ -124,7 +144,7 @@ describe("Step ownership", () => {
       const independent = yield* start(otherSessionID, SessionMessage.ID.make("msg_independent"))
       yield* fixture.db
         .insert(SessionPendingStepTable)
-        .values({ session_id: sessionID, assistant_message_id: assistantMessageID, generation: fixture.generation })
+        .values({ session_id: sessionID, assistant_message_id: assistantMessageID, generation: fixture.generation, data: parkedData(sessionID, assistantMessageID, fixture.generation) })
       expect(
         yield* fixture.db
           .insert(SessionPendingStepTable)
@@ -132,6 +152,7 @@ describe("Step ownership", () => {
             session_id: sessionID,
             assistant_message_id: otherMessageID,
             generation: other.durable.seq,
+            data: parkedData(sessionID, otherMessageID, other.durable.seq),
           })
           .pipe(Effect.exit),
       ).toMatchObject({ _tag: "Failure" })
@@ -139,6 +160,7 @@ describe("Step ownership", () => {
         session_id: otherSessionID,
         assistant_message_id: independent.data.assistantMessageID,
         generation: independent.durable.seq,
+        data: parkedData(otherSessionID, independent.data.assistantMessageID, independent.durable.seq),
       })
       expect(yield* fixture.db.select().from(SessionPendingStepTable)).toHaveLength(2)
     }),
@@ -151,7 +173,7 @@ describe("Step ownership", () => {
         const fixture = yield* seed
         yield* fixture.db
           .insert(SessionPendingStepTable)
-          .values({ session_id: sessionID, assistant_message_id: assistantMessageID, generation: fixture.generation })
+          .values({ session_id: sessionID, assistant_message_id: assistantMessageID, generation: fixture.generation, data: parkedData(sessionID, assistantMessageID, fixture.generation) })
         const before = yield* fixture.db.select().from(SessionMessageTable)
         const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
         yield* Effect.forEach([assistantMessageID, otherMessageID], (id) =>
@@ -175,14 +197,14 @@ describe("Step ownership", () => {
           assistant_message_id: assistantMessageID,
           generation: reused.durable.seq,
         }
-        yield* fixture.db.insert(SessionPendingStepTable).values(owner)
-        yield* fixture.db.insert(SessionQuestionTable).values({ id: Form.ID.make("frm_retained"), ...owner })
+        yield* fixture.db.insert(SessionPendingStepTable).values({ ...owner, data: parkedData(sessionID, assistantMessageID, reused.durable.seq) })
+        yield* fixture.db.insert(SessionQuestionTable).values({ id: Form.ID.make("frm_retained"), ...owner, call_id: "call_retained", prepared })
         yield* fixture.db.delete(SessionPendingStepTable).where(eq(SessionPendingStepTable.session_id, sessionID))
         const before = yield* fixture.db.select().from(SessionMessageTable)
         expect(yield* start(sessionID, assistantMessageID).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
         expect(yield* fixture.db.select().from(SessionMessageTable)).toEqual(before)
         expect(yield* fixture.db.select().from(SessionQuestionTable)).toEqual([
-          { id: Form.ID.make("frm_retained"), ...owner },
+          { id: Form.ID.make("frm_retained"), ...owner, call_id: "call_retained", prepared },
         ])
         expect(
           yield* fixture.db

@@ -253,15 +253,18 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`session_id\` text PRIMARY KEY NOT NULL,
           \`assistant_message_id\` text NOT NULL,
           \`generation\` integer NOT NULL,
+          \`data\` text NOT NULL,
           CONSTRAINT \`fk_session_pending_step_session_id_assistant_message_id_generation_session_message_session_id_id_step_started_seq_fk\` FOREIGN KEY (\`session_id\`,\`assistant_message_id\`,\`generation\`) REFERENCES \`session_message\`(\`session_id\`,\`id\`,\`step_started_seq\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
         CREATE TABLE \`session_question\` (
-          \`id\` text PRIMARY KEY,
+          \`id\` text PRIMARY KEY NOT NULL,
           \`session_id\` text NOT NULL,
           \`assistant_message_id\` text NOT NULL,
           \`generation\` integer NOT NULL,
+          \`call_id\` text NOT NULL,
+          \`prepared\` text NOT NULL,
           CONSTRAINT \`fk_session_question_session_id_assistant_message_id_generation_session_message_session_id_id_step_started_seq_fk\` FOREIGN KEY (\`session_id\`,\`assistant_message_id\`,\`generation\`) REFERENCES \`session_message\`(\`session_id\`,\`id\`,\`step_started_seq\`) ON DELETE CASCADE
         );
       `)
@@ -364,6 +367,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       )
       yield* tx.run(
         `CREATE INDEX \`session_question_step_owner_idx\` ON \`session_question\` (\`session_id\`,\`assistant_message_id\`,\`generation\`);`,
+      )
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`session_question_step_call_unique\` ON \`session_question\` (\`session_id\`,\`assistant_message_id\`,\`generation\`,\`call_id\`);`,
       )
       yield* tx.run(`CREATE INDEX \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)

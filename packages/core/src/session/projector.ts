@@ -21,6 +21,7 @@ import {
   SessionMessageTable,
   SessionPartTable,
   SessionPendingStepTable,
+  SessionQuestionTable,
   SessionTable,
   type SessionPartData,
 } from "./sql.js"
@@ -37,12 +38,15 @@ import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
 import { SessionHistory } from "./history.js"
 import { ProjectTable } from "../project/sql.js"
+import { SessionParking } from "./parking.js"
 
 type DatabaseService = Database.Interface["db"]
 type MessageEvent = Exclude<
   SessionEvent.DurableEvent,
   typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type | SessionEvent.Step.Parked
 >
+
+type StorageEvent = MessageEvent | SessionEvent.Step.Parked
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const encodeStoredUser = Schema.encodeSync(SessionStored.User)
@@ -341,8 +345,91 @@ type Writes = Pick<
   | "updateCompaction"
 >
 
+const requireNoPending = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  const pending = yield* db.select().from(SessionPendingStepTable)
+    .where(eq(SessionPendingStepTable.session_id, sessionID)).get().pipe(Effect.orDie)
+  if (pending) return yield* Effect.die(new SessionParking.ConflictError({ message: "Session already has a pending Step" }))
+})
+
+/** Bus owns the transaction for both live publication and replay. Never call this outside a projector. */
+const projectParked = Effect.fnUntraced(function* (db: DatabaseService, event: SessionEvent.Step.Parked) {
+  const data = SessionParking.encodePayload(event.data)
+  yield* requireNoPending(db, data.sessionID)
+  const row = yield* db.select().from(SessionMessageTable).where(and(
+    eq(SessionMessageTable.session_id, data.sessionID),
+    eq(SessionMessageTable.id, data.assistantMessageID),
+    eq(SessionMessageTable.type, "assistant"),
+  )).get().pipe(Effect.orDie)
+  if (!row || row.step_started_seq !== data.generation)
+    return yield* Effect.die(new SessionParking.ConflictError({ message: "Step owner or original generation does not match" }))
+  const [full = row] = yield* SessionHistory.withParts(db, [row])
+  const assistant = SessionHistory.decodeMessageRowSync(full)
+  if (assistant.type !== "assistant" || assistant.time.streamed === undefined ||
+    assistant.time.completed !== undefined || assistant.finish !== undefined || assistant.error !== undefined)
+    return yield* Effect.die(new SessionParking.ConflictError({ message: "Parking requires a streamed, nonterminal assistant" }))
+
+  const calls = assistant.content.filter((part) => part.type === "tool")
+  const callIDs = data.questions.map((question) => question.callID)
+  const questionIDs = data.questions.map((question) => question.questionID)
+  if (new Set(callIDs).size !== callIDs.length || new Set(questionIDs).size !== questionIDs.length ||
+    new Set(calls.map((call) => call.id)).size !== calls.length)
+    return yield* Effect.die(new SessionParking.ConflictError({ message: "Question and call IDs must be unique" }))
+  const existing = yield* db.select().from(SessionQuestionTable).where(or(
+    inArray(SessionQuestionTable.id, questionIDs),
+    and(eq(SessionQuestionTable.session_id, data.sessionID),
+      eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+      eq(SessionQuestionTable.generation, data.generation),
+      inArray(SessionQuestionTable.call_id, callIDs)),
+  )).get().pipe(Effect.orDie)
+  if (existing)
+    return yield* Effect.die(new SessionParking.ConflictError({ message: "Question or owner call already exists" }))
+  if (callIDs.some((id) => !calls.some((call) => call.id === id && call.executed === false &&
+      call.state.status === "running" && call.time.ran !== undefined && call.time.completed === undefined)) ||
+    calls.some((call) => !callIDs.includes(call.id) && call.state.status !== "completed" && call.state.status !== "error"))
+    return yield* Effect.die(new SessionParking.ConflictError({ message: "Questions require original local running calls; ordinary calls must be settled" }))
+
+  yield* db.insert(SessionPendingStepTable).values({
+    session_id: data.sessionID,
+    assistant_message_id: data.assistantMessageID,
+    generation: data.generation,
+    data,
+  }).run().pipe(Effect.orDie)
+  const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
+  yield* Effect.forEach(data.questions, (question) => Effect.gen(function* () {
+    yield* db.insert(SessionQuestionTable).values({
+      id: question.questionID,
+      session_id: data.sessionID,
+      assistant_message_id: data.assistantMessageID,
+      generation: data.generation,
+      call_id: question.callID,
+      prepared: question.prepared,
+    }).run().pipe(Effect.orDie)
+    yield* writes.updateAssistantPart(data.assistantMessageID, { type: "tool", callID: question.callID }, (call) => {
+      if (call.state.status !== "running") return
+      call.state = { ...call.state, status: "waiting", questionID: question.questionID, generation: data.generation }
+    })
+  }), { discard: true })
+  yield* setSession(db, event.data.sessionID, { time_updated: event.created })
+})
+
 function run(db: DatabaseService, event: MessageEvent) {
   return Effect.gen(function* () {
+    if (
+      event.type === SessionEvent.Tool.Called.type ||
+      event.type === SessionEvent.Tool.Success.type ||
+      event.type === SessionEvent.Tool.Failed.type
+    ) {
+      const row = yield* db.select().from(SessionMessageTable).where(and(
+        eq(SessionMessageTable.session_id, event.data.sessionID),
+        eq(SessionMessageTable.id, event.data.assistantMessageID),
+        eq(SessionMessageTable.type, "assistant"),
+      )).get().pipe(Effect.orDie)
+      const [full] = yield* SessionHistory.withParts(db, row ? [row] : [])
+      const assistant = full ? SessionHistory.decodeMessageRowSync(full) : undefined
+      if (assistant?.type === "assistant" && assistant.content.some(
+        (part) => part.type === "tool" && part.id === event.data.id && part.state.status === "waiting",
+      )) return yield* Effect.die(new SessionParking.ConflictError({ message: "Waiting calls cannot be called or settled" }))
+    }
     const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
     const adapter: SessionMessageUpdater.Adapter = {
       ...writes,
@@ -446,7 +533,7 @@ function run(db: DatabaseService, event: MessageEvent) {
 /** Assistant reads shared by both write paths; `decode` decides whether part rows are folded into `content`. */
 function assistantReads(
   db: DatabaseService,
-  event: MessageEvent,
+  event: StorageEvent,
   decode: (row: MessageRow) => Effect.Effect<SessionMessage.Info>,
 ): Pick<Writes, "getCurrentAssistant" | "getAssistant"> {
   return {
@@ -495,7 +582,7 @@ function assistantReads(
  * event rewrites the whole message. A message whose parts already live in session_part (written with the flag on,
  * or by a newer release) is written into those rows, and its row keeps an empty envelope.
  */
-function messageWrites(db: DatabaseService, event: MessageEvent): Writes {
+function messageWrites(db: DatabaseService, event: StorageEvent): Writes {
   const partRows = (messageID: SessionMessage.ID) =>
     db
       .select()
@@ -609,7 +696,7 @@ function messageWrites(db: DatabaseService, event: MessageEvent): Writes {
 }
 
 /** The write path with `experimental.part_rows` on: each assistant part is its own session_part row. */
-function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
+function partRowWrites(db: DatabaseService, event: StorageEvent): Writes {
   /**
    * The only place a legacy inline assistant row moves to session_part, called right before its parts are written.
    * `carry: false` drops the inline parts instead of copying them, for a write that replaces them all. Returns the
@@ -1087,6 +1174,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Started, (event) =>
       Effect.gen(function* () {
+        yield* requireNoPending(db, event.data.sessionID)
         yield* run(db, event)
         const owners = yield* db
           .update(SessionMessageTable)
@@ -1114,14 +1202,17 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.Step.FirstToken, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Step.Parked, (event) => projectParked(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
+        yield* requireNoPending(db, event.data.sessionID)
         yield* run(db, event)
         yield* applyUsage(db, event.data.sessionID, event.data, event.created)
       }),
     )
     yield* bus.project(SessionEvent.Step.Failed, (event) =>
       Effect.gen(function* () {
+        yield* requireNoPending(db, event.data.sessionID)
         yield* run(db, event)
         if (event.data.cost !== undefined && event.data.tokens !== undefined)
           yield* applyUsage(

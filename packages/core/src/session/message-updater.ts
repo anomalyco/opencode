@@ -47,7 +47,7 @@ const projectTerminalSnapshot = (draft: DraftAssistant, event: SessionEvent.Step
     }
 }
 
-// Parked is a schema-only foundation; no message or pending-row projection exists yet.
+// Parked has a private transactional SQL projector, outside the ordinary message fold.
 type ProjectedEvent = Exclude<SessionEvent.DurableEvent, SessionEvent.Step.Parked>
 
 export function update(adapter: Adapter, event: ProjectedEvent) {

@@ -9,7 +9,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
-import { EventTable } from "@opencode/core/event/sql"
+import { EventTable, EventSequenceTable } from "@opencode/core/event/sql"
 import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -20,6 +20,7 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Money } from "@opencode/schema/money"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionParking } from "@opencode/core/session/parking"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { fromRow } from "@opencode/core/session/info"
 import { SessionInbox } from "@opencode/core/session/inbox"
@@ -37,6 +38,8 @@ import {
   BlobTable,
   SessionInboxTable,
   SessionMessageTable,
+  SessionPendingStepTable,
+  SessionQuestionTable,
   SessionPartTable,
   SessionTable,
 } from "@opencode/core/session/sql"
@@ -126,6 +129,334 @@ const seedSession = (overrides?: Partial<typeof SessionTable.$inferInsert>) =>
   })
 
 describe("SessionProjector", () => {
+
+  it.effect("rolls back the entire parked Step when the second Question insert fails", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_parking_rollback")
+
+      yield* bus.publish(SessionEvent.Renamed, { sessionID, title: "Rollback fixture" })
+      const started = yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        agent: build,
+        model,
+        started: 1,
+      })
+
+      for (const id of ["question_a", "question_b"]) {
+        yield* bus.publish(SessionEvent.Tool.Input.Started, {
+          sessionID,
+          assistantMessageID,
+          id,
+          name: "question",
+        })
+        yield* bus.publish(SessionEvent.Tool.Called, {
+          sessionID,
+          assistantMessageID,
+          id,
+          input: { original: id },
+          executed: false,
+        })
+      }
+
+      yield* bus.publish(SessionEvent.Step.Streamed, { sessionID, assistantMessageID })
+
+      const prepared = {
+        adapter: "question@1" as const,
+        input: {
+          questions: [{
+            question: "Continue?",
+            header: "Continue",
+            options: [{ label: "Yes", description: "Continue" }],
+          }],
+        },
+      }
+      const payload: SessionEvent.Step.ParkedPayload = {
+        sessionID,
+        assistantMessageID,
+        generation: started.durable.seq,
+        finish: "tool-calls",
+        cost: Money.USD.make(0),
+        tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+        questions: [
+          { callID: "question_a", questionID: "frm_rollback_a" as never, prepared },
+          { callID: "question_b", questionID: "frm_rollback_b" as never, prepared },
+        ],
+      }
+
+      const before = yield* db.select().from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+      expect(before).toBeDefined()
+      const beforeMessage = yield* SessionHistory.loadMessageRow(db, before!)
+
+      yield* db.run(sql`
+        CREATE TRIGGER reject_second_question
+        BEFORE INSERT ON session_question
+        WHEN NEW.id = 'frm_rollback_b'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced second question failure');
+        END
+      `)
+
+      const sequenceBefore = yield* db.select().from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, sessionID))
+        .get()
+      const eventsBefore = yield* db.select().from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .all()
+
+      const result = yield* SessionParking.park(payload).pipe(Effect.exit)
+      expect(result._tag).toBe("Failure")
+
+      const sequenceAfter = yield* db.select().from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, sessionID))
+        .get()
+      const eventsAfter = yield* db.select().from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .all()
+      expect(sequenceAfter).toEqual(sequenceBefore)
+      expect(eventsAfter).toEqual(eventsBefore)
+
+      expect(yield* db.select().from(SessionPendingStepTable).all()).toEqual([])
+      expect(yield* db.select().from(SessionQuestionTable).all()).toEqual([])
+
+      const after = yield* db.select().from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+      expect(after).toBeDefined()
+      const afterMessage = yield* SessionHistory.loadMessageRow(db, after!)
+      expect(afterMessage).toEqual(beforeMessage)
+
+      yield* db.run(sql`DROP TRIGGER reject_second_question`)
+    }),
+  )
+
+  for (const mode of ["inline", "part_rows"] as const) {
+    it.effect(`parks two original question calls atomically beside a settled ordinary call (${mode})`, () =>
+      Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_parking_positive")
+      yield* bus.publish(SessionEvent.Renamed, {
+        sessionID,
+        title: "Parking integration fixture",
+      })
+      const started = yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        agent: build,
+        model,
+        started: 1,
+      })
+
+      const call = (id: string, name: string, executed: boolean) =>
+        Effect.gen(function* () {
+          yield* bus.publish(SessionEvent.Tool.Input.Started, {
+            sessionID,
+            assistantMessageID,
+            id,
+            name,
+          })
+          yield* bus.publish(SessionEvent.Tool.Called, {
+            sessionID,
+            assistantMessageID,
+            id,
+            input: { original: id },
+            executed,
+          })
+        })
+
+      yield* call("ordinary", "read", true)
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "ordinary",
+        content: [{ type: "text", text: "done" }],
+        executed: true,
+      })
+      yield* call("question_a", "question", false)
+      yield* call("question_b", "question", false)
+      yield* bus.publish(SessionEvent.Step.Streamed, { sessionID, assistantMessageID })
+
+      const prepared = (question: string) => ({
+        adapter: "question@1" as const,
+        input: {
+          questions: [{
+            question,
+            header: "Continue",
+            options: [{ label: "Yes", description: "Continue" }],
+          }],
+        },
+      })
+      const payload: SessionEvent.Step.ParkedPayload = {
+        sessionID,
+        assistantMessageID,
+        generation: started.durable.seq,
+        finish: "tool-calls",
+        cost: Money.USD.make(0),
+        tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+        questions: [
+          { callID: "question_a", questionID: "frm_parking_a" as never, prepared: prepared("A?") },
+          { callID: "question_b", questionID: "frm_parking_b" as never, prepared: prepared("B?") },
+        ],
+      }
+
+      yield* SessionParking.park(payload)
+
+      const pendingBeforeRetry = yield* db.select().from(SessionPendingStepTable).all()
+      const questionsBeforeRetry = yield* db.select().from(SessionQuestionTable).all()
+      const sequenceBeforeRetry = yield* db.select().from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, sessionID)).get()
+      const eventsBeforeRetry = yield* db.select().from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID)).all()
+
+      const retry = yield* SessionParking.park(payload).pipe(Effect.exit)
+      expect(retry._tag).toBe("Failure")
+      expect(yield* db.select().from(SessionPendingStepTable).all()).toEqual(pendingBeforeRetry)
+      expect(yield* db.select().from(SessionQuestionTable).all()).toEqual(questionsBeforeRetry)
+      expect(yield* db.select().from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, sessionID)).get()).toEqual(sequenceBeforeRetry)
+      expect(yield* db.select().from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID)).all()).toEqual(eventsBeforeRetry)
+
+      const parkedEvent = (yield* db.select().from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID)).all())
+        .find((event) => event.type === Bus.versionedType(SessionEvent.Step.Parked.type, 1))
+      expect(parkedEvent).toBeDefined()
+      if (!parkedEvent) throw new Error("Retained parked event missing")
+
+      const historical = {
+        id: Event.ID.make(parkedEvent.id),
+        created: parkedEvent.created,
+        aggregateID: sessionID,
+        seq: parkedEvent.seq,
+        type: parkedEvent.type,
+        data: parkedEvent.data,
+      }
+
+      const pendingBeforeReplay = yield* db.select().from(SessionPendingStepTable).all()
+      const questionsBeforeReplay = yield* db.select().from(SessionQuestionTable).all()
+      const sequenceBeforeReplay = yield* db.select().from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, sessionID)).get()
+      const eventsBeforeReplay = yield* db.select().from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID)).all()
+
+      yield* bus.replay(historical)
+
+      expect(yield* db.select().from(SessionPendingStepTable).all()).toEqual(pendingBeforeReplay)
+      expect(yield* db.select().from(SessionQuestionTable).all()).toEqual(questionsBeforeReplay)
+      expect(yield* db.select().from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, sessionID)).get()).toEqual(sequenceBeforeReplay)
+      expect(yield* db.select().from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID)).all()).toEqual(eventsBeforeReplay)
+
+      const divergent = {
+        ...historical,
+        data: { ...historical.data, finish: "stop" },
+      }
+      const divergentReplay = yield* bus.replay(divergent).pipe(Effect.exit)
+      expect(divergentReplay._tag).toBe("Failure")
+
+      expect(yield* db.select().from(SessionPendingStepTable).all()).toEqual(pendingBeforeReplay)
+      expect(yield* db.select().from(SessionQuestionTable).all()).toEqual(questionsBeforeReplay)
+      expect(yield* db.select().from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, sessionID)).get()).toEqual(sequenceBeforeReplay)
+      expect(yield* db.select().from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID)).all()).toEqual(eventsBeforeReplay)
+
+      // A parked Step is immutable until the dedicated continuation protocol resumes it.
+      const snapshot = () =>
+        Effect.all({
+          pending: db.select().from(SessionPendingStepTable).all(),
+          questions: db.select().from(SessionQuestionTable).all(),
+          messages: db.select().from(SessionMessageTable).all(),
+          parts: db.select().from(SessionPartTable).all(),
+          sequence: db.select().from(EventSequenceTable).all(),
+          events: db.select().from(EventTable).all(),
+        })
+
+      const beforeRejected = yield* snapshot()
+      const forbidden = [
+        bus.publish(SessionEvent.Step.Started, {
+          sessionID, assistantMessageID, agent: build, model, started: 2,
+        }).pipe(Effect.exit),
+        bus.publish(SessionEvent.Step.Ended, {
+          sessionID, assistantMessageID, finish: "stop",
+          cost: Money.USD.make(0),
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        }).pipe(Effect.exit),
+        bus.publish(SessionEvent.Step.Failed, {
+          sessionID, assistantMessageID,
+          error: { type: "provider.invalid-request" as const, message: "Rejected" },
+        }).pipe(Effect.exit),
+        bus.publish(SessionEvent.Tool.Called, {
+          sessionID, assistantMessageID, id: "question_a",
+          input: { unexpected: true }, executed: false,
+        }).pipe(Effect.exit),
+        bus.publish(SessionEvent.Tool.Success, {
+          sessionID, assistantMessageID, id: "question_a",
+          content: [{ type: "text" as const, text: "unexpected" }], executed: false,
+        }).pipe(Effect.exit),
+        bus.publish(SessionEvent.Tool.Failed, {
+          sessionID, assistantMessageID, id: "question_a",
+          error: { type: "tool.error" as const, message: "unexpected" }, executed: false,
+        }).pipe(Effect.exit),
+      ]
+
+      for (const rejectedEffect of forbidden) {
+        const rejected = yield* rejectedEffect
+        expect(rejected._tag).toBe("Failure")
+        expect(yield* snapshot()).toEqual(beforeRejected)
+      }
+
+      const pending = yield* db.select().from(SessionPendingStepTable).all()
+      expect(pending).toHaveLength(1)
+      expect(pending[0]).toMatchObject({
+        session_id: sessionID,
+        assistant_message_id: assistantMessageID,
+        generation: started.durable.seq,
+        data: payload,
+      })
+
+      const questions = yield* db.select().from(SessionQuestionTable).all()
+      expect(questions).toHaveLength(2)
+      expect(questions.map((question) => question.call_id).sort()).toEqual(["question_a", "question_b"])
+
+      const storedParts = yield* db.select().from(SessionPartTable)
+        .where(eq(SessionPartTable.message_id, assistantMessageID))
+        .all()
+      if (mode === "part_rows") {
+        expect(storedParts.length).toBeGreaterThanOrEqual(3)
+      } else {
+        expect(storedParts).toHaveLength(0)
+      }
+
+      const row = yield* db.select().from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+      expect(row).toBeDefined()
+      const message = yield* SessionHistory.loadMessageRow(db, row!)
+      if (message.type !== "assistant") {
+        throw new Error(`Expected assistant message, received ${message.type}`)
+      }
+      const calls = message.content.filter((part) => part.type === "tool")
+      expect(calls).toHaveLength(3)
+      expect(calls.find((part) => part.id === "ordinary")?.state.status).toBe("completed")
+      for (const id of ["question_a", "question_b"]) {
+        const original = calls.find((part) => part.id === id)
+        expect(original).toMatchObject({
+          id,
+          executed: false,
+          state: { status: "waiting", input: { original: id } },
+        })
+      }
+      }).pipe(mode === "part_rows" ? Effect.provide(partRows) : (effect) => effect),
+    )
+  }
+
   it.effect("does not settle a pending manual compaction on an auto failure", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
