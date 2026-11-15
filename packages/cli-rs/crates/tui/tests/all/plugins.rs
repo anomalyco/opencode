@@ -968,6 +968,10 @@ fn a_panel_cannot_take_the_keys_that_close_it() {
 /// Toasts on every change of the plugin list, as the C conformance plugin does.
 fn chatty(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_plugins(|host| host.toast(abi::Toast::new(abi::Variant::Info, "plugins changed")));
+    // Six toasts in one call: `chat 0` to `chat 5`.
+    setup.command(abi::Command::default().with_name("chatty.burst".to_owned()), |host, _| {
+        (0..6).for_each(|index| host.toast(abi::Toast::new(abi::Variant::Info, format!("chat {index}"))));
+    });
     Ok(())
 }
 
@@ -975,6 +979,47 @@ fn chatty(setup: &mut abi::Setup) -> Result<(), String> {
 fn boomer(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(abi::Command::default().with_name("boomer.panic".to_owned()), |_, _| panic!("boom"));
     Ok(())
+}
+
+/// `second.panic` panics.
+fn second(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command::default().with_name("second.panic".to_owned()), |_, _| panic!("boom"));
+    Ok(())
+}
+
+// Expected (review carbon new-2, big-boi's toast medium): a second failure behind several plugin toasts shows at once,
+// ahead of them; the plugins' toasts that wait are bounded, the oldest going, and they show after the host's, in order.
+#[test]
+fn a_second_failure_goes_ahead_of_the_plugin_toasts_that_wait() {
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    for (id, setup) in [("chatty", chatty as fn(&mut abi::Setup) -> _), ("boomer", boomer), ("second", second)] {
+        opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id, setup }.into());
+    }
+    h.app.render();
+    let title = |h: &Harness| h.tui.toasts.current().map(|toast| toast.title.unwrap_or(toast.message));
+    h.tui.keymap.dispatch("boomer.panic", None);
+    h.wait_for("Plugin failed: boomer");
+    h.tui.keymap.dispatch("chatty.burst", None);
+    h.app.advance(Duration::from_millis(100));
+    assert_eq!(title(&h).as_deref(), Some("Plugin failed: boomer"));
+    h.tui.keymap.dispatch("second.panic", None);
+    h.wait_for("Plugin failed: second");
+    let mut shown = Vec::new();
+    while let Some(next) = title(&h) {
+        shown.push(next);
+        h.tui.toasts.dismiss();
+    }
+    // `plugins changed` is chatty's toast of each failure, which waits as the burst does: of the seven that waited, the
+    // first failure's and `chat 0` to `chat 2` went.
+    assert_eq!(shown, ["Plugin failed: second", "chat 3", "chat 4", "chat 5", "plugins changed"]);
+    assert_eq!(opencode_ui::toast::PLUGIN_WAITING, 4);
+    // A plugin's toast that comes while another's shows and more wait takes its turn behind them.
+    h.tui.toasts.show(opencode_ui::toast::ToastOptions::new(opencode_ui::toast::Variant::Info, "host").keep());
+    h.tui.keymap.dispatch("chatty.burst", None);
+    h.app.advance(Duration::from_millis(1));
+    h.tui.toasts.dismiss();
+    h.tui.toasts.show_behind_kept(opencode_ui::toast::ToastOptions::new(opencode_ui::toast::Variant::Info, "late"));
+    assert_eq!(title(&h).as_deref(), Some("chat 2"));
 }
 
 // Expected (PL-2): a plugin that toasts as the plugin list changes does not hide the host's report of another plugin
