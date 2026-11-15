@@ -30,13 +30,23 @@ export class Config extends Context.Service<Config, Info>()("@opencode/ServerAut
   }
 }
 
-// Local accounts stay opt-in until the sign-in screen ships: the flag's channel default does not apply yet, so
-// the auth server option or `OPENCODE_FLAGS=local_auth` (or `all`) turn the feature on. Entries are empty
-// because the flag resolves at server boot, before any Location's config exists; the channel default replaces
-// the "unknown" placeholder once the screen exists.
-export function localRequested(options: { readonly auth?: { readonly local?: true } } | undefined) {
+// Local accounts follow the flag's channel default now that the sign-in screen exists: on for local and dev
+// builds, off elsewhere. The auth server option or `OPENCODE_FLAGS=local_auth` (or `all`) turn the feature on
+// regardless. Entries are empty because the flag resolves at server boot, before any Location's config exists.
+export function localRequested(
+  options:
+    | {
+        readonly auth?: { readonly local?: true }
+        readonly app?: { readonly channel?: string }
+      }
+    | undefined,
+) {
   if (options?.auth?.local) return true
-  return Flag.resolve({ entries: [], channel: "unknown", overrides: process.env.OPENCODE_FLAGS }).local_auth.enabled
+  return Flag.resolve({
+    entries: [],
+    channel: options?.app?.channel ?? "unknown",
+    overrides: process.env.OPENCODE_FLAGS,
+  }).local_auth.enabled
 }
 
 export function required(config: Info) {

@@ -134,7 +134,8 @@ export async function checkServerHealth(
 
     if (signal?.aborted) return unreachable
 
-    if (isUnauthorizedError(current.error)) return { type: "unauthorized" }
+    if (isUnauthorizedError(current.error))
+      return current.error.methods ? { type: "unauthorized", methods: current.error.methods } : { type: "unauthorized" }
 
     return next(count, retryable(current.error, signal))
   }

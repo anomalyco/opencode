@@ -7,8 +7,11 @@ export const SERVER_HEALTH_POLL_MS = 10_000
 /** The answer of one `/api/info` probe. */
 export type ServerProbeResult =
   | { readonly type: "healthy"; readonly version?: string; readonly hostname?: string }
-  | { readonly type: "unauthorized" }
+  | { readonly type: "unauthorized"; readonly methods?: ServerAuthMethods }
   | { readonly type: "unreachable" }
+
+/** The sign-ins a server's 401 advertises: its own accounts, or the shared password. */
+export type ServerAuthMethods = ReadonlyArray<"password" | "local">
 
 /**
  * What the app knows about a server's health. `checking` waits for the first answer from the current endpoint; a

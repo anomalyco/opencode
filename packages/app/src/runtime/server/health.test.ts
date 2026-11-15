@@ -62,6 +62,17 @@ describe("checkServerHealth", () => {
     expect(calls).toBe(1)
   })
 
+  test("reports the sign-ins a 401 advertises", async () => {
+    const fetch = fakeFetch(async () =>
+      new Response(`{"_tag":"UnauthorizedError","message":"Authentication required","methods":["local"]}`, {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      }),
+    )
+
+    expect(await checkServerHealth(server, fetch)).toEqual({ type: "unauthorized", methods: ["local"] })
+  })
+
   test("allows slow servers thirty seconds by default", async () => {
     const timeout = Object.getOwnPropertyDescriptor(AbortSignal, "timeout")
     let timeoutMs = 0

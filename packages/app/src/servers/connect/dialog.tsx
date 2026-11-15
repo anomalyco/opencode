@@ -12,7 +12,7 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { isServerUnauthorized } from "@/runtime/server/health-machine"
 import { createServerConnectController } from "./controller"
 import type { ServerConnectField, ServerOriginal } from "./machine"
-import { ConnectMethodSwitch } from "./method"
+import { ConnectMethodSwitch, LocalAccountSwitch } from "./method"
 import "@/settings/settings.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
@@ -179,26 +179,74 @@ export const DialogServer: Component<{
               />
             </div>
             <Show when={view().draft.method === "password"}>
-              <div class="flex w-full min-w-0 flex-col gap-2">
-                <label for="dialog-server-password" class="settings-server-dialog-label">
-                  {language.t("dialog.server.add.password")}
-                </label>
-                <TextInput
-                  id="dialog-server-password"
-                  type="password"
-                  appearance="large"
-                  class="!w-full self-stretch"
-                  value={view().draft.password}
-                  placeholder={language.t("dialog.server.add.passwordPlaceholder")}
+              <Show
+                when={view().localAuth}
+                fallback={
+                  <div class="flex w-full min-w-0 flex-col gap-2">
+                    <label for="dialog-server-password" class="settings-server-dialog-label">
+                      {language.t("dialog.server.add.password")}
+                    </label>
+                    <TextInput
+                      id="dialog-server-password"
+                      type="password"
+                      appearance="large"
+                      class="!w-full self-stretch"
+                      value={view().draft.password}
+                      placeholder={language.t("dialog.server.add.passwordPlaceholder")}
+                      disabled={view().disabled}
+                      aria-describedby="dialog-server-password-hint"
+                      onInput={(event) => change("password", event.currentTarget.value)}
+                      onKeyDown={keyDown}
+                    />
+                    <span id="dialog-server-password-hint" class="settings-server-dialog-hint">
+                      {language.t("server.connect.password.hint")}
+                    </span>
+                  </div>
+                }
+              >
+                <div class="flex w-full min-w-0 flex-col gap-2">
+                  <label for="dialog-server-username" class="settings-server-dialog-label">
+                    {language.t("server.connect.local.username")}
+                  </label>
+                  <TextInput
+                    id="dialog-server-username"
+                    type="text"
+                    appearance="large"
+                    class="!w-full self-stretch"
+                    dir="ltr"
+                    autocomplete="username"
+                    autocapitalize="off"
+                    spellcheck={false}
+                    value={view().draft.username}
+                    disabled={view().disabled}
+                    aria-describedby={view().error ? "dialog-server-error" : undefined}
+                    onInput={(event) => change("username", event.currentTarget.value)}
+                    onKeyDown={keyDown}
+                  />
+                </div>
+                <div class="flex w-full min-w-0 flex-col gap-2">
+                  <label for="dialog-server-password" class="settings-server-dialog-label">
+                    {language.t("dialog.server.add.password")}
+                  </label>
+                  <TextInput
+                    id="dialog-server-password"
+                    type="password"
+                    appearance="large"
+                    class="!w-full self-stretch"
+                    autocomplete={view().creating ? "new-password" : "current-password"}
+                    value={view().draft.password}
+                    disabled={view().disabled}
+                    aria-describedby={view().error ? "dialog-server-error" : undefined}
+                    onInput={(event) => change("password", event.currentTarget.value)}
+                    onKeyDown={keyDown}
+                  />
+                </div>
+                <LocalAccountSwitch
+                  create={view().creating}
                   disabled={view().disabled}
-                  aria-describedby="dialog-server-password-hint"
-                  onInput={(event) => change("password", event.currentTarget.value)}
-                  onKeyDown={keyDown}
+                  onChange={(create) => change("account", create ? "create" : "signin")}
                 />
-                <span id="dialog-server-password-hint" class="settings-server-dialog-hint">
-                  {language.t("server.connect.password.hint")}
-                </span>
-              </div>
+              </Show>
             </Show>
             <Show when={view().showScan}>
               <Button
@@ -214,6 +262,7 @@ export const DialogServer: Component<{
             <Show when={view().cameraHint}>{(hint) => <span class="settings-server-dialog-hint">{hint()}</span>}</Show>
             <ConnectMethodSwitch
               method={view().draft.method}
+              localAuth={view().localAuth}
               disabled={view().disabled}
               onChange={(method) => form.dispatch({ type: "method.changed", method })}
             />

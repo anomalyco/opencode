@@ -1,4 +1,5 @@
 import { type Accessor, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
+import { isConflictError, isInvalidRequestError, isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useCheckServerHealth } from "@/runtime/server/health"
@@ -10,6 +11,7 @@ import {
   transitionServerConnect,
   type ServerCameraSupport,
   type ServerConnectEffect,
+  type ServerConnectError,
   type ServerConnectEvent,
   type ServerConnectTarget,
   type ServerOriginal,
@@ -91,12 +93,30 @@ export function createServerConnectController(options: ServerConnectControllerOp
           error: { type: "connection-failed", url: effect.http.url },
         })
 
-      void Promise.try(() => check(effect.http)).then(
-        (result) =>
-          result.type === "healthy"
-            ? dispatch({ type: "submit.succeeded", attempt: effect.attempt, http: effect.http })
-            : failed(),
-        failed,
+      void Promise.try(() => check(effect.http)).then((result) => {
+        if (result.type === "healthy") return dispatch({ type: "submit.succeeded", attempt: effect.attempt, http: effect.http })
+
+        // A 401 says which sign-ins the server accepts, so a local-only one can switch the form to its accounts.
+        if (result.type === "unauthorized")
+          return dispatch({
+            type: "submit.failed",
+            attempt: effect.attempt,
+            error: { type: "credentials", methods: result.methods ?? [] },
+          })
+
+        return failed()
+      }, failed)
+
+      return
+    }
+
+    if (effect.type === "connect.local") {
+      void Promise.try(() => localAccount(effect)).then(dispatch, () =>
+        dispatch({
+          type: "submit.failed",
+          attempt: effect.attempt,
+          error: { type: "connection-failed", url: effect.url },
+        }),
       )
 
       return
@@ -139,6 +159,25 @@ export function createServerConnectController(options: ServerConnectControllerOp
     }
 
     if (options.surface === "dialog") options.onClose(effect.saved)
+  }
+
+  // Signs in — or registers, on the server's always-open registration — and checks the session token it issued.
+  const localAccount = async (
+    effect: Extract<ServerConnectEffect, { type: "connect.local" }>,
+  ): Promise<ServerConnectEvent> => {
+    const api = OpenCode.make({ baseUrl: effect.url, fetch: platform.fetch ?? globalThis.fetch })
+    const session = await (effect.create
+      ? api.experimental.auth.register({ username: effect.username, password: effect.password })
+      : api.experimental.auth.login({ username: effect.username, password: effect.password })
+    ).catch((cause) => ({ error: authFailure(cause, effect.url) }))
+
+    if ("error" in session) return { type: "submit.failed", attempt: effect.attempt, error: session.error }
+
+    const http = { url: effect.url, password: session.token }
+
+    if ((await check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
+
+    return { type: "submit.failed", attempt: effect.attempt, error: { type: "connection-failed", url: effect.url } }
   }
 
   const pair = async (effect: Extract<ServerConnectEffect, { type: "connect.link" }>): Promise<ServerConnectEvent> => {
@@ -209,4 +248,12 @@ async function probeCamera() {
   const devices = await navigator.mediaDevices.enumerateDevices()
 
   return devices.some((device) => device.kind === "videoinput")
+}
+
+// Maps the server's declared auth errors onto the form's; anything else failed to connect.
+function authFailure(cause: unknown, url: string): ServerConnectError {
+  if (isUnauthorizedError(cause)) return { type: "credentials", methods: cause.methods ?? [] }
+  if (isConflictError(cause)) return { type: "username-taken" }
+  if (isInvalidRequestError(cause)) return { type: "refused", message: cause.message }
+  return { type: "connection-failed", url }
 }

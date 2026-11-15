@@ -4,7 +4,7 @@ import { TextInput } from "@opencode/ui/text-input"
 import { Wordmark } from "@opencode/ui/wordmark"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createServerConnectController } from "./controller"
-import { ConnectMethodSwitch } from "./method"
+import { ConnectMethodSwitch, LocalAccountSwitch } from "./method"
 import "./screen.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
@@ -25,7 +25,11 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
           <h1 id="server-connect-title">{language.t("server.connect.title")}</h1>
           <p>
             {language.t(
-              view().draft.method === "link" ? "server.connect.description.pairing" : "server.connect.description",
+              view().draft.method === "link"
+                ? "server.connect.description.pairing"
+                : view().localAuth
+                  ? "server.connect.local.description"
+                  : "server.connect.description",
             )}
           </p>
         </header>
@@ -95,25 +99,74 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
                   }
                 />
               </div>
-              <div class="server-connect-field">
-                <label for="server-connect-password">{language.t("dialog.server.add.password")}</label>
-                <TextInput
-                  id="server-connect-password"
-                  name="password"
-                  type="password"
-                  autocomplete="current-password"
-                  appearance="large"
-                  value={view().draft.password}
+              <Show
+                when={view().localAuth}
+                fallback={
+                  <div class="server-connect-field">
+                    <label for="server-connect-password">{language.t("dialog.server.add.password")}</label>
+                    <TextInput
+                      id="server-connect-password"
+                      name="password"
+                      type="password"
+                      autocomplete="current-password"
+                      appearance="large"
+                      value={view().draft.password}
+                      disabled={view().disabled}
+                      aria-describedby="server-connect-password-hint"
+                      onInput={(event) =>
+                        form.dispatch({ type: "field.changed", field: "password", value: event.currentTarget.value })
+                      }
+                    />
+                    <p id="server-connect-password-hint" class="server-connect-hint">
+                      {language.t("server.connect.password.hint")}
+                    </p>
+                  </div>
+                }
+              >
+                <div class="server-connect-field">
+                  <label for="server-connect-username">{language.t("server.connect.local.username")}</label>
+                  <TextInput
+                    id="server-connect-username"
+                    name="username"
+                    dir="ltr"
+                    type="text"
+                    autocomplete="username"
+                    autocapitalize="off"
+                    spellcheck={false}
+                    required
+                    appearance="large"
+                    value={view().draft.username}
+                    disabled={view().disabled}
+                    aria-describedby={view().error ? "server-connect-error" : undefined}
+                    onInput={(event) =>
+                      form.dispatch({ type: "field.changed", field: "username", value: event.currentTarget.value })
+                    }
+                  />
+                </div>
+                <div class="server-connect-field">
+                  <label for="server-connect-password">{language.t("dialog.server.add.password")}</label>
+                  <TextInput
+                    id="server-connect-password"
+                    name="password"
+                    type="password"
+                    autocomplete={view().creating ? "new-password" : "current-password"}
+                    appearance="large"
+                    value={view().draft.password}
+                    disabled={view().disabled}
+                    aria-describedby={view().error ? "server-connect-error" : undefined}
+                    onInput={(event) =>
+                      form.dispatch({ type: "field.changed", field: "password", value: event.currentTarget.value })
+                    }
+                  />
+                </div>
+                <LocalAccountSwitch
+                  create={view().creating}
                   disabled={view().disabled}
-                  aria-describedby="server-connect-password-hint"
-                  onInput={(event) =>
-                    form.dispatch({ type: "field.changed", field: "password", value: event.currentTarget.value })
+                  onChange={(create) =>
+                    form.dispatch({ type: "field.changed", field: "account", value: create ? "create" : "signin" })
                   }
                 />
-                <p id="server-connect-password-hint" class="server-connect-hint">
-                  {language.t("server.connect.password.hint")}
-                </p>
-              </div>
+              </Show>
             </Show>
             <Show when={view().error}>
               <p id="server-connect-error" class="server-connect-error" role="alert">
@@ -137,6 +190,7 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
           <Show when={view().cameraHint}>{(hint) => <p>{hint()}</p>}</Show>
           <ConnectMethodSwitch
             method={view().draft.method}
+            localAuth={view().localAuth}
             disabled={view().disabled}
             onChange={(method) => form.dispatch({ type: "method.changed", method })}
           />
