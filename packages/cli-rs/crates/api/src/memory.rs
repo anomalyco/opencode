@@ -290,7 +290,7 @@ mod tests {
     }
 
     // Expected: a held route answers once its path is released, and counts as in flight only from then; a request
-    // after the release is answered at once.
+    // after the release is answered at once, and one after it is held again waits again.
     #[tokio::test]
     async fn a_held_route_answers_once_released() {
         let memory =
@@ -307,6 +307,11 @@ mod tests {
         drop(response);
         let after = memory.send(request("POST", "http://x/api/session/ses_2/generate")).await.unwrap();
         assert_eq!(after.status, 200);
+        memory.hold("/api/session/:id/generate");
+        let mut again = Box::pin(memory.send(request("POST", "http://x/api/session/ses_3/generate")));
+        assert!(again.as_mut().poll(&mut cx).is_pending());
+        memory.release("/api/session/:id/generate");
+        assert_eq!(again.await.unwrap().status, 200);
     }
 
     #[tokio::test]
