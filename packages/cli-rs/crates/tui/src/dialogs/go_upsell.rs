@@ -11,6 +11,7 @@ use opencode_local::model_pref::Model;
 use opencode_store::Catalog;
 use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
 
+use super::go_upsell_art;
 use crate::local::Local;
 use crate::prelude::*;
 
@@ -141,7 +142,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     if short {
         cx.dialogs.set_centered(true);
     }
-    // Text sits on a translucent panel, as it does over the rings the TS client animates behind it.
+    // Text sits on a translucent panel so the rings stay legible behind it.
     let base = theme.background.base;
     let text_bg = Color::rgba(base.r, base.g, base.b, 186);
     let primary = theme.background.action.primary.focused;
@@ -282,6 +283,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     let link = Text::new(app, vec![GO_URL.fg(primary).link(GO_URL)]).bg(text_bg).wrap(WrapMode::None);
     crate::features::links::open_on_click(app, &link, GO_URL.to_owned());
     let compact = short || height < if narrow { 26 } else { 22 };
+    let mut art = None;
     if compact {
         // TS's scrollbox takes its whole `maxHeight`, so the panel reaches the buttons at the bottom.
         let top = if short { 1 } else { height / 4 + 1 };
@@ -296,14 +298,19 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         root.add(&scroll);
     } else {
         root.add(&View::new(app).child(&used).child(&pitch));
-        root.add(
-            &View::new(app)
-                .height(7)
-                .padding_edge(Edge::Bottom, 1)
-                .align_items(Align::Center)
-                .justify(Justify::End)
-                .child(&link),
-        );
+        let anchor = View::new(app)
+            .height(7)
+            .padding_edge(Edge::Bottom, 1)
+            .align_items(Align::Center)
+            .justify(Justify::End)
+            .child(&link);
+        root.add(&anchor);
+        let colors = go_upsell_art::Colors {
+            background: base,
+            primary,
+            logo_base: opencode_ui::theme::tint(base, theme.text.base, 0.62),
+        };
+        art = Some(go_upsell_art::new(app, colors, &anchor));
     }
     if narrow {
         let column = View::new(app).align_items(Align::Start).shrink(0.0);
@@ -324,7 +331,10 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     paint();
     // The buttons' handlers reach the buttons through `paint`; letting go of them ends that cycle.
     cx.on_close(opentui::keymap::Disposer::new(move || buttons.borrow_mut().clear()));
-    root
+    match art {
+        Some(art) => View::new(app).child(&art).child(&root),
+        None => root,
+    }
 }
 
 fn dont_show_again(local: &Rc<Local>) {
