@@ -78,4 +78,17 @@ describe("resolveOpenTarget", () => {
     expect(resolveOpenTarget("packages/tui/src/ui/link.tsx")).toBeUndefined()
     expect(resolveOpenTarget("not a url")).toBeUndefined()
   })
+
+  test("rejects UNC paths in either slash style, including encoded ones", () => {
+    const base = path.resolve("/repo")
+    expect(resolveOpenTarget("//server/share/report.md")).toBeUndefined()
+    expect(resolveOpenTarget("\\\\server\\share\\report.md")).toBeUndefined()
+    expect(resolveOpenTarget("//server/share/report.md", base)).toBeUndefined()
+    expect(resolveOpenTarget("\\\\server\\share\\report.md", base)).toBeUndefined()
+    // Percent-escaped spellings must not bypass the policy after decoding.
+    expect(resolveOpenTarget("%2F%2Fserver/share/report.md", base)).toBeUndefined()
+    expect(resolveOpenTarget("%5C%5Cserver%5Cshare%5Creport.md", base)).toBeUndefined()
+    // A file URL whose path is itself a UNC target is still remote.
+    expect(resolveOpenTarget("file:////server/share/report.md")).toBeUndefined()
+  })
 })

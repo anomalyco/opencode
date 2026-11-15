@@ -22,16 +22,23 @@ export function openHref(input: string, base?: string) {
 
 /** @internal */
 export function resolveOpenTarget(input: string, base?: string) {
+  // Href spelling is URI-like: decode percent-escapes and drop #fragment / ?query so
+  // plan%20notes.md#section → plan notes.md while literal % / # use %25 / %23.
+  const decoded = decodeHrefPath(input)
+  // Remote shares are not local files. Both "//server/share" and "\\server\share" reach
+  // SMB/UNC paths on Windows, so reject them before any absolute-path shortcut and again
+  // after decoding, where %2F%2F... / %5C%5C... would otherwise slip through.
+  if (isRemotePath(decoded)) return undefined
   // Absolute paths before URL parsing: URL.canParse treats "C:\..." / "C:/..." as scheme "c:".
-  // Markdown absolute hrefs still use URI spelling (%20, #fragment), same as relatives.
-  if (path.isAbsolute(input) || /^[A-Za-z]:[\\/]/.test(input)) return decodeHrefPath(input)
+  if (path.isAbsolute(input) || /^[A-Za-z]:[\\/]/.test(input)) return decoded
   if (URL.canParse(input)) {
     const url = new URL(input)
     if (url.protocol === "http:" || url.protocol === "https:") return url.href
     // Match desktop: only local file URLs (no host) become filesystem paths.
     if (url.protocol === "file:" && !url.hostname) {
       try {
-        return fileURLToPath(url.href)
+        const target = fileURLToPath(url.href)
+        return isRemotePath(target) ? undefined : target
       } catch {
         return undefined
       }
@@ -39,10 +46,14 @@ export function resolveOpenTarget(input: string, base?: string) {
     return undefined
   }
   // Resolve project-relative Markdown links such as plan/example.md against the session directory.
-  // Href spelling is URI-like: decode percent-escapes and drop #fragment / ?query so
-  // plan%20notes.md#section → plan notes.md while literal % / # use %25 / %23.
   if (base === undefined || input.length === 0 || input.startsWith("#")) return
-  return path.resolve(base, decodeHrefPath(input))
+  const target = path.resolve(base, decoded)
+  return isRemotePath(target) ? undefined : target
+}
+
+/** Paths that reach a remote SMB share or a Windows device namespace instead of a local file. */
+function isRemotePath(value: string) {
+  return value.startsWith("//") || value.startsWith("\\\\")
 }
 
 function decodeHrefPath(input: string) {
