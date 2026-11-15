@@ -191,3 +191,61 @@ fn layer_rejects_the_command_shapes_typescript_rejects() {
         Some("Inline keymap commands require bind")
     );
 }
+
+// Expected (review carbon new-3): `parse_binding` gives the key sequences the engine registers for a binding, over
+// every alias form: an alias between the engine's boundaries (`+`, `,`, `<`, `>`, whitespace) is its key, also before a
+// token (`esc<leader>`) and after one (`<leader>esc`), and only there (`escx`); commas separate bindings, and a key the
+// layer binds nothing for, as one with an empty entry, `parse_binding` refuses or parses to nothing.
+#[test]
+fn a_binding_parses_as_its_layer_registers_it() {
+    let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
+    let strokes = |parts: &[opentui::keymap::KeySequencePart]| {
+        parts.iter().map(|part| format!("{:?}", part.stroke)).collect::<Vec<_>>()
+    };
+    for key in [
+        "esc",
+        "ESC",
+        "esc<",
+        "esc<leader>",
+        "<leader>esc",
+        "ctrl+esc",
+        "Esc+ctrl",
+        "esc,ctrl+e",
+        "x, esc",
+        "g esc",
+        "escx",
+        "xesc",
+        "enter",
+        "pgup",
+        "ctrl+e",
+        "a,,b",
+        "",
+    ] {
+        let layer =
+            tui.layer(KeymapLayer::new(vec![TuiCommand::new("probe.key", |_, _| {}).bind(Bind::Key(key.to_owned()))]));
+        let bound = tui.keymap().command_bindings(Visibility::Registered, &["probe.key"]);
+        let mut engine: Vec<Vec<String>> = match &layer {
+            Ok(_) => bound.get("probe.key").into_iter().flatten().map(|binding| strokes(&binding.sequence)).collect(),
+            Err(_) => Vec::new(),
+        };
+        let mut ours: Vec<Vec<String>> = tui
+            .parse_binding(key)
+            .unwrap_or_default()
+            .iter()
+            .filter(|parts| !parts.is_empty())
+            .map(|parts| strokes(parts))
+            .collect();
+        engine.sort();
+        ours.sort();
+        assert_eq!(ours, engine, "{key:?}");
+        drop(layer);
+    }
+    let escape = tui.keymap().parse_key("escape").unwrap().stroke;
+    let takes_escape = |key: &str| tui.parse_binding(key).unwrap().iter().flatten().any(|part| part.stroke == escape);
+    for key in ["esc", "esc<", "esc<leader>", "<leader>esc", "g esc", "x, esc"] {
+        assert!(takes_escape(key), "{key:?}");
+    }
+    for key in ["escx", "xesc", "ctrl+e"] {
+        assert!(!takes_escape(key), "{key:?}");
+    }
+}
