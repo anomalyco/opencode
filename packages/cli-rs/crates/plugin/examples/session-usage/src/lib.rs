@@ -6,25 +6,31 @@
 //! `message.list` for each session, through the host's `fetch`. It reads the meters with `usage.limits`, at most once per
 //! `refreshMs` and at once after a turn. Its own thread ticks every 15 seconds, which moves the countdowns and lets the
 //! throttled read run, and notices a change of the config file.
+//!
+//! TS reads every page again after each turn in the tree, and so does the panel. A page holds a hundred messages with
+//! their content, so another thread of the plugin's reads the pages and prices them: the UI thread hands it each page
+//! as the fetch's bytes and hears back only the page's cursor and, at the end, the total. Read on the UI thread, a
+//! family's pages after a subagent's turn went over the frame budget, and the panel was reported slow (PL-4).
 
 mod config;
 mod usage;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, mpsc};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime};
 
 use config::{Config, Position};
-use opencode_plugin_abi::types::{SessionMessageInfo, UsageLimitsGo, UsageLimitsMeter, V2Event};
+use opencode_plugin_abi::types::{ModelInfo, SessionMessageInfo, UsageLimitsGo, UsageLimitsMeter, V2Event};
 use opencode_plugin_abi::{
-    Changed, Fetch, Host, LocationRef, Node, Placement, Read, Render, RequestId, Setup, Span, Waker, Wrap,
-    export_plugin,
+    Changed, Fetch, Host, LocationRef, Node, Placement, Read, Render, RequestId, SendError, Sender, Setup, Span, Stop,
+    Waker, Wrap, base64, export_plugin,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 use usage::js_round;
 
 const MAX_SESSIONS: usize = 500;
@@ -66,7 +72,15 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     let events = ["session.execution.succeeded", "session.usage.updated", "session.created", "session.deleted"];
     let heard = state.clone();
     setup.on_event(&events, move |host, event| heard.borrow_mut().event(host, event));
-    setup.on_reply(move |host, id, reply| state.borrow_mut().reply(host, id, reply));
+    let replied = state.clone();
+    setup.on_reply(move |host, id, reply| replied.borrow_mut().reply(host, id, reply));
+    let decoded = state.clone();
+    let sender = setup.messages(move |host, message: Value| decoded.borrow_mut().decoded(host, message))?;
+    let (jobs, queue) = mpsc::channel();
+    // Without the thread, the UI thread reads the pages, as before.
+    if setup.spawner().spawn("decode", move |stop| decode(&queue, &sender, &stop)).is_ok() {
+        state.borrow_mut().decoder = Decoder::Thread(jobs);
+    }
     Ok(())
 }
 
@@ -91,21 +105,28 @@ struct State {
     run: Option<Run>,
     /// TS `costQueued` and `costReload`.
     queued: Option<bool>,
-    /// The messages of the last finished run, for TS `setTotal`: the total is priced with the location's models once
-    /// they are loaded, and the messages are dropped then, as TS drops its `messageSets`.
+    /// The last finished run, for TS `setTotal`: the decoder prices its messages with the location's models once they
+    /// are loaded, and drops them then, as TS drops its `messageSets`.
     priced: Option<Priced>,
     total: Option<f64>,
     /// Messages the Rust types rejected; they are left out of the total.
     skipped: usize,
+    decoder: Decoder,
+    /// The number of the next run.
+    runs: u64,
 }
 
 struct Priced {
     location: LocationRef,
-    sessions: Vec<Vec<SessionMessageInfo>>,
+    run: u64,
+    /// The decoder was asked for its total.
+    asked: bool,
 }
 
-/// TS `refreshCost` while it runs: the session it started for, where it is, and the requests it waits for.
+/// TS `refreshCost` while it runs: its number, the session it started for, where it is, and the requests it waits
+/// for.
 struct Run {
+    id: u64,
     session: String,
     location: LocationRef,
     stage: Stage,
@@ -123,15 +144,16 @@ enum Stage {
         next: Vec<String>,
         depth: usize,
     },
-    /// TS `costOfSessions`: the sessions, the first of the batch being read, and every session's messages so far.
-    Price { ids: Vec<String>, batch: usize, open: usize, sessions: Vec<Vec<SessionMessageInfo>> },
+    /// TS `costOfSessions`: the sessions, the first of the batch being read, and how many of the batch are still read;
+    /// the decoder keeps their messages.
+    Price { ids: Vec<String>, batch: usize, open: usize },
 }
 
 /// What a run does after a step.
 enum Next {
     Wait,
     Price(Vec<String>),
-    Finish(Vec<Vec<SessionMessageInfo>>),
+    Finish,
 }
 
 #[derive(Clone, Copy)]
@@ -158,6 +180,8 @@ impl State {
             priced: None,
             total: None,
             skipped: 0,
+            decoder: Decoder::Here(Book::default()),
+            runs: 0,
         }
     }
 
@@ -178,7 +202,7 @@ impl State {
         }
         self.session = Some(session);
         self.tree.clear();
-        self.priced = None;
+        self.forget_priced();
         self.total = None;
         self.refresh_cost(host, true);
         self.load(host, true);
@@ -276,7 +300,8 @@ impl State {
             }
             false => price(self.tree.clone()),
         };
-        self.run = Some(Run { session, location, stage, waiting: Vec::new() });
+        self.runs += 1;
+        self.run = Some(Run { id: self.runs, session, location, stage, waiting: Vec::new() });
         self.step(host);
     }
 
@@ -302,10 +327,8 @@ impl State {
                     }
                 }
                 Stage::Price { open, .. } if *open > 0 => Next::Wait,
-                Stage::Price { ids, batch, sessions, .. } if *batch >= ids.len() => {
-                    Next::Finish(std::mem::take(sessions))
-                }
-                Stage::Price { ids, batch, open, .. } => {
+                Stage::Price { ids, batch, .. } if *batch >= ids.len() => Next::Finish,
+                Stage::Price { ids, batch, open } => {
                     let end = (*batch + COST_CONCURRENCY).min(ids.len());
                     for (index, id) in ids.iter().enumerate().take(end).skip(*batch) {
                         run.waiting.push((host.fetch(messages(id, None)), Want::Messages { index, page: 0 }));
@@ -316,9 +339,9 @@ impl State {
             };
             match next {
                 Next::Wait => return,
-                Next::Finish(sessions) => return self.finish(host, Some(sessions)),
+                Next::Finish => return self.finish(host, true),
                 // TS drops a tree found for a session no longer in view.
-                Next::Price(_) if self.session.as_ref() != Some(&run.session) => return self.finish(host, None),
+                Next::Price(_) if self.session.as_ref() != Some(&run.session) => return self.finish(host, false),
                 Next::Price(ids) => {
                     self.tree = ids.clone();
                     run.stage = price(ids);
@@ -327,16 +350,38 @@ impl State {
         }
     }
 
-    /// The run ended: with its messages when it priced the session still in view; then a queued run starts.
-    fn finish(&mut self, host: &dyn Host, sessions: Option<Vec<Vec<SessionMessageInfo>>>) {
-        let run = self.run.take();
-        if let (Some(run), Some(sessions)) = (run, sessions)
-            && self.session.as_ref() == Some(&run.session)
-        {
-            self.priced = Some(Priced { location: run.location, sessions });
+    /// The run ended: `priced` when it read every page of the session still in view, which the decoder prices next;
+    /// else the decoder drops what it read. Then a queued run starts.
+    fn finish(&mut self, host: &dyn Host, priced: bool) {
+        if let Some(run) = self.run.take() {
+            match priced && self.session.as_ref() == Some(&run.session) {
+                true => {
+                    self.forget_priced();
+                    self.priced = Some(Priced { location: run.location, run: run.id, asked: false });
+                }
+                false => drop(self.send(Job::Forget { run: run.id })),
+            }
         }
         if let Some(reload) = self.queued.take() {
             self.refresh_cost(host, reload);
+        }
+    }
+
+    /// No total is wanted of the last finished run any more: the decoder drops its messages, unless it was asked.
+    fn forget_priced(&mut self) {
+        if let Some(priced) = self.priced.take().filter(|priced| !priced.asked) {
+            drop(self.send(Job::Forget { run: priced.run }));
+        }
+    }
+
+    /// Hands `job` to the decoder; what it answers at once, when the UI thread is the decoder.
+    fn send(&mut self, job: Job) -> Option<Value> {
+        match &mut self.decoder {
+            Decoder::Thread(jobs) => {
+                let _ = jobs.send(job);
+                None
+            }
+            Decoder::Here(book) => book.handle(job),
         }
     }
 
@@ -350,18 +395,56 @@ impl State {
         let Some(run) = &mut self.run else { return };
         let Some(index) = run.waiting.iter().position(|(known, _)| *known == id) else { return };
         let (_, want) = run.waiting.remove(index);
-        if !self.page(host, want, reply) {
+        if let Want::Messages { index, page } = want {
             // A failed request ends the run and keeps the last total, as TS's `catch` does.
-            return self.finish(host, None);
+            let Ok(Value::String(body)) = reply else { return self.finish(host, false) };
+            let job = Job::Page { run: run.id, index, page, body };
+            if let Some(answer) = self.send(job) {
+                self.decoded(host, answer);
+            }
+            return;
+        }
+        if !self.page(host, want, reply) {
+            return self.finish(host, false);
         }
         self.step(host);
     }
 
-    /// Takes in one page of the run's; false when it failed.
+    /// What the decoder answered: a page of the run that reads, after which the run reads the session's next page or
+    /// goes on; or the total of the last finished run.
+    fn decoded(&mut self, host: &dyn Host, answer: Value) {
+        if let Some(total) = answer.get("total") {
+            if self.priced.as_ref().is_some_and(|priced| total["run"].as_u64() == Some(priced.run)) {
+                self.total = total["total"].as_f64();
+                self.priced = None;
+            }
+            return;
+        }
+        let page = &answer["page"];
+        // A page of a run that ended.
+        if self.run.as_ref().is_none_or(|run| page["run"].as_u64() != Some(run.id)) {
+            return;
+        }
+        if page["ok"] != true {
+            return self.finish(host, false);
+        }
+        self.skipped += page["skipped"].as_u64().unwrap_or(0) as usize;
+        let (index, number) =
+            (page["index"].as_u64().unwrap_or(0) as usize, page["page"].as_u64().unwrap_or(0) as usize);
+        let Some(Run { stage: Stage::Price { ids, open, .. }, waiting, .. }) = &mut self.run else { return };
+        if let Some(cursor) = page["cursor"].as_str().filter(|_| number + 1 < MAX_PAGES) {
+            let fetch = messages(&ids[index], Some(cursor));
+            waiting.push((host.fetch(fetch), Want::Messages { index, page: number + 1 }));
+            return;
+        }
+        *open -= 1;
+        self.step(host);
+    }
+
+    /// Takes in one page of the run's children; false when it failed.
     fn page(&mut self, host: &dyn Host, want: Want, reply: Result<Value, String>) -> bool {
         let (Some(run), Ok(body)) = (&mut self.run, reply) else { return false };
-        let cursor = body.get("cursor").and_then(|cursor| cursor.get("next")).and_then(Value::as_str);
-        let cursor = cursor.filter(|cursor| !cursor.is_empty());
+        let cursor = page_cursor(&body);
         let data = body.get("data").cloned().unwrap_or(Value::Null);
         match (want, &mut run.stage) {
             (Want::Children { page }, Stage::Discover { ids, frontier, at, children: listed, next, .. }) => {
@@ -380,22 +463,6 @@ impl State {
                 }
                 *at += 1;
             }
-            (Want::Messages { index, page }, Stage::Price { ids, open, sessions, .. }) => {
-                let Value::Array(page_messages) = data else { return false };
-                // TS prices whatever a page holds; the API has no log for a plugin, so the panel counts what it skips.
-                for message in page_messages {
-                    match serde_json::from_value(message) {
-                        Ok(message) => sessions[index].push(message),
-                        Err(_) => self.skipped += 1,
-                    }
-                }
-                if let Some(cursor) = cursor.filter(|_| page + 1 < MAX_PAGES) {
-                    let fetch = messages(&ids[index], Some(cursor));
-                    run.waiting.push((host.fetch(fetch), Want::Messages { index, page: page + 1 }));
-                    return true;
-                }
-                *open -= 1;
-            }
             _ => return false,
         }
         true
@@ -411,15 +478,20 @@ impl State {
     }
 
     fn render(&mut self, read: &dyn Read, changed: &Changed) -> Render {
-        let pricing = self.priced.as_ref().is_some_and(|priced| changed.location(&priced.location));
+        let pricing = self.priced.as_ref().is_some_and(|priced| !priced.asked && changed.location(&priced.location));
         if !(changed.all || changed.woken || changed.local || pricing) {
             return Render::Keep;
         }
-        if let Some(priced) = &self.priced
+        if let Some(priced) = self.priced.as_mut().filter(|priced| !priced.asked)
             && let Some(models) = read.models(Some(&priced.location))
         {
-            self.total = Some(priced.sessions.iter().map(|messages| usage::session_cost(messages, &models)).sum());
-            self.priced = None;
+            priced.asked = true;
+            let job = Job::Price { run: priced.run, models };
+            // The UI thread as the decoder prices it now.
+            if let Some(total) = self.send(job).and_then(|answer| answer["total"]["total"].as_f64()) {
+                self.total = Some(total);
+                self.priced = None;
+            }
         }
         Render::Show(self.panel())
     }
@@ -488,8 +560,101 @@ impl State {
 
 /// A run that prices `ids`.
 fn price(ids: Vec<String>) -> Stage {
-    let sessions = vec![Vec::new(); ids.len()];
-    Stage::Price { ids, batch: 0, open: 0, sessions }
+    Stage::Price { ids, batch: 0, open: 0 }
+}
+
+/// What reads and prices the pages of messages: the plugin's thread, or the UI thread when it did not start.
+enum Decoder {
+    Thread(mpsc::Sender<Job>),
+    Here(Book),
+}
+
+/// What the decoder is asked.
+enum Job {
+    /// Page `page` of the messages of session `index` of run `run`: the reply's bytes, in base64.
+    Page { run: u64, index: usize, page: usize, body: String },
+    /// The total of run `run` at `models`' prices; its messages go.
+    Price { run: u64, models: Vec<ModelInfo> },
+    /// Run `run` ended with no total: its messages go.
+    Forget { run: u64 },
+}
+
+/// The messages the decoder read, of each run and each of its sessions.
+#[derive(Default)]
+struct Book {
+    runs: HashMap<u64, Vec<Vec<SessionMessageInfo>>>,
+}
+
+impl Book {
+    /// Does `job`, and returns what the UI thread hears of it: a page's cursor and the messages it skipped, or that it
+    /// could not be read; or a total.
+    fn handle(&mut self, job: Job) -> Option<Value> {
+        match job {
+            Job::Page { run, index, page, body } => {
+                let read = base64::decode(&body).and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
+                let page_of = |mut body: Value| {
+                    let cursor = page_cursor(&body).map(str::to_owned);
+                    Some((cursor, body.get_mut("data")?.take()))
+                };
+                let Some((cursor, Value::Array(messages))) = read.and_then(page_of) else {
+                    return Some(json!({ "page": { "run": run, "index": index, "page": page, "ok": false } }));
+                };
+                let sessions = self.runs.entry(run).or_default();
+                if sessions.len() <= index {
+                    sessions.resize_with(index + 1, Vec::new);
+                }
+                // TS prices whatever a page holds; the API has no log for a plugin, so the panel counts what it skips.
+                let mut skipped = 0;
+                for message in messages {
+                    match serde_json::from_value(message) {
+                        Ok(message) => sessions[index].push(message),
+                        Err(_) => skipped += 1,
+                    }
+                }
+                let page = json!({ "run": run, "index": index, "page": page, "ok": true, "cursor": cursor, "skipped": skipped });
+                Some(json!({ "page": page }))
+            }
+            Job::Price { run, models } => {
+                let sessions = self.runs.remove(&run).unwrap_or_default();
+                let total: f64 = sessions.iter().map(|messages| usage::session_cost(messages, &models)).sum();
+                Some(json!({ "total": { "run": run, "total": total } }))
+            }
+            Job::Forget { run } => {
+                self.runs.remove(&run);
+                None
+            }
+        }
+    }
+}
+
+/// The decoder's thread: does each job and sends the answer to the UI thread, until the plugin stops.
+fn decode(queue: &mpsc::Receiver<Job>, sender: &Sender<Value>, stop: &Stop) {
+    let mut book = Book::default();
+    while !stop.stopped() {
+        let job = match queue.recv_timeout(Duration::from_millis(500)) {
+            Ok(job) => job,
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+        };
+        let Some(mut answer) = book.handle(job) else { continue };
+        // A full mailbox has room again once the UI thread takes the next message.
+        loop {
+            match sender.send(answer) {
+                Ok(()) => break,
+                Err(SendError::Full(back)) if !stop.stopped() => {
+                    answer = back;
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(_) => return,
+            }
+        }
+    }
+}
+
+/// The cursor of the page after `body`, if any.
+fn page_cursor(body: &Value) -> Option<&str> {
+    let cursor = body.get("cursor").and_then(|cursor| cursor.get("next")).and_then(Value::as_str);
+    cursor.filter(|cursor| !cursor.is_empty())
 }
 
 /// TS `familyIDs`: every session the host knows in the tree of `session`, the root first.
@@ -507,7 +672,7 @@ fn children(parent: &str, cursor: Option<&str>) -> Fetch {
     Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned()).with_query(query)
 }
 
-/// A page of `session`'s messages (TS `client.message.list`).
+/// A page of `session`'s messages (TS `client.message.list`), as its bytes, which the decoder reads.
 fn messages(session: &str, cursor: Option<&str>) -> Fetch {
     let mut query = vec![("limit".to_owned(), PAGE_SIZE.to_string())];
     query.extend(cursor.map(|cursor| ("cursor".to_owned(), cursor.to_owned())));
@@ -515,6 +680,7 @@ fn messages(session: &str, cursor: Option<&str>) -> Fetch {
         .with_method("GET".to_owned())
         .with_path(format!("/api/session/{session}/message"))
         .with_query(query)
+        .with_bytes(true)
 }
 
 /// `Date.now()`.
@@ -654,14 +820,54 @@ mod tests {
 
     /// The panel on `ses_p`, which has no children and one page of `messages`, after the replies.
     fn after_one_page(host: &Fake, messages: Vec<Value>) -> State {
+        let mut state = mounted(host);
+        state.reply(host, last(host), Ok(bytes(json!({ "data": messages, "cursor": {} }))));
+        state
+    }
+
+    /// The panel on `ses_p`, which has no children, as it asks for the first page of messages.
+    fn mounted(host: &Fake) -> State {
         let mut state = State::new(Value::Null, config::load(&Value::Null));
         state.mount(host, "ses_p".to_owned(), true);
         assert_eq!(host.fetches.borrow()[0].path, "/api/session");
         state.reply(host, RequestId(1), Ok(json!({ "data": [], "cursor": {} })));
-        let page = RequestId(host.fetches.borrow().len() as u64);
-        assert_eq!(host.fetches.borrow().last().unwrap().path, "/api/session/ses_p/message");
-        state.reply(host, page, Ok(json!({ "data": messages, "cursor": {} })));
+        let fetches = host.fetches.borrow();
+        let fetch = fetches.last().unwrap();
+        assert!(fetch.path == "/api/session/ses_p/message" && fetch.bytes, "{fetch:?}");
         state
+    }
+
+    fn last(host: &Fake) -> RequestId {
+        RequestId(host.fetches.borrow().len() as u64)
+    }
+
+    /// A reply of `body` as its bytes.
+    fn bytes(body: Value) -> Value {
+        Value::String(base64::encode(body.to_string().as_bytes()))
+    }
+
+    // Expected (PL-4): a page of messages crosses to the decoder's thread as it came, and the UI thread reads none of
+    // it; the decoder's answer moves the run on, and its total shows.
+    #[test]
+    fn the_ui_thread_hands_each_page_to_the_decoder() {
+        let host = Fake::default();
+        let mut state = mounted(&host);
+        let (jobs, queue) = mpsc::channel();
+        state.decoder = Decoder::Thread(jobs);
+        let body = bytes(json!({ "data": [assistant("msg_1", 0.25)], "cursor": {} }));
+        state.reply(&host, last(&host), Ok(body.clone()));
+        let Ok(Job::Page { run, index: 0, page: 0, body: sent }) = queue.try_recv() else { panic!("no page job") };
+        assert_eq!(Value::String(sent.clone()), body);
+        assert!(state.run.is_some(), "the run waits for the decoder");
+        let mut book = Book::default();
+        let answer = book.handle(Job::Page { run, index: 0, page: 0, body: sent }).unwrap();
+        state.decoded(&host, answer);
+        assert!(state.run.is_none() && state.priced.is_some());
+        state.render(&host, &Changed::everything());
+        let Ok(Job::Price { run: priced, models }) = queue.try_recv() else { panic!("no price job") };
+        state.decoded(&host, book.handle(Job::Price { run: priced, models }).unwrap());
+        assert_eq!(state.total, Some(0.25));
+        assert!(book.runs.is_empty());
     }
 
     fn assistant(id: &str, cost: f64) -> Value {
@@ -682,6 +888,7 @@ mod tests {
         state.render(&host, &Changed::everything());
         assert_eq!(state.total, Some(0.25));
         assert!(state.priced.is_none() && state.run.is_none());
+        assert!(matches!(&state.decoder, Decoder::Here(book) if book.runs.is_empty()));
     }
 
     // Expected: a message the Rust types reject is skipped and counted, and the others are priced, as TS prices
