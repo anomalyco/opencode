@@ -7,6 +7,8 @@ export type Route = {
   method?: string
   // An exact path, or a pattern where `:name` matches one segment (`/api/session/:id`).
   path: string
+  // Answers only a request with exactly this query.
+  query?: Record<string, string[]>
   status?: number
   // Sent as `application/json`. A function computes it from the request and the log so far, for replies
   // that echo what a client generated (the prompt ID of `run`).
@@ -67,7 +69,11 @@ export async function startFakeServer(options: Options = {}) {
       const url = new URL(request.url)
       const entry = await logEntry(request, url)
       requests.push(entry)
-      const route = routes.find((route) => matches(route, request.method, url.pathname))
+      const route = routes.find(
+        (route) =>
+          matches(route, request.method, url.pathname) &&
+          (route.query === undefined || Bun.deepEquals(route.query, entry.query)),
+      )
       if (route) {
         const delay = typeof route.delay === "function" ? route.delay(entry, requests) : route.delay
         if (delay) await Bun.sleep(delay)

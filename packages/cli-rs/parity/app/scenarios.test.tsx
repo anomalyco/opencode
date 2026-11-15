@@ -81,7 +81,11 @@ async function record(name: string, file: string) {
       // The fixture serves its own event stream.
       if (url.pathname === "/api/event") return undefined
       const body = request.body ? await request.clone().text() : ""
-      const route = routes.find((route) => matches(route, request.method, url.pathname))
+      const route = routes.find(
+        (route) =>
+          matches(route, request.method, url.pathname) &&
+          (route.query === undefined || Bun.deepEquals(route.query, query(url))),
+      )
       if (route?.hold && !released.has(route.path))
         await new Promise<void>((go) => waiting.push({ path: route.path, go }))
       const response = route

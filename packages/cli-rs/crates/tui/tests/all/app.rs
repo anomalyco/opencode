@@ -523,6 +523,10 @@ fn routes(recording: &Recording) -> Vec<MemoryRoute> {
             ),
             (None, None) => MemoryRoute::body(method, &route.path, status, None, ""),
         };
+        let served = match &route.query {
+            Some(query) => served.with_query(query.clone()),
+            None => served,
+        };
         if route.hold { served.held() } else { served }
     });
     let recorded = |entry: &app::Exchange| match (&entry.json, &entry.text) {
