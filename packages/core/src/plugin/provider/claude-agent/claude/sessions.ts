@@ -29,7 +29,6 @@ export interface Request {
   readonly sessionID?: string
   // Native OpenCode fork lineage, or the session supplying a compaction/generate snapshot.
   readonly sourceID?: string
-  readonly compaction?: boolean
   readonly model: string
   readonly effort?: Options["effort"]
   readonly maxOutputTokens?: number
@@ -256,6 +255,14 @@ export function registry() {
             }
             if (part.type !== "tool_use") continue
             const name = ToolNames.original(part.name, request.tools)
+            if (!name && part.name.startsWith(ToolNames.PREFIX)) {
+              // A tool removed after this process started is still on its tool server; answer here so the turn goes on.
+              live.pending.expect(part.id, part.name)
+              live.pending.resolve(part.id, {
+                mcp: { isError: true, content: [{ type: "text", text: "This tool is no longer available." }] },
+                replacement: undefined,
+              })
+            }
             if (!name) continue
             live.pending.expect(part.id, part.name)
             waiting.push(part.id)
@@ -363,8 +370,6 @@ export function registry() {
       if (!sourceID) return 0
       const source = entries.get(sourceID)
       const copy = Effect.gen(function* () {
-        // Compaction ends the old primary context. Generate only takes a read-only snapshot.
-        if (request.compaction && source) yield* stop(source)
         const record = source?.record ?? (yield* records.get(sourceID))
         return yield* branch(entry, request, record)
       })
@@ -375,8 +380,11 @@ export function registry() {
 
     const prepare = Effect.fn("ClaudeSessions.prepare")(function* (entry: Entry, request: Request) {
       // Retire an exited or incompatible process first: once we continue its parked turn, open() must not replace it.
+      // A launch change waits for a parked turn to end: stopping it makes Claude Code record the waiting tool calls as
+      // refused by the user. A step without tools (the step limit) still stops it, since the old process offers them.
       if (entry.process) {
-        const needsRestart = entry.process.session.ended || entry.process.launch !== launch(request)
+        const parked = entry.process.waiting && entry.process.session.running && request.tools.length > 0
+        const needsRestart = entry.process.session.ended || (entry.process.launch !== launch(request) && !parked)
         if (needsRestart) yield* stop(entry)
       }
 
@@ -419,7 +427,8 @@ export function registry() {
       }
       if (collected.aborted) {
         // A stopped OpenCode turn needs a fresh Claude turn; addUser would only steer the old one.
-        yield* interrupt(entry)
+        // After a launch change it also needs a new process.
+        yield* live.launch === launch(request) ? interrupt(entry) : stop(entry)
         return { start, continuation: undefined }
       }
       return { start, continuation }

@@ -1,5 +1,5 @@
 import { Link, Meta, Title } from "@solidjs/meta"
-import { createAsync, useParams } from "@solidjs/router"
+import { useParams } from "@solidjs/router"
 import { HttpStatusCode } from "@solidjs/start"
 import { Show, Suspense } from "solid-js"
 import { LocaleLinks } from "~/component/locale-links"
@@ -10,6 +10,7 @@ import { ChangelogSettings, ChangelogTimeline, ChangelogUnavailable, entryPath }
 import { Site } from "~/component/site/site"
 import { useMarkdown } from "~/component/site/use-markdown"
 import { useI18n } from "~/context/i18n"
+import { pageData } from "~/lib/page-data"
 import { useLanguage } from "~/context/language"
 import { changelogEntry } from "~/lib/changelog"
 import { entryStatus } from "~/lib/changelog-notes"
@@ -20,7 +21,7 @@ export default function ChangelogRelease() {
   const i18n = useI18n()
   const language = useLanguage()
   const params = useParams()
-  const view = createAsync(() => changelogEntry(params.tag ?? ""))
+  const view = pageData(() => changelogEntry(params.tag ?? ""))
   const entry = () => view()?.entries[0]
   const markdown = useMarkdown(
     `/changelog/${params.tag}`,

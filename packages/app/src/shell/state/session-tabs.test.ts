@@ -146,6 +146,22 @@ test.each<{ name: string; run: () => SessionTabs; expected: SessionTabs }>([
       placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, { pane: "bottom", plugin: "terminal" }),
     expected: { all: [A, T1], active: T1, panes: { [T1]: "bottom" }, selected: { side: A, bottom: T1 } },
   },
+  {
+    name: "a reopened tab's target puts it back where it closed",
+    run: () =>
+      placeSessionTabs(
+        { all: [A, T1], active: A },
+        { all: [A, T1, B], active: B },
+        { pane: "side", plugin: "file", index: 1 },
+      ),
+    expected: { all: [A, B, T1], active: B, selected: { side: B } },
+  },
+  {
+    name: "a reopened tab past the strip's end lands last",
+    run: () =>
+      placeSessionTabs({ all: [A], active: A }, { all: [A, B], active: B }, { pane: "side", plugin: "file", index: 5 }),
+    expected: { all: [A, B], active: B, selected: { side: B } },
+  },
 ])("$name", ({ run, expected }) => {
   expect(run()).toEqual(expected)
 })

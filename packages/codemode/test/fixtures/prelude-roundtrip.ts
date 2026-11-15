@@ -2,9 +2,9 @@
 // prelude frame was on the stack.
 import { Effect } from "effect"
 import { CodeMode } from "../../src/index.js"
-import { CodeFlags } from "../../src/vm/opcodes.js"
-import { setRoundTrip } from "../../src/vm/runtime/execute.js"
-import { Vm } from "../../src/vm/vm.js"
+import { CodeFlags } from "../../src/opcodes.js"
+import { setRoundTrip } from "../../src/runtime/execute.js"
+import { Vm } from "../../src/vm.js"
 
 setRoundTrip(true)
 
@@ -17,7 +17,6 @@ Vm.prototype.capture = function (this: Vm, options) {
 const result = await Effect.runPromise(
   CodeMode.execute({
     tools: {},
-    engine: "vm",
     code: `
       const groups = Object.groupBy([1, 2, 3, 4, 5, 6], (x) => (x % 2 ? "odd" : "even"))
       const union = new Set([1, 2, 3]).union({ size: 2, has: () => true, keys: () => [7, 8][Symbol.iterator]() })

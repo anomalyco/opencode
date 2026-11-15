@@ -6,6 +6,7 @@
 //
 //   bun src/docs/script/validate-links.ts .output/public
 import path from "node:path"
+import { docsSets } from "../config"
 
 const root = path.resolve(process.argv[2] ?? ".output/public")
 const routes = path.resolve(import.meta.dir, "../../routes")
@@ -18,7 +19,19 @@ async function sitePage(pathname: string) {
     pathname === "/" ? [path.join(routes, "index.tsx")] : [`${route}.tsx`, path.join(route, "index.tsx")]
   return (await Promise.all(candidates.map((file) => Bun.file(file).exists()))).some(Boolean)
 }
-const files = await Array.fromAsync(new Bun.Glob("docs/**/*.html").scan({ cwd: root, absolute: true }))
+// Every page's ids, read once however many links name one.
+const ids = new Map<string, Promise<Set<string>>>()
+async function readIds(file: string) {
+  const html = await Bun.file(file).text()
+  return new Set(Array.from(html.matchAll(/\sid="([^"]*)"/g), (match) => match[1]))
+}
+const files = (
+  await Promise.all(
+    docsSets.map((set) =>
+      Array.fromAsync(new Bun.Glob(`${set.base.slice(1)}**/*.html`).scan({ cwd: root, absolute: true })),
+    ),
+  )
+).flat()
 const failures = (
   await Promise.all(
     files.flatMap(async (file) => {
@@ -26,10 +39,13 @@ const failures = (
       const page = `https://opencode.local/${path.relative(root, file).replace(/index\.html$/, "")}`
       return Promise.all(
         Array.from(html.matchAll(/href="([^"]+)"/g), async (match) => {
+          // Not a link on this site: an autolinked URL a translation ran into (`http://localhost:4096）`).
+          if (!URL.canParse(match[1], page)) return
           const url = new URL(match[1], page)
           if (url.origin !== "https://opencode.local") return
           if (externalRoutes.test(url.pathname)) return
-          if (!url.pathname.startsWith("/docs") && !url.hash && (await sitePage(url.pathname))) return
+          const docs = docsSets.some((set) => `${url.pathname}/`.startsWith(set.base))
+          if (!docs && !url.hash && (await sitePage(url.pathname))) return
 
           const targetPath = path.join(root, decodeURIComponent(url.pathname))
           const target = (
@@ -43,7 +59,8 @@ const failures = (
           if (!url.hash || !target.endsWith(".html")) return
 
           const id = decodeURIComponent(url.hash.slice(1))
-          if ((await Bun.file(target).text()).includes(`id="${id}"`)) return
+          if (!ids.has(target)) ids.set(target, readIds(target))
+          if ((await ids.get(target)!).has(id)) return
           return `${path.relative(root, file)}: missing ${url.pathname}${url.hash}`
         }),
       )

@@ -20,8 +20,10 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    width: 480px;
-    height: 368px;
+    width: min(calc(100vw - 32px), 480px);
+    --dialog-height: min(calc(100vh - 32px), 368px);
+    height: var(--dialog-height);
+    max-height: calc(100vh - 32px);
     background: var(--v2-background-bg-layer-01);
     box-shadow: var(--v2-elevation-overlay);
     border-radius: 6px;
@@ -158,23 +160,32 @@
     }
   }
 
-  &[data-fit] {
-    [data-slot="dialog-container"] {
-      height: auto;
+  &:is([data-anchored], [data-size="large"], [data-size="x-large"]) {
+    align-items: flex-start;
 
-      [data-slot="dialog-content"] {
-        min-height: 0;
-      }
+    [data-slot="dialog-container"] {
+      max-height: var(--dialog-height);
+      margin-top: calc((100vh - var(--dialog-height)) / 2);
     }
   }
 
-  &[data-size="large"] [data-slot="dialog-container"] {
-    width: 640px;
-    height: 480px;
+  &:is([data-size="large"], [data-size="x-large"]) [data-slot="dialog-container"] {
+    --dialog-height: min(calc(100vh - 96px), 600px);
+    width: min(calc(100vw - 32px), 880px);
+    background: var(--v2-background-bg-base);
+    border-radius: 12px;
   }
 
   &[data-size="x-large"] [data-slot="dialog-container"] {
-    width: min(calc(100vw - 32px), 980px);
-    height: min(calc(100vh - 92px), 600px);
+    --dialog-height: min(calc(100vh - 96px), 680px);
+    width: min(calc(100vw - 32px), 1040px);
+  }
+
+  &[data-fit] [data-slot="dialog-container"] {
+    height: auto;
+
+    [data-slot="dialog-content"] {
+      min-height: 0;
+    }
   }
 }

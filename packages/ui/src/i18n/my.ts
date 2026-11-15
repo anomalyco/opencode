@@ -166,6 +166,7 @@ export const dict = {
   "ui.common.dismiss": "ပယ်ရန်",
   "ui.common.close": "ပိတ်ပါ။",
   "ui.common.next": "နောက်တစ်ခု",
+  "ui.common.continue": "ဆက်ရန်",
   "ui.common.submit": "တင်ပြပါ။",
   "ui.common.showMore": "နောက်ထပ်ပြပါ။",
   "ui.permission.deny": "ငြင်းဆို",

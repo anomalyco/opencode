@@ -1,6 +1,6 @@
 [package]
 name = "opencode-pty"
-version = "0.5.0"
+version = "0.5.2"
 edition = "2024"
 rust-version = "1.90"
 description = "Persistent PTY service for OpenCode"
@@ -27,10 +27,12 @@ sha2 = "0.10"
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
+    "Win32_System_JobObjects",
     "Win32_System_Pipes",
     "Win32_System_Threading",
     "Win32_System_WindowsProgramming",

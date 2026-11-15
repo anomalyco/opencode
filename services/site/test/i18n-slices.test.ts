@@ -7,12 +7,13 @@ import { LOCALES } from "~/lib/language"
 
 const src = path.join(import.meta.dir, "../src")
 
-test("every page route is a boundary with its own slice", () => {
-  const routes = [...new Bun.Glob("routes/**/*.tsx").scanSync(src)]
-    .map((file) => path.join(src, file))
-    .filter((file) => readFileSync(file, "utf8").includes("export default"))
-  expect(routes.length).toBeGreaterThan(10)
-  expect(routes.filter((file) => !result.boundaries[file.replaceAll("\\", "/")])).toEqual([])
+test("every island and overlay is a boundary with its own slice, and no page route is", () => {
+  const files = (glob: string) =>
+    [...new Bun.Glob(glob).scanSync(src)].map((file) => path.join(src, file).replaceAll("\\", "/"))
+  const lazy = files("client/{islands,overlays}/*.{ts,tsx}")
+  expect(lazy.length).toBeGreaterThan(10)
+  expect(lazy.filter((file) => !result.boundaries[file])).toEqual([])
+  expect(files("routes/**/*.tsx").filter((file) => result.boundaries[file])).toEqual([])
 })
 
 test("every locale has a value for every key its slices name", () => {

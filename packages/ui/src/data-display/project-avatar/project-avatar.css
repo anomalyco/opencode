@@ -88,6 +88,19 @@
   text-shadow: none;
 }
 
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-label"] {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  visibility: hidden;
+}
+
+[data-slot="project-avatar-surface"]:is([data-has-image], [data-generated]) [data-slot="project-avatar-label"] {
+  background: var(--project-avatar-bg);
+}
+
 [data-slot="project-avatar-surface"][data-generated] {
   background: none;
   box-shadow: none;

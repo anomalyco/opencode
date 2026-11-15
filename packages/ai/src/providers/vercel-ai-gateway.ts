@@ -3,6 +3,7 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { OpenAIDecisions } from "../protocols/openai-decisions.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
 import { XAIImages } from "../protocols/xai-images.js"
 import { ProviderShared } from "../protocols/shared.js"
@@ -255,11 +256,21 @@ export const configure = (input: Config = {}) => {
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model({ id: modelID, providerOptions })
-  return { id, model, messages, responses, chat, image, decision, configure }
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    provider: id,
+    endpoint: { baseURL: configured.endpoint.baseURL },
+    auth: configured.auth,
+    headers: input.headers,
+    http: input.http,
+  })
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    embeddingRoute.model({ id: modelID, providerOptions })
+  return { id, model, messages, responses, chat, image, decision, embedding, configure }
 }
 
 export const provider = configure()
 export const decision = provider.decision
+export const embedding = provider.embedding
 export const messages = provider.messages
 export const responses = provider.responses
 export const chat = provider.chat
@@ -280,6 +291,11 @@ export const imageModel = (modelID: string, settings?: Settings) => {
 export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).decision(modelID, input.providerOptions)
+}
+
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
 }
 
 export * as VercelAIGateway from "./vercel-ai-gateway.js"

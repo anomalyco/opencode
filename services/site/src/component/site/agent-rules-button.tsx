@@ -7,7 +7,7 @@ import { siteSettings } from "./settings"
  * The button that copies the Brand page's rules as Markdown for an agent (Brand and Press). Its label
  * comes from Design mode (brand.agentButton). Once copied, Settings › Agent button copied either keeps
  * the label and turns the copy icon into a check, or shows `copied`. Both labels share one grid cell,
- * so the width never changes; screen readers hear "Copied".
+ * so the width never changes; screen readers hear "Copied". Static pages: src/client/islands/agent-rules.ts.
  */
 export function AgentRulesButton(props: { label: string; copied: string; source: () => string }) {
   const [done, setDone] = createSignal(false)
