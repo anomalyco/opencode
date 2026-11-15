@@ -1,57 +1,80 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
-import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { FSUtil } from "@opencode/util/fs-util"
 import { TmpRetention } from "@opencode/core/tmp-retention"
 import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
-const fsLayer = AppNodeBuilder.build(FSUtil.node, [])
-const old = new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000)
+const day = 24 * 60 * 60 * 1_000
+// ctime cannot be set back, so tests move "now" forward instead: everything written here is then 8 days old.
+const later = Date.now() + 8 * day
 
-describe("TmpRetention", () => {
-  it.live("deletes stale files at any depth and the directories they leave empty", () =>
-    withTempDir((tmp) =>
-      Effect.gen(function* () {
-        const fs = yield* FSUtil.Service
-        const upload = path.join(tmp.path, "uploads", "a", "photo.png")
-        const image = path.join(tmp.path, "images", "ses_1", "image_1.png")
-        const fresh = path.join(tmp.path, "images", "ses_1", "image_2.png")
-        const scratch = path.join(tmp.path, "notes.txt")
-        for (const file of [upload, image, fresh, scratch]) yield* fs.writeWithDirs(file, "x")
-        for (const file of [upload, image, scratch]) yield* fs.utimes(file, old, old)
-        for (const directory of ["uploads", "uploads/a", "images", "images/ses_1"])
-          yield* fs.utimes(path.join(tmp.path, directory), old, old)
-
-        yield* TmpRetention.cleanup(fs, tmp.path)
-
-        expect(yield* fs.exists(upload)).toBe(false)
-        expect(yield* fs.exists(image)).toBe(false)
-        expect(yield* fs.exists(scratch)).toBe(false)
-        expect(yield* fs.exists(fresh)).toBe(true)
-        expect(yield* fs.exists(path.join(tmp.path, "uploads"))).toBe(false)
-        expect(yield* fs.exists(path.join(tmp.path, "images", "ses_1"))).toBe(true)
-        expect(yield* fs.exists(tmp.path)).toBe(true)
-      }),
-    ).pipe(Effect.provide(fsLayer)),
+const write = (file: string) =>
+  Effect.promise(async () => {
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.writeFile(file, "x")
+  })
+const touchLater = (file: string) => Effect.promise(() => fs.utimes(file, new Date(later), new Date(later)))
+const exists = (file: string) =>
+  Effect.promise(() =>
+    fs.access(file).then(
+      () => true,
+      () => false,
+    ),
   )
 
-  it.live("keeps a recently created empty directory and files without a real timestamp", () =>
+describe("TmpRetention", () => {
+  it.live("deletes whole units that nothing touched within the retention", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {
-        const fs = yield* FSUtil.Service
-        const directory = path.join(tmp.path, "uploads", "b")
-        const epoch = path.join(tmp.path, "epoch.txt")
-        yield* fs.ensureDir(directory)
-        yield* fs.writeFileString(epoch, "x")
-        yield* fs.utimes(epoch, new Date(0), new Date(0))
+        const stale = path.join(tmp.path, "job-a", "node_modules", "dep", "index.js")
+        const scratch = path.join(tmp.path, "notes.txt")
+        const oldUpload = path.join(tmp.path, "uploads", "u1", "photo.png")
+        const newUpload = path.join(tmp.path, "uploads", "u2", "photo.png")
+        for (const file of [stale, scratch, oldUpload, newUpload]) yield* write(file)
+        yield* touchLater(newUpload)
 
-        yield* TmpRetention.cleanup(fs, tmp.path)
+        yield* TmpRetention.cleanup(tmp.path, later)
 
-        expect(yield* fs.exists(directory)).toBe(true)
-        expect(yield* fs.exists(epoch)).toBe(true)
+        expect(yield* exists(path.join(tmp.path, "job-a"))).toBe(false)
+        expect(yield* exists(scratch)).toBe(false)
+        expect(yield* exists(path.join(tmp.path, "uploads", "u1"))).toBe(false)
+        expect(yield* exists(newUpload)).toBe(true)
+        expect(yield* exists(tmp.path)).toBe(true)
       }),
-    ).pipe(Effect.provide(fsLayer)),
+    ),
+  )
+
+  it.live("keeps every file of a unit that is still in use, however old the rest is", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const dependency = path.join(tmp.path, "job-b", "node_modules", "dep", "index.js")
+        const source = path.join(tmp.path, "job-b", "src", "main.ts")
+        yield* write(dependency)
+        yield* write(source)
+        yield* touchLater(source)
+
+        yield* TmpRetention.cleanup(tmp.path, later)
+
+        expect(yield* exists(dependency)).toBe(true)
+        expect(yield* exists(source)).toBe(true)
+      }),
+    ),
+  )
+
+  it.live("keeps files created just now even when their mtime is old", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const extracted = path.join(tmp.path, "pkg", "package.json")
+        yield* write(extracted)
+        // What tar and `cp -p` do: the content is new but keeps an old mtime.
+        yield* Effect.promise(() => fs.utimes(extracted, new Date(0), new Date(500_000_000_000)))
+
+        yield* TmpRetention.cleanup(tmp.path)
+
+        expect(yield* exists(extracted)).toBe(true)
+      }),
+    ),
   )
 })
