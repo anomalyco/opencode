@@ -533,7 +533,8 @@ pub(crate) enum Effect {
     /// A storage write, which the host already shows to reads, for the claims to hear of.
     Stored,
     Navigate(abi::Route),
-    Fetch(abi::RequestId, abi::Fetch),
+    /// A fetch, with the mount that owns it ([`crate::Owners::owning`]).
+    Fetch(abi::RequestId, abi::Fetch, Option<Weak<()>>),
     Dialog(Box<abi::Dialog>),
     Copy(String, Option<abi::Action>),
     Composer(abi::ComposerEdit),
@@ -542,7 +543,7 @@ pub(crate) enum Effect {
     Model(String, String),
     Tab(abi::TabEdit),
     ClearSelection,
-    Foreground(abi::RequestId, abi::Foreground),
+    Foreground(abi::RequestId, abi::Foreground, Option<Weak<()>>),
     Title(String),
     Theme(String),
     InstallTheme(String, serde_json::Value),
@@ -1077,7 +1078,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
                 return Err(crate::REFUSED.to_owned());
             }
             let id = next_request();
-            ctx.effects.push(Effect::Fetch(id, fetch));
+            ctx.effects.push(Effect::Fetch(id, fetch, owning(ctx)));
             return Ok(serde_json::to_value(id).unwrap_or_default());
         }
         HostRequest::Dialog { dialog } => ctx.effects.push(Effect::Dialog(dialog)),
@@ -1135,7 +1136,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
                 return Err(crate::REFUSED.to_owned());
             }
             let id = next_request();
-            ctx.effects.push(Effect::Foreground(id, program));
+            ctx.effects.push(Effect::Foreground(id, program, owning(ctx)));
             return Ok(serde_json::to_value(id).unwrap_or_default());
         }
         HostRequest::Title { title } => ctx.effects.push(Effect::Title(title)),
@@ -1550,26 +1551,34 @@ impl Answers for Guest {
 }
 
 /// Calls `send` unless the instance `guest` names is destroyed or its activation ended, as a call that panicked after
-/// the one that asked for it ends it: a fetch or a program in the foreground. Its reply goes to the instance as
-/// `request` on the effect queue, unless the instance is destroyed by then.
+/// the one that asked for it ends it, or the mount that owns it closed: a fetch or a program in the foreground. Its
+/// reply goes to the instance as `request` on the effect queue, unless the instance is destroyed or that mount closed
+/// by then, as in process: a reply never reaches a mount opened again.
 fn reply_to(
     guest: &Weak<dyn Answers>,
     host: &dyn Host,
     request: abi::RequestId,
+    mount: Option<Weak<()>>,
     send: impl FnOnce(&dyn Host, crate::Reply),
 ) {
-    let Some(live) = guest.upgrade().filter(|guest| guest.live()) else { return };
-    let (guest, owner) = (guest.clone(), live.owner());
+    let live = move || mount.as_ref().is_none_or(|mount| mount.upgrade().is_some());
+    let Some(running) = guest.upgrade().filter(|guest| guest.live() && live()) else { return };
+    let (guest, owner) = (guest.clone(), running.owner());
     send(
         host,
         Box::new(move |result| {
             defer(&owner, move |_| {
-                if let Some(guest) = guest.upgrade() {
+                if let Some(guest) = guest.upgrade().filter(|_| live()) {
                     guest.answer(Request::Reply { id: request, result });
                 }
             });
         }),
     );
+}
+
+/// The mount that owns a request of the running call, as in process ([`crate::Owners::owning`]).
+fn owning(ctx: &Ctx) -> Option<Weak<()>> {
+    ctx.owners.as_ref().and_then(|owners| owners.owning())
 }
 
 /// Queues `effects` of plugin `id` on the effect queue, as the host would for a built-in; a fetch replies to `guest`, and
@@ -1605,7 +1614,9 @@ fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, gen
         Effect::Attention(attention) => host.attention(&attention),
         Effect::Stored => host.storage_changed(),
         Effect::Navigate(route) => host.navigate(id, &route),
-        Effect::Fetch(request, fetch) => reply_to(guest, host, request, |host, reply| host.fetch(fetch, reply)),
+        Effect::Fetch(request, fetch, mount) => {
+            reply_to(guest, host, request, mount, |host, reply| host.fetch(fetch, reply));
+        }
         // The host shows it only while its activation is live. What a setup that failed or a destroyed instance asked
         // for has none, and shows nowhere.
         Effect::Dialog(dialog) => {
@@ -1619,11 +1630,11 @@ fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, gen
         Effect::Model(provider, model) => host.set_model(&provider, &model),
         Effect::Tab(edit) => host.edit_tab(edit),
         Effect::ClearSelection => host.clear_selection(),
-        Effect::Foreground(request, program) => {
+        Effect::Foreground(request, program, mount) => {
             // The program starts later, once the turn is done: only if the instance is still live then.
             let owner = guest.clone();
             let alive = Box::new(move || owner.upgrade().is_some_and(|guest| guest.running()));
-            reply_to(guest, host, request, |host, reply| host.foreground(program, alive, reply));
+            reply_to(guest, host, request, mount, |host, reply| host.foreground(program, alive, reply));
         }
         Effect::Title(title) => host.set_title(&title),
         Effect::Theme(name) => host.set_theme(&name),
@@ -1632,6 +1643,12 @@ fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, gen
         Effect::Scroll(scroll) => scroll(),
         Effect::Input(effect) => effect(host),
     }
+}
+
+/// The commands `manifest` scopes to its route `name`.
+pub(crate) fn routed(manifest: &Manifest, name: &str) -> Vec<abi::Command> {
+    let scope = abi::Scope::Route(name.to_owned());
+    manifest.commands.iter().filter(|command| command.scope == scope).cloned().collect()
 }
 
 /// Registers what the manifest lists, each calling into `guest`.
@@ -1784,13 +1801,24 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
     // 2.0: the surfaces, whose views run through `View`.
     for (index, claim) in manifest.surfaces.iter().enumerate() {
         let at: v2::Place = (&claim.place).into();
-        // A library's commands run through its guest and apply what they asked for when the call returns, so they are
-        // bound to no mount.
-        let commands = match &at {
-            v2::Place::Route(name) => route::commands(&scoped, name),
-            v2::Place::Slot(_) | v2::Place::Panel(_) | v2::Place::Overlay(_) => Vec::new(),
+        // A route's commands are bound to the mount they run for, as in process: what they ask for is that mount's.
+        let commands: surface::Commands = match &at {
+            v2::Place::Route(name) => {
+                let routed = routed(manifest, name);
+                let guest = guest.clone();
+                Rc::new(move |alive: &Weak<()>| {
+                    let command = |command: &abi::Command| {
+                        let (guest, alive, name) = (guest.clone(), alive.clone(), command.name.clone());
+                        tui_command(command, move |input| {
+                            let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
+                            guest.owners.for_route(&alive, || guest.handle("run-command", &request));
+                        })
+                    };
+                    routed.iter().map(command).collect()
+                })
+            }
+            v2::Place::Slot(_) | v2::Place::Panel(_) | v2::Place::Overlay(_) => Rc::new(|_| Vec::new()),
         };
-        let commands: surface::Commands = Rc::new(move |_| commands.clone());
         let failing = Rc::downgrade(guest);
         let fail: surface::Fail = Rc::new(move |error| {
             if let Some(guest) = failing.upgrade() {

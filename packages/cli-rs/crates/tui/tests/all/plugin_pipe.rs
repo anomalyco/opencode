@@ -2598,6 +2598,57 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     assert_eq!(lines(), "Err\nOk\n");
 }
 
+// Expected (bigboi's last pass): over the pipe as on the native carriers, what a route's command asked for ends with
+// its mount: a reply that arrives after the route closed and opened again reaches the plugin no more. What a global
+// command asked for is the activation's, and arrives.
+#[test]
+fn a_late_reply_does_not_reach_a_mount_opened_again_over_the_pipe() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("replied");
+    let plugin = root.path().join("config/plugins/owned");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.owned\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.surface(\"owned\", {{ type: \"route\", name: \"owned\" }}, () => ({{ type: \"text\", spans: [{{ text: \"owned route\" }}] }}))\n  const fetch = (name) => async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/hold\" }})\n    appendFileSync({log:?}, name + \" \" + Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }}\n  carrier.command({{ name: \"owned.route\", title: \"owned.route\", scope: {{ route: \"owned\" }} }}, fetch(\"route\"))\n  carrier.command({{ name: \"owned.global\", title: \"owned.global\" }}, fetch(\"global\"))\n}} }}\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let (fake, gate, served, asked) = crate::plugin_surface::held();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.owned");
+    let h = &pipe.harness;
+    let route = Route::Plugin { id: "example.owned".into(), name: "owned".into() };
+    h.tui.navigate(route.clone());
+    h.wait_for("owned route");
+    h.tui.keymap.dispatch("owned.route", None);
+    // The JS host answers the command, and the host sends its fetch, before the route closes.
+    h.wait("the route's fetch went out", || {
+        h.app.advance(Duration::from_millis(1));
+        asked.load(std::sync::atomic::Ordering::SeqCst) >= 1
+    });
+    h.tui.navigate(Route::Home);
+    h.app.advance(Duration::from_millis(16));
+    h.tui.navigate(route);
+    h.wait_for("owned route");
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    let lines = || std::fs::read_to_string(&log).unwrap_or_default();
+    h.wait("the route's reply was served", || served.load(std::sync::atomic::Ordering::SeqCst) >= 1);
+    h.app.wait_until(Duration::from_millis(300), || {
+        h.app.advance(Duration::from_millis(1));
+        false
+    });
+    assert_eq!(lines(), "", "a reply reached a mount opened again");
+    h.tui.keymap.dispatch("owned.global", None);
+    h.wait("the global reply arrived", || {
+        h.app.advance(Duration::from_millis(1));
+        lines().ends_with('\n')
+    });
+    assert_eq!(lines(), "global Ok\n");
+}
+
 // Expected (bigboi P8-6): `data.session.pending` lists the session's inbox items the server has not delivered, as the
 // host holds them, where it listed none.
 #[test]

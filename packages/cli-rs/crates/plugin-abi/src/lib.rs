@@ -3674,10 +3674,17 @@ pub trait Host: Read {
                 an `Err`"
     )]
     fn fetch(&self, fetch: Fetch) -> RequestId;
-    /// 2.0: sends `fetch` to the server. [`Setup::on_reply`] gets the reply, with the ID this returns, unless the
-    /// plugin is disposed first. An error is a fetch the host did not take, and no reply comes for it: its queue of
-    /// effects is full, as when a plugin fans out without end, or it has no server. By default, [`Host::fetch`]'s
-    /// `RequestId(0)` is that error.
+    /// 2.0: sends `fetch` to the server. [`Setup::on_reply`] gets the reply, with the ID this returns, while what
+    /// owns the fetch lives, on every carrier:
+    ///
+    /// - A fetch a mount's call asks for (a command of the route it shows, or a handler of the mount's events: its
+    ///   input and its mount event) is that mount's. Once the mount closes, it is not sent, and its reply is dropped,
+    ///   also when the surface opens again under the same key: a reply never reaches another mount.
+    /// - Any other (setup, a global command, an event, a wake, a message, a layer of setup) is the activation's: its
+    ///   reply comes unless the plugin is disposed first.
+    ///
+    /// An error is a fetch the host did not take, and no reply comes for it: its queue of effects is full, as when a
+    /// plugin fans out without end, or it has no server. By default, [`Host::fetch`]'s `RequestId(0)` is that error.
     #[must_use = "a fetch the host did not take gets no reply"]
     fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
         #[allow(deprecated)]
@@ -3720,8 +3727,9 @@ pub trait Host: Read {
     /// The program has the terminal on all three standard streams and gets the signals of its keys, the host does
     /// not: on Unix it is the terminal's foreground process group, and one that stops (Ctrl+Z) is continued at once,
     /// as the host has no shell to hand it to; on Windows the host ignores Ctrl+C and Ctrl+Break while it runs. Input
-    /// it leaves unread is dropped. An error is a program the host did not take, as for [`Host::try_fetch`], or an
-    /// older host's: no reply comes for it. By default, [`Host::foreground`]'s `RequestId(0)` is that error.
+    /// it leaves unread is dropped. It is owned as a fetch is ([`Host::try_fetch`]): a mount's request does not start
+    /// once its mount closed, and its reply reaches no other mount. An error is a program the host did not take, as
+    /// for [`Host::try_fetch`], or an older host's: no reply comes for it. By default, [`Host::foreground`]'s `RequestId(0)` is that error.
     #[must_use = "a program the host did not take gets no reply"]
     fn try_foreground(&self, program: Foreground) -> Result<RequestId, String> {
         #[allow(deprecated)]

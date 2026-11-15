@@ -719,6 +719,8 @@ pub(crate) struct Owners {
     current: RefCell<Option<Rc<interact::Owner>>>,
     /// The mount of the running call that has no input owner: a claimed part's, while its view runs.
     called: RefCell<Option<abi::v2::MountId>>,
+    /// The mount of the running command of a 2.0 surface's route, which has no input owner either.
+    routed: RefCell<Option<Weak<()>>>,
     /// The activation's own input owner: the layers of its setup, and what a command asks for.
     input: Rc<interact::Owner>,
     /// The plugin's overlay surfaces, by name, each mounting into the frame the host gives it.
@@ -734,6 +736,7 @@ impl Owners {
             activation: activation.clone(),
             current: RefCell::default(),
             called: RefCell::default(),
+            routed: RefCell::default(),
             input,
             overlays: RefCell::default(),
         })
@@ -745,6 +748,21 @@ impl Owners {
         let result = f();
         *self.current.borrow_mut() = outer;
         result
+    }
+
+    /// Runs `f` as a command of the route mount `alive` stands for: what it asks for is that mount's.
+    pub(crate) fn for_route<R>(&self, alive: &Weak<()>, f: impl FnOnce() -> R) -> R {
+        let outer = self.routed.replace(Some(alive.clone()));
+        let result = f();
+        *self.routed.borrow_mut() = outer;
+        result
+    }
+
+    /// The mount that owns a request the running call makes (a fetch, a program): its route's for a route's command,
+    /// its input owner's for a handler; `None` for the activation's own calls (setup, a global command, an event),
+    /// whose requests are the activation's. Its reply comes only while the owner lives (bigboi's last pass).
+    pub(crate) fn owning(&self) -> Option<Weak<()>> {
+        self.routed.borrow().clone().or_else(|| self.mounted())
     }
 
     /// The input owner of the running call.

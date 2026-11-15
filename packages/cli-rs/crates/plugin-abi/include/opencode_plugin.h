@@ -226,7 +226,10 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet.
  * - "fetch" and "foreground" answer the ID their one reply comes back with ("reply"). One the host does not take, as
  *   while the effects that wait fill its queue, answers OPENCODE_ERROR with why, and no reply comes for it: the Rust
- *   SDK's `Host::try_fetch` returns that as an `Err`, and its 1.x `Host::fetch` as `RequestId(0)`.
+ *   SDK's `Host::try_fetch` returns that as an `Err`, and its 1.x `Host::fetch` as `RequestId(0)`. A request a
+ *   mount's call asks for (a "command" of the route it shows, an "input" to that mount) is the mount's: once it
+ *   closes, the request is not sent and its "reply" is dropped, also for the surface opened again under the same key.
+ *   Any other is the activation's, whose reply comes until `destroy`.
  * - "setting" names one of "diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single". "image-size"
  *   takes the image's bytes in base64 and answers the size the host decodes, or null. A host with the feature
  *   "image-bounds" answers "image-bounds" with the bounds of the images it decodes (`ImageBounds`): bytes past them
