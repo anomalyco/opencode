@@ -387,6 +387,9 @@ function view(plugin: Plugin, mount: Mount) {
   mount.staged = root ? new Map(mount.memo) : used
   mount.stagedNested = root ? new Map(mount.nested) : nested
   mount.last = text
+  // The registrations this view made go first. The reload they take mounts the surface again: a tree sent before them
+  // would show, then give way to the new mount's placeholder until its first tree.
+  if (unsettled.has(plugin)) tell(plugin)
   frame(TREE, {
     id: plugin.id,
     mount: mount.id,
@@ -570,7 +573,8 @@ function context(plugin: Plugin) {
 
 // Tells the host plugin `plugin`'s registrations once they settle, after setup, when they changed since it was told:
 // it takes them as a reload (P8: a V2 plugin registers in an async setup, and in its components). They settle once the
-// messages that came are handled: a mount that ends and one that begins with the same layer change nothing.
+// messages that came are handled: a mount that ends and one that begins with the same layer change nothing. What a
+// view registered goes before its tree (`view`).
 const unsettled = new Set<Plugin>()
 let settling = false
 function changed(plugin: Plugin) {
@@ -584,16 +588,18 @@ function changed(plugin: Plugin) {
 function settle() {
   settling = false
   if (running) return
-  for (const plugin of unsettled) {
-    if (!plugin.active || plugin.failed) continue
-    const manifest = manifestOf(plugin)
-    const holds = plugin.commands.filter((command) => command.hold).map((command) => command.name)
-    const told = JSON.stringify([manifest, holds])
-    if (told === plugin.told) continue
-    plugin.told = told
-    sendFor(plugin, { type: "manifest", id: plugin.id, manifest, holds })
-  }
+  for (const plugin of unsettled) tell(plugin)
   unsettled.clear()
+}
+
+function tell(plugin: Plugin) {
+  if (!plugin.active || plugin.failed) return
+  const manifest = manifestOf(plugin)
+  const holds = plugin.commands.filter((command) => command.hold).map((command) => command.name)
+  const told = JSON.stringify([manifest, holds])
+  if (told === plugin.told) return
+  plugin.told = told
+  sendFor(plugin, { type: "manifest", id: plugin.id, manifest, holds })
 }
 
 function manifestOf(plugin: Plugin) {
