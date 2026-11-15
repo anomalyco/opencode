@@ -471,11 +471,12 @@ impl Row {
     fn local(&self) -> bool {
         match self {
             Row::Server { plugin, .. } => matches!(plugin.source, PluginSource::Local(_)),
+            // TS's `path.isAbsolute`, which on Windows takes a rooted path without a drive (`/plugins/x`) too.
             Row::Tui(entry) => entry.target.as_deref().is_some_and(|target| {
                 target.starts_with("file://")
                     || target.starts_with("./")
                     || target.starts_with("../")
-                    || std::path::Path::new(target).is_absolute()
+                    || std::path::Path::new(target).has_root()
             }),
         }
     }
