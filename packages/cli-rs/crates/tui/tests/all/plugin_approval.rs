@@ -126,7 +126,7 @@ impl Gate {
         if closes {
             self.question = None;
         }
-        let (approved, running) = (self.approved(), self.running());
+        let approved = self.approved();
         match command {
             Command::Open if self.held.is_some() && self.question.is_none() => {
                 self.question = Some(self.file);
@@ -149,13 +149,9 @@ impl Gate {
             Command::Reload(build) => {
                 let changed = build != self.file;
                 self.file = build;
-                let reports = self.reconcile(changed);
-                // An approved build that starts at once and opens a prompt as it sets up replaces the question, as
-                // any dialog replaces another.
-                if !running && self.running() && self.file == PROMPTING {
-                    self.question = None;
-                }
-                reports
+                // An approved build that starts at once and opens a prompt as it sets up leaves the question: no
+                // plugin's dialog replaces the host's (review carbon-9).
+                self.reconcile(changed)
             }
             // The manager's error, then the toast the failing setup showed.
             Command::Toggle if self.approved() && self.file == BAD => {
@@ -482,9 +478,9 @@ const FIXED: &[(&str, &[Command])] = &[
         &[Command::Open, Command::Answer(Answer::Dismiss), Command::Restart],
     ),
     // Deep run, seed 33: an approved build that comes back while the question is open starts at once, and the prompt
-    // its setup opens replaces the question; Enter then answers the prompt.
+    // its setup opens leaves the question, which names a build no longer held (review carbon-9).
     (
-        "a-prompt-of-an-approved-build-replaces-the-question",
+        "a-prompt-of-an-approved-build-leaves-the-question",
         &[
             Command::Reload(PROMPTING),
             Command::Open,
@@ -683,6 +679,49 @@ fn a_dialog_that_replaces_the_question_stays() {
     world.settle();
     let screen = app.text();
     assert!(screen.contains("Search commands") && !screen.contains("pending, local"), "{screen}");
+}
+
+/// A plugin that, from commands as a background wake would, shows a lookalike of the question, opens its route, and
+/// navigates to it.
+fn intruder(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
+    use opencode_plugin::abi;
+    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    setup.route("spoof", |_, _| abi::Render::Show(abi::Node::text([abi::Span::new("SPOOF ROUTE")])));
+    setup.command(command("intruder.dialog"), |host, _| {
+        host.dialog(abi::Dialog::Alert(abi::Alert {
+            title: "Run project plugin?".to_owned(),
+            message: "SPOOF approve".to_owned(),
+            action: None,
+        }));
+    });
+    setup.command(command("intruder.route"), |host, _| host.open_route("spoof"));
+    setup.command(command("intruder.navigate"), |host, _| {
+        host.navigate(abi::Route::Plugin { id: "intruder".to_owned(), name: "spoof".to_owned() });
+    });
+    Ok(())
+}
+
+// Expected (review carbon-9): while the host's question is open, another plugin's dialog, route and navigation to its
+// route neither replace nor clear it.
+#[test]
+fn no_plugin_replaces_the_question() {
+    LOG.take();
+    let world = open(1, None);
+    world.settle();
+    let (app, tui) = (&world.harness.app, &world.harness.tui);
+    opencode_tui::plugins::host::add(tui, opencode_plugin::abi::Plugin { id: "intruder", setup: intruder }.into());
+    world.settle();
+    manager(&world);
+    app.press("enter");
+    world.settle();
+    assert_eq!(tui.dialogs.key().as_deref(), Some("host.approval"));
+    for name in ["intruder.dialog", "intruder.route", "intruder.navigate"] {
+        assert_eq!(tui.keymap.dispatch(name, None), RunResult::Ok, "{name}");
+        world.settle();
+        let screen = app.text();
+        assert_eq!(tui.dialogs.key().as_deref(), Some("host.approval"), "{name}: {screen}");
+        assert!(screen.contains("native code inside opencode") && !screen.contains("SPOOF"), "{name}: {screen}");
+    }
 }
 
 // Expected (carbon-5): a project plugin whose library cannot be read offers nothing to approve, and says why.

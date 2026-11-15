@@ -50,7 +50,8 @@ pub(super) fn ask(tui: &Tui, target: &str, back: impl Fn() + 'static) {
         let back = back.clone();
         tui.app.defer(move |_| back());
     }));
-    tui.dialogs.replace(move |cx| confirm(cx, props.clone()), Some(closed), DialogOptions::new(DialogSize::Medium));
+    let options = DialogOptions::new(DialogSize::Medium).key(super::host::APPROVAL);
+    tui.dialogs.replace(move |cx| confirm(cx, props.clone()), Some(closed), options);
 }
 
 /// The question about `artifact`, found as plugin directory `target`: the library that would run, where it really is

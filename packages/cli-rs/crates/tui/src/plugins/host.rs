@@ -131,8 +131,9 @@ impl Host for Tui {
         let mut options = ToastOptions::new(variant, toast.message.clone());
         options.title = toast.title.clone();
         // A toast about a session offers to open it, unless the session's family is on screen.
+        // A plugin's toast waits behind the host's own notice of a plugin (PL-2).
         let Some(session) = toast.session.as_ref().map(|id| SessionID(id.clone())) else {
-            return self.toasts.show(options);
+            return self.toasts.show_behind_kept(options);
         };
         let here = match self.route() {
             Route::Session { id: open } => self.data.read(|state| state.root(&open) == state.root(&session)),
@@ -145,7 +146,7 @@ impl Host for Tui {
             let route = Route::Session { id: session };
             options = options.action("Open", bind!(self, |tui| tui.navigate(route.clone())));
         }
-        self.toasts.show(options);
+        self.toasts.show_behind_kept(options);
     }
 
     fn failed(&self, id: &str) {
@@ -163,7 +164,8 @@ impl Host for Tui {
             return;
         }
         let options = ToastOptions::new(Variant::Warning, format!("{cost}. Run /plugins for details."))
-            .title(format!("Plugin is slow: {id}"));
+            .title(format!("Plugin is slow: {id}"))
+            .keep();
         tell_plugins(self);
         // Disabling the manager would leave no `/plugins` (review carbon-3).
         if id == super::manager::ID {
@@ -200,7 +202,7 @@ impl Host for Tui {
             }
             false => "This project wants to run native code inside opencode. Run /plugins to approve or decline it.",
         };
-        let mut options = ToastOptions::new(Variant::Warning, message);
+        let mut options = ToastOptions::new(Variant::Warning, message).keep();
         options.title = Some(format!("Plugin needs approval: {target}"));
         let open = bind!(self, |tui| {
             tui.keymap.dispatch("plugins.list", None);
@@ -244,6 +246,9 @@ impl Host for Tui {
     }
 
     fn open_route(&self, id: &str, name: &str) {
+        if guarded(self, id, "route") {
+            return;
+        }
         self.dialogs.clear();
         self.navigate(Route::Plugin { id: id.to_owned(), name: name.to_owned() });
     }
@@ -257,11 +262,14 @@ impl Host for Tui {
         self.keymap.dispatch(name, input);
     }
 
-    fn navigate(&self, _: &str, route: &abi::Route) {
+    fn navigate(&self, plugin: &str, route: &abi::Route) {
         let route = match route {
             abi::Route::Home => Route::Home,
             abi::Route::Session { id } => Route::Session { id: SessionID(id.clone()) },
             abi::Route::Plugin { id, name } => {
+                if guarded(self, plugin, "navigation") {
+                    return;
+                }
                 self.dialogs.clear();
                 Route::Plugin { id: id.clone(), name: name.clone() }
             }
@@ -287,7 +295,7 @@ impl Host for Tui {
 
     fn dialog(&self, id: &str, generation: u64, dialog: abi::Dialog) {
         // A dialog of an activation that ended, or of a setup that was not adopted, shows nowhere.
-        if self.plugins.live(id, generation) {
+        if self.plugins.live(id, generation) && !guarded(self, id, "dialog") {
             super::panel::show(self, id, generation, dialog);
         }
     }
@@ -633,7 +641,8 @@ pub fn reload_storage(tui: &Tui) {
 
 /// TS's error toast for a failed plugin, which offers to open the plugin manager.
 fn failed_toast(tui: &Tui, title: String, names: String) {
-    let mut options = ToastOptions::new(Variant::Error, format!("{names}Run /plugins to view details."));
+    // The host's notice lane: no plugin's toast hides it (PL-2).
+    let mut options = ToastOptions::new(Variant::Error, format!("{names}Run /plugins to view details.")).keep();
     options.title = Some(title);
     let options = options.action(
         "Open plugins",
@@ -1065,6 +1074,22 @@ pub fn tell_plugins(tui: &Tui) {
         *tui.plugins.told.borrow_mut() = entries;
         tui.plugins.tell_plugins();
     }));
+}
+
+/// The dialog keys of the host's question about a project plugin, and of its own `/plugins`. A plugin's dialog key is
+/// `<plugin>/<key>`, so no plugin names one without a `/`.
+pub(super) const APPROVAL: &str = "host.approval";
+pub(super) const FALLBACK: &str = "host.plugins";
+
+/// Whether the host's approval question or its own `/plugins` is on screen: then no plugin's dialog, route or
+/// navigation replaces or clears it, which would dismiss the question, or show a lookalike of it, or take the way to
+/// recover from the user (review carbon-9). What plugin `id` asked for, `what`, is dropped.
+fn guarded(tui: &Tui, id: &str, what: &str) -> bool {
+    let guarded = matches!(tui.dialogs.key().as_deref(), Some(APPROVAL | FALLBACK));
+    if guarded {
+        log::warn!("plugin {id}: its {what} is dropped while the host's own dialog is open");
+    }
+    guarded
 }
 
 /// Whether the host's own `/plugins` stands in for the plugin manager now.

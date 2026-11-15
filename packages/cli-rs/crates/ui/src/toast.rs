@@ -38,6 +38,9 @@ pub struct ToastOptions {
     pub variant: Variant,
     pub duration: Option<Duration>,
     pub action: Option<ToastAction>,
+    /// Shown for its whole time to [`Toasts::show_behind_kept`], whose toast waits behind it instead of replacing it:
+    /// the host's own plugin notices, which a plugin's toast must not hide (PL-2).
+    pub keep: bool,
 }
 
 impl ToastOptions {
@@ -52,6 +55,11 @@ impl ToastOptions {
 
     pub fn duration(mut self, duration: Duration) -> Self {
         self.duration = Some(duration);
+        self
+    }
+
+    pub fn keep(mut self) -> Self {
+        self.keep = true;
         self
     }
 
@@ -119,7 +127,18 @@ impl Toasts {
 
     /// Shows a toast now, or queues it while one is paused or others wait.
     pub fn show(&self, options: ToastOptions) {
-        let busy = self.0.current.borrow().is_some() && (self.0.paused.get() || !self.0.queue.borrow().is_empty());
+        self.put(options, false);
+    }
+
+    /// [`Toasts::show`], also queued while the toast on screen is kept.
+    pub fn show_behind_kept(&self, options: ToastOptions) {
+        self.put(options, true);
+    }
+
+    fn put(&self, options: ToastOptions, behind_kept: bool) {
+        let kept = behind_kept && self.0.current.borrow().as_ref().is_some_and(|current| current.keep);
+        let busy =
+            kept || self.0.current.borrow().is_some() && (self.0.paused.get() || !self.0.queue.borrow().is_empty());
         if busy {
             self.0.queue.borrow_mut().push_back(options);
             // TS keeps the surface mounted and updates `+N more`; a new surface would drop a selection on it.
