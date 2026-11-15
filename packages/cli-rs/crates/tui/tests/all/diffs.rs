@@ -1207,12 +1207,13 @@ fn a_plugins_binds_take_what_they_may() {
 }
 
 thread_local! {
-    /// Which of its two forms the dialog probe shows.
+    /// Which of its two forms the dialog probe shows, and whether its select has a note.
     static SECOND: Cell<bool> = const { Cell::new(false) };
+    static NOTED: Cell<bool> = const { Cell::new(false) };
 }
 
-// Expected (carbon's review of P6c, 5): a keyed select shown again shows its new empty text and note, which it had none
-// of; a panel shown again shows its new close label.
+// Expected (carbon's review of P6c, 5): a keyed select shown again shows its new empty text, then its new note, which it
+// had none of, each the one change; a panel shown again shows its new close label.
 #[test]
 fn a_select_and_a_panel_shown_again_show_their_new_fields() {
     use opencode_plugin::abi::{Action, Dialog, Panel, PanelSize, Select, SelectOption, Span};
@@ -1227,7 +1228,7 @@ fn a_select_and_a_panel_shown_again_show_their_new_fields() {
                 Select::new("Pick", options, action)
                     .with_key(Some("pick".into()))
                     .with_empty(second.then(|| Span::new("Nothing here")))
-                    .with_note(second.then(|| Span::new("A note under"))),
+                    .with_note(NOTED.with(Cell::get).then(|| Span::new("A note under"))),
             ));
         });
         setup.command(command("probe.panel"), |host, _| {
@@ -1246,7 +1247,10 @@ fn a_select_and_a_panel_shown_again_show_their_new_fields() {
     h.wait_for("row one");
     SECOND.with(|second| second.set(true));
     h.dispatch("probe.select");
+    // The empty text alone, then the note alone, each changed in place.
     h.wait_for("Nothing here");
+    NOTED.with(|noted| noted.set(true));
+    h.dispatch("probe.select");
     h.wait_for("A note under");
     h.keys(&["escape"]);
     SECOND.with(|second| second.set(false));
