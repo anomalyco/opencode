@@ -296,7 +296,7 @@ export const layer = (options?: Options) =>
         }).pipe(
           // A deleted parent owes nothing to the report; clear its row.
           Effect.catchTag("Session.NotFoundError", () => jobs.completeBackground(notificationID)),
-          // Retain the formatted outbox row for the next boot: the notification ID is
+          // Retain the outbox row for the next boot: the notification ID is
           // already owned by another item, so deleting it would lose the report.
           Effect.catchTag("Session.SyntheticConflictError", (error) =>
             Effect.logWarning("Failed to admit recovered subagent notification due to ID conflict", {
@@ -339,7 +339,7 @@ export const layer = (options?: Options) =>
         }
 
         if (background.status !== "running") {
-          // The outbox row already holds the formatted result; replay it without touching the child.
+          // Replay the settled report using the work captured with it.
           yield* deliverSubagentSafe(notices, background.notificationID, recovery, background)
           return false
         }
@@ -377,7 +377,7 @@ export const layer = (options?: Options) =>
           )
           yield* store.releaseOrphanedChildClaims()
           // Job.cancel persists the cancellation before interrupting the execution. A crash
-          // in between leaves its claim behind. Settlement writes a formatted error to the
+          // in between leaves its claim behind. Settlement writes an error to the
           // outbox atomically with release; such an older report can coexist with a new claim.
           for (const { status, recovery, error } of pending) {
             if (status !== "cancelled" || recovery.kind !== "subagent" || error !== undefined) continue
