@@ -131,6 +131,7 @@ pub fn config() -> Option<Config> {
 /// Waits until the JS host handled everything sent before, and no tree waits for the host; then three frames.
 pub fn settle(harness: &Harness, scripts: &Scripts) {
     let begun = Instant::now();
+    walked(harness, scripts);
     // A ping would start a JS host that nothing asked for.
     if scripts.pid().is_none() {
         for _ in 0..3 {
@@ -169,6 +170,19 @@ pub fn settle(harness: &Harness, scripts: &Scripts) {
         if pong == Some(false) && scripts.idle() {
             return;
         }
+    }
+}
+
+/// Waits until no walk of a plugin's tree runs (FT-2), and the loader took the last: then a few turns.
+pub fn walked(harness: &Harness, scripts: &Scripts) {
+    let begun = Instant::now();
+    while scripts.walking() {
+        assert!(begun.elapsed() < Duration::from_secs(20), "a walk of a plugin's tree never ended");
+        turn(harness);
+        std::thread::sleep(Duration::from_micros(200));
+    }
+    for _ in 0..3 {
+        turn(harness);
     }
 }
 
@@ -1396,6 +1410,8 @@ fn the_manager_asks_before_a_project_typescript_plugin_runs() {
     let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
     external_with(&harness.tui, external, Some(config));
     let (app, tui) = (&harness.app, &harness.tui);
+    // Its files are hashed off the UI thread (FT-2): the question comes once they are.
+    walked(&harness, &tui.plugins.scripts.borrow().clone().unwrap());
     let toast = tui.toasts.current().unwrap();
     assert_eq!(toast.title.as_deref(), Some(&*format!("Plugin needs approval: {}", dir.display())));
     assert!(toast.message.contains("TypeScript code in opencode's JS host"), "{}", toast.message);
@@ -2579,34 +2595,59 @@ fn a_failed_js_plugin_holds_nothing() {
     assert_eq!(limits::held(LAB), limits::Held::default(), "held once failed");
 }
 
-// Expected (bigboi P8-9): a plugin directory is read to hash it once, not again for each reconcile the JS host's
-// answers start: four plugins load reading each tree about once in all, and reconciles that change no file read none.
+// Expected (bigboi P8-9, FT-2): a plugin directory is read to hash it off the UI thread, and not again for each
+// reconcile the JS host's answers start: once no file changed lately, reconciles that change no file read none.
 #[test]
 fn the_js_hosts_answers_hash_no_plugin_again() {
     let Some(config) = config() else { return };
-    let size = |name: &str| -> u64 {
-        let dir = Path::new(EXAMPLES).join(name);
-        std::fs::read_dir(dir).unwrap().flatten().filter_map(|entry| entry.metadata().ok()).map(|meta| meta.len()).sum()
-    };
     let names = ["probe", "twin", "lab", "v2probe"];
-    let total: u64 = names.iter().map(|name| size(name)).sum();
     let before = opencode_plugin::loader::approval::hashed();
     let pipe = open(&names.map(|name| (name, None)), config, (80, 30));
     for id in ["example.probe", "example.twin", "example.lab", "example.v2probe"] {
         pipe.active(id);
     }
     pipe.settle();
-    let started = opencode_plugin::loader::approval::hashed() - before;
-    assert!(started <= 2 * total, "the start read {started} bytes of plugins of {total}");
+    // A file changed within the last 2 s is read again at each walk, as its next change may keep its size and time.
+    std::thread::sleep(Duration::from_millis(2100));
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    pipe.settle();
+    let walked = pipe.scripts().hashed();
+    assert!(walked > 0, "no walk read the plugins");
     for _ in 0..5 {
         opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
         pipe.settle();
     }
-    assert_eq!(
-        opencode_plugin::loader::approval::hashed() - before,
-        started,
-        "a reconcile that changed nothing hashed"
-    );
+    assert_eq!(pipe.scripts().hashed(), walked, "a reconcile that changed nothing hashed");
+    assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread hashed a plugin's files");
+}
+
+// Expected (FT-2): the UI thread reads none of a TypeScript plugin's files as the client starts, so its first frame
+// does not wait on them, however many its dependencies hold; the walk off the UI thread reads the plugin's own files
+// and each dependency's `package.json`, not the dependencies' files (2,000 of 8 KiB here); and the plugin loads.
+#[test]
+fn the_first_frame_does_not_wait_on_a_plugins_files() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().join("config/plugins/heavy");
+    let lib = dir.join("node_modules/dep/lib");
+    std::fs::create_dir_all(&lib).unwrap();
+    std::fs::write(dir.join("node_modules/dep/package.json"), r#"{ "name": "dep", "version": "1.0.0" }"#).unwrap();
+    let chunk = vec![b'x'; 8 << 10];
+    for index in 0..2000 {
+        std::fs::write(lib.join(format!("{index}.js")), &chunk).unwrap();
+    }
+    std::fs::write(dir.join("tui.ts"), "export default { id: \"example.heavy\", setup() {} }\n").unwrap();
+    let before = opencode_plugin::loader::approval::hashed();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    harness.app.render();
+    assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the plugin's files");
+    let pipe = Pipe { harness, root };
+    pipe.active("example.heavy");
+    let walked = pipe.scripts().hashed();
+    assert!(walked > 0 && walked < 64 << 10, "the walk read {walked} bytes");
+    assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the plugin's files");
 }
 
 // Expected (carbon-1, the flag on): a project the client works in loads nothing into the JS host as it starts for the

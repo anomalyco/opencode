@@ -465,23 +465,30 @@ impl Loader {
         // A project's TypeScript plugin runs only once the user approved its files, as a native build does: until then
         // nothing of it reaches the JS host, which does not start for it. What the JS host imports is a copy of exactly
         // the approved files (bigboi P8-1); a save since the approval holds the plugin back for a decision on it.
+        // Its files are hashed off the UI thread (FT-2): until the first walk ended it is starting. A copy that does not
+        // stage, as the files changed since the walk, is read again here.
         let staged = match target.project {
-            true => match self.approved(host, registry, name, Artifact::tree(dir)) {
-                Ok(artifact) => match self.approvals.staging().and_then(|root| artifact.stage(&root)) {
-                    Ok(staged) => Some(staged),
-                    Err(error) => {
-                        log::warn!("plugin {name}: {error}");
+            true => {
+                let Some(tree) = scripts.tree(dir) else {
+                    return !registry.loaded(name) && starting(registry, name, listed);
+                };
+                match self.approved(host, registry, name, tree) {
+                    Ok(artifact) => match self.approvals.staging().and_then(|root| artifact.stage(&root)) {
+                        Ok(staged) => Some(staged),
+                        Err(error) => {
+                            log::warn!("plugin {name}: {error}");
+                            scripts.forget(name);
+                            let changed = Artifact::tree(dir);
+                            let decision = changed.as_ref().ok().and_then(|changed| self.approvals.decision(changed));
+                            return self.hold(host, registry, name, changed, decision);
+                        }
+                    },
+                    Err(changed) => {
                         scripts.forget(name);
-                        let changed = Artifact::tree(dir);
-                        let decision = changed.as_ref().ok().and_then(|changed| self.approvals.decision(changed));
-                        return self.hold(host, registry, name, changed, decision);
+                        return changed;
                     }
-                },
-                Err(changed) => {
-                    scripts.forget(name);
-                    return changed;
                 }
-            },
+            }
             false => None,
         };
         let dir = staged.as_deref().unwrap_or(dir);
@@ -510,12 +517,7 @@ impl Loader {
                 false
             }
             Step::Starting if registry.loaded(name) => false,
-            Step::Starting => {
-                let status = Status::Skipped(STARTING.to_owned());
-                let changed = listed.as_ref() != Some(&status);
-                registry.set_unloaded(name, Some(status));
-                changed
-            }
+            Step::Starting => starting(registry, name, listed),
             Step::Unsupported => {
                 registry.unload(host, name);
                 self.seen.borrow_mut().remove(name);
@@ -758,6 +760,14 @@ impl Loader {
 /// The project root of `cwd`: the nearest ancestor with `.git` or `.hg`, else `cwd`.
 pub fn project_root(cwd: &Path) -> PathBuf {
     cwd.ancestors().find(|dir| dir.join(".git").exists() || dir.join(".hg").exists()).unwrap_or(cwd).to_path_buf()
+}
+
+/// Lists the TypeScript plugin `name` as starting on the JS host: whether the manager's list changed.
+fn starting(registry: &Registry, name: &str, listed: &Option<Status>) -> bool {
+    let status = Status::Skipped(STARTING.to_owned());
+    let changed = listed.as_ref() != Some(&status);
+    registry.set_unloaded(name, Some(status));
+    changed
 }
 
 /// The subdirectories of `dir`, `node_modules` and `.git` left out, to a depth of 8 and at most 64 in all.
