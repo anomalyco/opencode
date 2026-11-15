@@ -441,8 +441,8 @@ impl Row {
                 .as_deref()
                 .and_then(|target| std::path::Path::new(target).file_name())
                 .map_or_else(|| entry.id.clone(), |name| name.to_string_lossy().into_owned()),
-            Row::Tui(entry) if entry.origin != PluginOrigin::Configured => entry.id.clone(),
-            Row::Tui(entry) => entry.target.clone().unwrap_or_else(|| entry.id.clone()),
+            // A plugin not loaded is named by its package where the loader read one, else by its target (FT-15).
+            Row::Tui(entry) => entry.id.clone(),
             Row::Server { plugin, source } => plugin.id.as_ref().map_or_else(|| source.clone(), |id| id.0.clone()),
         }
     }
@@ -612,8 +612,9 @@ mod tests {
         assert_eq!((failed.toggle().as_deref(), failed.has_error()), (Some("k"), true));
         assert_eq!(failed.footer().as_deref(), Some("failed, local"));
         assert_eq!(row(PluginOrigin::Builtin, PluginStatus::Inactive).toggle().as_deref(), Some("k"));
+        // A skipped entry's ID is its package's name, or its target when the loader read none (FT-15).
         let skipped = row(PluginOrigin::Configured, PluginStatus::Skipped);
-        assert_eq!((skipped.toggle(), skipped.label().as_str(), skipped.has_error()), (None, "/plugins/sample", true));
+        assert_eq!((skipped.toggle(), skipped.label().as_str(), skipped.has_error()), (None, "sample", true));
         let pending = row(PluginOrigin::Configured, PluginStatus::Pending);
         assert_eq!((pending.toggle().as_deref(), pending.label().as_str()), (Some("k"), "sample"));
         assert!(!pending.has_error());

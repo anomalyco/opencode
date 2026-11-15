@@ -44,6 +44,12 @@ pub struct Plugins {
     telling: Cell<bool>,
     /// The host's own `/plugins` while the plugin manager has failed.
     fallback: RefCell<Option<Disposer>>,
+    /// The TUI parts of the server plugins listed as not loaded (FT-10).
+    server_parts: RefCell<Vec<String>>,
+    /// The plugins not loaded the user was told of this run, and whether the server's plugins were heard yet: the one
+    /// notice waits for them, so it names their TUI parts too.
+    told_skipped: RefCell<std::collections::HashSet<String>>,
+    heard_server: Cell<bool>,
 }
 
 impl Plugins {
@@ -1200,6 +1206,9 @@ pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>,
         told: RefCell::default(),
         telling: Cell::new(false),
         fallback: RefCell::default(),
+        server_parts: RefCell::default(),
+        told_skipped: RefCell::default(),
+        heard_server: Cell::new(false),
     }
 }
 
@@ -1255,7 +1264,13 @@ fn sync_server_plugins(tui: &Tui) {
     tui.app.spawn(
         async move { client.plugin_list(&input).await },
         bind!(tui, |tui, _, result| {
-            let Ok(output) = result else { return };
+            let Ok(output) = result else {
+                tui.plugins.heard_server.set(true);
+                return tell_skipped(&tui);
+            };
+            set_server_parts(&tui, &output.data);
+            tui.plugins.heard_server.set(true);
+            tell_skipped(&tui);
             let before = std::mem::replace(&mut tui.reads.server.borrow_mut().1, output.data.clone());
             let failed: Vec<String> = output
                 .data
@@ -1280,6 +1295,83 @@ fn sync_server_plugins(tui: &Tui) {
             }
         }),
     );
+}
+
+/// Lists the TUI parts of the active server plugins, which TS loads from the server's list (`serverTuiPlugins`), as
+/// not loaded, unless their target is listed already; a part the server no longer lists leaves the list.
+fn set_server_parts(tui: &Tui, plugins: &[PluginInfo]) {
+    // Only the client that loads external plugins has TS's reconcile to stand in for.
+    if tui.plugins.loader.borrow().is_none() {
+        return;
+    }
+    let parts: Vec<String> = plugins
+        .iter()
+        .filter(|plugin| matches!(plugin.state, PluginState::Active(_)) && plugin.features.tui == Some(true))
+        .filter_map(|plugin| match &plugin.source {
+            PluginSource::Package(package) => Some(package.target.clone()),
+            PluginSource::Local(local) => Some(local.path.clone()),
+            _ => None,
+        })
+        .collect();
+    let skipped = Status::Skipped(opencode_plugin::SKIPPED_SERVER_TUI.to_owned());
+    let before = tui.plugins.server_parts.replace(parts.clone());
+    let entries = tui.plugins.entries();
+    let status = |target: &str| entries.iter().find(|entry| entry.target.as_deref() == Some(target)).map(|e| &e.status);
+    let mut changed = false;
+    for gone in before.iter().filter(|target| !parts.contains(target)) {
+        if status(gone) == Some(&skipped) {
+            tui.plugins.set_unloaded(gone, None);
+            changed = true;
+        }
+    }
+    for part in parts.iter().filter(|target| status(target).is_none()) {
+        log::warn!("plugin {part} skipped: {}", opencode_plugin::SKIPPED_SERVER_TUI);
+        tui.plugins.set_unloaded(part, Some(skipped.clone()));
+        changed = true;
+    }
+    if changed {
+        tell_plugins(tui);
+    }
+}
+
+/// Tells the user once a run, in the host's notice lane, which TypeScript plugins are not loaded and why: the ones not
+/// told yet, grouped by reason, once the server's plugins were heard (FT-10).
+fn tell_skipped(tui: &Tui) {
+    if !tui.plugins.heard_server.get() || tui.plugins.loader.borrow().is_none() {
+        return;
+    }
+    let mut told = tui.plugins.told_skipped.borrow_mut();
+    let mut reasons: Vec<(String, Vec<String>)> = Vec::new();
+    for entry in tui.plugins.entries() {
+        let Status::Skipped(reason) = &entry.status else { continue };
+        if !entry.key.starts_with("target:") || reason == opencode_plugin::loader::STARTING || !told.insert(entry.key) {
+            continue;
+        }
+        match reasons.iter_mut().find(|(known, _)| known == reason) {
+            Some((_, names)) => names.push(entry.id),
+            None => reasons.push((reason.clone(), vec![entry.id])),
+        }
+    }
+    drop(told);
+    let count: usize = reasons.iter().map(|(_, names)| names.len()).sum();
+    if count == 0 {
+        return;
+    }
+    let lines: Vec<String> = reasons.iter().map(|(reason, names)| format!("{}: {reason}.", names.join(", "))).collect();
+    let title = match count {
+        1 => "1 TypeScript plugin not loaded".to_owned(),
+        count => format!("{count} TypeScript plugins not loaded"),
+    };
+    let options = ToastOptions::new(Variant::Warning, format!("{}\nRun /plugins to view details.", lines.join("\n")))
+        .title(title)
+        .keep()
+        .action(
+            "Open plugins",
+            bind!(tui, |tui| {
+                tui.keymap.dispatch("plugins.list", None);
+            }),
+        );
+    tui.toasts.show(options);
 }
 
 fn server_failed(plugins: &[PluginInfo]) -> usize {
@@ -1372,6 +1464,7 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
             loader.reconcile(&host(&tui), &tui.plugins);
             watch(&tui, &loader, &watches);
             builds.iter().for_each(|build| build.tell(&tui));
+            tell_skipped(&tui);
         })
     });
     // TS reconciles again when `config.data.plugins` changes: new entries, options and directives apply.
@@ -1390,7 +1483,12 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
         watch(&tui, &loader, &watches);
         // A new entry the loader does not load is listed skipped, with no remount (review carbon-4).
         tell_plugins(&tui);
+        tell_skipped(&tui);
     }));
+    // The server's plugins may have been heard before there was a loader.
+    let server = tui.reads.server.borrow().1.clone();
+    set_server_parts(tui, &server);
+    tell_skipped(tui);
 }
 
 /// `plugin dev`'s `build.log` beside its library, which its builds in the background publish in the watched directory:

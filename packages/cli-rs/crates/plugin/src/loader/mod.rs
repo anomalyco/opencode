@@ -22,7 +22,7 @@ use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
 use crate::pipe::{Scripts, Step};
-use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, Status};
+use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, SKIPPED_JS_OFF, SKIPPED_NPM, Status};
 use approval::{Approvals, Artifact, Decision};
 
 /// The file name of a plugin directory's native build: `plugin.so`, `plugin.dylib`, or `plugin.dll`.
@@ -124,6 +124,13 @@ pub struct Loader {
     held: RefCell<HashMap<String, Result<Artifact, String>>>,
     /// The JS host, which runs the targets that have no native build.
     scripts: Option<Rc<Scripts>>,
+}
+
+/// The `name` of the `package.json` in `dir`, which names a plugin that is not loaded in place of its path.
+fn package_name(dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join("package.json")).ok()?;
+    let package: serde_json::Value = serde_json::from_str(&text).ok()?;
+    package.get("name")?.as_str().filter(|name| !name.is_empty()).map(str::to_owned)
 }
 
 /// Why a TypeScript plugin is listed and not active while the JS host loads it.
@@ -334,6 +341,9 @@ impl Loader {
             // Only now is it known that the target has no native build.
             if self.skipped.borrow_mut().insert(name.to_owned()) {
                 log::warn!("plugin {name} skipped: {reason}");
+                if let Some(package) = target.local.as_deref().and_then(package_name) {
+                    registry.set_label(name, package);
+                }
             }
             registry.set_unloaded(name, status);
             changed
@@ -354,7 +364,12 @@ impl Loader {
                 registry.set_unloaded(name, None);
                 return false;
             }
-            return skip(SKIPPED);
+            // Why, with the way to load it where there is one (FT-10).
+            return skip(match (&target.local, &self.scripts) {
+                (None, _) => SKIPPED_NPM,
+                (Some(local), None) if local.is_dir() => SKIPPED_JS_OFF,
+                _ => SKIPPED,
+            });
         };
         let (digest, bytes, quarantine) = match self.admit(host, registry, target, &file, &listed) {
             Ok(build) => build,

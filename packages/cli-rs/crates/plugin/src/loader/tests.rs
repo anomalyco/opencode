@@ -516,7 +516,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     let config = root.path().join("config");
     let lib_dir = config.join("plugins").join("fake");
     let ts_dir = config.join("plugins").join("typescript");
-    fs::create_dir_all(&ts_dir).unwrap();
+    write(&ts_dir.join("package.json"), r#"{ "name": "@acme/typescript-tui" }"#);
     write(&lib_dir.join(entry_file()), "id=fake");
     let file = root.path().join(format!("extra.{}", std::env::consts::DLL_EXTENSION));
     write(&file, "id=extra");
@@ -535,8 +535,10 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     assert_eq!(entry(&entries, &lib_target).source, Source::External);
     assert_eq!(entry(&entries, &lib_target).status, Status::Active);
     assert_eq!(entry(&entries, &file_target).id, "extra");
-    assert_eq!(entry(&entries, &ts_target).status, Status::Skipped(SKIPPED.to_owned()));
-    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED.to_owned()));
+    // Skipped with why and how to load it, and named by its package rather than its path (FT-10, FT-15).
+    assert_eq!(entry(&entries, &ts_target).status, Status::Skipped(SKIPPED_JS_OFF.to_owned()));
+    assert_eq!(entry(&entries, &ts_target).id, "@acme/typescript-tui");
+    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_NPM.to_owned()));
     assert_eq!(fake.active.get(), 2);
     assert_eq!(host.remounts.get(), 1);
     assert!(loader.watch_dirs().contains(&lib_dir));
@@ -581,7 +583,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     fs::remove_file(lib_dir.join(entry_file())).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let entries = registry.entries();
-    assert_eq!(entry(&entries, &lib_target).status, Status::Skipped(SKIPPED.to_owned()));
+    assert_eq!(entry(&entries, &lib_target).status, Status::Skipped(SKIPPED_JS_OFF.to_owned()));
     assert!(!entries.iter().any(|entry| entry.id == "fake2"));
     assert_eq!(fake.active.get(), 1);
 
@@ -592,7 +594,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     let entries = registry.entries();
     let gone = |entry: &Entry| entry.target.as_ref().is_some_and(|target| [&lib_target, &ts_target].contains(&target));
     assert!(!entries.iter().any(gone), "{entries:?}");
-    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED.to_owned()));
+    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_NPM.to_owned()));
 }
 
 #[test]

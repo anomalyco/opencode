@@ -26,6 +26,7 @@ pub mod surface;
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
@@ -2206,7 +2207,7 @@ pub struct Entry {
     /// `held:<target>` for a build held back, `target:<target>` for a target that did not load. An ID alone is not
     /// enough: a held build may share its ID with a loaded plugin (review bigboi-3).
     pub key: String,
-    /// The plugin ID, or the configured target of a skipped entry.
+    /// The plugin ID, or the configured target of a skipped entry, or its package's name ([`Registry::set_label`]).
     pub id: String,
     /// Where an external or skipped plugin comes from: its `plugins` target or path.
     pub target: Option<String>,
@@ -2233,6 +2234,12 @@ impl Entry {
 
 /// Why a configured TypeScript TUI plugin is listed but not loaded (deviation of F16 until P.4).
 pub const SKIPPED: &str = "TypeScript TUI plugins do not run in opencode-native yet";
+/// Why a TypeScript plugin directory is not loaded while the JS host is off (FT-10).
+pub const SKIPPED_JS_OFF: &str = "TypeScript TUI plugins run on the JS host, which is off: set OPENCODE_PLUGIN_JS=1 (with Bun installed) to turn it on";
+/// Why a `plugins` entry that names an npm package is not loaded (FT-10).
+pub const SKIPPED_NPM: &str = "opencode-native does not install or load TUI plugins named by npm package";
+/// Why the TUI part of a server plugin is not loaded (FT-10).
+pub const SKIPPED_SERVER_TUI: &str = "opencode-native does not load the TUI part of a server plugin";
 
 struct Plugin {
     definition: Definition,
@@ -2321,6 +2328,8 @@ pub struct Registry {
     released: RefCell<Vec<String>>,
     /// The targets held now, never opened: by target, with the ID their crash named, and why.
     held: RefCell<Vec<(String, Hold)>>,
+    /// What names a target that is not loaded in place of its path: its package's name (FT-15).
+    labels: RefCell<HashMap<String, String>>,
 }
 
 impl Registry {
@@ -2364,6 +2373,7 @@ impl Registry {
             unsupervised: RefCell::default(),
             released: RefCell::default(),
             held: RefCell::default(),
+            labels: RefCell::default(),
         }
     }
 
@@ -2548,6 +2558,11 @@ impl Registry {
             .filter(|(_, status)| matches!(status, Status::Skipped(_)))
             .map(|(target, _)| target.clone())
             .collect()
+    }
+
+    /// Names `target` `label` in the list while it is not loaded, as its package's name rather than its path.
+    pub fn set_label(&self, target: &str, label: String) {
+        self.labels.borrow_mut().insert(target.to_owned(), label);
     }
 
     /// Lists `target` as not loaded with `status`, or clears it with `None`.
@@ -2855,9 +2870,10 @@ impl Registry {
             Entry { key, id, target: Some(target.clone()), source, status, active: false, slow: None }
         });
         let unloaded = self.unloaded.borrow();
+        let labels = self.labels.borrow();
         let unloaded = unloaded.iter().map(|(target, status)| Entry {
             key: format!("target:{target}"),
-            id: target.clone(),
+            id: labels.get(target).unwrap_or(target).clone(),
             target: Some(target.clone()),
             source: Source::Configured,
             status: status.clone(),
