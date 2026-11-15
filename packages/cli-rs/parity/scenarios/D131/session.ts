@@ -29,14 +29,14 @@ export function server(title?: string): Options {
       // In place of the fallback's stream, which `then` does not reach.
       { path: "/api/event", events: [{ id: "evt_connected", type: "server.connected", data: {} }] },
       ...catalog,
-      { method: "POST", path: "/api/session", json: (entry) => ({ data: info((entry.body as { id: string }).id) }) },
-      { path: "/api/session/:id", json: (entry) => ({ data: info(id(entry)) }) },
+      { method: "POST", path: "/api/session", json: (entry: Logged) => ({ data: info((entry.body as { id: string }).id) }) },
+      { path: "/api/session/:id", json: (entry: Logged) => ({ data: info(id(entry)) }) },
       { path: "/api/session/:id/message", json: { data: [], cursor: {} } },
       { path: "/api/session/:id/inbox", json: { data: [] } },
       {
         method: "POST",
         path: "/api/session/:id/prompt",
-        json: (entry) => ({ data: inbox(id(entry)) }),
+        json: (entry: Logged) => ({ data: inbox(id(entry)) }),
         then: (entry) => (title ? [renamed(id(entry), title)] : []),
         thenDelay: 500,
       },
