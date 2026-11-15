@@ -302,7 +302,8 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-// Queues `request` for the call that runs, the setup that runs, or a batch of its own; resolves with its answer.
+// Queues `request` for the call that runs, the setup that runs, or a batch of its own; resolves with its answer. A
+// call ends at its handler's first `await`: what it asks for after that is a batch's, the activation's, not the mount's.
 function effect(plugin: Plugin, request: Request): Promise<Json> {
   return new Promise((resolve) => {
     if (plugin.failed) return resolve(undefined)

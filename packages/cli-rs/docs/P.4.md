@@ -508,7 +508,13 @@ mount begin and end, not the mount: the end has no mount left to own anything, a
 plugin's, which a next mount shows, as the goal footer's is when the prompt mounts its next footer before the last one
 ends. Over the pipe, the host tells the JS host of each request it cancels, at once as the mount closes, and a
 TypeScript `fetch` of a mount that closed rejects with an `AbortError` ("the fetch was cancelled: the mount that asked
-for it closed"), as an aborted web fetch does, and leaves nothing pending, while the server still holds it. A Rust or C plugin hears nothing of a
+for it closed"), as an aborted web fetch does, and leaves nothing pending, while the server still holds it. A
+TypeScript handler's call ends at its first `await`: what it asks for after that goes out in a batch of the
+activation's, not in the mount's call, and is the activation's, also when the mount closed meanwhile. A message that
+settles the JS host's work (a fetch's reply, the answers of a call's effects, which carry a fetch's ID, a cancellation,
+a skipped sequence) is never dropped while the JS host runs: past the overflow's bound it waits in a reserve as large
+again, charged its bytes, and one too large for a frame goes as a failed answer. A JS host that reads nothing past the
+reserve is ended, which settles everything it held. A Rust or C plugin hears nothing of a
 cancelled request, as it has no promise that waits.
 
 ### Events
