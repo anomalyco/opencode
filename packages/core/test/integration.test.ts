@@ -243,7 +243,7 @@ describe("Integration", () => {
         const invalidKeys = [
           "1",
           ...provider.prefixes,
-          ...provider.prefixes.map((prefix) => prefix + "  \\t "),
+          ...provider.prefixes.map((prefix) => prefix + "  \t "),
           ...providerSpecificInvalidKeys,
         ]
         for (const key of invalidKeys) {
