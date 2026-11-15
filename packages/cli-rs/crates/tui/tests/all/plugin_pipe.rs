@@ -1128,7 +1128,7 @@ impl Project {
         let root = opencode_util::temp::tempdir().unwrap();
         let work = root.path().join("work");
         std::fs::create_dir_all(work.join(".git")).unwrap();
-        let dir = work.join(".opencode/plugins/probe");
+        let dir = work.join(".opencode").join("plugins").join("probe");
         copy(&Path::new(EXAMPLES).join("probe"), &dir);
         // It runs from a copy of its files: it logs beside this directory all the same.
         std::fs::write(dir.join("log.txt"), dir.with_file_name(".probe.log.jsonl").to_string_lossy().as_bytes())
@@ -1374,7 +1374,7 @@ fn the_manager_asks_before_a_project_typescript_plugin_runs() {
     let root = opencode_util::temp::tempdir().unwrap();
     let work = root.path().join("work");
     std::fs::create_dir_all(work.join(".git")).unwrap();
-    let dir = work.join(".opencode/plugins/probe");
+    let dir = work.join(".opencode").join("plugins").join("probe");
     copy(&Path::new(EXAMPLES).join("probe"), &dir);
     let harness = support::mount(100, 40, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
@@ -2060,7 +2060,7 @@ fn a_disabled_plugin_is_not_set_up_until_enabled() {
     let _ = std::fs::remove_file(&log);
     let root = opencode_util::temp::tempdir().unwrap();
     let config_dir = root.path().join("config");
-    let dir = config_dir.join("plugins/probe");
+    let dir = config_dir.join("plugins").join("probe");
     copy(&Path::new(EXAMPLES).join("probe"), &dir);
     let entries = serde_json::json!({ "plugins": [
         { "package": dir.to_string_lossy(), "options": { "log": log.to_string_lossy() } },
@@ -2098,7 +2098,7 @@ fn safe_mode_holds_a_typescript_plugin() {
     let _ = std::fs::remove_file(&log);
     let root = opencode_util::temp::tempdir().unwrap();
     let config_dir = root.path().join("config");
-    let dir = config_dir.join("plugins/probe");
+    let dir = config_dir.join("plugins").join("probe");
     copy(&Path::new(EXAMPLES).join("probe"), &dir);
     let entries = serde_json::json!({ "plugins": [{ "package": dir.to_string_lossy(), "options": { "log": log.to_string_lossy() } }] });
     let deps = Deps {
@@ -2171,7 +2171,7 @@ fn a_directory_without_a_tui_module_is_skipped() {
     let Some(config) = config() else { return };
     let pipe = open(&[("twin", None)], config, (80, 30));
     pipe.active(twin::ID);
-    let dir = pipe.root.path().join("config/plugins/server-only");
+    let dir = pipe.root.path().join("config").join("plugins").join("server-only");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("server.ts"), "export default {}\n").unwrap();
     opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
