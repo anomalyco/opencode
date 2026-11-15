@@ -191,7 +191,7 @@ export function TextPart(props: {
           content={props.part.text.trim()}
           streaming={props.message.time.completed === undefined}
           internalBlockMode="top-level"
-          tableOptions={{ style: "grid", cellPaddingX: 1 }}
+          tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.base}

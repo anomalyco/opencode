@@ -14,6 +14,8 @@ import { tmpdir } from "./fixture/fixture"
 import { createAppFixture } from "./fixture/app"
 import { waitForHighlightedFrame } from "./fixture/frame"
 import type { PluginInfo } from "@opencode/client"
+import { resolveThemeDocument } from "@opencode/theme/tui"
+import { getOpenCodeTheme } from "../src/theme"
 
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
   await using state = await tmpdir()
@@ -708,6 +710,71 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
   expect(frame).not.toContain("x^2")
   expect(frame).not.toContain("y^2")
   expect(frame).not.toContain("```")
+})
+
+test("draws markdown table grids with the theme border color", async () => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_table",
+    title: "Table fixture",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "fixture", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 2 },
+  }
+  await using setup = await createAppFixture({
+    width: 100,
+    height: 40,
+    state: state.path,
+    config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide" } },
+    args: { sessionID: session.id },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            {
+              id: "msg_table",
+              type: "assistant",
+              agent: session.agent,
+              model: session.model,
+              time: { created: 2, completed: 3 },
+              content: [{ type: "text", text: "| Tool | Use |\n| --- | --- |\n| read | TEXT_CELL |" }],
+            },
+            {
+              id: "msg_compaction",
+              type: "compaction",
+              time: { created: 4 },
+              status: "completed",
+              reason: "manual",
+              summary: "| Tool | Use |\n| --- | --- |\n| grep | SUMMARY_CELL |",
+              recent: "msg_table",
+            },
+          ],
+          cursor: {},
+        })
+      if (
+        url.pathname === `/api/session/${session.id}/inbox` ||
+        url.pathname === `/api/session/${session.id}/permission`
+      )
+        return json({ data: [] })
+      return undefined
+    },
+  })
+  await waitForHighlightedFrame(setup, (frame) => frame.includes("TEXT_CELL") && frame.includes("SUMMARY_CELL"))
+
+  const corners = setup
+    .captureSpans()
+    .lines.flatMap((line) => line.spans)
+    .filter((span) => span.text.includes("\u250c"))
+  expect(corners).toHaveLength(2)
+  const border = resolveThemeDocument(getOpenCodeTheme(), "dark").border.base.toInts()
+  for (const span of corners) {
+    expect(span.fg.toInts()).toEqual(border)
+  }
 })
 
 test("keeps assistant footer metrics current after prepend, same-length refresh, and revert", async () => {
