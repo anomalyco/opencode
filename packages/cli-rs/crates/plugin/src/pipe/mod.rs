@@ -396,11 +396,12 @@ struct Call {
     request: opencode_plugin_abi::Request,
     /// The input owner of a handler's event (P2): its effects are that mount's, as in process.
     owner: Option<Weak<crate::interact::Owner>>,
-    /// The mount of a route's command: what it asks for is that mount's, as in process.
-    routed: Option<Weak<()>>,
+    /// The mount the call's requests belong to: a route command's, or the input owner's, which outlives the owner
+    /// (bigboi's freeze pass). What it asks for is that mount's, as in process.
+    mount: Option<Weak<()>>,
 }
 
-/// What owns a call's requests: the input owner of a handler's event, and the mount of a route's command.
+/// What owns a call's requests: the input owner of a handler's event, and the mount the requests belong to.
 pub(crate) type Owning = (Option<Weak<crate::interact::Owner>>, Option<Weak<()>>);
 
 /// Whom an end of the JS host names.
@@ -1233,7 +1234,7 @@ impl Scripts {
         }
         for call in calls {
             if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()) {
-                self.call_as(&guest, call.export, call.request, false, call.user, (call.owner, call.routed));
+                self.call_as(&guest, call.export, call.request, false, call.user, (call.owner, call.mount));
             }
         }
         self.reconcile();
@@ -1270,12 +1271,12 @@ impl Scripts {
         request: opencode_plugin_abi::Request,
         hold: bool,
         user: bool,
-        (owner, routed): Owning,
+        (owner, mount): Owning,
     ) {
         let seq = self.next();
         let (id, activation, route) = (guest.id().to_owned(), guest.activation(), guest.unwatched_route());
         let message = Down::Call { seq, id, activation, call: request.clone(), route };
-        let call = Call { guest: Rc::downgrade(guest), export, user, request, owner, routed };
+        let call = Call { guest: Rc::downgrade(guest), export, user, request, owner, mount };
         self.send(message, Some(Waiting::Call(Box::new(call))));
         if hold {
             self.start_hold(seq);
