@@ -116,8 +116,33 @@ pub const V1_MINOR: u32 = 6;
 /// The symbol every 1.x plugin exports.
 pub const ENTRY_V1: &str = "opencode_plugin_v1";
 
-/// The optional features this crate's host side knows. None in 2.0: everything 2.0 has is in every 2.0 host.
-pub const FEATURES: &[&str] = &[];
+/// The optional features this crate's host side knows ([`HostApi::features`]).
+pub const FEATURES: &[&str] = &[IMAGE_BOUNDS];
+
+/// 2.0: the host answers [`HostRequest::ImageBounds`] with the bounds of the images it decodes, so the SDK answers
+/// [`Read::image_size`] of bytes past them without sending them (PL-9). A host without it is asked every time.
+pub const IMAGE_BOUNDS: &str = "image-bounds";
+
+/// What [`HostRequest::ImageBounds`] answers: the most bytes one image may have, and the most pixels a side its header
+/// may name, as the host decodes images; past either, [`Read::image_size`] is `None`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
+pub struct ImageBounds {
+    pub bytes: u64,
+    pub side: u64,
+}
+
+impl ImageBounds {
+    pub fn new(bytes: u64, side: u64) -> Self {
+        Self { bytes, side }
+    }
+
+    /// Whether `bytes` are past the bounds, by their length or the size their header names.
+    pub fn over(&self, bytes: &[u8]) -> bool {
+        bytes.len() as u64 > self.bytes
+            || image_size(bytes).is_some_and(|(width, height)| u64::from(width.max(height)) > self.side)
+    }
+}
 
 /// The version a host serves a plugin ([`Read::abi`]): its major, its minor of that major, and its optional features.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2269,6 +2294,8 @@ pub enum HostRequest {
     ImageSize {
         bytes: String,
     },
+    /// 2.0, of a host with [`IMAGE_BOUNDS`]: the bounds of the images it decodes, an [`ImageBounds`].
+    ImageBounds,
     /// 2.0 (P6c): [`Host::set_setting`], once the current call returns.
     SetSetting {
         name: String,
@@ -3585,7 +3612,8 @@ pub trait Read {
     /// 2.0 (P6c): the width and height of the image `bytes` decode to in the host, or `None` where an image node of
     /// them would show nothing: not a PNG, GIF, JPEG or WebP image, past the host's bounds, or bytes that do not
     /// decode. [`image_size`] reads only the header. Over the C ABI the bytes cross to the host in base64, and the host
-    /// decodes an image within its bounds: ask once per content and keep the answer, not in each view.
+    /// decodes an image within its bounds: ask once per content and keep the answer, not in each view. A host with
+    /// [`IMAGE_BOUNDS`] states its bounds once, and bytes past them answer `None` without crossing.
     fn image_size(&self, _bytes: &[u8]) -> Option<(u32, u32)> {
         None
     }
@@ -4067,7 +4095,36 @@ impl Read for HostHandle {
     }
 
     fn image_size(&self, bytes: &[u8]) -> Option<(u32, u32)> {
+        // Bytes past the bounds the host states are no image it decodes: no need to encode and send them (PL-9).
+        if self.image_bounds().is_some_and(|bounds| bounds.over(bytes)) {
+            return None;
+        }
         self.read(&HostRequest::ImageSize { bytes: base64::encode(bytes) }).flatten()
+    }
+}
+
+thread_local! {
+    /// The image bounds each host table stated, asked once, on the first [`Read::image_size`] (calls run on the UI
+    /// thread); `None` for a host that has no [`IMAGE_BOUNDS`] or did not answer.
+    static IMAGE_BOUNDS_OF: std::cell::RefCell<std::collections::HashMap<usize, Option<ImageBounds>>> =
+        std::cell::RefCell::default();
+}
+
+impl HostHandle {
+    /// The bounds of the images the host decodes, when it states them ([`IMAGE_BOUNDS`]).
+    fn image_bounds(&self) -> Option<ImageBounds> {
+        let key = self.api as usize;
+        if let Some(known) = IMAGE_BOUNDS_OF.with_borrow(|known| known.get(&key).copied()) {
+            return known;
+        }
+        let bounds = self
+            .features()
+            .iter()
+            .any(|feature| feature == IMAGE_BOUNDS)
+            .then(|| self.read::<ImageBounds>(&HostRequest::ImageBounds))
+            .flatten();
+        IMAGE_BOUNDS_OF.with_borrow_mut(|known| known.insert(key, bounds));
+        bounds
     }
 }
 
@@ -5598,6 +5655,67 @@ mod tests {
         assert!(refused.contains("ABI 2.1") && refused.contains("(2.0) lacks"), "{refused}");
         assert!(viewed(forgetting, 1).is_ok());
         assert_eq!(Registered::new("t", None).setup().abi(), Abi::current());
+    }
+
+    thread_local! {
+        /// The requests the fake host below was sent, by type.
+        static ASKED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// A host that states image bounds of 100 bytes and 10 pixels a side, and answers an image's size as [4, 3].
+    unsafe extern "C" fn bounded_call(_: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+        // SAFETY: the SDK lends the request for the call.
+        let request: serde_json::Value = serde_json::from_slice(unsafe { request.as_slice() }).unwrap();
+        let kind = request["type"].as_str().unwrap_or_default().to_owned();
+        let answer = match kind.as_str() {
+            "image-bounds" => r#"{"bytes":100,"side":10}"#,
+            _ => "[4,3]",
+        };
+        ASKED.with_borrow_mut(|asked| asked.push(kind));
+        // SAFETY: `out` is valid for writes.
+        unsafe { *out = Owned::from_vec(answer.as_bytes().to_vec()) };
+        OK
+    }
+
+    // Expected (PL-9, bigboi's re-review): a host with `image-bounds` states them once, and the SDK answers the size of
+    // bytes past them, by length or by the size their header names, without sending them; bytes within them are asked
+    // for. A host without the feature is asked for every image, as before.
+    #[test]
+    fn image_size_past_the_host_s_bounds_answers_without_the_host() {
+        let png = |side: u32| {
+            let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+            bytes.extend(side.to_be_bytes());
+            bytes.extend(side.to_be_bytes());
+            bytes
+        };
+        for (features, expected) in [
+            (&br#"["image-bounds"]"#[..], ["image-bounds", "image-size"].as_slice()),
+            (&b"[]"[..], ["image-size", "image-size", "image-size"].as_slice()),
+        ] {
+            ASKED.with_borrow_mut(Vec::clear);
+            let api = HostApi {
+                size: size_of::<HostApi>(),
+                major: ABI_MAJOR,
+                minor: ABI_MINOR,
+                ctx: std::ptr::null_mut(),
+                call: Some(bounded_call),
+                free: Some(runtime::free),
+                theme_mode: None,
+                wake: None,
+                send: None,
+                report: None,
+                stopped: None,
+                features: Bytes::new(features),
+            };
+            let host = HostHandle { api: &api };
+            let sizes = [host.image_size(&[0; 200]), host.image_size(&png(11)), host.image_size(&png(9))];
+            let bounded = expected.len() == 2;
+            let past = if bounded { None } else { Some((4, 3)) };
+            assert_eq!(sizes, [past, past, Some((4, 3))], "features {}", String::from_utf8_lossy(features));
+            assert_eq!(ASKED.with_borrow(Vec::clone), expected, "features {}", String::from_utf8_lossy(features));
+            IMAGE_BOUNDS_OF.with_borrow_mut(|known| known.remove(&(std::ptr::from_ref(&api) as usize)));
+        }
+        assert!(FEATURES.contains(&IMAGE_BOUNDS));
     }
 
     // Expected (carbon-8): borrowed bytes are refused unread when null with a length or over the bound, and `free`

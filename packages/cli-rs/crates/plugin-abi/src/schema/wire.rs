@@ -8,9 +8,9 @@ use crate::claim::{self, FencePart, ToolPart};
 use crate::interact::{self, Bind, Button, Dragged, Focused, Handled, Key, Layer, LayerScope, Pointer, PointerKind};
 use crate::{
     Alert, Attention, Blob, Command, Composer, ComposerEdit, Confirm, ConfirmLabel, Dialog, ErrorDetails, Family,
-    Fence, Fenced, Fetch, Foreground, Gutter, HostRequest, Image, Images, Info, InputTo, KeymapActive, KeymapCommand,
-    KeymapPending, KeymapSlash, Level, Manifest, Member, Metadata, Panel, PanelAction, PanelBind, PanelSize,
-    PluginEntry, PluginOrigin, PluginStatus, Render, RenderFence, Request, RequestId, Route, Scope, Select,
+    Fence, Fenced, Fetch, Foreground, Gutter, HostRequest, Image, ImageBounds, Images, Info, InputTo, KeymapActive,
+    KeymapCommand, KeymapPending, KeymapSlash, Level, Manifest, Member, Metadata, Panel, PanelAction, PanelBind,
+    PanelSize, PluginEntry, PluginOrigin, PluginStatus, Render, RenderFence, Request, RequestId, Route, Scope, Select,
     SelectAction, SelectOption, Session, SessionStatus, SlotClaim, SlotKind, Sound, SoundName, SurfaceClaim,
     SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
 };
@@ -309,6 +309,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Plugins { } { },
                 Setting { name: string() } { },
                 ImageSize { bytes: string() } { },
+                ImageBounds { } { },
                 SetSetting { name: string(), value: any() } { },
                 SetTheme { name: string() } { },
                 InstallTheme { name: string(), theme: any() } { },
@@ -666,6 +667,12 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 version: string(), size: pair(uint16(), uint16()), location: reference("LocationRef"),
             } { failed_plugins: uint64() }),
         ),
+        (
+            "ImageBounds",
+            object!(ImageBounds, "The bounds of the images a host with `image-bounds` decodes.", {
+                bytes: uint64(), side: uint64(),
+            } { }),
+        ),
         ("DrawList", draw_list()),
     ]
 }
@@ -736,6 +743,7 @@ pub(super) fn messages() -> Value {
         ("plugins", list("PluginEntry")),
         ("setting", nullable(any())),
         ("image-size", nullable(pair(uint32(), uint32()))),
+        ("image-bounds", reference("ImageBounds")),
         ("fetch", reference("RequestId")),
         ("foreground", reference("RequestId")),
         ("*", json!({ "type": "null" })),

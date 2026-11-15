@@ -223,7 +223,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   the palette, the user's scroll): the host answers OPENCODE_ERROR to any other. None of the input requests ("focus",
  *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet.
  * - "setting" names one of "diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single". "image-size"
- *   takes the image's bytes in base64 and answers the size the host decodes, or null. A "fetch" with "bytes" answers
+ *   takes the image's bytes in base64 and answers the size the host decodes, or null. A host with the feature
+ *   "image-bounds" answers "image-bounds" with the bounds of the images it decodes (`ImageBounds`): bytes past them
+ *   answer null, so a library need not send them. A "fetch" with "bytes" answers
  *   the body's bytes in base64 as a JSON string.
  *
  * Content (`Blob`) is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
