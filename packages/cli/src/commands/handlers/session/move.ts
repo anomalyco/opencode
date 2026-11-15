@@ -1,7 +1,7 @@
 import { OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { Effect } from "effect"
-import { EOL, homedir } from "node:os"
+import { EOL } from "node:os"
 import path from "node:path"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
@@ -11,7 +11,7 @@ import { errorMessage } from "../../../util/error"
 const handler = Effect.fn("cli.session.move")(function* (
   input: Runtime.Input<typeof Commands.commands.session.commands.move>,
 ) {
-  const directory = path.resolve(input.directory.replace(/^~(?=$|[\\/])/, homedir()))
+  const directory = path.resolve(input.directory)
   const server = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
   yield* Effect.tryPromise({
