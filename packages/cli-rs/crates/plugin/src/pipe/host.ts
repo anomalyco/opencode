@@ -44,6 +44,9 @@ process.stdout.write = ((chunk: unknown, encoding?: unknown, callback?: unknown)
 // The approved copies of project plugins (P8), each a root its own files may import from alone: a module of the
 // layer and the runtime's own aside, an import that resolves outside it is refused (bigboi P8-1).
 const confined = new Set<string>()
+// `Bun.resolveSync` calls this `onResolve` again, with the importer's directory and then each parent as the importer,
+// and resolving from those fails a relative import (FT-3): the call made inside answers Bun's own resolution.
+let resolving = false
 
 runtime({
   name: "opencode-compat",
@@ -52,9 +55,16 @@ runtime({
       build.module(name, () => ({ exports, loader: "object" }))
     build.onResolve({ filter: /.*/ }, (args) => {
       const importer = args.importer
-      const root = importer ? [...confined].find((root) => importer.startsWith(root)) : undefined
+      const root = importer && !resolving ? [...confined].find((root) => importer.startsWith(root)) : undefined
       if (!root || args.path in modules || builtin(args.path)) return undefined
-      const resolved = Bun.resolveSync(args.path, path.dirname(importer.split("?")[0]!))
+      resolving = true
+      const resolved = (() => {
+        try {
+          return Bun.resolveSync(args.path, path.dirname(importer.split("?")[0]!))
+        } finally {
+          resolving = false
+        }
+      })()
       if (resolved.startsWith(root) || builtin(resolved)) return undefined
       throw new Error(`${args.path} is outside the plugin's approved files`)
     })
