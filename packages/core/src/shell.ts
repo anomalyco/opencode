@@ -22,6 +22,7 @@ import { AppProcess } from "@opencode/util/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
 import { FileRetention } from "./file-retention.js"
@@ -825,7 +826,7 @@ const layer = () =>
           // Read the byte before the window too, to tell whether the window starts on a line boundary.
           const before = Math.max(0, start - 1)
           const window = yield* readRange(info.file, before, size - before)
-          const page = window.subarray(charBoundary(window, start - before)).toString("utf8")
+          const page = TextBoundary.utf8Tail(window, size - start)
           const partial = start > 0 && window[0] !== 10
           const endsWithNewline = page.endsWith("\n")
           const lines = page.split("\n")
@@ -1140,13 +1141,6 @@ function annotate(info: Info) {
 function spanCommand(command: string) {
   if (command.length <= SPAN_COMMAND_LIMIT) return command.toWellFormed()
   return `${command.slice(0, SPAN_COMMAND_LIMIT).toWellFormed()}…`
-}
-
-// Moves past UTF-8 continuation bytes (at most 3) so a byte cut never splits a character.
-function charBoundary(bytes: Buffer, offset: number) {
-  const limit = Math.min(bytes.length, offset + 3)
-  for (let index = offset; index < limit; index++) if ((bytes[index] & 0xc0) !== 0x80) return index
-  return limit
 }
 
 function formatSize(bytes: number) {

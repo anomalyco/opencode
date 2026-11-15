@@ -14,7 +14,12 @@ Dialog content wrapper built on Kobalte's dialog primitive with v2 styling.
 Compose with \`DialogHeader\`, \`DialogTitle\`, \`DialogTitleGroup\`, \`DialogBody\`, and \`DialogFooter\`.
 
 ### API
-- \`Dialog\`: \`size\` (normal | large | x-large), \`variant\`, \`fit\`.
+- \`Dialog\`: \`size\`, \`variant\`, \`fit\`.
+  - \`normal\`: 480px wide, for confirmations, sign-ins and small forms.
+  - \`large\`: 880×600, for palettes, pickers and lists.
+  - \`x-large\`: 1040×680, for long documents and settings-like panels.
+  - Sizes clamp to the window. \`fit\` makes the height follow the content up to the size's height; large sizes keep their top edge, so only the bottom edge moves.
+  - Dialogs don't set their own container width or height: pick the size that fits.
 - \`DialogHeader\`: row container with optional \`closeLabel\` and \`hideClose\`.
 - \`DialogTitle\`: accessible single-line header title.
 - \`DialogTitleGroup\`: column with \`title\` and required \`description\`.

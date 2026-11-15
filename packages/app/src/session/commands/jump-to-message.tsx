@@ -82,7 +82,7 @@ export function JumpToMessage(props: {
   let list!: SearchListHandle<ReturnType<typeof rows>[number]>
 
   return (
-    <Dialog class="command-palette command-palette-compact fork-dialog" fit>
+    <Dialog class="command-palette command-palette-compact fork-dialog" size="large" fit>
       <div class="sr-only">
         <DialogTitle>{language.t("dialog.jump.title")}</DialogTitle>
       </div>
