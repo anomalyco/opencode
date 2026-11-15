@@ -121,6 +121,9 @@ pub enum Down {
     /// What the effects of a call (`c<seq>`), a setup (`setup`) or a batch of the plugin's (`b<seq>`) answered, one
     /// value each ([`HostRequest`]'s results).
     Answered { id: String, key: String, results: Vec<serde_json::Value> },
+    /// The host cancelled `request` of activation `activation`, as the mount that owns it closed: no reply comes, and
+    /// the fetch that waits for it rejects with an `AbortError`.
+    Cancelled { activation: u64, request: opencode_plugin_abi::RequestId },
     /// Answered with [`Up::Pong`] once everything before it was handled.
     Ping { seq: u64 },
     /// The message of `seq` was over the queue and is not sent; its sequence goes, so the stream has no gap.
@@ -146,7 +149,8 @@ impl Down {
             | Down::Adopted { .. }
             | Down::Refused { .. }
             | Down::Snapshot { .. }
-            | Down::Answered { .. } => None,
+            | Down::Answered { .. }
+            | Down::Cancelled { .. } => None,
         }
     }
 }

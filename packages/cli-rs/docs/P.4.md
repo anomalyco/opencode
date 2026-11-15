@@ -503,7 +503,10 @@ mount's call asks for, a command of the route the mount shows or a handler of th
 mount event), is that mount's: once the mount closes, it is not sent (a program does not start), and a reply that
 arrives later is dropped, also when the surface opened again under the same key, whose mount is another. One from
 setup, a global or base command, an event, a wake, a message or a layer of setup is the activation's, and its reply
-comes unless the plugin is disposed first. Over the pipe, a TypeScript `fetch` of a mount that closed never resolves.
+comes unless the plugin is disposed first. Over the pipe, the host tells the JS host of each request it cancels, and a
+TypeScript `fetch` of a mount that closed rejects with an `AbortError` ("the fetch was cancelled: the mount that asked
+for it closed"), as an aborted web fetch does, and leaves nothing pending. A Rust or C plugin hears nothing of a
+cancelled request, as it has no promise that waits.
 
 ### Events
 

@@ -249,7 +249,7 @@ interface Plugin {
   snapshots: Map<string, Json>
   readErrors: Map<string, string>
   answers: Map<string, Array<(value: Json) => void>>
-  replies: Map<number, (result: Json) => void>
+  replies: Map<number, { resolve: (result: Json) => void; reject: (error: Error) => void }>
   batch: number
   // P8: who hears each snapshot, and the manifest the host was last told.
   listeners: Array<(key: string) => void>
@@ -265,6 +265,10 @@ const generations = new Map<number, Plugin>()
 const UNCOMMAND = 250
 // The failed reply of a fetch the host did not take, as `REFUSED` in `lib.rs` says it.
 const REFUSED = "the host takes no request now: the effects that wait fill its queue"
+// What a fetch rejects with when the host cancels it, as the mount that asked for it closed.
+function cancelled() {
+  return Object.assign(new Error("the fetch was cancelled: the mount that asked for it closed"), { name: "AbortError" })
+}
 let last = 0
 let themeMode = "dark"
 // The page theme's colors by token, `#rrggbbaa`, which the V2 context's `theme` reads (P8).
@@ -537,11 +541,15 @@ function context(plugin: Plugin) {
     // P8: what runs as the activation ends, such as the layer closing a dialog of the plugin's own.
     cleanup: (cleanup: () => unknown) => cleanUp(plugin, cleanup),
     fetch(request: Json): Promise<Json> {
-      // A fetch the host did not take answers no ID, and no reply comes: it ends as a failed reply does.
-      return effect(plugin, { type: "fetch", ...request }).then((id) =>
-        typeof id === "number" ? new Promise((resolve) => plugin.replies.set(id, resolve)) : { Err: REFUSED },
-      )
+      // A fetch the host did not take answers no ID, and no reply comes: it ends as a failed reply does. One the host
+      // cancels, as the mount that asked for it closed, rejects with an `AbortError`, as a web fetch that is aborted.
+      return effect(plugin, { type: "fetch", ...request }).then((id) => {
+        if (typeof id !== "number") return { Err: REFUSED }
+        return new Promise((resolve, reject) => plugin.replies.set(id, { resolve, reject }))
+      })
     },
+    // The fetches that wait for their reply: none once each settled.
+    pendingFetches: () => plugin.replies.size,
   }
   const base = {
     id: plugin.id,
@@ -828,7 +836,7 @@ function call(seq: number, plugin: Plugin, request: Json) {
     } else if (request.type === "reply") {
       const reply = plugin.replies.get(request.id)
       plugin.replies.delete(request.id)
-      reply?.(request.result)
+      reply?.resolve(request.result)
     }
     if (result instanceof Promise) result.catch((error) => fail(plugin, `${request.type} rejected: ${message(error)}`))
   } catch (thrown) {
@@ -964,6 +972,15 @@ async function handle(message: Json) {
           if (plugin.mounts.size) viewAll(plugin)
         })
       return
+    case "cancelled": {
+      if (!plugin) return
+      const reply = plugin.replies.get(message.request)
+      plugin.replies.delete(message.request)
+      // The fetch waits for it by now: the `answered` that gave it its ID ran first, and `drain` awaits each message,
+      // so the fetch's `then` ran before this one.
+      if (reply) within(plugin, () => reply.reject(cancelled()))
+      return
+    }
     case "answered": {
       const waiting = plugin?.answers.get(message.key)
       plugin?.answers.delete(message.key)
