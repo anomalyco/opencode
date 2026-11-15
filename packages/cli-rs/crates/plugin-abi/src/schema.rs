@@ -419,14 +419,15 @@ pub fn schema() -> Value {
         defs.into_iter().chain(wire::definitions()).map(|(name, schema)| (name.to_owned(), schema)).collect();
     json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": format!("https://opencode.ai/schema/plugin-abi/{}.{}.json", crate::ABI_MAJOR, crate::ABI_MINOR),
         "title": format!("opencode plugin ABI {}.{}", crate::ABI_MAJOR, crate::ABI_MINOR),
         "description": "Generated from opencode_plugin_abi by `examples/schema.rs`; do not edit. Normative for every \
                         binding: `describe` answers Metadata and `create` a Manifest; the host's `call` sends a \
                         Request and the plugin's sends a HostRequest, each answered as `x-messages` says by the \
                         request's type; a view answers a ViewReply whose tree is a Node, and a draw a DrawList. A \
                         field the schema leaves out of `required` may be left out; a reader ignores a field it does \
-                        not know. A later 2.x minor only adds optional fields, request types and node kinds.",
+                        not know. A later 2.x minor only adds optional fields, request types and node kinds. \
+                        The HTTP API's types are references into its OpenAPI document, \
+                        `packages/protocol/openapi.json`, relative to this file.",
         "x-abi": { "major": crate::ABI_MAJOR, "minor": crate::ABI_MINOR, "features": crate::FEATURES },
         "x-messages": wire::messages(),
         "$defs": defs,
@@ -528,11 +529,41 @@ mod tests {
     use super::*;
     use crate::Rgba;
 
-    /// Whether `value` conforms to `schema`, for the keywords [`schema`] writes.
+    /// The HTTP API's OpenAPI document, which the schema's references name.
+    fn openapi() -> &'static Value {
+        static DOCUMENT: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
+            let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("schema").join(wire::OPENAPI);
+            serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
+        });
+        &DOCUMENT
+    }
+
+    /// The schema a reference names: a definition of ours, or a component of the OpenAPI document, whose own
+    /// references are `#/components/...`. A reference that names nothing panics.
+    fn resolve<'a>(path: &str, defs: &'a Value) -> &'a Value {
+        if let Some(name) = path.strip_prefix("#/$defs/") {
+            return defs.get(name).unwrap_or_else(|| panic!("{path} names no definition"));
+        }
+        let pointer = path.strip_prefix(wire::OPENAPI).unwrap_or(path).strip_prefix('#').unwrap_or_default();
+        assert!(pointer.starts_with("/components/schemas/"), "{path} is no reference the schema may make");
+        openapi().pointer(pointer).unwrap_or_else(|| panic!("{path} names no component of the OpenAPI document"))
+    }
+
+    /// Whether `value` conforms to `schema`, for the keywords [`schema`] and the OpenAPI document write, but the
+    /// patterns of the OpenAPI document's strings. A schema with nothing to check, such as an annotation alone, panics:
+    /// a binding could not check it either (bigboi's re-review). `{}` takes anything.
     fn conforms(value: &Value, schema: &Value, defs: &Value) -> bool {
+        if *schema == json!({}) {
+            return true;
+        }
+        const CHECKED: [&str; 8] = ["$ref", "anyOf", "allOf", "oneOf", "not", "const", "enum", "type"];
+        let checks = schema.as_object().is_some_and(|object| object.keys().any(|key| CHECKED.contains(&key.as_str())));
+        assert!(checks, "a schema with nothing to check: {schema}");
         if let Some(path) = schema.get("$ref").and_then(Value::as_str) {
-            let name = path.trim_start_matches("#/$defs/");
-            return conforms(value, &defs[name], defs);
+            return conforms(value, resolve(path, defs), defs);
+        }
+        if schema.get("not").is_some_and(|not| conforms(value, not, defs)) {
+            return false;
         }
         if let Some(any) = schema.get("anyOf").and_then(Value::as_array) {
             return any.iter().any(|schema| conforms(value, schema, defs));
@@ -549,35 +580,55 @@ mod tests {
         if let Some(values) = schema.get("enum").and_then(Value::as_array) {
             return values.contains(value);
         }
-        match schema.get("type").and_then(Value::as_str) {
-            Some("string") => value.as_str().is_some_and(|text| match schema.get("pattern") {
-                Some(_) => text.len() == 9 && text.starts_with('#') && text[1..].chars().all(|c| c.is_ascii_hexdigit()),
-                None => true,
+        let types: Vec<&str> = match schema.get("type") {
+            Some(Value::String(one)) => vec![one],
+            Some(Value::Array(many)) => many.iter().filter_map(Value::as_str).collect(),
+            _ => return true,
+        };
+        types.iter().any(|kind| typed(value, schema, kind, defs))
+    }
+
+    /// Whether `value` is of `kind` with `schema`'s bounds.
+    fn typed(value: &Value, schema: &Value, kind: &str, defs: &Value) -> bool {
+        let count = |key: &str| schema.get(key).and_then(Value::as_u64).map(|count| count as usize);
+        match kind {
+            "string" => value.as_str().is_some_and(|text| {
+                let rgba = schema.get("pattern").and_then(Value::as_str) == Some(RGBA);
+                count("minLength").is_none_or(|min| text.chars().count() >= min)
+                    && (!rgba
+                        || text.len() == 9 && text.starts_with('#') && text[1..].chars().all(|c| c.is_ascii_hexdigit()))
             }),
-            Some("boolean") => value.is_boolean(),
-            Some("null") => value.is_null(),
-            Some("number") => value.as_f64().is_some_and(|n| {
+            "boolean" => value.is_boolean(),
+            "null" => value.is_null(),
+            "number" => value.as_f64().is_some_and(|n| {
                 let bound = |key: &str| schema[key].as_f64();
-                bound("minimum").is_none_or(|min| n >= min) && bound("maximum").is_none_or(|max| n <= max)
+                bound("minimum").is_none_or(|min| n >= min)
+                    && bound("maximum").is_none_or(|max| n <= max)
+                    && bound("exclusiveMinimum").is_none_or(|min| n > min)
             }),
             // In integers, as `u64::MAX` is no `f64`.
-            Some("integer") => {
+            "integer" => {
                 let exact = |value: &Value| value.as_i64().map(i128::from).or(value.as_u64().map(i128::from));
                 let bound = |key: &str| schema.get(key).and_then(exact);
                 exact(value).is_some_and(|n| {
-                    bound("minimum").is_none_or(|min| n >= min) && bound("maximum").is_none_or(|max| n <= max)
+                    bound("minimum").is_none_or(|min| n >= min)
+                        && bound("maximum").is_none_or(|max| n <= max)
+                        && bound("exclusiveMinimum").is_none_or(|min| n > min)
                 })
             }
-            Some("array") => {
-                value.as_array().is_some_and(|items| match schema.get("prefixItems").and_then(Value::as_array) {
+            "array" => value.as_array().is_some_and(|items| {
+                let long = count("minItems").is_none_or(|min| items.len() >= min);
+                long && match schema.get("prefixItems").and_then(Value::as_array) {
                     Some(prefix) => {
-                        items.len() == prefix.len()
+                        items.len() >= prefix.len()
                             && items.iter().zip(prefix).all(|(item, schema)| conforms(item, schema, defs))
+                            && (items.len() == prefix.len() || schema.get("items") != Some(&json!(false)))
+                            && (schema.get("maxItems").is_none() || Some(items.len()) <= count("maxItems"))
                     }
-                    None => items.iter().all(|item| conforms(item, &schema["items"], defs)),
-                })
-            }
-            Some("object") => value.as_object().is_some_and(|object| {
+                    None => schema.get("items").is_none_or(|each| items.iter().all(|item| conforms(item, each, defs))),
+                }
+            }),
+            "object" => value.as_object().is_some_and(|object| {
                 let properties = schema.get("properties").and_then(Value::as_object);
                 let required = schema["required"].as_array().into_iter().flatten().filter_map(Value::as_str);
                 let closed = schema.get("additionalProperties") == Some(&json!(false));
@@ -590,8 +641,24 @@ mod tests {
                         },
                     })
             }),
-            _ => true,
+            _ => false,
         }
+    }
+
+    /// The schema as it is shipped, `schema/v2.json`, which must be what [`schema`] generates.
+    fn shipped() -> Value {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("schema/v2.json");
+        let shipped: Value = serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+        // The node kind of a later minor is the tests' own (`Node::Later`), which no shipped schema has.
+        let mut generated = schema();
+        if let Some(kinds) = generated["$defs"]["Node"]["oneOf"].as_array_mut() {
+            kinds.retain(|kind| kind["properties"]["type"]["const"] != "later");
+        }
+        assert!(
+            shipped == generated,
+            "schema/v2.json is not what the generator writes: run script/gen/plugin-schema.ts"
+        );
+        shipped
     }
 
     /// Whether serde reads `value` as a `T`, and the schema's definition `name` takes it; both must agree.
@@ -609,7 +676,7 @@ mod tests {
     // `x-messages` does not name is answered with null.
     #[test]
     fn the_schema_takes_every_message_of_the_transcripts() {
-        let schema = schema();
+        let schema = shipped();
         let defs = &schema["$defs"];
         let messages = &schema["x-messages"];
         let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/conformance/transcripts.jsonl");
@@ -617,12 +684,16 @@ mod tests {
         let answer = |side: &str, kind: &str| messages[side].get(kind).unwrap_or(&messages[side]["*"]).clone();
         // What the next `return` answers: the schema of its reply, or `None` for a draw's bytes.
         let mut waiting: Vec<Option<Value>> = Vec::new();
+        let mut library = 2;
         let (mut requests, mut replies) = (0, 0);
         for (number, line) in text.lines().enumerate() {
             let entry: Value = serde_json::from_str(line).unwrap();
             let at = format!("transcripts.jsonl:{}", number + 1);
+            if let Some(major) = entry.get("library").and_then(Value::as_u64) {
+                library = major;
+            }
             if entry == json!("describe") {
-                waiting.push(Some(messages["describe"].clone()));
+                waiting.push(Some(messages[if library == 1 { "describe-v1" } else { "describe" }].clone()));
             } else if entry.get("create").is_some() {
                 waiting.push(Some(messages["create"].clone()));
             } else if let Some(call) = entry.get("call") {
@@ -664,6 +735,61 @@ mod tests {
             }
         }
         assert!(requests > 100 && replies > 100, "{requests} requests and {replies} replies checked");
+    }
+
+    // Expected (bigboi's re-review, finding 14): the shipped schema resolves without Rust. Every reference it makes
+    // names a definition of its own or a component of the HTTP API's OpenAPI document, whose key in Pascal case is the
+    // generated Rust type; none is an annotation alone, which the validator refuses. Against the shipped file, a 2.x
+    // `describe` without a nonempty ID is refused as `define` refuses it, a 1.x one is not, and an API value of the
+    // wrong shape is refused through its reference.
+    #[test]
+    fn the_shipped_schema_resolves_its_references_and_refuses_what_the_host_refuses() {
+        let schema = shipped();
+        let defs = &schema["$defs"];
+        fn refs<'a>(value: &'a Value, found: &mut Vec<&'a str>) {
+            match value {
+                Value::Object(object) => {
+                    found.extend(object.get("$ref").and_then(Value::as_str));
+                    assert!(!object.contains_key("x-api"), "an annotation instead of a reference: {value}");
+                    object.values().for_each(|value| refs(value, found));
+                }
+                Value::Array(values) => values.iter().for_each(|value| refs(value, found)),
+                _ => {}
+            }
+        }
+        let mut found = Vec::new();
+        refs(&schema, &mut found);
+        let types =
+            std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../api-types/src/types.rs"))
+                .unwrap();
+        let mut api = 0;
+        for path in found {
+            let named = resolve(path, defs);
+            assert!(named.is_object(), "{path}");
+            if let Some(key) = path.strip_prefix(&format!("{}#/components/schemas/", wire::OPENAPI)) {
+                api += 1;
+                let rust: String = key.split('.').map(|part| part[..1].to_uppercase() + &part[1..]).collect();
+                let declared = [format!("pub struct {rust} "), format!("pub enum {rust} ")];
+                assert!(declared.iter().any(|line| types.contains(line.as_str())), "{key} is no Rust type {rust}");
+            }
+        }
+        assert!(api >= 12, "{api} references into the OpenAPI document");
+        let annotation = std::panic::catch_unwind(|| conforms(&json!({}), &json!({ "x-api": "Session.Info" }), defs));
+        assert!(annotation.is_err(), "the validator took an annotation alone");
+        let unknown = std::panic::catch_unwind(|| {
+            conforms(&json!({}), &json!({ "$ref": format!("{}#/components/schemas/Nope", wire::OPENAPI) }), defs)
+        });
+        assert!(unknown.is_err(), "the validator took a reference that names nothing");
+        let describe = |name: &str, value: Value| conforms(&value, &schema["x-messages"][name], defs);
+        assert!(!describe("describe", json!({})));
+        assert!(!describe("describe", json!({ "id": "" })));
+        assert!(!describe("describe", json!({ "version": "1.0.0" })));
+        assert!(describe("describe", json!({ "id": "x", "version": "1.0.0" })));
+        assert!(describe("describe-v1", json!({})));
+        let session = &schema["x-messages"]["host"]["session"];
+        assert!(conforms(&Value::Null, session, defs));
+        assert!(!conforms(&json!({ "info": 1, "status": "idle" }), session, defs));
+        assert!(!conforms(&json!({ "info": {}, "status": "idle" }), session, defs), "an empty Session.Info");
     }
 
     // Expected (big-boi 14): the envelopes take and refuse what serde takes and refuses: an unknown request type, a

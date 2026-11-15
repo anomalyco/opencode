@@ -1,8 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://opencode.ai/schema/plugin-abi/2.0.json",
   "title": "opencode plugin ABI 2.0",
-  "description": "Generated from opencode_plugin_abi by `examples/schema.rs`; do not edit. Normative for every binding: `describe` answers Metadata and `create` a Manifest; the host's `call` sends a Request and the plugin's sends a HostRequest, each answered as `x-messages` says by the request's type; a view answers a ViewReply whose tree is a Node, and a draw a DrawList. A field the schema leaves out of `required` may be left out; a reader ignores a field it does not know. A later 2.x minor only adds optional fields, request types and node kinds.",
+  "description": "Generated from opencode_plugin_abi by `examples/schema.rs`; do not edit. Normative for every binding: `describe` answers Metadata and `create` a Manifest; the host's `call` sends a Request and the plugin's sends a HostRequest, each answered as `x-messages` says by the request's type; a view answers a ViewReply whose tree is a Node, and a draw a DrawList. A field the schema leaves out of `required` may be left out; a reader ignores a field it does not know. A later 2.x minor only adds optional fields, request types and node kinds. The HTTP API's types are references into its OpenAPI document, `packages/protocol/openapi.json`, relative to this file.",
   "x-abi": {
     "major": 2,
     "minor": 0,
@@ -11,6 +10,9 @@
   "x-messages": {
     "describe": {
       "$ref": "#/$defs/Metadata"
+    },
+    "describe-v1": {
+      "$ref": "#/$defs/MetadataV1"
     },
     "create": {
       "$ref": "#/$defs/Manifest"
@@ -118,22 +120,19 @@
       "pending": {
         "type": "array",
         "items": {
-          "description": "The HTTP API's SessionInboxInfo, as its OpenAPI document defines it.",
-          "x-api": "SessionInboxInfo"
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Inbox.Info"
         }
       },
       "messages": {
         "type": "array",
         "items": {
-          "description": "The HTTP API's SessionMessageInfo, as its OpenAPI document defines it.",
-          "x-api": "SessionMessageInfo"
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Info"
         }
       },
       "message": {
         "anyOf": [
           {
-            "description": "The HTTP API's SessionMessageInfo, as its OpenAPI document defines it.",
-            "x-api": "SessionMessageInfo"
+            "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Info"
           },
           {
             "type": "null"
@@ -145,8 +144,7 @@
           {
             "type": "array",
             "items": {
-              "description": "The HTTP API's ModelInfo, as its OpenAPI document defines it.",
-              "x-api": "ModelInfo"
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Model.Info"
             }
           },
           {
@@ -157,8 +155,7 @@
       "model": {
         "anyOf": [
           {
-            "description": "The HTTP API's ModelRef, as its OpenAPI document defines it.",
-            "x-api": "ModelRef"
+            "$ref": "../../../../protocol/openapi.json#/components/schemas/Model.Ref"
           },
           {
             "type": "null"
@@ -168,8 +165,7 @@
       "limits": {
         "anyOf": [
           {
-            "description": "The HTTP API's UsageLimitsInfo, as its OpenAPI document defines it.",
-            "x-api": "UsageLimitsInfo"
+            "$ref": "../../../../protocol/openapi.json#/components/schemas/UsageLimits.Info"
           },
           {
             "type": "null"
@@ -181,8 +177,7 @@
           {
             "type": "array",
             "items": {
-              "description": "The HTTP API's ProviderInfo, as its OpenAPI document defines it.",
-              "x-api": "ProviderInfo"
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Provider.Info"
             }
           },
           {
@@ -198,8 +193,7 @@
           {
             "type": "array",
             "items": {
-              "description": "The HTTP API's McpServer, as its OpenAPI document defines it.",
-              "x-api": "McpServer"
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Mcp.Server"
             }
           },
           {
@@ -212,8 +206,7 @@
           {
             "type": "array",
             "items": {
-              "description": "The HTTP API's IntegrationInfo, as its OpenAPI document defines it.",
-              "x-api": "IntegrationInfo"
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Integration.Info"
             }
           },
           {
@@ -224,8 +217,7 @@
       "vcs": {
         "anyOf": [
           {
-            "description": "The HTTP API's VcsInfo, as its OpenAPI document defines it.",
-            "x-api": "VcsInfo"
+            "$ref": "../../../../protocol/openapi.json#/components/schemas/Vcs.Info"
           },
           {
             "type": "null"
@@ -2378,6 +2370,33 @@
     "Metadata": {
       "type": "object",
       "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["id"],
+      "description": "What a 2.x library's `describe` answers: its nonempty ID, which the host reads before any `create`."
+    },
+    "MetadataV1": {
+      "type": "object",
+      "properties": {
         "version": {
           "anyOf": [
             {
@@ -2406,7 +2425,7 @@
         }
       },
       "required": [],
-      "description": "What `describe` answers. A 2.x library names a nonempty `id`."
+      "description": "What a 1.x library's `describe` answers; the ID may be left out."
     },
     "Manifest": {
       "type": "object",
@@ -2960,8 +2979,7 @@
               "maximum": 18446744073709551615
             },
             "event": {
-              "description": "The HTTP API's V2Event, as its OpenAPI document defines it.",
-              "x-api": "V2Event"
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/V2Event"
             },
             "type": {
               "const": "event"
@@ -3082,8 +3100,7 @@
             "events": {
               "type": "array",
               "items": {
-                "description": "The HTTP API's V2Event, as its OpenAPI document defines it.",
-                "x-api": "V2Event"
+                "$ref": "../../../../protocol/openapi.json#/components/schemas/V2Event"
               }
             },
             "type": {
@@ -3674,8 +3691,7 @@
           "type": "boolean"
         },
         "tool": {
-          "description": "The HTTP API's SessionMessageAssistantTool, as its OpenAPI document defines it.",
-          "x-api": "SessionMessageAssistantTool"
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool"
         }
       },
       "required": ["session", "message", "state", "permission", "tool"],
@@ -6581,8 +6597,7 @@
       "type": "object",
       "properties": {
         "info": {
-          "description": "The HTTP API's SessionInfo, as its OpenAPI document defines it.",
-          "x-api": "SessionInfo"
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Info"
         },
         "status": {
           "$ref": "#/$defs/SessionStatus"
