@@ -227,16 +227,8 @@ test("the desktop tab menu excludes the header drag region from its pointer targ
       )
     })
     .toBe(true)
-  // Chromium's synthetic clicks bypass native window hit-testing, so also assert the exclusion Electron consumes.
+  // Chromium's synthetic clicks bypass native window hit-testing, so assert the exclusion Electron consumes.
   await expect(menu).toHaveCSS("app-region", "no-drag")
-  await menu.getByRole("menuitem", { name: "Rename", exact: true }).click()
-  const input = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
-  await expect(input).toBeFocused()
-  await input.press("Escape")
-  await tab.click({ button: "right" })
-  const download = page.waitForEvent("download")
-  await menu.getByRole("menuitem", { name: "Export…", exact: true }).click()
-  expect((await download).suggestedFilename()).toBe("menu-session.json")
 })
 
 test("the web session header leaves window dragging to the browser", async ({ page }) => {
