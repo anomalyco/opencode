@@ -3077,7 +3077,7 @@ fn c_plugin(defines: &[&str]) -> Option<Vec<u8>> {
     let dir = opencode_util::temp::tempdir().unwrap();
     let library = dir.path().join("plugin.so");
     let built = Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".to_owned()))
-        .args(["-shared", "-fPIC", "-fvisibility=hidden", "-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .args(["-shared", "-fPIC", "-fvisibility=hidden", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror"])
         .args(defines.iter().map(|define| format!("-D{define}")))
         .arg("-I")
         .arg(root.join("../plugin-abi/include"))
