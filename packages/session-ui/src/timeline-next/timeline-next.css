@@ -237,7 +237,12 @@
   padding-top: 4px;
 }
 
-[data-timeline="next"] :is([data-component="timeline-event-list"], [data-slot="context-tool-group-item"]) {
+[data-timeline="next"]
+  :is(
+    [data-component="timeline-event-list"],
+    [data-slot="context-tool-group-item"],
+    [data-component="timeline-subagent"]
+  ) {
   [data-slot="timeline-event-item"] {
     display: flex;
     align-items: center;
