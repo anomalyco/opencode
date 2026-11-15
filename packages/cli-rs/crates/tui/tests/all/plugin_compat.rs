@@ -562,6 +562,39 @@ fn a_project_plugin_imports_nothing_outside_its_approved_files() {
     assert!(refused, "{status:?}");
 }
 
+// Expected (FT-3): a project plugin's approved files import one another by relative paths, from its root and from a
+// directory below it, as TS loads them.
+#[test]
+fn a_project_plugin_imports_its_own_files_by_relative_paths() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let work = root.path().join("work");
+    let dir = work.join(".opencode/plugins/near");
+    std::fs::create_dir_all(work.join(".git")).unwrap();
+    std::fs::create_dir_all(dir.join("dist/lib")).unwrap();
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{ "name": "near", "type": "module", "exports": { "./tui": "./dist/tui.js" } }"#,
+    )
+    .unwrap();
+    let marker = root.path().join("near.ran");
+    let module = format!(
+        "import {{ note }} from \"./lib/view.js\"\nexport default {{ id: \"example.near\", setup() {{ require(\"node:fs\").writeFileSync({marker:?}, note) }} }}\n"
+    );
+    std::fs::write(dir.join("dist/tui.js"), module).unwrap();
+    std::fs::write(dir.join("dist/lib/view.js"), "import { part } from \"../part.js\"\nexport const note = part\n")
+        .unwrap();
+    std::fs::write(dir.join("dist/part.js"), "export const part = \"near\"\n").unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.settle();
+    approve(&pipe, &dir);
+    pipe.active("example.near");
+    assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("near"));
+}
+
 /// A project with the V2 probe as its plugin, unapproved, whose module writes to the file returned last; the pipe's
 /// example plugins `globals` are the user's.
 fn project(globals: &[&str], config: Config) -> (Pipe, PathBuf, PathBuf) {
