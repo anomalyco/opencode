@@ -37,7 +37,9 @@ use super::wire;
 pub struct Limits {
     /// Bytes queued for the child (bigboi: 1 MiB a direction).
     pub queued: usize,
-    /// Ordered messages from the child the UI thread has not taken (the pipe's number, 256, as the mailbox's).
+    /// Ordered messages from the child the UI thread has not taken: 512 (FT-9), as a setup that watches the 128 reads a
+    /// plugin may sends one message a watch, beside its others, while the UI thread may be busy (the lab's 140 watches
+    /// flooded 256 under load). The bytes bound below holds their memory.
     pub ordered: usize,
     /// Bytes of them (bigboi: 8 MiB in all).
     pub inbox: usize,
@@ -58,7 +60,7 @@ impl Default for Limits {
     fn default() -> Self {
         Self {
             queued: 1 << 20,
-            ordered: 256,
+            ordered: 512,
             inbox: 8 << 20,
             trees: 8,
             ack: Duration::from_secs(1),

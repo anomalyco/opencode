@@ -20,7 +20,7 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   came, at most three times; after that a read that is late shows in a render only if the plugin's JSX follows it. A
   setup gets the route, `info` and the route's session at once, and a call the route while the plugin does not watch
   it; other first reads in a handler (tabs, the model, a panel's state) answer before their snapshot came. A plugin
-  watches at most 64 reads; one no live mount holds goes when a new one needs its place, and one the host could not
+  watches at most 128 reads; one no live mount or store holds goes when a new one needs its place, and one the host could not
   answer rejects its `sync` and is reported once. `data.session.sync` and `message.sync` answer what the host has
   loaded; they do not load a session the host has not.
 - **An async setup that waits on the host** (a `client` call, a `sync`) hands the plugin to the host at its first such

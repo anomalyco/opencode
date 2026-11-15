@@ -1880,13 +1880,14 @@ fn a_stored_value_is_answered_watched_and_unwatched() {
     assert!(!pipe.harness.app.text().contains(r#"\"y\""#), "{}", pipe.harness.app.text());
 }
 
-// Expected (carbon-8): a plugin watches at most 64 reads, its note and 63 of the 70 others; the rest are not answered.
+// Expected (carbon-8, FT-9): a plugin watches at most 128 reads, its note and 127 of the 140 others; the rest are not
+// answered.
 #[test]
-fn a_plugin_watches_at_most_64_reads() {
+fn a_plugin_watches_at_most_128_reads() {
     let Some(config) = config() else { return };
     let pipe = lab(config);
     pipe.harness.tui.keymap.dispatch("lab.watches", None);
-    assert_eq!(toasted(&pipe, "watches"), "watches 63");
+    assert_eq!(toasted(&pipe, "watches"), "watches 127");
 }
 
 /// Runs `command` of the lab, which ends it, and checks it alone failed with `cause` and whether the JS host `ended`.

@@ -20,8 +20,9 @@
 
 use crate::Host;
 
-/// The storage keys one plugin may declare.
-pub const KEYS: usize = 64;
+/// The storage keys one plugin may declare (FT-9: opencode-tokscope declares about 80, its 64 history shards and a
+/// dozen others).
+pub const KEYS: usize = 128;
 /// The JSON bytes one stored value may have.
 pub const VALUE_BYTES: usize = 256 << 10;
 

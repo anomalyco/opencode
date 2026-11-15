@@ -624,6 +624,63 @@ fn a_plugin_importing_opentuis_classes_links_and_sets_up() {
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("resize"));
 }
 
+// Expected (FT-9): a plugin that makes a store for each of 80 keys in its setup, as opencode-tokscope does for its
+// history shards, loads and stays active, and each store holds and follows what the host stored for it, as in TS: no
+// key or read bound is hit, and with the UI thread busy as the setup runs, its messages stay under the pipe's 256.
+#[test]
+fn a_plugin_with_eighty_stores_reads_each() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().join("config/plugins/shards");
+    std::fs::create_dir_all(&dir).unwrap();
+    let marker = root.path().join("shards.sum");
+    let module = format!(
+        "export default {{ id: \"example.shards\", setup(context) {{\n\
+         const stores = Array.from({{ length: 80 }}, (_, index) => context.storage.store(`shard${{index}}`, {{ initial: {{ n: 0 }} }})[0])\n\
+         context.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"shards.sum\", title: \"Sum\", run() {{\n\
+         require(\"node:fs\").writeFileSync({marker:?}, String(stores.reduce((sum, store) => sum + store.n, 0)))\n\
+         }} }}] }}))\n\
+         }} }}\n"
+    );
+    std::fs::write(dir.join("tui.ts"), module).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let host = opencode_tui::plugins::host::host(&harness.tui);
+    for index in 0..80 {
+        opencode_plugin::Host::storage_write(&*host, &format!("plugin.example.shards.shard{index}"), r#"{"n":1}"#)
+            .unwrap();
+    }
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let (received, sent) = (opencode_plugin::pipe::crossed().received, opencode_plugin::pipe::crossed().sent);
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    // The UI thread takes nothing while the setup runs, as when it is busy at startup: once the hello, the load and
+    // the setup went, what the setup sends waits for it.
+    pipe.harness.wait("the setup went to the JS host", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        opencode_plugin::pipe::crossed().sent - sent >= 3
+    });
+    std::thread::sleep(Duration::from_millis(1500));
+    pipe.active("example.shards");
+    pipe.settle();
+    // A store's read let go and watched again at each snapshot sent 13,000 messages; each store's are a few.
+    let sent = opencode_plugin::pipe::crossed().received - received;
+    assert!(sent < 1000, "the setup sent {sent} messages");
+    pipe.harness.tui.keymap.dispatch("shards.sum", None);
+    pipe.settle();
+    assert_eq!(pipe.status("example.shards"), Some(Status::Active));
+    assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("80"));
+    // The host's values change, as another client's writes change them: every store follows, as none was let go.
+    for index in 0..80 {
+        opencode_plugin::Host::storage_write(&*host, &format!("plugin.example.shards.shard{index}"), r#"{"n":2}"#)
+            .unwrap();
+    }
+    opencode_plugin::Host::storage_changed(&*host);
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("shards.sum", None);
+    pipe.settle();
+    assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("160"));
+}
+
 /// A project with the V2 probe as its plugin, unapproved, whose module writes to the file returned last; the pipe's
 /// example plugins `globals` are the user's.
 fn project(globals: &[&str], config: Config) -> (Pipe, PathBuf, PathBuf) {

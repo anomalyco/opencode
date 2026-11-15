@@ -623,7 +623,7 @@ route, a slot, a panel or an overlay, and whose `on` hears each mount begin and 
 input has a slot surface's `slot` and no `changed`: the JS host views again when what the plugin watches changes;
 `layer(layer, handler)`;
 `command`, `on`, `storage(keys)`, `effect` (any host request, P2's `open-panel`, `overlay`, `focus`, `set-mode`,
-`release-keys` among them), `watch`/`unwatch`/`read` (snapshots, at most 64), `invalidate`, `fetch`.
+`release-keys` among them), `watch`/`unwatch`/`read` (snapshots, at most 128), `invalidate`, `fetch`.
 `OPENCODE_JS_HOST_TRACE=<file>` appends every frame the JS host reads and writes to the file.
 
 A project's TypeScript plugin waits for approval as a native build does (below): its artifact is the directory and a
@@ -656,7 +656,7 @@ It is the second timing tier. No frame waits for the JS host:
   held: it ends the hold, drops what it kept, and reaches the host.
 - **Supervision**: the queues are bounded. To the JS host, 1 MiB is queued and what does not fit waits in an overflow
   of 8 MiB that drains as it reads, past which a message is refused (a handler's call answered with nothing); nothing
-  ends for it. From it, 256 unread messages and 8 MiB, and 8 unread trees, after which it blocks in its write. A JS host
+  ends for it. From it, 512 unread messages and 8 MiB, and 8 unread trees, after which it blocks in its write. A JS host
   that owes an answer and sends nothing for 1 s (a started load or setup: 10 s) is hung, so a queue that moves is not;
   hung, or over a resident set of 512 MiB, it is ended. Its process group is killed with it. It also dies with the
   client however the client ends, and takes what its plugins started with it: when its input ends, on Linux on the

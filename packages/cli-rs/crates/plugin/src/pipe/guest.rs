@@ -23,8 +23,9 @@ use crate::mailbox::Mailbox;
 use crate::surface::{self, Viewed, Viewing};
 use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, route, tui_command};
 
-/// The reads a plugin watches at most.
-const WATCHES: usize = 64;
+/// The reads a plugin watches at most (FT-9: opencode-tokscope watches about 80, a store each of its 64 history shards
+/// and a dozen others). What they push is charged to the plugin's content, which bounds their memory.
+const WATCHES: usize = 128;
 /// The bytes of JSON a watched read pushes at most: what one control frame carries.
 const READ: usize = super::wire::CONTROL_CAP;
 
