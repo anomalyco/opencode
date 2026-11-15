@@ -1,6 +1,6 @@
-//! Who owns what a plugin asks for (bigboi's freeze and ownership passes): one table of request ownership, run on every
-//! carrier. A row is a request kind, the call that asks for it, and when a mount closes; its expected outcome comes from
-//! the one written rule ([`expected`]), not from the row.
+//! Who owns what a plugin asks for (bigboi's freeze and ownership passes, carbon own-1): one table of request and
+//! effect ownership, run on every carrier. A row is a request or an effect, the call that asks for it, and when a mount
+//! closes; its expected outcome comes from the one written rule ([`expected`]), not from the row.
 
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
@@ -10,7 +10,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use opencode_plugin::abi;
-use opencode_plugin::abi::interact::{Anchor, Bind, Event, Handled, Layer, LayerScope, Overlay};
+use opencode_plugin::abi::interact::{Anchor, Bind, Event, Handled, Interact, Layer, LayerScope, Overlay};
 use opencode_plugin::abi::v2;
 use opencode_tui::plugins::host::{External, external_with};
 use opencode_tui::{Deps, Route};
@@ -23,6 +23,20 @@ use crate::support::{self, Harness};
 enum Kind {
     Fetch,
     Foreground,
+    /// The effects a call asks of the input: an overlay of the plugin's, a mode, the focus of node `n`, a blur, and
+    /// an offset of scroll `s`.
+    Overlay,
+    Mode,
+    Focus,
+    Blur,
+    Scroll,
+}
+
+impl Kind {
+    /// A request, which gets a reply; else an effect, which applies.
+    fn request(self) -> bool {
+        matches!(self, Kind::Fetch | Kind::Foreground)
+    }
 }
 
 /// The call that asks.
@@ -73,6 +87,10 @@ enum Outcome {
     Cancelled,
     /// The program ran once, and no reply comes.
     Unanswered,
+    /// The effect applies: to the mount that asked, or to the activation.
+    Applied,
+    /// The effect applies nowhere: neither to the activation nor to a mount opened since.
+    Dropped,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -87,6 +105,13 @@ struct Row {
 /// may send or start its request only while it is open, and hear its reply only while it is open.
 fn expected(row: Row) -> Outcome {
     let mount_owned = matches!(row.origin, Origin::Route | Origin::Input);
+    if !row.kind.request() {
+        let closed = matches!(row.close, Close::BeforeDispatch | Close::InFlight | Close::Racing);
+        return match mount_owned && closed {
+            true => Outcome::Dropped,
+            false => Outcome::Applied,
+        };
+    }
     match row.close {
         Close::BeforeDispatch | Close::InFlight | Close::Racing if mount_owned => Outcome::Cancelled,
         Close::Launched if mount_owned => Outcome::Unanswered,
@@ -98,6 +123,26 @@ fn expected(row: Row) -> Outcome {
 fn unreachable(carrier: Carrier, row: Row) -> Option<&'static str> {
     if row.close == Close::Racing && carrier != Carrier::Pipe {
         return Some("in process and over the C ABI, what a call asks for leaves with its turn: no answer to race");
+    }
+    if !row.kind.request() {
+        return match (row.kind, row.origin, row.close) {
+            (_, _, Close::Launched | Close::AfterReply) => Some("an effect has no reply and no launch"),
+            (_, _, Close::Other) => Some("the control's overlay is an overlay itself, and takes the focus"),
+            (_, Origin::Setup, _) => Some("setup holds no input: its verbs are refused (P2)"),
+            (Kind::Blur, ..) => {
+                Some("on a plugin's route the host has no composer to give the focus to: a blur moves nothing to see")
+            }
+            (Kind::Focus | Kind::Scroll, Origin::MountBegin | Origin::MountEnd, _) => {
+                Some("a mount's begin comes before its first view, its end after its tree: no node to name")
+            }
+            (Kind::Focus | Kind::Scroll, Origin::Global, close) if close != Close::Never => {
+                Some("an activation's verb names the newest mount that holds the node: with the route closed, none")
+            }
+            (_, Origin::MountEnd, close) if close != Close::BeforeDispatch => {
+                Some("the mount's end asks as the mount closes: only before dispatch")
+            }
+            _ => None,
+        };
     }
     match (row.kind, row.origin, row.close) {
         (Kind::Fetch, _, Close::Launched) => Some("a fetch has no launch"),
@@ -115,7 +160,7 @@ fn unreachable(carrier: Carrier, row: Row) -> Option<&'static str> {
 }
 
 fn rows(carrier: Carrier) -> Vec<Row> {
-    let kinds = [Kind::Fetch, Kind::Foreground];
+    let kinds = [Kind::Fetch, Kind::Foreground, Kind::Overlay, Kind::Mode, Kind::Focus, Kind::Blur, Kind::Scroll];
     let origins = [Origin::Setup, Origin::Global, Origin::Route, Origin::MountBegin, Origin::MountEnd, Origin::Input];
     let closes = [
         Close::Never,
@@ -180,6 +225,9 @@ struct Seen {
 }
 
 fn run(carrier: Carrier, row: Row) -> Result<(), String> {
+    if !row.kind.request() {
+        return run_effect(carrier, row);
+    }
     let root = opencode_util::temp::tempdir().unwrap();
     let mark = root.path().join("launched");
     let (fake, gate, served, asked) = held();
@@ -271,6 +319,10 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         }
         (Outcome::Cancelled, Kind::Fetch, _) => served.load(Ordering::SeqCst) == asked.load(Ordering::SeqCst),
         (Outcome::Cancelled, Kind::Foreground, _) => !probe.asked().is_empty(),
+        (Outcome::Applied | Outcome::Dropped, ..)
+        | (_, Kind::Overlay | Kind::Mode | Kind::Focus | Kind::Blur | Kind::Scroll, _) => {
+            unreachable!("an effect's row runs in run_effect")
+        }
     };
     h.app.wait_until(support::WAIT, || {
         h.app.advance(Duration::from_millis(1));
@@ -307,6 +359,7 @@ fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
         (Kind::Foreground, false) => replied("code") && seen.launched == 1,
         // The pipe's carrier has no promise of a program: its reply goes nowhere.
         (Kind::Foreground, true) => seen.launched == 1,
+        _ => unreachable!("an effect's row runs in run_effect"),
     };
     // A fetch whose mount closed before its dispatch is not sent.
     let sent = usize::from(!matches!(row.close, Close::BeforeDispatch | Close::Racing));
@@ -314,11 +367,13 @@ fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
         (Kind::Fetch, false) => seen.replies.is_empty() && seen.sent == sent,
         (Kind::Fetch, true) => replied("AbortError 0") && seen.sent == sent,
         (Kind::Foreground, _) => seen.replies.is_empty() && seen.launched == 0,
+        _ => unreachable!("an effect's row runs in run_effect"),
     };
     let held = match outcome {
         Outcome::Delivered => delivered,
         Outcome::Cancelled => cancelled,
         Outcome::Unanswered => seen.replies.is_empty() && seen.launched == 1,
+        Outcome::Applied | Outcome::Dropped => unreachable!("an effect's row runs in run_effect"),
     };
     // The control closed another mount, which began and ended, or it would be told from no close at all (bigboi's
     // verification).
@@ -331,6 +386,110 @@ fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
         false => Err(format!(
             "{carrier:?} {row:?}: expected {outcome:?}; asked {:?}, replies {:?}, sent {}, launched {}, other {:?}",
             seen.asked, seen.replies, seen.sent, seen.launched, seen.other
+        )),
+    }
+}
+
+/// Runs an effect's row: the route's mount asks, or the activation does, and the route closes as the row says. A
+/// racing row closes the route and opens it again, a mount of its own, before the JS host's answer applies. What the
+/// effect did is read from the host: the overlays and modes it holds, and the route's last live mount's focus and
+/// scroll.
+fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let mark = root.path().join("launched");
+    let probe = Probe::start(carrier, row, root.path(), &mark, support::deps(Arc::new(support::empty())));
+    let h = probe.harness();
+    let (plugin, route) = (probe.id(), Route::Plugin { id: probe.id().into(), name: "probe".into() });
+    let mounts = || opencode_plugin::behave::mounts(h.app.app(), plugin, "probe");
+    let shows = |count: usize| {
+        h.app.wait_until(support::WAIT, || {
+            h.app.advance(Duration::from_millis(1));
+            mounts().len() == count && mounts().last().is_some_and(|mount| !mount.offsets.is_empty())
+        })
+    };
+    let focus = || opencode_plugin::behave::focus(&*h.tui, plugin, "probe", "n");
+    let ledger = || opencode_plugin::interact::ledger(&*h.tui);
+    let racing = row.close == Close::Racing;
+    let before = ledger();
+    if racing {
+        probe.hold(true);
+    }
+    h.tui.navigate(route.clone());
+    // A mount that closes as it begins leaves no mount to wait for.
+    let begins_closed = row.origin == Origin::MountBegin && row.close != Close::Never;
+    if racing && row.origin == Origin::MountBegin {
+        h.tui.navigate(Route::Home);
+    } else if !begins_closed && !shows(1) {
+        return Err(format!("{carrier:?} {row:?}: the route never showed"));
+    }
+    if row.kind == Kind::Blur && row.close == Close::Never {
+        focus();
+    }
+    turns(h, 3);
+    match row.origin {
+        Origin::Global => _ = h.tui.keymap.dispatch("probe.global", None),
+        Origin::Route => _ = h.tui.keymap.dispatch("probe.route", None),
+        Origin::Input => h.app.press("x"),
+        Origin::MountEnd => h.tui.navigate(Route::Home),
+        Origin::Setup | Origin::MountBegin => {}
+    }
+    if racing && matches!(row.origin, Origin::Global | Origin::Route | Origin::Input) {
+        h.tui.navigate(Route::Home);
+    }
+    turns(h, 3);
+    // The route opens again, a mount of its own, which focuses its node, before what the closed one asked applies:
+    // held over the pipe, applied already elsewhere.
+    if row.close != Close::Never {
+        // The close is the call's own effect, which over the pipe applies only when the JS host answers: the route
+        // opens again once it closed, or the close would end the new mount instead.
+        let closed = h.app.wait_until(support::WAIT, || {
+            h.app.advance(Duration::from_millis(1));
+            mounts().is_empty()
+        });
+        if !closed {
+            return Err(format!("{carrier:?} {row:?}: the route never closed"));
+        }
+        h.tui.navigate(route);
+        if !shows(1) {
+            return Err(format!("{carrier:?} {row:?}: the route never showed again"));
+        }
+        if row.kind == Kind::Blur {
+            focus();
+        }
+    }
+    if racing {
+        probe.hold(false);
+    }
+    let applied = || {
+        let (now, last) = (ledger(), mounts().pop().unwrap_or_default());
+        match row.kind {
+            Kind::Overlay => now.overlays > before.overlays,
+            Kind::Mode => now.modes > before.modes,
+            Kind::Focus => last.focused.as_deref() == Some("n"),
+            Kind::Blur => last.focused.is_none(),
+            Kind::Scroll => last.offsets.iter().any(|(id, offset)| id == "s" && *offset == 3),
+            Kind::Fetch | Kind::Foreground => unreachable!("a request"),
+        }
+    };
+    let outcome = expected(row);
+    h.app.wait_until(support::WAIT, || {
+        h.app.advance(Duration::from_millis(1));
+        h.app.render();
+        probe.asked().len() == 1 && applied() == (outcome == Outcome::Applied)
+    });
+    h.app.wait_until(Duration::from_millis(300), || {
+        h.app.advance(Duration::from_millis(1));
+        false
+    });
+    let (asked, did) = (probe.asked().len(), applied());
+    let (now, last) = (ledger(), mounts());
+    drop(probe);
+    match asked == 1 && did == (outcome == Outcome::Applied) {
+        true => Ok(()),
+        false => Err(format!(
+            "{carrier:?} {row:?}: expected {outcome:?}; asked {asked}, applied {did}, overlays {}, modes {}, mounts {last:?}",
+            now.overlays - before.overlays,
+            now.modes - before.modes,
         )),
     }
 }
@@ -488,6 +647,29 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
             let (command, args) = MARK.with_borrow(|mark| witness(mark));
             host.try_foreground(abi::Foreground::new(command).with_args(args))
         }
+        // An effect gets no ID: the call asked.
+        Kind::Overlay => {
+            let anchor = Anchor::Point { x: 0, y: 0 };
+            host.overlay(Overlay { surface: "other".into(), anchor, width: 20, height: 1 });
+            Err("asked".to_owned())
+        }
+        Kind::Mode => {
+            host.set_mode(Some("probe"));
+            Err("asked".to_owned())
+        }
+        Kind::Focus => {
+            host.focus("n");
+            Err("asked".to_owned())
+        }
+        Kind::Blur => {
+            host.blur();
+            Err("asked".to_owned())
+        }
+        Kind::Scroll => {
+            let target = v2::Target::Node { surface: "probe".into(), id: "s".into() };
+            host.scroll(target, v2::Scroll::Offset { offset: 3 });
+            Err("asked".to_owned())
+        }
     };
     SEEN.with_borrow_mut(|seen| seen.0.push(asked));
     match row.close {
@@ -509,26 +691,24 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.on_reply(|_, id, result| SEEN.with_borrow_mut(|seen| seen.1.push((id, format!("{result:?}")))));
     let layer = Layer::default().with_scope(LayerScope::Global).with_keys(vec![Bind::new("x", "probe")]);
-    let surface = v2::Surface::new("probe", v2::Place::Route("probe".into()), |_| {
-        v2::Node::text(vec![abi::Span::new("probe route")])
-    })
-    .mounts()
-    .layers(vec![layer])
-    .on(|host, event| match event {
-        Event::Mount { mounted: true, .. } => {
-            ask(host, Origin::MountBegin);
-            Handled::Pass
-        }
-        Event::Mount { mounted: false, .. } => {
-            ask(host, Origin::MountEnd);
-            Handled::Pass
-        }
-        Event::Key(key) if key.bind.as_deref() == Some("probe") => {
-            ask(host, Origin::Input);
-            Handled::Consume
-        }
-        _ => Handled::Pass,
-    });
+    let surface = v2::Surface::new("probe", v2::Place::Route("probe".into()), |_| page())
+        .mounts()
+        .layers(vec![layer])
+        .on(|host, event| match event {
+            Event::Mount { mounted: true, .. } => {
+                ask(host, Origin::MountBegin);
+                Handled::Pass
+            }
+            Event::Mount { mounted: false, .. } => {
+                ask(host, Origin::MountEnd);
+                Handled::Pass
+            }
+            Event::Key(key) if key.bind.as_deref() == Some("probe") => {
+                ask(host, Origin::Input);
+                Handled::Consume
+            }
+            _ => Handled::Pass,
+        });
     setup.surface(surface);
     let other = v2::Surface::new("other", v2::Place::Overlay("other".into()), |_| {
         v2::Node::text(vec![abi::Span::new("other overlay")])
@@ -544,6 +724,18 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
+/// The route's page: its text, a focusable node `n`, and a scroll `s` taller than its five rows.
+fn page() -> v2::Node {
+    let rows = (0..40).map(|row| v2::Node::text(vec![abi::Span::new(format!("row {row}"))])).collect();
+    v2::Node::column(vec![
+        v2::Node::text(vec![abi::Span::new("probe route")]),
+        v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("focusable")])])
+            .with_id("n")
+            .interact(Interact { focusable: true, ..Interact::default() }),
+        v2::Node::scroll(rows).with_id("s").layout(abi::Layout::default().height(abi::Width::Cells(5))),
+    ])
+}
+
 /// The probe in TypeScript, on the raw carrier: the same calls, which log what the fetch settled with and what stayed
 /// pending; its program is the Rust one's.
 fn script(row: Row, log: &Path, mark: &Path) -> String {
@@ -556,9 +748,11 @@ fn script(row: Row, log: &Path, mark: &Path) -> String {
         command,
         args,
     ]);
+    let page = serde_json::to_string(&page()).unwrap();
     format!(
         r#"import {{ appendFileSync }} from "node:fs"
 const [KIND, ORIGIN, CLOSE, LOG, COMMAND, ARGS] = {params}
+const PAGE = {page}
 const log = (line) => appendFileSync(LOG, line + "\n")
 export default {{ id: "example.probe", setup(api) {{
   const carrier = api[Symbol.for("opencode.carrier")]
@@ -574,12 +768,17 @@ export default {{ id: "example.probe", setup(api) {{
         (result) => log("settled " + Object.keys(result ?? {{}}).join(",") + " " + carrier.pendingFetches()),
         (error) => log("settled " + error.name + " " + carrier.pendingFetches()),
       )
-    }} else carrier.effect({{ type: "foreground", command: COMMAND, args: ARGS }})
+    }} else if (KIND === "Foreground") carrier.effect({{ type: "foreground", command: COMMAND, args: ARGS }})
+    else if (KIND === "Overlay") carrier.effect({{ type: "overlay", surface: "other", anchor: {{ point: {{ x: 0, y: 0 }} }}, width: 20, height: 1 }})
+    else if (KIND === "Mode") carrier.effect({{ type: "set-mode", mode: "probe" }})
+    else if (KIND === "Focus") carrier.effect({{ type: "focus", node: "n" }})
+    else if (KIND === "Blur") carrier.effect({{ type: "blur" }})
+    else carrier.effect({{ type: "scroll", target: {{ type: "node", surface: "probe", id: "s" }}, verb: {{ type: "offset", offset: 3 }} }})
     if (CLOSE === "InFlight") home()
     if (CLOSE === "Other") carrier.effect({{ type: "close-overlay", surface: "other" }})
   }}
   ask("Setup")
-  carrier.surface("probe", {{ type: "route", name: "probe" }}, () => ({{ type: "text", spans: [{{ text: "probe route" }}] }}), {{
+  carrier.surface("probe", {{ type: "route", name: "probe" }}, () => PAGE, {{
     mounts: true,
     layers: [{{ scope: "global", keys: [{{ key: "x", name: "probe" }}] }}],
     on: (event) => {{
