@@ -16,7 +16,7 @@ export default {
     const command = (name: string, run: (input?: string) => unknown) => carrier.command({ name, title: name }, run)
     carrier.storage(["note"])
     carrier.watch("note", { type: "storage-get", key: "note" })
-    for (let index = 0; index < 70; index++) carrier.watch(`w${index}`, { type: "info" })
+    for (let index = 0; index < 140; index++) carrier.watch(`w${index}`, { type: "info" })
     command("lab.context", () => toast(`${api.app.version} ${api.app.channel} ${api.themeMode}`))
     command("lab.store", async (input?: string) => {
       await carrier.effect({ type: "storage-set", key: "note", value: JSON.stringify({ text: input }) })
@@ -27,7 +27,7 @@ export default {
     command("lab.readerror", () => toast(`read error ${carrier.readError("note") ?? "none"}`))
     command("lab.watches", () => {
       let answered = 0
-      for (let index = 0; index < 70; index++) if (carrier.read(`w${index}`) !== undefined) answered++
+      for (let index = 0; index < 140; index++) if (carrier.read(`w${index}`) !== undefined) answered++
       toast(`watches ${answered}`)
     })
     // A watch of a handler's, which a setup again does not make.

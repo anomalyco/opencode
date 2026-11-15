@@ -92,11 +92,12 @@ export function context(base: Base, carrier: Carrier) {
   }
 
   // Reads: a watch per key, a signal per key that a snapshot bumps, and whether the render that runs read one the host
-  // has not pushed yet. The host watches at most 64 reads a plugin (bigboi P8-2): a read a live mount made is held while
-  // the mount lives; the rest are idle, and the least recently used of them goes when a new read needs its place, or
-  // when more than 16 are idle. A read the host could not answer is an error, not empty data: `sync` rejects with it,
-  // and the plugin's first such error is reported once.
-  const WATCHES = 64
+  // has not pushed yet. The host watches at most 128 reads a plugin (bigboi P8-2, FT-9): a read a live mount made is
+  // held while the mount lives, and a store's while the store does; the rest are idle, and the least recently used of
+  // them goes when a new read needs its place, or when more than 16 are idle. A store's read let go came back at its
+  // next snapshot and let another go: 80 stores sent 13,000 messages (FT-9). A read the host could not answer is an
+  // error, not empty data: `sync` rejects with it, and the plugin's first such error is reported once.
+  const WATCHES = 128
   const IDLE = 16
   const versions = new Map<string, ReturnType<typeof createSignal<number>>>()
   const watched = new Map<string, Json>()
@@ -118,7 +119,9 @@ export function context(base: Base, carrier: Carrier) {
   })
   const idle = () => {
     const live = new Set([...rendered.values(), ...(shown ? [shown.mounted] : [])].flatMap((at) => [...at.keys]))
-    return [...watched.keys()].filter((key) => !live.has(key) && !waiters.get(key)?.length)
+    return [...watched.keys()].filter(
+      (key) => !live.has(key) && !key.startsWith("storage:") && !waiters.get(key)?.length,
+    )
   }
   const release = (key: string) => {
     watched.delete(key)
