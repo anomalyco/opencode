@@ -866,7 +866,9 @@ impl Owners {
 /// what its verbs staged.
 #[derive(Default)]
 struct Call {
-    effects: Vec<Effect>,
+    /// What the call asked for, each with whether its room is reserved: an effect that answers an ID the call was
+    /// given (a fetch) is admitted past the queue's bound ([`has_room`]).
+    effects: Vec<(Effect, bool)>,
     undo: Undo,
     staged: Staged,
 }
@@ -942,7 +944,10 @@ impl Scope {
                 outer.undo.0.extend(call.undo.0);
                 outer.staged = call.staged;
             }
-            (_, None) => call.effects.into_iter().for_each(|effect| request(&self.host, &self.id, effect)),
+            (_, None) => call.effects.into_iter().for_each(|(effect, reserved)| match reserved {
+                true => defer(&self.host, effect),
+                false => request(&self.host, &self.id, effect),
+            }),
         }
         out
     }
@@ -1262,6 +1267,10 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn fetch(&self, fetch: abi::Fetch) -> abi::RequestId {
+        self.try_fetch(fetch).unwrap_or(abi::RequestId(0))
+    }
+
+    fn try_fetch(&self, fetch: abi::Fetch) -> Result<abi::RequestId, String> {
         self.request(move |host, reply| host.fetch(fetch, reply))
     }
 
@@ -1353,6 +1362,10 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn foreground(&self, program: abi::Foreground) -> abi::RequestId {
+        self.try_foreground(program).unwrap_or(abi::RequestId(0))
+    }
+
+    fn try_foreground(&self, program: abi::Foreground) -> Result<abi::RequestId, String> {
         // The program starts later, once the turn is done: only if its plugin is still active then.
         let owner = Rc::downgrade(self.scope);
         let alive = Box::new(move || {
@@ -1479,15 +1492,22 @@ pub(crate) fn next_request() -> abi::RequestId {
 
 impl Scoped<'_> {
     /// Queues `send` like an effect, unless the plugin is disposed by then, and returns the ID its reply comes back to
-    /// the plugin's [`abi::Setup::on_reply`] handlers with, on the effect queue, unless the plugin is disposed first.
-    fn request(&self, send: impl FnOnce(&dyn Host, Reply) + 'static) -> abi::RequestId {
+    /// the plugin's [`abi::Setup::on_reply`] handlers with, on the effect queue, unless the plugin is disposed first;
+    /// [`REFUSED`] without room for it.
+    fn request(&self, send: impl FnOnce(&dyn Host, Reply) + 'static) -> Result<abi::RequestId, String> {
+        // An ID is a promise of a reply: none is given unless the request's effect has room (bigboi's final pass).
+        let staged = self.scope.call.borrow().as_ref().map_or(0, |call| call.effects.len());
+        if !has_room(staged) {
+            log::warn!("plugin {}: {REFUSED}", self.scope.id);
+            return Err(REFUSED.to_owned());
+        }
         let id = next_request();
         let scope = Rc::downgrade(self.scope);
         // A request a mount's command asked for ends with the mount: a reply for a mount that closed, also one opened
         // again since, is dropped when it arrives.
         let mount = self.scope.mount.borrow().clone();
         let live = move || mount.as_ref().is_none_or(|mount| mount.upgrade().is_some());
-        self.defer(move |host| {
+        self.defer_reserved(move |host| {
             if scope.upgrade().is_none_or(|scope| scope.activation.disposed()) || !live() {
                 return;
             }
@@ -1507,7 +1527,7 @@ impl Scoped<'_> {
                 }),
             );
         });
-        id
+        Ok(id)
     }
 
     /// Who asks, for the behaviors: the host's app, the plugin, and the mount whose call runs.
@@ -1518,8 +1538,16 @@ impl Scoped<'_> {
     /// Holds `effect` until the call returns.
     fn defer(&self, effect: impl FnOnce(&dyn Host) + 'static) {
         match &mut *self.scope.call.borrow_mut() {
-            Some(call) => call.effects.push(Box::new(effect)),
+            Some(call) => call.effects.push((Box::new(effect), false)),
             None => request(&self.scope.host, &self.scope.id, effect),
+        }
+    }
+
+    /// [`Scoped::defer`] for an effect whose room [`has_room`] reserved: it is admitted past the queue's bound.
+    fn defer_reserved(&self, effect: impl FnOnce(&dyn Host) + 'static) {
+        match &mut *self.scope.call.borrow_mut() {
+            Some(call) => call.effects.push((Box::new(effect), true)),
+            None => defer(&self.scope.host, effect),
         }
     }
 
@@ -1699,6 +1727,16 @@ pub fn flush() {
     }
     FLUSHING.with(|flushing| flushing.set(false));
 }
+
+/// Whether a request's effect, after the `staged` effects of the call that asks, has room: under [`CHAIN`] and
+/// [`QUEUE`]. A request is given an ID only then, and its effect is then admitted past the bound, so an ID always gets
+/// its reply (bigboi's final pass); a request refused is an error, [`REFUSED`], on every carrier.
+pub(crate) fn has_room(staged: usize) -> bool {
+    DEPTH.get() <= CHAIN && EFFECTS.with(|effects| effects.borrow().len()).saturating_add(staged) < QUEUE
+}
+
+/// Why the host refuses a request that would be given an ID ([`has_room`]).
+pub(crate) const REFUSED: &str = "the host takes no request now: the effects that wait fill its queue";
 
 /// [`defer`] for what plugin `plugin` asked for, on every carrier, one entry an effect: dropped past [`CHAIN`] or
 /// [`QUEUE`].

@@ -135,7 +135,11 @@ fn ask(host: &dyn Host, state: &State, session: String, question: String) {
     let input =
         SessionGenerateInput { session_id: SessionID(session), prompt: format!("{INSTRUCTIONS}\n\n{question}") };
     let call = Client::session_generate_call(&input).expect("the generate input encodes");
-    state.pending.borrow_mut().insert(host.fetch(fetch_of(call)), question);
+    match host.try_fetch(fetch_of(call)) {
+        Ok(id) => drop(state.pending.borrow_mut().insert(id, question)),
+        // A fetch the host did not take ends as a failed reply does.
+        Err(error) => host.toast(Toast::new(Variant::Error, error)),
+    }
 }
 
 /// `Answer`: the question in the header, the answer as Markdown in a body at most 60% of the screen high, and

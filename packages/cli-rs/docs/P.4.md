@@ -59,7 +59,9 @@ Versions only grow by appending:
   a 1.4 plugin's requests are unchanged.
 - The host serves two majors. A library that exports `opencode_plugin_v2` is served 2.0; one that exports only
   `opencode_plugin_v1` (every 1.x build) loads as before and is served 1.6, with no surfaces and no mailbox. 2.0 has
-  every 1.6 entry and request, so a 1.x plugin rebuilt against this crate needs no change. Any other major is
+  every 1.6 entry and request, so a 1.x plugin rebuilt against this crate needs no change: `Host::fetch` and
+  `Host::foreground` keep their 1.x `RequestId` and warn as deprecated, naming `try_fetch` and `try_foreground`
+  (Fetch, below). Any other major is
   refused, and the plugin manager shows why: "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x
   plugins (up to 2.0) and ABI 1.x plugins (up to 1.6); rebuild the plugin against opencode-plugin-abi 2".
 - Nothing is removed from the ABI inside a major; an alias stays until 3.0 (O-125 (6)). A plugin that needs an
@@ -96,7 +98,7 @@ registers the P.1 surface as data, because widgets and closures cannot cross the
 | a route page's `onMount` | `on_route_mount(name, run(&dyn Host, mounted))`, however the route was opened |
 | `storage_key(key)` | `storage_key(key)`; `Read::storage_get`, `Host::storage_set` and `Host::storage_merge` on `plugin.<id>.<key>` |
 | event subscriptions (`api.event.on`) | `on_event(types, run(&dyn Host, &V2Event))`, with the HTTP API's own event |
-| `api.client` | `Host::fetch(Fetch { method, path, query, body }) -> RequestId` and `on_reply(run(&dyn Host, RequestId, Result<Value, String>))` |
+| `api.client` | `Host::try_fetch(Fetch { method, path, query, body }) -> Result<RequestId, String>` (1.x: `Host::fetch(..) -> RequestId`) and `on_reply(run(&dyn Host, RequestId, Result<Value, String>))` |
 | a timer's tick | `Setup::waker()` on the plugin's thread, and `on_wake(run(&dyn Host))` on the UI thread |
 | a fence's cleanup | `on_fence_gone(run(key))` |
 | `on_dispose` | `on_dispose(run(&dyn Host))` |
@@ -108,7 +110,7 @@ registers the P.1 surface as data, because widgets and closures cannot cross the
 | `ui.tabs.enabled/list/open/focus/move/close` (1.6) | `Read::tabs_enabled`, `Read::tabs`, `Host::edit_tab(TabEdit) -> bool` |
 | `keymap.pending/active/commands/shortcuts` (1.6) | `Read::keymap_pending`, `keymap_active`, `keymap_commands`, `shortcuts(name)` |
 | `renderer.getSelection()`, `clearSelection()` (1.6) | `Read::selection`, `Host::clear_selection`; a plugin cannot set the range. The selection is the widgets' live state, as in TS: it goes when its anchor widget goes (a transcript row scrolled out of its window, a claim whose node changed), and a key press clears it before the keymap runs, as TS's selection key handler does |
-| `renderer.suspend()`, a program, `resume()` (1.6) | `Host::foreground(Foreground { command, args, cwd }) -> RequestId`; the exit code comes to `on_reply` |
+| `renderer.suspend()`, a program, `resume()` (1.6) | `Host::try_foreground(Foreground { command, args, cwd }) -> Result<RequestId, String>` (1.x: `Host::foreground(..) -> RequestId`); the exit code comes to `on_reply` |
 | `renderer.setTerminalTitle` (1.6) | `Host::set_title(title)` |
 | 1.x `api.theme.selected/has/set/install` (1.6) | `Read::theme`, `Read::themes`, `Host::set_theme(name) -> bool`, `Host::install_theme(name, json)` |
 | `<a href>` in a text (1.6) | `Span::link(url)`, an OSC 8 link |
@@ -485,6 +487,15 @@ is the JSON body of any 2xx status, or `null` without a body. An error is text: 
 characters; `UnexpectedStatus: 404` without one), `Transport: …` when the request could not be sent or would leave the
 origin, or `MalformedResponse: …` when the body is not JSON. With `bytes` (2.0), the reply is the body's bytes in
 base64 as a JSON string, whatever they are. A fetch asked for by a failed setup or by a dispose callback is not sent.
+
+A fetch is given an ID only when its reply can come, on every carrier. The host's queue of effects is bounded; while
+the effects that wait fill it (a plugin that fans out without end), or a chain of dispatches is too deep, the host
+does not take a fetch or a `foreground`, and no reply comes for it. In the 2.x Rust SDK `try_fetch` and
+`try_foreground` return an `Err` with why; over the C ABI the request answers `OPENCODE_ERROR`; over the pipe, the
+TypeScript fetch resolves as a failed reply. A fetch the host takes is admitted past the bound, so every ID it gives
+gets its one reply. The 1.x calls are unchanged, in a 1.x binary and in 1.x source rebuilt on this SDK: `fetch` and
+`foreground` return `RequestId`, and `RequestId(0)` for any request the host refuses, as on a host without fetch;
+no reply carries that ID.
 
 ### Events
 

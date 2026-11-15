@@ -130,12 +130,12 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
         let args = vec!["-c".to_owned(), input.unwrap_or_default().to_owned()];
         // The test's working directory: the TUI's is a fake one.
         let cwd = Some(".".to_owned());
-        asked.set(Some(host.foreground(abi::Foreground { command: "sh".to_owned(), args, cwd })));
+        asked.set(host.try_foreground(abi::Foreground { command: "sh".to_owned(), args, cwd }).ok());
     });
     let asked = program.clone();
     setup.command(command("p0b.missing"), move |host, _| {
         let missing = abi::Foreground { command: "p0b-no-such-program".to_owned(), ..abi::Foreground::default() };
-        asked.set(Some(host.foreground(missing)));
+        asked.set(host.try_foreground(missing).ok());
     });
     let exited = Rc::new(RefCell::new("-".to_owned()));
     let told = exited.clone();
