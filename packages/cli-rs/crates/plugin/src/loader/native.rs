@@ -1569,7 +1569,7 @@ fn reply_to(
         if mount.upgrade().is_none() {
             return running.cancel(request);
         }
-        INFLIGHT.with_borrow_mut(|inflight| inflight.push((mount.clone(), guest.clone(), request)));
+        wait(mount, guest, request);
     }
     let (guest, owner) = (guest.clone(), running.owner());
     send(
@@ -1588,35 +1588,70 @@ fn reply_to(
     );
 }
 
-/// A request of a mount that waits for its reply ([`reply_to`]): the mount, the instance that asked, and its ID.
-type Waiting = (Weak<()>, Weak<dyn Answers>, abi::RequestId);
+/// The requests of mounts that wait for their reply ([`reply_to`]), by request and by mount, so that a reply and a
+/// mount's close each touch only their own (bigboi's ownership pass).
+#[derive(Default)]
+struct Inflight {
+    /// Each request: its mount's key, and the instance that asked.
+    requests: std::collections::HashMap<abi::RequestId, (usize, Weak<dyn Answers>)>,
+    /// Each mount's requests, by its key: the address of its token, which the weak reference here keeps from another
+    /// mount while any of its requests waits.
+    mounts: std::collections::HashMap<usize, (Weak<()>, std::collections::HashSet<abi::RequestId>)>,
+}
 
 thread_local! {
-    static INFLIGHT: RefCell<Vec<Waiting>> = const { RefCell::new(Vec::new()) };
+    static INFLIGHT: RefCell<Inflight> = RefCell::default();
+}
+
+/// The key of mount `mount` in [`Inflight`].
+pub(crate) fn mount_key(mount: &Weak<()>) -> usize {
+    mount.as_ptr() as usize
+}
+
+/// Keeps `request` of mount `mount`, which `guest` asked for, until its reply or the mount's close.
+fn wait(mount: &Weak<()>, guest: &Weak<dyn Answers>, request: abi::RequestId) {
+    let key = mount_key(mount);
+    INFLIGHT.with_borrow_mut(|inflight| {
+        inflight.requests.insert(request, (key, guest.clone()));
+        inflight.mounts.entry(key).or_insert_with(|| (mount.clone(), Default::default())).1.insert(request);
+    });
 }
 
 /// Whether `request` waited for its reply, which it does no more.
 fn take_inflight(request: abi::RequestId) -> bool {
     INFLIGHT.with_borrow_mut(|inflight| {
-        let at = inflight.iter().position(|(_, _, waiting)| *waiting == request);
-        at.map(|at| inflight.swap_remove(at)).is_some()
+        let Some((key, _)) = inflight.requests.remove(&request) else { return false };
+        if let Some((_, waiting)) = inflight.mounts.get_mut(&key) {
+            waiting.remove(&request);
+            if waiting.is_empty() {
+                inflight.mounts.remove(&key);
+            }
+        }
+        true
     })
 }
 
-/// Cancels at once each waiting request whose mount closed, rather than once its reply comes: the JS host's fetch of a
-/// mount that closed settles while the server still holds it (bigboi's freeze pass). A surface's mount calls it as it
-/// ends.
-pub(crate) fn cancel_closed() {
-    let closed: Vec<_> = INFLIGHT.with_borrow_mut(|inflight| {
-        let (closed, open) = std::mem::take(inflight).into_iter().partition(|(mount, _, _)| mount.upgrade().is_none());
-        *inflight = open;
-        closed
+/// Cancels at once the waiting requests of the mount whose key is `key`, which closed, rather than once their replies
+/// come: the JS host's fetch of a mount that closed settles while the server still holds it (bigboi's freeze pass). A
+/// surface's mount calls it as it ends. How many requests it cancelled: no other mount's are looked at.
+pub(crate) fn cancel_closed(key: usize) -> usize {
+    let cancelled: Vec<_> = INFLIGHT.with_borrow_mut(|inflight| {
+        let Some((_, waiting)) = inflight.mounts.remove(&key) else { return Vec::new() };
+        waiting.into_iter().filter_map(|request| Some((request, inflight.requests.remove(&request)?.1))).collect()
     });
-    for (_, guest, request) in closed {
+    let count = cancelled.len();
+    for (request, guest) in cancelled {
         if let Some(guest) = guest.upgrade() {
             guest.cancel(request);
         }
     }
+    count
+}
+
+/// The requests that wait, for the tests.
+#[cfg(test)]
+pub(crate) fn waiting() -> usize {
+    INFLIGHT.with_borrow(|inflight| inflight.requests.len())
 }
 
 /// The mount that owns a request of the running call, as in process ([`crate::Owners::owning`]).
