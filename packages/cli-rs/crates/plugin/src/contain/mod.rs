@@ -428,11 +428,17 @@ impl Monitor {
     }
 
     /// Whether a crash in a call of `slot` names its artifact: always without a record, as no parent restarts the
-    /// client then. An external build the record cannot name is not admitted (final review big-boi 11).
+    /// client then. An external build is named by its build, its target and digest, whatever ID the record could hold
+    /// beside them; a built-in by its ID. An external build the record cannot name is not admitted (final review
+    /// big-boi 11; re-review: the same build loaded again after its ID was too long to hold).
     pub fn attributed(&self, slot: Slot) -> bool {
         let Some((record, _)) = self.record.get() else { return true };
         let plugins = self.plugins.borrow();
-        plugins.get(usize::from(slot.0)).is_some_and(|stats| record.named(slot.0) == Some(stats.artifact.clone()))
+        let Some(stats) = plugins.get(usize::from(slot.0)) else { return false };
+        record.named(slot.0).is_some_and(|named| match &stats.artifact.target {
+            Some(_) => (&named.target, &named.digest) == (&stats.artifact.target, &stats.artifact.digest),
+            None => named == stats.artifact,
+        })
     }
 
     /// Runs `f` as call `kind` of the plugin in `slot`: timed, and named in the record while it runs. A call within a
