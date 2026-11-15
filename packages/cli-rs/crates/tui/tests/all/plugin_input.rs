@@ -90,6 +90,8 @@ pub struct Probe {
     pub paste_rank: bool,
     /// The panel's texts may be selected.
     pub selectable: bool,
+    /// The other plugin binds the printable `h` and `f6` everywhere (FT-14).
+    pub global_h: bool,
 }
 
 thread_local! {
@@ -553,6 +555,15 @@ pub fn other(setup: &mut abi::Setup) -> Result<(), String> {
             Handled::Consume
         });
     }
+    if probe(|probe| probe.global_h) {
+        let layer = Layer::default()
+            .with_scope(LayerScope::Global)
+            .with_keys(vec![Bind::new("h", "gh"), Bind::new("f6", "gg")]);
+        setup.layer(layer, |host, event| {
+            log("other", host, event);
+            Handled::Consume
+        });
+    }
     // A mode of a plugin with only a global layer: in it, every key is the plugin's.
     setup.command(command("other.gmode"), |host, _| host.set_mode(Some("g")));
     setup.layer(
@@ -751,6 +762,25 @@ fn a_passed_key_goes_on_and_a_consumed_one_does_not() {
     settle(&harness);
     assert_eq!(composer(&harness), "x");
     assert_eq!(taken(), ["global: any x [-]", "setup: key cx [-]"]);
+}
+
+// Expected (FT-14): a plugin's printable bind in global scope does not take a key while the composer has the focus, so
+// the user's `h` types; its bind with a modifier does. Once no text input has the focus, its `h` reaches it.
+#[test]
+fn a_printable_global_bind_leaves_the_composer_its_typing() {
+    let harness = open_with(|probe| probe.global_h = true);
+    harness.app.type_text("h");
+    settle(&harness);
+    assert_eq!(composer(&harness), "h");
+    assert_eq!(taken(), Vec::<String>::new());
+    harness.app.press("f6");
+    settle(&harness);
+    assert_eq!(taken(), ["other: key gg [-]"]);
+    run(&harness, "input.panel", None);
+    harness.app.press("h");
+    settle(&harness);
+    assert_eq!(composer(&harness), "h");
+    assert_eq!(taken(), ["other: key gh [-]"]);
 }
 
 // Expected (3.8, `delivery`): a modal composer's mode switch applies before the next key of the same batch: `esc`,

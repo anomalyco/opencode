@@ -1304,10 +1304,11 @@ fn transcript_setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     // A wake is not the user's input: a verb from it would fight the wheel.
     setup.on_wake(|host| host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: 9 }));
-    // A key a layer of the plugin takes is (P2's handler, folded with P3's).
+    // A key a layer of the plugin takes is (P2's handler, folded with P3's). With a modifier: a printable global key is
+    // the composer's while it has the focus (FT-14).
     let layer = abi::interact::Layer::default()
         .with_scope(abi::interact::LayerScope::Global)
-        .with_keys(vec![abi::interact::Bind::new("z", "up")]);
+        .with_keys(vec![abi::interact::Bind::new("alt+z", "up")]);
     setup.layer(layer, |host, _| {
         host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: -4 });
         Handled::Consume
@@ -1341,7 +1342,7 @@ fn the_transcript_takes_three_verbs_from_a_handler_only() {
         harness.app.advance(Duration::from_millis(1));
         harness.app.render();
     }
-    harness.app.press("z");
+    harness.app.press("alt+z");
     harness.app.advance(Duration::from_millis(5));
     assert_eq!(*verbs.borrow(), [v2::Scroll::By { rows: -3 }, v2::Scroll::By { rows: -4 }]);
     // A read answers any call.
