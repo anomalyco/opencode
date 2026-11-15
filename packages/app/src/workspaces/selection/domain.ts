@@ -131,14 +131,17 @@ export function resolvePickerTarget(policy: PickerPolicy, path: string, home: st
 }
 
 export function displayInputDirectory(path: string, home: string) {
-  const displayed = displayPickerPath(path, "", home)
-  const separator = pickerDisplaySeparator(displayed)
-
-  return displayed.endsWith(separator) ? displayed : displayed + separator
+  return withPickerSeparator(displayPickerPath(path, "", home))
 }
 
 export function pickerDisplaySeparator(displayed: string) {
   return displayed.includes("\\") ? "\\" : "/"
+}
+
+export function withPickerSeparator(displayed: string) {
+  const separator = pickerDisplaySeparator(displayed)
+
+  return displayed.endsWith(separator) ? displayed : displayed + separator
 }
 
 // `abort(key)` and `clear()` abort the task's signal and resolve its promise with undefined at once, so a task that
@@ -295,7 +298,8 @@ function normalizePickerDrive(input: string) {
   return value
 }
 
-function trimPickerPath(input: string) {
+// Canonical form for comparing paths: Windows display keeps "\", typed input may use either separator.
+export function trimPickerPath(input: string) {
   const value = normalizePickerDrive(input)
 
   if (value === "/" || value === "//" || /^[A-Za-z]:\/$/.test(value)) return value
