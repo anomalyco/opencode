@@ -402,7 +402,8 @@ fn the_list_comes_back_on_the_row_that_was_asked_about() {
     h.wait_for("pending, local");
     h.app.press("enter");
     let screen = h.wait_for("Run project plugin?");
-    assert!(screen.contains("plugins/second") && !screen.contains("plugins/first"), "{screen}");
+    let named = |name: &str| format!("plugins{}{name}", std::path::MAIN_SEPARATOR);
+    assert!(screen.contains(&named("second")) && !screen.contains(&named("first")), "{screen}");
 }
 
 /// A plugin whose command panics.
