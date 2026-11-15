@@ -4987,6 +4987,8 @@ impl Registered {
                 let (_, render) = self.views.iter().find(|(route, _)| *route == name).ok_or("no such route")?;
                 json(serde_json::to_value(render(&self.host, &changed)))
             }
+            // 0 names no request, so no handler hears a reply to it (bigboi's freeze pass).
+            Request::Reply { id: RequestId(0), .. } => Err("the host sent a reply to request ID 0".to_owned()),
             Request::Reply { id, result } => {
                 self.replies.iter().for_each(|run| run(&self.host, id, result.clone()));
                 Ok(serde_json::Value::Null)
@@ -6203,6 +6205,10 @@ mod tests {
         let reply = serde_json::from_slice(&serde_json::to_vec(&reply).unwrap()).unwrap();
         assert_eq!(setup.handle(reply).unwrap(), serde_json::Value::Null);
         assert_eq!(*seen.borrow(), [(RequestId(7), Err("gone".to_owned())), (RequestId(7), Err("gone".to_owned()))]);
+        // A reply to ID 0, which names no request, is refused before a handler runs (bigboi's freeze pass).
+        let zero = serde_json::json!({ "type": "reply", "id": 0, "result": { "Ok": null } });
+        assert!(setup.handle(serde_json::from_value(zero).unwrap()).is_err());
+        assert_eq!(seen.borrow().len(), 2, "a handler heard a reply to ID 0");
     }
 
     // Expected: the shims answer a null instance with an error, ignore a null `out` or a null `destroy`, and never
