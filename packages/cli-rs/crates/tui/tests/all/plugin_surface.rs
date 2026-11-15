@@ -806,18 +806,21 @@ fn owned(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// A server whose `/api/hold` answers once the gate opens, counting what it served.
-type Gate = Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>;
+/// A server whose `/api/hold` answers once the gate opens, counting what it served, and what it was asked.
+pub(crate) type Gate = Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>;
 
-fn held() -> (support::Fake, Gate, Arc<std::sync::atomic::AtomicUsize>) {
+type Count = Arc<std::sync::atomic::AtomicUsize>;
+
+pub(crate) fn held() -> (support::Fake, Gate, Count, Count) {
     let gate: Gate = Arc::default();
-    let served = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (served, asked) = (Count::default(), Count::default());
     let fake = {
-        let (gate, served) = (gate.clone(), served.clone());
+        let (gate, served, asked) = (gate.clone(), served.clone(), asked.clone());
         support::Fake::new(move |seen| {
             if seen.path != "/api/hold" {
                 return support::base(seen, support::DIRECTORY);
             }
+            asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let (open, wake) = &*gate;
             let open = wake.wait_timeout_while(open.lock().unwrap(), Duration::from_secs(10), |open| !*open).unwrap();
             drop(open);
@@ -825,22 +828,32 @@ fn held() -> (support::Fake, Gate, Arc<std::sync::atomic::AtomicUsize>) {
             (200, serde_json::json!({ "held": true }))
         })
     };
-    (fake, gate, served)
+    (fake, gate, served, asked)
 }
 
-// Expected (`lifecycle`, mounts): what a mount's own command asked for ends with that mount: a reply that arrives
-// after the route closed and opened again under the same key reaches the plugin no more. What the plugin's global
-// command asked for is the plugin's, and arrives.
+// Expected (`lifecycle`, mounts; bigboi's last pass): what a mount's own command asked for ends with that mount: a
+// reply that arrives after the route closed and opened again under the same key reaches the plugin no more. What the
+// plugin's global command asked for is the activation's, and arrives. The same on both carriers.
 #[test]
 fn a_late_reply_does_not_reach_a_mount_opened_again() {
+    for loopback in [false, true] {
+        late_reply(loopback);
+    }
+}
+
+fn late_reply(loopback: bool) {
     REPLIES.with(|replies| replies.borrow_mut().clear());
-    let (fake, gate, served) = held();
-    let deps = Deps {
-        route: Route::Home,
-        builtins: vec![abi::Plugin { id: "test.owned", setup: owned }.into()],
-        ..support::deps(Arc::new(fake))
+    let (fake, gate, served, _) = held();
+    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
+    let host = opencode_tui::plugins::host::host(&harness.tui);
+    let definition = match loopback {
+        true => {
+            let entries = abi::export_plugin!(@loopback "test.owned", owned);
+            opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+        }
+        false => abi::Plugin { id: "test.owned", setup: owned }.into(),
     };
-    let harness = support::mount(80, 24, deps);
+    opencode_tui::plugins::host::add(&harness.tui, definition);
     let route = Route::Plugin { id: "test.owned".into(), name: "owned".into() };
     harness.tui.navigate(route.clone());
     harness.wait_for("owned route");
@@ -860,10 +873,18 @@ fn a_late_reply_does_not_reach_a_mount_opened_again() {
         harness.app.wait_until(Duration::from_millis(300), || false);
     };
     arrived(1);
-    assert!(REPLIES.with(|replies| replies.borrow().is_empty()), "a reply reached a mount opened again");
+    assert!(
+        REPLIES.with(|replies| replies.borrow().is_empty()),
+        "loopback {loopback}: a reply reached a mount opened again"
+    );
     let _ = harness.tui.keymap.dispatch("owned.global", None);
     arrived(2);
-    assert_eq!(REPLIES.with(|replies| replies.borrow().len()), 1, "the plugin's own reply did not arrive");
+    assert_eq!(
+        REPLIES.with(|replies| replies.borrow().len()),
+        1,
+        "loopback {loopback}: the plugin's own reply did not arrive"
+    );
+    harness.tui.plugins.deactivate_all();
 }
 
 thread_local! {
@@ -1173,7 +1194,7 @@ fn a_theme_of_another_name_calls_the_view_once_and_builds_nothing() {
 #[test]
 fn a_reload_drops_the_replies_of_the_activation_before() {
     REPLIES.with(|replies| replies.borrow_mut().clear());
-    let (fake, gate, served) = held();
+    let (fake, gate, served, _) = held();
     let deps = Deps {
         route: Route::Home,
         builtins: vec![abi::Plugin { id: "test.owned", setup: owned }.into()],
