@@ -1072,6 +1072,10 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::Attention(attention) => ctx.effects.push(Effect::Attention(attention)),
         HostRequest::Navigate { route } => ctx.effects.push(Effect::Navigate(route)),
         HostRequest::Fetch(fetch) => {
+            // An ID is a promise of a reply: none is given unless the fetch's effect has room (bigboi's final pass).
+            if !crate::has_room(ctx.effects.len()) {
+                return Err(crate::REFUSED.to_owned());
+            }
             let id = next_request();
             ctx.effects.push(Effect::Fetch(id, fetch));
             return Ok(serde_json::to_value(id).unwrap_or_default());
@@ -1127,6 +1131,9 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::Selection => return read(ctx, |read| serde_json::to_value(read.selection())),
         HostRequest::ClearSelection => ctx.effects.push(Effect::ClearSelection),
         HostRequest::Foreground(program) => {
+            if !crate::has_room(ctx.effects.len()) {
+                return Err(crate::REFUSED.to_owned());
+            }
             let id = next_request();
             ctx.effects.push(Effect::Foreground(id, program));
             return Ok(serde_json::to_value(id).unwrap_or_default());
@@ -1579,7 +1586,13 @@ pub(crate) fn apply(
     for effect in effects {
         let (id, guest) = (id.clone(), guest.clone());
         let plugin = id.clone();
-        crate::request(host, &plugin, move |host| run(host, effect, &id, &guest, generation));
+        // A request given an ID had its room reserved then ([`crate::has_room`]): it is admitted past the bound.
+        let reserved = matches!(effect, Effect::Fetch(..) | Effect::Foreground(..));
+        let effect = move |host: &dyn Host| run(host, effect, &id, &guest, generation);
+        match reserved {
+            true => defer(host, effect),
+            false => crate::request(host, &plugin, effect),
+        }
     }
 }
 

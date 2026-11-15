@@ -561,7 +561,7 @@ thread_local! {
 }
 
 /// `chain.self` dispatches itself; `chain.fan` dispatches itself twice, and copies with itself as the `then`.
-fn chain(setup: &mut abi::Setup) -> Result<(), String> {
+pub(crate) fn chain(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::default().with_name(name.to_owned());
     setup.command(command("chain.self"), |host, _| {
         CHAINED.set((CHAINED.get().0 + 1, CHAINED.get().1));
@@ -617,6 +617,95 @@ fn a_chain_of_dispatches_never_holds_the_ui_thread() {
         // The UI still takes input: the composer shows what was typed.
         h.app.type_text("still here");
         h.wait_for("still here");
+        h.tui.plugins.deactivate_all();
+        h.app.advance(Duration::from_millis(16));
+    }
+}
+
+thread_local! {
+    /// What `fetcher`'s fetches returned, and the IDs its replies came back with.
+    static FETCHES: RefCell<Fetches> = const { RefCell::new((Vec::new(), Vec::new())) };
+    /// What `fetcher`'s 1.x fetches returned.
+    static LEGACY: RefCell<Vec<abi::RequestId>> = const { RefCell::new(Vec::new()) };
+}
+
+type Fetches = (Vec<Result<abi::RequestId, String>>, Vec<abi::RequestId>);
+
+/// `fetcher.go` fetches the session list, and `fetcher.legacy` as a 1.x plugin's source does; each reply is kept by
+/// its ID.
+fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command::default().with_name("fetcher.legacy".to_owned()), |host, _| {
+        let fetch = abi::Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned());
+        #[allow(deprecated)]
+        let id = host.fetch(fetch);
+        LEGACY.with_borrow_mut(|legacy| legacy.push(id));
+    });
+    setup.command(abi::Command::default().with_name("fetcher.go".to_owned()), |host, _| {
+        let fetch = abi::Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned());
+        let id = host.try_fetch(fetch);
+        FETCHES.with_borrow_mut(|fetches| fetches.0.push(id));
+    });
+    setup.on_reply(|_, id, _| FETCHES.with_borrow_mut(|fetches| fetches.1.push(id)));
+    Ok(())
+}
+
+// Expected (bigboi's final pass): a fetch is given an ID only when its reply can come. While another plugin's fan-out
+// fills the queue of effects, an unrelated plugin's fetch is an error that says so, and every ID given gets its reply,
+// also once the fan-out ends; a fetch with room gets an ID and its reply, on both carriers. A 1.x plugin's `fetch`
+// gets `RequestId(0)`, which no reply carries, as the 1.x SDK answers a fetch the host did not take (O-125, O-154).
+#[test]
+fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
+    for loopback in [false, true] {
+        let h = home_with(
+            chain,
+            abi::export_plugin!(@loopback "probe", chain),
+            loopback,
+            support::deps(Arc::new(fake(String::new()))),
+        );
+        let host = opencode_tui::plugins::host::host(&h.tui);
+        let definition = match loopback {
+            true => {
+                let entries = abi::export_plugin!(@loopback "fetcher", fetcher);
+                opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+            }
+            false => abi::Plugin { id: "fetcher", setup: fetcher }.into(),
+        };
+        opencode_tui::plugins::host::add(&h.tui, definition);
+        h.wait_for("chain ready");
+        FETCHES.with_borrow_mut(|fetches| *fetches = Default::default());
+        LEGACY.with_borrow_mut(Vec::clear);
+        h.tui.keymap.dispatch("chain.fan", None);
+        for _ in 0..80 {
+            h.app.render();
+        }
+        assert!(opencode_plugin::effects_waiting() >= 60_000, "loopback {loopback}: the queue is not under pressure");
+        h.tui.keymap.dispatch("fetcher.go", None);
+        let under = FETCHES.with_borrow(|fetches| fetches.0.clone());
+        let refused = matches!(&under[..], [Err(error)] if error.contains("the effects that wait fill its queue"));
+        assert!(refused, "loopback {loopback}: a fetch with no room returned {under:?}");
+        h.tui.keymap.dispatch("fetcher.legacy", None);
+        let legacy = LEGACY.with_borrow(Vec::clone);
+        assert_eq!(legacy, [abi::RequestId(0)], "loopback {loopback}: a 1.x fetch with no room");
+        // The fan-out ends, the queue drains, and a fetch with room is given an ID and its reply.
+        h.tui.plugins.set_active(&host, "probe", false);
+        let drained = h.app.wait_until(support::WAIT, || {
+            h.app.render();
+            opencode_plugin::effects_waiting() == 0
+        });
+        assert!(drained, "loopback {loopback}: the queue did not drain");
+        h.tui.keymap.dispatch("fetcher.go", None);
+        h.tui.keymap.dispatch("fetcher.legacy", None);
+        let replied = h.app.wait_until(support::WAIT, || {
+            let (given, replies) = FETCHES.with_borrow(|fetches| fetches.clone());
+            let legacy = LEGACY.with_borrow(|legacy| legacy[1..].to_vec());
+            given.iter().flatten().chain(&legacy).all(|id| replies.contains(id))
+        });
+        let (given, replies) = FETCHES.with_borrow(|fetches| fetches.clone());
+        let legacy = LEGACY.with_borrow(Vec::clone);
+        assert!(
+            replied && given.len() == 2 && given[1].is_ok() && legacy.len() == 2 && legacy[1] != abi::RequestId(0),
+            "loopback {loopback}: {given:?} {legacy:?} {replies:?}"
+        );
         h.tui.plugins.deactivate_all();
         h.app.advance(Duration::from_millis(16));
     }
@@ -793,7 +882,7 @@ thread_local! {
 /// `x.run` asks for `true` in the foreground; the reply goes to [`RAN`].
 fn running(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(abi::Command::default().with_name("x.run".into()), |host, _| {
-        host.foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
+        let _ = host.try_foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
     });
     setup.on_reply(|_, _, result| RAN.set(Some(result)));
     Ok(())

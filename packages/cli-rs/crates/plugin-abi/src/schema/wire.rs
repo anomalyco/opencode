@@ -552,7 +552,11 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             let _ = |value: &RequestId| {
                 let RequestId(_) = value;
             };
-            described(uint64(), "What a `fetch` or a `foreground` answers, which its reply names.")
+            described(
+                uint64(),
+                "What a `fetch` or a `foreground` the host takes answers, which its one reply names. One the host does \
+                 not take, as when its queue of effects is full, answers an error, and no reply comes.",
+            )
         }),
         ("Handled", unit!(Handled { Consume, Pass })),
         (

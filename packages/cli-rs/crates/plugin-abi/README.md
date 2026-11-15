@@ -135,7 +135,12 @@ A plugin binary carries its ABI version. The host is ABI 2.0, and loads every 1.
 | A 3.x SDK | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" | — |
 
 A plugin of 1.6 rebuilt on the 2.0 SDK keeps every entry and request of 1.6 until 3.0, and what 2.0 adds is in
-`docs/P.4.md`: surfaces of contract 2.0 over the C ABI, and threads that send messages.
+`docs/P.4.md`: surfaces of contract 2.0 over the C ABI, and threads that send messages. Its source builds unchanged
+(O-154). `Host::fetch` and `Host::foreground` keep their 1.x meaning until 3.0: they return `RequestId`, and
+`RequestId(0)`, which no reply carries, for a request the host did not take, as the 1.x SDK does. They warn as
+deprecated, naming the 2.x calls `Host::try_fetch` and `Host::try_foreground`. Those return `Result<RequestId,
+String>`: an `Err` is a request the host did not take, as while the effects that wait fill its queue, and no reply
+comes for it; an ID always gets its one reply.
 
 ### The source promise of 2.x
 

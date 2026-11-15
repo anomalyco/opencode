@@ -6062,7 +6062,7 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 18446744073709551615,
-      "description": "What a `fetch` or a `foreground` answers, which its reply names."
+      "description": "What a `fetch` or a `foreground` the host takes answers, which its one reply names. One the host does not take, as when its queue of effects is full, answers an error, and no reply comes."
     },
     "Handled": {
       "type": "string",

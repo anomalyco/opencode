@@ -224,6 +224,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * - A "scroll" of the transcript is taken only from a call that answers the user's input (a key, a click, an edit,
  *   the palette, the user's scroll): the host answers OPENCODE_ERROR to any other. None of the input requests ("focus",
  *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet.
+ * - "fetch" and "foreground" answer the ID their one reply comes back with ("reply"). One the host does not take, as
+ *   while the effects that wait fill its queue, answers OPENCODE_ERROR with why, and no reply comes for it: the Rust
+ *   SDK's `Host::try_fetch` returns that as an `Err`, and its 1.x `Host::fetch` as `RequestId(0)`.
  * - "setting" names one of "diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single". "image-size"
  *   takes the image's bytes in base64 and answers the size the host decodes, or null. A host with the feature
  *   "image-bounds" answers "image-bounds" with the bounds of the images it decodes (`ImageBounds`): bytes past them

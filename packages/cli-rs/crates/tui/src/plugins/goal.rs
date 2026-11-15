@@ -123,8 +123,15 @@ impl Goals {
             input: Some(json!({ "sessionID": session })),
         };
         let call = Client::rpc_call_call(&input).expect("the goal read encodes");
-        let read = Pending::Read { session: session.to_owned(), turn };
-        self.pending.borrow_mut().insert(host.fetch(fetch_of(call)), read);
+        self.ask(host, fetch_of(call), Pending::Read { session: session.to_owned(), turn });
+    }
+
+    /// Fetches `fetch` for `pending`; a fetch the host did not take ends as a failed reply does.
+    fn ask(&self, host: &dyn Host, fetch: abi::Fetch, pending: Pending) {
+        match host.try_fetch(fetch) {
+            Ok(id) => drop(self.pending.borrow_mut().insert(id, pending)),
+            Err(error) => self.answered(host, pending, Err(error)),
+        }
     }
 
     /// A new turn of `session`, which outdates the reads in flight.
@@ -158,6 +165,10 @@ impl Goals {
 
     fn reply(&self, host: &dyn Host, id: RequestId, result: Result<serde_json::Value, String>) {
         let Some(pending) = self.pending.borrow_mut().remove(&id) else { return };
+        self.answered(host, pending, result);
+    }
+
+    fn answered(&self, host: &dyn Host, pending: Pending, result: Result<serde_json::Value, String>) {
         match pending {
             Pending::Command => {
                 if let Err(error) = result {
@@ -215,7 +226,7 @@ impl Goals {
             ..SessionCommandInput::default()
         };
         let call = Client::session_command_call(&input).expect("the goal command encodes");
-        self.pending.borrow_mut().insert(host.fetch(fetch_of(call)), Pending::Command);
+        self.ask(host, fetch_of(call), Pending::Command);
     }
 }
 

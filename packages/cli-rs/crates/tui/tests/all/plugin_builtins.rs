@@ -460,7 +460,7 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
             // What the plugin starts as a mount ends is the plugin's: its reply comes after the mount went.
             if !mounted {
                 let fetch = abi::Fetch::default().with_method("GET".into()).with_path("/api/probe".into());
-                host.fetch(fetch);
+                let _ = host.try_fetch(fetch);
             }
         }
         Handled::Pass

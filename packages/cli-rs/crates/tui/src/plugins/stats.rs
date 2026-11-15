@@ -65,7 +65,11 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         if *mount {
             mounted.mounts.set(mounted.mounts.get() + 1);
             *mounted.stats.borrow_mut() = None;
-            mounted.request.set(Some(host.fetch(request())));
+            match host.try_fetch(request()) {
+                Ok(id) => mounted.request.set(Some(id)),
+                // A fetch the host did not take ends as a failed reply does.
+                Err(error) => *mounted.stats.borrow_mut() = Some(data(Err(error))),
+            }
             return Handled::Pass;
         }
         mounted.mounts.set(mounted.mounts.get().saturating_sub(1));

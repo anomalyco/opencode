@@ -154,6 +154,8 @@ enum Next {
     Wait,
     Price(Vec<String>),
     Finish,
+    /// The host did not take a request: the run ends as a failed one does.
+    Fail,
 }
 
 #[derive(Clone, Copy)]
@@ -282,7 +284,11 @@ impl State {
             .with_method("GET".to_owned())
             .with_path("/api/experimental/usage/limits".to_owned())
             .with_query(query);
-        self.limits = Some(host.fetch(fetch));
+        match host.try_fetch(fetch) {
+            Ok(id) => self.limits = Some(id),
+            // As a failed read: it hides the meters.
+            Err(_) => self.go = None,
+        }
     }
 
     /// TS `refreshCost`: one run at a time; a request during a run runs once it ends.
@@ -322,24 +328,30 @@ impl State {
                         Next::Price(std::mem::take(ids))
                     } else {
                         let fetch = children(&frontier[*at], None);
-                        run.waiting.push((host.fetch(fetch), Want::Children { page: 0 }));
-                        Next::Wait
+                        match ask(host, &mut run.waiting, fetch, Want::Children { page: 0 }) {
+                            true => Next::Wait,
+                            false => Next::Fail,
+                        }
                     }
                 }
                 Stage::Price { open, .. } if *open > 0 => Next::Wait,
                 Stage::Price { ids, batch, .. } if *batch >= ids.len() => Next::Finish,
                 Stage::Price { ids, batch, open } => {
                     let end = (*batch + COST_CONCURRENCY).min(ids.len());
-                    for (index, id) in ids.iter().enumerate().take(end).skip(*batch) {
-                        run.waiting.push((host.fetch(messages(id, None)), Want::Messages { index, page: 0 }));
-                    }
+                    let asked = ids.iter().enumerate().take(end).skip(*batch).all(|(index, id)| {
+                        ask(host, &mut run.waiting, messages(id, None), Want::Messages { index, page: 0 })
+                    });
                     (*open, *batch) = (end - *batch, end);
-                    Next::Wait
+                    match asked {
+                        true => Next::Wait,
+                        false => Next::Fail,
+                    }
                 }
             };
             match next {
                 Next::Wait => return,
                 Next::Finish => return self.finish(host, true),
+                Next::Fail => return self.finish(host, false),
                 // TS drops a tree found for a session no longer in view.
                 Next::Price(_) if self.session.as_ref() != Some(&run.session) => return self.finish(host, false),
                 Next::Price(ids) => {
@@ -434,7 +446,9 @@ impl State {
         let Some(Run { stage: Stage::Price { ids, open, .. }, waiting, .. }) = &mut self.run else { return };
         if let Some(cursor) = page["cursor"].as_str().filter(|_| number + 1 < MAX_PAGES) {
             let fetch = messages(&ids[index], Some(cursor));
-            waiting.push((host.fetch(fetch), Want::Messages { index, page: number + 1 }));
+            if !ask(host, waiting, fetch, Want::Messages { index, page: number + 1 }) {
+                self.finish(host, false);
+            }
             return;
         }
         *open -= 1;
@@ -452,8 +466,7 @@ impl State {
                 listed.extend(page_ids.map(str::to_owned));
                 if let Some(cursor) = cursor.filter(|_| page + 1 < MAX_PAGES && listed.len() < MAX_SESSIONS) {
                     let fetch = children(&frontier[*at], Some(cursor));
-                    run.waiting.push((host.fetch(fetch), Want::Children { page: page + 1 }));
-                    return true;
+                    return ask(host, &mut run.waiting, fetch, Want::Children { page: page + 1 });
                 }
                 for child in std::mem::take(listed) {
                     if !ids.contains(&child) && ids.len() < MAX_SESSIONS {
@@ -666,6 +679,12 @@ fn family(read: &dyn Read, session: &str) -> Vec<String> {
 }
 
 /// A page of `parent`'s children (TS `client.session.list`).
+/// Fetches `fetch` for `want` of the run that waits on `waiting`; false when the host did not take it, which ends the
+/// run, as a failed request does: no reply comes.
+fn ask(host: &dyn Host, waiting: &mut Vec<(RequestId, Want)>, fetch: Fetch, want: Want) -> bool {
+    host.try_fetch(fetch).map(|id| waiting.push((id, want))).is_ok()
+}
+
 fn children(parent: &str, cursor: Option<&str>) -> Fetch {
     let mut query = vec![("limit".to_owned(), PAGE_SIZE.to_string()), ("parentID".to_owned(), parent.to_owned())];
     query.extend(cursor.map(|cursor| ("cursor".to_owned(), cursor.to_owned())));

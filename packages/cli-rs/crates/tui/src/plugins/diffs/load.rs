@@ -40,7 +40,7 @@ impl Viewer {
                 ..SessionDiffInput::default()
             };
             let call = Client::session_diff_call(&input).expect("the diff input encodes");
-            return diffs.fetch(host, fetch_of(call), Asked::Diff { viewer, load, base: None });
+            return self.fetch(host, diffs, fetch_of(call), Asked::Diff { viewer, load, base: None });
         }
         let chosen = diffs.memory.borrow().bases.get(&key).cloned();
         match (self.mode.needs_base(), chosen, self.reported.get(&key).cloned()) {
@@ -51,7 +51,12 @@ impl Viewer {
             (true, None, Some(known)) => self.fetch_diff(host, diffs, known),
             (true, None, None) => {
                 let call = Client::vcs_base_call(&VcsBaseInput { location: self.location_query() });
-                diffs.fetch(host, fetch_of(call.expect("the base input encodes")), Asked::Base { viewer, load, key });
+                self.fetch(
+                    host,
+                    diffs,
+                    fetch_of(call.expect("the base input encodes")),
+                    Asked::Base { viewer, load, key },
+                );
             }
         }
     }
@@ -70,7 +75,14 @@ impl Viewer {
             untracked: None,
         };
         let call = Client::vcs_diff_call(&input).expect("the diff input encodes");
-        diffs.fetch(host, fetch_of(call), Asked::Diff { viewer: self.id, load: self.loads, base });
+        self.fetch(host, diffs, fetch_of(call), Asked::Diff { viewer: self.id, load: self.loads, base });
+    }
+
+    /// Fetches `fetch` for `asked`; a fetch the host did not take ends as a failed reply does.
+    fn fetch(&mut self, host: &dyn Host, diffs: &Diffs, fetch: abi::Fetch, asked: Asked) {
+        if let Err((asked, error)) = diffs.fetch(host, fetch, asked) {
+            self.reply(host, diffs, asked, Err(error));
+        }
     }
 
     /// The diff arrived, or failed.
@@ -98,7 +110,7 @@ impl Viewer {
             let input = FileReadInput { location: self.location_query(), path: file.clone() };
             let call = Client::file_read_call(&input).expect("the read input encodes");
             let fetch = fetch_of(call).with_bytes(true);
-            diffs.fetch(host, fetch, Asked::Image { viewer: self.id, load: self.loads, file });
+            self.fetch(host, diffs, fetch, Asked::Image { viewer: self.id, load: self.loads, file });
         }
     }
 
@@ -109,7 +121,9 @@ impl Viewer {
             return;
         }
         let call = Client::vcs_base_call(&VcsBaseInput { location: self.location_query() });
-        diffs.fetch(host, fetch_of(call.expect("the base input encodes")), Asked::Reported { viewer: self.id, key });
+        let asked = Asked::Reported { viewer: self.id, key };
+        // A look-up the host did not take is as a failed one, which reports nothing.
+        let _ = diffs.fetch(host, fetch_of(call.expect("the base input encodes")), asked);
     }
 
     /// A reply for this viewer.
@@ -177,8 +191,13 @@ impl Asked {
 }
 
 impl Diffs {
-    pub fn fetch(&self, host: &dyn Host, fetch: abi::Fetch, asked: Asked) {
-        self.requests.borrow_mut().insert(host.fetch(fetch), asked);
+    /// Fetches `fetch` for `asked`; `asked` back, with the host's error, when the host did not take it.
+    pub fn fetch(&self, host: &dyn Host, fetch: abi::Fetch, asked: Asked) -> Result<(), (Asked, String)> {
+        match host.try_fetch(fetch) {
+            Ok(id) => drop(self.requests.borrow_mut().insert(id, asked)),
+            Err(error) => return Err((asked, error)),
+        }
+        Ok(())
     }
 
     /// Takes the request `id` stood for, if it is still asked for.

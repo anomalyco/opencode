@@ -263,6 +263,8 @@ const plugins = new Map<string, Plugin>()
 const generations = new Map<number, Plugin>()
 // How long a component's command outlives its mount, in milliseconds (P8).
 const UNCOMMAND = 250
+// The failed reply of a fetch the host did not take, as `REFUSED` in `lib.rs` says it.
+const REFUSED = "the host takes no request now: the effects that wait fill its queue"
 let last = 0
 let themeMode = "dark"
 // The page theme's colors by token, `#rrggbbaa`, which the V2 context's `theme` reads (P8).
@@ -535,8 +537,9 @@ function context(plugin: Plugin) {
     // P8: what runs as the activation ends, such as the layer closing a dialog of the plugin's own.
     cleanup: (cleanup: () => unknown) => cleanUp(plugin, cleanup),
     fetch(request: Json): Promise<Json> {
-      return effect(plugin, { type: "fetch", ...request }).then(
-        (id) => new Promise((resolve) => plugin.replies.set(id, resolve)),
+      // A fetch the host did not take answers no ID, and no reply comes: it ends as a failed reply does.
+      return effect(plugin, { type: "fetch", ...request }).then((id) =>
+        typeof id === "number" ? new Promise((resolve) => plugin.replies.set(id, resolve)) : { Err: REFUSED },
       )
     },
   }

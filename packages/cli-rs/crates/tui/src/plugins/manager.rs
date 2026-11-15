@@ -143,37 +143,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_plugins(move |host| heard.show(host));
     setup.on_reply(move |host, id, reply| {
         let Some(asked) = state.requests.borrow_mut().remove(&id) else { return };
-        let current = |open: u64| open == state.opened.get();
-        let newest = |open: u64, asked: u64| current(open) && asked == state.asked.get();
-        match asked {
-            Asked::List(open, asked) => {
-                if let (true, Ok(plugins)) = (newest(open, asked), data::<Vec<PluginInfo>>(reply)) {
-                    state.server.replace(Some(plugins));
-                }
-            }
-            Asked::Check(open, asked) => {
-                let plugins = data::<Vec<PluginInfo>>(reply);
-                if current(open) {
-                    state.checking.set(false);
-                }
-                match plugins {
-                    Ok(plugins) if newest(open, asked) => drop(state.server.replace(Some(plugins))),
-                    Ok(_) => {}
-                    Err(error) => host.toast(Toast::new(Variant::Error, error)),
-                }
-            }
-            Asked::Update(open, key) => {
-                if current(open) {
-                    state.updating.borrow_mut().retain(|updating| *updating != key);
-                }
-                match reply {
-                    Ok(_) if current(open) => state.fetch(host, Asked::List(open, state.next())),
-                    Ok(_) => {}
-                    Err(error) => host.toast(Toast::new(Variant::Error, error)),
-                }
-            }
-        }
-        state.show(host);
+        state.answered(host, asked, reply);
     });
     Ok(())
 }
@@ -214,7 +184,45 @@ impl State {
             }
         };
         let call = call.expect("the plugin inputs encode");
-        self.requests.borrow_mut().insert(host.fetch(fetch_of(call)), asked);
+        match host.try_fetch(fetch_of(call)) {
+            Ok(id) => drop(self.requests.borrow_mut().insert(id, asked)),
+            // A fetch the host did not take ends as a failed reply does.
+            Err(error) => self.answered(host, asked, Err(error)),
+        }
+    }
+
+    fn answered(&self, host: &dyn Host, asked: Asked, reply: Result<Value, String>) {
+        let current = |open: u64| open == self.opened.get();
+        let newest = |open: u64, asked: u64| current(open) && asked == self.asked.get();
+        match asked {
+            Asked::List(open, asked) => {
+                if let (true, Ok(plugins)) = (newest(open, asked), data::<Vec<PluginInfo>>(reply)) {
+                    self.server.replace(Some(plugins));
+                }
+            }
+            Asked::Check(open, asked) => {
+                let plugins = data::<Vec<PluginInfo>>(reply);
+                if current(open) {
+                    self.checking.set(false);
+                }
+                match plugins {
+                    Ok(plugins) if newest(open, asked) => drop(self.server.replace(Some(plugins))),
+                    Ok(_) => {}
+                    Err(error) => host.toast(Toast::new(Variant::Error, error)),
+                }
+            }
+            Asked::Update(open, key) => {
+                if current(open) {
+                    self.updating.borrow_mut().retain(|updating| *updating != key);
+                }
+                match reply {
+                    Ok(_) if current(open) => self.fetch(host, Asked::List(open, self.next())),
+                    Ok(_) => {}
+                    Err(error) => host.toast(Toast::new(Variant::Error, error)),
+                }
+            }
+        }
+        self.show(host);
     }
 
     /// Every row: the TUI plugins, then the server plugins, each sorted by label.

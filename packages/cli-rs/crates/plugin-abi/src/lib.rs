@@ -3666,9 +3666,24 @@ pub trait Host: Read {
     fn open_route(&self, name: &str);
     /// Shows `route`: home, a session, or a plugin's route.
     fn navigate(&self, route: Route);
-    /// Sends `fetch` to the server. [`Setup::on_reply`] gets the reply, with the ID this returns, unless the plugin is
-    /// disposed first.
+    /// 1.x: [`Host::try_fetch`], but a fetch the host did not take returns `RequestId(0)`, which no reply carries, as
+    /// it does on a host without fetch. It keeps that meaning until 3.0, so a 1.x plugin's source builds unchanged
+    /// (O-125, O-154).
+    #[deprecated(
+        note = "a fetch the host does not take returns RequestId(0) and never gets a reply; `try_fetch` returns it as \
+                an `Err`"
+    )]
     fn fetch(&self, fetch: Fetch) -> RequestId;
+    /// 2.0: sends `fetch` to the server. [`Setup::on_reply`] gets the reply, with the ID this returns, unless the
+    /// plugin is disposed first. An error is a fetch the host did not take, and no reply comes for it: its queue of
+    /// effects is full, as when a plugin fans out without end, or it has no server. By default, [`Host::fetch`]'s
+    /// `RequestId(0)` is that error.
+    #[must_use = "a fetch the host did not take gets no reply"]
+    fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
+        #[allow(deprecated)]
+        let id = self.fetch(fetch);
+        (id != RequestId(0)).then_some(id).ok_or_else(|| "the host did not take the fetch".to_owned())
+    }
     /// Shows `dialog`.
     fn dialog(&self, dialog: Dialog);
     /// Copies `text` to the clipboard, then runs `then` once it is copied; a toast says so when it fails.
@@ -3689,16 +3704,29 @@ pub trait Host: Read {
     }
     /// 1.6: clears the mouse selection (TS `renderer.clearSelection()`).
     fn clear_selection(&self) {}
-    /// 1.6: gives the terminal to `program` until it exits, then takes it back, as the host does for `$EDITOR`.
+    /// 1.6: [`Host::try_foreground`], but a program the host did not take returns `RequestId(0)`, which no reply
+    /// carries, as on an older host. It keeps that meaning until 3.0, as [`Host::fetch`] does.
+    #[deprecated(
+        note = "a program the host does not take returns RequestId(0) and never gets a reply; `try_foreground` \
+                returns it as an `Err`"
+    )]
+    fn foreground(&self, _program: Foreground) -> RequestId {
+        RequestId(0)
+    }
+    /// 2.0: gives the terminal to `program` until it exits, then takes it back, as the host does for `$EDITOR`.
     /// [`Setup::on_reply`] gets `{ "code": <exit code or null> }` with the ID this returns, plus `"signal"` on Unix when
     /// a signal ended it, or the error when it did not start. It starts once the current call is done, and not when
     /// the plugin was disposed or failed by then, another program has the terminal, or the host has none (headless).
     /// The program has the terminal on all three standard streams and gets the signals of its keys, the host does
     /// not: on Unix it is the terminal's foreground process group, and one that stops (Ctrl+Z) is continued at once,
     /// as the host has no shell to hand it to; on Windows the host ignores Ctrl+C and Ctrl+Break while it runs. Input
-    /// it leaves unread is dropped. An older host never replies.
-    fn foreground(&self, _program: Foreground) -> RequestId {
-        RequestId(0)
+    /// it leaves unread is dropped. An error is a program the host did not take, as for [`Host::try_fetch`], or an
+    /// older host's: no reply comes for it. By default, [`Host::foreground`]'s `RequestId(0)` is that error.
+    #[must_use = "a program the host did not take gets no reply"]
+    fn try_foreground(&self, program: Foreground) -> Result<RequestId, String> {
+        #[allow(deprecated)]
+        let id = self.foreground(program);
+        (id != RequestId(0)).then_some(id).ok_or_else(|| "the host did not take the program".to_owned())
     }
     /// 1.6: sets the terminal title (TS `renderer.setTerminalTitle`). The host sets its own again with its next
     /// change, such as a route change.
@@ -4171,8 +4199,12 @@ impl Host for HostHandle {
     }
 
     fn fetch(&self, fetch: Fetch) -> RequestId {
-        // A host without fetch never replies; an ID no reply carries is as good as any.
-        self.read(&HostRequest::Fetch(fetch)).unwrap_or(RequestId(0))
+        // As the 1.x SDK: a host that refuses it, or has no fetch, never replies.
+        self.try_fetch(fetch).unwrap_or(RequestId(0))
+    }
+
+    fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
+        self.requested(&HostRequest::Fetch(fetch))
     }
 
     fn dialog(&self, dialog: Dialog) {
@@ -4252,8 +4284,11 @@ impl Host for HostHandle {
     }
 
     fn foreground(&self, program: Foreground) -> RequestId {
-        // As `fetch`: a host without it never replies.
-        self.read(&HostRequest::Foreground(program)).unwrap_or(RequestId(0))
+        self.try_foreground(program).unwrap_or(RequestId(0))
+    }
+
+    fn try_foreground(&self, program: Foreground) -> Result<RequestId, String> {
+        self.requested(&HostRequest::Foreground(program))
     }
 
     fn set_title(&self, title: &str) {
@@ -4277,6 +4312,12 @@ impl HostHandle {
     /// A read's answer; `None` from a host that does not know the request or has no value.
     fn read<T: serde::de::DeserializeOwned>(&self, request: &HostRequest) -> Option<T> {
         serde_json::from_value::<Option<T>>(self.request(request).ok()?).ok().flatten()
+    }
+
+    /// The ID of the reply to `request`; an error, the host's, when it did not take it.
+    fn requested(&self, request: &HostRequest) -> Result<RequestId, String> {
+        serde_json::from_value(self.request(request)?)
+            .map_err(|error| format!("the host answered no request ID: {error}"))
     }
 }
 
@@ -6706,7 +6747,7 @@ mod tests {
         assert!(!host.set_variant(Some("high")));
         assert!(!host.edit_tab(TabEdit::Focus { session: "ses_1".into() }));
         assert!(!host.set_theme("nord"));
-        assert_eq!(host.foreground(Foreground { command: "less".into(), ..Foreground::default() }), RequestId(0));
+        assert!(host.try_foreground(Foreground { command: "less".into(), ..Foreground::default() }).is_err());
         host.set_model("p", "m");
         host.clear_selection();
         host.set_title("t");

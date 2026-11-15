@@ -1007,6 +1007,8 @@ fn a_wake_from_an_in_process_plugin_thread_draws_its_claims_again() {
 
 /// The sample's server request and live panel, compiled in rather than loaded.
 #[path = "../../../examples/sample/src/fetch.rs"]
+// Its source is a 1.x plugin's, which calls the 1.x `fetch` and `foreground` (O-154).
+#[allow(deprecated)]
 mod sample_fetch;
 
 /// The sample's fetch row before and after the reply, the fetches it sent, and the panels it showed, as `registry` has
@@ -1069,7 +1071,7 @@ fn replying(setup: &mut abi::Setup) -> Result<(), String> {
     setup.slot(abi::Placement::append("home.footer"), |_, _, _| abi::Render::Hide);
     let command = abi::Command::default().with_name("x.fetch".into());
     setup.command(command, |host, _| {
-        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/slow".into()));
+        let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/slow".into()));
     });
     setup.on_reply(|host, _, _| host.toast(abi::Toast::new(abi::Variant::Info, "reply")));
     Ok(())
@@ -1105,6 +1107,8 @@ fn a_slow_reply_across_a_disable_delivers_nothing() {
 
 /// The sample's prompt footer claim, compiled in rather than loaded.
 #[path = "../../../examples/sample/src/prompt.rs"]
+// Its source is a 1.x plugin's, which calls the 1.x `fetch` and `foreground` (O-154).
+#[allow(deprecated)]
 mod sample_prompt;
 
 /// The sample's prompt row as `registry` mounts `prompt.footer` for `ses_1`: as mounted, after its fetch is answered,
@@ -1175,6 +1179,8 @@ fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_l
 
 /// The sample's reads and verbs of ABI 1.6, compiled in rather than loaded.
 #[path = "../../../examples/sample/src/reads.rs"]
+// Its source is a 1.x plugin's, which calls the 1.x `fetch` and `foreground` (O-154).
+#[allow(deprecated)]
 mod sample_reads;
 
 /// A text delta, as the server streams one.
@@ -1385,7 +1391,7 @@ fn a_claim_empty_while_narrow_shows_once_wide() {
 /// A command that asks for a program in the foreground, and one that asks and then panics.
 fn asking(setup: &mut abi::Setup) -> Result<(), String> {
     let run = |host: &dyn abi::Host| {
-        host.foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
+        let _ = host.try_foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
     };
     setup.command(abi::Command::default().with_name("x.run".into()), move |host, _| run(host));
     setup.command(abi::Command::default().with_name("x.boom".into()), move |host, _| {
@@ -1488,7 +1494,7 @@ fn waking(setup: &mut abi::Setup) -> Result<(), String> {
     let ran = runs.clone();
     setup.on_wake(move |host| {
         ran.set(ran.get() + 1);
-        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/api/woken".into()));
+        let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/api/woken".into()));
     });
     setup.slot(abi::Placement::append("home.footer"), move |_, _, changed| {
         go.store(true, Ordering::Release);
@@ -1630,7 +1636,7 @@ fn a_failed_plugins_waker_lets_go_of_the_host() {
 fn fetching(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::default().with_name(name.to_owned());
     setup.command(command("fetching.fetch"), |host, _| {
-        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/fetched".into()));
+        let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/fetched".into()));
     });
     setup.command(command("fetching.panic"), |_, _| panic!("fetching panicked"));
     Ok(())
@@ -1687,7 +1693,7 @@ fn lifecycle(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_dispose(|host| {
         LIFECYCLE_DISPOSED.set(LIFECYCLE_DISPOSED.get() + 1);
         host.toast(abi::Toast::new(abi::Variant::Info, "dispose"));
-        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/disposed".into()));
+        let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/disposed".into()));
     });
     setup.on_reply(|host, _, _| host.toast(abi::Toast::new(abi::Variant::Info, "reply")));
     let panic = abi::Command::default().with_name("lifecycle.panic".to_owned());
@@ -1986,14 +1992,14 @@ fn leak(host: &dyn abi::Host, at: &str) {
     host.toast(abi::Toast::new(abi::Variant::Info, "leaked"));
     host.attention(abi::Attention { title: None, message: "leaked".into(), notify: None, sound: None });
     host.open_route("r");
-    host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/leaked".into()));
+    let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/leaked".into()));
     host.dialog(abi::Dialog::Close { key: "leaked".into() });
     // 1.6
     host.set_variant(Some("high"));
     host.set_model("opencode", "small");
     host.edit_tab(abi::TabEdit::Focus { session: "ses_1".into() });
     host.clear_selection();
-    host.foreground(abi::Foreground { command: "leaked".into(), ..abi::Foreground::default() });
+    let _ = host.try_foreground(abi::Foreground { command: "leaked".into(), ..abi::Foreground::default() });
     host.set_title("leaked");
     host.set_theme("nord");
     host.install_theme("leaked", serde_json::json!({ "theme": {} }));
@@ -2020,7 +2026,7 @@ fn panicky(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(abi::Command::default().with_name("x.panic".into()), |host, _| leak(host, "command"));
     let fetch = abi::Command::default().with_name("x.fetch".into());
     setup.command(fetch, |host, _| {
-        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/asked".into()));
+        let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/asked".into()));
     });
     setup.on_reply(|host, _, _| leak(host, "reply"));
     setup.on_event(&["session.execution.succeeded"], |host, _| leak(host, "event"));
@@ -2985,7 +2991,7 @@ fn a_builtin_runs_inside_the_catch() {
 fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::default().with_name(name.into()).with_title(name.into());
     setup.command(command("fetcher.fetch"), |host, _| {
-        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/late".into()));
+        let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/late".into()));
     });
     setup.command(command("fetcher.panic"), |_, _| panic!("fetcher fault"));
     Ok(())
