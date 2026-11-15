@@ -17,6 +17,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::MountId;
 use crate::Color;
 
 /// An edge of a scroll's viewport.
@@ -211,6 +212,10 @@ pub struct Top {
 /// What a `layout` call gets: this frame's geometry, after the host's behaviors, for what the surface named.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Geometry {
+    /// The mount this call is for (big-boi 4): two mounts of one surface, with the same tree and the same rects, tell
+    /// their models apart by it. A 2.0 host names it in every call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mount: Option<MountId>,
     /// The rects of the nodes it named.
     pub rects: Vec<(String, Rect)>,
     /// The scrolls it named, and those with a `notify_top`.

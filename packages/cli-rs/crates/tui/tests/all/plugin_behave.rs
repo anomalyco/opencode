@@ -2777,3 +2777,110 @@ fn an_event_acts_on_the_mount_it_came_from() {
         drop(mounts);
     }
 }
+
+thread_local! {
+    /// The model of `test.keyed`: each mount's draft, by the mount's generation, as the plugin keeps it.
+    static DRAFTS: RefCell<std::collections::BTreeMap<u64, String>> = RefCell::default();
+    /// The mounts `test.keyed`'s `layout` heard of.
+    static LAID: RefCell<std::collections::BTreeSet<u64>> = RefCell::default();
+}
+
+/// A route of one input and the draft it shows, kept per mount: the handler finds the mount's draft by
+/// `Read::mount`, the layout by `Geometry::mount`, and a mount's end drops its draft.
+fn keyed_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let surface = v2::Surface::new("keyed", v2::Place::Route("keyed".into()), |cx| {
+        let draft = DRAFTS.with(|drafts| drafts.borrow().get(&cx.mount.generation).cloned()).unwrap_or_default();
+        let shown = text(format!("draft[{draft}]")).with_id("shown");
+        v2::Node::column(vec![v2::Node::input(draft).with_id("say"), shown]).layout(abi::Layout::default().grow())
+    })
+    .mounts()
+    .layout(vec![v2::Notify::Node { id: "say".into() }], |geometry| {
+        if let Some(mount) = &geometry.mount {
+            LAID.with(|laid| laid.borrow_mut().insert(mount.generation));
+        }
+        v2::LayoutReply::default()
+    })
+    .on(|host, event| {
+        match (event, host.mount()) {
+            (Event::Change { text, .. }, Some(mount)) => {
+                DRAFTS.with(|drafts| drafts.borrow_mut().insert(mount.generation, text.clone()));
+            }
+            (Event::Mount { mount, mounted: false, .. }, _) => {
+                DRAFTS.with(|drafts| drafts.borrow_mut().remove(&mount.generation));
+            }
+            _ => {}
+        }
+        Handled::Pass
+    });
+    setup.surface(surface);
+    Ok(())
+}
+
+// Expected (big-boi 4): two mounts of one surface with the same node ids, rects and text hear identical input, and
+// the handler and the layout tell them apart by the mount they name, so the plugin's model keyed by mount changes
+// for the mount typed in alone. A mount closed and opened again is a new mount, with a model of its own, on both
+// carriers.
+#[test]
+fn a_handler_and_a_layout_name_the_mount_they_are_for() {
+    use opentui::prelude::*;
+    for carrier in crate::plugin_surface::CARRIERS {
+        DRAFTS.with(|drafts| drafts.borrow_mut().clear());
+        LAID.with(|laid| laid.borrow_mut().clear());
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![crate::plugin_surface::builtin(
+                carrier,
+                abi::Plugin { id: "test.keyed", setup: keyed_setup },
+            )],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(80, 16, deps);
+        harness.app.advance(Duration::ZERO);
+        let host = opencode_tui::plugins::host::host(&harness.tui);
+        let app = harness.app.app();
+        let frame = View::new(app).row().absolute().z_index(3000).width(80).height(12);
+        let cells: Vec<View> = (0..2).map(|_| View::new(app).column().width(40).height(12)).collect();
+        cells.iter().for_each(|cell| {
+            frame.add(cell);
+        });
+        let open = |cell: &View| {
+            let mount = harness.tui.plugins.route(&*host, "test.keyed", "keyed").expect("the route mounts");
+            cell.add(&mount.root());
+            mount
+        };
+        let mut mounts: Vec<_> = cells.iter().map(open).collect();
+        opencode_ui::root::add(app, &frame);
+        let settle = || {
+            for _ in 0..3 {
+                harness.app.advance(Duration::from_millis(1));
+                harness.app.render();
+            }
+            harness.app.render().text()
+        };
+        let drafts = || DRAFTS.with(|drafts| drafts.borrow().values().cloned().collect::<Vec<_>>());
+        settle();
+        for (x, typed) in [(1, "a"), (41, "b")] {
+            harness.app.click(x, 0);
+            harness.app.type_text(typed);
+            settle();
+        }
+        let screen = settle();
+        assert_eq!(drafts(), ["a", "b"], "{carrier:?}: the model\n{screen}");
+        assert!(screen.contains("draft[a]") && screen.contains("draft[b]"), "{carrier:?}:\n{screen}");
+        assert_eq!(LAID.with(|laid| laid.borrow().len()), 2, "{carrier:?}: the layout named one mount for both");
+        // The left mount closes, and opens again as a new mount, which types its own draft.
+        let closed = mounts.remove(0);
+        closed.root().detach();
+        drop(closed);
+        settle();
+        assert_eq!(drafts(), ["b"], "{carrier:?}: the closed mount kept its model");
+        mounts.insert(0, open(&cells[0]));
+        settle();
+        harness.app.click(1, 0);
+        harness.app.type_text("c");
+        let screen = settle();
+        assert_eq!(drafts(), ["b", "c"], "{carrier:?}: the model\n{screen}");
+        assert!(screen.contains("draft[c]") && screen.contains("draft[b]"), "{carrier:?}:\n{screen}");
+        drop(mounts);
+    }
+}

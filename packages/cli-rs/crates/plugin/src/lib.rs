@@ -770,6 +770,11 @@ impl Owners {
         self.owner_of(id).rect(id)
     }
 
+    /// The ID of the running call's mount (big-boi 4).
+    pub(crate) fn mount_id(&self) -> Option<abi::v2::MountId> {
+        self.current.borrow().as_ref().and_then(|owner| owner.id().cloned())
+    }
+
     /// The mount of the running call's owner: the one a verb or a read of its scrolls names (P3).
     pub(crate) fn mounted(&self) -> Option<Weak<()>> {
         self.current.borrow().as_ref().and_then(|owner| owner.mounted())
@@ -1170,6 +1175,10 @@ impl abi::Read for Scoped<'_> {
 
     fn mode(&self) -> Option<String> {
         self.scope.owners.mode()
+    }
+
+    fn mount(&self) -> Option<abi::v2::MountId> {
+        self.scope.owners.mount_id()
     }
 }
 

@@ -74,6 +74,8 @@ pub struct Owner {
     focusable: RefCell<Vec<String>>,
     /// The mount it holds the input of, as long as it lives; `None` for an activation.
     mount: Option<Weak<()>>,
+    /// That mount's ID, which a call for it names to the plugin (big-boi 4).
+    id: Option<opencode_plugin_abi::v2::MountId>,
 }
 
 struct Mode {
@@ -196,9 +198,11 @@ impl Owner {
         root: View,
         (lookup, nearest): (Lookup, Nearest),
         deliver: Option<Deliver>,
-        mount: Weak<()>,
+        (id, mount): (opencode_plugin_abi::v2::MountId, Weak<()>),
     ) -> Rc<Self> {
-        Rc::new(Self::new(plugin, surface, host, Some(root), Some((lookup, nearest)), deliver, Some(mount)))
+        let mut owner = Self::new(plugin, surface, host, Some(root), Some((lookup, nearest)), deliver, Some(mount));
+        owner.id = Some(id);
+        Rc::new(owner)
     }
 
     /// An activation's owner, which has no surface.
@@ -233,6 +237,7 @@ impl Owner {
             ids: RefCell::default(),
             focusable: RefCell::default(),
             mount,
+            id: None,
         }
     }
 
@@ -567,6 +572,11 @@ impl Owner {
     /// The mount it holds the input of; `None` for an activation.
     pub(crate) fn mounted(&self) -> Option<Weak<()>> {
         self.mount.clone()
+    }
+
+    /// The ID of the mount it holds the input of; `None` for an activation.
+    pub(crate) fn id(&self) -> Option<&opencode_plugin_abi::v2::MountId> {
+        self.id.as_ref()
     }
 
     /// Calls the mount's handler with what one of its widgets or scrolls sends (P3): an edit, a scroll.
