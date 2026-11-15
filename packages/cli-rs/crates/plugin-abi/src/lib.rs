@@ -1773,8 +1773,33 @@ pub enum Request {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum InputTo {
-    Surface { surface: usize },
-    Layer { layer: usize },
+    /// A surface's handler, for the mount the event is for (big-boi 4), which [`Read::mount`] names to the handler;
+    /// none for [`interact::Event::Mount`], which the plugin hears rather than the mount, and which names its mount.
+    Surface {
+        surface: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mount: Option<v2::MountId>,
+    },
+    Layer {
+        layer: usize,
+    },
+}
+
+thread_local! {
+    /// The mount of the request the SDK runs on this thread, which [`Read::mount`] names over the C ABI.
+    static CALLED: std::cell::RefCell<Option<v2::MountId>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` as a call for `mount`: [`Read::mount`] names it until `f` returns or unwinds.
+fn for_mount<R>(mount: Option<&v2::MountId>, f: impl FnOnce() -> R) -> R {
+    struct Restore(Option<v2::MountId>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            CALLED.with(|called| *called.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(CALLED.with(|called| called.replace(mount.cloned())));
+    f()
 }
 
 /// What [`Request::View`] returns: the tree, the content the view gave the host with its handles, and how many values
@@ -3394,6 +3419,13 @@ pub trait Read {
     fn mode(&self) -> Option<String> {
         None
     }
+    /// 2.0: the mount the running call is for: of a surface's handler ([`v2::Surface::on`]), its view, draw and
+    /// `layout`; `None` for a call of the plugin's own (a command, a layer of setup, a message) (big-boi 4). Two mounts
+    /// of one surface with the same tree hear the same events: a plugin with a model per mount finds the model by it,
+    /// and drops it on [`interact::Event::Mount`] or [`Request::Unmount`].
+    fn mount(&self) -> Option<v2::MountId> {
+        None
+    }
     /// 2.0 (P6b): the TUI plugins, in the host's order; [`Setup::on_plugins`] hears when they change.
     fn plugins(&self) -> Vec<PluginEntry> {
         Vec::new()
@@ -3869,6 +3901,10 @@ impl Read for HostHandle {
 
     fn mode(&self) -> Option<String> {
         self.read(&HostRequest::InputMode).flatten()
+    }
+
+    fn mount(&self) -> Option<v2::MountId> {
+        CALLED.with(|called| called.borrow().clone())
     }
 
     fn plugins(&self) -> Vec<PluginEntry> {
@@ -4631,7 +4667,7 @@ impl Registered {
     fn draw(&self, surface: usize, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Result<Vec<u8>, String> {
         let surface = self.surfaces.get(surface).ok_or("no such surface")?;
         let draw = surface.draw.as_ref().ok_or("the surface has no draw")?;
-        let list = draw(&mut v2::Draw { read: &self.host, mount, canvas, frame });
+        let list = for_mount(Some(mount), || draw(&mut v2::Draw { read: &self.host, mount, canvas, frame }));
         Ok(list.map(canvas::List::into_bytes).unwrap_or_default())
     }
 
@@ -4712,8 +4748,9 @@ impl Registered {
                     v2::ContentRef(next)
                 };
                 let mut release = |handle| released.push(handle);
-                let node =
-                    (surface.view)(&mut v2::View::new(&self.host, &input, &mount, &mut memo, &mut give, &mut release));
+                let node = for_mount(Some(&mount), || {
+                    (surface.view)(&mut v2::View::new(&self.host, &input, &mount, &mut memo, &mut give, &mut release))
+                });
                 // The table keeps what the returned tree holds. A tree the host refuses is followed by a request for a
                 // whole one, whose view starts with an empty table.
                 memo.finish(std::slice::from_ref(&node));
@@ -4732,10 +4769,12 @@ impl Registered {
                     v2::ContentRef(next)
                 };
                 let mut release = |handle| released.push(handle);
-                let node = (claim.view)(
-                    &mut v2::View::new(&self.host, &input, &mount, &mut memo, &mut give, &mut release),
-                    &part,
-                );
+                let node = for_mount(Some(&mount), || {
+                    (claim.view)(
+                        &mut v2::View::new(&self.host, &input, &mount, &mut memo, &mut give, &mut release),
+                        &part,
+                    )
+                });
                 // A declined part keeps its table: the host asks for a whole tree when it next shows the part.
                 match &node {
                     Some(node) => memo.finish(std::slice::from_ref(node)),
@@ -4757,17 +4796,17 @@ impl Registered {
             Request::Layout { surface, geometry } => {
                 let layout =
                     self.surfaces.get(surface).and_then(|surface| surface.layout.as_ref()).ok_or("no layout")?;
-                json(serde_json::to_value(layout(&geometry)))
+                json(serde_json::to_value(for_mount(geometry.mount.as_ref(), || layout(&geometry))))
             }
             Request::Input { to, event } => {
-                let handler = match to {
-                    InputTo::Surface { surface } => {
-                        self.surfaces.get(surface).and_then(|surface| surface.handler.clone())
+                let (handler, mount) = match to {
+                    InputTo::Surface { surface, mount } => {
+                        (self.surfaces.get(surface).and_then(|surface| surface.handler.clone()), mount)
                     }
-                    InputTo::Layer { layer } => self.layers.get(layer).map(|(_, handler)| handler.clone()),
+                    InputTo::Layer { layer } => (self.layers.get(layer).map(|(_, handler)| handler.clone()), None),
                 };
                 let handler = handler.ok_or("no such handler")?;
-                json(serde_json::to_value(handler(&self.host, &event)))
+                json(serde_json::to_value(for_mount(mount.as_ref(), || handler(&self.host, &event))))
             }
             Request::Search { name, query, options } => {
                 let (_, search) = self.searches.iter().find(|(known, _)| *known == name).ok_or("no such search")?;

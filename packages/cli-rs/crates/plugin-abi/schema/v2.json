@@ -1812,6 +1812,9 @@
               "type": "null"
             }
           ]
+        },
+        "mount": {
+          "$ref": "#/$defs/MountId"
         }
       },
       "required": ["rects", "scrolls", "groups", "tops", "moved_only", "reached", "transcript"],

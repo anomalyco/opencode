@@ -213,16 +213,18 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   {"type": "unmount", "mount"}                               -> null
  *   {"type": "message", "message": "<json text>"}              -> null
  *   2.0 (P3), for a surface the manifest says has them:
- *   {"type": "layout", "surface": index, "geometry": {"rects", "scrolls", "groups", "tops", "moved_only",
+ *   {"type": "layout", "surface": index, "geometry": {"mount", "rects", "scrolls", "groups", "tops", "moved_only",
  *    "reached", "transcript"?}}                                -> {"paints"?: [{"node", "bg"}], "again"?: bool}
- *      After the solve, when something the surface's "notify" names changed. It reads only, as a view does.
+ *      After the solve, when something the surface's "notify" names changed. It reads only, as a view does. "mount"
+ *      is the mount it is for: two mounts of one surface with the same tree tell their models apart by it.
  *   2.0 (P2), with P3's scroll and input events:
- *   {"type": "input", "to": {"type": "surface", "surface": index} | {"type": "layer", "layer": index},
+ *   {"type": "input", "to": {"type": "surface", "surface": index, "mount"?} | {"type": "layer", "layer": index},
  *    "event": {"type": "key" | "paste" | "pointer" | "hover" | "closed", ...} |
  *     {"type": "scroll", "event": {"type": "landed", "scroll", "anchor"} | {"type": "user-scroll", "scroll"}} |
  *     {"type": "change" | "submit", "node", "text"} |
  *     {"type": "mount", "mount": {"surface", "key", "generation"}, "mounted", "slot"?}} -> "consume" | "pass"
- *      A surface's handler hears the events of the mount the host routed them to; what it reads and asks of the input
+ *      A surface's handler hears the events of the mount the host routed them to, which "mount" names (none for a
+ *      "mount" event, which the plugin hears and which names its mount); what it reads and asks of the input
  *      ("rect", "focused", "input-mode", "focus", "set-mode", "overlay", "scroll", ...) is that mount's. A layer of the
  *      manifest is the plugin's own. A scroll's and an input's events go to the surface's handler; the answer to them
  *      does not matter.

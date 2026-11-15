@@ -18,7 +18,7 @@ use super::{Call, Scripts, Waiting, count};
 use crate::activation::{Activation, Wake};
 use crate::interact::{Deliver, Owner};
 use crate::limits;
-use crate::loader::native::{Answers, Ctx, apply, handle};
+use crate::loader::native::{Answers, Ctx, To, apply, handle};
 use crate::mailbox::Mailbox;
 use crate::surface::{self, Viewed, Viewing};
 use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, route, tui_command};
@@ -202,11 +202,15 @@ impl Guest {
     /// listener of every key goes on, which the handler only hears; the others' answer does not matter. The handler's
     /// own answer is advisory (synthesis 3.7). A `hold` bind holds the keys after it until the plugin's `release_keys`
     /// effect, or [`opencode_plugin_abi::interact::HOLD`].
-    fn deliver(self: &Rc<Self>, to: InputTo) -> Deliver {
+    fn deliver(self: &Rc<Self>, to: To) -> Deliver {
         let guest = Rc::downgrade(self);
         Rc::new(move |_: &dyn Host, owner: &Rc<Owner>, event: &Event| {
             let Some(guest) = guest.upgrade().filter(|guest| !guest.ended()) else { return Handled::Pass };
-            let request = Request::Input { to: to.clone(), event: event.clone() };
+            let to = match to {
+                To::Surface(surface) => InputTo::Surface { surface, mount: owner.id().cloned() },
+                To::Layer(layer) => InputTo::Layer { layer },
+            };
+            let request = Request::Input { to, event: event.clone() };
             guest.call_for("handle", request, false, Some(Rc::downgrade(owner)));
             match event {
                 Event::Key(key) if key.bind.is_some() => Handled::Consume,
@@ -571,7 +575,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
     // P2: the layers of setup, each with its own handler, the activation's. Searches answer at once, which the JS host
     // cannot: it registers none.
     for (index, layer) in manifest.layers.iter().enumerate() {
-        let deliver = guest.deliver(InputTo::Layer { layer: index });
+        let deliver = guest.deliver(To::Layer(index));
         guest.owners.input.register(&**setup.host(), std::slice::from_ref(layer), &deliver);
     }
     for (index, claim) in manifest.surfaces.iter().enumerate() {
@@ -601,7 +605,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
         };
         let input = Rc::new(surface::Input {
             plugin: setup.id().to_owned(),
-            deliver: claim.handler.then(|| guest.deliver(InputTo::Surface { surface: index })),
+            deliver: claim.handler.then(|| guest.deliver(To::Surface(index))),
             layers: claim.layers.clone(),
             panel: matches!(place.at, v2::Place::Panel(_)),
             mounts: claim.mounts,

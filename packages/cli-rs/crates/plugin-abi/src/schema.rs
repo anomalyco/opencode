@@ -380,7 +380,7 @@ pub fn schema() -> Value {
                 moved_only: boolean(),
                 reached: array(pair(string(), int32())),
                 transcript: nullable(reference("TranscriptView")),
-            } { }),
+            } { mount: reference("MountId") }),
         ),
         ("Paint", object!(Paint, "A box's background `layout` sets.", { node: string(), bg: reference("Color") } { })),
         (
@@ -789,6 +789,7 @@ mod tests {
             }],
         };
         let geometry = Geometry {
+            mount: Some(mount.clone()),
             rects: vec![("n".into(), Rect { x: -1, y: 2, width: 3, height: 4 })],
             scrolls: vec![("s".into(), state)],
             groups: vec![("s".into(), "g".into(), vec![anchor.clone()])],

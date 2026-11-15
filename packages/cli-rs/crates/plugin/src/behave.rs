@@ -1165,7 +1165,7 @@ impl Surface {
         behave.seen = Some(signature);
         let reached = std::mem::take(&mut behave.reached);
         drop(behave);
-        let geometry = Geometry { moved_only, reached, ..geometry };
+        let geometry = Geometry { mount: Some(self.id.clone()), moved_only, reached, ..geometry };
         tally(|counts| counts.layouts += 1);
         let reply: LayoutReply = layout(&geometry);
         self.with_index(|index, behave| {
