@@ -1,6 +1,7 @@
 import { Meta, MetaContext, MetaProvider } from "@solidjs/meta"
 import { type JSX, Show } from "solid-js"
 import { escape, isServer, ssr, useAssets } from "solid-js/web"
+import { staticRender } from "~/lib/static-render"
 
 // MetaProvider, with the server's <head> tags grouped under label comments so View Source reads in
 // sections. @solidjs/meta renders every tag as one string in call order and has no way to add a
@@ -77,23 +78,27 @@ function ServerMetaProvider(props: { children: JSX.Element }) {
 }
 
 function render(tags: Tag[]) {
+  // Ids for hydration to find the tags by, left off the static pages (src/static/render.tsx).
+  const ids = !staticRender()
   const placed = new Set<Tag>()
   return groups
     .map((group) => {
       const members = tags.filter((tag) => !placed.has(tag) && group[1](tag))
       members.forEach((tag) => placed.add(tag))
-      return members.length ? `\n<!-- ${group[0]} -->\n${members.map(markup).join("\n")}` : ""
+      return members.length ? `\n<!-- ${group[0]} -->\n${members.map((tag) => markup(tag, ids)).join("\n")}` : ""
     })
     .join("\n")
 }
 
-function markup(tag: Tag) {
-  const attributes = Object.keys(tag.props)
-    .map((key) => (key === "children" ? "" : ` ${key}="${escapeHtml(tag.props[key], true)}"`))
-    .join("")
-  if (!tag.setting?.close) return `<${tag.tag} data-sm="${tag.id}"${attributes}/>`
+function markup(tag: Tag, ids: boolean) {
+  const attributes =
+    (ids ? ` data-sm="${tag.id}"` : "") +
+    Object.keys(tag.props)
+      .map((key) => (key === "children" ? "" : ` ${key}="${escapeHtml(tag.props[key], true)}"`))
+      .join("")
+  if (!tag.setting?.close) return `<${tag.tag}${attributes}/>`
   const children = Array.isArray(tag.props.children) ? tag.props.children.join("") : tag.props.children
-  return `<${tag.tag} data-sm="${tag.id}"${attributes}>${tag.setting.escape ? escapeHtml(children) : (children ?? "")}</${tag.tag}>`
+  return `<${tag.tag}${attributes}>${tag.setting.escape ? escapeHtml(children) : (children ?? "")}</${tag.tag}>`
 }
 
 /** The key @solidjs/meta uses to keep one title, and one meta per name, property, charset or http-equiv. */

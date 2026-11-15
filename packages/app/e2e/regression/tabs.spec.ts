@@ -334,10 +334,11 @@ for (const [tabLayout, direction, label] of [
     await tabB.click({ button: "right" })
     await expect(menu.getByRole("menuitem")).toHaveText([
       "Rename",
+      "Export…",
       "Close tab",
       "Close other tabs",
       label,
-      "Delete session…",
+      "Delete…",
     ])
     await menu.getByRole("menuitem", { name: "Close other tabs", exact: true }).click()
     await expect(titles).toHaveText([b.title])
@@ -439,7 +440,7 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
     await expect(title).toHaveText(a.title)
 
     await title.click({ button: "right" })
-    await page.getByRole("menuitem", { name: "Delete session…", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
 
     const dialog = page.getByRole("dialog")
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
@@ -447,7 +448,7 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
     await expect(title).toHaveText(a.title)
 
     await title.click({ button: "right" })
-    await page.getByRole("menuitem", { name: "Delete session…", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
     await dialog.getByRole("button", { name: "Delete session", exact: true }).click()
     await remove
     await expect(title).toHaveCount(0)
@@ -668,6 +669,239 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await expect(tab(b.id).locator('[data-mark="unread"]')).toBeHidden()
   await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
   await expect(tab(c.id).locator('[data-mark="failed"]')).toBeHidden()
+
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as read", exact: true }).click()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
+    "Rename",
+    "Export…",
+    "Mark as unread",
+    "Close tab",
+    "Close other tabs",
+    "Close tabs to the right",
+    "Delete…",
+  ])
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await tab(c.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(c.id))
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await page.mouse.move(0, 0)
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await expect(tab(c.id).locator('[data-slot="tab-status"]')).toHaveCSS("opacity", "1")
+  await tab(a.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(a.id))
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await tab(c.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(c.id))
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await tab(a.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(a.id))
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+})
+
+test("Recent and Pinned rows show the side tabs' status dots and shortcuts for sessions that aren't open as tabs", async ({
+  page,
+}) => {
+  const d = { id: "ses_tab_d", title: "Tab D session" }
+  // Recent lists only the last 7 days.
+  const t = Date.now() - 60_000
+
+  await mockWorkspace(page, {
+    name: "RecentUnread",
+    sessions: [
+      { ...a, time: { created: t + 3, updated: t + 3 } },
+      { ...b, outcome: "failed", time: { created: t + 1, updated: t + 1, idle: t + 1 } },
+      { ...c, outcome: "succeeded", time: { created: t + 2, updated: t + 2, idle: t + 2 } },
+      { ...d, time: { created: t, updated: t } },
+    ],
+    sessionStatus: { [d.id]: { type: "running" } },
+    sessionPermissions: {
+      [d.id]: [
+        { id: "permission-recent-d", sessionID: d.id, action: "shell", resources: ["ls"], metadata: {}, save: [] },
+      ],
+    },
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "recent" } },
+    },
+  })
+  // Recent is offered only on desktop, whose fixture names the server "sidecar".
+  const href = (id: string) => sessionHref(id, "sidecar")
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: href(a.id) })}`)
+  const sidebar = page.locator('[data-slot="sidebar-recent"]')
+  const row = (id: string) => sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${href(id)}"])`)
+  const link = (id: string) => row(id).locator("[data-titlebar-tab-link]")
+
+  await expect(link(a.id)).toHaveAttribute("aria-current", "page")
+  await expect(row(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await expect(row(c.id).locator('[data-mark="failed"]')).toBeHidden()
+  // A permission asked before the window connected marks the running session, as on an unselected side tab.
+  await expect(row(d.id).locator('[data-mark="attention"]')).toBeVisible()
+
+  await link(b.id).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Pin", exact: true }).click()
+  const pinned = page.getByRole("group", { name: "Pinned", exact: true })
+  await expect(pinned.locator(`a[href="${href(b.id)}"]`)).toHaveCount(1)
+  await expect(row(b.id).locator('[data-mark="failed"]')).toBeVisible()
+  await expect(row(b.id).locator('[data-mark="unread"]')).toBeHidden()
+
+  // The next-unread shortcut steps through Recent rows like side tabs; opening the finished session clears its dot.
+  await page.keyboard.press("Shift+Alt+ArrowDown")
+  await expect(link(c.id)).toHaveAttribute("aria-current", "page")
+  await expect(row(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await link(a.id).click()
+  await expect(link(a.id)).toHaveAttribute("aria-current", "page")
+  await expect(row(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await expect(row(b.id).locator('[data-mark="failed"]')).toBeVisible()
+
+  // The hover preview sits level with the hovered row, as on side tabs, rather than clamped inside the row.
+  const preview = page.locator('[data-component="session-tab-popover"]')
+
+  for (const id of [b.id, c.id]) {
+    await row(id).hover()
+    await expect(preview).toBeVisible()
+    await expect
+      .poll(async () => {
+        const card = await preview.boundingBox()
+        const box = await row(id).boundingBox()
+
+        return card && box ? Math.round(card.y - box.y) : undefined
+      })
+      .toBe(0)
+  }
+})
+
+test("Recent shows the last 7 days, and Show more reveals 30 more rows, fetching pages on demand", async ({ page }) => {
+  const day = 24 * 60 * 60 * 1000
+  const now = Date.now()
+
+  // The mock lists sessions newest last; 10 are from today and 55 are over a week old.
+  const sessions = Array.from({ length: 65 }, (_, index) => {
+    const updated = index < 55 ? now - 8 * day - (55 - index) * 60_000 : now - (65 - index) * 60_000
+
+    return { id: `ses_cap_${index}`, title: `Cap session ${index}`, time: { created: updated, updated } }
+  })
+
+  await mockWorkspace(page, {
+    name: "RecentCap",
+    sessions,
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "recent" } },
+    },
+  })
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: sessionHref("ses_cap_64", "sidecar") })}`,
+  )
+  const recent = page.locator('[data-slot="sidebar-recent"]').getByRole("group", { name: "Recent", exact: true })
+  const rows = recent.locator("[data-titlebar-tab-slot]")
+  const more = recent.getByRole("button", { name: "Show more", exact: true })
+
+  await expect(rows).toHaveCount(10)
+  await expect(rows.first()).toContainText("Cap session 64")
+  await expect(rows.last()).toContainText("Cap session 55")
+  await more.click()
+  await expect(rows).toHaveCount(40)
+  await expect(rows.last()).toContainText("Cap session 25")
+  // The first page held 50 sessions, so the next 30 need the server's second page.
+  await more.click()
+  await expect(rows).toHaveCount(65)
+  await expect(rows.last()).toContainText("Cap session 0")
+  await expect(more).toBeHidden()
+})
+
+test("Recent keeps the server's order from its last reload, which a run end or window focus triggers", async ({
+  page,
+}) => {
+  const t = Date.now() - 60_000
+
+  const workspace = await mockWorkspace(page, {
+    name: "RecentOrder",
+    sessions: [
+      { ...a, time: { created: t, updated: t, idle: t } },
+      { ...b, time: { created: t + 1, updated: t + 1, idle: t + 1 } },
+    ],
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "recent" } },
+    },
+  })
+
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: sessionHref(a.id, "sidecar") })}`,
+  )
+
+  const recent = page.locator('[data-slot="sidebar-recent"]').getByRole("group", { name: "Recent", exact: true })
+  const rows = recent.locator("[data-titlebar-tab-slot]")
+
+  // The mock serves these records, so changing one changes what the next list reload returns.
+  const advance = (id: string, time: { updated: number; idle?: number }, title?: string) => {
+    const session = workspace.sessions.find((item) => item.id === id)
+
+    if (!session) throw new Error(`Unknown session ${id}`)
+
+    Object.assign(session, { title: title ?? session.title, time: { ...session.time, ...time } })
+  }
+
+  await expect(rows).toHaveText([/Tab B session/, /Tab A session/])
+
+  // Renaming advances the server's time, but the row stays where the last reload put it.
+  advance(a.id, { updated: t + 2 }, "Renamed A session")
+  await workspace.push([
+    {
+      id: "evt_recent_order_rename",
+      created: t + 2,
+      type: "session.renamed",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: a.id, seq: 1, version: 1 },
+      data: { sessionID: a.id, title: "Renamed A session" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.renamed" }>,
+  ])
+  await expect(rows.first()).toContainText("Tab B session")
+  await expect(rows.last()).toContainText("Renamed A session")
+
+  // The window coming back reloads the list, as the iOS app does when it returns to the foreground.
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+  await expect(rows).toHaveText([/Renamed A session/, /Tab B session/])
+
+  advance(b.id, { updated: t + 3, idle: t + 3 })
+  await workspace.push([
+    {
+      id: "evt_recent_order_run_end",
+      created: t + 3,
+      type: "session.execution.succeeded",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: b.id, seq: 1, version: 1 },
+      data: { sessionID: b.id },
+    } satisfies Extract<OpenCodeEvent, { type: "session.execution.succeeded" }>,
+  ])
+  await expect(rows).toHaveText([/Tab B session/, /Renamed A session/])
+})
+
+test("an unfocused window preserves a restored manual unread reminder", async ({ page }) => {
+  // Playwright emulates focus for each page, so model a background window explicitly.
+  await page.addInitScript(() => {
+    document.hasFocus = () => false
+  })
+  await mockWorkspace(page, {
+    name: "BackgroundUnread",
+    sessions: [a, { ...c, time: { created: T0, updated: T0, idle: T0, viewed: T0 } }],
+    seed: { storage: { "opencode.global.dat:notification.manual-unread": { sessions: [c.id] } } },
+  })
+  await page.goto(sessionHref(c.id))
+  await expectSessionTitle(page, c.title)
+  const tab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(c.id)}"])`)
+
+  await expect(tab.locator('[data-mark="unread"]')).toBeVisible()
+  await page.evaluate(() => {
+    document.hasFocus = Document.prototype.hasFocus.bind(document)
+    window.dispatchEvent(new Event("focus"))
+  })
+  await expect(tab.locator('[data-mark="unread"]')).toBeHidden()
 })
 
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
@@ -1491,14 +1725,45 @@ test("tab shortcuts cycle side-panel tabs when the side panel is focused with mu
 })
 
 test("⌘W past the side panel's last tab keeps the session tab", async ({ page }) => {
-  const sessions = await emptySidePanel(page)
+  await page.clock.install()
+  const sessions = await emptySidePanel(page, () => holdClock(page))
   await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.resume()
 
   // From the composer ⌘W closes the session tab, so only a swallowed press above leaves Beta to land on.
   await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
   await page.keyboard.press("ControlOrMeta+w")
   await expectPath(page, sessionHref(sessions.beta.id))
   await expect(sessions.alphaTab).toHaveCount(0)
+})
+
+test("⌘W past the side panel's last tab closes the session tab once ⌘W has rested", async ({ page }) => {
+  await page.clock.install()
+  const sessions = await emptySidePanel(page, () => holdClock(page))
+
+  // Each ⌘W within the rest is swallowed and restarts it, so the third lands 800ms after the panel closed.
+  await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.runFor(400)
+  await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.runFor(400)
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(sessions.alphaTab).toHaveCount(1)
+
+  await page.clock.runFor(600)
+  await page.clock.resume()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
+})
+
+test("⌘⇧T brings back a side tab and opens the side panel it closed with", async ({ page }) => {
+  await emptySidePanel(page)
+  const panel = page.locator("#review-panel")
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(panel).toHaveAttribute("aria-hidden", "false")
+  await expect(panel.getByRole("tab", { selected: true })).toHaveCount(1)
 })
 
 test("⌘W past the side panel's last tab keeps the session tab when focus leaves the panel just after", async ({
@@ -1522,10 +1787,12 @@ test("⌘W past the side panel's last tab keeps the session tab when focus leave
     observer.observe(document, { subtree: true, attributes: true, attributeFilter: ["aria-hidden"] })
   })
 
-  const sessions = await emptySidePanel(page)
+  await page.clock.install()
+  const sessions = await emptySidePanel(page, () => holdClock(page))
   const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
   await expect(composer).toBeFocused()
   await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.resume()
 
   // Only a swallowed press above leaves Beta for this one to land on.
   await composer.click()
@@ -1545,6 +1812,7 @@ test("⌘W closes the session tab again once the window loses focus after the si
 
 test("⌘W in the side panel closes its last New tab with the panel, and only then the session tab", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
+  await page.clock.install()
   const alpha = { id: "ses_side_new_alpha", title: "Side new alpha" }
   const beta = { id: "ses_side_new_beta", title: "Side new beta" }
   await openSession(page, { name: "SideCloseNewTab", sessions: [alpha, beta] })
@@ -1563,6 +1831,7 @@ test("⌘W in the side panel closes its last New tab with the panel, and only th
   await panel.getByRole("button", { name: /^Open file/ }).focus()
 
   // The New tab was the panel's last tab, so closing it closes the panel too, and focus goes back.
+  await holdClock(page)
   await page.keyboard.press("ControlOrMeta+w")
   await expect(newTab).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
@@ -1571,6 +1840,7 @@ test("⌘W in the side panel closes its last New tab with the panel, and only th
   // One press too many closes nothing rather than the session.
   await page.keyboard.press("ControlOrMeta+w")
   await expect(alphaTab).toHaveCount(1)
+  await page.clock.resume()
   await expectPath(page, sessionHref(alpha.id))
 
   // With no panel open, ⌘W from the composer closes the session tab.
@@ -1590,6 +1860,91 @@ test("the Windows titlebar menu pastes through the desktop edit action", async (
   await expect(paste).toHaveText("PasteCtrl+V")
   await paste.click()
   await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
+})
+
+// #63095: hovering down the parent items left every submenu open, stacked on top of each other. Closing each one as
+// soon as the pointer left it then showed no submenu until the next opened, so the menu blinked on every item.
+test("the Windows titlebar menu swaps one submenu for the next as the pointer moves down its parent items", async ({
+  page,
+}) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const parents = ["File", "Edit", "View"].map((name) => page.getByRole("menuitem", { name, exact: true }))
+  const submenus = page.locator('[role="menu"].desktop-app-menu-sub')
+
+  // Keep the hover delay from elapsing while Playwright moves the pointer and checks the old submenu.
+  await holdClock(page)
+
+  for (const [index, parent] of parents.entries()) {
+    const box = (await parent.boundingBox())!
+    // Down and to the left, away from the open submenu, so the pointer isn't heading for it.
+    await page.mouse.move(box.x + box.width / 2 - index * 20, box.y + box.height / 2, { steps: 4 })
+    await expect(parent).toHaveAttribute("data-highlighted", "")
+
+    if (index > 0) await expect(parents[index - 1]).toHaveAttribute("aria-expanded", "true")
+    await expect(parent).toHaveAttribute("aria-expanded", "false")
+    // Kobalte's hover delay.
+    await page.clock.runFor(100)
+    await expect(parent).toHaveAttribute("aria-expanded", "true")
+    await expect(submenus).toHaveCount(1)
+  }
+})
+
+// #59613: crossing the other parent items on the way to a submenu's lower items closed it and opened theirs.
+test("the Windows titlebar menu keeps a submenu open while the pointer crosses other parent items to reach it", async ({
+  page,
+}) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const file = page.getByRole("menuitem", { name: "File", exact: true })
+  const fileBox = (await file.boundingBox())!
+  const from = { x: fileBox.x + fileBox.width / 2, y: fileBox.y + fileBox.height / 2 }
+  await page.mouse.move(from.x, from.y, { steps: 4 })
+  await page.clock.runFor(100)
+  const closeWindow = page.getByRole("menuitem", { name: /^Close Window/ })
+  const target = (await closeWindow.boundingBox())!
+  const to = { x: target.x + 20, y: target.y + target.height / 2 }
+  const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / 4)
+
+  // A slow, straight move at 125px a second: it stays longer than the hover delay on each item it crosses, and the
+  // whole trip takes longer than the 300ms that Kobalte keeps the way to a submenu open.
+  for (let step = 1; step <= steps; step++) {
+    await page.mouse.move(from.x + ((to.x - from.x) * step) / steps, from.y + ((to.y - from.y) * step) / steps)
+    await page.clock.runFor(32)
+  }
+
+  await expect(closeWindow).toHaveAttribute("data-highlighted", "")
+  await expect(file).toHaveAttribute("aria-expanded", "true")
+  await expect(page.locator('[role="menu"].desktop-app-menu-sub')).toHaveCount(1)
+})
+
+// Moving down the parent items while drifting right kept the way to the open submenu alive, so the highlight stayed on
+// the item that opened it while the pointer crossed the next ones.
+test("the Windows titlebar menu highlights each parent item the pointer drifts down across", async ({ page }) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const view = page.getByRole("menuitem", { name: "View", exact: true })
+  const box = (await view.boundingBox())!
+  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.mouse.move(from.x, from.y, { steps: 4 })
+  await page.clock.runFor(100)
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  const go = page.getByRole("menuitem", { name: "Go", exact: true })
+  const target = (await go.boundingBox())!
+
+  // 1px right for every 4px down, a frame at a time, until the pointer is a few pixels inside Go.
+  for (let step = 1; from.y + step * 4 < target.y + 8; step++) {
+    await page.mouse.move(from.x + step, from.y + step * 4)
+    await page.clock.runFor(16)
+  }
+
+  await expect(go).toHaveAttribute("data-highlighted", "")
 })
 
 test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }) => {
@@ -1723,8 +2078,64 @@ test("⌘W in a focused Context tab closes it, then the panel, and keeps the ses
   await expectPath(page, sessionHref(alpha.id))
 })
 
+test("with the side panel open, ⌘W closes its tabs from anywhere, ⌥⌘W the session tab, and ⌘⇧T undoes them newest first", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/SideCloseAnywhere"
+  const alpha = { id: "ses_side_anywhere_alpha", title: "Side anywhere alpha" }
+  const beta = { id: "ses_side_anywhere_beta", title: "Side anywhere beta" }
+  await openSession(page, {
+    name: "SideCloseAnywhere",
+    sessions: [alpha, beta],
+    fileList: (path) => (path ? [] : ["README.md"].map((file) => fileNode(directory, file))),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { [alpha.id]: { review: true }, [beta.id]: { review: true } },
+      storage: reviewTabs(directory, alpha.id),
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const fileTab = panel.getByRole("tab", { name: "README.md", exact: true })
+  const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
+  const sessionTab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+
+  // ⌥⌘W closes Beta's session tab although its side panel holds a tab that ⌘W would close.
+  await sessionTab(beta.id).locator("a").click()
+  await expectPath(page, sessionHref(beta.id))
+  await expect(panel.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+Alt+w")
+  await expect(sessionTab(beta.id)).toHaveCount(0)
+  await expectPath(page, sessionHref(alpha.id))
+
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "README.md", exact: true }).click()
+  await expect(fileTab).toHaveAttribute("aria-selected", "true")
+
+  // From the composer, ⌘W closes the side tab, not the session tab.
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(fileTab).toHaveCount(0)
+  await expect(sessionTab(alpha.id)).toHaveCount(1)
+  await expectPath(page, sessionHref(alpha.id))
+
+  // The side tab closed after Beta, so it comes back first, then Beta.
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(fileTab).toHaveAttribute("aria-selected", "true")
+  await expect(sessionTab(beta.id)).toHaveCount(0)
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(sessionTab(beta.id)).toHaveCount(1)
+  await expectPath(page, sessionHref(beta.id))
+})
+
+// Stops the clock `page.clock.install()` set up, so the ⌘W guard's rest after the panel empties only moves when the
+// test moves it, however slow the runner.
+const holdClock = (page: Page) => page.evaluate(() => Date.now()).then((now) => page.clock.pauseAt(now + 1_000))
+
 // Closes Alpha's side tabs with ⌘W until the side panel empties and collapses, as an overshooting hand would.
-async function emptySidePanel(page: Page) {
+async function emptySidePanel(page: Page, beforeLastClose?: () => Promise<void>) {
   await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/SideCloseOvershoot"
   const alpha = { id: "ses_side_close_alpha", title: "Side close alpha" }
@@ -1751,6 +2162,7 @@ async function emptySidePanel(page: Page) {
   await page.keyboard.press("ControlOrMeta+w")
   await expect(fileTab).toHaveCount(0)
   await expect(reviewTab).toHaveAttribute("aria-selected", "true")
+  await beforeLastClose?.()
   await page.keyboard.press("ControlOrMeta+w")
   await expect(panel).toHaveAttribute("aria-hidden", "true")
 
@@ -1801,6 +2213,39 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   expect(await target.evaluate((element, before) => element === before, row)).toBe(true)
   expect(await list.evaluate((element) => element.scrollTop)).toBe(offset)
+})
+
+test("renaming an inbox card updates the same session on Home", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "RenameInbox",
+    sessions: [
+      { id: "ses_rename_inbox", title: "Original inbox title" },
+      { id: "ses_rename_kept", title: "Unchanged title" },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const home = page.locator('[data-component="home-session-row-container"][data-session-id="ses_rename_inbox"]')
+
+  await expect(home).toContainText("Original inbox title")
+  await inbox
+    .locator('[data-slot="sidebar-inbox-item"]')
+    .filter({ hasText: "Original inbox title" })
+    .click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+
+  await dialog.getByRole("textbox").fill("Renamed inbox title")
+  await dialog.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await expect(
+    inbox.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: "Renamed inbox title" }),
+  ).toHaveCount(1)
+  await expect(inbox.getByText("Original inbox title", { exact: true })).toHaveCount(0)
+  await expect(inbox.getByText("Unchanged title", { exact: true })).toBeVisible()
+  await expect(home).toContainText("Renamed inbox title")
 })
 
 test("the inbox Archived dialog searches only archived sessions and restores the selected session", async ({
@@ -2066,6 +2511,17 @@ test("the inbox keeps every unread result separate from expandable Recent, inclu
   await inbox.getByRole("button", { name: "Show less", exact: true }).click()
   await expect(recent).toHaveCount(10)
   await expect(unread).toHaveCount(12)
+
+  const marked = page.getByText("Read session 1", { exact: true })
+
+  await recent.filter({ has: marked }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await expect(unread.filter({ has: marked })).toHaveCount(1)
+  await expect(recent.filter({ has: marked })).toHaveCount(0)
+  await unread.filter({ has: marked }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as read", exact: true }).click()
+  await expect(recent.filter({ has: marked })).toHaveCount(1)
+  await expect(unread.filter({ has: marked })).toHaveCount(0)
 })
 
 test("the inbox waits for initial requests and orders attention by waiting age rather than last update", async ({

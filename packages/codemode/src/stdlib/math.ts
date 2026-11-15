@@ -1,16 +1,7 @@
-import { constants, type Method, methods } from "../interpreter/native.js"
-import { typeError } from "../interpreter/model.js"
-import { Obj, coerceToNumber } from "../interpreter/objects.js"
-import { preserveConsumerError, withPrimitives } from "../interpreter/callback.js"
-import type { Interpreter } from "../interpreter/interpreter.js"
-import type { Eval } from "../interpreter/runner.js"
-
-// Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
-declare global {
-  interface Math {
-    sumPrecise(values: Iterable<number>): number
-  }
-}
+import { constants, type Method, methods } from "../runtime/native.js"
+import { Obj, coerceToNumber } from "../runtime/objects.js"
+import { withPrimitives } from "../runtime/callback.js"
+import type { Interpreter } from "../runtime/interpreter.js"
 
 export const mathGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -20,18 +11,17 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
   const unary = (name: string, op: (a: number) => number): Method => [
     name,
     1,
-    (_, args) => withPrimitives(ctx, "number", [args[0]], ([a]) => op(coerceToNumber(a))),
+    (_, args) => withPrimitives("number", [args[0]], ([a]) => op(coerceToNumber(a))),
   ]
   const binary = (name: string, op: (a: number, b: number) => number): Method => [
     name,
     2,
-    (_, args) =>
-      withPrimitives(ctx, "number", [args[0], args[1]], ([a, b]) => op(coerceToNumber(a), coerceToNumber(b))),
+    (_, args) => withPrimitives("number", [args[0], args[1]], ([a, b]) => op(coerceToNumber(a), coerceToNumber(b))),
   ]
   const variadic = (name: string, op: (...values: Array<number>) => number): Method => [
     name,
     2,
-    (_, args) => withPrimitives(ctx, "number", args, (values) => op(...values.map(coerceToNumber))),
+    (_, args) => withPrimitives("number", args, (values) => op(...values.map(coerceToNumber))),
   ]
   constants(math, {
     PI: Math.PI,
@@ -80,29 +70,6 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
     unary("fround", Math.fround),
     unary("clz32", Math.clz32),
     binary("imul", Math.imul),
-    [
-      "sumPrecise",
-      1,
-      function* (_, args) {
-        const cursor = yield* ctx.iterate(args[0])
-        if (cursor === undefined) {
-          throw typeError("Math.sumPrecise expects a synchronous iterable.")
-        }
-        const numbers: Array<number> = []
-        while (true) {
-          const step = yield* cursor.next()
-          if (step.done) return Math.sumPrecise(numbers)
-          if (typeof step.value !== "number") {
-            yield* preserveConsumerError(cursor.close, rejectNonNumber())
-          }
-          numbers.push(step.value as number)
-        }
-      },
-    ],
   ])
   return math
-}
-
-function* rejectNonNumber(): Eval<never> {
-  throw typeError("Math.sumPrecise expects an iterable of numbers.")
 }

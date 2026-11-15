@@ -1,6 +1,7 @@
-import { createRoot, getOwner } from "solid-js"
+import { type Component, createRoot, getOwner } from "solid-js"
 import { createComponent, insert } from "solid-js/web"
 import { voiceMode } from "./flag"
+import HexPromo from "./hex-promo"
 import { setVoicePhase } from "./state"
 
 // The orb (voice mode, or for launch the Hex promo) lives outside the pages: it is rendered once, into a host element that each page's site
@@ -18,10 +19,12 @@ export function adoptVoice(site: HTMLElement) {
     // sees the app's providers (language, i18n) that wrap every page. The root function takes
     // `dispose`: Solid gives a root whose function takes no arguments no owner, and so no context.
     const owner = getOwner()
-    // With voice mode off (flag.ts) only the small Hex promo loads; voice mode's code never does.
-    void (voiceMode ? import("./voice-mode") : import("./hex-promo")).then((module) =>
-      createRoot((_dispose) => insert(target, createComponent(module.default, {})), owner),
-    )
+    const mount = (component: Component) =>
+      createRoot((_dispose) => insert(target, createComponent(component, {})), owner)
+    // With voice mode off (flag.ts) the Hex promo's orb renders with the page (its pop-up loads on
+    // intent); voice mode's code never loads.
+    if (voiceMode) void import("./voice-mode").then((module) => mount(module.default))
+    if (!voiceMode) mount(HexPromo)
   }
   if (host.parentElement !== site) site.appendChild(host)
 }

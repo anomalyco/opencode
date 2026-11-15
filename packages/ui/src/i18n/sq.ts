@@ -163,6 +163,7 @@ export const dict = {
   "ui.common.dismiss": "Largoje",
   "ui.common.close": "Mbylle",
   "ui.common.next": "Tjetra",
+  "ui.common.continue": "Vazhdoni",
   "ui.common.submit": "Paraqisni",
   "ui.common.showMore": "Trego më shumë",
   "ui.permission.deny": "Moho",

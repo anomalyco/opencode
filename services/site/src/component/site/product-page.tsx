@@ -1,6 +1,7 @@
 import "./product-page.css"
 import { Meta, Title } from "@solidjs/meta"
-import { createAsync, useNavigate } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
+import { pageData } from "~/lib/page-data"
 import { For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js"
 import { LocaleLinks } from "~/component/locale-links"
 import { ShareMeta } from "~/component/share-meta"
@@ -15,7 +16,8 @@ import { productDetailsSource } from "~/i18n/content/areas/product-details"
 import { productsSource } from "~/i18n/content/areas/products"
 import { ChangelogSettings, ChangelogTimeline, ChangelogUnavailable } from "./changelog-entry"
 import { Companions } from "./companions"
-import { moreProducts, productAreas, productDetails, type PageSlug } from "./product-data"
+import { moreProducts, productAreas, type PageSlug } from "./product-data"
+import { productDetails } from "./product-details"
 import { orderedProducts } from "./products-order"
 import { designCopy, designEditing } from "./design-copy"
 import { CardVideo, InstallTabs, ProductAction, useCardShrink } from "./products"
@@ -54,7 +56,8 @@ export function ProductPage(props: { slug: PageSlug }) {
   }
 
   // The left and right arrow keys step through the products, unless focus is somewhere that
-  // uses them itself (fields, tabs, the carousel, open menus).
+  // uses them itself (fields, tabs, the carousel, open menus). On a static page,
+  // src/client/entry.ts.
   onMount(() => {
     const step = (event: KeyboardEvent) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
@@ -76,7 +79,7 @@ export function ProductPage(props: { slug: PageSlug }) {
   useCardShrink(() => props.slug)
 
   // The newest three entries with notes in this product's areas, then a link to the changelog with that filter.
-  const data = createAsync(async () => {
+  const data = pageData(async () => {
     const filter = areas()
     return filter ? productChangelog(filter) : undefined
   })

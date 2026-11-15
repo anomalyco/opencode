@@ -582,10 +582,20 @@
     justify-content: flex-start;
     gap: 4px;
 
-    /* Hover actions show and hide at once, without a fade. */
+    /* Production keeps the whole footer hover-only. Dev channels keep the copy control visible and
+       hide only the metadata. Keeping the metadata in flow means the copy control does not move. */
     @media (hover: hover) {
-      opacity: 0;
-      pointer-events: none;
+      &:not([data-copy-always-visible]) {
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+
+    &[data-copy-always-visible] [data-slot="text-part-meta"] {
+      @media (hover: hover) {
+        opacity: 0;
+        pointer-events: none;
+      }
     }
 
     [data-component="tooltip-v2-trigger"] {
@@ -660,6 +670,12 @@
 
   &:hover [data-slot="text-part-copy-wrapper"],
   &:focus-within [data-slot="text-part-copy-wrapper"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  &:hover [data-slot="text-part-copy-wrapper"][data-copy-always-visible] [data-slot="text-part-meta"],
+  &:focus-within [data-slot="text-part-copy-wrapper"][data-copy-always-visible] [data-slot="text-part-meta"] {
     opacity: 1;
     pointer-events: auto;
   }
@@ -1910,22 +1926,6 @@
   [data-slot="user-message-text"] {
     background: var(--v2-background-bg-layer-02);
     color: var(--v2-text-text-base);
-
-    .markdown-session-link {
-      padding: 0;
-      text-align: start;
-      background: none;
-      box-shadow: none;
-      color: inherit;
-      text-decoration: underline;
-      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
-      text-underline-offset: 2px;
-
-      &:hover {
-        color: inherit;
-        text-decoration-color: currentColor;
-      }
-    }
   }
 
   [data-slot="user-message-comments"] {

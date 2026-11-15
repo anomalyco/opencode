@@ -10,7 +10,7 @@ import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Tabs } from "@opencode/ui/tabs"
-import { createEffect, createMemo, on, onMount, Show, type ParentProps } from "solid-js"
+import { createEffect, createMemo, on, onCleanup, Show, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SessionPreview } from "@/session/story-model"
@@ -252,7 +252,12 @@ function Sources(props: SourcesArgs) {
         timelineDetail={timelineDetail}
         side={
           <Show when={state.panel}>
-            <Side expand={props.expand} count={sources().sources.length} onClose={() => setState("panel", false)}>
+            <Side
+              turn={props.turn}
+              expand={props.expand}
+              count={sources().sources.length}
+              onClose={() => setState("panel", false)}
+            >
               <SourcesPanel sources={sources()} icons={props.icons} onOpen={() => {}} />
             </Side>
           </Show>
@@ -264,16 +269,24 @@ function Sources(props: SourcesArgs) {
 
 // The side panel's frame around the real panel: the strip with the real tab title, as the side region draws it.
 // `expand` opens the first search with results once it shows.
-function Side(props: ParentProps<{ expand: boolean; count: number; onClose: () => void }>) {
+function Side(props: ParentProps<{ turn: Turn; expand: boolean; count: number; onClose: () => void }>) {
   const language = useLanguage()
   let el: HTMLDivElement | undefined
 
-  onMount(() => {
-    if (!props.expand) return
-    requestAnimationFrame(() =>
-      el?.querySelector<HTMLButtonElement>('[data-slot="sources-step-row"][aria-expanded="false"]')?.click(),
-    )
-  })
+  createEffect(
+    on(
+      () => [props.turn, props.expand] as const,
+      ([, expand]) => {
+        const frame = requestAnimationFrame(() => {
+          const row = el?.querySelector<HTMLButtonElement>('[data-slot="sources-step-row"][aria-expanded]')
+
+          if (row && row.getAttribute("aria-expanded") !== String(expand)) row.click()
+        })
+
+        onCleanup(() => cancelAnimationFrame(frame))
+      },
+    ),
+  )
 
   return (
     <Tabs value="sources" class="flex h-full min-h-0 flex-col bg-v2-background-bg-base">

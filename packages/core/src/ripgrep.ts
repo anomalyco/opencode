@@ -5,6 +5,7 @@ import { ChildProcess } from "effect/process"
 import { Entry, Match } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { collectStream, waitForAbort } from "@opencode/util/process"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { Environment } from "./environment/index.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { RipgrepBinary } from "./ripgrep/binary.js"
@@ -44,6 +45,8 @@ export class Error extends Schema.TaggedError<Error>()("Ripgrep.Error", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
+
+export class InvalidGlobError extends Error {}
 
 export class InvalidPatternError extends Schema.TaggedError<InvalidPatternError>()("Ripgrep.InvalidPatternError", {
   pattern: Schema.String,
@@ -143,6 +146,11 @@ const layer = Layer.effect(
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
+          if (code === 2) {
+            // rg 13 omits the program name. Ignore-file diagnostics start with a path and line number.
+            const prefix = /^(?:rg: )?error parsing glob /.exec(stderr)
+            if (prefix) return yield* new InvalidGlobError({ message: stderr.slice(prefix[0].length).trimEnd() })
+          }
           if (input.pattern && code === 2 && isInvalidPattern(stderr)) {
             return yield* new InvalidPatternError({ pattern: input.pattern, message: stderr.trim() })
           }
@@ -245,7 +253,7 @@ const layer = Layer.effect(
                     lines: {
                       text:
                         match.data.lines.text.length > MAX_LINE_CHARS
-                          ? Buffer.from(match.data.lines.text.slice(0, MAX_LINE_CHARS), "utf8").toString() + "..."
+                          ? TextBoundary.head(match.data.lines.text, MAX_LINE_CHARS) + "..."
                           : match.data.lines.text,
                     },
                     path: { text: normalizePath(match.data.path.text) },

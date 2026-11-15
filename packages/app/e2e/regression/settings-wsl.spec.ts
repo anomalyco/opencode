@@ -175,6 +175,67 @@ test("adding an SSH server while the SSH plugin is down fails instead of connect
   await expect(dialog.getByRole("button", { name: "Add server", exact: true })).toBeEnabled()
 })
 
+test("adding an SSH server closes the dialog when the connection is ready", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    directory: "/repo",
+    project: project({ id: "proj_ssh_add", directory: "/repo" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  await page.goto(`/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready" })}`)
+  const settings = page.getByTestId("settings-screen")
+
+  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
+  await settings.getByRole("button", { name: "Add server", exact: true }).press("Enter")
+  await page.getByRole("menuitem", { name: "Add SSH server", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+
+  await dialog.getByRole("textbox", { name: "Host or SSH command" }).fill("ssh devbox")
+  await dialog.getByRole("button", { name: "Add server", exact: true }).click()
+  await expect(dialog.getByRole("button", { name: "Connecting over SSH…", exact: true })).toBeDisabled()
+  // The fixture control sits behind the modal.
+  await page.getByText("Finish SSH connection", { exact: true }).dispatchEvent("click")
+  await expect(dialog).toHaveCount(0)
+  await expect(settings.getByRole("region", { name: "devbox", exact: true })).toBeVisible()
+})
+
+test("SSH asks for the account password after a rejected key passphrase", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    directory: "/repo",
+    project: project({ id: "proj_ssh_fallback", directory: "/repo" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  await page.goto(`/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready" })}`)
+  const settings = page.getByTestId("settings-screen")
+
+  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
+  await settings.getByRole("button", { name: "Add server", exact: true }).press("Enter")
+  await page.getByRole("menuitem", { name: "Add SSH server", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+
+  await dialog.getByRole("textbox", { name: "Host or SSH command" }).fill("ssh dev@key-fallback")
+  await dialog.getByRole("button", { name: "Add server", exact: true }).click()
+  const key = dialog.getByRole("textbox", { name: "Enter passphrase for key 'id_ed25519':", exact: true })
+
+  await key.fill("incorrect-passphrase")
+  await dialog.getByRole("button", { name: "Continue", exact: true }).click()
+  // Release main's two snapshots separately, after the response RPC has returned.
+  await page.getByText("Clear SSH passphrase prompt", { exact: true }).dispatchEvent("click")
+  await expect(key).toBeDisabled()
+  await page.getByText("Request SSH account password", { exact: true }).dispatchEvent("click")
+  const account = dialog.getByRole("textbox", { name: "dev@key-fallback's password:", exact: true })
+
+  await expect(account).toBeEditable()
+  await expect(account).toHaveValue("")
+  await account.fill("fixture-password")
+  await dialog.getByRole("button", { name: "Continue", exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(settings.getByRole("region", { name: "key-fallback", exact: true })).toBeVisible()
+})
+
 test("WSL session and draft tabs outlive the plugin going away until the server is removed", async ({ page }) => {
   const directory = "/home/ubuntu/project"
   const wsl = session({ id: "ses_wsl_tabs", directory, title: "WSL tabs session" })
