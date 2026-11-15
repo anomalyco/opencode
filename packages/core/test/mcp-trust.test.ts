@@ -4,6 +4,7 @@ import { createServer } from "node:net"
 import { describe, expect, test } from "bun:test"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
+import { App } from "@opencode/core/app"
 import { Config } from "@opencode/core/config"
 import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { Credential } from "@opencode/core/credential"
@@ -13,6 +14,7 @@ import { Bus } from "@opencode/core/bus"
 import { ID, type Payload } from "@opencode/schema/event"
 import { Form } from "@opencode/core/form"
 import { Integration } from "@opencode/core/integration"
+import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -72,8 +74,11 @@ function trustMcpLayer(url: string) {
     Layer.provideMerge(Mcp.layer()),
     Layer.provideMerge(Form.layer),
     Layer.provideMerge(storeLayer),
+    Layer.provideMerge(Flag.layer),
     Layer.provide(
       Layer.mergeAll(
+        App.layer(),
+        Layer.succeed(Flag.Overrides, undefined),
         Config.testLayer([
           new Document({
             type: "document",

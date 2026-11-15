@@ -136,13 +136,14 @@ export const Plugin = {
                 ),
                 metadata: { matches: result.matches.length, truncated: result.truncated },
               })),
-              Effect.mapError((error) =>
-                error instanceof ToolFailure
-                  ? error
-                  : error instanceof Ripgrep.InvalidPatternError
-                    ? new ToolFailure({ message: `Invalid regex pattern: ${error.message}` })
-                    : new ToolFailure({ message: `Unable to grep for ${input.pattern}`, error }),
-              ),
+              Effect.mapError((error) => {
+                if (error instanceof ToolFailure) return error
+                if (error instanceof Ripgrep.InvalidGlobError)
+                  return new ToolFailure({ message: `Invalid glob in include ${error.message}` })
+                if (error instanceof Ripgrep.InvalidPatternError)
+                  return new ToolFailure({ message: `Invalid regex pattern: ${error.message}` })
+                return new ToolFailure({ message: `Unable to grep for ${input.pattern}`, error })
+              }),
             ),
         }),
       )

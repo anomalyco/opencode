@@ -162,6 +162,7 @@ export const dict = {
   "ui.common.dismiss": "हटाएँ",
   "ui.common.close": "बंद करें",
   "ui.common.next": "अगला",
+  "ui.common.continue": "जारी रखें",
   "ui.common.submit": "जमा करें",
   "ui.common.showMore": "और दिखाएँ",
   "ui.permission.deny": "अस्वीकार करें",

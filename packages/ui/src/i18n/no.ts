@@ -181,6 +181,7 @@ export const dict: Record<Keys, string> = {
   "ui.common.dismiss": "Avvis",
   "ui.common.close": "Lukk",
   "ui.common.next": "Neste",
+  "ui.common.continue": "Fortsett",
   "ui.common.submit": "Send inn",
   "ui.common.showMore": "Vis mer",
   "ui.common.clear": "Tøm",

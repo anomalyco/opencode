@@ -165,6 +165,7 @@ export const dict = {
   "ui.common.dismiss": "Abaikan",
   "ui.common.close": "Tutup",
   "ui.common.next": "Seterusnya",
+  "ui.common.continue": "Teruskan",
   "ui.common.submit": "Hantar",
   "ui.common.showMore": "Lihat lagi",
   "ui.permission.deny": "Tolak",
