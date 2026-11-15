@@ -196,7 +196,7 @@ fn files(setup: &mut Setup) {
                 .paint("head", if odd { "background.raised.high" } else { "background.raised.base" })
         })
         .on(move |_, event| {
-            if let Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. } } = event {
+            if let Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. }, .. } = event {
                 landed.borrow_mut().landed = anchor.id.clone();
             }
             Handled::Pass
@@ -237,7 +237,7 @@ fn files_view(files: &Files) -> v2::Node {
 /// The panel `notes`, its overlay `menu`, and the select of cards with its search.
 fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
     setup.command(command("board.notes"), |host, _| {
-        host.open_panel(OpenPanel { surface: "notes".into(), session: None, fullscreen: false });
+        host.open_panel(OpenPanel::new("notes"));
     });
     setup.command(command("board.unnotes"), |host, _| host.close_panel("notes"));
     setup.search("cards", |_, query, options| {
@@ -262,7 +262,7 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
         let (keys, said) = (viewed.borrow().keys.join(" "), viewed.borrow().said.join(" "));
         let pad = v2::Node::column(vec![v2::Node::text(vec![Span::new("pad")])])
             .with_id("pad")
-            .interact(Interact { focusable: true, ..Interact::default() });
+            .interact(Interact::default().with_focusable(true));
         v2::Node::column(vec![
             v2::Node::text(vec![Span::new(format!(
                 "notes focused={} at {}",
@@ -272,13 +272,7 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
             v2::Node::text(vec![Span::new(format!("heard {keys}"))]),
             pad,
             v2::Node::text(vec![Span::new(format!("said {said}"))]),
-            v2::Node::Input {
-                id: Some("say".into()),
-                value: String::new(),
-                placeholder: "say".into(),
-                lines: None,
-                layout: Layout::default(),
-            },
+            v2::Node::input("").with_id("say").placeholder("say"),
         ])
     })
     .layers(vec![Layer::default().with_keys(keys)])
@@ -295,16 +289,11 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
                     heard("hold".to_owned());
                     host.release_keys();
                 }
-                "menu" => host.overlay(Overlay {
-                    surface: "menu".into(),
-                    anchor: Anchor::Node { node: "pad".into() },
-                    width: 12,
-                    height: 2,
-                }),
+                "menu" => host.overlay(Overlay::new("menu", Anchor::Node { node: "pad".into() }, 12, 2)),
                 "blur" => host.blur(),
                 _ => return Handled::Pass,
             },
-            Event::Closed { surface } => heard(format!("closed:{surface}")),
+            Event::Closed { surface, .. } => heard(format!("closed:{surface}")),
             Event::Change { text, .. } => said.borrow_mut().said.push(format!("c:{text}")),
             Event::Submit { text, .. } => said.borrow_mut().said.push(format!("s:{text}")),
             _ => return Handled::Pass,
@@ -329,25 +318,27 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
 /// A claimed part as a card: a title, and what the part holds as content, memoized on both. A finished call shows its
 /// output by reference; a call that failed is left to the host's row.
 fn claimed(cx: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
-    let (title, body, output) = match part {
-        Part::Tool(tool) => {
-            let input = match &tool.tool.state {
-                SessionMessageAssistantToolState::Streaming(state) => state.input.clone(),
-                SessionMessageAssistantToolState::Running(state) => format!("{:?}", state.input),
-                SessionMessageAssistantToolState::Completed(state) => format!("{:?}", state.input),
-                _ => return None,
-            };
-            let output = (tool.state == State::Completed).then(|| tool.output());
-            (format!("{} {} {:?}", tool.tool.name, tool.tool.id, tool.state), input, output)
-        }
-        Part::Fence(fence) => (format!("fence {}", fence.info), fence.code.clone(), None),
+    // A kind of part a later host claims is left to the host's row.
+    let (title, body, output) = if let Part::Tool(tool) = part {
+        let input = match &tool.tool.state {
+            SessionMessageAssistantToolState::Streaming(state) => state.input.clone(),
+            SessionMessageAssistantToolState::Running(state) => format!("{:?}", state.input),
+            SessionMessageAssistantToolState::Completed(state) => format!("{:?}", state.input),
+            _ => return None,
+        };
+        let output = (tool.state == State::Completed).then(|| tool.output());
+        (format!("{} {} {:?}", tool.tool.name, tool.tool.id, tool.state), input, output)
+    } else if let Part::Fence(fence) = part {
+        (format!("fence {}", fence.info), fence.code.clone(), None)
+    } else {
+        return None;
     };
     Some(cx.memo("part", (title.clone(), body.clone(), output.clone()), |cx| {
         let mut children = vec![
             v2::Node::text(vec![Span::new(title)]).fg("text.muted"),
-            v2::Node::Markdown { id: None, source: v2::Source::Content(cx.content(body)) },
+            v2::Node::markdown(v2::Source::Content(cx.content(body))),
         ];
-        children.extend(output.map(|source| v2::Node::Markdown { id: None, source }));
+        children.extend(output.map(v2::Node::markdown));
         v2::Node::column(children).bg("background.raised.base")
     }))
 }
@@ -384,11 +375,10 @@ fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {
     };
     let header = v2::Node::text(vec![Span::new(header)]).with_id("header");
     let total: u32 = values.iter().sum();
-    let meter = v2::Node::canvas("meter").version(u64::from(total)).animate(board.borrow().animate).layout(Layout {
-        width: Some(Width::Cells(40)),
-        height: Some(Width::Cells(2)),
-        ..Layout::default()
-    });
+    let meter = v2::Node::canvas("meter")
+        .version(u64::from(total))
+        .animate(board.borrow().animate)
+        .layout(Layout::default().width(Width::Cells(40)).height(Width::Cells(2)));
     let cards = v2::Node::scroll(cards).with_id("cards").layout(Layout::default().grow());
     v2::Node::column(vec![header, meter, cards]).with_id("board").layout(Layout::default().grow())
 }

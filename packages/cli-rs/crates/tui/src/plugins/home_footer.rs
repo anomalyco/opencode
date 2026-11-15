@@ -66,13 +66,13 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             let fixed = Layout::default().shrink(false);
             row.push(Node::row(plugins).gap(1).layout(fixed).on_click(Click::command("plugins.list", None)));
         }
-        row.push(Node::Slot { path: slot::HOME_FOOTER_STATUS.to_owned() });
+        row.push(Node::slot(slot::HOME_FOOTER_STATUS));
         row.push(Node::column(Vec::new()).layout(Layout::default().grow()));
         if width >= 64 {
             let version = Node::text([Span::new(info.version)]).fg("text.muted");
             row.push(Node::column(vec![version]).layout(Layout::default().shrink(false)));
         }
-        let full = Layout { width: Some(Width::Percent(100.0)), ..Layout::default() }.shrink(false);
+        let full = Layout::default().width(Width::Percent(100.0)).shrink(false);
         Node::row(row).gap(2).padding(2, if height < 16 { 0 } else { 1 }).layout(full).with_id(ROOT)
     }));
     Ok(())

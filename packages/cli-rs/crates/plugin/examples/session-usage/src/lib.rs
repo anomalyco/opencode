@@ -405,7 +405,7 @@ impl State {
     fn location(&self, read: &dyn Read) -> LocationRef {
         let session = self.session.as_deref().and_then(|id| read.session(id));
         match session {
-            Some(session) => LocationRef { directory: session.info.location.directory.0, workspace: None },
+            Some(session) => LocationRef::new(session.info.location.directory.0, None),
             None => read.info().location,
         }
     }
@@ -679,7 +679,7 @@ mod tests {
         let mut state = after_one_page(&host, vec![assistant("msg_1", 0.25)]);
         assert!(state.run.is_none() && state.priced.is_some());
 
-        state.render(&host, &Changed { all: true, ..Changed::default() });
+        state.render(&host, &Changed::everything());
         assert_eq!(state.total, Some(0.25));
         assert!(state.priced.is_none() && state.run.is_none());
     }
@@ -691,7 +691,7 @@ mod tests {
         let host = Fake::default();
         let broken = json!({ "id": "msg_2", "type": "assistant", "model": 5, "cost": 9 });
         let mut state = after_one_page(&host, vec![assistant("msg_1", 0.25), broken, assistant("msg_3", 0.5)]);
-        state.render(&host, &Changed { all: true, ..Changed::default() });
+        state.render(&host, &Changed::everything());
         assert_eq!((state.total, state.skipped), (Some(0.75), 1));
     }
 

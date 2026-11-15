@@ -118,10 +118,10 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         let mode = host.mode();
         host.release_keys();
         host.blur();
-        host.open_panel(OpenPanel { surface: "rows".to_owned(), session: None, fullscreen: false });
+        host.open_panel(OpenPanel::new("rows"));
         host.close_panel("rows");
         let anchor = Anchor::Edge(Edge::Top);
-        host.overlay(Overlay { surface: "rows".to_owned(), anchor, width: 10, height: 3 });
+        host.overlay(Overlay::new("rows", anchor, 10, 3));
         host.close_overlay("rows");
         let mode = mode.unwrap_or_else(|| "none".to_owned());
         host.toast(Toast::new(Variant::Info, format!("ui {} {} {mode}", focused.surface, rect.is_some())));
@@ -149,13 +149,13 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         claim::Part::Fence(fence) => {
             Some(v2::Node::text(vec![Span::new(format!("fenced {}", fence.code))]).with_id("fence"))
         }
-        claim::Part::Tool(_) => None,
+        _ => None,
     }));
     let claims = state.clone();
     setup.claim(claim::Claim::tool("conf-tool", move |view, _| {
         claims.claimed.set(claims.claimed.get() + 1);
         let handle = view.content(format!("claimed {}", claims.claimed.get()));
-        Some(v2::Node::Markdown { id: Some("claim".to_owned()), source: v2::Source::Content(handle) })
+        Some(v2::Node::markdown(v2::Source::Content(handle)).with_id("claim"))
     }));
     setup.on_wake(|host| host.toast(Toast::new(Variant::Info, "woken")));
     setup.command(command("conf.plugins"), |host, _| plugins(host, "plugins"));
@@ -169,24 +169,20 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             true => count(),
             false => view.memo("fixed", (), |view| {
                 let handle = view.content("# fixed");
-                v2::Node::Markdown { id: None, source: v2::Source::Content(handle) }
+                v2::Node::markdown(v2::Source::Content(handle))
             }),
         };
         v2::Node::column(vec![count(), second]).with_id("root")
     }));
     let drawn = pad.clone();
     let canvas = v2::Surface::new("pad", v2::Place::Route("pad".to_owned()), move |_| {
-        let size = Layout { width: Some(Width::Cells(20)), height: Some(Width::Cells(1)), ..Layout::default() };
+        let size = Layout::default().width(Width::Cells(20)).height(Width::Cells(1));
         v2::Node::column(vec![v2::Node::canvas("pad").version(pad.pads.get()).layout(size)]).with_id("pad-root")
     });
     setup.surface(canvas.draw(move |draw| {
         drawn.draws.set(drawn.draws.get() + 1);
-        let cause = match draw.frame.cause {
-            v2::Cause::First => "first",
-            v2::Cause::Resized => "resized",
-            v2::Cause::Version => "version",
-            v2::Cause::Animate => "animate",
-        };
+        // `first`, `resized`, `version` or `animate`, and a cause a later host adds by its own name.
+        let cause = format!("{:?}", draw.frame.cause).to_lowercase();
         let mut list = List::new();
         list.text(0, 0, &format!("draw {} {cause}", drawn.draws.get()), Style::new());
         Some(list)
@@ -201,7 +197,7 @@ fn kept(state: Rc<State>) -> v2::Surface {
     v2::Surface::new("kept", v2::Place::Route("kept".to_owned()), move |view| {
         let bumps = state.bumps.get();
         if !view.input.changed.all && state.shown.get() == Some(bumps) {
-            return v2::Node::Keep { key: "kept-root".to_owned() };
+            return v2::Node::keep("kept-root");
         }
         state.shown.set(Some(bumps));
         let shown = v2::Node::text(vec![Span::new(format!("kept {bumps}"))]).with_id("kept");
@@ -226,7 +222,7 @@ fn rows() -> v2::Surface {
         }
         let button = v2::Node::column(vec![v2::Node::text(vec![Span::new("press")])])
             .with_id("button")
-            .interact(Interact { pointer: true, ..Interact::default() });
+            .interact(Interact::default().with_pointer(true));
         let where_ = v2::Node::text(vec![Span::new("where")]).with_id("where");
         v2::Node::column(vec![where_, button, items]).with_id("rows-root")
     });
@@ -235,10 +231,10 @@ fn rows() -> v2::Surface {
         .layout(notify, |geometry| {
             let down = geometry.scrolls.iter().any(|(id, state)| id == "items" && state.offset > 0);
             let paints = match down {
-                true => vec![v2::Paint { node: "where".to_owned(), bg: "#203040".into() }],
+                true => vec![v2::Paint::new("where", "#203040")],
                 false => Vec::new(),
             };
-            v2::LayoutReply { paints, again: false }
+            paints.into_iter().fold(v2::LayoutReply::default(), |reply, paint| reply.paint(paint.node, paint.bg))
         })
         .on(handle)
 }
@@ -247,11 +243,11 @@ fn rows() -> v2::Surface {
 fn handle(host: &dyn Host, event: &interact::Event) -> Handled {
     let (said, handled) = match event {
         interact::Event::Key(key) if key.bind.as_deref() == Some("conf") => ("key conf".to_owned(), Handled::Consume),
-        interact::Event::Paste { text } => (format!("paste {text}"), Handled::Consume),
+        interact::Event::Paste { text, .. } => (format!("paste {text}"), Handled::Consume),
         interact::Event::Pointer(pointer) if pointer.kind == PointerKind::Down => {
             (format!("pressed {}", pointer.node), Handled::Consume)
         }
-        interact::Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. } } => {
+        interact::Event::Scroll { event: v2::ScrollEvent::Landed { anchor, .. }, .. } => {
             (format!("landed {}", anchor.id), Handled::Pass)
         }
         interact::Event::Mount { mounted, .. } => {
