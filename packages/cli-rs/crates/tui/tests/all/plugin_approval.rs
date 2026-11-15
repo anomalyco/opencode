@@ -232,7 +232,9 @@ impl Model for ApprovalModel {
 /// The probe in the project's plugins directory, on build `build`; `root` keeps the approvals of a client before.
 fn open(build: u8, root: Option<opencode_util::temp::TempDir>) -> World {
     let root = root.unwrap_or_else(|| opencode_util::temp::tempdir().unwrap());
-    World::load(Some((root.path().join("work/.opencode/plugins/probe"), build, root)), Route::Home)
+    // One component at a time: the target is the path the loader finds, whose separators are all `\` on Windows.
+    let probe = root.path().join("work").join(".opencode").join("plugins").join("probe");
+    World::load(Some((probe, build, root)), Route::Home)
 }
 
 fn target(world: &World) -> String {

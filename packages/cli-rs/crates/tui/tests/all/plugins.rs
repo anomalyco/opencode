@@ -296,7 +296,9 @@ fn a_state_directory_inside_the_project_keeps_no_decision() {
     h.wait_for("pending, local");
     h.app.press("enter");
     h.wait_for("Run project plugin?");
-    let target = root.path().join("work/.opencode/plugins/sample").to_string_lossy().into_owned();
+    // The path the loader finds, whose separators are all `\` on Windows.
+    let target = root.path().join("work").join(".opencode").join("plugins").join("sample");
+    let target = target.to_string_lossy().into_owned();
     let (_, unsaved) = opencode_tui::plugins::host::held(&h.tui, &target).unwrap();
     assert!(unsaved.as_deref().is_some_and(|reason| reason.contains("inside the project")), "{unsaved:?}");
     h.app.press("right");
@@ -393,7 +395,7 @@ fn the_list_comes_back_on_the_row_that_was_asked_about() {
     h.wait_for("second");
     h.app.press("down");
     h.app.press("enter");
-    h.wait_for("plugins/second");
+    h.wait_for(&format!("plugins{}second", std::path::MAIN_SEPARATOR));
     h.app.press("escape");
     let back = h.app.wait_until(support::WAIT, || !h.app.text().contains("Run project plugin?"));
     assert!(back);
