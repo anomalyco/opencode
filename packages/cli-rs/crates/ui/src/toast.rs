@@ -13,6 +13,8 @@ use std::rc::{Rc, Weak};
 use std::time::{Duration, Instant};
 
 pub const DEFAULT_DURATION: Duration = Duration::from_millis(5000);
+/// The plugins' toasts that may wait behind the host's ([`Toasts::show_behind_kept`]).
+pub const PLUGIN_WAITING: usize = 4;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Variant {
@@ -81,7 +83,11 @@ struct Inner {
     /// The surface's `+N more` line.
     more: RefCell<Option<Text>>,
     current: RefCell<Option<ToastOptions>>,
+    /// TS's queue: the toasts shown while one is paused.
     queue: RefCell<VecDeque<ToastOptions>>,
+    /// The plugins' toasts that wait ([`Toasts::show_behind_kept`]), at most [`PLUGIN_WAITING`]: they come after the
+    /// queue, so a toast of the host never waits behind one of a plugin (review carbon new-2).
+    waiting: RefCell<VecDeque<ToastOptions>>,
     timer: Cell<Option<TimerId>>,
     started: Cell<Instant>,
     remaining: Cell<Duration>,
@@ -105,6 +111,7 @@ impl Toasts {
             more: RefCell::new(None),
             current: RefCell::new(None),
             queue: RefCell::new(VecDeque::new()),
+            waiting: RefCell::new(VecDeque::new()),
             timer: Cell::new(None),
             started: Cell::new(app.now()),
             remaining: Cell::new(Duration::ZERO),
@@ -127,30 +134,43 @@ impl Toasts {
 
     /// Shows a toast now, or queues it while one is paused or others wait.
     pub fn show(&self, options: ToastOptions) {
-        self.put(options, false);
-    }
-
-    /// [`Toasts::show`], also queued while the toast on screen is kept.
-    pub fn show_behind_kept(&self, options: ToastOptions) {
-        self.put(options, true);
-    }
-
-    fn put(&self, options: ToastOptions, behind_kept: bool) {
-        let kept = behind_kept && self.0.current.borrow().as_ref().is_some_and(|current| current.keep);
-        let busy =
-            kept || self.0.current.borrow().is_some() && (self.0.paused.get() || !self.0.queue.borrow().is_empty());
-        if busy {
+        if self.0.current.borrow().is_some() && (self.0.paused.get() || !self.0.queue.borrow().is_empty()) {
             self.0.queue.borrow_mut().push_back(options);
-            // TS keeps the surface mounted and updates `+N more`; a new surface would drop a selection on it.
-            if let Some(more) = self.0.more.borrow().as_ref() {
-                more.set_text(format!("+{} more", self.pending())).visible(true);
-            }
-            return;
+            return self.more();
         }
+        self.present(options);
+    }
+
+    /// A plugin's toast: [`Toasts::show`], but it waits while the toast on screen is kept or others wait, behind every
+    /// toast of the host. Of the plugins' toasts that wait the oldest goes when a [`PLUGIN_WAITING`]th more comes.
+    pub fn show_behind_kept(&self, options: ToastOptions) {
+        let current = self.0.current.borrow().as_ref().map(|current| current.keep);
+        let held = self.0.paused.get() || !self.0.queue.borrow().is_empty() || !self.0.waiting.borrow().is_empty();
+        if current == Some(true) || current.is_some() && held {
+            let mut waiting = self.0.waiting.borrow_mut();
+            if waiting.len() == PLUGIN_WAITING {
+                waiting.pop_front();
+                log::warn!("a plugin's toast that waited was dropped: {PLUGIN_WAITING} more came behind it");
+            }
+            waiting.push_back(options);
+            drop(waiting);
+            return self.more();
+        }
+        self.present(options);
+    }
+
+    fn present(&self, options: ToastOptions) {
         let duration = options.length();
         *self.0.current.borrow_mut() = Some(options);
         self.start(duration);
         self.paint();
+    }
+
+    /// TS keeps the surface mounted and updates `+N more`; a new surface would drop a selection on it.
+    fn more(&self) {
+        if let Some(more) = self.0.more.borrow().as_ref() {
+            more.set_text(format!("+{} more", self.pending())).visible(true);
+        }
     }
 
     /// `toast.error`: an error toast with the message.
@@ -165,10 +185,10 @@ impl Toasts {
         );
     }
 
-    /// Hides the current toast and shows the next queued one.
+    /// Hides the current toast and shows the next queued one: the host's first, then the plugins'.
     pub fn dismiss(&self) {
         self.clear_timer();
-        let next = self.0.queue.borrow_mut().pop_front();
+        let next = self.0.queue.borrow_mut().pop_front().or_else(|| self.0.waiting.borrow_mut().pop_front());
         let duration = next.as_ref().map(ToastOptions::length);
         *self.0.current.borrow_mut() = next;
         match duration {
@@ -217,7 +237,7 @@ impl Toasts {
 
     /// How many toasts wait behind the current one.
     pub fn pending(&self) -> usize {
-        self.0.queue.borrow().len()
+        self.0.queue.borrow().len() + self.0.waiting.borrow().len()
     }
 
     fn start(&self, duration: Duration) {
