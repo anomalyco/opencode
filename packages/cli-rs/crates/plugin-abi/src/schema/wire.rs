@@ -238,10 +238,11 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             "ToolPart",
             object!(ToolPart, "A tool call in an assistant message.", {
                 session: string(), message: string(), state: reference("ToolState"), permission: boolean(),
-                tool: api("Session.Message.Assistant.Tool"),
+                tool: reference("ClaimTool"),
             } { }),
         ),
         ("ToolState", unit!(ToolState { Pending, Running, Completed, Error })),
+        ("ClaimTool", claim_tool()),
         (
             "FencePart",
             object!(FencePart, "A fenced code block the transcript shows.", {
@@ -768,6 +769,46 @@ pub(super) fn messages() -> Value {
         "create": reference("Manifest"),
         "call": map(&call),
         "host": map(&host),
+    })
+}
+
+/// A claim's tool call: the HTTP API's assistant tool part, but that a completed call's `content`, what it returned,
+/// is empty, since a `part-output` source names it and the host reads it (`claim::ToolPart`); an error's is left out,
+/// and metadata past 4096 bytes of JSON is empty. The HTTP API requires a completed call's content, so its own
+/// definition would refuse every completed claim (bigboi's final pass).
+fn claim_tool() -> Value {
+    let tool = |pointer: &str| api(&format!("Session.Message.Assistant.Tool/properties/{pointer}"));
+    let completed = json!({
+        "type": "object",
+        "properties": {
+            "status": { "type": "string", "enum": ["completed"] },
+            "input": { "type": "object" },
+            "content": { "type": "array", "maxItems": 0 },
+            "metadata": { "type": "object" },
+        },
+        "required": ["status", "input", "content"],
+        "additionalProperties": false,
+    });
+    json!({
+        "description": "A tool call as a claim's view gets it: the HTTP API's assistant tool part without what the \
+                        call returned, which its `part-output` source names.",
+        "type": "object",
+        "properties": {
+            "type": tool("type"),
+            "id": tool("id"),
+            "name": tool("name"),
+            "executed": tool("executed"),
+            "native": tool("native"),
+            "state": { "anyOf": [
+                api("Session.Message.ToolState.Streaming"),
+                api("Session.Message.ToolState.Running"),
+                completed,
+                api("Session.Message.ToolState.Error"),
+            ] },
+            "time": tool("time"),
+        },
+        "required": ["type", "id", "name", "state", "time"],
+        "additionalProperties": false,
     })
 }
 

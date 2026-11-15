@@ -591,6 +591,9 @@ mod tests {
     /// Whether `value` is of `kind` with `schema`'s bounds.
     fn typed(value: &Value, schema: &Value, kind: &str, defs: &Value) -> bool {
         let count = |key: &str| schema.get(key).and_then(Value::as_u64).map(|count| count as usize);
+        let fits = |len: usize| {
+            count("minItems").is_none_or(|min| len >= min) && count("maxItems").is_none_or(|max| len <= max)
+        };
         match kind {
             "string" => value.as_str().is_some_and(|text| {
                 let rgba = schema.get("pattern").and_then(Value::as_str) == Some(RGBA);
@@ -617,16 +620,17 @@ mod tests {
                 })
             }
             "array" => value.as_array().is_some_and(|items| {
-                let long = count("minItems").is_none_or(|min| items.len() >= min);
-                long && match schema.get("prefixItems").and_then(Value::as_array) {
-                    Some(prefix) => {
-                        items.len() >= prefix.len()
-                            && items.iter().zip(prefix).all(|(item, schema)| conforms(item, schema, defs))
-                            && (items.len() == prefix.len() || schema.get("items") != Some(&json!(false)))
-                            && (schema.get("maxItems").is_none() || Some(items.len()) <= count("maxItems"))
+                fits(items.len())
+                    && match schema.get("prefixItems").and_then(Value::as_array) {
+                        Some(prefix) => {
+                            items.len() >= prefix.len()
+                                && items.iter().zip(prefix).all(|(item, schema)| conforms(item, schema, defs))
+                                && (items.len() == prefix.len() || schema.get("items") != Some(&json!(false)))
+                        }
+                        None => {
+                            schema.get("items").is_none_or(|each| items.iter().all(|item| conforms(item, each, defs)))
+                        }
                     }
-                    None => schema.get("items").is_none_or(|each| items.iter().all(|item| conforms(item, each, defs))),
-                }
             }),
             "object" => value.as_object().is_some_and(|object| {
                 let properties = schema.get("properties").and_then(Value::as_object);
@@ -685,7 +689,7 @@ mod tests {
         // What the next `return` answers: the schema of its reply, or `None` for a draw's bytes.
         let mut waiting: Vec<Option<Value>> = Vec::new();
         let mut library = 2;
-        let (mut requests, mut replies) = (0, 0);
+        let (mut requests, mut replies, mut completed) = (0, 0, 0);
         for (number, line) in text.lines().enumerate() {
             let entry: Value = serde_json::from_str(line).unwrap();
             let at = format!("transcripts.jsonl:{}", number + 1);
@@ -700,6 +704,7 @@ mod tests {
                 let request = &call["request"];
                 assert!(conforms(request, &defs["Request"], defs), "{at}: {request}");
                 requests += 1;
+                completed += usize::from(request["part"]["tool"]["state"]["status"] == "completed");
                 let kind = request["type"].as_str().unwrap();
                 waiting.push((kind != "draw").then(|| answer("call", kind)));
             } else if let Some(host) = entry.get("host") {
@@ -735,6 +740,8 @@ mod tests {
             }
         }
         assert!(requests > 100 && replies > 100, "{requests} requests and {replies} replies checked");
+        // A completed call, whose output the host keeps from the claim's view (bigboi's final pass).
+        assert!(completed > 0, "no completed tool claim in the transcripts");
     }
 
     // Expected (bigboi's re-review, finding 14): the shipped schema resolves without Rust. Every reference it makes
@@ -767,6 +774,8 @@ mod tests {
             let named = resolve(path, defs);
             assert!(named.is_object(), "{path}");
             if let Some(key) = path.strip_prefix(&format!("{}#/components/schemas/", wire::OPENAPI)) {
+                // A pointer into a component names the component's own key first.
+                let key = key.split('/').next().unwrap_or_default();
                 api += 1;
                 let rust: String = key.split('.').map(|part| part[..1].to_uppercase() + &part[1..]).collect();
                 let declared = [format!("pub struct {rust} "), format!("pub enum {rust} ")];

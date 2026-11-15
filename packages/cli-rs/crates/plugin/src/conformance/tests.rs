@@ -218,6 +218,12 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
                         });
                         host.app.render();
                     }
+                    Step::Complete { tool } => {
+                        if let Some(mount) = &claimed {
+                            mount.show(completed(tool));
+                        }
+                        host.app.render();
+                    }
                     Step::Markdown { text } => {
                         host.app().root().clear();
                         (route, claimed) = (None, None);
@@ -300,6 +306,23 @@ fn pending(tool: &str) -> abi::claim::Part {
         session: "ses_1".into(),
         message: "msg_1".into(),
         state: abi::claim::State::Pending,
+        permission: false,
+        tool: call,
+    }))
+}
+
+/// The call of [`pending`], completed with an output, as the transcript has it.
+fn completed(tool: &str) -> abi::claim::Part {
+    let call = serde_json::from_value(json!({
+        "type": "tool", "id": "call_1", "name": tool,
+        "state": { "status": "completed", "input": {}, "content": [{ "type": "text", "text": "done" }] },
+        "time": { "created": 1, "completed": 2 },
+    }))
+    .unwrap();
+    abi::claim::Part::Tool(Box::new(abi::claim::ToolPart {
+        session: "ses_1".into(),
+        message: "msg_1".into(),
+        state: abi::claim::State::Completed,
         permission: false,
         tool: call,
     }))

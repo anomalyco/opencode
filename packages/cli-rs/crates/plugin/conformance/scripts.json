@@ -183,6 +183,9 @@
       { "do": "claim", "tool": "conf-tool" },
       { "do": "advance" },
       { "do": "observe" },
+      { "do": "complete", "tool": "conf-tool" },
+      { "do": "advance" },
+      { "do": "observe" },
       { "do": "close" },
       { "do": "advance" },
       { "do": "observe" }

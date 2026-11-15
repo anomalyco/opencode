@@ -3691,7 +3691,7 @@
           "type": "boolean"
         },
         "tool": {
-          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool"
+          "$ref": "#/$defs/ClaimTool"
         }
       },
       "required": ["session", "message", "state", "permission", "tool"],
@@ -3700,6 +3700,66 @@
     "ToolState": {
       "type": "string",
       "enum": ["pending", "running", "completed", "error"]
+    },
+    "ClaimTool": {
+      "description": "A tool call as a claim's view gets it: the HTTP API's assistant tool part without what the call returned, which its `part-output` source names.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/type"
+        },
+        "id": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/id"
+        },
+        "name": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/name"
+        },
+        "executed": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/executed"
+        },
+        "native": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/native"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.ToolState.Streaming"
+            },
+            {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.ToolState.Running"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["completed"]
+                },
+                "input": {
+                  "type": "object"
+                },
+                "content": {
+                  "type": "array",
+                  "maxItems": 0
+                },
+                "metadata": {
+                  "type": "object"
+                }
+              },
+              "required": ["status", "input", "content"],
+              "additionalProperties": false
+            },
+            {
+              "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.ToolState.Error"
+            }
+          ]
+        },
+        "time": {
+          "$ref": "../../../../protocol/openapi.json#/components/schemas/Session.Message.Assistant.Tool/properties/time"
+        }
+      },
+      "required": ["type", "id", "name", "state", "time"],
+      "additionalProperties": false
     },
     "FencePart": {
       "type": "object",

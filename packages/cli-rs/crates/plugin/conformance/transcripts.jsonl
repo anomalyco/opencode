@@ -280,7 +280,7 @@
 {"observe":{"seen":{"toasts":[],"status":"Some(Active)"}}}
 "destroy"
 "destroyed"
-{"transcript":"claim","about":"a renderer claim (Pr): a tool call shown through the plugin's claim of its tool, its view, and the part's unmount","library":2,"script":[{"do":"load","options":""},{"do":"claim","tool":"conf-tool"},{"do":"advance"},{"do":"observe"},{"do":"close"},{"do":"advance"},{"do":"observe"}]}
+{"transcript":"claim","about":"a renderer claim (Pr): a tool call shown through the plugin's claim of its tool, its view, and the part's unmount","library":2,"script":[{"do":"load","options":""},{"do":"claim","tool":"conf-tool"},{"do":"advance"},{"do":"observe"},{"do":"complete","tool":"conf-tool"},{"do":"advance"},{"do":"observe"},{"do":"close"},{"do":"advance"},{"do":"observe"}]}
 {"open":{"entry":2,"major":2,"minor":0,"requires_minor":0,"served":0}}
 "describe"
 {"return":{"status":0,"reply":{"version":"1.0.0","id":"conformance"}}}
@@ -292,6 +292,9 @@
 {"call":{"request":{"type":"claim","claim":1,"mount":{"surface":"conf-tool","key":"call_1","generation":1},"input":{"width":60,"height":0,"palette":{"mode":"dark","colors":{}},"changed":{"all":true}},"part":{"type":"tool","session":"ses_1","message":"msg_1","state":"pending","permission":false,"tool":{"type":"tool","id":"call_1","name":"conf-tool","state":{"status":"streaming","input":""},"time":{"created":1}}},"next":1}}}
 {"return":{"status":0,"reply":{"node":{"type":"markdown","id":"claim","source":{"content":2}},"content":[[2,"claimed 2"]]}}}
 {"observe":{"seen":{"toasts":[],"status":"Some(Active)","screen":["claimed 2"]}}}
+{"call":{"request":{"type":"claim","claim":1,"mount":{"surface":"conf-tool","key":"call_1","generation":1},"input":{"width":60,"height":0,"palette":{"mode":"dark","colors":{}},"changed":{"all":true}},"part":{"type":"tool","session":"ses_1","message":"msg_1","state":"completed","permission":false,"tool":{"type":"tool","id":"call_1","name":"conf-tool","state":{"status":"completed","input":{},"content":[]},"time":{"created":1,"completed":2}}},"next":2}}}
+{"return":{"status":0,"reply":{"node":{"type":"markdown","id":"claim","source":{"content":3}},"content":[[3,"claimed 3"]]}}}
+{"observe":{"seen":{"toasts":[],"status":"Some(Active)","screen":["claimed 3"]}}}
 {"call":{"request":{"type":"unmount","mount":{"surface":"conf-tool","key":"call_1","generation":1}}}}
 {"return":{"status":0,"reply":null}}
 {"observe":{"seen":{"toasts":[],"status":"Some(Active)"}}}
