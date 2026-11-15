@@ -1,3 +1,4 @@
+import type { SessionStatus } from "@opencode/client/promise"
 import type { SessionDocument } from "../document"
 import { File } from "../components/file"
 import { DataProvider, type ReadMediaUrlFn, type TurnDiffSource } from "../context/data"
@@ -14,6 +15,8 @@ export function CurrentSessionProviders(props: {
   backgroundCompaction?: boolean
   readMedia?: ReadMediaUrlFn
   turnDiff?: TurnDiffSource
+  /** Other sessions' statuses, such as the subagents a replay has started. */
+  sessionStatus?: Record<string, SessionStatus>
   children: JSX.Element
 }) {
   return (
@@ -75,6 +78,7 @@ export function CurrentSessionProviders(props: {
           [CURRENT_SESSION_ID]: props.document.status,
           session_child_review: { type: "idle" },
           session_child_tests: { type: "busy" },
+          ...props.sessionStatus,
         },
         session_diff: { [CURRENT_SESSION_ID]: props.document.diffs },
       }}

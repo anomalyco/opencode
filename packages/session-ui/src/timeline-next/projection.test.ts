@@ -150,7 +150,7 @@ describe("New timeline projection", () => {
     ])
   })
 
-  test("a subagent finishes in the group that started it only when nothing comes between; otherwise it reports in its own row", () => {
+  test("each subagent event stays in order in both visible placements, even without a title or visible launch", () => {
     const launched: SessionMessageInfo[] = [
       { id: "user", type: "user", text: "Go", time: { created: 0 } },
       step("launch", 1, {
@@ -195,13 +195,15 @@ describe("New timeline projection", () => {
           timelineDetail: () => detail,
         })
 
-        const result = projection
-          .rows()
-          .flatMap((row) =>
-            Predicate.isTagged(row, "AssistantPart") && row.group.type !== "part"
-              ? [`${row.group.type}:${row.group.refs.map((ref) => ref.messageID).join("+")}`]
-              : [],
-          )
+        const result = projection.rows().flatMap((row) => {
+          if (Predicate.isTagged(row, "Notice")) return [`notice:${row.messageID}`]
+
+          if (!Predicate.isTagged(row, "AssistantPart")) return []
+
+          if (row.group.type === "part") return [`part:${row.group.ref.messageID}`]
+
+          return [`${row.group.type}:${row.group.refs.map((ref) => ref.messageID).join("+")}`]
+        })
 
         dispose()
 
@@ -210,9 +212,20 @@ describe("New timeline projection", () => {
 
     const grouped = { ...detailed, subagents: { placement: "grouped" as const } }
 
-    expect(groups([...launched, report], grouped)).toEqual(["context:launch+report"])
-    expect(groups([...launched, said, report], grouped)).toEqual(["context:launch", "events:report"])
-    expect(groups([...launched, report], detailed)).toEqual(["events:launch", "events:report"])
+    for (const detail of [grouped, detailed]) {
+      expect(groups([...launched, report], detail)).toEqual(["subagent:launch", "subagent:report"])
+      expect(groups([...launched, said, report], detail)).toEqual(["subagent:launch", "part:said", "subagent:report"])
+      expect(groups([launched[0]!, report], detail)).toEqual(["subagent:report"])
+
+      if (report.type !== "synthetic") throw new Error("Expected a subagent report")
+      expect(groups([...launched, report, { ...report, id: "untitled", description: undefined }], detail)).toEqual([
+        "subagent:launch",
+        "subagent:report",
+        "subagent:untitled",
+      ])
+    }
+
+    expect(groups([...launched, report], messagesOnly)).toEqual([])
   })
 
   test("a move shows only when it changes where the session is", () => {

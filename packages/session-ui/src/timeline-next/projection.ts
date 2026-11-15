@@ -639,9 +639,8 @@ function turnCommentary(entries: Entry[], settled: boolean, visible: (content: C
 }
 
 /**
- * Notices fold into the rows around them: grouped notices join the activity group, and background work reporting back
- * one after another reads as one events row, "Finished 2 subagents". Anything else between them keeps them apart, so
- * the order of events stays true.
+ * Grouped notices join the activity group, shell reports can share an events row, and each subagent report keeps
+ * its own place in the timeline.
  */
 function groupNotices(
   rows: TimelineRow.TimelineRow[],
@@ -657,7 +656,8 @@ function groupNotices(
 
     // Work that reports back right after the activity group that started it, with nothing between, finishes there.
     if (
-      event &&
+      message &&
+      event?.kind === "shell" &&
       !event.failed &&
       Predicate.isTagged(previous, "AssistantPart") &&
       previous.group.type === "context" &&
@@ -672,7 +672,7 @@ function groupNotices(
       return result
     }
 
-    const type = message ? noticeGroup(detail, message) : undefined
+    const type = message ? noticeGroup(detail, message, event) : undefined
 
     const current =
       Predicate.isTagged(row, "Notice") && type
@@ -750,8 +750,8 @@ function launches(
   )
 }
 
-function noticeGroup(detail: TimelineDetail, message: SessionMessageInfo) {
-  if (noticeEvent(message)) return "events" as const
+function noticeGroup(detail: TimelineDetail, message: SessionMessageInfo, event?: TimelineEvent) {
+  if (event) return event.kind === "subagent" ? ("subagent" as const) : ("events" as const)
 
   return noticePlacement(detail, message) === "grouped" ? ("context" as const) : undefined
 }
@@ -929,6 +929,17 @@ function groupContent(
   items.forEach((item) => {
     const type = contentGroup(detail, item.content, commentary)
 
+    if (type === "subagent") {
+      flush()
+      groups.push({
+        type,
+        key: `subagent:${item.messageID}:${item.partID}`,
+        refs: [{ messageID: item.messageID, partID: item.partID }],
+      })
+
+      return
+    }
+
     if (type) {
       if (adjacent?.type !== type) flush()
       adjacent ??= { type, refs: [] }
@@ -955,5 +966,5 @@ function isNotice(message: SessionMessageInfo): message is Notice {
 
   if (message.type !== "synthetic") return true
 
-  return !!message.description?.trim() || timelineNoticeRequired(message)
+  return message.metadata?.source === "subagent" || !!message.description?.trim() || timelineNoticeRequired(message)
 }
