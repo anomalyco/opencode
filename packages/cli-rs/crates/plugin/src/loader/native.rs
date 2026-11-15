@@ -667,6 +667,12 @@ impl Instance {
                 context.undo();
                 return Err(format!("setup panicked: {}", text(bytes)));
             }
+            // An error the host cannot read is refused before its status is: nothing of it happens, as for a call
+            // (big-boi 8).
+            if let Err(error) = bytes {
+                context.undo();
+                return Err(format!("setup returned a bad result: {error}"));
+            }
             // What the failed setup and its disposal asked for still happens; its fetches reach no activation.
             context.drain();
             return Err(text(bytes));

@@ -3495,6 +3495,31 @@ fn a_2x_library_names_its_id_before_any_setup() {
     }
 }
 
+// Expected (big-boi 8, O-135): a setup's effects follow its result as a call's do: an error the host reads is an
+// answer, and what setup asked for happens; an error in a buffer the host refuses, and a panic, leave nothing of it.
+// Each answer goes back to the plugin's `free` once.
+#[test]
+fn a_setup_whose_error_the_host_refuses_leaves_no_effect() {
+    for (answer, shown, failure) in [
+        (1, true, "no"),
+        (2, false, "setup returned a bad result: a null buffer of 5 bytes"),
+        (3, false, "setup panicked: boom"),
+    ] {
+        let host = host();
+        SETUP_ANSWER.set(answer);
+        DESCRIBED.set(r#"{"id":"c"}"#);
+        let (definition, error) = from_api(&dynamic(&host), &c_table(ABI_MAJOR, true), ABI_MAJOR, None).unwrap();
+        SETUP_FREED.set(0);
+        let registry = Registry::define(Vec::new(), []);
+        registry.load(&dynamic(&host), definition.external("c.so", error));
+        host.app.advance(Duration::from_millis(1));
+        let messages: Vec<String> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
+        assert_eq!(messages.iter().any(|message| message == "from setup"), shown, "answer {answer}: {messages:?}");
+        assert_eq!(entry(&registry.entries(), "c.so").status, Status::Failed(failure.to_owned()), "answer {answer}");
+        assert_eq!(SETUP_FREED.get(), 1, "answer {answer}: not freed once");
+    }
+}
+
 // Expected (big-boi 5, carbon-8): what a plugin lends the host's entries is checked as what it returns: `call`,
 // `send` and `report` refuse a null pointer with a length, and a length over the bound, before they read it or reach
 // the mailbox; `free` takes back the host's buffer by its pointer and capacity, whatever its length says.
