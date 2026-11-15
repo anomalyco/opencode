@@ -88,14 +88,25 @@ fn rust_library(major: u32) -> Vec<u8> {
     library
 }
 
-/// `examples/conformance/plugin.c` built as ABI 2.0 or 1.x, with symbols hidden and every warning an error; `None`
-/// without a C compiler, unless `OPENCODE_RS_REQUIRE_CC` asks for one.
+/// `examples/conformance/plugin.c` built as ABI 2.0 or 1.x, with symbols hidden, optimized as a binding's author
+/// builds it (which runs the warnings that need the optimizer, such as `-Wformat-truncation`), and every warning an
+/// error; `None` without a C compiler, unless `OPENCODE_RS_REQUIRE_CC` asks for one.
 #[cfg(unix)]
 fn c_library(major: u32) -> Option<Vec<u8>> {
     let dir = opencode_util::temp::tempdir().unwrap();
     let library = dir.path().join("plugin.so");
     let built = Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".to_owned()))
-        .args(["-shared", "-fPIC", "-fvisibility=hidden", "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic"])
+        .args([
+            "-shared",
+            "-fPIC",
+            "-fvisibility=hidden",
+            "-std=c11",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-pedantic",
+        ])
         .args((major < 2).then_some("-DCONFORMANCE_V1"))
         .arg("-I")
         .arg(root().join("../plugin-abi/include"))
