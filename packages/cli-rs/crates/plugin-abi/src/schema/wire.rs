@@ -32,9 +32,20 @@ type OpenPanel = interact::OpenPanel;
 /// The definitions of the envelopes and replies, beside the parent's of the tree and the calls of P3.
 pub(super) fn definitions() -> Vec<(&'static str, Value)> {
     vec![
+        ("Metadata", {
+            let _ = |value: &Metadata| {
+                let Metadata { version: _, id: _, requires: _ } = value;
+            };
+            object(
+                &[("id", json!({ "type": "string", "minLength": 1 }))],
+                &[("version", nullable(string())), ("requires", array(string()))],
+                None,
+                "What a 2.x library's `describe` answers: its nonempty ID, which the host reads before any `create`.",
+            )
+        }),
         (
-            "Metadata",
-            object!(Metadata, "What `describe` answers. A 2.x library names a nonempty `id`.", { } {
+            "MetadataV1",
+            object!(Metadata, "What a 1.x library's `describe` answers; the ID may be left out.", { } {
                 version: nullable(string()), id: nullable(string()), requires: array(string()),
             }),
         ),
@@ -227,7 +238,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             "ToolPart",
             object!(ToolPart, "A tool call in an assistant message.", {
                 session: string(), message: string(), state: reference("ToolState"), permission: boolean(),
-                tool: api("SessionMessageAssistantTool"),
+                tool: api("Session.Message.Assistant.Tool"),
             } { }),
         ),
         ("ToolState", unit!(ToolState { Pending, Running, Completed, Error })),
@@ -645,7 +656,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
         (
             "Session",
             object!(Session, "A session and its status.", {
-                info: api("SessionInfo"), status: reference("SessionStatus"),
+                info: api("Session.Info"), status: reference("SessionStatus"),
             } { }),
         ),
         ("SessionStatus", unit!(SessionStatus { Idle, Running })),
@@ -703,17 +714,17 @@ pub(super) fn messages() -> Value {
         ("session", maybe("Session")),
         ("sessions", list("Session")),
         ("family", reference("Family")),
-        ("pending", array(api("SessionInboxInfo"))),
-        ("messages", array(api("SessionMessageInfo"))),
-        ("message", nullable(api("SessionMessageInfo"))),
-        ("models", nullable(array(api("ModelInfo")))),
-        ("model", nullable(api("ModelRef"))),
-        ("limits", nullable(api("UsageLimitsInfo"))),
-        ("providers", nullable(array(api("ProviderInfo")))),
+        ("pending", array(api("Session.Inbox.Info"))),
+        ("messages", array(api("Session.Message.Info"))),
+        ("message", nullable(api("Session.Message.Info"))),
+        ("models", nullable(array(api("Model.Info")))),
+        ("model", nullable(api("Model.Ref"))),
+        ("limits", nullable(api("UsageLimits.Info"))),
+        ("providers", nullable(array(api("Provider.Info")))),
         ("info", reference("Info")),
-        ("mcp-servers", nullable(array(api("McpServer")))),
-        ("integrations", nullable(array(api("IntegrationInfo")))),
-        ("vcs", nullable(api("VcsInfo"))),
+        ("mcp-servers", nullable(array(api("Mcp.Server")))),
+        ("integrations", nullable(array(api("Integration.Info")))),
+        ("vcs", nullable(api("Vcs.Info"))),
         ("route", reference("Route")),
         ("scroll-state", maybe("ScrollState")),
         ("anchors", list("AnchorAt")),
@@ -753,6 +764,7 @@ pub(super) fn messages() -> Value {
     };
     json!({
         "describe": reference("Metadata"),
+        "describe-v1": reference("MetadataV1"),
         "create": reference("Manifest"),
         "call": map(&call),
         "host": map(&host),
@@ -797,9 +809,13 @@ fn single(name: &str, schema: Value) -> Value {
     json!({ "type": "object", "properties": { name: schema }, "required": [name], "additionalProperties": false })
 }
 
-/// A value of the HTTP API's type `name`, as its OpenAPI document (`packages/sdk`) defines it.
-fn api(name: &str) -> Value {
-    json!({ "description": format!("The HTTP API's {name}, as its OpenAPI document defines it."), "x-api": name })
+/// Where the HTTP API's OpenAPI document is, from `schema/v2.json`: `packages/protocol/openapi.json`.
+pub(crate) const OPENAPI: &str = "../../../../protocol/openapi.json";
+
+/// A value of the HTTP API's component `key` (`Session.Info`), a reference into its OpenAPI document. The Rust type of
+/// `opencode_api_types` is the key in Pascal case (`SessionInfo`).
+fn api(key: &str) -> Value {
+    json!({ "$ref": format!("{OPENAPI}#/components/schemas/{key}") })
 }
 
 fn any() -> Value {
