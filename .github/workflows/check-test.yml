@@ -113,6 +113,12 @@ jobs:
         if: runner.os == 'Linux'
         run: bun run lint:effect-simplifications
 
+      # nix/scripts is not a workspace, so turbo never runs its tests.
+      - name: Test Nix install layout
+        if: runner.os == 'Linux'
+        working-directory: nix/scripts
+        run: bun test
+
       - name: Configure git identity
         run: |
           git config --global user.email "bot@opencode.ai"
