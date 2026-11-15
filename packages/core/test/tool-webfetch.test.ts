@@ -10,11 +10,9 @@ import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { WebFetchTool } from "@opencode/core/tool/plugin/webfetch"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Image } from "@opencode/core/image"
 import { testEffect } from "./lib/effect"
-import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 
 const webFetchToolNode = makeLocationNode({
   name: "test/webfetch-tool-plugin",
@@ -56,8 +54,7 @@ const permission = permissionLayer({
 })
 const toolLayer = (replacements: LayerNode.Replacements = []) =>
   AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
-    Permission.node.replace(permission),
-    Image.node.replace(imagePassthrough),
+    ...toolNodeReplacements(permission),
     ...replacements,
   ])
 const it = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)]))
@@ -534,6 +531,23 @@ describe("WebFetchTool registration", () => {
       })
       expect(checks.map((check) => check.resources)).toEqual([[target]])
       expect(requests.map((request) => request.url)).toEqual([url])
+    }),
+  )
+
+  it.effect("matches rules against the URL as written without the fragment and rejects credentials", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+
+      yield* executeTool(registry, call({ url: "https://Example.com#top", format: "text" }))
+      expect(assertions.map((assertion) => assertion.resources)).toEqual([["https://Example.com"]])
+
+      reset()
+      expect(yield* executeTool(registry, call({ url: "https://user@example.com/", format: "text" }))).toMatchObject({
+        status: "error",
+        error: { message: "URL must not include credentials" },
+      })
+      expect(requests).toEqual([])
     }),
   )
 

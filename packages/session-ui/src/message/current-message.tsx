@@ -27,10 +27,13 @@ export function SessionUserMessage(props: {
   voice?: boolean
   historicalAgent: string
   historicalModel: SessionMessageAssistant["model"]
-  /** The agent and model the previous prompt chose; a waiting steer names only what it changes. */
-  previousSelection?: { agent: string; model: SessionMessageAssistant["model"] }
   actions?: SessionUserActions
   run?: UserRun
+  /** The newest delivered prompt, whose revert undoes the last turn. */
+  latest?: boolean
+  runSnaps?: () => boolean
+  runHovered?: boolean
+  onMenuOpenChange?: (open: boolean) => void
   fold?: boolean
   expanded?: boolean
   onExpandedChange?: (expanded: boolean) => void
@@ -45,9 +48,12 @@ export function SessionUserMessage(props: {
       voice={props.voice}
       agent={props.historicalAgent}
       model={props.historicalModel}
-      previousSelection={props.previousSelection}
       actions={props.actions}
       run={props.run}
+      latest={props.latest}
+      runSnaps={props.runSnaps}
+      runHovered={props.runHovered}
+      onMenuOpenChange={props.onMenuOpenChange}
       fold={props.fold}
       expanded={props.expanded}
       onExpandedChange={props.onExpandedChange}
@@ -61,6 +67,7 @@ export function SessionAssistantContent(props: {
   contentID: string
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number | null
+  turnTokensPerSecond?: number
   sources?: TurnSources
   onOpenSources?: () => void
   defaultOpen?: boolean
@@ -79,6 +86,7 @@ export function SessionAssistantContent(props: {
             message={props.message}
             showCopy={props.showAssistantCopyPartID === props.contentID}
             turnDurationMs={props.turnDurationMs}
+            turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
           />

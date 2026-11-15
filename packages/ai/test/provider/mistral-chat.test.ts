@@ -63,15 +63,13 @@ describe("Mistral Chat", () => {
           ],
           toolChoice: "lookup",
           promptCacheKey: "session-1",
-          generation: {
-            maxTokens: 64,
-            seed: 7,
-            temperature: 0.2,
-            topP: 0.8,
-            frequencyPenalty: 0.1,
-            presencePenalty: 0.3,
-            stop: ["done"],
-          },
+          maxTokens: 64,
+          seed: 7,
+          temperature: 0.2,
+          topP: 0.8,
+          frequencyPenalty: 0.1,
+          presencePenalty: 0.3,
+          stop: ["done"],
           providerOptions: {
             safePrompt: true,
             documentImageLimit: 3,
@@ -205,7 +203,7 @@ describe("Mistral Chat", () => {
 
       const unsupported = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { supportsPromptCacheKey: false } }),
+          model: LanguageModel.update(model, { capabilities: { promptCacheKey: false } }),
           prompt: "Hello",
           promptCacheKey: "common-key",
           providerOptions: { promptCacheKey: "native-key" },

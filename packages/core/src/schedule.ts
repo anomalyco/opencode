@@ -23,6 +23,7 @@ import {
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
+import { Flag } from "./flag.js"
 import { Instance } from "./instance/service.js"
 import { KVTable } from "./kv/sql.js"
 import type { Permission } from "./permission.js"
@@ -216,11 +217,11 @@ const layer = Layer.effect(
     // Config is per location, so a schedule follows the config where its Session lives.
     const settings = (session: SessionSchema.Info) =>
       Effect.gen(function* () {
-        const config = yield* Effect.serviceOption(Config.Service)
-        if (Option.isNone(config)) return { enabled: false, timezone: undefined }
-        const entries = yield* config.value.entries()
+        const config = yield* Config.Service
+        const flags = yield* Flag.Service
+        const entries = yield* config.entries()
         return {
-          enabled: Config.latest(entries, "experimental")?.schedules === true,
+          enabled: flags.resolve(entries).schedules.enabled,
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(instances.provide(session))

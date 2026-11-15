@@ -1,12 +1,18 @@
-import { Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack, type Accessor } from "solid-js"
 import { Portal } from "solid-js/web"
 import { SESSION_PANES, type SessionPane } from "@/shell/state/session-tabs"
-
-type Rect = { left: number; top: number; width: number; height: number }
-
-/** Where a dragged tab lands: before a tab in a pane's strip (its end without `before`), or in a pane. */
-export type PaneDropTarget = { pane: SessionPane; before?: string; strip: boolean; rect: Rect }
+import {
+  INITIAL_PANE_DRAG_STATE,
+  selectDraggingKey,
+  selectDragLayer,
+  selectMoveKey,
+  transitionPaneDrag,
+  type PaneDragEffect,
+  type PaneDragEvent,
+  type PaneDragState,
+  type PaneDropTarget,
+  type Rect,
+} from "./pane-drag-machine"
 
 /**
  * Drags side and bottom panel tabs between panes. The strips and pane bodies mark themselves with `data-pane-strip`,
@@ -15,17 +21,17 @@ export type PaneDropTarget = { pane: SessionPane; before?: string; strip: boolea
  * bottom edge of the session opens the bottom pane.
  */
 export function createPaneDrag(input: {
+  /** The session whose tabs drag; a change cancels the gesture, so a release cannot move a tab in another session. */
+  identity: Accessor<unknown>
   /** Panes that hold tabs; a pane without them is created by dropping on its zone. */
   shown: (pane: SessionPane) => boolean
   drop: (key: string, target: PaneDropTarget) => void
 }) {
-  const [state, setState] = createStore<{
-    key?: string
-    title: string
-    x: number
-    y: number
-    target?: PaneDropTarget
-  }>({ title: "", x: 0, y: 0 })
+  const [paneDrag, setPaneDrag] = createSignal<PaneDragState>(INITIAL_PANE_DRAG_STATE)
+  const dragging = createMemo(() => selectDraggingKey(paneDrag()))
+  const layer = createMemo(() => selectDragLayer(paneDrag()))
+
+  let clearSuppression: (() => void) | undefined
 
   const hit = (x: number, y: number, key: string): PaneDropTarget | undefined => {
     const inside = (rect: DOMRect) =>
@@ -99,96 +105,154 @@ export function createPaneDrag(input: {
     }
   }
 
-  const start = (event: PointerEvent, key: string, title: string) => {
-    if (event.button !== 0) return
-    const origin = { x: event.clientX, y: event.clientY }
-    const drag = { active: false }
-    const swallow = (click: MouseEvent) => click.stopPropagation()
+  const dispatch = (event: PaneDragEvent) => {
+    const previous = untrack(paneDrag)
+    const next = transitionPaneDrag(previous, event)
 
-    const move = (moved: PointerEvent) => {
-      if (!drag.active && Math.hypot(moved.clientX - origin.x, moved.clientY - origin.y) < 4) return
+    if (next.state === previous) return false
+    setPaneDrag(next.state)
+    next.effects.forEach(run)
 
-      if (!drag.active) {
-        drag.active = true
-        document.body.style.userSelect = "none"
-      }
+    return true
+  }
 
-      const target = hit(moved.clientX, moved.clientY, key)
-      // Away from any drop target the release cancels, so the cursor stays normal.
-      document.body.style.cursor = target ? "grabbing" : ""
-      setState({ key, title, x: moved.clientX, y: moved.clientY, target })
+  const move = (event: PointerEvent) => {
+    // Only the gesture's pointer, once it drags, hit-tests the drop zones.
+    const key = selectMoveKey(untrack(paneDrag), event.pointerId, event.clientX, event.clientY)
+
+    if (key === undefined) return
+    dispatch({
+      type: "pointer.move",
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      target: hit(event.clientX, event.clientY, key),
+    })
+  }
+
+  const up = (event: PointerEvent) => dispatch({ type: "pointer.up", pointerId: event.pointerId })
+  const cancel = (event: PointerEvent) => dispatch({ type: "pointer.cancel", pointerId: event.pointerId })
+  // Leaving the window loses the release, which would leave the drag stuck.
+  const blur = () => dispatch({ type: "blur" })
+
+  const escape = (keyboard: KeyboardEvent) => {
+    if (keyboard.key !== "Escape" || !dispatch({ type: "escape" })) return
+    keyboard.preventDefault()
+    keyboard.stopPropagation()
+  }
+
+  const swallow = (click: MouseEvent) => click.stopPropagation()
+
+  const run = (effect: PaneDragEffect) => {
+    if (effect.type === "gesture.attach") {
+      window.addEventListener("pointermove", move)
+      window.addEventListener("pointerup", up)
+      window.addEventListener("pointercancel", cancel)
+      window.addEventListener("blur", blur)
+      window.addEventListener("keydown", escape, true)
+
+      return
     }
 
-    const finish = (commit: boolean) => {
+    if (effect.type === "gesture.cleanup") {
       window.removeEventListener("pointermove", move)
       window.removeEventListener("pointerup", up)
       window.removeEventListener("pointercancel", cancel)
+      window.removeEventListener("blur", blur)
       window.removeEventListener("keydown", escape, true)
 
-      if (!drag.active) return
-      const target = state.target
+      if (!effect.unlockBody) return
       document.body.style.userSelect = ""
       document.body.style.cursor = ""
-      setState({ key: undefined, target: undefined })
-      // The release over the strip would click whatever tab is under it.
+
+      return
+    }
+
+    if (effect.type === "body.lock") {
+      document.body.style.userSelect = "none"
+      document.body.style.cursor = effect.cursor
+
+      return
+    }
+
+    if (effect.type === "body.cursor") {
+      document.body.style.cursor = effect.cursor
+
+      return
+    }
+
+    if (effect.type === "click-suppression.arm") {
+      clearSuppression?.()
       window.addEventListener("click", swallow, true)
-      setTimeout(() => window.removeEventListener("click", swallow, true))
+      const timer = setTimeout(() => clearSuppression?.())
+      clearSuppression = () => {
+        clearTimeout(timer)
+        window.removeEventListener("click", swallow, true)
+        clearSuppression = undefined
+      }
 
-      if (commit && target) input.drop(key, target)
+      return
     }
 
-    const up = () => finish(true)
-    const cancel = () => finish(false)
+    if (effect.type === "click-suppression.clear") {
+      clearSuppression?.()
 
-    const escape = (keyboard: KeyboardEvent) => {
-      if (keyboard.key !== "Escape") return
-      keyboard.preventDefault()
-      keyboard.stopPropagation()
-      finish(false)
+      return
     }
 
-    window.addEventListener("pointermove", move)
-    window.addEventListener("pointerup", up)
-    window.addEventListener("pointercancel", cancel)
-    window.addEventListener("keydown", escape, true)
+    input.drop(effect.key, effect.target)
   }
+
+  createEffect(on(input.identity, () => void dispatch({ type: "session.changed" }), { defer: true }))
+  onCleanup(() => void dispatch({ type: "disposed" }))
 
   return {
     /** The dragged tab's key while a drag runs. */
-    dragging: () => state.key,
-    start,
+    dragging,
+    start: (event: PointerEvent, key: string, title: string) =>
+      void dispatch({
+        type: "pointer.down",
+        pointerId: event.pointerId,
+        button: event.button,
+        x: event.clientX,
+        y: event.clientY,
+        key,
+        title,
+      }),
     Layer: () => (
-      <Show when={state.key}>
-        <Portal>
-          <div class="fixed inset-0 z-[100] pointer-events-none" data-component="pane-drag-layer">
-            <Show when={state.target}>
-              {(target) => (
-                <div
-                  data-slot={target().strip ? "pane-drop-indicator" : "pane-drop-zone"}
-                  data-pane={target().pane}
-                  class="absolute"
-                  classList={{
-                    "bg-v2-icon-icon-accent rounded-full": target().strip,
-                    "rounded-[10px] border border-v2-icon-icon-accent bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_12%,transparent)]":
-                      !target().strip,
-                  }}
-                  style={{
-                    left: `${target().rect.left}px`,
-                    top: `${target().rect.top}px`,
-                    width: `${target().rect.width}px`,
-                    height: `${target().rect.height}px`,
-                  }}
-                />
-              )}
-            </Show>
-            <div
-              class="absolute max-w-60 h-7 px-2.5 flex items-center rounded-md bg-v2-background-bg-base text-13-regular text-v2-text-text-base truncate shadow-[var(--v2-elevation-raised)] opacity-90"
-              style={{ left: `${state.x + 12}px`, top: `${state.y + 12}px` }}
-            >
-              {state.title}
+      <Show when={layer()}>
+        {(current) => (
+          <Portal>
+            <div class="fixed inset-0 z-[100] pointer-events-none" data-component="pane-drag-layer">
+              <Show when={current().target}>
+                {(target) => (
+                  <div
+                    data-slot={target().strip ? "pane-drop-indicator" : "pane-drop-zone"}
+                    data-pane={target().pane}
+                    class="absolute"
+                    classList={{
+                      "bg-v2-icon-icon-accent rounded-full": target().strip,
+                      "rounded-[10px] border border-v2-icon-icon-accent bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_12%,transparent)]":
+                        !target().strip,
+                    }}
+                    style={{
+                      left: `${target().rect.left}px`,
+                      top: `${target().rect.top}px`,
+                      width: `${target().rect.width}px`,
+                      height: `${target().rect.height}px`,
+                    }}
+                  />
+                )}
+              </Show>
+              <div
+                class="absolute max-w-60 h-7 px-2.5 flex items-center rounded-md bg-v2-background-bg-base text-13-regular text-v2-text-text-base truncate shadow-[var(--v2-elevation-raised)] opacity-90"
+                style={{ left: `${current().x + 12}px`, top: `${current().y + 12}px` }}
+              >
+                {current().title}
+              </div>
             </div>
-          </div>
-        </Portal>
+          </Portal>
+        )}
       </Show>
     ),
   }

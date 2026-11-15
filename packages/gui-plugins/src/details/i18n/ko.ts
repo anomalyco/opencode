@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "구성된 플러그인이 없습니다",
   skills: "스킬",
   "skills.empty": "설정된 스킬이 없습니다",
-  lsp: "LSP",
-  "lsp.empty": "설정된 LSP 서버가 없습니다",
   failed: "실패",
   retry: "재시도",
   connecting: "연결 중…",

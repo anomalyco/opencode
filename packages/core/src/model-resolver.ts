@@ -5,19 +5,18 @@ import {
   DecisionModel,
   DecisionModelCompatibility,
   DecisionModelSchema,
-  HttpOptions,
   ImageModel,
   ImageModelSchema,
   LanguageModel,
   ProviderConfigurationError,
   type ProviderPackage,
 } from "@opencode/ai/effect"
-import { Auth, mergeHttpOptions } from "@opencode/ai/route"
+import { Auth, mergeTransport } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
-import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js"
+import { Capabilities, Compatibility, ID, Info, Model, Ref, VariantID } from "./model.js"
 import type { RuntimeInfo } from "./model.js"
 import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
@@ -148,6 +147,8 @@ export type MediaError =
 
 export interface Interface {
   readonly resolve: (requested?: Ref) => Effect.Effect<Resolved | undefined, Error>
+  /** The model used when nothing is selected: the configured default, or the first available text model. */
+  readonly fallback: () => Effect.Effect<Info | undefined>
   readonly resolveModel: (model: Info, variant?: VariantID) => Effect.Effect<Resolved, Error>
   /** An enabled image model by ref, or undefined when no image model has that ref. */
   readonly resolveImage: (ref: Ref) => Effect.Effect<ImageModel | undefined, MediaError>
@@ -245,23 +246,39 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   return yield* Effect.try({
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+      const timeouts = Provider.timeouts(configured)
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
+        capabilities: resolved.compatibility
+          ? capabilities(runtime.capabilities, resolved.compatibility)
+          : runtime.capabilities,
         compatibility: resolved.compatibility
-          ? Object.assign({}, runtime.compatibility, resolved.compatibility)
+          ? Object.assign({}, runtime.compatibility, Struct.omit(resolved.compatibility, CAPABILITY_KEYS))
           : runtime.compatibility,
-        // Timeouts and body encoding are transport policy, so they land on the route's HTTP defaults instead of package settings.
-        defaults: {
-          ...runtime.defaults,
-          http: mergeHttpOptions(
-            runtime.defaults?.http,
-            new HttpOptions({ ...Provider.timeouts(configured), encoding: Provider.encoding(configured) }),
-          ),
+        // Timeouts and body encoding are transport policy, so they land on the model's options instead of package settings.
+        options: {
+          ...runtime.options,
+          ...mergeTransport(runtime.options, {
+            timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
+            http: { encoding: Provider.encoding(configured), tls: Provider.tls(configured) },
+          }),
         },
       })
     },
     catch: (cause) => constructionError(resolved, cause),
   })
+})
+
+// Config `compatibility` keys the AI package reads as model capabilities.
+const CAPABILITY_KEYS = ["supportsPromptCacheKey", "streamUsage", "supportsEffortUpdates"] as const
+
+const capabilities = (base: LanguageModel["capabilities"], compatibility: Compatibility) => ({
+  ...base,
+  ...("supportsPromptCacheKey" in compatibility ? { promptCacheKey: compatibility.supportsPromptCacheKey } : {}),
+  ...("streamUsage" in compatibility ? { streamUsage: compatibility.streamUsage } : {}),
+  ...("supportsEffortUpdates" in compatibility
+    ? { reasoning: { ...base?.reasoning, updates: compatibility.supportsEffortUpdates } }
+    : {}),
 })
 
 /** Settings and package loading shared by every model type: credentials, variables, canonical provider, overlays. */
@@ -298,7 +315,8 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
-  const { resolved, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const { resolved, configured, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const tls = Provider.tls(configured)
   const runtime: unknown = yield* Effect.try({
     try: () => module.model(resolved.modelID ?? resolved.id, settings),
     catch: (cause) => constructionError(resolved, cause),
@@ -313,7 +331,12 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
         })
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
-  return adapted
+  if (!tls || !(adapted instanceof DecisionModel || adapted instanceof ImageModel)) return adapted
+  // Media and decision models are plain classes with readonly fields, so copy onto the same prototype.
+  const copy: Runtime = Object.assign(Object.create(Object.getPrototypeOf(adapted)), adapted, {
+    http: { ...adapted.http, tls },
+  })
+  return copy
 })
 
 const constructionError = (model: RuntimeInfo, cause: unknown) =>
@@ -365,7 +388,8 @@ function prepareProviderURL(
   const prepared = baseURL.replace(
     /\$\{([^}]+)\}/g,
     (placeholder, name: string) =>
-      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ?? placeholder,
+      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ??
+      placeholder,
   )
   const failure = unresolvedProviderVariables(model, prepared)
   return failure ? Effect.fail(failure) : Effect.succeed(prepared)
@@ -486,7 +510,8 @@ export const layer = Layer.effect(
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,
         cache: runtimeInfo.settings?.cache,
-        transport: provider?.settings?.transport,
+        // The WebSocket transport can't present a client certificate, so `tls` keeps the model on HTTP.
+        transport: Provider.tls(provider?.settings ?? {}) ? "http" : provider?.settings?.transport,
         chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
       }
     })
@@ -499,27 +524,33 @@ export const layer = Layer.effect(
         (model) => model.providerID === ref.providerID && model.id === ref.id,
       )
       if (!info) return undefined
-      const { credential, runtimeInfo } = yield* prepare(info, ref.variant)
-      return yield* fromCatalogMedia(runtimeInfo, is, credential, dependencies)
+      const { provider, credential, runtimeInfo } = yield* prepare(info, ref.variant)
+      // Same no-key rule as chat in `load`. A built image or decision model can't have its auth swapped like chat,
+      // so the package gets `apiKey: false` up front and builds the model without auth.
+      const keyless =
+        provider?.activation === "enabled" &&
+        credential === undefined &&
+        !hasConfiguredAuth(runtimeInfo) &&
+        usesAPIKeyAuth(runtimeInfo.package)
+      return yield* fromCatalogMedia(
+        keyless ? { ...runtimeInfo, settings: { ...runtimeInfo.settings, apiKey: false } } : runtimeInfo,
+        is,
+        credential,
+        dependencies,
+      )
+    })
+    const fallback = Effect.fn("ModelResolver.fallback")(function* () {
+      const model = yield* models.default()
+      if (model && hasPackage(model)) return model
+      return (yield* models.available()).find((model) => hasPackage(model) && Model.supportsText(model))
     })
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
-        const selected = requested
-          ? yield* models.get(requested.providerID, requested.id)
-          : yield* models
-              .default()
-              .pipe(
-                Effect.flatMap((model) =>
-                  model && hasPackage(model)
-                    ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) =>
-                        models.find((model) => hasPackage(model) && Model.supportsText(model)),
-                      ),
-                ),
-              )
+        const selected = requested ? yield* models.get(requested.providerID, requested.id) : yield* fallback()
         if (!selected) return undefined
         return yield* load(selected, requested?.variant)
       }),
+      fallback,
       resolveModel: load,
       resolveImage: Effect.fn("ModelResolver.resolveImage")(function* (ref) {
         return yield* loadMedia(ref, "image", isImageModel)
@@ -532,9 +563,12 @@ export const layer = Layer.effect(
 )
 
 function hasConfiguredAuth(model: RuntimeInfo) {
-  return [model.settings?.apiKey, model.settings?.authToken, model.settings?.accessToken].some(
-    (value) => typeof value === "string" && value !== "",
-  )
+  return [
+    model.settings?.apiKey,
+    model.settings?.gatewayApiKey,
+    model.settings?.authToken,
+    model.settings?.accessToken,
+  ].some((value) => typeof value === "string" && value !== "")
 }
 
 const API_KEY_AUTH_PACKAGES: ReadonlySet<string> = new Set([
@@ -561,6 +595,7 @@ const API_KEY_AUTH_PACKAGES: ReadonlySet<string> = new Set([
   "@opencode/ai/providers/deepseek",
   "@opencode/ai/providers/fireworks",
   "@opencode/ai/providers/openai-compatible",
+  "@opencode/ai/providers/openai-compatible/decisions",
   "@opencode/ai/providers/google",
   "@opencode/ai/providers/google/interactions",
   "@opencode/ai/providers/groq",

@@ -4,8 +4,7 @@ import { CloudflareRunDecisions } from "../protocols/cloudflare-run-decisions.js
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../protocols/index.js"
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import type { RouteDefaultsInput } from "../route/client.js"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import { CloudflareShared } from "./cloudflare-shared.js"
@@ -29,7 +28,7 @@ type GatewayOptions = {
 
 export type Config = GatewayURL &
   GatewayOptions &
-  Omit<RouteDefaultsInput, "providerOptions"> &
+  Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly gatewayApiKey?: string | Redacted.Redacted | Config.Config<string | Redacted.Redacted>
     readonly providerOptions?: OpenAIProviderOptionsInput

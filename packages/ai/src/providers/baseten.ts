@@ -3,17 +3,17 @@ import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { SystemOne } from "../protocols/system-one.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("baseten")
 const baseURL = "https://inference.baseten.co/v1"
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput

@@ -46,6 +46,38 @@ story("shows a static pin board with reduced motion", async ({ mount, page }) =>
   expect(await requestedFrames(page)).toBe(0)
 })
 
+story("the lodger pops the pin board out and packs it back into the e", async ({ mount, page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await mount("app-new-session-wordmark--flat")
+  const grip = page.locator('[data-slot="wordmark-lodger-grip"]')
+  const flat = page.locator('[data-slot="wordmark-flat"]')
+  const board = page.locator("canvas")
+  await expect(board).toHaveCount(0)
+
+  // Pulling the lodger well past its slip distance pops every pin out into the board.
+  const hole = (await grip.boundingBox())!
+  await page.mouse.move(hole.x + hole.width / 2, hole.y + hole.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(hole.x + hole.width / 2 + 160, hole.y + hole.height / 2 + 80, { steps: 12 })
+  await page.mouse.up()
+  await expect(flat).toBeHidden()
+  await expect(board).not.toHaveCount(0)
+  await expect.poll(() => requestedFrames(page)).toBe(0)
+
+  // Carrying it from its perch back into the "e" reels the pins in and tucks the lodger away.
+  const lodger = (await page.locator('[data-slot="wordmark-lodger"]').boundingBox())!
+  const unit = lodger.width / 234
+  const perch = (await grip.boundingBox())!
+  await page.mouse.move(perch.x + perch.width / 2, perch.y + perch.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(perch.x + perch.width / 2 - 24 * unit, perch.y + perch.height / 2 - 16 * unit, { steps: 12 })
+  await page.mouse.up()
+  await expect(board).toHaveCount(0)
+  await expect(flat).toBeVisible()
+  await expect.poll(() => requestedFrames(page)).toBe(0)
+  await expect(grip).toBeVisible()
+})
+
 // Reads the on-screen pixel at a grid cell. The board may be drawn with WebGL, whose canvas cannot be read
 // back once presented, so the pixel comes from a screenshot decoded in the page.
 async function pinPixel(page: Page, cell = PIN) {

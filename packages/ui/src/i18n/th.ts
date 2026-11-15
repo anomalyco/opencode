@@ -171,6 +171,7 @@ export const dict = {
   "ui.common.dismiss": "ปิด",
   "ui.common.close": "ปิด",
   "ui.common.next": "ถัดไป",
+  "ui.common.continue": "ดำเนินการต่อ",
   "ui.common.submit": "ส่ง",
   "ui.common.showMore": "แสดงเพิ่มเติม",
 

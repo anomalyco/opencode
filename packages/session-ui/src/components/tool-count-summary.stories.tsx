@@ -1,4 +1,5 @@
 import { Button } from "@opencode/ui/button"
+import { createEffect } from "solid-js"
 import { createStore } from "solid-js/store"
 import { AnimatedCountList, type CountItem } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
@@ -8,8 +9,14 @@ const text = {
   done: "Explored",
 } as const
 
-function ContextProgress() {
-  const [state, setState] = createStore({ reads: 2, searches: 1, lists: 0, active: true })
+type Counts = { reads: number; searches: number; lists: number; active: boolean }
+
+function ContextProgress(props: Counts) {
+  const [state, setState] = createStore({ ...props })
+
+  for (const key of ["reads", "searches", "lists", "active"] as const) {
+    createEffect(() => setState({ [key]: props[key] }))
+  }
 
   const items = (): CountItem[] => [
     { key: "ui.messagePart.context.read", count: state.reads },
@@ -17,7 +24,7 @@ function ContextProgress() {
     { key: "ui.messagePart.context.list", count: state.lists },
   ]
 
-  const reset = () => setState({ reads: 2, searches: 1, lists: 0, active: true })
+  const reset = () => setState({ ...props })
 
   return (
     <div class="flex max-w-[620px] flex-col gap-5 rounded-lg border border-border-weak-base bg-background-base p-5">
@@ -54,6 +61,9 @@ export default {
   title: "OpenCode/Work/Context progress",
   id: "components-animated-count-list",
   component: AnimatedCountList,
+  argTypes: Object.fromEntries(
+    ["reads", "searches", "lists"].map((key) => [key, { control: { type: "range", min: 0, max: 100, step: 1 } }]),
+  ),
   parameters: {
     docs: {
       description: {
@@ -65,19 +75,21 @@ export default {
 }
 
 export const Exploring = {
-  render: () => <ContextProgress />,
+  args: { reads: 2, searches: 1, lists: 0, active: true },
+  render: (args: Counts) => <ContextProgress {...args} />,
 }
 
 export const Completed = {
-  render: () => (
+  args: { reads: 5, searches: 3, lists: 1, active: false },
+  render: (args: Counts) => (
     <span class="flex items-center gap-2 text-14-medium text-text-strong">
-      <ToolStatusTitle active={false} activeText={text.active} doneText={text.done} split={false} />
+      <ToolStatusTitle active={args.active} activeText={text.active} doneText={text.done} split={false} />
       <span class="text-14-regular text-text-base">
         <AnimatedCountList
           items={[
-            { key: "ui.messagePart.context.read", count: 5 },
-            { key: "ui.messagePart.context.search", count: 3 },
-            { key: "ui.messagePart.context.list", count: 1 },
+            { key: "ui.messagePart.context.read", count: args.reads },
+            { key: "ui.messagePart.context.search", count: args.searches },
+            { key: "ui.messagePart.context.list", count: args.lists },
           ]}
           fallback=""
         />

@@ -19,8 +19,12 @@ export type VectorRequest = {
   readonly size: { readonly width: number; readonly height: number } | undefined
 }
 
-/** A rasterized SVG picture, or none when the window could not decode it either. */
-export type VectorBitmap = { readonly asset: string; readonly bitmap: ImageBitmap | undefined }
+/** A rasterized SVG picture, or none when the window could not decode it either, at the request's `size`. */
+export type VectorBitmap = {
+  readonly asset: string
+  readonly size: { readonly width: number; readonly height: number } | undefined
+  readonly bitmap: ImageBitmap | undefined
+}
 
 export type SlidePainted =
   | {

@@ -16,6 +16,7 @@ import {
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
+  type UserMessage,
 } from "../schema/index.js"
 import type { Media } from "../media.js"
 import {
@@ -606,13 +607,12 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
 })
 
 const lowerUserContent = Effect.fnUntraced(function* (
-  part: LLMRequest["messages"][number]["content"][number],
+  part: UserMessage["content"][number],
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMedia(part, request, adapter)
-  return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
+  return yield* lowerMedia(part, request, adapter)
 })
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
@@ -649,7 +649,10 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
     part.namespace === undefined ? custom.get(part.name) : undefined
 
   for (const message of request.messages) {
-    const rawMetadata = message.providerMetadata?.[providerMetadataKey]
+    const rawMetadata =
+      message.role === "user" || message.role === "assistant"
+        ? message.providerMetadata?.[providerMetadataKey]
+        : undefined
     const metadata = rawMetadata === undefined ? undefined : yield* decodeMessageMetadata(rawMetadata)
     if (message.role === "system") {
       const update = effortUpdate(message)
@@ -791,8 +794,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
     }
 
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent(adapter.name, "tool", ["tool-result"])
       input.push({
         type: customTool(part) ? "custom_tool_call_output" : "function_call_output",
         call_id: part.id,
@@ -814,16 +815,15 @@ export const lowerConversation = Effect.fnUntraced(function* (request: LLMReques
 })
 
 export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
-  const generation = request.generation
   const cacheKey = ProviderShared.promptCacheKey(request)
   const parallelToolCalls = resolveParallelToolCalls(request, options)
   return {
     stream: true as const,
-    max_output_tokens: generation?.maxTokens,
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    presence_penalty: generation?.presencePenalty,
-    frequency_penalty: generation?.frequencyPenalty,
+    max_output_tokens: request.maxTokens,
+    temperature: request.temperature,
+    top_p: request.topP,
+    presence_penalty: request.presencePenalty,
+    frequency_penalty: request.frequencyPenalty,
     ...(options.store !== undefined ? { store: options.store } : {}),
     ...(options.metadata ? { metadata: options.metadata } : {}),
     ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
@@ -890,7 +890,11 @@ export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(reque
 // cached-read and cache-write subsets, and `output_tokens` (inclusive total)
 // with a `reasoning_tokens` subset. Pass the totals through and derive the
 // non-cached breakdown.
-export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadataKey: string) => {
+export const mapUsage = (
+  usage: OpenResponsesUsage | null | undefined,
+  providerMetadataKey: string,
+  ...frames: ReadonlyArray<unknown>
+) => {
   if (!usage) return undefined
   const cached = usage.input_tokens_details?.cached_tokens
   const cacheWrite = usage.input_tokens_details?.cache_write_tokens
@@ -904,9 +908,39 @@ export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerM
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
-    ...ProviderShared.reportedBilling(usage),
+    ...ProviderShared.reportedBilling(usage, ...frames),
     providerMetadata: { [providerMetadataKey]: usage },
   })
+}
+
+// GitHub Copilot lists the filters that ran; the blocking one names its rule in `content_filter_raw`.
+const decodeContentFilters = Schema.decodeUnknownOption(
+  Schema.Array(
+    Schema.Struct({
+      source_type: Schema.optional(Schema.String),
+      blocked: Schema.optional(Schema.Boolean),
+      content_filter_raw: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            action: Schema.optional(Schema.String),
+            label: Schema.optional(Schema.String),
+            result: Schema.optional(Schema.Unknown),
+          }),
+        ),
+      ),
+      content_filter_results: Schema.optional(Schema.Unknown),
+    }),
+  ),
+)
+
+const contentFilterCategory = (raw: unknown) => {
+  const blocked = Option.getOrElse(decodeContentFilters(raw), () => []).filter((filter) => filter.blocked)
+  const filter = blocked.find((item) => item.source_type === "completion") ?? blocked[0]
+  if (!filter) return undefined
+  return (
+    filter.content_filter_raw?.find((rule) => rule.action === "BLOCK" && rule.result === true)?.label ??
+    ProviderShared.contentFilterCategory(filter.content_filter_results)
+  )
 }
 
 const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason => {
@@ -981,8 +1015,9 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
   compaction: "cmp",
 }
 
-// An item without an id adopts the id already open in its output slot,
-// otherwise it gets a locally minted one.
+// An item adopts the id already open in its output slot, since GitHub Copilot
+// sends a different id on every event, including the item's own done event.
+// Otherwise it keeps its id or gets a locally minted one.
 const resolveItem = (
   state: Pick<ParserState, "outputItems">,
   item: StreamItem,
@@ -990,8 +1025,8 @@ const resolveItem = (
 ): OutputItem => ({
   ...item,
   id:
-    item.id ??
     (index === undefined ? undefined : state.outputItems[index]) ??
+    item.id ??
     `${ITEM_ID_PREFIX[item.type] ?? "item"}_${crypto.randomUUID().replaceAll("-", "")}`,
 })
 
@@ -1392,12 +1427,15 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
     }
     events.push(...pending.events)
   }
+  const normalized = mapFinishReason(event, current.hasFunctionCall)
   const lifecycle = Lifecycle.finish(current.lifecycle, events, {
     reason: {
-      normalized: mapFinishReason(event, current.hasFunctionCall),
+      normalized,
       raw: event.response?.incomplete_details?.reason,
+      ...(normalized === "content-filter" ? { category: contentFilterCategory(event.response?.content_filters) } : {}),
     },
-    usage: mapUsage(event.response?.usage, current.providerMetadataKey),
+    // Copilot reports its billing on the terminal event, beside `response`.
+    usage: mapUsage(event.response?.usage, current.providerMetadataKey, event, event.response),
     providerMetadata:
       event.response?.id || event.response?.service_tier
         ? providerMetadata(current, {

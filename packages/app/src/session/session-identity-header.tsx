@@ -52,7 +52,7 @@ export function SessionTitleHeader(props: ParentProps) {
     <>
       {/* The bottom inset reserves room for the fade without covering rows stuck below the bar. */}
       <div data-session-title class="pointer-events-none sticky top-0 z-30 w-full pb-4">
-        <div class="pointer-events-auto flex items-center bg-v2-background-bg-base pe-3 ps-2.5">
+        <div class="pointer-events-auto flex items-center bg-v2-background-bg-base pe-[var(--session-header-inset-end,12px)] ps-2.5">
           <CollapsedSidebarToggleSpace />
           <div class="min-w-0 flex-1">{props.children}</div>
         </div>
@@ -435,7 +435,8 @@ export function SessionLocation(props: {
         </Menu.Portal>
       </Menu>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator gap={8} before={6} after={4} />
+        {/* A child's lineage follows, whose buttons pad 6px; a title pads 4px. */}
+        <SessionHeaderSeparator gap={8} before={6} after={props.compact ? 6 : 4} />
       </Show>
     </>
   )
@@ -499,21 +500,20 @@ export function SessionAncestorTrail(props: {
                 data-slot={ancestor.direct ? "session-title-parent" : "session-title-ancestor"}
                 data-session-id={ancestor.id}
                 title={ancestor.title}
-                class="max-w-[min(200px,40vw)] shrink-0 truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
-                classList={{ "ps-1": index() === 0 }}
+                class="h-7 max-w-[min(200px,40vw)] shrink-0 truncate rounded-[6px] px-1.5 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
                 onClick={() => open(props.sessionID, ancestor.id)}
               >
                 <bdi dir="auto">{ancestor.title}</bdi>
               </button>
               <Show when={index() < ancestors().length - 1}>
-                <SessionHeaderSeparator gap={8} before={0} after={0} />
+                <SessionHeaderSeparator gap={8} before={6} after={6} />
               </Show>
             </>
           )}
         </For>
       </div>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator gap={8} before={0} after={4} />
+        <SessionHeaderSeparator gap={8} before={6} after={4} />
       </Show>
     </div>
   )

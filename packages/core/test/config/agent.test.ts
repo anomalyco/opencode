@@ -442,6 +442,11 @@ permissions:
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(tmp.path, "agents", "team"), { recursive: true })
             await fs.mkdir(path.join(tmp.path, "modes"), { recursive: true })
+            await fs.mkdir(path.join(tmp.path, "agents", ".opencode", "node_modules", "probe"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "agents", ".opencode", "node_modules", "probe", "README.md"),
+              "# Dependency README",
+            )
             await fs.writeFile(
               path.join(tmp.path, "agents", "reviewer.md"),
               `---
@@ -509,6 +514,7 @@ Use native v2 fields.`,
           expect(themed?.color).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("disabled"))).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("empty"))).toBeUndefined()
+          expect(yield* agents.get(Agent.ID.make(".opencode/node_modules/probe/README"))).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("plan"))).toMatchObject({ system: "Make a plan.", mode: "primary" })
         }),
       ),

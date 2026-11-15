@@ -74,6 +74,8 @@ export interface Snapshot {
     readonly messageID: SessionMessage.ID
     readonly call: ToolCall
     readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
+    /** Completes when the user asks the call to stop; see `Tool.Context.cancel`. */
+    readonly cancel?: Effect.Effect<void>
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
@@ -138,6 +140,7 @@ const layer = Layer.effect(
         "gen_ai.tool.name": name,
         "gen_ai.tool.call.id": context.id,
         "session.id": context.sessionID,
+        "gen_ai.agent.name": context.agent,
       })
       const execution = yield* execute(tool, input, context).pipe(
         Effect.map((value) => ({ value })),
@@ -303,6 +306,7 @@ const layer = Layer.effect(
                 messageID: input.messageID,
                 id: Tool.CallID.make(input.call.id),
                 progress: input.progress ?? (() => Effect.void),
+                cancel: input.cancel,
               }
               const event = yield* beforeExecute(input.call.name, input.call.input, context)
               const requested = input.definitions?.get(event.tool)
@@ -361,7 +365,9 @@ const layer = Layer.effect(
 )
 
 /** Store a valid tool under its effective name, or record why it was skipped. */
-function commit(editor: Data, id: string, tool: Tool.Info & { readonly id: string }) {
+function commit(editor: Data, id: string, input: Tool.Info & { readonly id: string }) {
+  // JavaScript plugins may leave out `input` for a tool that takes none.
+  const tool = input.input === undefined || input.input === null ? { ...input, input: {} } : input
   const registered = register(tool)
   if (Result.isFailure(registered)) {
     editor.errors.push({
@@ -400,6 +406,11 @@ function register(tool: Tool.Info): Result.Result<ToolDefinition, RegistrationEr
   const id = effectiveName(tool)
   if (tool.options?.codemode === false && id === "execute")
     return Result.fail(new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' }))
+  // Standard Schema libraries such as ArkType make schemas that are functions.
+  if (typeof tool.input !== "object" && typeof tool.input !== "function")
+    return Result.fail(
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
+    )
   return Result.try({
     try: () => ToolDefinition.make(definition(tool)),
     catch: (error) =>

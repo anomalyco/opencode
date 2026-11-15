@@ -1,19 +1,19 @@
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
+import type { Route, CompactionOperations } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { MediaRoute } from "../route/media.js"
 import {
-  HttpOptions,
   ProviderConfigurationError,
   ProviderID,
-  mergeHttpOptions,
   type ModelID,
   type ProviderOptions,
+  type RequestOptions,
 } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
@@ -27,7 +27,7 @@ const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 55 * 60 * 1000
 type AzureURL = AtLeastOne<{ readonly resourceName: string; readonly baseURL: string }>
 
 export type Config = AzureURL &
-  RouteDefaultsInput &
+  RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly apiVersion?: string
     readonly queryParams?: Record<string, string>
@@ -140,7 +140,7 @@ export const configure = (input: Config) => {
   const chat = (modelID: string | ModelID) =>
     configuredRoute(chatRoute, input, modelID)
       .with(withOpenAIOptions(modelID, modelDefaults))
-      .model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
+      .model<OpenAIProviderOptionsInput>({ id: modelID, capabilities: { promptCacheKey: true } })
 
   const messages = (modelID: string | ModelID) =>
     messagesRoute
@@ -164,12 +164,20 @@ export const configure = (input: Config) => {
       id: modelID,
       provider: id,
       providerOptions,
-      http: mergeHttpOptions(
-        media.http,
-        target.query === undefined ? undefined : new HttpOptions({ query: target.query }),
-      ),
+      http: { ...media.http, query: { ...media.http?.query, ...target.query } },
     })
   }
+
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIEmbeddings.route
+      .with({
+        provider: id,
+        endpoint: endpoint(input, modelID),
+        auth: auth(input),
+        headers: input.headers,
+        http: input.http,
+      })
+      .model({ id: modelID, providerOptions })
 
   return {
     id,
@@ -178,6 +186,7 @@ export const configure = (input: Config) => {
     chat,
     messages,
     image,
+    embedding,
     configure,
   }
 }
@@ -226,6 +235,10 @@ export const messagesModel: ProviderPackage.Model<MessagesSettings, AnthropicMes
 export const imageModel = (modelID: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
+}
+export const embeddingModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
 }
 export const model = responsesModel
 export const responses = responsesModel
