@@ -1,3 +1,4 @@
+import { SQLiteError } from "bun:sqlite"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { Layer } from "effect"
 import type { SqlClient } from "effect/sql"
@@ -11,3 +12,7 @@ export const supportsForeignKeyToggle = true
 // busyTimeout; Database.layer treats both as fatal.
 export const sqliteLayer = (config: SqliteClient.SqliteClientConfig): Layer.Layer<SqlClient.SqlClient> =>
   Layer.orDie(SqliteClient.layer(config))
+
+// bun:sqlite throws SQLiteError, whose errno is SQLite's extended result code.
+export const driverError = (cause: unknown) =>
+  cause instanceof SQLiteError ? { code: cause.errno, message: cause.message } : undefined

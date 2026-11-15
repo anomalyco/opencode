@@ -49,9 +49,9 @@ it.live("a write on a full disk answers 500 with the storage reason instead of a
   Effect.gen(function* () {
     const server = yield* boot
     const session = yield* Effect.promise(() => server.api.session.create({ location: server.location }))
-    // A real SQLITE_FULL: the database may not grow, so a write that needs a new page fails.
-    const rows = yield* server.db.all<{ page_count: number }>("PRAGMA page_count").pipe(Effect.orDie)
-    yield* server.db.run(`PRAGMA max_page_count = ${rows[0]!.page_count}`).pipe(Effect.orDie)
+    // A real SQLITE_FULL: SQLite never lowers the limit below the current size, so 1 means the database may not grow
+    // and a write that needs a new page fails.
+    yield* server.db.run("PRAGMA max_page_count = 1").pipe(Effect.orDie)
 
     const prompt = yield* server.request("POST", `/api/session/${session.id}/prompt`, { text: large })
     expect(prompt.status).toBe(500)

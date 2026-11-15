@@ -221,3 +221,6 @@ export const sqliteLayer = (config: Config): Layer.Layer<SqlClient.SqlClient> =>
           ),
         ),
       )
+
+// Durable Object SQLite throws a plain Error without SQLite result codes.
+export const driverError = (_cause: unknown): { code: number; message: string } | undefined => undefined

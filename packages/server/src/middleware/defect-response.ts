@@ -3,6 +3,8 @@ import { UnknownError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http"
 
+const respond = HttpServerResponse.schemaJson(UnknownError)
+
 // Effect answers a failure it has no response for with an empty 500. Replace exactly that response, like the
 // encoding failure in schema-error.ts: the reason when it's one a person can act on (a storage failure), otherwise a
 // ref to find it in the server log. Every cause Effect already answers (declared errors, route-not-found, defects that
@@ -19,15 +21,14 @@ export const defectResponseLayer = HttpRouter.middleware(
           yield* Effect.logError("request failed", cause).pipe(
             Effect.annotateLogs({ ref, route: `${request.method} ${request.url}` }),
           )
-          return HttpServerResponse.jsonUnsafe(
-            {
-              _tag: "UnknownError",
+          return yield* respond(
+            new UnknownError({
               message:
                 StorageFailure.message(cause) ?? "Server failed to handle the request. Check server logs for details.",
               ref,
-            } satisfies typeof UnknownError.Encoded,
+            }),
             { status: 500 },
-          )
+          ).pipe(Effect.orDie)
         }),
       ),
     ),
