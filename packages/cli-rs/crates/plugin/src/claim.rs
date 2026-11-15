@@ -547,6 +547,12 @@ impl Core {
                     log::error!("claim {}: its last tree again: {refused}", self.id.surface);
                 }
             }
+            // One view a frame here too: a part viewed in this frame takes the new palette at the next paint.
+            _ if self.viewed.get() == Some(host.app().frame_number()) => {
+                if let Some(core) = self.this.upgrade() {
+                    core.wait();
+                }
+            }
             _ => {
                 self.draw(&*host);
             }
@@ -739,10 +745,18 @@ impl Shows for Core {
 }
 
 /// A wake of the plugin, or a handler of it that ran, draws the part again: the plugin's own state may have changed
-/// what its view returns. A part the host's row shows for the rest of its mount is not asked.
+/// what its view returns. A part the host's row shows for the rest of its mount is not asked. A part viewed in this
+/// frame already, by a revision or another wake, is viewed at the next paint with what is newest then, as a revision
+/// that streams is (review bigboi 12): one view a frame, whichever way it is asked for.
 impl Drawn for Core {
     fn woken(&self, host: &dyn Host) {
         if self.fallen.get() || self.part.borrow().is_none() {
+            return;
+        }
+        if self.viewed.get() == Some(host.app().frame_number()) {
+            if let Some(core) = self.this.upgrade() {
+                core.wait();
+            }
             return;
         }
         let before = self.shows.get();
