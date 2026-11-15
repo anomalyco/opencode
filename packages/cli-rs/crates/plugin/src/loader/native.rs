@@ -1209,7 +1209,8 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
 /// The mount whose handler or view runs, which P3's verbs and reads name; `None` for a command, which is bound to no
 /// mount: then the plugin's newest live mount of the surface.
 fn called_mount(ctx: &Ctx) -> Option<std::rc::Weak<()>> {
-    ctx.owners.as_ref().and_then(|owners| owners.mounted())
+    // The mount the call is of, also a route command's, which holds no input (carbon own-1).
+    ctx.owners.as_ref().and_then(|owners| owners.owning())
 }
 
 /// What the calls hold of the input; a setup asks nothing of it, as it has no mount and no owner yet.

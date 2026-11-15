@@ -388,6 +388,49 @@ fn hook(app: &App) -> Option<Rc<Hook>> {
     HOOKS.with(|hooks| hooks.borrow().get(&key(app)).cloned())
 }
 
+/// What a plugin's live mount of a surface holds of the input, for the tests: its generation, the node it focuses,
+/// and each scroll's offset, by id.
+#[doc(hidden)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MountState {
+    pub generation: u64,
+    pub focused: Option<String>,
+    pub offsets: Vec<(String, i32)>,
+}
+
+/// The live mounts of plugin `plugin`'s surface `surface` in `app`, oldest first, for the tests.
+#[doc(hidden)]
+pub fn mounts(app: &App, plugin: &str, surface: &str) -> Vec<MountState> {
+    let Some(hook) = hook(app) else { return Vec::new() };
+    let mut mounts = hook.live();
+    mounts.retain(|mount| mount.calls.plugin == plugin && mount.id.surface == surface);
+    mounts
+        .iter()
+        .map(|mount| {
+            let mut offsets = mount
+                .with_index(|index, _| {
+                    Some(index.scrolls.iter().map(|(id, scrolled)| (id.clone(), scrolled.state().offset)).collect())
+                })
+                .unwrap_or_else(Vec::new);
+            offsets.sort();
+            let focused = mount.holder().and_then(|owner| owner.focused().node);
+            MountState { generation: mount.id.generation, focused, offsets }
+        })
+        .collect()
+}
+
+/// Focuses node `node` of plugin `plugin`'s newest live mount of `surface`, as the user would, for the tests: a mount
+/// that holds the focus before a verb applies. Whether such a mount was found.
+#[doc(hidden)]
+pub fn focus(host: &dyn crate::Host, plugin: &str, surface: &str, node: &str) -> bool {
+    let Some(hook) = hook(host.app()) else { return false };
+    let mut mounts = hook.live();
+    mounts.retain(|mount| mount.calls.plugin == plugin && mount.id.surface == surface);
+    let Some(owner) = mounts.pop().and_then(|mount| mount.holder()) else { return false };
+    owner.focus(host, node);
+    true
+}
+
 /// What the behaviors did, counted per thread outside any mount (`work`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Counts {
@@ -705,6 +748,8 @@ fn mount(caller: &Caller<'_>, surface: &str) -> Option<Rc<Surface>> {
     let own = caller.mount.as_ref().and_then(|own| mounts.iter().rposition(|mount| Weak::ptr_eq(&mount.alive(), own)));
     match own {
         Some(at) => Some(mounts.swap_remove(at)),
+        // A call of a mount that closed: its verb ends with it, and never reaches a mount opened since (carbon own-1).
+        None if caller.mount.as_ref().is_some_and(|own| own.upgrade().is_none()) => None,
         None => mounts.pop(),
     }
 }

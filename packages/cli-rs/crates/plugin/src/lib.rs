@@ -710,6 +710,10 @@ struct Scope {
 /// Mounts an overlay surface into its frame.
 type OverlayFn = Rc<dyn Fn(&dyn Host, &View) -> Option<Box<dyn Claimed>>>;
 
+/// The mount a call is of closed: what it asks of the input applies nowhere (carbon own-1).
+#[derive(Debug)]
+struct Closed;
+
 /// What a plugin's calls hold of the input (P2), on either carrier: the owner of the running call, the activation's own,
 /// and the overlay surfaces. Its verbs are effects, which run once the call returns.
 pub(crate) struct Owners {
@@ -766,33 +770,47 @@ impl Owners {
         self.owned.borrow().clone().or_else(|| self.mounted())
     }
 
-    /// The input owner of the running call.
-    fn owner(&self) -> Rc<interact::Owner> {
-        self.current.borrow().clone().unwrap_or_else(|| self.input.clone())
+    /// The mount the running call is of: its input owner, else the owner of the mount it belongs to (a route's
+    /// command, or an input whose owner went before its effects applied); `Err` when that mount closed, whose call
+    /// then affects nothing, neither the activation nor a mount opened since (carbon own-1); `Ok(None)` for the
+    /// activation's own calls.
+    fn mount_owner(&self) -> Result<Option<Rc<interact::Owner>>, Closed> {
+        if let Some(current) = self.current.borrow().clone() {
+            return Ok(Some(current));
+        }
+        let Some(owned) = self.owned.borrow().clone() else { return Ok(None) };
+        let mounts = self.activation.owners();
+        let own = mounts.into_iter().find(|owner| owner.mounted().is_some_and(|mount| Weak::ptr_eq(&mount, &owned)));
+        own.map(Some).ok_or(Closed)
+    }
+
+    /// The input owner of the running call: its mount's, or the activation's.
+    fn owner(&self) -> Result<Rc<interact::Owner>, Closed> {
+        Ok(self.mount_owner()?.unwrap_or_else(|| self.input.clone()))
     }
 
     /// The owner a call's node `id` belongs to: the running call's mount, or, for a call of the plugin's own (a
     /// command), its newest mount whose tree holds the id.
-    fn owner_of(&self, id: &str) -> Rc<interact::Owner> {
-        if let Some(current) = self.current.borrow().clone() {
-            return current;
+    fn owner_of(&self, id: &str) -> Result<Rc<interact::Owner>, Closed> {
+        if let Some(own) = self.mount_owner()? {
+            return Ok(own);
         }
         let mounts = self.activation.owners();
-        mounts.into_iter().rev().find(|owner| owner.has(id)).unwrap_or_else(|| self.input.clone())
+        Ok(mounts.into_iter().rev().find(|owner| owner.has(id)).unwrap_or_else(|| self.input.clone()))
     }
 
     /// The owner a call's focus is about: the running call's mount, or, for a call of the plugin's own (a command), its
     /// newest mount that has the focus.
-    fn owner_focused(&self) -> Rc<interact::Owner> {
-        if let Some(current) = self.current.borrow().clone() {
-            return current;
+    fn owner_focused(&self) -> Result<Rc<interact::Owner>, Closed> {
+        if let Some(own) = self.mount_owner()? {
+            return Ok(own);
         }
         let mounts = self.activation.owners().into_iter().rev();
-        mounts.into_iter().find(|owner| owner.focused().surface).unwrap_or_else(|| self.input.clone())
+        Ok(mounts.into_iter().find(|owner| owner.focused().surface).unwrap_or_else(|| self.input.clone()))
     }
 
     pub(crate) fn rect(&self, id: &str) -> Option<abi::interact::Rect> {
-        self.owner_of(id).rect(id)
+        self.owner_of(id).ok()?.rect(id)
     }
 
     /// The ID of the running call's mount (big-boi 4).
@@ -815,11 +833,11 @@ impl Owners {
     }
 
     pub(crate) fn focused(&self) -> abi::interact::Focused {
-        self.owner_focused().focused()
+        self.owner_focused().map(|owner| owner.focused()).unwrap_or_default()
     }
 
     pub(crate) fn mode(&self) -> Option<String> {
-        self.owner().mode()
+        self.owner().ok()?.mode()
     }
 
     pub(crate) fn open_panel(&self, open: abi::interact::OpenPanel) -> Effect {
@@ -839,7 +857,8 @@ impl Owners {
             log::warn!("plugin {}: no overlay surface {:?}", self.id, overlay.surface);
             return None;
         };
-        let (id, opener) = (self.id.clone(), self.owner());
+        let Ok(opener) = self.owner() else { return Some(Box::new(|_| {})) };
+        let id = self.id.clone();
         Some(Box::new(move |host| {
             if let Some(router) = host.router().filter(|_| opener.alive()) {
                 router.open(host, &id, &overlay, &opener, |frame| open(host, frame));
@@ -857,17 +876,19 @@ impl Owners {
     }
 
     pub(crate) fn focus(&self, node: &str) -> Effect {
-        let (owner, node) = (self.owner_of(node), node.to_owned());
+        let Ok(owner) = self.owner_of(node) else { return Box::new(|_| {}) };
+        let node = node.to_owned();
         Box::new(move |host| owner.focus(host, &node))
     }
 
     pub(crate) fn blur(&self) -> Effect {
-        let owner = self.owner_focused();
+        let Ok(owner) = self.owner_focused() else { return Box::new(|_| {}) };
         Box::new(move |host| owner.blur(host))
     }
 
     pub(crate) fn set_mode(&self, mode: Option<&str>) -> Effect {
-        let (owner, mode) = (self.owner(), mode.map(str::to_owned));
+        let Ok(owner) = self.owner() else { return Box::new(|_| {}) };
+        let mode = mode.map(str::to_owned);
         Box::new(move |host| owner.set_mode(host, mode.as_deref()))
     }
 
@@ -1013,7 +1034,8 @@ impl Scope {
             return;
         }
         let outer = self.mount.replace(Some(alive.clone()));
-        self.run(export, handler);
+        // What it asks of the input is the mount's too, as on the other carriers (carbon own-1).
+        self.owners.owned_by(alive, || self.run(export, handler));
         *self.mount.borrow_mut() = outer;
     }
 
