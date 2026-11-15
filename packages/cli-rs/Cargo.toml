@@ -10,6 +10,15 @@ publish = false
 
 [workspace.lints.rust]
 unsafe_code = "deny"
+# From Anomaly's shared Rust lint set, the ones the client already has no findings for, so it keeps none.
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+dbg_macro = "deny"
+todo = "warn"
 
 [workspace.dependencies]
 opencode-acp = { path = "crates/acp" }
