@@ -1012,7 +1012,8 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     };
 
     let layers = vec![
-        // The prompt's commands (`promptCommands`); only `prompt.queue` is in the palette.
+        // The prompt's commands in the order of `promptCommands`, which the palette keeps; then `session.cd`, whose TS
+        // layer is older.
         KeymapLayer::global(vec![
             command("prompt.clear", "Clear prompt", "Prompt", |prompt, tui| {
                 prompt.clear(tui);
@@ -1041,6 +1042,25 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                 true
             })
             .palette(),
+            command("prompt.editor_context.clear", "Remove editor context", "Prompt", |prompt, tui| {
+                prompt.dismiss_editor_context(tui);
+                tui.dialogs.clear();
+                true
+            })
+            .palette()
+            .enabled(when(|prompt, tui| prompt.editor_context(tui).is_some())),
+            command("prompt.paste", "Paste", "Prompt", |prompt, _| {
+                if let Some(prompt) = prompt.rc() {
+                    super::paste::from_clipboard(&prompt);
+                }
+                true
+            }),
+            command("prompt.images.view", "View image attachments", "Prompt", |prompt, tui| {
+                super::attach::view(tui, prompt);
+                true
+            })
+            .palette()
+            .enabled(when(|prompt, _| super::attach::has_images(prompt))),
             command("session.interrupt", "Interrupt session", "Session", |prompt, tui| {
                 if prompt.focused() {
                     prompt.interrupt(tui);
@@ -1055,21 +1075,6 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                 true
             })
             .enabled(when(|prompt, _| prompt.busy.get())),
-            command("prompt.skills", "Skills", "Prompt", |prompt, tui| {
-                crate::dialogs::skill::show(tui, Some(prompt.location(tui)), insert_skill(prompt.this.clone()));
-                true
-            })
-            .palette()
-            .slash("skills"),
-            autocomplete::cd::command(inner.this.clone()),
-            super::r#move::command(inner.this.clone()),
-            command("prompt.editor_context.clear", "Remove editor context", "Prompt", |prompt, tui| {
-                prompt.dismiss_editor_context(tui);
-                tui.dialogs.clear();
-                true
-            })
-            .palette()
-            .enabled(when(|prompt, tui| prompt.editor_context(tui).is_some())),
             command("prompt.editor", "Open editor", "Session", |prompt, tui| {
                 if let Some(prompt) = prompt.rc() {
                     super::external_editor::open(tui, &prompt);
@@ -1078,18 +1083,14 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
             })
             .palette()
             .slash("editor"),
-            command("prompt.paste", "Paste", "Prompt", |prompt, _| {
-                if let Some(prompt) = prompt.rc() {
-                    super::paste::from_clipboard(&prompt);
-                }
-                true
-            }),
-            command("prompt.images.view", "View image attachments", "Prompt", |prompt, tui| {
-                super::attach::view(tui, prompt);
+            command("prompt.skills", "Skills", "Prompt", |prompt, tui| {
+                crate::dialogs::skill::show(tui, Some(prompt.location(tui)), insert_skill(prompt.this.clone()));
                 true
             })
             .palette()
-            .enabled(when(|prompt, _| super::attach::has_images(prompt))),
+            .slash("skills"),
+            super::r#move::command(inner.this.clone()),
+            autocomplete::cd::command(inner.this.clone()),
         ]),
         super::stash::layer(inner),
         KeymapLayer::default().priority(1).bindings(["prompt.queue"]),

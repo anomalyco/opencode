@@ -140,7 +140,9 @@ pub struct TuiCommand {
     pub group: Option<String>,
     pub enabled: Condition,
     pub bind: Bind,
-    pub palette: bool,
+    /// Whether the palette lists it. TS sets `palette` each time a layer's commands change, so a command can leave
+    /// the palette and stay a command, as `variant.list` does while the model has no variants.
+    pub palette: Condition,
     pub slash: Option<Slash>,
     pub suggested: Condition,
     pub run: CommandRun,
@@ -167,7 +169,7 @@ impl TuiCommand {
             group: None,
             enabled: Condition::Always,
             bind: Bind::Key(bind.into()),
-            palette: false,
+            palette: Condition::Never,
             slash: None,
             suggested: Condition::Never,
             run: Rc::new(move |input, event| run(input, event).into_outcome()),
@@ -199,8 +201,12 @@ impl TuiCommand {
         self
     }
 
-    pub fn palette(mut self) -> Self {
-        self.palette = true;
+    pub fn palette(self) -> Self {
+        self.palette_when(Condition::Always)
+    }
+
+    pub fn palette_when(mut self, palette: impl Into<Condition>) -> Self {
+        self.palette = palette.into();
         self
     }
 
@@ -322,8 +328,23 @@ type Invocation = (String, Option<String>);
 
 struct Registered<T> {
     id: u64,
+    /// When the layer counts as registered for [`TuiKeymap::commands`]: its `id`, or later after a [`Hold`].
+    rank: u64,
     layer: KeymapLayer<T>,
     engine: Disposer,
+}
+
+/// Holds back the rank of some layers until it drops ([`TuiKeymap::hold`]).
+pub struct Hold<'a, T: Clone + PartialEq + 'static>(&'a TuiKeymap<T>, Vec<u64>);
+
+impl<T: Clone + PartialEq + 'static> Drop for Hold<'_, T> {
+    fn drop(&mut self) {
+        let held = &self.1;
+        for registered in self.0.layers.borrow_mut().iter_mut().filter(|registered| held.contains(&registered.id)) {
+            registered.rank = self.0.next_layer.get();
+            self.0.next_layer.set(registered.rank + 1);
+        }
+    }
 }
 
 struct ModeEntry {
@@ -340,6 +361,10 @@ pub struct TuiKeymap<T> {
     /// as `createLayer` reads the configured bindings reactively.
     layers: Rc<RefCell<Vec<Registered<T>>>>,
     next_layer: Cell<u64>,
+    /// The commands of TS's first command layer, in its order ([`Self::set_first_layer`]).
+    first_layer: RefCell<Vec<String>>,
+    /// The layers registered during [`Self::hold`]'s `register`.
+    held: RefCell<Option<Vec<u64>>>,
     leader: Option<TimedLeader<T>>,
     /// The timeout `leader` was built with, and the configured one now ([`Self::set_leader_timeout`]).
     leader_timeouts: (Duration, Cell<Duration>),
@@ -384,6 +409,8 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             keybinds: RefCell::new(Rc::new(keybinds)),
             layers: Rc::default(),
             next_layer: Cell::new(0),
+            first_layer: RefCell::default(),
+            held: RefCell::default(),
             leader,
             leader_timeouts: (options.leader_timeout, Cell::new(options.leader_timeout)),
             leader_stroke,
@@ -508,7 +535,10 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         let engine = self.keymap.register_layer(self.compile(layer.clone())?);
         let id = self.next_layer.get();
         self.next_layer.set(id + 1);
-        self.layers.borrow_mut().push(Registered { id, layer, engine });
+        if let Some(held) = self.held.borrow_mut().as_mut() {
+            held.push(id);
+        }
+        self.layers.borrow_mut().push(Registered { id, rank: id, layer, engine });
         Ok(Disposer::new(bind!(self.layers, |layers| {
             // Dropped after the borrow ends, as `set_keybinds` drops what it replaced.
             let removed = {
@@ -537,7 +567,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
                     named.push((id, command));
                 }
                 None => {
-                    if command.palette {
+                    if !matches!(command.palette, Condition::Never) {
                         return Err("Palette commands require an ID".to_owned());
                     }
                     if command.slash.is_some() {
@@ -607,7 +637,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         engine.title = command.title.clone();
         engine.desc = command.description.clone();
         engine.category = command.group.clone();
-        engine.namespace = command.palette.then(|| "palette".to_owned());
+        engine.namespace = (!matches!(command.palette, Condition::Never)).then(|| "palette".to_owned());
         engine.data(command)
     }
 
@@ -659,10 +689,27 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         publish_mode(&self.keymap, &self.mode());
     }
 
-    /// The reachable commands, for the palette and slash completion.
+    /// Runs `register`. The layers it registers work at once, but [`Self::commands`] lists them as if registered when
+    /// the hold drops: TS loads the built-in plugins only once the first route has mounted, where this TUI activates
+    /// them before.
+    pub fn hold(&self, register: impl FnOnce()) -> Hold<'_, T> {
+        *self.held.borrow_mut() = Some(Vec::new());
+        register();
+        Hold(self, self.held.take().unwrap_or_default())
+    }
+
+    /// Names the commands of TS's first command layer, in its order: `app.tsx` registers them in one layer before any
+    /// other, where this TUI declares them with their features, in many layers. The keymap lists the newest layer
+    /// first, so [`Self::commands`] lists these last, in this order.
+    pub fn set_first_layer(&self, ids: impl IntoIterator<Item = String>) {
+        *self.first_layer.borrow_mut() = ids.into_iter().collect();
+    }
+
+    /// The reachable commands, for the palette and slash completion: the newest layer's first.
     pub fn commands(&self) -> Vec<CommandView> {
         self.sync_mode();
-        self.keymap
+        let mut commands: Vec<CommandView> = self
+            .keymap
             .commands(&CommandQuery::visibility(Visibility::Reachable))
             .iter()
             .map(|command| match command.data_as::<TuiCommand>() {
@@ -672,7 +719,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
                     description: declared.description.clone(),
                     group: declared.group.clone(),
                     enabled: check(&declared.enabled),
-                    palette: declared.palette,
+                    palette: check(&declared.palette),
                     slash: declared.slash.clone(),
                     suggested: check(&declared.suggested),
                 },
@@ -687,7 +734,28 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
                     suggested: false,
                 },
             })
-            .collect()
+            .collect();
+        // The keymap lists by priority, then the newest layer first; the newest by rank here. The first layer's commands
+        // go after them, in its order, and last the addons' (no layer here declares them), which TS registers with
+        // the keymap, before any layer. The sort is stable, so a layer's commands keep their order.
+        let mut ranks = std::collections::HashMap::new();
+        for registered in self.layers.borrow().iter() {
+            for id in registered.layer.commands.iter().filter_map(|command| command.id.clone()) {
+                let rank = (registered.layer.priority, registered.rank);
+                ranks.entry(id).and_modify(|newest: &mut (i32, u64)| *newest = rank.max(*newest)).or_insert(rank);
+            }
+        }
+        let first = self.first_layer.borrow();
+        commands.sort_by_key(|command| {
+            let rank = ranks.get(&command.id).copied();
+            let place = match first.iter().position(|id| *id == command.id) {
+                Some(index) => index + 1,
+                None if rank.is_some() => 0,
+                None => usize::MAX,
+            };
+            (place, std::cmp::Reverse(rank))
+        });
+        commands
     }
 
     /// The first shortcut of a registered command, such as `ctrl+x n`.

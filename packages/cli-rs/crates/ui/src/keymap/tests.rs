@@ -249,3 +249,42 @@ fn a_binding_parses_as_its_layer_registers_it() {
         assert!(!takes_escape(key), "{key:?}");
     }
 }
+
+// Expected (D131): the commands list in the order of TS's layers. The newest layer comes first; a held layer counts
+// as registered when its hold drops; the first layer's commands come last, in its order, wherever they were declared;
+// a command leaves the palette while its `palette` condition fails.
+#[test]
+fn commands_list_in_the_order_of_typescript_layers() {
+    let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
+    let layer = |ids: &[&str]| {
+        let commands = ids.iter().map(|id| TuiCommand::new(*id, |_, _| {})).collect();
+        tui.layer(KeymapLayer::global(commands)).unwrap().forget();
+    };
+    tui.set_first_layer(["app.b", "app.a", "app.c"].map(String::from));
+    layer(&["app.a"]);
+    layer(&["app.b", "app.c"]);
+    let held = tui.hold(|| layer(&["plugin.a"]));
+    layer(&["route.a", "route.b"]);
+    // The textarea addon's `input.*` commands come last, as TS registers them with the keymap.
+    let order = || {
+        let ids = tui.commands().into_iter().map(|command| command.id).collect::<Vec<_>>();
+        assert!(ids.last().is_some_and(|id| id.starts_with("input.")), "{ids:?}");
+        ids.into_iter().filter(|id| !id.starts_with("input.")).collect::<Vec<_>>()
+    };
+    assert_eq!(order(), ["route.a", "route.b", "plugin.a", "app.b", "app.a", "app.c"]);
+    drop(held);
+    assert_eq!(order(), ["plugin.a", "route.a", "route.b", "app.b", "app.a", "app.c"]);
+
+    let shown = Rc::new(Cell::new(false));
+    let when = Condition::when({
+        let shown = shown.clone();
+        move || shown.get()
+    });
+    tui.layer(KeymapLayer::global(vec![TuiCommand::new("variant.list", |_, _| {}).palette_when(when)]))
+        .unwrap()
+        .forget();
+    let palette = || tui.commands().into_iter().find(|command| command.id == "variant.list").unwrap().palette;
+    assert!(!palette());
+    shown.set(true);
+    assert!(palette());
+}

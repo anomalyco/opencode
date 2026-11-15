@@ -19,3 +19,6 @@ written unchanged; the value has no effect.
 User decision: "designs should fit that and only that". Every P-COMP and P-APP fixture is recorded from the TS TUI
 with the experiment on (`parity/lib/app.ts` `withNewDesigns`), and `parity/component/E.18a-settings.tsx` records
 the Experiments dialog with the same registry as Rust, without the `new-designs` entry.
+`parity/scenarios/D131/designs.pty.ts` drives the difference with the config a release starts with: the palette
+searches in its title row ("Search commands") where TS shows a "Commands" title above a "Search" field, and `/debug`
+copies with `c` where TS copies with Enter.
