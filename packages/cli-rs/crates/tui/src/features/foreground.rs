@@ -72,6 +72,9 @@ pub fn run(tui: &Tui, program: abi::Foreground, alive: Box<dyn Fn() -> bool>, re
             }
             let result = opencode_util::job::run(&mut command).map(exit);
             let result = result.map_err(|error| format!("{}: {error}", program.command));
+            if let (Some(tui), Some(exited)) = (weak.upgrade(), EXITED.with_borrow(Clone::clone)) {
+                exited(&tui);
+            }
             // Once the terminal is set up again: the suspended terminal lost the title, and the program may have set
             // its own, so the last title comes back first, before the reply, which may set another.
             let Some(tui) = weak.upgrade() else { return answer.send(result) };
@@ -88,6 +91,20 @@ pub fn run(tui: &Tui, program: abi::Foreground, alive: Box<dyn Fn() -> bool>, re
             answer.send(Err("another program is in the foreground".to_owned()));
         }
     }
+}
+
+/// What runs once a plugin's program exited, before its reply goes ([`on_exit`]).
+pub type Exited = Rc<dyn Fn(&Tui)>;
+
+thread_local! {
+    static EXITED: RefCell<Option<Exited>> = RefCell::default();
+}
+
+/// Runs `exited` each time a plugin's program exits, before its reply goes, or nothing for `None`: a test closes a
+/// mount between a program's launch and its reply (bigboi's ownership pass).
+#[doc(hidden)]
+pub fn on_exit(exited: Option<Exited>) {
+    EXITED.set(exited);
 }
 
 /// The reply of an exit `status`.
