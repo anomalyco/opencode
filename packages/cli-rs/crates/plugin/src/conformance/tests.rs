@@ -55,7 +55,7 @@ fn reference(major: u32) -> PluginApi {
         major,
         minor: if major >= 2 { ABI_MINOR } else { V1_MINOR },
         requires_minor: if major >= 2 { 0 } else { 4 },
-        create: Some(abi::export_plugin!(@loopback "conformance", reference::setup)),
+        create: Some(abi::export_plugin!(@loopback_create "conformance", reference::setup)),
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),

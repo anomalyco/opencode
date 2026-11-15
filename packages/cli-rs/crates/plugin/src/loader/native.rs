@@ -160,10 +160,23 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
         log::info!("plugin library version {version}, ABI {}.{}", library.major, library.minor);
     }
     let options = options.map(str::to_owned);
-    // Setup runs on each activation only, so a disabled plugin starts nothing. A plugin without `describe`
-    // (ABI 1.0) tells its ID only from setup, so for it setup runs once now, and that instance is destroyed.
-    let id = match metadata.id {
+    // Setup runs on each activation only, so a disabled plugin starts nothing: loading a library runs its native
+    // initializers, never its setup. A 2.x library names its ID in `describe`, before any `create` (big-boi 6). A 1.x
+    // library without one (ABI 1.0) tells its ID only from setup, so for it alone setup runs once now, and that
+    // instance is destroyed.
+    let id = match metadata.id.filter(|id| !id.is_empty()) {
         Some(id) => id,
+        None if library.major >= 2 => {
+            let missing = match library.describe {
+                None => "has no `describe`",
+                Some(_) => "names no ID in `describe`",
+            };
+            return Err(format!(
+                "plugin of ABI {}.{} {missing}: a 2.x plugin describes itself with a nonempty \"id\" before it is \
+                 set up; rebuild it with `opencode_plugin_abi::plugin!`, or return the ID from `describe`",
+                library.major, library.minor
+            ));
+        }
         // That instance only tells the ID: nothing it asks for happens.
         None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref(), true, None)?.1.id,
     };
@@ -1948,11 +1961,8 @@ impl Drawn for Claim {
 /// The definition of a built-in whose `create` is `create`, wired through the byte shims of the C ABI as a loaded
 /// library is, for the tests that prove a built-in on that path (`Loopback`).
 #[doc(hidden)]
-pub fn loopback(
-    host: &Rc<dyn Host>,
-    create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
-) -> Result<(Definition, ErrorFn), String> {
-    loopback_with(host, create, None)
+pub fn loopback(host: &Rc<dyn Host>, entries: abi::runtime::Loopback) -> Result<(Definition, ErrorFn), String> {
+    loopback_with(host, entries.create, Some(entries.describe))
 }
 
 /// [`loopback`] for a plugin that describes itself (`export_plugin!(@loopback_described ..)`), as every library
