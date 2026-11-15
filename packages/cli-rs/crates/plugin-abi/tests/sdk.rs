@@ -39,6 +39,21 @@ fn plugins_on_the_sdk_pull_in_no_tui() {
     }
 }
 
+// Expected (big-boi 14, carbon-4): the pinned author crate, written against the 2.0 SDK, builds as a crate outside the
+// workspace on this SDK, and on what a later 2.x adds (the `next` feature: a node kind and an event kind more), so the
+// 2.x source promise holds for a plugin with two mounts, a key, a layout, released content, a worker and a wildcard.
+#[test]
+fn a_pinned_plugin_builds_through_the_next_sdk() {
+    let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for features in [None, Some("opencode-plugin-abi/next")] {
+        let mut check = cargo();
+        check.args(["check", "--quiet", "--locked", "--manifest-path"]).arg(crate_dir.join("tests/pinned/Cargo.toml"));
+        check.arg("--target-dir").arg(crate_dir.join("../../target/sample-plugin"));
+        check.args(features.map(|features| ["--features", features]).into_iter().flatten());
+        assert!(check.status().unwrap().success(), "the pinned plugin does not build with {features:?}");
+    }
+}
+
 // Expected: the README's quick start shows `examples/hello` as it is, so what an author copies is what the tests build
 // and load (`the_quick_start_plugin_loads_from_a_plugins_directory_and_runs` in `opencode-plugin`).
 #[test]
