@@ -1611,7 +1611,7 @@ pub(crate) fn budget(
 
 /// Closes the frames before the one open as the next paint starts, before it counts its frame; while one over the
 /// budget is still open, at the paint after too.
-fn close_at_paint(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>) {
+pub(crate) fn close_at_paint(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>) {
     let Some(strong) = host.upgrade() else { return };
     let (host, monitor) = (host.clone(), monitor.clone());
     strong.app().animate(move |_, _| {

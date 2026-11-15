@@ -253,6 +253,11 @@ impl Activation {
         if let Some((id, news)) = monitor.backlog(slot, self.mailbox.full(), self.mailbox.stats().refused) {
             crate::defer(&self.host, move |host| host.slow(&id, &news));
         }
+        // The paints close the frames, which tell the plugin list of each change the backlog makes to slow, also
+        // once it ends with no mail to say so (review carbon-12).
+        if monitor.open_over() && monitor.wants_close() {
+            crate::close_at_paint(&self.host, &monitor);
+        }
     }
 
     pub fn track(&self, claim: Weak<dyn Drawn>) {

@@ -522,3 +522,67 @@ fn nested_host_work_is_its_own_plugins() {
     assert_eq!(bench.monitor.host_time("p"), Duration::from_millis(1), "p's own host time");
     assert_eq!(bench.monitor.host_time("q"), Duration::from_millis(2), "q's host time");
 }
+
+/// A backlog of `frames` frames in a row at the end of which the mailbox of `slot` was full: the news of each.
+fn backlogged(bench: &Bench, slot: Slot, frames: usize) -> Vec<(String, String)> {
+    (0..frames)
+        .filter_map(|_| {
+            bench.frame.set(bench.frame.get() + 1);
+            bench.monitor.backlog(slot, true, 7)
+        })
+        .collect()
+}
+
+// Expected (4.14 `reported-once`; final review big-boi 10): the user is told a plugin is slow once a plugin and session,
+// whichever cause comes first: slow by its calls and then by its backlog is one news; so is the backlog first and its
+// calls after; and a plugin set up again, or rebuilt, that is slow again tells nothing more. Its state still follows
+// each cause and each build.
+#[test]
+fn slow_is_told_once_a_plugin_and_session_across_causes_and_activations() {
+    // Calls first, then the backlog.
+    let bench = Bench::new();
+    let slot = bench.monitor.slot(&Artifact::builtin("p"));
+    let mut news = bench.frames(slot, 13, 1);
+    assert_eq!(news.len(), 1);
+    news.extend(backlogged(&bench, slot, 13).into_iter().map(|(_, news)| news));
+    assert_eq!(news.len(), 1, "a second cause told again: {news:?}");
+    assert!(bench.monitor.is_slow("p"));
+    // Set up again (disabled and enabled), then slow again by either cause: nothing more.
+    bench.call(slot, "setup", US);
+    assert!(!bench.monitor.is_slow("p"));
+    assert!(bench.frames(slot, 13, 1).is_empty() && bench.monitor.is_slow("p"));
+    bench.call(slot, "setup", US);
+    assert!(backlogged(&bench, slot, 13).is_empty() && bench.monitor.is_slow("p"));
+    // A new build of the same plugin.
+    let new = bench.monitor.slot(&Artifact::external("p", "/p", "0000000000000002"));
+    bench.call(new, "setup", US);
+    assert!(bench.frames(new, 13, 1).is_empty() && bench.monitor.is_slow("p"));
+    // The backlog first, then the calls; another plugin is told of its own.
+    let bench = Bench::new();
+    let (slot, other) = (bench.monitor.slot(&Artifact::builtin("p")), bench.monitor.slot(&Artifact::builtin("q")));
+    assert_eq!(backlogged(&bench, slot, 13).len(), 1);
+    assert!(bench.frames(slot, 13, 1).is_empty());
+    assert_eq!(bench.frames(other, 13, 1).len(), 1);
+}
+
+// Expected (review carbon-12): the backlog cause changes slow as the calls do: the plugin list hears it when the
+// backlog makes the plugin slow, also once its news was told, and when the backlog leaves the window with no mail
+// since, at the paint that closes the frames.
+#[test]
+fn a_backlog_that_starts_or_ends_is_a_change_of_slow() {
+    let bench = Bench::new();
+    let slot = bench.monitor.slot(&Artifact::builtin("p"));
+    backlogged(&bench, slot, 12);
+    assert!(!bench.monitor.take_flipped() && !bench.monitor.is_slow("p"));
+    backlogged(&bench, slot, 1);
+    assert!(bench.monitor.take_flipped() && bench.monitor.is_slow("p"));
+    assert!(bench.monitor.open_over(), "the paints must close the frames until the backlog ends");
+    // No mail for a window: the paints close the frames and see it end.
+    bench.frame.set(bench.frame.get() + 120);
+    bench.monitor.close();
+    assert!(bench.monitor.take_flipped() && !bench.monitor.is_slow("p"));
+    assert!(!bench.monitor.open_over());
+    // Backlogged a second time, with its news told already: a change all the same.
+    backlogged(&bench, slot, 13);
+    assert!(bench.monitor.take_flipped() && bench.monitor.is_slow("p"));
+}
