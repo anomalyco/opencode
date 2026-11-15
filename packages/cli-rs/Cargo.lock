@@ -963,8 +963,8 @@ checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 
 [[package]]
 name = "opentui"
-version = "0.8.3"
-source = "git+https://github.com/anomalyco/opentui?rev=cb94c87f78b24a89f425ff6a6315748eb40641ca#cb94c87f78b24a89f425ff6a6315748eb40641ca"
+version = "0.9.0"
+source = "git+https://github.com/anomalyco/opentui?rev=e477ffa3abde407f06e0161bd1e2509bcdf68f0e#e477ffa3abde407f06e0161bd1e2509bcdf68f0e"
 dependencies = [
  "libc",
  "opentui-sys",
@@ -980,8 +980,8 @@ dependencies = [
 
 [[package]]
 name = "opentui-sys"
-version = "0.8.3"
-source = "git+https://github.com/anomalyco/opentui?rev=cb94c87f78b24a89f425ff6a6315748eb40641ca#cb94c87f78b24a89f425ff6a6315748eb40641ca"
+version = "0.9.0"
+source = "git+https://github.com/anomalyco/opentui?rev=e477ffa3abde407f06e0161bd1e2509bcdf68f0e#e477ffa3abde407f06e0161bd1e2509bcdf68f0e"
 
 [[package]]
 name = "percent-encoding"
