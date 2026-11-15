@@ -367,3 +367,51 @@ test("attention, listed commands and the mouse button", async () => {
   expect(fake.effects.at(-1)).toEqual({ type: "dispatch", name: "session.new" })
   expect((modules["@opentui/core"] as Json).MouseButton.LEFT).toBe(0)
 })
+
+// FT-5: every name the installed `@opentui/core` and `@opentui/solid` export is one the layer exports, so a plugin's
+// named import of it links; an inert class can be extended, constructed and called through, and an enum is the
+// package's own.
+test("the layer exports every name of OpenTUI's packages", async () => {
+  for (const name of ["@opentui/core", "@opentui/solid"]) {
+    const real = Object.keys(await import(Bun.resolveSync(name, import.meta.dir)))
+    const served = new Set(Object.keys(modules[name]!))
+    expect(real.filter((key) => !served.has(key))).toEqual([])
+  }
+  const core = modules["@opentui/core"] as Json
+  const real = await import(Bun.resolveSync("@opentui/core", import.meta.dir))
+  expect(core.CliRenderEvents).toEqual({ ...real.CliRenderEvents })
+  class Fence extends core.BoxRenderable {
+    label = "fence"
+    describe() {
+      return this.label
+    }
+  }
+  const fence = new Fence({}, { id: "f" }) as Json
+  fence.add(new core.TextRenderable({}, {}))
+  expect([fence.describe(), fence instanceof Fence, fence instanceof core.BoxRenderable]).toEqual(["fence", true, true])
+  expect(`${core.SyntaxStyle.fromStyles({ keyword: {} })}`).toBe("")
+  expect(core.addDefaultParsers([])).toBeDefined()
+  // opencode-good-fences spreads a Map's values at setup.
+  expect([...core.extensionToFiletype.values()]).toEqual([])
+})
+
+// FT-6: a method of OpenTUI's renderer that the layer lacks warns once and does nothing, rather than throw; an emitter's
+// chains, and a member that is no method stays undefined.
+test("the renderer's missing methods do nothing", async () => {
+  const fake = host()
+  const ctx = plugin("t.renderer", fake)
+  ctx.renderer.prependInputHandler(() => false)
+  const bound = ctx.renderer.setBackgroundColor.bind(ctx.renderer)
+  bound("#000000")
+  expect(ctx.renderer.on("resize", () => {}).off("resize", () => {})).toBe(ctx.renderer)
+  expect(ctx.renderer.notAMember).toBeUndefined()
+  await ctx.renderer.idle()
+  expect(fake.toasts()).toEqual([
+    "t.renderer: renderer.prependInputHandler is not supported by opencode-native yet",
+    "t.renderer: renderer.setBackgroundColor is not supported by opencode-native yet",
+    "t.renderer: renderer.on is not supported by opencode-native yet",
+    "t.renderer: renderer.off is not supported by opencode-native yet",
+    "t.renderer: renderer.notAMember is not supported by opencode-native yet",
+    "t.renderer: renderer.idle is not supported by opencode-native yet",
+  ])
+})

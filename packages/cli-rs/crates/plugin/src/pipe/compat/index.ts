@@ -5,6 +5,7 @@ import * as solid from "solid-js"
 import * as store from "solid-js/store"
 import { createComponent, splitProps } from "solid-js"
 import * as core from "./core"
+import { exports } from "./inert"
 import * as jsx from "./jsx"
 import * as render from "./render"
 import { context, PluginContext, reported } from "./v2"
@@ -28,17 +29,27 @@ function Portal(): never {
   throw new Error("<Portal> is not supported by opencode-native's JS host")
 }
 
-const opentuiSolid = {
+// Every name the real package exports links (FT-5): those the layer lacks are inert (`inert.ts`).
+const opentuiSolid = exports("solid", {
   ...render,
   ...solid,
   createComponent: render.createComponent,
   mergeProps: render.mergeProps,
   Dynamic,
+  createDynamic: (component: () => unknown, props: Record<string, unknown>) =>
+    Dynamic(
+      render.mergeProps(props, {
+        get component() {
+          return component()
+        },
+      }),
+    ),
   Portal,
+  RendererContext: solid.createContext(),
   extend() {
     throw new Error("extend is not supported by opencode-native's JS host")
   },
-}
+})
 
 const plugin = {
   Plugin: { define: (definition: unknown) => definition },
@@ -66,7 +77,7 @@ export const modules: Record<string, Record<string, unknown>> = {
   // A local module without the pragma compiles for React's runtime; it gets OpenTUI's (TS compiles it with Solid's).
   "react/jsx-runtime": jsx,
   "react/jsx-dev-runtime": jsx,
-  "@opentui/core": core,
+  "@opentui/core": exports("core", core),
   "@opencode/plugin/tui": plugin,
 }
 
