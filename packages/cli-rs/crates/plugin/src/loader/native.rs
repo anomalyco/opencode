@@ -1564,24 +1564,59 @@ fn reply_to(
     mount: Option<Weak<()>>,
     send: impl FnOnce(&dyn Host, crate::Reply),
 ) {
-    let live = move || mount.as_ref().is_none_or(|mount| mount.upgrade().is_some());
     let Some(running) = guest.upgrade().filter(|guest| guest.live()) else { return };
-    if !live() {
-        return running.cancel(request);
+    if let Some(mount) = &mount {
+        if mount.upgrade().is_none() {
+            return running.cancel(request);
+        }
+        INFLIGHT.with_borrow_mut(|inflight| inflight.push((mount.clone(), guest.clone(), request)));
     }
     let (guest, owner) = (guest.clone(), running.owner());
     send(
         host,
         Box::new(move |result| {
             defer(&owner, move |_| {
-                let Some(guest) = guest.upgrade() else { return };
-                match live() {
+                // A mount's request its mount's close cancelled already ([`cancel_closed`]) waits no more.
+                let waiting = mount.is_none() || take_inflight(request);
+                let Some(guest) = guest.upgrade().filter(|_| waiting) else { return };
+                match mount.as_ref().is_none_or(|mount| mount.upgrade().is_some()) {
                     true => guest.answer(Request::Reply { id: request, result }),
                     false => guest.cancel(request),
                 }
             });
         }),
     );
+}
+
+/// A request of a mount that waits for its reply ([`reply_to`]): the mount, the instance that asked, and its ID.
+type Waiting = (Weak<()>, Weak<dyn Answers>, abi::RequestId);
+
+thread_local! {
+    static INFLIGHT: RefCell<Vec<Waiting>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Whether `request` waited for its reply, which it does no more.
+fn take_inflight(request: abi::RequestId) -> bool {
+    INFLIGHT.with_borrow_mut(|inflight| {
+        let at = inflight.iter().position(|(_, _, waiting)| *waiting == request);
+        at.map(|at| inflight.swap_remove(at)).is_some()
+    })
+}
+
+/// Cancels at once each waiting request whose mount closed, rather than once its reply comes: the JS host's fetch of a
+/// mount that closed settles while the server still holds it (bigboi's freeze pass). A surface's mount calls it as it
+/// ends.
+pub(crate) fn cancel_closed() {
+    let closed: Vec<_> = INFLIGHT.with_borrow_mut(|inflight| {
+        let (closed, open) = std::mem::take(inflight).into_iter().partition(|(mount, _, _)| mount.upgrade().is_none());
+        *inflight = open;
+        closed
+    });
+    for (_, guest, request) in closed {
+        if let Some(guest) = guest.upgrade() {
+            guest.cancel(request);
+        }
+    }
 }
 
 /// The mount that owns a request of the running call, as in process ([`crate::Owners::owning`]).
@@ -1639,9 +1674,13 @@ fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, gen
         Effect::Tab(edit) => host.edit_tab(edit),
         Effect::ClearSelection => host.clear_selection(),
         Effect::Foreground(request, program, mount) => {
-            // The program starts later, once the turn is done: only if the instance is still live then.
-            let owner = guest.clone();
-            let alive = Box::new(move || owner.upgrade().is_some_and(|guest| guest.running()));
+            // The program starts later, once the turn is done: only if the instance is still live then, and the mount
+            // that owns it is still open (bigboi's freeze pass).
+            let (owner, owning) = (guest.clone(), mount.clone());
+            let alive = Box::new(move || {
+                let open = owning.as_ref().is_none_or(|mount| mount.upgrade().is_some());
+                open && owner.upgrade().is_some_and(|guest| guest.running())
+            });
             reply_to(guest, host, request, mount, |host, reply| host.foreground(program, alive, reply));
         }
         Effect::Title(title) => host.set_title(&title),
@@ -1819,7 +1858,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                         let (guest, alive, name) = (guest.clone(), alive.clone(), command.name.clone());
                         tui_command(command, move |input| {
                             let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
-                            guest.owners.for_route(&alive, || guest.handle("run-command", &request));
+                            guest.owners.owned_by(&alive, || guest.handle("run-command", &request));
                         })
                     };
                     routed.iter().map(command).collect()
