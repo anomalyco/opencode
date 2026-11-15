@@ -1381,3 +1381,69 @@ fn a_merge_is_bounded_by_the_value_it_makes() {
         );
     }
 }
+
+thread_local! {
+    /// The field names `two`'s key `state` held at each of its reads.
+    static TWO: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The plugin `two`, which adds a field `a` of 140 KiB to its key `state`.
+fn two(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key("state");
+    setup.command(named("two.add"), |host, _| {
+        host.storage_merge("state", serde_json::Map::from_iter([("a".to_owned(), json!("a".repeat(140 << 10)))]));
+    });
+    setup.command(named("two.read"), |host, _| {
+        let fields = host.storage_get("state").and_then(|value| value.as_object().cloned()).unwrap_or_default();
+        TWO.with_borrow_mut(|two| two.push(fields.keys().cloned().collect()));
+    });
+    Ok(())
+}
+
+// Expected (re-review final pass, the storage bound): two clients each add a field of 140 KiB to a key that was empty
+// when each read it. The other client's write lands first; this client's merge fits what it read, but the value it
+// makes under the lock would be 280 KiB, past 256 KiB: it is refused there, the file keeps the other client's value
+// alone, and this client's plugin reads that value after, not its own merge. On both carriers.
+#[test]
+fn two_clients_merging_a_key_stay_within_its_bound_together() {
+    for carrier in crate::plugin_surface::CARRIERS {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let paths = support::home_paths(&root.path().join("home"));
+        let other = opencode_local::storage::Storage::new(&paths.state, "test").unwrap();
+        TWO.with_borrow_mut(Vec::clear);
+        let deps = Deps {
+            route: Route::Home,
+            roots: support::roots(paths, "test"),
+            builtins: vec![crate::plugin_surface::builtin(carrier, abi::Plugin { id: "two", setup: two })],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(80, 24, deps);
+        let run = |command: &str| {
+            harness.tui.keymap.dispatch(command, None);
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
+        };
+        // This client reads the key empty; the other client then adds its field, through the same lock.
+        run("two.read");
+        let theirs = json!({ "b": "b".repeat(140 << 10) });
+        other
+            .update_within("plugin.two.state", &json!({}), opencode_plugin::storage::VALUE_BYTES, |value| {
+                *value = theirs.clone();
+            })
+            .unwrap();
+        run("two.add");
+        opencode_tui::plugins::host::flush_storage(&harness.tui);
+        let fields = |value: Value| value.as_object().map(|object| object.keys().cloned().collect::<Vec<_>>());
+        let stored = other.load("plugin.two.state", &Value::Null).unwrap();
+        assert_eq!(fields(stored), Some(vec!["b".to_owned()]), "{carrier:?}: both fields were kept");
+        // The refusal reaches the UI thread at once, which reads the key again: before the storage watcher's debounce.
+        harness.app.advance(Duration::ZERO);
+        run("two.read");
+        assert_eq!(
+            TWO.with_borrow(|two| two.last().cloned()),
+            Some(vec!["b".to_owned()]),
+            "{carrier:?}: this client still shows its own merge"
+        );
+        assert_eq!(TWO.with_borrow(|two| two.first().cloned()), Some(Vec::new()), "{carrier:?}");
+    }
+}
