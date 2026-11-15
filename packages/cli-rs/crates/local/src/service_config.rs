@@ -8,6 +8,7 @@
 //! Stopping the service before a change and creating the remote tunnel are not file operations:
 //! [`Edit::stops_service`] and [`Edit::needs_tunnel`] tell the caller when to do them.
 
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -23,7 +24,7 @@ use crate::paths::Paths;
 use crate::registration::write_new_private;
 
 /// The service config (`ServiceConfig.Info`). Field order is the schema order.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Info {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -44,6 +45,22 @@ pub struct Info {
     pub cors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<IndexMap<String, String>>,
+}
+
+// Keeps the password and the secret route out of logs.
+impl fmt::Debug for Info {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Info")
+            .field("disabled", &self.disabled)
+            .field("remote", &self.remote.as_ref().map(|_| "<redacted>"))
+            .field("remote_accepted", &self.remote_accepted)
+            .field("hostname", &self.hostname)
+            .field("port", &self.port)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("cors", &self.cors)
+            .field("env", &self.env)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -523,6 +540,14 @@ mod tests {
         ] {
             assert!(Info::parse(bad).is_none(), "{bad}");
         }
+    }
+
+    #[test]
+    fn debug_redacts_the_password_and_route() {
+        let info = Info::parse(r#"{"port":80,"password":"hunter2","remote":{"route":"r0ute"}}"#).unwrap();
+        let shown = format!("{info:?}");
+        assert!(!shown.contains("hunter2") && !shown.contains("r0ute"), "{shown}");
+        assert!(shown.contains("password: Some(\"<redacted>\")") && shown.contains("port: Some(80)"), "{shown}");
     }
 
     #[test]
