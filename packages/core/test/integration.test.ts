@@ -198,7 +198,7 @@ describe("Integration", () => {
           method: {
             type: "key",
             validation: { prefix: "sk-ant-" },
-          } as Integration.KeyMethod & { validation: { prefix: string } },
+          },
         })
         editor.method.update({
           integrationID: opaqueID,
