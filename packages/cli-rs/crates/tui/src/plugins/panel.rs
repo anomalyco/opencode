@@ -818,11 +818,15 @@ fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
     let mine = tui.reads.owner.borrow().as_ref().is_some_and(|(id, _)| *id == owner.0);
     if mine && tui.dialogs.key().as_deref() == Some(key.as_str()) {
         let live = tui.reads.panel.borrow_mut().take();
-        // A change of its close label or its height builds it again (carbon's review of P6c, 5).
+        // A change of what `build` bakes into the widgets builds it again: its close label, its height, whether it is
+        // bare, whether its body bleeds, whether it has a footer row (carbon's review of P6c, 5; final review
+        // carbon-12).
         if let Some(live) = live.filter(|live| live.key == key) {
             let same = {
                 let shown = live.shown.borrow();
-                (&shown.close, shown.height) == (&panel.close, panel.height)
+                let footed = |panel: &abi::Panel| panel.height.is_none() || !panel.actions.is_empty();
+                (&shown.close, shown.height, shown.bare, shown.bleed, footed(&shown))
+                    == (&panel.close, panel.height, panel.bare, panel.bleed, footed(&panel))
             };
             if !same {
                 *live.shown.borrow_mut() = panel.clone();
