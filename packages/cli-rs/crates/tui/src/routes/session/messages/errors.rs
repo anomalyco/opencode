@@ -371,9 +371,9 @@ fn json_string<'a>(body: &'a str, key: &str) -> Option<&'a str> {
     None
 }
 
-/// `Date.now()`.
+/// `Date.now()`, on the sim's clock when it sets one.
 pub fn now() -> f64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |elapsed| elapsed.as_millis() as f64)
+    time::now_ms() as f64
 }
 
 /// The free-limit and Go-limit stops (`session.step.failed`): restore the stopped prompt when the prompt is empty, and
@@ -488,5 +488,34 @@ mod tests {
         assert!(far.contains(" · "), "{far}");
         // `Locale.time` under Bun puts an ASCII space before AM/PM.
         assert!(far.contains(" AM") || far.contains(" PM"), "{far:?}");
+    }
+
+    /// Each screen's `Date.now()` runs on the sim's fixed clock (`OPENCODE_DRIVE_NOW`). A process reads that once,
+    /// so a child of this test binary sets it.
+    #[test]
+    fn screens_read_the_sim_clock() {
+        const FIXED: f64 = 1_600_000_000_000.0;
+        if std::env::var_os("OPENCODE_RS_CLOCK_CHILD").is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "routes::session::messages::errors::tests::screens_read_the_sim_clock"])
+                .env("OPENCODE_RS_CLOCK_CHILD", "1")
+                .env("OPENCODE_DRIVE_NOW", (FIXED as i64).to_string())
+                .env("TZ", "UTC")
+                .output()
+                .unwrap();
+            let (stdout, stderr) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+            assert!(output.status.success() && stdout.contains("1 passed"), "{stdout}\n{stderr}");
+            return;
+        }
+        let rows = [
+            ("the session list, open and stash dialogs", crate::dialogs::session_list::now_ms as fn() -> f64),
+            ("the free-limit reset", now),
+        ];
+        for (screen, clock) in rows {
+            assert!((clock() - FIXED).abs() < 60_000.0, "{screen}: {}", clock());
+        }
+        // A reset a minute away is today: the time alone.
+        let reset = free_limit_reset(Some(60_000.0), FIXED, now()).unwrap();
+        assert!(!reset.contains(" · "), "{reset}");
     }
 }
