@@ -259,7 +259,7 @@ describe("AI promise client", () => {
   test("exposes a generation's snapshot and terminal state", async () => {
     const ai = AI.make({ layer: executor([]) })
     const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
-    expect(generation.snapshot).toEqual({ id: "tr_1", status: "queued" })
+    expect(generation.snapshot).toEqual({ id: "tr_1", status: "running" })
     expect(generation.terminal).toBe(false)
     const refreshed = await generation.refresh()
     expect(refreshed.terminal).toBe(false)
@@ -274,7 +274,7 @@ describe("AI promise client", () => {
     const events: Array<string> = []
     for await (const event of generation.events({ poll: { interval: 10 } })) events.push(event.type)
     expect(events).toEqual(["generation-progress", "generation-finished"])
-    expect(generation.status).toBe("queued")
+    expect(generation.status).toBe("running")
     expect((await generation.result()).text).toBe("Hello there.")
     await ai.dispose()
   })

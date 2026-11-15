@@ -50,7 +50,7 @@ import { attached } from "../components/message-file"
 import { CompactionMessage, CompactionQueued } from "./compaction"
 import { unwrapErrorMessage } from "./errors"
 import { TimelineEventItem, TimelineEventRow } from "./event-row"
-import { noticeEvent, toolEvent, type TimelineEvent } from "./events"
+import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
 import { contentOpens, diffOpens, goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
@@ -118,27 +118,6 @@ export function createNextTimelineRowRenderer(input: {
       indexes: new Map(messages.map((message, index) => [message.id, index])),
     }
   })
-
-  // Subagents that have reported back, by their session: a finish or stop notice ends the work its start launched.
-  const reported = createMemo(
-    () =>
-      new Set(
-        turns().messages.flatMap((message) => {
-          const sessionID = message.type === "synthetic" ? noticeEvent(message)?.sessionID : undefined
-
-          return sessionID ? [sessionID] : []
-        }),
-      ),
-  )
-
-  // A start spins while its subagent has not reported back and its session is still working.
-  const running = (event: TimelineEvent) => {
-    const id = event.sessionID
-
-    if (event.verb !== "started" || event.failed || !id || reported().has(id)) return false
-
-    return (data.store.session_status[id]?.type ?? "idle") !== "idle"
-  }
 
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
@@ -462,7 +441,7 @@ export function createNextTimelineRowRenderer(input: {
           <Show when={events()[0]}>
             {(event) => (
               <div data-component="timeline-subagent">
-                <TimelineEventItem event={event()} running={running(event())} />
+                <TimelineEventItem event={event()} />
               </div>
             )}
           </Show>

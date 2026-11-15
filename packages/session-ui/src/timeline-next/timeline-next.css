@@ -311,8 +311,7 @@
     line-height: 16px;
     white-space: nowrap;
 
-    [data-slot="timeline-event-item-glyph"],
-    [data-component="session-progress-indicator-v2"] {
+    [data-slot="timeline-event-item-glyph"] {
       flex-shrink: 0;
       width: 12px;
       height: 12px;
