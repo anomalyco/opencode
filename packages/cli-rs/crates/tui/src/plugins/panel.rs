@@ -682,23 +682,13 @@ fn usable_action(tui: &Tui, action: &abi::SelectAction) -> bool {
 /// close keys, which a plugin's layer above them would take, keeping the user in its dialog (review carbon-5).
 fn usable_key(tui: &Tui, key: &str) -> bool {
     let keymap = tui.keymap.keymap();
-    let escape = keymap.parse_key("escape").map(|chord| chord.stroke).ok();
-    // Each binding as the host's keymap expands the key: a comma separates bindings, and `esc` is `escape`.
-    key.split(',').map(str::trim).all(|binding| {
-        let spelled: String = binding
-            .split_inclusive(|character: char| character == '+' || character.is_whitespace())
-            .map(|token| {
-                let name = token.trim_end_matches(|character: char| character == '+' || character.is_whitespace());
-                match name.eq_ignore_ascii_case("esc") {
-                    true => format!("escape{}", &token[name.len()..]),
-                    false => token.to_owned(),
-                }
-            })
-            .collect();
-        let parsed = keymap
-            .parse_key_sequence(spelled.as_str())
-            .is_ok_and(|parts| !parts.is_empty() && parts.iter().all(|part| Some(&part.stroke) != escape.as_ref()));
-        parsed && !binding.is_empty() && !opencode_plugin::interact::reserved(tui, &spelled)
+    let closing: Vec<_> = ["escape", opencode_plugin::abi::interact::RESERVED]
+        .into_iter()
+        .filter_map(|key| keymap.parse_key(key).ok().map(|chord| chord.stroke))
+        .collect();
+    // The sequences the keymap registers for the key, not its text: aliases and commas expand as they do there.
+    tui.keymap.parse_binding(key).is_ok_and(|bindings| {
+        bindings.iter().all(|parts| !parts.is_empty() && parts.iter().all(|part| !closing.contains(&part.stroke)))
     })
 }
 
