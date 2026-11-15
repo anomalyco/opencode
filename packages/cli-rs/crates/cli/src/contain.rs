@@ -53,6 +53,8 @@ struct Restart {
     server: ServerFlags,
     root: RootArgs,
     global: GlobalArgs,
+    /// `plugin dev <dir>`: the next client builds and watches the plugin again.
+    dev: Option<OsString>,
 }
 
 /// Runs first in `main`, before any thread starts. Returns the arguments to run with, in this process or in the client
@@ -99,6 +101,8 @@ fn wanted(raw: &[OsString]) -> Option<Restart> {
     match std::env::var(PARENT).as_deref() {
         Ok("0") => return None,
         Ok("1") => return Some(restart),
+        // `plugin dev` always runs the native build it makes (review carbon-1).
+        _ if restart.dev.is_some() => return Some(restart),
         _ => {}
     }
     let paths = opencode_local::paths::Paths::from_env().ok()?;
@@ -123,9 +127,14 @@ fn wanted(raw: &[OsString]) -> Option<Restart> {
     opencode_plugin::loader::has_native_build(&paths.config, &cwd, &targets).then_some(restart)
 }
 
-/// What a restart keeps of `raw`, when `raw` runs the TUI.
+/// What a restart keeps of `raw`, when `raw` runs the TUI, also under `plugin dev <dir>` as `main` takes it.
 fn tui(raw: &[OsString]) -> Option<Restart> {
     let args: Vec<String> = raw.iter().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect();
+    let (args, dev) = match crate::commands::plugin_dev::take(&args) {
+        None => (args, None),
+        Some(Ok(crate::commands::plugin_dev::Native::Dev { dir, rest })) => (rest, Some(dir.into_os_string())),
+        Some(_) => return None,
+    };
     let crate::parse::Outcome::Run(invocation) = crate::parse::parse(&args, &crate::help::name()) else {
         return None;
     };
@@ -136,6 +145,7 @@ fn tui(raw: &[OsString]) -> Option<Restart> {
         server: invocation.server.clone(),
         root: invocation.cli.root.clone(),
         global: invocation.cli.global.clone(),
+        dev,
     })
 }
 
@@ -191,6 +201,9 @@ impl Policy {
 /// `session`. They are rebuilt from the parsed command line, so every spelling the parser takes comes out one way.
 fn arguments(program: &OsString, restart: &Restart, session: Option<&str>) -> Vec<OsString> {
     let mut next = vec![program.clone()];
+    if let Some(dir) = &restart.dev {
+        next.extend(["plugin".into(), "dev".into(), dir.clone()]);
+    }
     if restart.server.standalone {
         next.push("--standalone".into());
     }
