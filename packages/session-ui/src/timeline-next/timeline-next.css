@@ -330,6 +330,7 @@
 
       @media (hover: hover) {
         &:hover:not([aria-disabled]) {
+          cursor: pointer;
           background-color: var(--v2-overlay-simple-overlay-hover);
         }
       }
