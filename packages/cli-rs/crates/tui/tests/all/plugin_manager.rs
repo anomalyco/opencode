@@ -56,6 +56,11 @@ fn open_with(config: serde_json::Value, extra: Vec<opencode_plugin::Builtin>) ->
         ..support::deps(Arc::new(fake))
     };
     let harness = support::mount(100, 30, deps);
+    // The budget is not what these rows check. On the wall clock a loaded machine's stall in a call (memory reclaim,
+    // swap), which is no wait on a run queue, is charged: enough of them make a plugin slow, a change of the plugin list
+    // a reader hears beside the step's own. A call here takes no time; the slow row sets its own clock.
+    let now = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || now);
     settle(&harness);
     // The host's own read of the server plugins as it starts, which a loaded machine may send late: rows that count
     // the manager's reads count from after it.
