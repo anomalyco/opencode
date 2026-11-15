@@ -3773,3 +3773,46 @@ fn a_1x_manifest_drops_the_2_0_registrations() {
     let new = super::manifest(&bytes, 2, None).unwrap();
     assert!(new.plugins && new.searches == ["s"]);
 }
+
+/// An instance that counts the requests the host cancelled for it.
+#[derive(Default)]
+struct Cancelled(Cell<usize>);
+
+impl Answers for Cancelled {
+    fn live(&self) -> bool {
+        true
+    }
+
+    fn running(&self) -> bool {
+        true
+    }
+
+    fn owner(&self) -> Weak<dyn Host> {
+        Weak::<TestHost>::new()
+    }
+
+    fn answer(self: Rc<Self>, _: Request) {}
+
+    fn cancel(self: Rc<Self>, _: abi::RequestId) {
+        self.0.set(self.0.get() + 1);
+    }
+}
+
+// Expected (bigboi's ownership pass): a mount's close cancels its own waiting requests and looks at no other mount's,
+// however many wait, and replies in any order each take their own: the work grows with neither unrelated requests nor
+// the order of the replies.
+#[test]
+fn a_mounts_close_cancels_only_its_own_requests() {
+    let counted = Rc::new(Cancelled::default());
+    let guest = Rc::downgrade(&(counted.clone() as Rc<dyn Answers>));
+    let (busy, closing) = (Rc::new(()), Rc::new(()));
+    (1..=1000).for_each(|id| wait(&Rc::downgrade(&busy), &guest, abi::RequestId(id)));
+    (1001..=1002).for_each(|id| wait(&Rc::downgrade(&closing), &guest, abi::RequestId(id)));
+    let key = mount_key(&Rc::downgrade(&closing));
+    drop(closing);
+    assert_eq!(cancel_closed(key), 2, "the close looked at another mount's requests");
+    assert_eq!((counted.0.get(), waiting()), (2, 1000));
+    assert!((1..=1000).rev().all(|id| take_inflight(abi::RequestId(id))));
+    assert!(!take_inflight(abi::RequestId(1001)), "a cancelled request waited still");
+    assert_eq!(waiting(), 0);
+}
