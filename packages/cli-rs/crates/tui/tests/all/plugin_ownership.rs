@@ -23,13 +23,14 @@ use crate::support::{self, Harness};
 enum Kind {
     Fetch,
     Foreground,
-    /// The effects a call asks of the input: an overlay of the plugin's, a mode, the focus of node `n`, a blur, and
-    /// an offset of scroll `s`.
+    /// The effects a call asks of the input: an overlay of the plugin's, a mode, the focus of node `n`, a blur, an
+    /// offset of scroll `s`, and a move of the session transcript, the app's, which the user's handler may ask for.
     Overlay,
     Mode,
     Focus,
     Blur,
     Scroll,
+    Transcript,
 }
 
 impl Kind {
@@ -106,7 +107,12 @@ struct Row {
 fn expected(row: Row) -> Outcome {
     let mount_owned = matches!(row.origin, Origin::Route | Origin::Input);
     if !row.kind.request() {
-        let closed = matches!(row.close, Close::BeforeDispatch | Close::InFlight | Close::Racing);
+        // A move of the transcript, the app's, outlives the mount once it applied: asked before the close, it applies
+        // before it, in order. The mount's own effects close with it.
+        let closed = match row.kind {
+            Kind::Transcript => matches!(row.close, Close::BeforeDispatch | Close::Racing),
+            _ => matches!(row.close, Close::BeforeDispatch | Close::InFlight | Close::Racing),
+        };
         return match mount_owned && closed {
             true => Outcome::Dropped,
             false => Outcome::Applied,
@@ -135,6 +141,9 @@ fn unreachable(carrier: Carrier, row: Row) -> Option<&'static str> {
             (Kind::Focus | Kind::Scroll, Origin::MountBegin | Origin::MountEnd, _) => {
                 Some("a mount's begin comes before its first view, its end after its tree: no node to name")
             }
+            (Kind::Transcript, Origin::MountBegin | Origin::MountEnd, _) => Some(
+                "a mount's begin and end are no handler of the user's input: a transcript verb from them is refused",
+            ),
             (Kind::Focus | Kind::Scroll, Origin::Global, close) if close != Close::Never => {
                 Some("an activation's verb names the newest mount that holds the node: with the route closed, none")
             }
@@ -160,7 +169,16 @@ fn unreachable(carrier: Carrier, row: Row) -> Option<&'static str> {
 }
 
 fn rows(carrier: Carrier) -> Vec<Row> {
-    let kinds = [Kind::Fetch, Kind::Foreground, Kind::Overlay, Kind::Mode, Kind::Focus, Kind::Blur, Kind::Scroll];
+    let kinds = [
+        Kind::Fetch,
+        Kind::Foreground,
+        Kind::Overlay,
+        Kind::Mode,
+        Kind::Focus,
+        Kind::Blur,
+        Kind::Scroll,
+        Kind::Transcript,
+    ];
     let origins = [Origin::Setup, Origin::Global, Origin::Route, Origin::MountBegin, Origin::MountEnd, Origin::Input];
     let closes = [
         Close::Never,
@@ -320,7 +338,7 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         (Outcome::Cancelled, Kind::Fetch, _) => served.load(Ordering::SeqCst) == asked.load(Ordering::SeqCst),
         (Outcome::Cancelled, Kind::Foreground, _) => !probe.asked().is_empty(),
         (Outcome::Applied | Outcome::Dropped, ..)
-        | (_, Kind::Overlay | Kind::Mode | Kind::Focus | Kind::Blur | Kind::Scroll, _) => {
+        | (_, Kind::Overlay | Kind::Mode | Kind::Focus | Kind::Blur | Kind::Scroll | Kind::Transcript, _) => {
             unreachable!("an effect's row runs in run_effect")
         }
     };
@@ -409,6 +427,16 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
     };
     let focus = || opencode_plugin::behave::focus(&*h.tui, plugin, "probe", "n");
     let ledger = || opencode_plugin::interact::ledger(&*h.tui);
+    // The session transcript, as the host publishes it: what moved it is recorded.
+    let moved = Rc::new(Cell::new(0));
+    let recorded = moved.clone();
+    let _published = opencode_plugin::behave::publish_transcript(
+        h.app.app(),
+        opencode_plugin::behave::Published {
+            read: Rc::new(|| v2::TranscriptView { offset: 0, viewport: 10, extent: 40, ..Default::default() }),
+            scroll: Rc::new(move |_| recorded.set(recorded.get() + 1)),
+        },
+    );
     let racing = row.close == Close::Racing;
     let before = ledger();
     if racing {
@@ -468,6 +496,7 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
             Kind::Focus => last.focused.as_deref() == Some("n"),
             Kind::Blur => last.focused.is_none(),
             Kind::Scroll => last.offsets.iter().any(|(id, offset)| id == "s" && *offset == 3),
+            Kind::Transcript => moved.get() > 0,
             Kind::Fetch | Kind::Foreground => unreachable!("a request"),
         }
     };
@@ -670,6 +699,10 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
             host.scroll(target, v2::Scroll::Offset { offset: 3 });
             Err("asked".to_owned())
         }
+        Kind::Transcript => {
+            host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: 3 });
+            Err("asked".to_owned())
+        }
     };
     SEEN.with_borrow_mut(|seen| seen.0.push(asked));
     match row.close {
@@ -773,6 +806,7 @@ export default {{ id: "example.probe", setup(api) {{
     else if (KIND === "Mode") carrier.effect({{ type: "set-mode", mode: "probe" }})
     else if (KIND === "Focus") carrier.effect({{ type: "focus", node: "n" }})
     else if (KIND === "Blur") carrier.effect({{ type: "blur" }})
+    else if (KIND === "Transcript") carrier.effect({{ type: "scroll", target: {{ type: "transcript" }}, verb: {{ type: "by", rows: 3 }} }})
     else carrier.effect({{ type: "scroll", target: {{ type: "node", surface: "probe", id: "s" }}, verb: {{ type: "offset", offset: 3 }} }})
     if (CLOSE === "InFlight") home()
     if (CLOSE === "Other") carrier.effect({{ type: "close-overlay", surface: "other" }})

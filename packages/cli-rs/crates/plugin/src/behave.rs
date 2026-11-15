@@ -759,8 +759,13 @@ fn mount(caller: &Caller<'_>, surface: &str) -> Option<Rc<Surface>> {
 pub(crate) fn scroll(caller: &Caller<'_>, target: Target, verb: Scroll) -> Box<dyn FnOnce()> {
     match target {
         Target::Transcript => {
-            let (key, plugin) = (key(caller.app), caller.plugin.to_owned());
+            let (key, plugin, own) = (key(caller.app), caller.plugin.to_owned(), caller.mount.clone());
             Box::new(move || {
+                // A mount's verb ends with it: once it closed, the transcript the user is back on is not its to move
+                // (carbon own-1, bigboi's pipe sign-off).
+                if own.is_some_and(|own| own.upgrade().is_none()) {
+                    return;
+                }
                 let scroll =
                     TRANSCRIPTS.with(|transcripts| transcripts.borrow().get(&key).map(|(_, it)| it.scroll.clone()));
                 match (scroll, &verb) {
