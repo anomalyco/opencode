@@ -10,7 +10,8 @@
  * host of a later minor.
  *
  * A plugin is a shared library that exports `opencode_plugin_v2`, which returns its `opencode_plugin_api`.
- * Everything after that crosses as JSON in byte buffers. A buffer one side returns is freed by that side's `free`,
+ * Everything after that crosses as JSON in byte buffers, but a draw's answer, which is bytes ("The messages", below).
+ * A buffer one side returns is freed by that side's `free`,
  * so each side keeps its own allocator. Every call runs on the host's UI thread, except the entries of the host
  * table marked "any thread".
  *
@@ -24,13 +25,21 @@
  *
  * What the host takes from the plugin, and what the plugin must keep to:
  *
- * - Borrowed bytes (`opencode_bytes`) are valid, and unchanged, for the length of the call that passes them only. They
- *   are not NUL-terminated. A null `ptr` means no bytes, with `len` 0.
- * - A buffer the plugin returns (`opencode_owned`) is one it allocated: `ptr` to `len` initialized bytes inside an
- *   allocation of `cap >= len` bytes, or `ptr` null with `len` 0. The host copies it out and hands that exact
- *   descriptor back to the plugin's `free` once, whatever the status, also when it refuses it. The host refuses,
- *   unread, a null `ptr` with a length, a `len` past `cap`, and a buffer over 256 MiB. The same holds the other way for
- *   the host's buffers and its `free`.
+ * - Borrowed bytes (`opencode_bytes`) are valid, and unchanged, for the length of the call that passes them only: one
+ *   readable allocation of `len` bytes. They are not NUL-terminated. A null `ptr` means no bytes, with `len` 0. The
+ *   receiver refuses, unread, a null `ptr` with a length and a length over 256 MiB; `call` answers OPENCODE_ERROR and
+ *   `send` OPENCODE_ERROR, and `report` reads at most the 4 KiB the host keeps of a report.
+ * - A buffer either side returns (`opencode_owned`) is one it allocated: `ptr` to `len` initialized bytes inside an
+ *   allocation of `cap >= len` bytes, or `ptr` null with `len` 0. The receiver copies it out and hands that exact
+ *   descriptor back to the other side's `free` once, whatever the status, also when it refuses it. It refuses,
+ *   unread, a null `ptr` with a length, a `len` past `cap`, and a buffer over 256 MiB. A `free` frees by `ptr` and
+ *   `cap` and does not read `len`; it cannot check the descriptor, so each side hands back exactly what it received.
+ * - An `out` pointer is writable and aligned for an `opencode_owned` for the length of the call; a callee writes it
+ *   once, also when it answers an error.
+ * - The one reentrant direction is the plugin's: while the host's `call` into a plugin runs, the plugin may call the
+ *   host table's `call` on the same thread. The host never calls into an instance while one of its calls runs.
+ * - `free` and `destroy` return nothing, so they cannot answer OPENCODE_PANIC: each contains its own failure (catches
+ *   it and returns).
  * - Tables are aligned for their types. The plugin's table, and the host's `features` bytes, live as long as the
  *   library and the instance respectively.
  * - `call` and `theme_mode` of the host table are for the host's UI thread, the thread that calls the plugin; from
@@ -151,129 +160,73 @@ typedef struct opencode_plugin_api {
 #endif
 
 /* The entry every 2.x plugin exports. A 1.x plugin exports `opencode_plugin_v1` with the same table; the host serves
- * it ABI 1.4. */
+ * it ABI 1.6, whose host table ends before `send`. */
 OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
 
 /*
- * The message schema. Every message is a JSON object; a request is tagged by "type". Fields with a default may be
- * left out, and a reader ignores fields it does not know. The Rust types in `crates/plugin-abi/src/lib.rs` and
- * `src/v2.rs` and `src/claim.rs` are the reference.
+ * The messages. Their schema is `crates/plugin-abi/schema/v2.json` (JSON Schema 2020-12, `$id` .../plugin-abi/2.0.json),
+ * generated from the Rust types and normative for every binding; the definitions named below are its `$defs`, and
+ * its `x-messages` names the definition of each request type's answer. Every message is JSON but a draw's answer,
+ * which is bytes (`DrawList`). A request is tagged by "type". A field the schema leaves out of "required" may be left
+ * out, and a reader ignores a field it does not know. `crates/plugin/conformance` holds every message of its scripted
+ * sessions, each of which the schema takes.
  *
- * Manifest (what `create` returns):
- *   {"id", "commands": [{"name", "title", "group", "slash", "keybind", "palette", "description"?, "arguments"?,
- *    "scope"?}], "fences": [language], "slots": [{"kind", "path", "render"?, "mount"?}], "routes": [name],
- *    "storage": [key], "render": 2, "events"?: [[type]], "render_routes"?: [name], "wake"?: bool,
- *    "route_mounts"?: [name], "fence_gone"?: bool,
- *    "surfaces"?: [{"name", "place": {"type": "route", "name"} | {"type": "slot", "kind", "path"}
- *      | {"type": "panel", "name"} | {"type": "overlay", "name"}, "palette"?, "draw"?: bool, "notify"?: [notify],
- *      "layout"?: bool, "handler"?: bool, "layers"?: [layer], "mounts"?: bool}],
- *    "claims"?: [{"target": {"type": "tool" | "fence", "name"}, "palette"?}],
- *    "messages"?: bool, "layers"?: [layer], "searches"?: [name], "plugins"?: bool}
- *   A layer is {"scope": "surface" | {"node": id} | "composer" | "global", "priority"?, "mode"?,
- *    "keys"?: [{"key", "name", "title"?, "hold"?, "command"?}], "any"?, "paste"?}. 2.0 (P6c): a key's "command" names
- *    the user's keybind that takes it; "key" is used when the host knows no keybind of that name.
+ * - `describe` answers `Metadata`; a 2.x library names a nonempty "id", which the host reads before it runs any
+ *   `create`, so setup runs once, at activation. Loading a library runs its native initializers, never its setup.
+ * - `create` answers `Manifest`: what the plugin registered. A request names a registration by its index in the
+ *   manifest's list ("claim" a slot claim, "surface" a surface, "handler" an event handler, "layer" a layer).
+ * - The host's `call` sends a `Request`; the host table's `call` takes a `HostRequest`.
  *
- * Requests from the host (`call`), with their results:
- *   {"type": "command", "name", "input"}                      -> null
- *   {"type": "render-fence", fence fields, "index"}            -> {"type": "code" | "keep" | "lines", ...}
- *   {"type": "render", "claim", "input", "changed"}            -> {"type": "keep" | "hide" | "show", "node"}
- *   {"type": "render-route", "name", "changed"}                -> the same
- *   {"type": "event", "handler", "event"}                      -> null
- *   {"type": "reply", "id", "result": {"Ok": json} | {"Err": text}} -> null
- *   {"type": "mount", "claim", "input", "mounted"}             -> null
- *   {"type": "route-mount", "name", "mounted"}                 -> null
- *   {"type": "wake"}                                           -> null
- *   {"type": "fence-gone", "key"}                              -> null
- *   2.0:
- *   {"type": "view", "surface": index, "mount": {"surface", "key", "generation"},
- *    "input": {"width", "height", "palette": {"mode", "colors"}, "full"?, "changed"?, "slot"?}, "next": n}
- *                                     -> {"node": tree, "content"?: [[handle, content]], "memo"?: n}
- *      `memo` is how many values the plugin's memo table for the mount holds, at most the tree's nodes with an id.
- *      `content` is what the view gave the host this time, numbered next + 1, next + 2, ...; a node names it as
- *      {"content": handle}. A tree may name a subtree the last accepted tree had under an id as
- *      {"type": "keep", "key": id}. With "full" set, the host holds no tree to keep from. "changed" is what changed
- *      since the mount's last view, as in "render"; a keep of the last tree's root keeps the mount as it is. "slot" is a
- *      slot surface's input, as in "render".
- *   {"type": "draw", "surface": index, "mount", "canvas": id,
- *    "frame": {"width", "height", "cause": "first" | "resized" | "version" | "animate", "dt": {"secs", "nanos"}}}
- *                                     -> the canvas's list as bytes, not JSON; none keeps the list the host holds
- *      The host sends it only for a surface whose manifest entry has "draw", for one of its canvases, as it paints the
- *      canvas at the frame's size. "dt" is the animation's time since its last frame, zero for the other causes. The
- *      list's format is in `crates/plugin-abi/src/canvas.rs`: a version byte (1), then records of an operation byte, a
- *      little-endian u32 payload length and the payload. One the host cannot read fails the plugin; one over a limit
- *      shows a placeholder.
- *   {"type": "claim", "claim": index, "mount", "input", "part", "next": n}
- *                                     -> {"node": tree | null, "content"?, "released"?, "memo"?}
- *      A renderer claim's view of one part: a tool call {"type": "tool", "session", "message", "state": "pending" |
- *      "running" | "completed" | "error", "permission", "tool": the transcript's tool part without what the call
- *      returned, which a "part-output" source names, and without metadata over 4096 bytes of JSON}, or a fence
- *      {"type": "fence", "language", "info", "code", "streaming", "closed"}. A null node leaves the part to the
- *      host's own row. The rest is as for "view", but "height" is 0: a part is as tall as its tree. Each part is a
- *      mount of its own.
- *   {"type": "unmount", "mount"}                               -> null
- *   {"type": "message", "message": "<json text>"}              -> null
- *   2.0 (P3), for a surface the manifest says has them:
- *   {"type": "layout", "surface": index, "geometry": {"mount", "rects", "scrolls", "groups", "tops", "moved_only",
- *    "reached", "transcript"?}}                                -> {"paints"?: [{"node", "bg"}], "again"?: bool}
- *      After the solve, when something the surface's "notify" names changed. It reads only, as a view does. "mount"
- *      is the mount it is for: two mounts of one surface with the same tree tell their models apart by it.
- *   2.0 (P2), with P3's scroll and input events:
- *   {"type": "input", "to": {"type": "surface", "surface": index, "mount"?} | {"type": "layer", "layer": index},
- *    "event": {"type": "key" | "paste" | "pointer" | "hover" | "closed", ...} |
- *     {"type": "scroll", "event": {"type": "landed", "scroll", "anchor"} | {"type": "user-scroll", "scroll"}} |
- *     {"type": "change" | "submit", "node", "text"} |
- *     {"type": "mount", "mount": {"surface", "key", "generation"}, "mounted", "slot"?}} -> "consume" | "pass"
- *      A surface's handler hears the events of the mount the host routed them to, which "mount" names (none for a
- *      "mount" event, which the plugin hears and which names its mount); what it reads and asks of the input
- *      ("rect", "focused", "input-mode", "focus", "set-mode", "overlay", "scroll", ...) is that mount's. A layer of the
- *      manifest is the plugin's own. A scroll's and an input's events go to the surface's handler; the answer to them
- *      does not matter.
- *   {"type": "search", "name", "query", "options": [option]}   -> [value]
- *   2.0 (P6b), for a plugin whose manifest has "plugins":
- *   {"type": "plugins"}                                        -> null
- *      The plugin list ("plugins" below) changed.
+ * What the requests of the host mean (`Request`):
+ * - "command", "event", "reply", "mount", "route-mount", "wake", "fence-gone", "deltas", "unmount", "message" and
+ *   "plugins" run the plugin's handlers and answer null. "reply" carries {"Ok": json} or {"Err": text}; "message" the
+ *   JSON text a thread sent, as a JSON string; "plugins" goes to a plugin whose manifest has "plugins".
+ * - "render-fence", "render" and "render-route" (1.4 on) answer `Fenced` and `Render`; "fence", "slot" and "route"
+ *   (1.3) answer lines.
+ * - "view" (2.0) answers `ViewReply`. Its "content" is what the view gave the host this time, numbered "next" + 1,
+ *   "next" + 2, ...; a node names it as {"content": handle}, and "released" lets the host drop handles. "memo" is how
+ *   many values the plugin's memo table for the mount holds, at most the tree's nodes with an id. A tree may name a
+ *   subtree the last accepted tree had under an id as {"type": "keep", "key": id}; with "full" in the input the host
+ *   holds no tree to keep from, and a keep of the last tree's root keeps the mount as it is. "changed" is what changed
+ *   since the mount's last view; "slot" a slot surface's input.
+ * - "claim" (2.0) answers `ClaimReply`: a renderer claim's view of one part, a tool call or a fence, each part a mount
+ *   of its own and as tall as its tree ("height" 0). A null node leaves the part to the host's own row. A tool part
+ *   leaves out what the call returned, which a "part-output" source names, and metadata over 4096 bytes of JSON.
+ * - "draw" (2.0) answers a `DrawList`, bytes, or none to keep the list the host holds. The host sends it only for a
+ *   surface whose manifest entry has "draw", for one of its canvases, as it paints the canvas at the frame's size;
+ *   "dt" is the animation's time since its last frame, zero for the other causes. A list the host cannot read fails
+ *   the plugin; one over a limit shows a placeholder. A reader skips an operation it does not know.
+ * - "layout" (2.0) answers `LayoutReply`, for a surface whose manifest entry has "layout", after the solve, when
+ *   something its "notify" names changed. Its geometry's "mount" is the mount it is for.
+ * - "input" (2.0) answers `Handled` ("consume" or "pass"). A surface's handler hears the events of the mount the host
+ *   routed them to, which "to" names in "mount" (none for a "mount" event, which the plugin hears and which names its
+ *   mount); what the handler reads and asks of the input ("rect", "focused", "input-mode", "focus", "set-mode",
+ *   "overlay", "scroll", ...) is that mount's. A layer of the manifest is the plugin's own. The answer to a scroll's
+ *   and an input node's events does not matter.
+ * - "search" (2.0) answers the values of the options to list, in order.
  *
- * 2.0 tree nodes ("type"): "box" {"id"?, "row"?, "gap"?, "padding"?, "justify"?, "align"?, "bg"?, "layout"?,
- *   "on_click"?, "children", "visible"?}, "text" {"id"?, "spans", "fg"?, "wrap"?, "truncate"?, "selectable"?, "hover_fg"?,
- *   "layout"?, "on_click"?}, "slot" {"path"}, "markdown" {"id"?, "source"}, "spinner" {"id"?, "label"},
- *   "scroll" {"id"?, "height"?, "follow"?, "layout"?, "children"}, "diff" {"id"?, "content", "view"?, "filetype"?,
- *   "hunks"?, "wrap"?, "padding"?},
- *   "canvas" {"id", "layout"?, "version"?, "animate"?}, "keep" {"key"}. A source is {"text": text},
- *   {"content": handle} or {"part-output": {"session", "part"}}. A tree the host cannot decode, such as one with a
- *   kind it does not know, fails the plugin and leaves no effect.
+ * Tree nodes (`Node`, by "type"): "box", "text", "slot", "markdown", "spinner", "scroll", "diff", "input", "list",
+ * "code", "image", "keep" and "canvas". A source (`Source`) is {"text": text}, {"content": handle} or
+ * {"part-output": {"session", "part"}}. A dialog's and a 1.x render's body is a node of ABI 1.x (`V1Node`). A tree the
+ * host cannot decode, such as one with a kind it does not know, fails the plugin and leaves no effect: a library
+ * lowers a kind of a later minor for an older host before it answers (the Rust SDK's `View::or`).
  *
- * Requests to the host (the host table's `call`), tagged by "type". Those that read, or shape only the call's own
- *   effects: "log", "storage-get", "storage-key", "color", "session", "family", "messages", "models", "model",
- *   "limits", "providers", "info", "mcp-servers", "integrations", "vcs", "route", "interactive", "shortcut",
- *   "dialog-open", 1.5 "composer", "checkpoint", "rollback", 1.6 "variants", "tabs-enabled", "tabs",
- *   "keymap-pending", "keymap-active", "keymap-commands", "shortcuts", "selection", "theme", "themes", 2.0 (P3)
- *   "scroll-state" {"target"}, "anchors" {"target", "group"}, "top-anchor" {"target", "group", "inset"?},
- *   "transcript", 2.0 (P2) "rect", "focused", "input-mode", 2.0 (P6a) "message" {"session", "message"} (one
- *   message, or null), 2.0 (P6b) "plugins", which answers [{"key", "id", "target"?, "origin": "builtin" | "added" |
- *   "configured" | "external", "status": "active" | "inactive" | "skipped" | "failed" | "pending" | "declined",
- *   "active"?, "slow"?}] and no error text, 2.0 (P6c) "setting" {"name"}, which answers the user's setting of that name
- *   (one of "diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single") or null, and "image-size"
- *   {"bytes": base64}, which answers [width, height] of the image the host decodes from them, or null. Those that ask
- *   for something: "toast", "storage-set", "storage-merge", "open-route", "dispatch", "attention", "navigate", "fetch", "dialog", "copy", 1.5
- *   "composer-edit", 1.6 "set-variant", "set-model", "tab", "clear-selection", "foreground", "title", "set-theme",
- *   "install-theme", 2.0 (P3) "scroll" {"target", "verb"}, 2.0 (P2) "open-panel", "close-panel", "overlay",
- *   "close-overlay", "focus", "blur", "set-mode", "release-keys" (none of P2's during `create`, which has no input
- *   yet), 2.0 (P6c) "set-setting" {"name", "value"}. A "fetch" with "bytes" answers the body's bytes in base64 as a
- *   JSON string; a "dialog" may be {"type": "images", "images": [{"data": base64, "name"?}], "index"?}, a select may
- *   have "query", "query_delay", "filterless", "empty" and "note", and a panel "close" and "height".
- *   `crates/plugin-abi/schema/v2.json` has the types of P3's (Target, Scroll, ScrollState, AnchorAt, Geometry,
- *   LayoutReply, ScrollEvent, TranscriptView). Effects wait until the plugin's call returns. A call that panics, or
- *   whose answer the host refuses (it cannot decode it, the tree breaks the contract, a handler answers anything but
- *   null), has none, and fails the plugin. A call that answers OPENCODE_ERROR keeps them (see above). A render of 1.4
- *   on, a view, a claim's view, a draw, a layout or a search ("render-fence", "render", "render-route", "view",
- *   "claim", "draw", "layout", "search") reads only, as in process, where these get the host's reads alone: the host
- *   answers OPENCODE_ERROR to any request of it that asks for something. A
- *   render of 1.3 ("fence", "slot", "route") may ask, and what it asks for happens when the host draws its answer. A
- *   "scroll" of the transcript is taken only from a call that answers the user's input (a key, a click, an edit, the
- *   palette, the user's scroll): the host answers OPENCODE_ERROR to any other.
+ * What the requests to the host do (`HostRequest`):
+ * - Effects wait until the plugin's call returns. A call that panics, or whose answer the host refuses (it cannot
+ *   decode it, the tree breaks the contract, a handler answers anything but null), has none, and fails the plugin;
+ *   so does a `create` whose buffer the host refuses, whatever its status. A call that answers OPENCODE_ERROR keeps
+ *   them (see above).
+ * - A render of 1.4 on, a view, a claim's view, a draw, a layout and a search read only: the host answers
+ *   OPENCODE_ERROR to any request of theirs that asks for something. A render of 1.3 may ask, and what it asks for
+ *   happens when the host draws its answer.
+ * - A "scroll" of the transcript is taken only from a call that answers the user's input (a key, a click, an edit,
+ *   the palette, the user's scroll): the host answers OPENCODE_ERROR to any other. None of the input requests ("focus",
+ *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet.
+ * - "setting" names one of "diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single". "image-size"
+ *   takes the image's bytes in base64 and answers the size the host decodes, or null. A "fetch" with "bytes" answers
+ *   the body's bytes in base64 as a JSON string.
  *
- * Content in a view reply is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
- * A message the host delivers ("message") is the JSON text the sender wrote, as a JSON string.
+ * Content (`Blob`) is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
  */
 
 #ifdef __cplusplus

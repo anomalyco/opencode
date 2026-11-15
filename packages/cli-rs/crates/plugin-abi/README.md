@@ -127,7 +127,7 @@ A plugin binary carries its ABI version. The host is ABI 2.0, and loads every 1.
 | The 1.4 SDK | yes; a 1.3 host refuses it, naming both versions | The 1.4 requests |
 | The 1.5 SDK | yes; a 1.3 host refuses it, and a 1.4 host loads it and offers what it has: `composer()` reads `None`, and `edit_composer`, `Dialog::Confirm` and `Dialog::Alert` do nothing | The 1.4 requests; 1.5 adds only what the plugin asks of the host |
 | The 1.6 SDK | yes; a 1.3 host refuses it. On a 1.4 or 1.5 host the reads and verbs of 1.6 answer their defaults (see below) | The 1.4 requests, and `Deltas` to a plugin with `on_deltas` |
-| The 2.0 SDK, this crate | yes | The requests of 1.6, and the 2.0 ones: surfaces (`View`, `Unmount`) and messages (`Message`) |
+| The 2.0 SDK, this crate | yes | The requests of 1.6, and the 2.0 ones: surfaces (`View`, `Draw`, `Layout`, `Input`, `Unmount`), claims (`Claim`), messages (`Message`), searches (`Search`) and the plugin list (`Plugins`); `schema/v2.json` has each |
 | A 3.x SDK | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" | — |
 
 A plugin of 1.6 rebuilt on the 2.0 SDK keeps every entry and request of 1.6 until 3.0, and what 2.0 adds is in
