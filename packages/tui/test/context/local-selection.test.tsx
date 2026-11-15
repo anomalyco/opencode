@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { RGBA } from "@opentui/core"
 import { agent, model, renderLocal, session } from "../fixture/local"
 import { json } from "../fixture/tui-client"
 
@@ -180,6 +181,13 @@ test("session with subagent does not resolve the subagent in current()", async (
   await setup.data.session.sync("ses_subagent")
   setup.route.navigate({ type: "session", sessionID: "ses_subagent" })
   expect(setup.local.agent.current()?.id).toBe("build")
+})
+
+test("color resolves custom hex color for subagents", async () => {
+  await using setup = await renderLocal({
+    agents: [agent("build"), { ...agent("explore"), mode: "subagent", color: "#ff00ff" }],
+  })
+  expect(setup.local.agent.color("explore").equals(RGBA.fromHex("#ff00ff"))).toBe(true)
 })
 
 async function publishSelection(

@@ -56,14 +56,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     function createAgent() {
+      const allAgents = createMemo(() => data.location.agent.list(location.ref) ?? [])
       const primaryAgents = createMemo(() =>
-        (data.location.agent.list(location.ref) ?? []).filter((agent) => agent.mode !== "subagent"),
+        allAgents().filter((agent) => agent.mode !== "subagent"),
       )
       const agents = createMemo(() =>
         primaryAgents().filter((agent) => !agent.hidden),
       )
       const visibleAgents = createMemo(() =>
-        (data.location.agent.list(location.ref) ?? []).filter((agent) => !agent.hidden),
+        allAgents().filter((agent) => !agent.hidden),
       )
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
@@ -129,12 +130,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(id: string) {
-          const agent = primaryAgents().find((agent) => agent.id === id)
+          const agent = allAgents().find((agent) => agent.id === id)
           if (agent?.color) return RGBA.fromHex(agent.color)
           const index = visibleAgents().findIndex((agent) => agent.id === id)
           if (index === -1) {
-            const primaryIndex = primaryAgents().findIndex((agent) => agent.id === id)
-            if (primaryIndex !== -1) return colors()[primaryIndex % colors().length]
+            const allIndex = allAgents().findIndex((agent) => agent.id === id)
+            if (allIndex !== -1) return colors()[allIndex % colors().length]
             return colors()[0]
           }
           return colors()[index % colors().length]
