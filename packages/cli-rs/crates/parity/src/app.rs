@@ -80,6 +80,8 @@ pub struct RouteSpec {
     /// Answers only once a [`Step::Release`] names its path.
     #[serde(default)]
     pub hold: bool,
+    /// Answers only a request with exactly this query.
+    pub query: Option<BTreeMap<String, Vec<String>>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
