@@ -19,7 +19,7 @@
 //! that finds the proxy's queue full is delivered once it has room, so the last one is never lost. From ABI 2.0 its
 //! threads `send` messages to its mailbox ([`crate::mailbox`]), which the UI thread hands to the plugin one call each.
 //!
-//! Versions follow the ABI's rules. The host serves ABI 2.0 to a library that exports [`abi::ENTRY`], and ABI 1.4 to
+//! Versions follow the ABI's rules. The host serves ABI 2.0 to a library that exports [`abi::ENTRY`], and ABI 1.6 to
 //! one that exports only [`abi::ENTRY_V1`], as before. Only a major the host does not serve, a too-short table, a
 //! plugin that requires a newer host minor version, or one that requires a feature the host lacks is refused. Entries
 //! past the plugin's table size are absent.
