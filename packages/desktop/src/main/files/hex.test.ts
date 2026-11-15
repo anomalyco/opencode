@@ -4,33 +4,49 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { detectHex, hexPaths } from "./hex"
 
-test("uses the Hex installers' per-user layouts and desktop PATH", () => {
-  const mac = hexPaths("darwin", "/Users/test", { PATH: "/bin" })
-  expect([...mac]).toContain("/Users/test/Applications/Hex.app/Contents/MacOS/hex")
-  expect([...mac]).toContain("/bin/hex")
+test("uses Rune's per-platform installation paths", () => {
+  expect(hexPaths("darwin", "/home/test", { PATH: "/bin" })).toEqual({
+    support: "/home/test/Library/Application Support/hex",
+    bundles: ["/Applications/Hex.app", "/home/test/Applications/Hex.app"],
+  })
+  expect(hexPaths("win32", "C:\\Users\\test", { APPDATA: "D:\\roaming", PATH: "C:\\tools" })).toEqual({
+    support: "D:\\roaming\\hex",
+    registry: "C:\\Windows\\System32\\reg.exe",
+  })
 
-  const windows = hexPaths("win32", "C:\\Users\\test", { APPDATA: "D:\\roaming", PATH: "D:\\bin;C:\\tools" })
-  expect([...windows]).toContain("D:\\roaming\\hex\\current-version")
-  expect([...windows]).toContain("C:\\tools\\hex.com")
+  const linux = hexPaths("linux", "/home/test", {
+    XDG_DATA_HOME: "relative",
+    XDG_DATA_DIRS: "relative:/opt/share",
+    PATH: ":/bin:.",
+  })
 
-  const linux = hexPaths("linux", "/home/test", { XDG_DATA_HOME: "/data" })
-  expect([...linux]).toContain("/data/applications/anomaly.hex.desktop")
-  expect([...linux]).toContain("/data/hex/service.sock")
-  expect([...linux]).toContain("/usr/bin/hex")
+  expect(linux).toEqual({
+    support: "/home/test/.local/share/hex",
+    entries: [
+      "/home/test/.local/share/applications/anomaly.hex.desktop",
+      "/home/test/.local/share/applications/hex.desktop",
+      "/opt/share/applications/anomaly.hex.desktop",
+      "/opt/share/applications/hex.desktop",
+    ],
+    binaries: ["/home/test/.local/bin/hex", "/bin/hex"],
+  })
 })
 
-test("retained Hex settings alone do not count as an installation", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "hex-detect-"))
+test("a stale version marker is ignored; a discovery document or the selected exe counts", async () => {
+  const support = await mkdtemp(path.join(tmpdir(), "hex-detect-"))
 
   try {
-    const support = path.join(root, "hex")
-    await mkdir(support)
-    await writeFile(path.join(support, "settings.json"), "{}")
-    const marker = path.join(support, "current-version")
-    expect(await detectHex([marker])).toBe(false)
-    await writeFile(marker, "3.1.0")
-    expect(await detectHex([marker])).toBe(true)
+    const paths = { support, registry: path.join(support, "missing-reg.exe") }
+    await writeFile(path.join(support, "current-version"), "2.3.0\r\n")
+    expect(await detectHex(paths)).toBe(false)
+    await writeFile(path.join(support, "local-api.json"), "")
+    expect(await detectHex(paths)).toBe(true)
+    await rm(path.join(support, "local-api.json"))
+    const version = path.join(support, "versions", "2.3.0")
+    await mkdir(version, { recursive: true })
+    await writeFile(path.join(version, "hex.exe"), "")
+    expect(await detectHex(paths)).toBe(true)
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await rm(support, { recursive: true, force: true })
   }
 })
