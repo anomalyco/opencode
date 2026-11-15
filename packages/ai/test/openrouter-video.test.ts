@@ -154,14 +154,14 @@ describe("ai.video.status / result / cancel / OpenRouter", () => {
             .status(model, id)
             .pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { id, status }))))),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "queued",
-        "running",
-        "completed",
-        "failed",
-        "cancelled",
-        "expired",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "running" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "error", reason: "cancelled" },
+        { status: "error", reason: "expired" },
+        { status: "running" },
       ])
     }),
   )

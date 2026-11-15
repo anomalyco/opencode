@@ -180,6 +180,7 @@ export type {
   AwaitOptions as GenerationAwaitOptions,
   Event as GenerationEvent,
   Poll,
+  Reason as GenerationReason,
   Route as GenerationRoute,
   Snapshot as GenerationSnapshot,
   Status as GenerationStatus,

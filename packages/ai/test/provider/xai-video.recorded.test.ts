@@ -33,7 +33,7 @@ describe("xAI Video recorded", () => {
           Effect.tap((status) => Effect.sync(() => observed.push(status))),
           Effect.repeat({
             schedule: Schedule.spaced(queuedPoll.interval ?? "10 millis"),
-            until: (status) => status.status !== "queued" && status.status !== "running",
+            until: (status) => status.status !== "running",
           }),
         )
         const progress = observed.flatMap((status) => (status.progress === undefined ? [] : [status.progress]))
