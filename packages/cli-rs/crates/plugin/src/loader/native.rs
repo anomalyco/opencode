@@ -1043,6 +1043,10 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::Plugins => return read(ctx, |read| serde_json::to_value(read.plugins())),
         HostRequest::Setting { name } => return read(ctx, |read| serde_json::to_value(read.setting(&name))),
         HostRequest::ImageSize { bytes } => {
+            // Bytes past what the host decodes show nothing, which their length says before they are decoded (PL-9).
+            if (bytes.len() / 4 * 3) as u64 > crate::limits::get().image_bytes + 2 {
+                return Ok(serde_json::Value::Null);
+            }
             let bytes = abi::base64::decode(&bytes).ok_or("image bytes that are not base64")?;
             return read(ctx, |read| serde_json::to_value(read.image_size(&bytes)));
         }
