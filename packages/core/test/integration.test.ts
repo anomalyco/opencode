@@ -185,38 +185,57 @@ describe("Integration", () => {
     }),
   )
 
-  it.effect("validates declared key prefixes before persisting credentials", () =>
+  it.effect("validates provider-declared key prefixes before persisting credentials", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const credentials = yield* Credential.Service
-      const constrainedID = Integration.ID.make("anthropic")
+      const providers = [
+        { id: "anthropic", prefix: "sk-ant-", key: "sk-ant-test-fixture" },
+        { id: "deepseek", prefix: "sk-", key: "sk-test-fixture" },
+        { id: "groq", prefix: "gsk_", key: "gsk_test-fixture" },
+        { id: "huggingface", prefix: "hf_", key: "hf_test-fixture" },
+        { id: "openrouter", prefix: "sk-or-v1-", key: "sk-or-v1-test-fixture" },
+        { id: "xai", prefix: "xai-", key: "xai-test-fixture" },
+      ]
       const opaqueID = Integration.ID.make("custom")
 
       yield* integrations.transform((editor) => {
-        editor.method.update({
-          integrationID: constrainedID,
-          method: {
-            type: "key",
-            validation: { prefix: "sk-ant-" },
-          },
-        })
+        for (const provider of providers) {
+          editor.method.update({
+            integrationID: Integration.ID.make(provider.id),
+            method: {
+              type: "key",
+              validation: { prefix: provider.prefix },
+            },
+          })
+        }
         editor.method.update({
           integrationID: opaqueID,
           method: { type: "key" },
         })
       })
 
-      yield* integrations.connection.key({
-        integrationID: constrainedID,
-        key: "sk-ant-api03-test-key",
-      })
-      const before = yield* credentials.list(constrainedID)
+      for (const provider of providers) {
+        const integrationID = Integration.ID.make(provider.id)
+        yield* integrations.connection.key({ integrationID, key: provider.key })
+        const before = yield* credentials.list(integrationID)
 
-      const invalid = yield* integrations.connection
-        .key({ integrationID: constrainedID, key: "1" })
-        .pipe(Effect.flip)
-      expect(invalid.cause).toMatchObject({ message: 'API key must start with "sk-ant-".' })
-      expect(yield* credentials.list(constrainedID)).toEqual(before)
+        const invalid = yield* integrations.connection
+          .key({ integrationID, key: "1" })
+          .pipe(Effect.flip)
+        expect(invalid.cause).toMatchObject({
+          message: `API key must start with "${provider.prefix}" and include a value after the prefix.`,
+        })
+        expect(yield* credentials.list(integrationID)).toEqual(before)
+
+        const prefixOnly = yield* integrations.connection
+          .key({ integrationID, key: provider.prefix })
+          .pipe(Effect.flip)
+        expect(prefixOnly.cause).toMatchObject({
+          message: `API key must start with "${provider.prefix}" and include a value after the prefix.`,
+        })
+        expect(yield* credentials.list(integrationID)).toEqual(before)
+      }
 
       const empty = yield* integrations.connection
         .key({ integrationID: opaqueID, key: "  \t " })

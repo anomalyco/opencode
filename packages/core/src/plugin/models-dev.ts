@@ -9,6 +9,10 @@ import { ModelsDev } from "../models-dev.js"
 // Only enforce formats that the provider documents as stable. Other integrations stay opaque.
 const API_KEY_VALIDATION: Record<string, Integration.KeyMethod["validation"]> = {
   anthropic: { prefix: "sk-ant-" },
+  deepseek: { prefix: "sk-" },
+  groq: { prefix: "gsk_" },
+  huggingface: { prefix: "hf_" },
+  openrouter: { prefix: "sk-or-v1-" },
 }
 
 // These catalog entries require inference profiles on Bedrock Runtime.
