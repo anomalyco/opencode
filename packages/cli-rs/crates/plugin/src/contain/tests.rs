@@ -586,3 +586,60 @@ fn a_backlog_that_starts_or_ends_is_a_change_of_slow() {
     backlogged(&bench, slot, 13);
     assert!(bench.monitor.take_flipped() && bench.monitor.is_slow("p"));
 }
+
+// Expected (final review big-boi 11): a build keeps one slot from its load, before its ID is known, to its activation:
+// a crash in either names the same artifact, by its ID once it is known; a later load of the same build finds that
+// slot, and a new build gets its own. An ID too long for the record leaves the build named by its target and digest,
+// never unnamed.
+#[test]
+fn a_build_keeps_one_slot_from_its_load_to_its_activation() {
+    let bench = Bench::new();
+    let dir = opencode_util::temp::tempdir().unwrap();
+    let record = Arc::new(Record::create(dir.path()).unwrap());
+    bench.monitor.attach(record.clone()).unwrap();
+    let (anonymous, named) =
+        (Artifact::external("", "/p", "0000000000000001"), Artifact::external("p", "/p", "0000000000000001"));
+    let load = bench.monitor.slot(&anonymous);
+    assert!(bench.monitor.attributed(load));
+    bench.call(load, "load", Duration::from_millis(3));
+    let active = bench.monitor.slot(&named);
+    assert_eq!(active, load, "the activation took another slot");
+    assert_eq!(record.named(active.0), Some(named.clone()));
+    assert_eq!(bench.monitor.load("p").0, Some(Duration::from_millis(3)));
+    assert_eq!(bench.monitor.slot(&anonymous), load, "a load of the same build again");
+    let crashed = |slot: Slot, kind: &str| {
+        record.enter(slot.0, record::kind(kind), 0);
+        record.crash().artifact
+    };
+    assert_eq!(crashed(active, "setup"), Some(named.clone()));
+    let other = bench.monitor.slot(&Artifact::external("", "/p", "0000000000000002"));
+    assert_ne!(other, load, "a new build shares a slot");
+    // An ID the record cannot hold beside its target.
+    let long = Artifact::external(&"x".repeat(record::NAME_BYTES), "/p", "0000000000000002");
+    assert_eq!(bench.monitor.slot(&long), other);
+    assert_eq!(crashed(other, "setup"), Some(Artifact::external("", "/p", "0000000000000002")));
+}
+
+// Expected (final review big-boi 11): a build whose identity the record cannot hold, by its length or past the record's
+// slots, is not attributed, so the loader does not admit it; without a record every build is.
+#[test]
+fn a_build_the_record_cannot_name_is_not_attributed() {
+    let bench = Bench::new();
+    let long = Artifact::external("", &"/p".repeat(record::NAME_BYTES), "0000000000000001");
+    assert!(bench.monitor.attributed(bench.monitor.slot(&long)), "no record");
+    let bench = Bench::new();
+    let dir = opencode_util::temp::tempdir().unwrap();
+    let record = Arc::new(Record::create(dir.path()).unwrap());
+    bench.monitor.attach(record.clone()).unwrap();
+    let snapshot = Snapshot { session: Some("ses_a".into()), draft: "kept".into(), dropped: false };
+    record.publish(&snapshot);
+    assert!(!bench.monitor.attributed(bench.monitor.slot(&long)), "too long");
+    for index in 1..record::NAMES {
+        let slot = bench.monitor.slot(&Artifact::builtin(&format!("b{index}")));
+        assert!(bench.monitor.attributed(slot), "{index}");
+    }
+    let past = bench.monitor.slot(&Artifact::external("", "/q", "0000000000000001"));
+    assert!(!bench.monitor.attributed(past), "past the record's slots");
+    // Nothing was written past the names: the snapshot after them reads back.
+    assert_eq!(record.snapshot(), Some(snapshot));
+}

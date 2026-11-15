@@ -8,9 +8,11 @@
 //!
 //! - **Words** (`AtomicU64`): the call state with its generation, the running call, its start, the call the
 //!   watchdog claimed, the call whose notice it painted, the committed snapshot, whether the terminal was taken.
-//! - **Names** (bytes, published by a checksum word): each plugin slot's identity, written once before the slot's
-//!   first call and never again. An identity is the plugin's ID and, for an external plugin, its target and build, so
-//!   a crash names the artifact and not only an ID another plugin may share.
+//! - **Names** (bytes, published by a checksum word): each plugin slot's identity, written before the slot's first
+//!   call, and once more when an external build that loaded before its ID was known is named with it (final review
+//!   big-boi 11): between calls, so no crash names a slot while it is written. An identity is the plugin's ID and, for
+//!   an external plugin, its target and build, so a crash names the artifact and not only an ID another plugin may
+//!   share. A build whose identity the record cannot hold is not admitted ([`Record::holds`]).
 //! - **Snapshots** (bytes, two slots): the session and the draft. A writer fills the slot that is not committed, then
 //!   commits it with one word, so a crash in the middle leaves the previous whole snapshot.
 //! - **Handoff** (bytes): what the parent tells the next client: the crash it restarts after, and safe mode.
@@ -32,9 +34,12 @@ use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering, fence};
 
 use opencode_util::page::Page;
 
-/// The plugins a record can name; a later one runs unnamed.
-pub const NAMES: usize = 128;
+/// The plugin builds a record can name in one client's life: each built-in, and each external build, however often it
+/// reloads. A build past them is not admitted.
+pub const NAMES: usize = 1024;
 const NAME: usize = 512;
+/// The bytes of a plugin's ID, target and build one name holds, with its checksum and lengths aside.
+pub const NAME_BYTES: usize = NAME - 10;
 const HEADER: usize = 4096;
 const SLOT: usize = 256 * 1024;
 pub const SIZE: usize = HEADER + NAMES * NAME + 2 * SLOT;
@@ -43,7 +48,7 @@ const SESSION_MAX: usize = 255;
 /// The longest draft a snapshot keeps, in bytes.
 pub const DRAFT_MAX: usize = SLOT - 16 - SESSION_MAX - 1;
 
-const MAGIC: u64 = u64::from_le_bytes(*b"OCRUN\x00\x00\x02");
+const MAGIC: u64 = u64::from_le_bytes(*b"OCRUN\x00\x00\x03");
 const W_MAGIC: usize = 0;
 const W_STATE: usize = 1;
 const W_CALL: usize = 2;
@@ -243,17 +248,24 @@ impl Record {
         self.bytes(at, len).iter().map(|cell| cell.load(Ordering::Relaxed)).collect()
     }
 
-    /// Names plugin slot `slot`, once, before its first call. A slot past [`NAMES`], or an identity too long for an
-    /// entry, stays unnamed.
-    pub fn name(&self, slot: u16, artifact: &Artifact) {
-        let slot = usize::from(slot);
-        if slot >= NAMES {
-            return;
+    /// Names plugin slot `slot` before its first call, or again between calls: whether it holds `artifact` now. A slot
+    /// past [`NAMES`], or an identity too long for an entry, is not written, and a name it held stays.
+    pub fn name(&self, slot: u16, artifact: &Artifact) -> bool {
+        if !Self::holds(slot, artifact) {
+            return false;
         }
-        let at = HEADER + slot * NAME;
-        let Some(encoded) = artifact.encode(NAME - 4) else { return };
+        let at = HEADER + usize::from(slot) * NAME;
+        let Some(encoded) = artifact.encode(NAME - 4) else { return false };
+        // A reader between the two stores sees no name rather than half of one.
+        self.word32(at).store(0, Ordering::Release);
         self.write(at + 4, &encoded);
         self.word32(at).store(checksum(&encoded), Ordering::Release);
+        true
+    }
+
+    /// Whether a record can name `artifact` in slot `slot`.
+    pub fn holds(slot: u16, artifact: &Artifact) -> bool {
+        usize::from(slot) < NAMES && artifact.encode(NAME - 4).is_some()
     }
 
     /// The identity of slot `slot`, if it holds a valid one.

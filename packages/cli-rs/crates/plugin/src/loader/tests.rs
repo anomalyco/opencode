@@ -1063,6 +1063,27 @@ fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
     assert_eq!(fake.loads.get(), 0);
 }
 
+// Expected (final review big-boi 11): under a crash guard, a build whose identity the run record cannot hold is not
+// opened, with an error that says what to do; a build at a short path beside it loads.
+#[test]
+fn a_build_the_crash_record_cannot_name_is_not_opened() {
+    let project = Project::new();
+    let deep = ["a", "b", "c"].iter().fold(project.root.path().to_path_buf(), |path, part| path.join(part.repeat(200)));
+    write(&deep.join(entry_file()), "id=deep");
+    write(&project.config().join(format!("plugins/short/{}", entry_file())), "id=short");
+    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let dir = opencode_util::temp::tempdir().unwrap();
+    registry.monitor().attach(std::sync::Arc::new(crate::contain::Record::create(dir.path()).unwrap())).unwrap();
+    let target = deep.to_string_lossy().into_owned();
+    let loader = project.loader(fake.clone(), vec![Configured { target: target.clone(), options: None }]);
+    loader.reconcile(&dynamic(&host), &registry);
+    let Status::Failed(error) = entry(&registry.entries(), &target).status.clone() else { panic!() };
+    assert!(error.contains("crash guard cannot name this build"), "{error}");
+    let short = project.config().join("plugins/short").to_string_lossy().into_owned();
+    assert_eq!(entry(&registry.entries(), &short).status, Status::Active);
+    assert_eq!(fake.loads.get(), 1, "the deep build was opened");
+}
+
 // Expected: an approved build that fails is told again when it comes back after a spell as pending, as a new failure.
 #[test]
 fn a_failure_after_a_pending_spell_is_told_again() {
