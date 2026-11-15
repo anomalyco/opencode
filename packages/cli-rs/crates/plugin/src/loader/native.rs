@@ -1053,6 +1053,12 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             let bytes = abi::base64::decode(&bytes).ok_or("image bytes that are not base64")?;
             return read(ctx, |read| serde_json::to_value(read.image_size(&bytes)));
         }
+        HostRequest::ImageBounds => {
+            let limits = crate::limits::get();
+            return Ok(
+                serde_json::to_value(abi::ImageBounds::new(limits.image_bytes, limits.image_side)).unwrap_or_default()
+            );
+        }
         HostRequest::SetSetting { name, value } => ctx.effects.push(Effect::Setting(name, value)),
         HostRequest::McpServers { location } => {
             return read(ctx, |read| serde_json::to_value(read.mcp_servers(location.as_ref())));
@@ -1268,6 +1274,7 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Plugins
         | HostRequest::Setting { .. }
         | HostRequest::ImageSize { .. }
+        | HostRequest::ImageBounds
         | HostRequest::McpServers { .. }
         | HostRequest::Integrations { .. }
         | HostRequest::Vcs { .. }

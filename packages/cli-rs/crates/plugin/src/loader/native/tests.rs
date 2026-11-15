@@ -3522,6 +3522,24 @@ fn a_setup_whose_error_the_host_refuses_leaves_no_effect() {
     }
 }
 
+// Expected (PL-9): a 2.x library's host table states `image-bounds`, and the host answers it with the bounds it
+// decodes images within, as its limits set them; a 1.x table states no feature.
+#[test]
+fn the_host_states_the_bounds_of_the_images_it_decodes() {
+    let table = host_table(ABI_MAJOR, HOST_MINOR, std::ptr::null_mut());
+    // SAFETY: the host's static list.
+    let features: Vec<String> = serde_json::from_slice(unsafe { table.features.as_slice() }).unwrap();
+    assert_eq!(features, [abi::IMAGE_BOUNDS]);
+    assert!(unsafe { host_table(1, V1_MINOR, std::ptr::null_mut()).features.as_slice() }.is_empty());
+    let host = host();
+    let mut ctx = Ctx::new(Rc::downgrade(&dynamic(&host)), "bounded", Vec::new());
+    let limits = crate::limits::get();
+    assert_eq!(
+        handle(&mut ctx, HostRequest::ImageBounds),
+        Ok(serde_json::json!({ "bytes": limits.image_bytes, "side": limits.image_side }))
+    );
+}
+
 // Expected (bigboi's re-review, findings 5 and 7): a draw's answer is held to every buffer's rules before the list's:
 // an OK descriptor past 256 MiB is refused unread, even one that starts as a list does, rather than taken as a list
 // over its bytes; an OK list between the two limits is over its bytes and not copied; an error and a panic between
