@@ -43,14 +43,8 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
                 Node::text([Span::new(format!("shown {} times", shown.get()))]),
             )
             .with_size(PanelSize::Medium)
-            .with_actions(vec![PanelAction {
-                title: "again".to_owned(),
-                key: Some("a".to_owned()),
-                color: None,
-                close: false,
-                action: again.clone(),
-            }])
-            .with_binds(vec![PanelBind { key: "a".to_owned(), title: "Show again".to_owned(), action: again }])
+            .with_actions(vec![PanelAction::new("again", again.clone()).with_key(Some("a".to_owned()))])
+            .with_binds(vec![PanelBind::new("a", "Show again", again)])
             .with_centered(true),
         ));
     });

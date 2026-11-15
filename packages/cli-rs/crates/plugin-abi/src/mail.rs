@@ -50,6 +50,7 @@ impl<M> SendError<M> {
 /// A refused send, as the host reports it.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Refused {
     Full,
     Closed,

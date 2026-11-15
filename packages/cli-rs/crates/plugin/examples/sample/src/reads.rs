@@ -41,11 +41,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             host.clear_selection();
             host.set_title("sample title");
             host.install_theme("sample", json!({ "theme": {} }));
-            program.set(Some(host.foreground(Foreground {
-                command: "true".to_owned(),
-                args: vec!["a".to_owned()],
-                cwd: None,
-            })));
+            program.set(Some(host.foreground(Foreground::new("true").with_args(vec!["a".to_owned()]))));
             let answers: Vec<String> = answers.iter().map(bool::to_string).collect();
             host.toast(Toast::new(Variant::Info, format!("sample verbs: {}", answers.join(" "))));
             host.dialog(Dialog::Panel(
