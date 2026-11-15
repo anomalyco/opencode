@@ -1443,7 +1443,10 @@ impl Guest {
         let result = result.and_then(|bytes| decode(bytes).map_err(bad));
         let overrun = timed.overrun.then(|| {
             let limit = self.monitor.limits().overrun.as_millis();
-            format!("{export} took {} ms, over the limit of {limit} ms", timed.took.as_millis())
+            match timed.cpu {
+                Some(cpu) => format!("{export} used {} ms of CPU, over the limit of {limit} ms", cpu.as_millis()),
+                None => format!("{export} took {} ms, over the limit of {limit} ms", timed.took.as_millis()),
+            }
         });
         let error = match &result {
             Ok(_) => {

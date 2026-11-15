@@ -2,6 +2,9 @@
 //! through [`Monitor::call`]: it reads the clock before and after, so the plugin cannot opt out and does not report its
 //! own time, and while a run record is attached it names the call in the record for the watchdog and a restart. On
 //! Linux the time the thread waited on a run queue meanwhile is not the plugin's: a loaded machine's, it is not charged.
+//! The overrun is judged by the CPU time the thread used in the call ([`thread_cpu`]), where the OS can say: a page
+//! fault served from swap or disk, a wait on a lock or a sleep is the machine's, not the plugin's work (FT-13). Wall
+//! time stays the hang watchdog's.
 //!
 //! The budget acts after a call returns, because a call on the UI thread cannot be stopped:
 //!
@@ -10,7 +13,8 @@
 //!   paint ([`Monitor::close`]), and a call in a later frame closes its plugin's frame too.
 //! - **slow**: over the frame budget in more than [`Limits::slow`] of the last [`Limits::window`] frames the plugin ran
 //!   in. It informs only, once a session, because wall time on a loaded machine is noisy.
-//! - **overrun**: one call over [`Limits::overrun`]. The caller fails an external plugin; for a built-in it is a host
+//! - **overrun**: one call that used more CPU than [`Limits::overrun`] (wall time less the run-queue wait where the OS
+//!   tells no CPU time). The caller fails an external plugin; for a built-in it is a host
 //!   bug, logged and counted ([`Monitor::host_overruns`]). A plugin's first call after `setup` is exempt, because its
 //!   pages are cold. Loading a library, `setup` and `dispose` are timed and do not count: they are its load.
 //!
@@ -154,8 +158,11 @@ pub struct Slot(u16);
 /// What a call cost, and what the budget says about it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Timed {
+    /// Wall time, less the time on a run queue where the OS tells it: what the frame budget counts.
     pub took: Duration,
-    /// Over [`Limits::overrun`], and not exempt.
+    /// The CPU time the thread used in the call, where the OS can say: what the overrun judges.
+    pub cpu: Option<Duration>,
+    /// Over [`Limits::overrun`] (by `cpu`, else by `took`), and not exempt.
     pub overrun: bool,
     /// The plugin just became slow, for the first time this session: what it costs a frame.
     pub slow: Option<String>,
@@ -188,6 +195,8 @@ pub struct Monitor {
     clock: RefCell<Rc<dyn Fn() -> Instant>>,
     /// How long this thread has waited on a run queue so far ([`queued`]).
     queued: RefCell<Rc<dyn Fn() -> Duration>>,
+    /// The CPU time this thread has used so far ([`thread_cpu`]), where the OS can say.
+    cpu: RefCell<Rc<dyn Fn() -> Option<Duration>>>,
     /// A test set the clock: the record still takes the monotonic clock, which the watchdog reads.
     injected: Cell<bool>,
     frame: RefCell<Rc<dyn Fn() -> u64>>,
@@ -300,6 +309,7 @@ impl Monitor {
             limits: Cell::new(limits),
             clock: RefCell::new(Rc::new(Instant::now)),
             queued: RefCell::new(Rc::new(queued)),
+            cpu: RefCell::new(Rc::new(thread_cpu)),
             injected: Cell::new(false),
             frame: RefCell::new(Rc::new(|| 0)),
             nested: RefCell::default(),
@@ -324,10 +334,12 @@ impl Monitor {
         self.limits.set(limits);
     }
 
-    /// Reads time from `clock`, which tests inject. The time on a run queue is then none.
+    /// Reads time from `clock`, which tests inject. The time on a run queue is then none, and an overrun is judged by
+    /// `clock` alone.
     pub fn set_clock(&self, clock: impl Fn() -> Instant + 'static) {
         *self.clock.borrow_mut() = Rc::new(clock);
         *self.queued.borrow_mut() = Rc::new(|| Duration::ZERO);
+        *self.cpu.borrow_mut() = Rc::new(|| None);
         self.injected.set(true);
     }
 
@@ -449,8 +461,9 @@ impl Monitor {
         if self.depth.get() > 0 {
             return (f(), Timed::default());
         }
-        let (clock, queued) = (self.clock.borrow().clone(), self.queued.borrow().clone());
-        let (start, waited) = (clock(), queued());
+        let (clock, queued, cpu) =
+            (self.clock.borrow().clone(), self.queued.borrow().clone(), self.cpu.borrow().clone());
+        let (start, waited, used) = (clock(), queued(), cpu());
         let generation = self.record.get().map(|(record, epoch)| {
             let now = if self.injected.get() { Instant::now() } else { start };
             record.enter(slot.0, record::kind(kind), now.saturating_duration_since(*epoch).as_millis() as u64)
@@ -462,13 +475,14 @@ impl Monitor {
         let took = clock().saturating_duration_since(start);
         // Runnable but not running is the machine's load, not the plugin's time.
         let charged = took.saturating_sub(queued().saturating_sub(waited));
+        let cpu = used.zip(cpu()).map(|(before, after)| after.saturating_sub(before));
         let noticed =
             generation.zip(self.record.get()).is_some_and(|(generation, (record, _))| record.was_noticed(generation));
         if noticed && let Some(notice) = self.on_notice.borrow().clone() {
             let artifact = self.plugins.borrow()[usize::from(slot.0)].artifact.clone();
             notice(&artifact, took);
         }
-        (value, self.account(slot, kind, charged))
+        (value, self.account(slot, kind, charged, cpu))
     }
 
     /// Runs `work`, the host's own work for the plugin in `slot`'s nodes (building them, laying out a list's window,
@@ -520,8 +534,8 @@ impl Monitor {
         self.latest(id, |stats| stats.calls_total).unwrap_or_default()
     }
 
-    /// What the budget makes of a call of `kind` that took `took`.
-    fn account(&self, slot: Slot, kind: &'static str, took: Duration) -> Timed {
+    /// What the budget makes of a call of `kind` that took `took`, of which it used `cpu` where the OS can say.
+    fn account(&self, slot: Slot, kind: &'static str, took: Duration, cpu: Option<Duration>) -> Timed {
         self.nest(took);
         let limits = self.limits();
         let frame = self.frame();
@@ -530,15 +544,15 @@ impl Monitor {
         match kind {
             "load" => {
                 stats.load = Some(took);
-                return Timed { took, ..Timed::default() };
+                return Timed { took, cpu, ..Timed::default() };
             }
             "setup" => {
                 *stats = Stats { artifact: std::mem::take(&mut stats.artifact), load: stats.load, ..Stats::default() };
                 stats.setup = Some(took);
                 stats.cold = true;
-                return Timed { took, ..Timed::default() };
+                return Timed { took, cpu, ..Timed::default() };
             }
-            "dispose" => return Timed { took, ..Timed::default() },
+            "dispose" => return Timed { took, cpu, ..Timed::default() },
             _ => {}
         }
         let samples = match stats.kinds.iter().position(|(known, _)| *known == kind) {
@@ -553,7 +567,7 @@ impl Monitor {
         stats.counted = Some(add(stats.counted, frame, took));
         self.counted.set(Some(add(self.counted.get(), frame, took)));
         let cold = std::mem::take(&mut stats.cold);
-        let overrun = took > limits.overrun && !cold;
+        let overrun = cpu.unwrap_or(took) > limits.overrun && !cold;
         let (slow, opened) = stats.add(frame, took, &limits);
         let id = stats.artifact.id.clone();
         drop(plugins);
@@ -566,7 +580,7 @@ impl Monitor {
             }
             None => self.all.set(Some((frame, took))),
         }
-        Timed { took, overrun, slow, opened }
+        Timed { took, cpu, overrun, slow, opened }
     }
 
     /// A paint starts: every frame before the one now open ends; the open one goes on through the paint, so a paint
@@ -807,6 +821,29 @@ fn queued() -> Duration {
 #[cfg(not(target_os = "linux"))]
 fn queued() -> Duration {
     Duration::ZERO
+}
+
+/// The CPU time this thread has used so far, user and system: only while it ran, so neither a run queue, a sleep, a
+/// lock nor a page fault served from swap or disk counts. Unix (Linux, macOS, the BSDs) reads
+/// `CLOCK_THREAD_CPUTIME_ID`, to the nanosecond; Windows reads `GetThreadTimes`, which advances by the scheduler's
+/// tick (about 15.6 ms). `None` where the OS does not tell.
+#[cfg(unix)]
+pub(crate) fn thread_cpu() -> Option<Duration> {
+    let mut time = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: `time` outlives the call, which only writes it.
+    #[allow(unsafe_code)]
+    let read = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut time) };
+    (read == 0).then(|| Duration::new(time.tv_sec as u64, time.tv_nsec as u32))
+}
+
+#[cfg(windows)]
+pub(crate) fn thread_cpu() -> Option<Duration> {
+    opencode_util::win::thread_cpu_time()
+}
+
+#[cfg(not(any(unix, windows)))]
+pub(crate) fn thread_cpu() -> Option<Duration> {
+    None
 }
 
 #[cfg(test)]
