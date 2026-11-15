@@ -286,11 +286,12 @@ impl Mailbox {
     }
 }
 
-/// What a message under `key` counts of the mailbox's bytes: its key, and its text when it is JSON.
+/// What a message under `key` counts of the mailbox's bytes: its key, and its JSON text, as the C ABI sends it or as
+/// an in-process value was written (review carbon-10).
 fn size(key: Option<&str>, message: &Message) -> u64 {
     let text = match message {
         Message::Json(text) => text.len(),
-        _ => 0,
+        Message::Value(_, bytes) => *bytes,
     };
     (key.map_or(0, str::len) + text) as u64
 }
@@ -299,7 +300,7 @@ fn size_of((key, message, _): &(Option<String>, Message, u64)) -> u64 {
     size(key.as_deref(), message)
 }
 
-/// The mailbox of an in-process plugin: Rust values, no bytes.
+/// The mailbox of an in-process plugin: Rust values, each with the length of its JSON text.
 impl Link for Mailbox {
     fn json(&self) -> bool {
         false
@@ -307,12 +308,12 @@ impl Link for Mailbox {
 
     fn send(&self, key: Option<&str>, message: Outgoing) -> Result<(), (Refused, Outgoing)> {
         let message = match message {
-            Outgoing::Value(value) => Message::Value(value),
+            Outgoing::Value(value, bytes) => Message::Value(value, bytes),
             Outgoing::Json(text) => Message::Json(text),
         };
         self.put(key, message).map_err(|(refused, message)| {
             let message = match message {
-                Message::Value(value) => Outgoing::Value(value),
+                Message::Value(value, bytes) => Outgoing::Value(value, bytes),
                 Message::Json(text) => Outgoing::Json(text),
             };
             (refused, message)
@@ -399,7 +400,7 @@ mod tests {
         for close in [false, true] {
             let mailbox = Mailbox::new("test.reentrant", Arc::new(Wake::new(None)));
             let dropped = Arc::new(AtomicBool::new(false));
-            let message = Message::Value(Box::new(Reentrant(mailbox.clone(), dropped.clone())));
+            let message = Message::Value(Box::new(Reentrant(mailbox.clone(), dropped.clone())), 0);
             mailbox.put(Some("k"), message).map_err(|_| ()).unwrap();
             let (done, finished) = std::sync::mpsc::channel();
             let other = mailbox.clone();
@@ -434,6 +435,71 @@ mod tests {
         assert_eq!(mailbox.put_json(b"", b"{not json"), abi::FULL);
         mailbox.close();
         assert_eq!(mailbox.put_json(b"", b"{not json"), abi::CLOSED);
+    }
+
+    /// The C ABI's link, as `host_send` makes it: JSON text into [`Mailbox::put_json`].
+    struct Json(Arc<Mailbox>);
+
+    impl Link for Json {
+        fn json(&self) -> bool {
+            true
+        }
+
+        fn send(&self, key: Option<&str>, message: Outgoing) -> Result<(), (Refused, Outgoing)> {
+            let Outgoing::Json(text) = &message else { unreachable!("a JSON link gets text") };
+            match self.0.put_json(key.unwrap_or_default().as_bytes(), text.as_bytes()) {
+                abi::OK => Ok(()),
+                abi::FULL => Err((Refused::Full, message)),
+                abi::CLOSED => Err((Refused::Closed, message)),
+                _ => Err((Refused::Unencodable, message)),
+            }
+        }
+
+        fn report(&self, message: &str) {
+            self.0.panicked(message.to_owned());
+        }
+
+        fn stopped(&self) -> bool {
+            self.0.closed()
+        }
+    }
+
+    /// A message with a field JSON leaves out.
+    #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+    struct Note {
+        text: String,
+        #[serde(skip)]
+        cached: u32,
+    }
+
+    // Expected (`carrier-equal`; review carbon-10): an in-process plugin's messages count their JSON bytes against the
+    // mailbox's, as the C ABI's do: the same sends are taken and refused on both carriers, and the handler gets the
+    // message as its JSON reads back, the field JSON leaves out at its default, as a library's handler does. A refused
+    // message comes back to its sender as it was sent.
+    #[test]
+    fn both_carriers_take_and_refuse_the_same_messages() {
+        let _limits =
+            crate::limits::set(crate::limits::Limits { plugin_content: 120, ..crate::limits::Limits::default() });
+        let note = |n: u32| Note { text: "x".repeat(40 + n as usize), cached: n + 7 };
+        let mut outcomes = Vec::new();
+        for json in [false, true] {
+            let mailbox = Mailbox::new("test.equal", Arc::new(Wake::new(None)));
+            let link: Arc<dyn Link> = match json {
+                false => mailbox.clone(),
+                true => Arc::new(Json(mailbox.clone())),
+            };
+            let sender = abi::mail::Sender::<Note>::new(abi::mail::Revocable::new(link));
+            let sent: Vec<Result<(), abi::mail::SendError<Note>>> = (0..4).map(|n| sender.send(note(n))).collect();
+            assert!(matches!(&sent[2], Err(abi::mail::SendError::Full(back)) if *back == note(2)), "{json}: {sent:?}");
+            let taken = mailbox.take_one(None).map(|message| match message {
+                Message::Value(value, bytes) => (*value.downcast::<Note>().unwrap(), bytes),
+                Message::Json(text) => (serde_json::from_str::<Note>(&text).unwrap(), text.len()),
+            });
+            outcomes.push((sent.iter().map(Result::is_ok).collect::<Vec<_>>(), taken));
+        }
+        let read = Note { text: "x".repeat(40), cached: 0 };
+        assert_eq!(outcomes[0], outcomes[1]);
+        assert_eq!(outcomes[0], (vec![true, true, false, false], Some((read, 51))));
     }
 
     // Expected (review bigboi low): toggling a plugin keeps one row of it, and a retired mailbox leaves none.

@@ -11,7 +11,9 @@
 //! A message is what JSON carries: a library gets it as JSON, so on every carrier a send first writes the message as
 //! JSON and reads it back as `M`, on the sending thread, and hands back one that does not come back as itself
 //! ([`SendError::Unencodable`]: a `NaN`, a map with keys that are not strings, a serializer that fails). The host
-//! keeps the sender's JSON text as it is, so what one carrier delivers, the other does too.
+//! keeps the sender's JSON text as it is, and in process the value that text reads back as, with the text's length,
+//! which counts against the mailbox's bytes as the text does over the C ABI (review carbon-10): so what one carrier
+//! delivers and refuses, the other does too.
 //!
 //! [`Spawner::spawn`] starts a thread named after the plugin, with a [`Stop`] flag that is set when the plugin leaves
 //! `active`, and catches a panic on it: the host fails the plugin and says so once. A thread cannot be killed; it ends
@@ -58,17 +60,19 @@ pub enum Refused {
     Unencodable,
 }
 
-/// A message on its way to the host: a Rust value in process, JSON text over the C ABI.
+/// A message on its way to the host: a Rust value in process, with the length of its JSON text; JSON text over the C
+/// ABI.
 #[doc(hidden)]
 pub enum Outgoing {
-    Value(Box<dyn Any + Send>),
+    Value(Box<dyn Any + Send>, usize),
     Json(String),
 }
 
 /// A message the host delivers to the plugin's handler.
 #[doc(hidden)]
 pub enum Message {
-    Value(Box<dyn Any + Send>),
+    /// A Rust value, and the length of the JSON text it was read back from.
+    Value(Box<dyn Any + Send>, usize),
     /// JSON text, as the sender wrote it.
     Json(String),
 }
@@ -148,35 +152,33 @@ impl<M: Serialize + DeserializeOwned + Send + 'static> Sender<M> {
 
     fn post(&self, key: Option<&str>, message: M) -> Result<(), SendError<M>> {
         // The author's code runs here, before the guard: a slow or failing serializer never holds a revocation up.
-        let Some(json) = encoded(&message) else { return Err(SendError::Unencodable(message)) };
-        let outgoing = if self.link.0.json { Outgoing::Json(json) } else { Outgoing::Value(Box::new(message)) };
+        let Some((json, read)) = encoded(&message) else { return Err(SendError::Unencodable(message)) };
+        // In process the host gets what the JSON reads back as, as a library's handler does.
+        let outgoing = match self.link.0.json {
+            true => Outgoing::Json(json),
+            false => Outgoing::Value(Box::new(read), json.len()),
+        };
         let refused = self.link.with(|link| match link {
             Some(link) => link.send(key, outgoing).err(),
             None => Some((Refused::Closed, outgoing)),
         });
-        // A refused message comes back after the guard, so dropping it runs no author code under it either.
-        let (refused, outgoing) = match refused {
-            None => return Ok(()),
-            Some(refused) => refused,
-        };
-        let message = match outgoing {
-            Outgoing::Value(value) => match value.downcast::<M>() {
-                Ok(message) => *message,
-                Err(_) => unreachable!("the host returned another value"),
-            },
-            Outgoing::Json(json) => match serde_json::from_str::<M>(&json) {
-                Ok(message) => message,
-                Err(_) => unreachable!("an encoded message reads back"),
-            },
-        };
-        Err(refused.with(message))
+        // A refused message is dropped after the guard, so dropping it runs no author code under it either; the sender
+        // gets its own message back.
+        match refused {
+            None => Ok(()),
+            Some((refused, outgoing)) => {
+                drop(outgoing);
+                Err(refused.with(message))
+            }
+        }
     }
 }
 
-/// `message` as JSON text, when it reads back as an `M`.
-fn encoded<M: Serialize + DeserializeOwned>(message: &M) -> Option<String> {
+/// `message` as JSON text, and what it reads back as, when that is an `M`.
+fn encoded<M: Serialize + DeserializeOwned>(message: &M) -> Option<(String, M)> {
     let json = serde_json::to_string(message).ok()?;
-    serde_json::from_str::<M>(&json).ok().map(|_| json)
+    let read = serde_json::from_str::<M>(&json).ok()?;
+    Some((json, read))
 }
 
 impl Refused {
@@ -241,7 +243,7 @@ pub(crate) fn handler<M: DeserializeOwned + 'static>(
 ) -> impl Fn(&dyn crate::Host, Message) + 'static {
     move |host, message| {
         let message = match message {
-            Message::Value(value) => *value.downcast::<M>().unwrap_or_else(|_| panic!("a message of another type")),
+            Message::Value(value, _) => *value.downcast::<M>().unwrap_or_else(|_| panic!("a message of another type")),
             Message::Json(json) => serde_json::from_str::<M>(&json)
                 .unwrap_or_else(|error| panic!("a message that does not read as the plugin's type: {error}")),
         };
