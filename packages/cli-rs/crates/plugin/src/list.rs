@@ -48,6 +48,9 @@ type Moving = (u64, bool, Option<Option<f64>>);
 /// on screen stays in its item; a verb's offset is rows, which go on into the items after.
 type Reading = (String, f64, bool);
 
+/// What the end of a list shows: the viewport's rows, the item at its top, and the rows into it.
+type EndView = (f32, String, f64);
+
 /// The widgets of an item near the view.
 pub(crate) struct Mounted {
     pub wrapper: View,
@@ -83,9 +86,11 @@ pub(crate) struct List {
     /// it), whether it follows the end, and where a verb meant it to go: an offset, or the end (`Some(None)`); a
     /// user's move goes where the first solve after it shows.
     moving: Cell<Option<Moving>>,
-    /// A user's move no solve has seen, as the items were before a change: the reading at its top, and the rows they
-    /// summed to, by which the solve judges whether it is at the end.
-    unsolved: RefCell<Option<(Option<Reading>, f64)>>,
+    /// What the end showed when a verb moved the list to it ([`List::end_view`]), while the list follows it, and the
+    /// offset it was at.
+    end: RefCell<Option<(EndView, f64)>>,
+    /// What a user's move no solve has seen saw ([`List::seen`]): the reading at its top, and whether it was at the end.
+    unsolved: RefCell<Option<(Option<Reading>, bool)>>,
     /// Rows the offset moved to hold the reading position since the behaviors last read it: the view did not move,
     /// so what they keep at an offset (a step's memory) moves with it.
     shifted: Cell<f64>,
@@ -126,6 +131,7 @@ impl List {
             groups: HashSet::new(),
             reading: RefCell::default(),
             moving: Cell::new(None),
+            end: RefCell::default(),
             unsolved: RefCell::default(),
             shifted: Cell::new(0.0),
             clamped: Cell::new(false),
@@ -154,9 +160,6 @@ impl List {
                 *self.reading.get_mut() = self.at_row(row).map(|(key, rows, _)| (key, rows, false));
                 self.restored.set(Some(row));
                 self.moving.set(None);
-            }
-            Some((u64::MAX, _, None)) if self.unsolved.get_mut().is_none() => {
-                *self.unsolved.get_mut() = Some((self.at_top(), self.prefix[self.items.len()]));
             }
             Some((u64::MAX, ..)) => {}
             _ if self.reading.borrow().is_none() => {
@@ -318,10 +321,7 @@ impl List {
                     // The end as the move saw it: this solve may already lay out an item it mounted, shorter than
                     // its estimate, and clamp the offset to an end the reader never reached.
                     None => {
-                        let (top, total) =
-                            self.unsolved.take().unwrap_or_else(|| (self.at_top(), self.prefix[self.items.len()]));
-                        let most = total - f64::from(self.scroll.rect().height);
-                        let follows = most > 0.0 && self.top() >= most - 0.5;
+                        let (top, follows) = self.unsolved.take().unwrap_or_else(|| self.seen());
                         (follows, if follows { None } else { top })
                     }
                 };
@@ -377,6 +377,17 @@ impl List {
         if heights {
             self.sum();
         }
+        // A verb's move to the end showed the end as it was. A solve whose end shows the same holds the view, though
+        // the offset moves with the rows above it (cards built again at another width take their estimates), so what
+        // the behaviors keep at the offset moves with it.
+        if follows
+            && let Some((seen, top)) = self.end.take()
+            && self.end_view(viewport.height).as_ref() == Some(&seen)
+        {
+            let now = self.top();
+            self.shifted.set(self.shifted.get() + now - top);
+            *self.end.get_mut() = Some((seen, now));
+        }
         let mut moved = false;
         let held = reading.clone();
         if let Some((key, within, inside)) = reading
@@ -419,13 +430,30 @@ impl List {
     /// A verb or the user moves the list: where it goes is the reading position.
     pub fn moved(&self) {
         self.reading.take();
-        self.unsolved.take();
+        self.end.take();
+        *self.unsolved.borrow_mut() = Some(self.seen());
         self.moving.set(Some((u64::MAX, false, None)));
+    }
+
+    /// What a user's move sees, for the solve after it: the reading at its offset, and whether that is the end. Both by
+    /// the sums, offset and viewport of the move, which a change or a resize before that solve does not move: a taller
+    /// viewport clamps the offset to an end the reader was not at.
+    fn seen(&self) -> (Option<Reading>, bool) {
+        let most = self.prefix[self.items.len()] - f64::from(self.scroll.rect().height);
+        (self.at_top(), most > 0.0 && self.top() >= most - 0.5)
     }
 
     /// A verb moved the list to row `row`, or to the end when `None`.
     pub fn intend(&self, row: Option<f64>) {
         self.moving.set(Some((u64::MAX, false, Some(row))));
+        let end = row.is_none().then(|| self.end_view(self.scroll.rect().height)).flatten();
+        *self.end.borrow_mut() = end.map(|end| (end, self.top()));
+    }
+
+    /// What the end shows in a viewport of `height` rows.
+    fn end_view(&self, height: f32) -> Option<EndView> {
+        let most = (self.prefix[self.items.len()] - f64::from(height)).max(0.0);
+        self.at_row(most).map(|(key, rows, _)| (height, key, rows))
     }
 
     /// The item at the viewport's top and the rows into it.

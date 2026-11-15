@@ -856,9 +856,8 @@ impl Surface {
     /// Applies `verb` to scroll `id` now; where a step landed.
     fn verb(&self, id: &str, verb: &Scroll) -> Option<AnchorAt> {
         let anchors = matches!(verb, Scroll::Step { .. }).then(|| self.anchors(id, step_group(verb)));
-        if !matches!(verb, Scroll::Forget | Scroll::Step { by: 0, .. }) {
-            self.each_list(id, crate::list::List::moved);
-        }
+        // A step that finds no anchor is no move of the list either: a resize in its batch holds the reading.
+        let mut moves = !matches!(verb, Scroll::Forget | Scroll::Step { by: 0, .. });
         let landed = self.with_index(|index, behave| {
             let scrolled = index.scrolls.get(id)?;
             scrolled.went.take();
@@ -927,7 +926,11 @@ impl Surface {
                         Some(at) => usize::try_from(at as i64 + i64::from(*by)).ok().and_then(|at| anchors.get(at)),
                         None if *by > 0 => anchors.iter().find(|at| i64::from(at.row) > line),
                         None => anchors.iter().rev().find(|at| i64::from(at.row) < line),
-                    }?;
+                    };
+                    let Some(next) = next else {
+                        moves = false;
+                        return None;
+                    };
                     behave.pending.remove(id);
                     // An anchor of a list item without widgets: the item is mounted where the host assumes it, and
                     // the step lands, and reports, once its own rows are known.
@@ -949,6 +952,9 @@ impl Surface {
                 }
             }
         });
+        if moves {
+            self.each_list(id, crate::list::List::moved);
+        }
         // A list holds the reading position from where the move meant to go, not where a solve clamps it.
         if let Some(went) = self.with_index(|index, _| index.scrolls.get(id)?.went.take()) {
             self.each_list(id, |list| list.intend(went));
