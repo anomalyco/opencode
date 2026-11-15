@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, ImageClient, Media } from "../src/effect.js"
-import { Google, OpenAI, OpenAICompatible, OpenRouter, VercelAIGateway, XAI, ZAI } from "../src/providers.js"
+import { Google, OpenAI, OpenAICompatible, OpenRouter, VercelAIGateway, XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json } from "./lib/http.js"
 
@@ -10,7 +10,7 @@ const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   ImageClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
 describe("Image", () => {
-  for (const provider of [OpenAI, Google, XAI, ZAI]) {
+  for (const provider of [OpenAI, Google, XAI]) {
     const model = provider.configure({ apiKey: "test", baseURL: "https://image.test" }).image("image-model")
     for (const body of ['{"data":42,"candidates":42,"opaque":{"nested":[1,2]},"trace":"outer"}', '{"invalid":']) {
       it.effect(`retains ${model.provider} image response body and decode cause: ${body}`, () =>
@@ -773,11 +773,6 @@ describe("Image", () => {
           model: Google.configure({ apiKey: "test" }).image("model"),
           prompt: "edit",
           images: [Media.url("https://example.test/image.png")],
-        }),
-        ai.image.generate({
-          model: ZAI.configure({ apiKey: "test" }).image("model"),
-          prompt: "edit",
-          images: [Media.bytes(Uint8Array.from([1]), "image/png")],
         }),
       ]
       yield* Effect.forEach(cases, (program) =>

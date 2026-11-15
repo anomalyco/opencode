@@ -12,7 +12,7 @@ import {
   Media,
 } from "../src/effect.js"
 import type { Service } from "../src/image-client.js"
-import { Anthropic, Google, OpenAI, XAI, ZAI } from "../src/providers.js"
+import { Anthropic, Google, OpenAI, XAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
 type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
@@ -139,20 +139,6 @@ ai.image.generate({
 ai.image.generate({ model: xai, prompt: "A lighthouse", n: "2" })
 // @ts-expect-error Known xAI string options retain their value kind.
 ai.image.generate({ model: xai, prompt: "A lighthouse", providerOptions: { responseFormat: 2 } })
-
-const zai = ZAI.configure({ apiKey: "test" }).image("any-model-id")
-// @ts-expect-error Image generation options are request-scoped, not provider configuration.
-ZAI.configure({ image: { providerOptions: { quality: "hd" } } })
-ai.image.generate({
-  model: zai,
-  prompt: "A lighthouse",
-  providerOptions: { quality: "future-quality", userID: "user-123", future_option: true },
-})
-ai.image.generate({ model: zai, prompt: "A lighthouse", providerOptions: { user_id: "raw-user" } })
-// @ts-expect-error Known Z.ai string options retain their value kind.
-ai.image.generate({ model: zai, prompt: "A lighthouse", providerOptions: { quality: 1 } })
-// @ts-expect-error Known Z.ai user IDs retain their value kind.
-ai.image.generate({ model: zai, prompt: "A lighthouse", providerOptions: { userID: 1 } })
 
 declare const generic: ImageModel<ImageOptions>
 const widenImage = <Options extends ImageOptions>(model: ImageModel<Options>): ImageModel => model

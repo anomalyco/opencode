@@ -125,13 +125,8 @@ describe("ModelResolver", () => {
   it.effect("routes compatible packages to the host's dedicated package when one exists", () =>
     Effect.gen(function* () {
       const routes = {
-        "alibaba-coding-plan-cn": "alibaba-chat",
         baseten: "baseten-chat",
-        deepseek: "deepseek-chat",
         "fireworks-ai": "fireworks-chat",
-        "moonshotai-cn": "moonshot-chat",
-        zhipuai: "zai-chat",
-        "zhipuai-coding-plan": "zai-coding-chat",
         cerebras: "openai-compatible-chat",
         deepinfra: "openai-compatible-chat",
         groq: "openai-compatible-chat",
@@ -341,7 +336,7 @@ describe("ModelResolver", () => {
         settings: { baseURL: "https://native-mistral.example.com/v1" },
         headers: { "cf-access-token": "access-token" },
       }),
-      ...["baseten", "cloudflare-ai-gateway", "cloudflare-workers-ai", "deepseek", "fireworks"].map((name) =>
+      ...["baseten", "cloudflare-ai-gateway", "cloudflare-workers-ai", "fireworks"].map((name) =>
         model(`@opencode/ai/providers/${name}`, {
           providerID: Provider.ID.make("gateway"),
           settings: { baseURL: `https://${name}.example.com/v1` },
@@ -1153,7 +1148,6 @@ describe("ModelResolver", () => {
   it.effect("never loads the AI SDK for packages with native implementations", () =>
     Effect.gen(function* () {
       const packages = [
-        ["@ai-sdk/alibaba", "@opencode/ai/providers/alibaba/chat", "api-model"],
         ["@ai-sdk/anthropic", "@opencode/ai/providers/anthropic", "api-model"],
         ["@ai-sdk/amazon-bedrock", "@opencode/ai/providers/amazon-bedrock", "api-model"],
         ["@ai-sdk/amazon-bedrock/mantle", "@opencode/ai/providers/amazon-bedrock/mantle/chat", "openai.gpt-oss-120b"],

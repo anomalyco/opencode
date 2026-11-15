@@ -23,5 +23,5 @@
 - ئۇيغۇرچە: [bin/muhliscode-policy.json](../bin/muhliscode-policy.json) ئامبارنىڭ ئىچكى `policies` مېخانىزمى بىلەن `provider.use` نى `deny` قىلىدۇ. `bin/muhliscode.cmd` ئۇنى `OPENCODE_CONFIG` ئارقىلىق ھەر قېتىم يۈكلەيدۇ.
 - ئۇيغۇرچە: چەكلەنگەنلەر: `opencode` (ئەسلى OpenCode نىڭ ھەقسىز تىزىملىكى، ئىچىدە DeepSeek، GLM، MiniMax، Xiaomi MiMo، Meituan LongCat بار)، `opencode-go`، Alibaba / Qwen، Moonshot / Kimi، Zhipu / Z.ai، MiniMax، DeepSeek، BytePlus، Volcengine، SiliconFlow، StepFun، Xiaomi، Baidu، Tencent / Hunyuan، Huawei، iFlytek ۋە `*-cn` بىلەن ئاخىرلىشىدىغانلار.
 - ئۇيغۇرچە چەكلىمە: بۇ چەكلەش تەمىنلىگۈچى ID سى بويىچە. ئەگەر ئىشلەتكۈچى OpenRouter غا ئوخشاش ئارىلىق مۇلازىمەت ئارقىلىق خىتاي مودېلىنى تاللىسا، چەكلەش ئۇنى توسمايدۇ.
-- ئۇيغۇرچە چەكلىمە: `packages/ai/src/providers/` ئىچىدە ئىسپاتلانغان كود (alibaba، minimax، moonshot، deepseek، zai، volcengine، byteplus) تېخى ئۆچۈرۈلمىدى. ئۇلار پەقەت چەكلەنگەن.
+- ئۇيغۇرچە: خىتاي تەمىنلىگۈچىلىرىنىڭ مەنبە كودى (`alibaba`، `minimax`، `moonshot`، `deepseek`، `zai`، `volcengine`، `byteplus`) `packages/ai` تىن ئۆچۈرۈلدى، مودېل تىزىملىكىدىن (`snapshot.txt`) 37 تەمىنلىگۈچى ئېلىۋېتىلدى. `core/src/variant.ts` ۋە `packages/ai/README.md` دا كونا ئىزلار قالدى.
 - ئۇيغۇرچە: ئىسپاتلاش: `muhliscode models` تىزىملىكىدە پەقەت `claude-agent` ۋە `google` قالدى.

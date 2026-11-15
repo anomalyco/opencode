@@ -288,11 +288,6 @@ describe("image and decision generation", () => {
       package: "@opencode/ai/providers/openai/images",
     }),
     Info.make({
-      ...Info.default(Provider.ID.make("zai"), ID.make("glm-image")),
-      type: "image",
-      package: "@opencode/ai/providers/zai/images",
-    }),
-    Info.make({
       ...Info.default(Provider.ID.openai, ID.make("gpt-5")),
       package: "@opencode/ai/providers/openai/responses",
     }),
@@ -480,14 +475,6 @@ describe("image and decision generation", () => {
         headers: { authorization: "Bearer console-token" },
       })
       expect(requests[0]?.body).toStrictEqual({ model: "gpt-image-2.5-sunburst", prompt: "A black circle" })
-    }),
-  )
-
-  mediaIt.effect("downloads URL images and detects their type from the bytes", () =>
-    Effect.gen(function* () {
-      const generate = yield* Generate.Service
-      const result = yield* generate.image({ model: ref("zai", "glm-image"), prompt: "A fox" })
-      expect(result.images).toEqual([{ type: "image", data: Buffer.from(PNG).toString("base64"), mime: "image/png" }])
     }),
   )
 

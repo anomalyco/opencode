@@ -5,7 +5,6 @@ import {
   CloudflareAIGateway,
   CloudflareWorkersAI,
   DeepInfra,
-  DeepSeek,
   TogetherAI,
 } from "../../src/providers/index.js"
 import * as Google from "../../src/providers/google.js"
@@ -25,11 +24,6 @@ const anthropic = Anthropic.configure({
 })
 const anthropicHaiku = anthropic.model("claude-haiku-4-5-20251001")
 const anthropicOpus = anthropic.model("claude-opus-4-7")
-const minimax = AnthropicCompatible.configure({
-  apiKey: process.env.MINIMAX_API_KEY ?? "fixture",
-  baseURL: "https://api.minimax.io/anthropic/v1",
-  provider: "minimax",
-}).model("MiniMax-M3")
 const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
 const gemini = google.model("gemini-2.5-flash")
 const xai = XAI.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" })
@@ -53,7 +47,6 @@ const cloudflareAIGatewayClaude = cloudflareAIGateway.model("anthropic/claude-ha
 const cloudflareAIGatewayOpenAI = cloudflareAIGateway.model("openai/gpt-5-nano")
 const cloudflareWorkersAI = cloudflareWorkers.model("@cf/meta/llama-3.1-8b-instruct")
 const cloudflareWorkersAITools = cloudflareWorkers.model("@cf/openai/gpt-oss-20b")
-const deepseek = DeepSeek.configure({ apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture" }).model("deepseek-chat")
 const together = TogetherAI.configure({
   apiKey: process.env.TOGETHER_API_KEY ?? process.env.TOGETHER_AI_API_KEY ?? "fixture",
 }).model("meta-llama/Llama-3.3-70B-Instruct-Turbo")
@@ -126,15 +119,6 @@ describeRecordedGoldenScenarios([
       { id: "tool-loop", temperature: false },
       { id: "image-tool-result", temperature: false, maxTokens: 40 },
     ],
-  },
-  {
-    name: "MiniMax M3 Anthropic-compatible",
-    prefix: "anthropic-compatible-messages",
-    protocol: "anthropic-messages",
-    model: minimax,
-    requires: ["MINIMAX_API_KEY"],
-    options: { redact: { allowRequestHeaders: ["anthropic-version"] } },
-    scenarios: ["text", "tool-call", "tool-loop"],
   },
   {
     name: "Gemini 2.5 Flash",
@@ -213,13 +197,6 @@ describeRecordedGoldenScenarios([
     requires: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"],
     options: cloudflareOptions,
     scenarios: [{ id: "tool-call", maxTokens: 120 }],
-  },
-  {
-    name: "DeepSeek Chat",
-    prefix: "openai-compatible-chat",
-    model: deepseek,
-    requires: ["DEEPSEEK_API_KEY"],
-    scenarios: ["text"],
   },
   {
     name: "TogetherAI Llama 3.3 70B",

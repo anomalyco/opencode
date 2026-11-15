@@ -176,37 +176,6 @@ const images: ReadonlyArray<Case<ImageModel>> = [
     auth: ["authorization", "Bearer xai-key"],
   },
   {
-    name: "zai",
-    load: async () => {
-      const { model } = await import("@opencode/ai/providers/zai/images")
-      return model("glm-image", { ...shared, apiKey: "zai-key", baseURL: "https://open.bigmodel.test/api/paas/v4" })
-    },
-    url: "https://open.bigmodel.test/api/paas/v4/images/generations",
-    auth: ["authorization", "Bearer zai-key"],
-  },
-  {
-    name: "minimax",
-    load: async () => {
-      const { model } = await import("@opencode/ai/providers/minimax/images")
-      return model("image-01", { ...shared, apiKey: "minimax-key", baseURL: "https://api.minimax.cn/v1" })
-    },
-    url: "https://api.minimax.cn/v1/image_generation",
-    auth: ["authorization", "Bearer minimax-key"],
-  },
-  {
-    name: "alibaba",
-    load: async () => {
-      const { model } = await import("@opencode/ai/providers/alibaba/images")
-      return model("qwen-image-2.0", {
-        ...shared,
-        apiKey: "dashscope-key",
-        baseURL: "https://dashscope-intl.aliyuncs.com/api/v1",
-      })
-    },
-    url: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
-    auth: ["authorization", "Bearer dashscope-key"],
-  },
-  {
     name: "google",
     load: async () => {
       const { model } = await import("@opencode/ai/providers/google/images")
@@ -448,16 +417,6 @@ const embeddings: ReadonlyArray<Case<EmbeddingModel>> = [
     provider: "digitalocean",
   },
   {
-    name: "alibaba",
-    load: async () => {
-      const { model } = await import("@opencode/ai/providers/alibaba/embeddings")
-      return model("text-embedding-v4", { ...shared, apiKey: "dashscope-key", region: "ap-southeast-1" })
-    },
-    url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/embeddings",
-    auth: ["authorization", "Bearer dashscope-key"],
-    provider: "alibaba",
-  },
-  {
     name: "azure",
     load: async () => {
       const { model } = await import("@opencode/ai/providers/azure/embeddings")
@@ -512,44 +471,6 @@ const videos: ReadonlyArray<Case<VideoModel>> = [
     url: "https://openrouter.ai/api/v1/videos",
     auth: ["authorization", "Bearer openrouter-key"],
     provider: "openrouter",
-  },
-  {
-    name: "byteplus",
-    load: async () => {
-      const { model } = await import("@opencode/ai/providers/byteplus/videos")
-      return model("dreamina-seedance-2-0-260128", { ...shared, apiKey: "byteplus-key" })
-    },
-    url: "https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks",
-    auth: ["authorization", "Bearer byteplus-key"],
-    provider: "byteplus",
-  },
-  {
-    name: "volcengine",
-    load: async () => {
-      const { model } = await import("@opencode/ai/providers/volcengine/videos")
-      return model("doubao-seedance-2-0-260128", { ...shared, apiKey: "ark-key" })
-    },
-    url: "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
-    auth: ["authorization", "Bearer ark-key"],
-    provider: "volcengine",
-  },
-  {
-    name: "minimax",
-    load: async () => {
-      const { model } = await import("@opencode/ai/providers/minimax/videos")
-      return model("MiniMax-H3-Lite", { ...shared, apiKey: "minimax-key" })
-    },
-    url: "https://api.minimax.io/v2/video_generation",
-    auth: ["authorization", "Bearer minimax-key"],
-  },
-  {
-    name: "minimax (minimax-cn, Hailuo)",
-    load: async () => {
-      const { model } = await import("@opencode/ai/providers/minimax/videos")
-      return model("MiniMax-Hailuo-2.3", { ...shared, apiKey: "minimax-key", baseURL: "https://api.minimax.cn" })
-    },
-    url: "https://api.minimax.cn/v1/video_generation",
-    auth: ["authorization", "Bearer minimax-key"],
   },
   {
     name: "google",

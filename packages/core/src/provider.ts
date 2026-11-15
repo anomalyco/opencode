@@ -29,12 +29,6 @@ export class LoadError extends Schema.TaggedError<LoadError>()("Provider.LoadErr
 
 const packages = new Map<string, Promise<unknown>>()
 const builtins = new Map<string, () => Promise<unknown>>([
-  ["@opencode/ai/providers/alibaba", () => import("@opencode/ai/providers/alibaba")],
-  ["@opencode/ai/providers/alibaba/chat", () => import("@opencode/ai/providers/alibaba/chat")],
-  ["@opencode/ai/providers/alibaba/messages", () => import("@opencode/ai/providers/alibaba/messages")],
-  ["@opencode/ai/providers/alibaba/responses", () => import("@opencode/ai/providers/alibaba/responses")],
-  ["@opencode/ai/providers/alibaba/images", () => import("@opencode/ai/providers/alibaba/images")],
-  ["@opencode/ai/providers/alibaba/embeddings", () => import("@opencode/ai/providers/alibaba/embeddings")],
   ["@opencode/ai/providers/amazon-bedrock", () => import("@opencode/ai/providers/amazon-bedrock")],
   ["@opencode/ai/providers/amazon-bedrock/mantle", () => import("@opencode/ai/providers/amazon-bedrock/mantle")],
   [
@@ -59,7 +53,6 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/azure/messages", () => import("@opencode/ai/providers/azure/messages")],
   ["@opencode/ai/providers/baseten", () => import("@opencode/ai/providers/baseten")],
   ["@opencode/ai/providers/baseten/decisions", () => import("@opencode/ai/providers/baseten/decisions")],
-  ["@opencode/ai/providers/byteplus/videos", () => import("@opencode/ai/providers/byteplus/videos")],
   ["@opencode/ai/providers/cerebras", () => import("@opencode/ai/providers/cerebras")],
   ["@opencode/ai/providers/cloudflare-ai-gateway", () => import("@opencode/ai/providers/cloudflare-ai-gateway")],
   [
@@ -80,7 +73,6 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/cohere/embeddings", () => import("@opencode/ai/providers/cohere/embeddings")],
   ["@opencode/ai/providers/deepinfra", () => import("@opencode/ai/providers/deepinfra")],
   ["@opencode/ai/providers/deepinfra/embeddings", () => import("@opencode/ai/providers/deepinfra/embeddings")],
-  ["@opencode/ai/providers/deepseek", () => import("@opencode/ai/providers/deepseek")],
   ["@opencode/ai/providers/digitalocean", () => import("@opencode/ai/providers/digitalocean")],
   ["@opencode/ai/providers/digitalocean/decisions", () => import("@opencode/ai/providers/digitalocean/decisions")],
   ["@opencode/ai/providers/digitalocean/embeddings", () => import("@opencode/ai/providers/digitalocean/embeddings")],
@@ -113,17 +105,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/meta/images", () => import("@opencode/ai/providers/meta/images")],
   ["@opencode/ai/providers/meta/messages", () => import("@opencode/ai/providers/meta/messages")],
   ["@opencode/ai/providers/meta/responses", () => import("@opencode/ai/providers/meta/responses")],
-  ["@opencode/ai/providers/minimax", () => import("@opencode/ai/providers/minimax")],
-  ["@opencode/ai/providers/minimax/chat", () => import("@opencode/ai/providers/minimax/chat")],
-  ["@opencode/ai/providers/minimax/images", () => import("@opencode/ai/providers/minimax/images")],
-  ["@opencode/ai/providers/minimax/messages", () => import("@opencode/ai/providers/minimax/messages")],
-  ["@opencode/ai/providers/minimax/responses", () => import("@opencode/ai/providers/minimax/responses")],
-  ["@opencode/ai/providers/minimax/videos", () => import("@opencode/ai/providers/minimax/videos")],
   ["@opencode/ai/providers/mistral", () => import("@opencode/ai/providers/mistral")],
-  ["@opencode/ai/providers/moonshot", () => import("@opencode/ai/providers/moonshot")],
-  ["@opencode/ai/providers/moonshot/chat", () => import("@opencode/ai/providers/moonshot/chat")],
-  ["@opencode/ai/providers/moonshot/messages", () => import("@opencode/ai/providers/moonshot/messages")],
-  ["@opencode/ai/providers/moonshot/responses", () => import("@opencode/ai/providers/moonshot/responses")],
   ["@opencode/ai/providers/openai", () => import("@opencode/ai/providers/openai")],
   ["@opencode/ai/providers/openai/chat", () => import("@opencode/ai/providers/openai/chat")],
   ["@opencode/ai/providers/openai/responses", () => import("@opencode/ai/providers/openai/responses")],
@@ -158,7 +140,6 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/typesafe-ai/decisions", () => import("@opencode/ai/providers/typesafe-ai/decisions")],
   ["@opencode/ai/providers/venice", () => import("@opencode/ai/providers/venice")],
   ["@opencode/ai/providers/venice/responses", () => import("@opencode/ai/providers/venice/responses")],
-  ["@opencode/ai/providers/volcengine/videos", () => import("@opencode/ai/providers/volcengine/videos")],
   ["@opencode/ai/providers/vercel-ai-gateway", () => import("@opencode/ai/providers/vercel-ai-gateway")],
   ["@opencode/ai/providers/vercel-ai-gateway/chat", () => import("@opencode/ai/providers/vercel-ai-gateway/chat")],
   [
@@ -181,16 +162,6 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/xai", () => import("@opencode/ai/providers/xai")],
   ["@opencode/ai/providers/xai/images", () => import("@opencode/ai/providers/xai/images")],
   ["@opencode/ai/providers/xai/videos", () => import("@opencode/ai/providers/xai/videos")],
-  ["@opencode/ai/providers/zai", () => import("@opencode/ai/providers/zai")],
-  ["@opencode/ai/providers/zai/chat", () => import("@opencode/ai/providers/zai/chat")],
-  ["@opencode/ai/providers/zai/images", () => import("@opencode/ai/providers/zai/images")],
-  ["@opencode/ai/providers/zai-coding-plan", () => import("@opencode/ai/providers/zai-coding-plan")],
-  ["@opencode/ai/providers/zai-coding-plan/chat", () => import("@opencode/ai/providers/zai-coding-plan/chat")],
-  ["@opencode/ai/providers/zai-coding-plan/messages", () => import("@opencode/ai/providers/zai-coding-plan/messages")],
-  [
-    "@opencode/ai/providers/zai-coding-plan/responses",
-    () => import("@opencode/ai/providers/zai-coding-plan/responses"),
-  ],
 ])
 
 /** Native `@opencode/ai/providers/*` entrypoints bundled with Core and loadable by name from config. */

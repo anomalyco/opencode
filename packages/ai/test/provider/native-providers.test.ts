@@ -13,7 +13,6 @@ import {
   CloudflareAIGateway,
   CloudflareWorkersAI,
   DeepInfra,
-  DeepSeek,
   Fireworks,
   Google,
   GoogleVertex,
@@ -52,8 +51,8 @@ describe("native OpenAI-compatible providers", () => {
       [GoogleVertexMessages.configure(vertex).model("model"), "vertex"],
       [Anthropic.configure({ apiKey: "test" }).model("model"), "anthropic"],
       [
-        AnthropicCompatible.configure({ baseURL: "https://example.test/v1", provider: "minimax" }).model("model"),
-        "minimax",
+        AnthropicCompatible.configure({ baseURL: "https://example.test/v1", provider: "custom-anthropic" }).model("model"),
+        "custom-anthropic",
       ],
       [OpenAICompatible.configure({ baseURL: "https://example.test/v1", provider: "custom" }).model("model"), "custom"],
       [
@@ -62,7 +61,6 @@ describe("native OpenAI-compatible providers", () => {
       ],
       [Cerebras.configure({ apiKey: "test" }).model("model"), "cerebras"],
       [Baseten.configure({ apiKey: "test" }).model("model"), "baseten"],
-      [DeepSeek.configure({ apiKey: "test" }).model("model"), "deepseek"],
       [Fireworks.configure({ apiKey: "test" }).model("model"), "fireworks"],
       [DeepInfra.configure({ apiKey: "test" }).model("model"), "deepinfra"],
       [Groq.configure({ apiKey: "test" }).model("model"), "groq"],
@@ -98,7 +96,7 @@ describe("native OpenAI-compatible providers", () => {
 
   it.effect("preserves extracted providers' Chat requests and identity through custom endpoints", () =>
     Effect.gen(function* () {
-      for (const provider of [Baseten, DeepSeek, Fireworks]) {
+      for (const provider of [Baseten, Fireworks]) {
         const settings = {
           apiKey: "fixture",
           baseURL: "https://gateway.example/v1",
@@ -203,7 +201,7 @@ describe("native OpenAI-compatible providers", () => {
   })
 
   test("maps package settings onto native executable models", () => {
-    for (const native of [Baseten, Cerebras, DeepSeek, Fireworks, TogetherAI]) {
+    for (const native of [Baseten, Cerebras, Fireworks, TogetherAI]) {
       const selected = native.model("provider-model", {
         apiKey: "fixture",
         baseURL: "https://gateway.example/v1",
@@ -227,12 +225,6 @@ describe("native OpenAI-compatible providers", () => {
           env: { BASETEN_API_KEY: "baseten-secret" },
           token: "baseten-secret",
           url: "https://inference.baseten.co/v1/chat/completions",
-        },
-        {
-          model: DeepSeek.configure().model("deepseek-chat"),
-          env: { DEEPSEEK_API_KEY: "deepseek-secret" },
-          token: "deepseek-secret",
-          url: "https://api.deepseek.com/v1/chat/completions",
         },
         {
           model: Fireworks.configure().model("model"),

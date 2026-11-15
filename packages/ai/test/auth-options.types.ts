@@ -7,7 +7,6 @@ import * as Anthropic from "../src/providers/anthropic.js"
 import * as AnthropicCompatible from "../src/providers/anthropic-compatible.js"
 import * as Azure from "../src/providers/azure.js"
 import { CloudflareWorkersAI } from "../src/providers/cloudflare-workers-ai.js"
-import { DeepSeek } from "../src/providers/deepseek.js"
 import * as Google from "../src/providers/google.js"
 import * as GoogleVertex from "../src/providers/google-vertex.js"
 import * as GoogleVertexChat from "../src/providers/google-vertex-chat.js"
@@ -273,10 +272,6 @@ XAI.configure({ apiKey: "xai-key" }).chat("grok-4")
 XAI.configure({ apiKey: "xai-key" }).responses("grok-4", {})
 // @ts-expect-error xAI Chat selectors only accept model ids.
 XAI.configure({ apiKey: "xai-key" }).chat("grok-4", {})
-
-DeepSeek.configure({ apiKey: "deepseek-key" }).model("deepseek-chat")
-// @ts-expect-error OpenAI-compatible family selectors only accept model ids.
-DeepSeek.configure({ apiKey: "deepseek-key" }).model("deepseek-chat", {})
 
 CloudflareWorkersAI.configure({ accountId: "account", apiKey: "cf-key" }).model("@cf/meta/llama")
 // @ts-expect-error Cloudflare Workers AI model selectors only accept model ids.

@@ -112,7 +112,6 @@ export function rewrite<ID extends string>(
 
 const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/amazon-bedrock": "@opencode/ai/providers/amazon-bedrock",
-  "@ai-sdk/alibaba": "@opencode/ai/providers/alibaba/chat",
   "@ai-sdk/anthropic": "@opencode/ai/providers/anthropic",
   "@ai-sdk/azure": "@opencode/ai/providers/azure/responses",
   "@ai-sdk/cerebras": "@opencode/ai/providers/cerebras",
@@ -140,12 +139,6 @@ const protocols = (name: string) => ({
 })
 
 const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  alibaba: protocols("alibaba"),
-  "alibaba-cn": protocols("alibaba"),
-  "alibaba-coding-plan": protocols("alibaba"),
-  "alibaba-coding-plan-cn": protocols("alibaba"),
-  "alibaba-token-plan": protocols("alibaba"),
-  "alibaba-token-plan-cn": protocols("alibaba"),
   baseten: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/baseten" },
   "cloudflare-ai-gateway": {
     "@ai-sdk/anthropic": "@opencode/ai/providers/cloudflare-ai-gateway",
@@ -155,25 +148,13 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   },
   cohere: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cohere/chat" },
   "cloudflare-workers-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-workers-ai" },
-  deepseek: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/deepseek" },
   digitalocean: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/digitalocean" },
   "fireworks-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/fireworks" },
   "google-vertex": {
     "@ai-sdk/openai-compatible": "@opencode/ai/providers/google-vertex/chat",
     "@ai-sdk/mistral": "@opencode/ai/providers/google-vertex/mistral",
   },
-  "kimi-for-coding": protocols("moonshot"),
   meta: protocols("meta"),
-  minimax: protocols("minimax"),
-  "minimax-cn": protocols("minimax"),
-  "minimax-coding-plan": protocols("minimax"),
-  "minimax-cn-coding-plan": protocols("minimax"),
-  moonshotai: protocols("moonshot"),
-  "moonshotai-cn": protocols("moonshot"),
-  zai: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/zai/chat" },
-  "zai-coding-plan": protocols("zai-coding-plan"),
-  zhipuai: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/zai/chat" },
-  "zhipuai-coding-plan": protocols("zai-coding-plan"),
 }
 
 export function native(npm: string, context: Context & { readonly settings?: Provider.Settings }): string | undefined {

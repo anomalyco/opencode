@@ -7,57 +7,6 @@ const configuration = (provider: string, message: string) =>
   expect.objectContaining({ _tag: "ProviderConfiguration", provider, message })
 
 describe("provider package entrypoints", () => {
-  test("maps Alibaba API entrypoints onto explicit regional routes", async () => {
-    const modules = await Promise.all([
-      import("@opencode/ai/providers/alibaba"),
-      import("@opencode/ai/providers/alibaba/chat"),
-      import("@opencode/ai/providers/alibaba/messages"),
-      import("@opencode/ai/providers/alibaba/responses"),
-    ])
-    const settings = {
-      region: "eu-central-1",
-      workspaceID: "llm-fixture",
-      apiKey: "fixture",
-      headers: { "x-test": "fixture" },
-      body: { extension: true },
-    }
-    const routes = ["alibaba-chat", "alibaba-chat", "alibaba-messages", "alibaba-responses"]
-    modules.forEach((module, index) => {
-      const model = module.model("qwen3.8-max", settings)
-      expect(model.provider).toBe("alibaba")
-      expect(model.route.id).toBe(routes[index])
-      expect(model.route.endpoint.baseURL).toBe(
-        `https://llm-fixture.eu-central-1.maas.aliyuncs.com/${index === 2 ? "apps/anthropic/v1" : "compatible-mode/v1"}`,
-      )
-      expect(model.options?.headers).toEqual(settings.headers)
-      expect(model.options?.http?.body).toEqual(settings.body)
-    })
-  })
-
-  test("maps Moonshot API entrypoints onto provider-owned routes", async () => {
-    const modules = await Promise.all([
-      import("@opencode/ai/providers/moonshot"),
-      import("@opencode/ai/providers/moonshot/chat"),
-      import("@opencode/ai/providers/moonshot/messages"),
-      import("@opencode/ai/providers/moonshot/responses"),
-    ])
-    const settings = {
-      apiKey: "fixture",
-      baseURL: "https://gateway.example/v1",
-      headers: { "x-application": "fixture" },
-      body: { future_option: true },
-    }
-    const routes = ["moonshot-chat", "moonshot-chat", "moonshot-messages", "moonshot-responses"]
-    modules.forEach((module, index) => {
-      const selected = module.model("kimi-k3", settings)
-      expect(selected.provider).toBe("moonshotai")
-      expect(selected.route.id).toBe(routes[index])
-      expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
-      expect(selected.options?.headers).toEqual(settings.headers)
-      expect(selected.options?.http?.body).toEqual(settings.body)
-    })
-  })
-
   test("maps OpenRouter, DigitalOcean and Venice Responses entrypoints onto provider-owned routes", async () => {
     const providers = [
       [
@@ -118,63 +67,6 @@ describe("provider package entrypoints", () => {
       const selected = module.model("command-a-03-2025", settings)
       expect(selected.provider).toBe("cohere")
       expect([selected.route.id, selected.route.endpoint.baseURL]).toEqual(routes[index])
-      expect(selected.options?.headers).toEqual(settings.headers)
-      expect(selected.options?.http?.body).toEqual(settings.body)
-    })
-  })
-
-  test("maps MiniMax API entrypoints onto provider-owned routes", async () => {
-    const modules = await Promise.all([
-      import("@opencode/ai/providers/minimax"),
-      import("@opencode/ai/providers/minimax/messages"),
-      import("@opencode/ai/providers/minimax/chat"),
-      import("@opencode/ai/providers/minimax/responses"),
-    ])
-    const settings = {
-      apiKey: "fixture",
-      baseURL: "https://gateway.example/v1",
-      headers: { "x-application": "opencode" },
-      body: { service_tier: "priority" },
-    }
-    const routes = ["minimax-messages", "minimax-messages", "minimax-chat", "minimax-responses"]
-    modules.forEach((module, index) => {
-      const selected = module.model("MiniMax-M3", settings)
-      expect(selected.provider).toBe("minimax")
-      expect(selected.route.id).toBe(routes[index])
-      expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
-      expect(selected.options?.headers).toEqual(settings.headers)
-      expect(selected.options?.http?.body).toEqual(settings.body)
-    })
-  })
-
-  test("maps ZAI and Coding Plan entrypoints onto distinct provider-owned routes", async () => {
-    const modules = await Promise.all([
-      import("@opencode/ai/providers/zai"),
-      import("@opencode/ai/providers/zai/chat"),
-      import("@opencode/ai/providers/zai-coding-plan"),
-      import("@opencode/ai/providers/zai-coding-plan/chat"),
-      import("@opencode/ai/providers/zai-coding-plan/messages"),
-      import("@opencode/ai/providers/zai-coding-plan/responses"),
-    ])
-    const routes = [
-      "zai-chat",
-      "zai-chat",
-      "zai-coding-chat",
-      "zai-coding-chat",
-      "zai-coding-messages",
-      "zai-coding-responses",
-    ]
-    const settings = {
-      apiKey: "fixture",
-      baseURL: "https://gateway.example/custom",
-      headers: { "x-test": "fixture" },
-      body: { extension: true },
-    }
-    modules.forEach((module, index) => {
-      const selected = module.model("glm-5.3", settings)
-      expect(selected.provider).toBe(index < 2 ? "zai" : "zai-coding-plan")
-      expect(selected.route.id).toBe(routes[index])
-      expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
       expect(selected.options?.headers).toEqual(settings.headers)
       expect(selected.options?.http?.body).toEqual(settings.body)
     })

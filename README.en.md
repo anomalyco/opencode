@@ -15,6 +15,25 @@ MuhlisCode is our own AI coding assistant, forked from the latest version of [Op
 
 Its main goal is to work in two languages: English and Uyghur (Latin script, ULY).
 
+## Main feature: cleaned of Chinese models and other risks
+
+The most important point: MuhlisCode is built on OpenCode, but all Chinese models and other potential risks were removed while building it. This is the biggest feature of the tool.
+
+What was actually done:
+
+- The source code of the Chinese providers was deleted from `packages/ai`: Alibaba (Qwen), MiniMax, Moonshot (Kimi), DeepSeek, Zhipu / Z.ai, Volcengine and BytePlus.
+- 37 providers from Chinese companies were removed from the bundled model catalog (`snapshot.txt`).
+- [bin/muhliscode-policy.json](./bin/muhliscode-policy.json) additionally denies those providers by policy (Baidu, Tencent, Xiaomi, StepFun, SiliconFlow and others, plus `*-cn`).
+- The hosted "free list" of the original OpenCode (`opencode`) is denied. It contained DeepSeek, GLM, MiniMax, Xiaomi MiMo and LongCat models.
+- The automatic update check is off by default, so no version information is sent to `opencode.ai`.
+
+Honest limits:
+
+- Chinese models reached through an aggregator such as OpenRouter are not blocked, because the block works on provider names.
+- No third-party MCP server or skill is vetted automatically. You must vet them yourself (see the sections below).
+- Old traces of the removed providers remain in `core/src/variant.ts` and `packages/ai/README.md`. They are unused but not cleaned yet.
+- The full list of restrictions is in [security/SECURITY_POLICY.md](./security/SECURITY_POLICY.md).
+
 ## Why was it made?
 
 Today's AI coding tools do not support Uyghur, and most of them send user data to their own servers or collect usage statistics.
@@ -32,7 +51,9 @@ Note: in the list below, "done" means it works today, and "planned" means it is 
 - Done: it can be used with your Claude Code account (see the section below).
 - Planned: an English and Uyghur (ULY) interface. The TUI is English only for now, and the Uyghur GUI is not added yet.
 - Planned: replace the name "opencode" with "MuhlisCode" in visible places.
-- Planned: review and close the remaining calls that reach `opencode.ai` (free models, `models.opencode.ai`, and others).
+- Done: Chinese models and the original OpenCode free list are blocked (see the section above).
+- Done: models from your own LM Studio can be used (see the section below).
+- Planned: review and close the remaining calls that reach `opencode.ai` (for example `models.opencode.ai`).
 
 Details: [docs/PLAN.md](./docs/PLAN.md) and [security/audits/2026-11-15-telemetry.md](./security/audits/2026-11-15-telemetry.md).
 
@@ -78,6 +99,100 @@ If you need to test against a running `opencode` server and live sessions (note:
 ```bash
 bun run dev:live
 ```
+
+## Opening it with the `muhliscode` command
+
+Add [bin/muhliscode.cmd](./bin/muhliscode.cmd) to your PATH, and typing `muhliscode` in any folder opens that folder.
+
+```powershell
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";<repository-path>\bin", "User")
+```
+
+- The launcher uses `--standalone`, so it does not connect to the background service of an installed original `opencode`.
+- Each time it loads `bin/muhliscode-policy.json` (through `OPENCODE_CONFIG`), which denies the Chinese providers.
+
+## Using local models from LM Studio
+
+MuhlisCode detects the models in your LM Studio automatically. This is the most private route, because no text leaves your computer.
+
+1. Open LM Studio, download a model and load it.
+2. Start the local server in LM Studio (Developer section, "Start Server"). The default address is `http://127.0.0.1:1234`.
+3. Open `muhliscode` and type `/models`. The model appears as `lmstudio/<model-name>`. The list refreshes automatically; wait a moment if it does not show yet.
+4. Choose it and use it as usual.
+
+Notes:
+
+- For agent features (editing files, running commands), choose a model that supports tool use. Plain models can only chat.
+- I tested the automatic detection against a fake LM Studio server: the model appeared in the list. I could not test a conversation with a real LM Studio and a real model.
+- If you download models made by Chinese companies (Qwen, DeepSeek, GLM and others) into LM Studio, MuhlisCode does not block them, because they run locally. That decision is yours.
+- Ollama (`http://127.0.0.1:11434`) is detected the same way.
+
+## Installing skills
+
+Yes, you can install skills in MuhlisCode. A skill is a folder with a `SKILL.md` file.
+
+Locations (each needs `<name>/SKILL.md`):
+
+- Inside a project: `.opencode/skills/`
+- Global: `%USERPROFILE%\.config\opencode\skills\` (shared with an installed original `opencode`)
+- Claude Code compatible: `.claude/skills/` and `.agents/skills/`
+- Through the `skills` list in the config (a path or an `https://` link)
+
+Security rule: a skill from outside may contain code, so never install and use it directly.
+
+1. Put it in `skills/_quarantine/` first.
+2. Read all of its files (scripts, dependencies, outbound addresses).
+3. Do not use anything that connects to Chinese companies or unknown servers.
+4. Only after the review, move it to one of the locations above.
+
+Note: MuhlisCode contains two built-in skills, `opencode` and `report`. `report` is used to file issues through the GitHub CLI, so read it before use. If you do not want it, deny it in the config with a `skill.use` policy.
+
+## MCP and other settings
+
+MCP (Model Context Protocol) is a way to connect outside tools to the agent, such as file search, a database or a web page. Each MCP server is a separate program.
+
+Commands:
+
+```bash
+muhliscode mcp list              # show configured MCP servers
+muhliscode mcp add               # add a new MCP server
+muhliscode mcp auth <name>       # log in to a remote MCP server with OAuth
+muhliscode mcp logout <name>     # remove the saved login
+```
+
+Security: an MCP server can run code on your computer or send your text outside. Add only trusted ones that are not tied to Chinese companies. With `policies` (`mcp.use`) in the config you can deny or allow them.
+
+Config files:
+
+- Global: `%USERPROFILE%\.config\opencode\opencode.jsonc` (shared with an installed original `opencode`)
+- Project: `opencode.jsonc` or `.opencode/opencode.jsonc`
+- The launcher also loads [bin/muhliscode-policy.json](./bin/muhliscode-policy.json) through `OPENCODE_CONFIG`
+
+Main config keys:
+
+| Key | Use |
+| --- | --- |
+| `providers` | Model providers and their addresses |
+| `policies` | Allow or deny providers, MCP servers, skills and more |
+| `permissions` | What the agent may do (files, commands) |
+| `agents` | Agents you define |
+| `mcp` | MCP servers |
+| `skills` | Extra skill folders or links |
+| `commands` | Your own `/` commands |
+| `instructions` | Extra instruction files always given to the agent |
+| `plugins` | Plugins |
+| `formatter`, `lsp` | Code formatter and language server |
+| `share` | Sharing sessions (set it to `manual` or `disabled`) |
+
+Environment variables:
+
+| Variable | Meaning |
+| -------- | ------- |
+| `MUHLISCODE_ENABLE_AUTOUPDATE=1` | Turns the update check on (off by default) |
+| `OPENCODE_CONFIG` | Path of an extra config file |
+| `OPENCODE_DISABLE_MODELS_FETCH=1` | Turns off downloading the model list from `models.opencode.ai` |
+
+Note: I took the config keys from the repository's config schema (`packages/schema/src/config.ts`). I did not fully test the inner shape of each one here (for example the exact form of `mcp`).
 
 ## Agents
 
