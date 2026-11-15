@@ -5,7 +5,7 @@ import { useTheme } from "../context/theme"
 import { tint } from "../theme/color"
 import { go, logo } from "../logo"
 
-// East Turkistan flag blue.
+// "Muhlis" is East Turkistan flag blue; "Code" follows the theme text color.
 const blue = RGBA.fromHex("#00A3E0")
 
 export function Logo() {
@@ -64,7 +64,7 @@ export function Logo() {
             {(line) => <box flexDirection="row">{renderLine(line, blue, false)}</box>}
           </For>
           <For each={logo.right}>
-            {(line) => <box flexDirection="row">{renderLine(line, blue, true)}</box>}
+            {(line) => <box flexDirection="row">{renderLine(line, theme.text.base, true)}</box>}
           </For>
         </>
       ) : (
@@ -72,7 +72,7 @@ export function Logo() {
           {(line, index) => (
             <box flexDirection="row" gap={1}>
               <box flexDirection="row">{renderLine(line, blue, false)}</box>
-              <box flexDirection="row">{renderLine(logo.right[index()], blue, true)}</box>
+              <box flexDirection="row">{renderLine(logo.right[index()], theme.text.base, true)}</box>
             </box>
           )}
         </For>
