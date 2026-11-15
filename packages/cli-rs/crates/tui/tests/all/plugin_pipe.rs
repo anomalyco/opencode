@@ -2357,6 +2357,97 @@ fn a_read_past_the_frame_with_its_snapshot_fails_alone() {
     assert_eq!(toasted(&pipe, "read error"), "read error none");
 }
 
+// Expected (bigboi's pipe sign-off, recheck): a watched read whose snapshot fits a frame but not what is left of the
+// overflow goes as a failed read, and charges the plugin's content nothing: once the queue drained, the ledger holds
+// what it held before, and a neighbouring read that needs that room is pushed.
+#[test]
+fn a_read_the_overflow_refuses_holds_no_content() {
+    use opencode_plugin::limits::{self, Limits};
+    let Some(mut config) = config() else { return };
+    // A frame takes the read; the overflow takes the backlog and not the read beside it.
+    (config.limits.queued, config.limits.inbox, config.limits.ordered) = (40 << 10, 64 << 10, 1 << 16);
+    let root = opencode_util::temp::tempdir().unwrap();
+    let (log, stalled, gate) = (root.path().join("report"), root.path().join("stalled"), root.path().join("gate"));
+    let plugin = root.path().join("config").join("plugins").join("quota");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        r#"import {{ appendFileSync, existsSync, writeFileSync }} from "node:fs"
+const [LOG, STALLED, GATE] = {paths}
+export default {{ id: "example.quota", setup(api) {{
+  const carrier = api[Symbol.for("opencode.carrier")]
+  const command = (name, run) => carrier.command({{ name, title: name }}, run)
+  carrier.storage(["a", "b"])
+  carrier.watch("a", {{ type: "storage-get", key: "a" }})
+  carrier.watch("b", {{ type: "storage-get", key: "b" }})
+  // The JS host reads nothing until the gate opens.
+  command("quota.stall", () => setTimeout(() => {{
+    writeFileSync(STALLED, "")
+    while (!existsSync(GATE)) {{}}
+  }}, 0))
+  command("quota.noop", () => {{}})
+  const read = (key) => key + " " + (carrier.read(key) ?? "").length + " " + (carrier.readError(key) ?? "none")
+  command("quota.report", () => appendFileSync(LOG, read("a") + " | " + read("b") + "\n"))
+}} }}
+"#,
+        paths = serde_json::json!([log, stalled, gate]),
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.quota");
+    pipe.settle();
+    let (h, scripts, id) = (&pipe.harness, pipe.scripts(), "example.quota");
+    // Its content is its two reads, each nothing yet.
+    let null = "null".len() as u64;
+    let before = limits::held(id).content;
+    assert_eq!(before, 2 * null);
+    // Room for one read of 32,785 bytes beside what it holds, not two.
+    let _limits = limits::set(Limits { plugin_content: before + (40 << 10), ..limits::get() });
+    let value = serde_json::json!({ "t": "x".repeat(32_785 - 14) }).to_string();
+    let bytes = serde_json::to_vec(&serde_json::json!(value)).unwrap().len();
+    assert_eq!(bytes, 32_785);
+    h.tui.keymap.dispatch("quota.stall", None);
+    h.wait("the JS host stalled", || {
+        h.app.advance(Duration::from_millis(1));
+        stalled.exists()
+    });
+    // A backlog that leaves the overflow less room than the read.
+    for _ in 0..10_000 {
+        if scripts.overflow_bytes() > (64 << 10) - bytes / 2 {
+            break;
+        }
+        h.tui.keymap.dispatch("quota.noop", Some(&"x".repeat(2 << 10)));
+    }
+    assert!(scripts.overflow_bytes() > (64 << 10) - bytes / 2, "no backlog");
+    let refused = pipe::crossed().refused_sends;
+    let host = opencode_tui::plugins::host::host(&h.tui);
+    opencode_plugin::Host::storage_write(&*host, "plugin.example.quota.a", &value).unwrap();
+    opencode_plugin::Host::storage_changed(&*host);
+    h.wait("the read was refused", || {
+        h.app.advance(Duration::from_millis(1));
+        pipe::crossed().refused_sends > refused
+    });
+    std::fs::write(&gate, "").unwrap();
+    pipe.settle();
+    // A failed read holds nothing, as one past the frame: what is left is the neighbour's.
+    assert_eq!(limits::held(id).content, null, "the refused read is still charged");
+    // The neighbour needs the room the refused read would have held.
+    opencode_plugin::Host::storage_write(&*host, "plugin.example.quota.b", &value).unwrap();
+    opencode_plugin::Host::storage_changed(&*host);
+    pipe.settle();
+    h.tui.keymap.dispatch("quota.report", None);
+    h.wait("the report", || {
+        h.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    let report = std::fs::read_to_string(&log).unwrap();
+    let (a, b) = report.trim_end().split_once(" | ").unwrap();
+    assert!(a.starts_with("a 0 the read's snapshot of ") && a.ends_with("does not fit the JS host's queue"), "{a}");
+    assert_eq!(b, format!("b {} none", value.len()));
+}
+
 // Expected (bigboi's pipe sign-off): a load the JS host's queue refuses (here its options are past the frame's cap)
 // fails with why, as nothing else answers it; its neighbour on the same JS host is active, and once the JS host
 // answered a ping, nothing waits.

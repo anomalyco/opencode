@@ -857,6 +857,11 @@ impl Scripts {
         // A snapshot goes as a failed read, in its place: the JS host would keep the value before with no error
         // (P.4.md, reads; bigboi's pipe sign-off).
         if let Down::Snapshot { id, key, .. } = message {
+            // Its value was charged as it was pushed: it never reaches the JS host, so its room goes back (bigboi's
+            // pipe sign-off, recheck).
+            if let Some(guest) = self.guest(id) {
+                guest.unpushed(key);
+            }
             let error = Some(format!("the read's snapshot of {size} bytes does not fit the JS host's queue"));
             let failed = Down::Snapshot { id: id.clone(), key: key.clone(), value: serde_json::Value::Null, error };
             return self.settle(&failed, 0);
