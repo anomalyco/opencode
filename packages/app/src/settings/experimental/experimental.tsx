@@ -93,6 +93,20 @@ export const SettingsExperimental: Component = () => {
                 </Switch>
               </div>
             </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.experimental.row.promptRail.title")}
+              description={language.t("settings.experimental.row.promptRail.description")}
+            >
+              <div data-action="settings-prompt-rail">
+                <Switch
+                  checked={settings.general.promptRail()}
+                  onChange={(checked) => settings.general.setPromptRail(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.promptRail.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
           </SettingsList>
         </div>
       </div>
