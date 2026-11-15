@@ -139,15 +139,32 @@ impl Bytes {
         Self { ptr: bytes.as_ptr(), len: bytes.len() }
     }
 
+    /// The bytes, checked as every receiver checks borrowed bytes: a null `ptr` with a length, or a length over
+    /// [`MAX_BUFFER`], is refused before anything is read through it.
+    ///
     /// # Safety
-    /// `ptr` must point to `len` readable bytes that outlive the returned slice, or be null.
-    pub unsafe fn as_slice<'a>(self) -> &'a [u8] {
-        if self.ptr.is_null() {
-            return &[];
+    /// A non-null `ptr` must point to `len` readable bytes of one allocation that outlive the returned slice.
+    pub unsafe fn checked<'a>(self) -> Result<&'a [u8], String> {
+        match (self.ptr.is_null(), self.len) {
+            (true, 0) => Ok(&[]),
+            (true, len) => Err(format!("a null buffer of {len} bytes")),
+            (false, len) if len > MAX_BUFFER => Err(format!("a buffer of {len} bytes, over {MAX_BUFFER}")),
+            // SAFETY: as documented; `len` is under `isize::MAX`.
+            (false, len) => Ok(unsafe { std::slice::from_raw_parts(self.ptr, len) }),
         }
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+
+    /// [`Bytes::checked`], with a refused descriptor read as no bytes.
+    ///
+    /// # Safety
+    /// As for [`Bytes::checked`].
+    pub unsafe fn as_slice<'a>(self) -> &'a [u8] {
+        unsafe { self.checked() }.unwrap_or_default()
     }
 }
+
+/// The largest buffer either side takes from the other, borrowed ([`Bytes`]) or returned ([`Owned`]): 256 MiB.
+pub const MAX_BUFFER: usize = 256 << 20;
 
 /// A buffer the callee allocated; the caller copies it out, then passes it to the callee's `free`.
 #[repr(C)]
@@ -166,7 +183,7 @@ impl Owned {
     }
 
     /// # Safety
-    /// `self` must come from [`Owned::from_vec`] in the same library, or be [`Owned::EMPTY`].
+    /// `self` must come from [`Owned::from_vec`] in the same library, unchanged, or be [`Owned::EMPTY`].
     pub unsafe fn into_vec(self) -> Vec<u8> {
         if self.ptr.is_null() {
             return Vec::new();
@@ -174,13 +191,51 @@ impl Owned {
         unsafe { Vec::from_raw_parts(self.ptr, self.len, self.cap) }
     }
 
-    /// A copy of the bytes, leaving the buffer for its owner to free.
+    /// Frees a buffer this side made with [`Owned::from_vec`], as a `free` does: by its `ptr` and `cap`, whatever
+    /// `len` says, so a descriptor whose `len` the other side broke frees what was allocated and reads nothing.
     ///
     /// # Safety
-    /// `ptr` must point to `len` readable bytes, or be null.
-    pub unsafe fn to_vec(&self) -> Vec<u8> {
-        unsafe { Bytes { ptr: self.ptr, len: self.len }.as_slice().to_vec() }
+    /// `ptr` and `cap` must come from [`Owned::from_vec`] in the same library, or `ptr` be null.
+    pub unsafe fn release(self) {
+        if !self.ptr.is_null() {
+            // SAFETY: as documented; a `Vec<u8>` of no length drops no element.
+            drop(unsafe { Vec::from_raw_parts(self.ptr, 0, self.cap) });
+        }
     }
+
+    /// A copy of the bytes, leaving the buffer for its owner to free. A descriptor [`received`] refuses copies nothing.
+    ///
+    /// # Safety
+    /// A non-null `ptr` must point to `len` readable bytes.
+    pub unsafe fn to_vec(&self) -> Vec<u8> {
+        unsafe { self.bytes() }.map(<[u8]>::to_vec).unwrap_or_default()
+    }
+
+    /// The initialized bytes, or why the descriptor cannot describe a buffer the other side allocated: a null `ptr`
+    /// with a length, a `len` past `cap`, or a buffer over [`MAX_BUFFER`].
+    unsafe fn bytes(&self) -> Result<&[u8], String> {
+        if !self.ptr.is_null() && self.len > self.cap {
+            return Err(format!("a buffer of {} bytes in {} of room", self.len, self.cap));
+        }
+        // SAFETY: as for `to_vec`.
+        unsafe { Bytes { ptr: self.ptr, len: self.len }.checked() }
+    }
+}
+
+/// What every receiver of the C ABI does with a buffer the other side returned ([`PluginApi::create`],
+/// [`PluginApi::call`], [`PluginApi::describe`], [`HostApi::call`]): it checks the descriptor, copies the bytes out,
+/// and hands that exact descriptor back to the other side's `free` once, also when it refuses it. A null `ptr` with a
+/// length, a `len` past `cap`, and a buffer over [`MAX_BUFFER`] are refused unread.
+///
+/// # Safety
+/// `out` was written by the side whose `free` this is; a non-null `ptr` points to `len` readable bytes when the
+/// descriptor is not refused.
+pub unsafe fn received(out: Owned, free: unsafe extern "C" fn(Owned)) -> Result<Vec<u8>, String> {
+    // SAFETY: as documented.
+    let bytes = unsafe { out.bytes() }.map(<[u8]>::to_vec);
+    // SAFETY: the buffer goes back to the side that wrote it, once, as it was received.
+    unsafe { free(out) };
+    bytes
 }
 
 /// What the host gives a plugin instance. It stays valid until the host destroys the instance. A plugin reads an
@@ -3516,13 +3571,12 @@ impl HostHandle {
         let (Some(call), Some(free)) = (core.call, core.free) else {
             return Err("the host takes no requests".to_owned());
         };
-        // SAFETY: `call` writes `out`, which `free` takes back.
+        // SAFETY: `call` writes `out`, which goes back to `free` as the host wrote it, also when it is refused.
         let (status, bytes) = unsafe {
             let status = call(core.ctx, Bytes::new(&json), &mut out);
-            let bytes = out.to_vec();
-            free(out);
-            (status, bytes)
+            (status, received(out, free))
         };
+        let bytes = bytes.map_err(|error| format!("the host returned a bad result: {error}"))?;
         match status {
             OK => serde_json::from_slice(&bytes).map_err(|error| error.to_string()),
             _ => Err(String::from_utf8_lossy(&bytes).into_owned()),
@@ -4889,8 +4943,9 @@ pub mod runtime {
     ) -> i32 {
         QUIET.call_once(|| std::panic::set_hook(Box::new(|_| {})));
         // SAFETY: the host passes valid pointers for the length of the call.
-        let options = unsafe { options.as_slice() };
+        let options = unsafe { options.checked() };
         guard(out, || {
+            let options = options.map_err(|error| format!("the host passed bad options: {error}"))?;
             if instance.is_null() {
                 return Err("no instance pointer".to_owned());
             }
@@ -4928,8 +4983,9 @@ pub mod runtime {
     /// `instance` must come from [`create`] and not be destroyed, or be null.
     pub unsafe extern "C" fn call(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
         // SAFETY: as documented.
-        let (registered, request) = unsafe { (instance.cast::<Registered>().as_ref(), request.as_slice()) };
+        let (registered, request) = unsafe { (instance.cast::<Registered>().as_ref(), request.checked()) };
         guard(out, || {
+            let request = request.map_err(|error| format!("the host sent a bad request: {error}"))?;
             let registered = registered.ok_or("no instance")?;
             let request: Request = serde_json::from_slice(request).map_err(|error| error.to_string())?;
             // A draw answers with its list's bytes as they are, which JSON would only wrap.
@@ -4956,10 +5012,10 @@ pub mod runtime {
     }
 
     /// # Safety
-    /// `owned` must come from this library.
+    /// `owned` must come from this library; only its `ptr` and `cap` are read.
     pub unsafe extern "C" fn free(owned: Owned) {
         // SAFETY: as documented.
-        drop(unsafe { owned.into_vec() });
+        unsafe { owned.release() };
     }
 
     /// Runs `f` and writes its result into `out`. With a null `out` nothing runs: there is nowhere to put the
@@ -5143,6 +5199,92 @@ mod tests {
         let full = HostHandle { api: &HostApi { size: size_of::<HostApi>(), ..api } };
         assert!(full.request(&HostRequest::Route).is_err_and(|error| error.contains("EOF")));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    thread_local! {
+        /// The descriptors the fake host's `free` took back, in order.
+        static FREED: std::cell::RefCell<Vec<(usize, usize, usize)>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// A host whose `call` answers what `ctx`, a `(status, Owned)`, holds, as it holds it.
+    unsafe extern "C" fn answer_as(ctx: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
+        // SAFETY: the test passes a live row.
+        let (status, owned) = unsafe { &*ctx.cast::<(i32, Owned)>() };
+        unsafe { *out = Owned { ptr: owned.ptr, len: owned.len, cap: owned.cap } };
+        *status
+    }
+
+    unsafe extern "C" fn counted_free(owned: Owned) {
+        FREED.with(|freed| freed.borrow_mut().push((owned.ptr as usize, owned.len, owned.cap)));
+    }
+
+    // Expected (big-boi 5, carbon-8): the SDK checks what the host returns as the host checks what a plugin returns: a
+    // null pointer with a length, a length past the capacity and a buffer over the bound are refused unread, whatever
+    // the status, and every descriptor, refused or not, goes back to the host's `free` once, exactly as it came.
+    #[test]
+    fn the_sdk_refuses_a_host_buffer_the_host_cannot_have_written() {
+        let mut json = *b"null      ";
+        let ptr = json.as_mut_ptr();
+        let rows: [(_, Result<serde_json::Value, &str>); 7] = [
+            ((OK, Owned { ptr, len: 4, cap: 10 }), Ok(serde_json::Value::Null)),
+            ((OK, Owned { ptr: std::ptr::null_mut(), len: 5, cap: 5 }), Err("a null buffer of 5 bytes")),
+            // The bytes past `cap` are there and read as JSON: only the check refuses them.
+            ((OK, Owned { ptr, len: 10, cap: 4 }), Err("a buffer of 10 bytes in 4 of room")),
+            ((OK, Owned { ptr, len: MAX_BUFFER + 1, cap: usize::MAX }), Err("over")),
+            ((ERROR, Owned { ptr, len: 10, cap: 4 }), Err("in 4 of room")),
+            ((PANIC, Owned { ptr: std::ptr::null_mut(), len: 1, cap: 0 }), Err("a null buffer")),
+            ((ERROR, Owned { ptr, len: 4, cap: 10 }), Err("null")),
+        ];
+        for (index, (row, expected)) in rows.into_iter().enumerate() {
+            let api = HostApi {
+                size: size_of::<HostApi>(),
+                major: ABI_MAJOR,
+                minor: ABI_MINOR,
+                ctx: std::ptr::from_ref(&row).cast_mut().cast(),
+                call: Some(answer_as),
+                free: Some(counted_free),
+                theme_mode: None,
+                wake: None,
+                send: None,
+                report: None,
+                stopped: None,
+                features: Bytes::new(&[]),
+            };
+            FREED.with(|freed| freed.borrow_mut().clear());
+            let got = HostHandle { api: &api }.request(&HostRequest::Route);
+            match expected {
+                Ok(value) => assert_eq!(got, Ok(value), "row {index}"),
+                Err(needle) => assert!(got.as_ref().is_err_and(|error| error.contains(needle)), "row {index}: {got:?}"),
+            }
+            let freed = FREED.with(|freed| freed.borrow().clone());
+            assert_eq!(
+                freed,
+                [(row.1.ptr as usize, row.1.len, row.1.cap)],
+                "row {index} was not freed once, as it came"
+            );
+        }
+    }
+
+    // Expected (carbon-8): borrowed bytes are refused unread when null with a length or over the bound, and `free`
+    // reads only the pointer and the capacity, so a broken length frees what was allocated.
+    #[test]
+    fn borrowed_bytes_and_free_check_what_they_can() {
+        let bytes = b"abc";
+        let refused = [
+            (Bytes { ptr: std::ptr::null(), len: 2 }, "a null buffer of 2 bytes"),
+            (Bytes { ptr: bytes.as_ptr(), len: MAX_BUFFER + 1 }, "over"),
+        ];
+        for (borrowed, needle) in refused {
+            // SAFETY: refused before anything is read, as the test checks.
+            assert!(unsafe { borrowed.checked() }.is_err_and(|error| error.contains(needle)));
+            assert!(unsafe { borrowed.as_slice() }.is_empty());
+        }
+        assert_eq!(unsafe { Bytes::new(bytes).checked() }, Ok(&bytes[..]));
+        assert_eq!(unsafe { Bytes { ptr: std::ptr::null(), len: 0 }.checked() }, Ok(&[][..]));
+        let mut owned = Owned::from_vec(b"abcdef".to_vec());
+        owned.len = usize::MAX;
+        // SAFETY: `ptr` and `cap` are `from_vec`'s.
+        unsafe { runtime::free(owned) };
     }
 
     unsafe extern "C" fn wake(ctx: *mut c_void) {
