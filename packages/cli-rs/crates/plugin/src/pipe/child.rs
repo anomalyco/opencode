@@ -822,11 +822,14 @@ mod tests {
         // Its hello woke the host once, which takes it.
         assert!(!take_until(&child, |events| !events.is_empty()).is_empty(), "no hello");
         let payload = vec![b'x'; 1 << 10];
+        // Nothing wakes the host while the queue fills: the count before the refusal is the one the wake must pass, which
+        // the writer may give at once (bigboi's pipe pass).
+        let before = wakes.load(Ordering::SeqCst);
         // The child's input and the queue fill: the OS pipe's buffer, then the queue's bound.
         let full =
             (0..10_000).find(|_| matches!(child.send(wire::CONTROL, &payload, None, Wait::Ack), Err(Refused::Full)));
         assert!(full.is_some(), "the queue never filled");
-        let (before, begun) = (wakes.load(Ordering::SeqCst), Instant::now());
+        let begun = Instant::now();
         while wakes.load(Ordering::SeqCst) == before && begun.elapsed() < Duration::from_secs(2) {
             std::thread::sleep(Duration::from_millis(5));
         }
