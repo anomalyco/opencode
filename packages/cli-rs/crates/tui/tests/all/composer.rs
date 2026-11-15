@@ -479,6 +479,50 @@ fn the_shell_output_dialog_shows_the_output_without_escapes() {
 }
 
 #[test]
+fn the_shell_output_dialog_waits_while_the_server_holds_back_a_live_character() {
+    // The running shell wrote `waiting ` and two of the three bytes of `€`. The server answers the text, then keeps
+    // its cursor before `€` (#63984): reading again at once would spin until the shell writes the last byte.
+    let location = json!({ "directory": "/project", "project": { "id": "proj_test", "directory": "/project" } });
+    let page = |cursor: &str, limit: bool, data: Value| {
+        let mut query = opencode_api::memory::Query::new();
+        query.insert("cursor".to_owned(), vec![cursor.to_owned()]);
+        query.insert("location[directory]".to_owned(), vec!["/project".to_owned()]);
+        if limit {
+            query.insert("limit".to_owned(), vec!["65536".to_owned()]);
+        }
+        MemoryRoute::json("GET", "/api/shell/sh_1/output", 200, &json!({ "location": location, "data": data }))
+            .with_query(query)
+    };
+    let mut routes = vec![
+        page("9007199254740991", false, json!({ "output": "", "cursor": 10, "size": 10, "truncated": false })),
+        page("0", true, json!({ "output": "waiting ", "cursor": 8, "size": 10, "truncated": false })),
+        page("8", true, json!({ "output": "", "cursor": 8, "size": 10, "truncated": false })),
+    ];
+    routes.extend(self::routes());
+    let harness = mount_routes(None, routes);
+    harness.tui.keymap.dispatch("session.child.first", None);
+    harness.memory.emit(&json!({
+        "id": "evt_shell", "created": 1, "type": "shell.created",
+        "location": { "directory": "/project", "project": { "id": "proj_test", "directory": "/project" } },
+        "data": { "info": shell() },
+    }));
+    harness.app.press("right");
+    assert!(harness.wait(|harness| harness.app.text().contains("make watch")));
+    harness.app.press("enter");
+    let held = |harness: &Harness| {
+        let outputs = harness.requests("GET", "/api/shell/sh_1/output");
+        outputs.iter().filter(|logged| logged.query.get("cursor").is_some_and(|cursor| cursor == &["8"])).count()
+    };
+    assert!(harness.wait(|harness| held(harness) == 1));
+    assert!(harness.app.text().contains("waiting"));
+    harness.app.wait_until(Duration::from_millis(500), || false);
+    assert_eq!(held(&harness), 1, "the dialog read the held-back character again at once");
+    // The next poll, a second later, tries again.
+    harness.app.advance(Duration::from_secs(1));
+    assert!(harness.wait(|harness| held(harness) == 2));
+}
+
+#[test]
 fn the_subagent_selection_follows_the_keys_while_subagents_stream_under_a_resting_pointer() {
     let harness = mount_family();
     harness.app.press("down");
