@@ -21,4 +21,8 @@ with the experiment on (`parity/lib/app.ts` `withNewDesigns`), and `parity/compo
 the Experiments dialog with the same registry as Rust, without the `new-designs` entry.
 `parity/scenarios/D131/designs.pty.ts` drives the difference with the config a release starts with: the palette
 searches in its title row ("Search commands") where TS shows a "Commands" title above a "Search" field, and `/debug`
-copies with `c` where TS copies with Enter.
+copies with `c` where TS copies with Enter. `parity/scenarios/D131/plugins-release.pty.ts` drives a list that
+overflows: TS's old `DialogSelect` keeps every row for options, where the new design gives the last row to a "…"
+indicator, so `/plugins` lists one more plugin in TS (4 lines). `D131/plugins.pty.ts` runs the same list with the
+experiment on, and the two clients are equal. The plugins field test saw these palette and `/plugins` differences
+(`steps/plugins-field-test.md`, "Not plugin defects").
