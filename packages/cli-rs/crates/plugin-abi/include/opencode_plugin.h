@@ -168,7 +168,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * generated from the Rust types and normative for every binding; the definitions named below are its `$defs`, and
  * its `x-messages` names the definition of each request type's answer. Every message is JSON but a draw's answer,
  * which is bytes (`DrawList`). A request is tagged by "type". A field the schema leaves out of "required" may be left
- * out, and a reader ignores a field it does not know. `crates/plugin/conformance` holds every message of its scripted
+ * out, and a reader ignores a field it does not know. The HTTP API's types (a session, a message, a model) are
+ * references into the API's OpenAPI document, `packages/protocol/openapi.json`, relative to the schema's file. A 2.x
+ * `describe` answers `Metadata`, whose "id" is required and nonempty; a 1.x one `MetadataV1`. `crates/plugin/conformance` holds every message of its scripted
  * sessions, each of which the schema takes.
  *
  * - `describe` answers `Metadata`; a 2.x library names a nonempty "id", which the host reads before it runs any
