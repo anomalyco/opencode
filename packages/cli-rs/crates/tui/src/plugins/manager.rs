@@ -110,7 +110,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(hidden("opencode.plugins.error"), move |host, key| {
         let key = key.filter(|_| host.dialog_open(LIST));
         let row = key.and_then(|key| detail.rows(host).into_iter().find(|row| row.key() == key));
-        if let Some(row) = row.filter(Row::has_error) {
+        if let Some(row) = row.filter(Row::has_details) {
             detail.erring.set(true);
             host.dialog(Dialog::ErrorDetails(details(&row)));
         }
@@ -274,12 +274,12 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
         hidden_all: !rows.iter().any(|row| row.package().is_some()),
     }];
     actions.extend([
-        // A toggle row's error: enter toggles it.
+        // A toggle row's error or slow report: enter toggles it.
         SelectAction {
             title: "view error".to_owned(),
             key: Some("space".to_owned()),
             action: error.clone(),
-            hidden: except(&|row| row.toggle().is_some() && row.has_error()),
+            hidden: except(&|row| row.toggle().is_some() && row.has_details()),
             primary: None,
             rowless: false,
             command: Some("dialog.plugins.error".to_owned()),
@@ -302,7 +302,7 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
             title: "view error".to_owned(),
             key: Some("enter".to_owned()),
             action: error.clone(),
-            hidden: except(&|row| row.toggle().is_none() && row.has_error()),
+            hidden: except(&|row| row.toggle().is_none() && row.has_details()),
             primary: None,
             rowless: false,
             command: None,
@@ -359,11 +359,20 @@ fn option(row: &Row, state: &State) -> SelectOption {
 fn details(row: &Row) -> ErrorDetails {
     let runtime = if matches!(row, Row::Tui(_)) { "tui" } else { "server" };
     let source = row.source();
+    // A plugin that runs and is slow: its report, with what each kind of call cost.
+    let (title, status, error) = match row.slow().filter(|_| !row.has_error()) {
+        Some(report) => ("TUI plugin is slow".to_owned(), "slow", report.to_owned()),
+        None => (
+            format!("{} plugin error", if runtime == "tui" { "TUI" } else { "Server" }),
+            "failed",
+            // A TUI plugin's error is the host's to show: the plugin list does not carry it.
+            row.server_error().unwrap_or_else(|| "Unknown plugin error".to_owned()),
+        ),
+    };
     ErrorDetails {
-        title: format!("{} plugin error", if runtime == "tui" { "TUI" } else { "Server" }),
-        // A TUI plugin's error is the host's to show: the plugin list does not carry it.
-        error: row.server_error().unwrap_or_else(|| "Unknown plugin error".to_owned()),
-        context: Some(format!("Plugin: {}\nStatus: failed\nRuntime: {runtime}\nSource: {source}", row.label())),
+        title,
+        error,
+        context: Some(format!("Plugin: {}\nStatus: {status}\nRuntime: {runtime}\nSource: {source}", row.label())),
         source: Some(source),
         back: Some(command("opencode.plugins.back", Some(row.key()))),
         reference: match row {
@@ -506,10 +515,38 @@ impl Row {
         if self.outdated() {
             details.push("update available".to_owned());
         }
-        if let Row::Tui(PluginEntry { slow: Some(slow), .. }) = self {
-            details.push(slow.clone());
+        if let Some(report) = self.slow() {
+            details.push(slow_summary(report));
         }
         (!details.is_empty()).then(|| details.join(", "))
+    }
+
+    /// The report of a TUI plugin that is slow.
+    fn slow(&self) -> Option<&str> {
+        match self {
+            Row::Tui(PluginEntry { slow: Some(slow), .. }) => Some(slow),
+            _ => None,
+        }
+    }
+
+    /// It has an error, or a slow report, to show in its details.
+    fn has_details(&self) -> bool {
+        self.has_error() || self.slow().is_some()
+    }
+}
+
+/// What a slow plugin's footer says of its `report`: its costliest call kind and that kind's worst time, or its backlog.
+/// The whole report goes in the row's details, so the footer leaves room for the title (PL-5).
+fn slow_summary(report: &str) -> String {
+    let Some(kinds) = report.strip_prefix("slow (p50/p99/worst): ") else { return "slow: backlog".to_owned() };
+    let worst = |kind: &str| -> Option<(String, f64)> {
+        let [name, times, "ms"] = kind.split_whitespace().collect::<Vec<_>>()[..] else { return None };
+        Some((name.to_owned(), times.rsplit('/').next()?.parse().ok()?))
+    };
+    let costliest = kinds.split(';').next().unwrap_or_default().split(", ").filter_map(worst);
+    match costliest.max_by(|a, b| a.1.total_cmp(&b.1)) {
+        Some((kind, ms)) => format!("slow: {kind} {ms:.1} ms"),
+        None => "slow".to_owned(),
     }
 }
 
@@ -571,5 +608,33 @@ mod tests {
         let pending = row(PluginOrigin::Configured, PluginStatus::Pending);
         assert_eq!((pending.toggle().as_deref(), pending.label().as_str()), (Some("k"), "sample"));
         assert!(!pending.has_error());
+    }
+
+    // Expected (PL-5): a slow plugin's footer names the kind of call that cost the most, by its worst time, and its
+    // details hold the whole report; a backlog says so, and a healthy row has no details.
+    #[test]
+    fn a_slow_row_says_what_costs_and_shows_the_report() {
+        let report = "slow (p50/p99/worst): view 0.0/0.0/0.1 ms, run-command 0.0/0.0/0.0 ms, draw 1.9/2.0/2.4 ms, \
+                      host 0.0/0.1/0.1 ms; setup 3.0 ms";
+        let row = |slow: Option<&str>| {
+            Row::Tui(PluginEntry {
+                key: "k".to_owned(),
+                id: "live.stress".to_owned(),
+                target: Some("/plugins/stress".to_owned()),
+                origin: PluginOrigin::External,
+                status: PluginStatus::Active,
+                active: true,
+                slow: slow.map(str::to_owned),
+            })
+        };
+        let slow = row(Some(report));
+        assert_eq!(slow.footer().as_deref(), Some("local, slow: draw 2.4 ms"));
+        assert!(slow.has_details() && !slow.has_error());
+        let shown = details(&slow);
+        assert_eq!((shown.title.as_str(), shown.error.as_str()), ("TUI plugin is slow", report));
+        assert!(shown.context.unwrap().contains("Status: slow"));
+        let backlog = row(Some("backlog: full at the end of 13 of the last 16 frames, 9 sends refused"));
+        assert_eq!(backlog.footer().as_deref(), Some("local, slow: backlog"));
+        assert!(!row(None).has_details());
     }
 }
