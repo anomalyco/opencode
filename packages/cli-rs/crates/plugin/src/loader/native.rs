@@ -596,6 +596,34 @@ fn host_table(major: u32, minor: u32, ctx: *mut c_void) -> HostApi {
     }
 }
 
+thread_local! {
+    /// The length of the last draw's list that [`received_list`] did not copy, as it was over one list's bytes.
+    static OVER_LIST: Cell<Option<usize>> = const { Cell::new(None) };
+}
+
+/// [`received`] for a draw's list, which is admitted by its descriptor's length before a byte of it is copied (review
+/// bigboi 7): one past [`abi::canvas::MAX_BYTES`] is over its limit, which [`OVER_LIST`] tells and the canvas shows as
+/// its placeholder, if it starts as a list does; else it is malformed, as [`abi::canvas::check`] reads it.
+///
+/// # Safety
+/// As [`received`].
+unsafe fn received_list(out: Owned, free: unsafe extern "C" fn(Owned)) -> Result<Vec<u8>, String> {
+    if out.ptr.is_null() || out.len > out.cap || out.len <= abi::canvas::MAX_BYTES {
+        // SAFETY: the caller's.
+        return unsafe { received(out, free) };
+    }
+    // SAFETY: the plugin wrote `len` bytes at `ptr`, at least one, which it owns until `free`.
+    let first = unsafe { *out.ptr };
+    let len = out.len;
+    // SAFETY: the buffer goes back to the library that wrote it, once.
+    unsafe { free(out) };
+    if first != abi::canvas::VERSION {
+        return Err(abi::canvas::Error::Malformed("not a canvas list".into()).to_string());
+    }
+    OVER_LIST.set(Some(len));
+    Ok(Vec::new())
+}
+
 /// A call's failure: the plugin panicked or the host refused its answer, which leaves no effect; or the plugin
 /// returned an error, which is an answer.
 enum Failed {
@@ -717,7 +745,11 @@ impl Instance {
         // SAFETY: `handle` is live until drop; `out` goes back to the library's `free`.
         let (status, bytes) = unsafe {
             let status = crate::contain::catch(|| (self.library.call)(self.handle, Bytes::new(&json), &mut out));
-            (status.unwrap_or(abi::PANIC), received(out, self.library.free))
+            let bytes = match request {
+                Request::Draw { .. } => received_list(out, self.library.free),
+                _ => received(out, self.library.free),
+            };
+            (status.unwrap_or(abi::PANIC), bytes)
         };
         conformance::tap(Event::Return { status, reply: bytes.as_deref().map_err(String::as_str) });
         let bytes = bytes.map_err(|error| Failed::Refused(format!("returned a bad result: {error}")))?;
@@ -1859,12 +1891,16 @@ impl Viewer for Remote {
         mount: &v2::MountId,
         canvas: &str,
         frame: v2::Frame,
-    ) -> Option<Option<Vec<u8>>> {
+    ) -> Option<Option<crate::canvas::Drawn>> {
         let request = Request::Draw { surface: self.index, mount: mount.clone(), canvas: canvas.to_owned(), frame };
         // The result is the list's bytes as they are, which the canvas checks; none keeps the list. What the draw reads
         // of the input is its mount's, as a view's is.
+        OVER_LIST.set(None);
         let drawn = self.guest.owners.as_owner(owner, || self.guest.exchange("draw", &request, Ok))?;
-        Some(drawn.filter(|bytes| !bytes.is_empty()))
+        if let (Some(len), Some(_)) = (OVER_LIST.take(), &drawn) {
+            return Some(Some(Err(abi::canvas::Error::Over(abi::canvas::Limit::Bytes(len)))));
+        }
+        Some(drawn.filter(|bytes| !bytes.is_empty()).map(Ok))
     }
 
     fn forget(&self, _: &dyn Host, mount: &v2::MountId) {

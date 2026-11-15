@@ -112,7 +112,7 @@ pub(crate) trait Viewer {
         _mount: &v2::MountId,
         _canvas: &str,
         _frame: v2::Frame,
-    ) -> Option<Option<Vec<u8>>> {
+    ) -> Option<Option<canvas::Drawn>> {
         None
     }
     /// The mount ended.
@@ -188,7 +188,7 @@ impl Viewer for Linked {
         mount: &v2::MountId,
         canvas: &str,
         frame: v2::Frame,
-    ) -> Option<Option<Vec<u8>>> {
+    ) -> Option<Option<canvas::Drawn>> {
         let draw = self.draw.as_ref()?;
         let (mut ran, mut list) = (false, None);
         // A call that panicked set no list; one that was refused did not run.
@@ -196,7 +196,7 @@ impl Viewer for Linked {
             ran = true;
             list = draw(&mut v2::Draw { read, mount, canvas, frame });
         });
-        ran.then(|| list.map(abi::canvas::List::into_bytes))
+        ran.then(|| list.map(|list| Ok(list.into_bytes())))
     }
 }
 
@@ -1102,7 +1102,7 @@ impl Surface {
     }
 
     /// One call of the surface's draw for canvas `id` at `frame` ([`canvas::Draw`]).
-    fn draw_canvas(&self, id: &str, frame: v2::Frame) -> Option<Option<Vec<u8>>> {
+    fn draw_canvas(&self, id: &str, frame: v2::Frame) -> Option<Option<canvas::Drawn>> {
         self.viewer.draw(&*self.owner.upgrade()?, &self.holder()?, &self.id, id, frame)
     }
 
