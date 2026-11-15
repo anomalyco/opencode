@@ -17,8 +17,8 @@ set -eu
 target=${1:?usage: check-target.sh <target> [cargo clippy arguments...]}
 shift
 case $target in
-    x86_64-pc-windows-msvc) name=windows zig_target=x86_64-windows-gnu stubs='opentui.dll opentui.lib' ;;
-    aarch64-pc-windows-msvc) name=windows-arm64 zig_target=aarch64-windows-gnu stubs='opentui.dll opentui.lib' ;;
+    x86_64-pc-windows-msvc) name=windows zig_target=x86_64-windows-gnu stubs=opentui-static.lib ;;
+    aarch64-pc-windows-msvc) name=windows-arm64 zig_target=aarch64-windows-gnu stubs=opentui-static.lib ;;
     x86_64-apple-darwin) name=macos-x64 zig_target=x86_64-macos.13.0 stubs=libopentui.a ;;
     aarch64-apple-darwin) name=macos-arm64 zig_target=aarch64-macos.13.0 stubs=libopentui.a ;;
     *)
@@ -44,11 +44,12 @@ export CARGO_TARGET_DIR="$here/target/check-$name"
 tools=$CARGO_TARGET_DIR/tools
 mkdir -p "$tools/lib"
 cp "$header" "$tools/lib/opentui.h"
+# The static archive opentui-sys links with its default static feature: libopentui.a, or opentui-static.lib on MSVC.
+# rustc reads a static library it is told to link even in a check, so the stub is an empty archive (COFF archives
+# share ar's format), not an empty file.
 for stub in $stubs; do
-    : > "$tools/lib/$stub"
+    printf '!<arch>\n' > "$tools/lib/$stub"
 done
-# rustc reads a static library it is told to link even in a check, so the archive is an empty one, not an empty file.
-case $stubs in *libopentui.a*) printf '!<arch>\n' > "$tools/lib/libopentui.a" ;; esac
 # cc-rs gives MSVC targets lib.exe's options and the others ar's.
 case $target in
     *-windows-msvc) printf '#!/bin/sh\nexec %s lib "$@"\n' "$zig" > "$tools/ar" ;;
