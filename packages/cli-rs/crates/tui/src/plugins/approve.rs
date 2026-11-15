@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn the_question_names_the_library_and_says_what_is_not_saved() {
         let root = opencode_util::temp::tempdir().unwrap();
-        let target = root.path().join("plugins/p");
+        let target = root.path().join("plugins").join("p");
         std::fs::create_dir_all(&target).unwrap();
         let inside = std::fs::canonicalize(&target).unwrap().join("plugin.so");
         let artifact = |path: std::path::PathBuf| Artifact {
