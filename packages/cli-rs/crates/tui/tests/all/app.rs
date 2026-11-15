@@ -470,10 +470,11 @@ fn fence_margin_plugin() -> abi::Plugin {
 
 /// P8: the recording's config with each `plugins` entry `./out/npm/node_modules/<name>` unpacked there from the
 /// published tarball `parity/plugins/npm/<name>.tgz` (a scope's `/` as `__`), as the TS recorder does, and named by its
-/// absolute path: the TS side resolved it against the parity directory, its working directory.
+/// absolute path: the TS side resolved it against the parity directory, its working directory. An entry
+/// `./plugins/<name>` is that directory of the parity tree, by its absolute path.
 fn npm_config(config: &serde_json::Value) -> String {
     const PREFIX: &str = "./out/npm/node_modules/";
-    let parity = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity");
+    let parity = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("parity");
     let mut config = config.clone();
     let entries = config.get_mut("plugins").and_then(serde_json::Value::as_array_mut).into_iter().flatten();
     for entry in entries {
@@ -485,6 +486,12 @@ fn npm_config(config: &serde_json::Value) -> String {
             },
             _ => continue,
         };
+        // A local V2 plugin under parity/plugins runs on the JS host too, as TS loads it from there (FT-12).
+        if target.starts_with("./plugins/") {
+            let local = target.split('/').skip(1).fold(parity.clone(), |path, part| path.join(part));
+            *target = local.to_string_lossy().into_owned();
+            continue;
+        }
         let Some(name) = target.strip_prefix(PREFIX).map(str::to_owned) else { continue };
         let into = parity.join(&target[2..]);
         let _ = std::fs::remove_dir_all(&into);

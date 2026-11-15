@@ -274,12 +274,16 @@ export function context(base: Base, carrier: Carrier) {
   const PRESS = `${id}.compat.press`
   const ANSWER = `${id}.compat.answer`
   const DISMISS = `${id}.compat.dismiss`
+  const QUERY = `${id}.compat.query`
+  // The search of the select on screen, which the host tells each query.
+  let searching: ((query: string) => void) | undefined
   carrier.command({ name: PRESS, title: PRESS }, (input) => {
     const [mount, node] = (input ?? "").split("\u0001")
     const pressed = presses.get(mount ?? "")?.get(node ?? "")
     const event = { type: pressed?.kind, button: 0, modifiers: { shift: false, alt: false, ctrl: false } }
     pressed?.handler({ ...event, stopPropagation() {}, preventDefault() {} })
   })
+  carrier.command({ name: QUERY, title: QUERY }, (input) => searching?.(input ?? ""))
   carrier.command({ name: ANSWER, title: ANSWER }, (input) => {
     const resolve = answering
     answering = undefined
@@ -867,25 +871,50 @@ export function context(base: Base, carrier: Carrier) {
           return ask({ type: "prompt", title: options.title, placeholder: options.placeholder })
         },
         async select(options: Json) {
-          if (options.search) unsupported("ui.dialog.select search")
           if (options.actions?.length) unsupported("ui.dialog.select actions")
-          const values: Json[] = options.options.map((option: Json) => option.value)
-          const current = values.indexOf(options.current)
-          const answer = await ask({
-            type: "select",
-            title: options.title,
-            placeholder: options.placeholder,
-            options: options.options.map((option: Json, index: number) => ({
+          const search = options.search
+          const enabled = options.options.filter((option: Json) => !option.disabled)
+          // The rows listed now, which an answer's index names: a plugin's search lists its own, flat and in its order,
+          // with the category as the footer, as TS's does (FT-12).
+          let listed: Json[] = search ? (search("", enabled) ?? []).filter((option: Json) => !option.disabled) : options.options
+          const rows = () =>
+            listed.map((option: Json, index: number) => ({
               title: option.title,
               value: String(index),
               description: option.description,
-              footer: option.footer,
-              category: option.category,
+              footer: search ? (option.category ?? option.footer) : option.footer,
+              category: search ? undefined : option.category,
               disabled: !!option.disabled,
-            })),
-            ...(current === -1 ? {} : { current: String(current) }),
+            }))
+          const current = () => {
+            const at = listed.findIndex((option: Json) => option.value === options.current)
+            return at === -1 ? {} : { current: String(at) }
+          }
+          // The host tells a plugin's search each query (P6c's `query`): it lists the rows the search returns, in place
+          // under the select's key.
+          const key = `search.${asked + 1}`
+          const dialog = () => ({
+            type: "select",
+            title: options.title,
+            placeholder: options.placeholder,
+            options: rows(),
+            ...current(),
+            ...(search ? { key, query: { type: "command", name: QUERY } } : {}),
           })
-          return answer === undefined ? undefined : values[Number(answer)]
+          const run = search
+            ? (query: string) => {
+                listed = (search(query, enabled) ?? []).filter((option: Json) => !option.disabled)
+                const select = { ...dialog(), action: { type: "command", name: ANSWER } }
+                void carrier.effect({ type: "dialog", dialog: select })
+              }
+            : undefined
+          searching = run
+          const answer = await ask(dialog())
+          // A select that replaced this one searches on.
+          if (searching === run) searching = undefined
+          // A keyed select stays open as a row is picked.
+          if (search && answer !== undefined) void carrier.effect({ type: "dialog", dialog: { type: "close", key } })
+          return answer === undefined ? undefined : listed[Number(answer)]?.value
         },
       },
       toast: {
