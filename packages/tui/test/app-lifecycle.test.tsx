@@ -1020,6 +1020,7 @@ test("drops assistant footer timestamp parts as the terminal narrows", async () 
   const footer = wide.split("\n").find((line) => line.includes("Build ·"))!
   const bar = footer.lastIndexOf("█")
   const full = footer.slice(footer.indexOf("Build"), bar === -1 ? undefined : bar).trimEnd()
+  // Two-cell outer padding per side, three-cell footer padding, and the three-cell scrollbar gutter.
   const exact = stringWidth(full) + 10
 
   setup.resize(exact, 40)

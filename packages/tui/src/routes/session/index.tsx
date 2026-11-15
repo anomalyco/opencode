@@ -2039,14 +2039,18 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const duration = createMemo(() => SessionTurn.duration(messages(), props.message, turn()))
   const tokensPerSecond = createMemo(() => SessionTurn.tokensPerSecond(messages(), props.message, turn()))
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
-  // The scrollbox reserves its scrollbar track and viewport gutter before the footer's left padding.
+  const showModel = createMemo(() => ctx.terminal.width >= 28)
+  const showDuration = createMemo(() => {
+    const elapsed = duration()
+    return elapsed && (ctx.terminal.width < 28 || ctx.terminal.width >= 36) ? elapsed : undefined
+  })
+  // Footer left padding, plus the scrollbox's viewport gutter, bar padding, and bar when the scrollbar is on.
   const availableWidth = createMemo(() => ctx.width - 3 - (config.data.session.scrollbar ? 3 : 0))
   const baseWidth = createMemo(() => {
     let used = stringWidth(Locale.titlecase(props.message.agent))
-    if (ctx.terminal.width >= 28) used += stringWidth(` · ${model()}`)
-    const elapsed = duration()
-    if (elapsed && (ctx.terminal.width < 28 || ctx.terminal.width >= 36))
-      used += stringWidth(` · ${Locale.duration(elapsed)}`)
+    if (showModel()) used += stringWidth(` · ${model()}`)
+    const elapsed = showDuration()
+    if (elapsed) used += stringWidth(` · ${Locale.duration(elapsed)}`)
     if (interrupted()) used += stringWidth(" · interrupted")
     return used
   })
@@ -2093,11 +2097,11 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <span style={{ fg: props.message.error ? theme.text.muted : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
           </span>
-          <Show when={ctx.terminal.width >= 28}>
+          <Show when={showModel()}>
             <span style={{ fg: theme.text.muted }}> · {model()}</span>
           </Show>
-          <Show when={duration() && (ctx.terminal.width < 28 || ctx.terminal.width >= 36)}>
-            <span style={{ fg: theme.text.muted }}> · {Locale.duration(duration())}</span>
+          <Show when={showDuration()}>
+            {(value) => <span style={{ fg: theme.text.muted }}> · {Locale.duration(value())}</span>}
           </Show>
           <Show when={showTokensPerSecond()}>
             {(value) => <span style={{ fg: theme.text.muted }}> · {value().toFixed(1)} tok/s</span>}
