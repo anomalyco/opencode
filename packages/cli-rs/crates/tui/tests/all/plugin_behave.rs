@@ -888,7 +888,9 @@ fn the_deep_runs_rows_hold() {
         // viewer-frames, where a resize across 60 columns builds every card again in its frame: steps at the end with
         // a resize between, whose memory holds by the rows the list kept (300 and 500 seeds); an item built again and
         // unmounted before it was laid out takes its estimate in that frame (seed 517, 2,000 seeds); a step that finds
-        // nothing, in a batch with a resize, judges the end by the rows its move saw (seed 1178's first six steps).
+        // nothing is no move, so a resize in its batch holds the reading, also where a taller viewport clamps the
+        // offset to an end the reader was not at (seed 1178); a step that lands at the end keeps its memory while the
+        // end shows the same, as the rows above it take their estimates (seed 1766).
         vec![
             Command::Resize { width: 71, height: 17 },
             Command::Review(0),
@@ -912,6 +914,14 @@ fn the_deep_runs_rows_hold() {
             Command::Step(1),
             Command::Step(2),
             Command::Batch { width: 75, height: 8, by: 1 },
+            Command::Batch { width: 45, height: 21, by: 1 },
+        ],
+        vec![
+            Command::Edge { bottom: true },
+            Command::Resize { width: 58, height: 11 },
+            Command::Page(250),
+            Command::Batch { width: 60, height: 11, by: 1 },
+            Command::Step(-2),
         ],
     ];
     for row in &rows {
