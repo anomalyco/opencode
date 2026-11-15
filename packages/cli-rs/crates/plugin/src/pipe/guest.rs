@@ -531,6 +531,12 @@ impl Answers for Guest {
     fn answer(self: Rc<Self>, request: Request) {
         self.call("on-reply", request, false);
     }
+
+    fn cancel(self: Rc<Self>, request: opencode_plugin_abi::RequestId) {
+        if !self.ended() {
+            self.send(Down::Cancelled { activation: self.activation(), request }, None);
+        }
+    }
 }
 
 /// Registers what the plugin's setup listed, each calling it on the JS host.

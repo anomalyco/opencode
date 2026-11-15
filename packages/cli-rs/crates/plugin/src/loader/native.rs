@@ -1530,6 +1530,9 @@ pub(crate) trait Answers {
     fn owner(&self) -> Weak<dyn Host>;
     /// Hands it the reply, as its `on-reply` call.
     fn answer(self: Rc<Self>, request: Request);
+    /// The host cancelled `request`, as the mount that owns it closed: no reply comes. A library hears nothing of it,
+    /// as a plugin in process does; the JS host settles the promise that waits for the reply.
+    fn cancel(self: Rc<Self>, _request: abi::RequestId) {}
 }
 
 impl Answers for Guest {
@@ -1562,14 +1565,19 @@ fn reply_to(
     send: impl FnOnce(&dyn Host, crate::Reply),
 ) {
     let live = move || mount.as_ref().is_none_or(|mount| mount.upgrade().is_some());
-    let Some(running) = guest.upgrade().filter(|guest| guest.live() && live()) else { return };
+    let Some(running) = guest.upgrade().filter(|guest| guest.live()) else { return };
+    if !live() {
+        return running.cancel(request);
+    }
     let (guest, owner) = (guest.clone(), running.owner());
     send(
         host,
         Box::new(move |result| {
             defer(&owner, move |_| {
-                if let Some(guest) = guest.upgrade().filter(|_| live()) {
-                    guest.answer(Request::Reply { id: request, result });
+                let Some(guest) = guest.upgrade() else { return };
+                match live() {
+                    true => guest.answer(Request::Reply { id: request, result }),
+                    false => guest.cancel(request),
                 }
             });
         }),
