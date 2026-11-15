@@ -605,7 +605,14 @@ const make = Effect.gen(function* () {
   })
 
   const inspect = Effect.fnUntraced(function* () {
-    if (OPENCODE_LOCAL || ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")) {
+    // This fork never contacts the upstream update service unless MUHLISCODE_ENABLE_AUTOUPDATE is set:
+    // the check sends the installed version and platform to opencode.ai and would replace the fork with upstream.
+    const enabled = ["1", "true"].includes(process.env.MUHLISCODE_ENABLE_AUTOUPDATE?.toLowerCase() ?? "")
+    if (
+      OPENCODE_LOCAL ||
+      !enabled ||
+      ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")
+    ) {
       yield* Effect.logInfo("update check skipped", {
         reason: OPENCODE_LOCAL ? "local-install" : "disabled",
         version: OPENCODE_VERSION,

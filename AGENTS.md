@@ -1,3 +1,4 @@
+- Also follow [MUHLISCODE.md](./MUHLISCODE.md): MuhlisCode governance rules (terminology, privacy, Uyghur Markdown line starts, per-turn history and audit).
 - After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit generated client files directly.
 - Keep runtime dependencies directed from Schema to Core and Protocol, then from Core and Protocol to Server. Client runtime code may depend on Schema and Protocol but never Core or Server; `sdk` composes Client, Core, and Server.
 - This repository does not use Changesets. Do not add `.changeset` files; follow the existing release workflow instead.
