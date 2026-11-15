@@ -54,6 +54,25 @@ fn a_pinned_plugin_builds_through_the_next_sdk() {
     }
 }
 
+// Expected (O-125): the 1.x form `export_plugin!(id, setup, requires_minor = N)` keeps building ABI 1.x (the loader's
+// `version` tests read its table), and warns in the plugin's own crate, naming the 2.x form.
+#[test]
+fn the_legacy_requires_minor_form_warns_with_the_2x_form() {
+    let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = cargo()
+        .args(["check", "--locked", "--features", "requires-1-5", "--manifest-path"])
+        .arg(crate_dir.join("../plugin/examples/sample/Cargo.toml"))
+        .arg("--target-dir")
+        .arg(crate_dir.join("../../target/sample-plugin"))
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    let warned = stderr.contains("use of deprecated function `opencode_plugin_abi::runtime::legacy::requires_minor`")
+        && stderr.contains("`plugin!(id = id, requires_minor = N, setup)`");
+    assert!(warned, "no deprecation of the 1.x form:\n{stderr}");
+}
+
 // Expected: the README's quick start shows `examples/hello` as it is, so what an author copies is what the tests build
 // and load (`the_quick_start_plugin_loads_from_a_plugins_directory_and_runs` in `opencode-plugin`).
 #[test]
