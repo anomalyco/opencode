@@ -49,7 +49,7 @@ use std::time::Duration;
 use opencode_plugin_abi::mail::Message;
 use opencode_plugin_abi::{
     self as abi, ABI_MAJOR, ABI_MINOR, Bytes, Fenced, HostApi, HostRequest, Line, Manifest, Owned, PluginApi,
-    PluginApiV1_0, Request, V1_MINOR, v2,
+    PluginApiV1_0, Request, V1_MINOR, received, v2,
 };
 use opencode_ui::keymap::TuiCommand;
 use opencode_util::dl;
@@ -583,29 +583,6 @@ fn host_table(major: u32, minor: u32, ctx: *mut c_void) -> HostApi {
     }
 }
 
-/// The largest buffer the host takes from a plugin.
-const MAX_BUFFER: usize = 256 << 20;
-
-/// The bytes of a buffer a plugin returned, which goes back to its `free` whatever it holds. A descriptor that cannot
-/// describe a buffer the plugin allocated (a null pointer with a length, a length past the capacity) or one over
-/// [`MAX_BUFFER`] is refused before anything is read through it.
-///
-/// # Safety
-/// `out` was written by the plugin whose `free` this is.
-unsafe fn received(out: Owned, free: unsafe extern "C" fn(Owned)) -> Result<Vec<u8>, String> {
-    let bytes = match (out.ptr.is_null(), out.len) {
-        (true, 0) => Ok(Vec::new()),
-        (true, len) => Err(format!("a null buffer of {len} bytes")),
-        (false, len) if len > out.cap => Err(format!("a buffer of {len} bytes in {} of room", out.cap)),
-        (false, len) if len > MAX_BUFFER => Err(format!("a buffer of {len} bytes, over {MAX_BUFFER}")),
-        // SAFETY: the plugin wrote `len` bytes at `ptr`, which it owns until `free`.
-        (false, _) => Ok(unsafe { out.to_vec() }),
-    };
-    // SAFETY: the buffer goes back to the library that wrote it, once.
-    unsafe { free(out) };
-    bytes
-}
-
 /// A call's failure: the plugin panicked or the host refused its answer, which leaves no effect; or the plugin
 /// returned an error, which is an answer.
 enum Failed {
@@ -831,8 +808,10 @@ unsafe extern "C" fn host_call(ctx: *mut c_void, request: Bytes, out: *mut Owned
         return abi::ERROR;
     }
     // SAFETY: `ctx` is the `Shared` this instance was created with, or null; `request` is valid for the call.
-    let (shared, request) = unsafe { (ctx.cast::<Shared>().as_ref(), request.as_slice()) };
+    let (shared, checked) = unsafe { (ctx.cast::<Shared>().as_ref(), request.checked()) };
+    let request = checked.as_deref().unwrap_or_default();
     let result = catch_unwind(AssertUnwindSafe(|| {
+        checked.as_ref().map_err(|error| format!("a bad host request: {error}"))?;
         let ctx = &shared.ok_or("no host context")?.ctx;
         let request: HostRequest = serde_json::from_slice(request)
             .map_err(|error| format!("unsupported host request (host ABI {ABI_MAJOR}.{HOST_MINOR}): {error}"))?;
@@ -866,26 +845,31 @@ unsafe fn mailbox<'a>(ctx: *mut c_void) -> Option<&'a Mailbox> {
 
 /// The host's side of [`HostApi::send`], on any thread. Never blocks.
 unsafe extern "C" fn host_send(ctx: *mut c_void, key: Bytes, message: Bytes) -> i32 {
-    // SAFETY: `ctx` is this instance's `Shared`; `key` and `message` are valid for the call.
+    // SAFETY: `ctx` is this instance's `Shared`; `key` and `message` are valid for the call. A descriptor `checked`
+    // refuses is not read, and sends nothing.
+    let (key, message) = unsafe { (key.checked(), message.checked()) };
+    let (Ok(key), Ok(message)) = (key, message) else { return abi::ERROR };
+    // SAFETY: as above.
     let sent = catch_unwind(AssertUnwindSafe(|| unsafe {
-        mailbox(ctx).map_or(abi::CLOSED, |mail| mail.put_json(key.as_slice(), message.as_slice()))
+        mailbox(ctx).map_or(abi::CLOSED, |mail| mail.put_json(key, message))
     }));
     let status = sent.unwrap_or(abi::ERROR);
-    // SAFETY: as above.
-    conformance::tap(Event::Send { key: unsafe { key.as_slice() }, message: unsafe { message.as_slice() }, status });
+    conformance::tap(Event::Send { key, message, status });
     status
 }
 
-/// The host's side of [`HostApi::report`], on any thread.
+/// The host's side of [`HostApi::report`], on any thread. Only the bytes the mailbox keeps of a report are read.
 unsafe extern "C" fn host_report(ctx: *mut c_void, message: Bytes) {
+    // SAFETY: as for `host_send`.
+    let Ok(message) = (unsafe { message.checked() }) else { return };
+    let kept = &message[..message.len().min(crate::mailbox::REPORT + 3)];
     // SAFETY: as for `host_send`.
     let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
         if let Some(mail) = mailbox(ctx) {
-            mail.panicked(String::from_utf8_lossy(message.as_slice()).into_owned());
+            mail.panicked(String::from_utf8_lossy(kept).into_owned());
         }
     }));
-    // SAFETY: as above.
-    conformance::tap(Event::Report { message: unsafe { message.as_slice() } });
+    conformance::tap(Event::Report { message: kept });
 }
 
 /// The host's side of [`HostApi::stopped`], on any thread.
@@ -923,9 +907,10 @@ unsafe extern "C" fn host_wake(ctx: *mut c_void) {
     conformance::tap(Event::Wake);
 }
 
+/// The host's side of [`HostApi::free`]: by the `ptr` and `cap` the host wrote, whatever `len` says.
 unsafe extern "C" fn host_free(owned: Owned) {
     // SAFETY: the host made `owned` with `Owned::from_vec`.
-    drop(unsafe { owned.into_vec() });
+    unsafe { owned.release() };
 }
 
 pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, String> {
