@@ -293,11 +293,7 @@ describe("Session.move", () => {
                           replacements: [
                             ...bindings,
                             ...(broken
-                              ? [
-                                  Config.node.replace(
-                                    Config.configured({ project: false, global: false, content: config }),
-                                  ),
-                                ]
+                              ? [Config.node.replace(Layer.effect(Config.Service, Effect.die("broken config")))]
                               : []),
                           ],
                         }),

@@ -5,17 +5,25 @@ import type { PromptHistoryComment, PromptHistoryEntry } from "../schema"
 
 export type { PromptHistoryComment, PromptHistoryEntry } from "../schema"
 
-export const MAX_HISTORY = 100
+// Attachments keep their bytes pinned for as long as history references them, so only the most
+// recent entries may carry them; older entries are kept only when they are attachment-free.
+const MAX_RECENT_HISTORY = 100
+
+const MAX_HISTORY = 200
 
 export type PromptHistoryStoredEntry = PromptHistoryEntry
 
 function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
-  return {
+  const result: SelectedLineRange = {
     start: selection.start,
     end: selection.end,
-    ...(selection.side ? { side: selection.side } : {}),
-    ...(selection.endSide ? { endSide: selection.endSide } : {}),
   }
+
+  if (selection.side) result.side = selection.side
+
+  if (selection.endSide) result.endSide = selection.endSide
+
+  return result
 }
 
 export function clonePromptHistoryComments(comments: PromptHistoryComment[]) {
@@ -29,7 +37,6 @@ export function prependHistoryEntry(
   entries: PromptHistoryStoredEntry[],
   prompt: Prompt,
   comments: PromptHistoryComment[] = [],
-  max = MAX_HISTORY,
 ) {
   const text = prompt
     .map((part) => ("content" in part ? part.content : ""))
@@ -50,7 +57,9 @@ export function prependHistoryEntry(
 
   if (last && isPromptEqual(last, entry)) return entries
 
-  return [entry, ...entries].slice(0, max)
+  return [entry, ...entries]
+    .filter((item, index) => index < MAX_RECENT_HISTORY || !item.prompt.some(isAttachment))
+    .slice(0, MAX_HISTORY)
 }
 
 // A send that failed puts its prompt back in the composer, so the entry recorded for it would
@@ -89,6 +98,8 @@ function isPromptEqual(entryA: PromptHistoryStoredEntry, entryB: PromptHistorySt
     if (partA.type !== partB.type) return false
 
     if (partA.type === "text" && partA.content !== (partB.type === "text" ? partB.content : "")) return false
+
+    if (partA.type === "session" && (partB.type !== "session" || partA.id !== partB.id)) return false
 
     if (partA.type === "file") {
       if (partA.path !== (partB.type === "file" ? partB.path : "")) return false

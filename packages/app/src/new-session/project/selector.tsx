@@ -1,64 +1,47 @@
-import {
-  createEffect,
-  createSignal,
-  For,
-  onCleanup,
-  Show,
-  splitProps,
-  type Accessor,
-  type ComponentProps,
-} from "solid-js"
-import { createStore } from "solid-js/store"
-import { Menu } from "@opencode/ui/menu"
+import { type Accessor, createMemo } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
-import {
-  displayName,
-  getProjectAvatarSource,
-  getProjectAvatarVariant,
-  ProjectAvatar,
-} from "@opencode/ui/project-avatar"
 import { useLanguage } from "@/runtime/i18n/language"
 import { pathKey } from "@/workspaces/path-key"
-import { handleDocumentSearchKeydown } from "@/shell/commands/search-keydown"
-import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
+
+/** A server listed in the location dialog; the current server gets no tag. */
+export type PromptServer = {
+  key: string
+  name: string
+  /** "This computer" beside the current server's name in the server picker. */
+  hint?: string
+  kind: "current" | "remote" | "plugin"
+  /** The plugin's short badge, e.g. "SSH". */
+  label?: string
+}
 
 export type PromptProject = {
   name?: string
   id?: string
   worktree: string
+  vcs?: string
   sandboxes?: string[]
+  worktrees?: { directory: string; strategy?: string }[]
   icon?: { color?: string; url?: string; override?: string }
-  server?: { key: string; name: string }
+  time?: { active: number }
+  /** This client has used the project on its server. */
+  used?: boolean
+  server?: PromptServer
 }
 
 export type PromptProjectControls = {
   available: PromptProject[]
+  /** The ready servers a project can be added to, when more than one server is listed. */
+  servers?: PromptServer[]
   directory: string
   projectID?: string
   server?: string
-  select: (worktree: string, server?: string) => void
+  /** Moves the draft to a project; `workspace` is "main", "create", or a worktree directory. */
+  select: (directory: string, server?: string, workspace?: string) => void
   add: (title: string, server?: string) => void
 }
 
-const actionPrefix = "action:"
-
-const projectPrefix = "project:"
-
-function projectKey(project: PromptProject) {
-  return `${projectPrefix}${encodeURIComponent(project.server?.key ?? "")}:${encodeURIComponent(project.worktree)}`
-}
-
-function actionKey(server?: string) {
-  return `${actionPrefix}${encodeURIComponent(server ?? "")}`
-}
-
-export function createPromptProjectController(input: {
-  controls: Accessor<PromptProjectControls>
-  onDone: () => void
-}) {
+export function createPromptProjectController(input: { controls: Accessor<PromptProjectControls> }) {
   const language = useLanguage()
-  const [store, setStore] = createStore({ open: false, search: "", active: "" })
-  let searchRef: HTMLInputElement | undefined
 
   const current = () => {
     const controls = input.controls()
@@ -73,424 +56,41 @@ export function createPromptProjectController(input: {
     )
   }
 
-  const selected = () => current() ?? input.controls().available[0]
-
-  const projects = () => {
-    const search = store.search.trim().toLowerCase()
-
-    if (!search) return input.controls().available
-
-    return input.controls().available.filter((project) => displayName(project).toLowerCase().includes(search))
-  }
-
-  const servers = () =>
+  // One list across servers: used projects first, then the rest, each by recent activity.
+  const projects = createMemo(() =>
     input
       .controls()
-      .available.map((project) => project.server)
-      .filter((server, index, all) => server && all.findIndex((item) => item?.key === server.key) === index)
-
-  const keys = () => {
-    if (servers().length <= 1) {
-      return [...projects().map(projectKey), actionKey(servers()[0]?.key)]
-    }
-
-    return [
-      ...servers().flatMap((server) =>
-        projects()
-          .filter((project) => project.server?.key === server!.key)
-          .map(projectKey),
+      .available.toSorted(
+        (a, b) => Number(!!b.used) - Number(!!a.used) || (b.time?.active ?? 0) - (a.time?.active ?? 0),
       ),
-      actionKey(),
-    ]
-  }
+  )
 
-  const initialActive = () => {
-    const selectedKey = selected() ? projectKey(selected()!) : undefined
-    const options = keys()
+  const selected = () => current() ?? projects()[0]
 
-    if (selectedKey && options.includes(selectedKey)) return selectedKey
-
-    return options[0] ?? ""
-  }
-
-  const close = () => {
-    setStore({ open: false, search: "", active: "" })
-    input.onDone()
-  }
-
-  const select = (project: PromptProject) => {
-    if (
-      pathKey(project.worktree) !== pathKey(current()?.worktree ?? "") ||
-      project.server?.key !== current()?.server?.key
-    ) {
-      input.controls().select(project.worktree, project.server?.key)
-    }
-
-    close()
-  }
-
-  const add = (server?: string) => {
-    setStore({ open: false, search: "", active: "" })
-    input.controls().add(language.t("command.project.open"), server)
-  }
-
-  const setSearch = (value: string) => {
-    const search = value.trim().toLowerCase()
-
-    const first = input
-      .controls()
-      .available.find((project) => !search || displayName(project).toLowerCase().includes(search))
-
-    setStore({
-      search: value,
-      active: first ? projectKey(first) : actionKey(servers().length > 1 ? undefined : servers()[0]?.key),
-    })
-  }
+  const matches = (project: PromptProject, other?: PromptProject) =>
+    !!other && pathKey(other.worktree) === pathKey(project.worktree) && other.server?.key === project.server?.key
 
   return {
     selected,
+    isSelected: (project: PromptProject) => matches(project, selected()),
     empty: () => input.controls().available.length === 0,
     projects,
-    servers,
-    projectKey,
-    actionKey,
-    open: () => store.open,
-    search: () => store.search,
-    active: () => store.active,
+    servers: () => input.controls().servers ?? [],
     labels: {
       add: () => language.t("session.new.project.add"),
-      clear: () => language.t("common.clear"),
       new: () => language.t("session.new.project.new"),
-      search: () => language.t("session.new.project.search"),
     },
-    add,
-    select,
-    setOpen(open: boolean) {
-      if (open) {
-        setStore({ open: true, active: initialActive() })
-        setTimeout(() => requestAnimationFrame(() => searchRef?.focus()))
-
-        return
-      }
-
-      setStore({ open: false, search: "", active: "" })
+    add(server?: string) {
+      input.controls().add(language.t("command.project.open"), server)
     },
-    setSearch,
-    clearSearch() {
-      setStore({ search: "", active: initialActive() })
-      setTimeout(() => searchRef?.focus())
-    },
-    setActive(key: string) {
-      setStore("active", key)
-    },
-    moveActive(delta: number) {
-      const options = keys()
-
-      if (options.length === 0) return
-      const index = options.indexOf(store.active)
-      const start = index === -1 ? 0 : index
-      setStore("active", options[(start + delta + options.length) % options.length])
-    },
-    activeProject() {
-      return store.active.startsWith(projectPrefix)
-        ? projects().find((project) => projectKey(project) === store.active)
-        : undefined
-    },
-    activeServer() {
-      return store.active.startsWith(actionPrefix)
-        ? decodeURIComponent(store.active.slice(actionPrefix.length)) || undefined
-        : undefined
-    },
-    activeAction() {
-      return store.active.startsWith(actionPrefix)
-    },
-    setSearchRef(el: HTMLInputElement) {
-      searchRef = el
-    },
-    focusSearch() {
-      setTimeout(() => requestAnimationFrame(() => searchRef?.focus()))
-    },
-    handleSearchKeydown(event: KeyboardEvent) {
-      return handleDocumentSearchKeydown(searchRef, event, store.search, setSearch)
+    select(project: PromptProject, workspace?: string) {
+      if (matches(project, current())) return
+      input.controls().select(project.worktree, project.server?.key, workspace)
     },
   }
 }
 
 export type PromptProjectController = ReturnType<typeof createPromptProjectController>
-
-export function PromptProjectSelector(props: {
-  controller: PromptProjectController
-  placement?: "bottom" | "bottom-start"
-}) {
-  const [triggerReady, setTriggerReady] = createSignal(false)
-  let contentRef: HTMLDivElement | undefined
-  const dismiss = createMenuDismissController(() => contentRef)
-  let triggerFrame: number | undefined
-
-  // Floating UI requires a connected anchor; route transitions can construct this trigger before adoption.
-  const setTriggerRef = (element: HTMLButtonElement) => {
-    const ready = () => {
-      if (!element.isConnected) {
-        triggerFrame = requestAnimationFrame(ready)
-
-        return
-      }
-
-      triggerFrame = undefined
-      setTriggerReady(true)
-    }
-
-    ready()
-  }
-
-  onCleanup(() => {
-    if (triggerFrame !== undefined) cancelAnimationFrame(triggerFrame)
-  })
-
-  const activeItem = () =>
-    props.controller.active()
-      ? contentRef?.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(props.controller.active())}"]`)
-      : undefined
-
-  const selectProject = (project: PromptProject) => {
-    dismiss.preventTriggerRestore()
-    props.controller.setOpen(false)
-    dismiss.afterClose(() => props.controller.select(project))
-  }
-
-  const selectAction = (server?: string) => {
-    dismiss.preventTriggerRestore()
-    props.controller.setOpen(false)
-    dismiss.afterClose(() => props.controller.add(server))
-  }
-
-  const selectActive = () => {
-    const project = props.controller.activeProject()
-
-    if (project) {
-      selectProject(project)
-
-      return
-    }
-
-    if (props.controller.activeAction() && props.controller.servers().length > 1) {
-      const item = activeItem()
-      item?.focus()
-      item?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }))
-
-      return
-    }
-
-    selectAction(props.controller.activeServer())
-  }
-
-  const moveActive = (delta: number) => {
-    props.controller.moveActive(delta)
-    queueMicrotask(() => activeItem()?.scrollIntoView({ block: "nearest" }))
-  }
-
-  const focusPreviousControl = () => {
-    const target = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    )
-      .filter((element) => !contentRef?.contains(element) && !element.hasAttribute("data-focus-trap"))
-      .findLast((element) => element.offsetParent !== null)
-
-    dismiss.preventTriggerRestore()
-    target?.focus()
-    queueMicrotask(() => {
-      if (props.controller.open()) props.controller.setOpen(false)
-    })
-  }
-
-  const selectedValue = () => {
-    const project = props.controller.selected()
-
-    return project ? props.controller.projectKey(project) : undefined
-  }
-
-  createEffect(() => {
-    if (!props.controller.open()) return
-    const handler = (event: KeyboardEvent) => props.controller.handleSearchKeydown(event)
-    document.addEventListener("keydown", handler, true)
-    onCleanup(() => document.removeEventListener("keydown", handler, true))
-  })
-
-  return (
-    <Menu
-      open={triggerReady() && props.controller.open()}
-      placement={props.placement ?? "bottom"}
-      gutter={4}
-      modal={false}
-      onOpenChange={(open) => {
-        if (open) dismiss.allowTriggerRestore()
-        props.controller.setOpen(open)
-      }}
-    >
-      <Menu.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
-      <Menu.Portal>
-        <Menu.Content
-          ref={contentRef}
-          id="prompt-project-menu"
-          class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none [&[data-closed]]:!animate-none"
-          onOpenAutoFocus={(event) => event.preventDefault()}
-          onPointerDownOutside={dismiss.preventTriggerRestore}
-          onFocusOutside={dismiss.preventTriggerRestore}
-          onCloseAutoFocus={dismiss.onCloseAutoFocus}
-        >
-          <div class="flex flex-col">
-            <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-1 text-v2-icon-icon-muted">
-              <Icon name="magnifying-glass" size="small" class="shrink-0" />
-              <input
-                ref={(el) => props.controller.setSearchRef(el)}
-                value={props.controller.search()}
-                placeholder={props.controller.labels.search()}
-                aria-autocomplete="list"
-                aria-controls="prompt-project-menu"
-                aria-activedescendant={props.controller.active() || undefined}
-                class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                onInput={(event) => props.controller.setSearch(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Tab") {
-                    event.preventDefault()
-                    event.stopPropagation()
-
-                    if (event.shiftKey) {
-                      focusPreviousControl()
-
-                      return
-                    }
-
-                    activeItem()?.focus()
-
-                    return
-                  }
-
-                  event.stopPropagation()
-
-                  if (event.key === "Escape") {
-                    event.preventDefault()
-                    props.controller.setOpen(false)
-
-                    return
-                  }
-
-                  if (event.altKey || event.metaKey) return
-
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault()
-                    moveActive(1)
-
-                    return
-                  }
-
-                  if (event.key === "ArrowUp") {
-                    event.preventDefault()
-                    moveActive(-1)
-
-                    return
-                  }
-
-                  if (event.key === "Enter" && !event.isComposing) {
-                    event.preventDefault()
-                    selectActive()
-                  }
-                }}
-              />
-              <Show when={props.controller.search().trim()}>
-                <button
-                  type="button"
-                  class="flex size-5 items-center justify-center rounded-sm bg-transparent text-v2-icon-icon-faint transition-colors hover:text-v2-icon-icon-base focus-visible:text-v2-icon-icon-base active:text-v2-icon-icon-base"
-                  onPointerDown={(event) => event.preventDefault()}
-                  onClick={() => props.controller.clearSearch()}
-                  aria-label={props.controller.labels.clear()}
-                >
-                  <Icon name="circle-xmark" />
-                </button>
-              </Show>
-            </div>
-            <div class="my-0.5 max-h-[224px] overflow-y-auto">
-              <Show
-                when={props.controller.servers().length > 1}
-                fallback={
-                  <Menu.RadioGroup value={selectedValue()}>
-                    <For each={props.controller.projects()}>
-                      {(project) => (
-                        <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
-                      )}
-                    </For>
-                  </Menu.RadioGroup>
-                }
-              >
-                <For
-                  each={props.controller
-                    .servers()
-                    .filter((server) =>
-                      props.controller.projects().some((project) => project.server?.key === server!.key),
-                    )}
-                >
-                  {(server) => (
-                    <div>
-                      <div class="flex h-7 select-none items-center pl-1.5 pr-3 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-faint">
-                        {server!.name}
-                      </div>
-                      <Menu.RadioGroup value={selectedValue()}>
-                        <For
-                          each={props.controller.projects().filter((project) => project.server?.key === server!.key)}
-                        >
-                          {(project) => (
-                            <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
-                          )}
-                        </For>
-                      </Menu.RadioGroup>
-                    </div>
-                  )}
-                </For>
-              </Show>
-            </div>
-          </div>
-          <div class="-mx-0.5 h-px bg-v2-border-border-muted" />
-          <div class="flex flex-col pt-0.5">
-            <Show
-              when={props.controller.servers().length > 1}
-              fallback={
-                <ProjectAction
-                  server={props.controller.servers()[0]?.key}
-                  controller={props.controller}
-                  onSelect={selectAction}
-                />
-              }
-            >
-              <Menu.Sub>
-                <Menu.SubTrigger
-                  id={props.controller.actionKey()}
-                  data-option-key={props.controller.actionKey()}
-                  class={projectActionClass}
-                  classList={{
-                    "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === props.controller.actionKey(),
-                  }}
-                  onMouseEnter={() => props.controller.setActive(props.controller.actionKey())}
-                >
-                  <Icon name="plus" size="small" />
-                  <span class="min-w-0 flex-1 truncate leading-5">{props.controller.labels.add()}</span>
-                </Menu.SubTrigger>
-                <Menu.Portal>
-                  <Menu.SubContent class="max-h-[224px] min-w-[180px] overflow-y-auto rounded-md border-0 bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none">
-                    <For each={props.controller.servers()}>
-                      {(server) => <ServerAction server={server!} onSelect={selectAction} />}
-                    </For>
-                  </Menu.SubContent>
-                </Menu.Portal>
-              </Menu.Sub>
-            </Show>
-          </div>
-        </Menu.Content>
-      </Menu.Portal>
-    </Menu>
-  )
-}
 
 export function PromptProjectAddButton(props: { controller: PromptProjectController }) {
   return (
@@ -504,120 +104,5 @@ export function PromptProjectAddButton(props: { controller: PromptProjectControl
       <span class="min-w-0 truncate leading-5">{props.controller.labels.new()}</span>
       <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
     </button>
-  )
-}
-
-function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptProjectController }) {
-  const [local, rest] = splitProps(props, ["controller", "class", "classList", "onClick", "onKeyDown"])
-  const project = () => local.controller.selected()
-
-  return (
-    <button
-      {...rest}
-      data-action="prompt-project"
-      type="button"
-      class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-      classList={{
-        ...local.classList,
-        "hover:bg-v2-overlay-simple-overlay-hover": !local.controller.open(),
-        "bg-v2-overlay-simple-overlay-pressed": local.controller.open(),
-        "text-v2-text-text-muted": local.controller.open(),
-      }}
-      onClick={local.onClick ?? (() => local.controller.setOpen(true))}
-      onKeyDown={(event) => {
-        if (!local.controller.open() && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-          event.preventDefault()
-          event.stopPropagation()
-
-          return
-        }
-
-        if (typeof local.onKeyDown === "function") local.onKeyDown(event)
-      }}
-    >
-      <Show
-        when={project()}
-        fallback={<Icon name="folder-add-left" size="small" class="shrink-0 text-v2-icon-icon-muted" />}
-      >
-        {(item) => (
-          <ProjectAvatar
-            fallback={displayName(item())}
-            src={getProjectAvatarSource(item().id, item().icon)}
-            variant={getProjectAvatarVariant(item().icon?.color)}
-          />
-        )}
-      </Show>
-      <span class="min-w-0 truncate leading-5">
-        {project() ? displayName(project()!) : local.controller.labels.new()}
-      </span>
-      <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-    </button>
-  )
-}
-
-function ProjectItem(props: {
-  project: PromptProject
-  controller: PromptProjectController
-  onSelect: (project: PromptProject) => void
-}) {
-  const key = () => props.controller.projectKey(props.project)
-
-  return (
-    <Menu.RadioItem
-      id={key()}
-      value={key()}
-      data-option-key={key()}
-      class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
-      classList={{ "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === key() }}
-      closeOnSelect
-      onMouseEnter={() => {
-        props.controller.setActive(key())
-        props.controller.focusSearch()
-      }}
-      onSelect={() => props.onSelect(props.project)}
-    >
-      <ProjectAvatar
-        fallback={displayName(props.project)}
-        src={getProjectAvatarSource(props.project.id, props.project.icon)}
-        variant={getProjectAvatarVariant(props.project.icon?.color)}
-      />
-      <span class="min-w-0 truncate leading-5">{displayName(props.project)}</span>
-    </Menu.RadioItem>
-  )
-}
-
-const projectActionClass =
-  "h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
-
-function ProjectAction(props: {
-  server?: string
-  controller: PromptProjectController
-  onSelect: (server?: string) => void
-}) {
-  const key = () => props.controller.actionKey(props.server)
-
-  return (
-    <Menu.Item
-      id={key()}
-      data-option-key={key()}
-      class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
-      classList={{ "!bg-v2-overlay-simple-overlay-hover": props.controller.active() === key() }}
-      onMouseEnter={() => {
-        props.controller.setActive(key())
-        props.controller.focusSearch()
-      }}
-      onSelect={() => props.onSelect(props.server)}
-    >
-      <Icon name="plus" size="small" />
-      <span class="min-w-0 truncate leading-5">{props.controller.labels.add()}</span>
-    </Menu.Item>
-  )
-}
-
-function ServerAction(props: { server: { key: string; name: string }; onSelect: (server: string) => void }) {
-  return (
-    <Menu.Item class={projectActionClass} onSelect={() => props.onSelect(props.server.key)}>
-      <span class="min-w-0 flex-1 truncate leading-5">{props.server.name}</span>
-    </Menu.Item>
   )
 }

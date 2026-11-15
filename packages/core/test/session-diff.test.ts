@@ -161,6 +161,10 @@ describe("Session.diff", () => {
             _tag: "Session.TurnRangeError",
             field: "from",
           })
+          expect(yield* diff({ from: first, to: firstStep }).pipe(Effect.flip)).toMatchObject({
+            _tag: "Session.TurnRangeError",
+            field: "to",
+          })
           expect(yield* diff({ from: SessionMessage.ID.create() }).pipe(Effect.flip)).toMatchObject({
             _tag: "Session.MessageNotFoundError",
           })
@@ -191,6 +195,10 @@ describe("Session.diff", () => {
           expect((yield* sessions.diff({ sessionID: forked.id, context: 0 })).map(summarize)).toEqual([
             ["third.txt", "added", 1, 0],
           ])
+          // Messages are scoped to their own Session.
+          expect(yield* sessions.diff({ sessionID: forked.id, from: first }).pipe(Effect.flip)).toMatchObject({
+            _tag: "Session.MessageNotFoundError",
+          })
         }).pipe(Effect.provide(LocationServiceMap.Service.get(created.location)))
       }),
     // Real Location/plugin startup and Git snapshots can exceed five seconds under CI load.

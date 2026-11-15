@@ -1,5 +1,6 @@
 export * as Variant from "./variant.js"
 
+import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 
@@ -7,6 +8,18 @@ export type Support =
   | { readonly type: "effort"; readonly values?: readonly string[] }
   | { readonly type: "toggle" }
   | { readonly type: "budget_tokens"; readonly min?: number; readonly max?: number }
+
+/** Reasoning controls in models.dev v2's shape, where `default` is the provider default rather than a variant. */
+export function supports(reasoning: ConfigProvider.Reasoning): readonly Support[] {
+  if (!reasoning.supported) return []
+  return [
+    ...(reasoning.toggle ? [{ type: "toggle" as const }] : []),
+    ...(reasoning.effort
+      ? [{ type: "effort" as const, values: reasoning.effort.filter((value) => value !== "default") }]
+      : []),
+    ...(reasoning.budget ? [{ type: "budget_tokens" as const, ...reasoning.budget }] : []),
+  ]
+}
 
 type Variants = Model.Info["variants"]
 type Overlay = Omit<Variants[number], "id">
@@ -597,7 +610,6 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/azure/responses": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle/responses": openaiResponses,
-  "@opencode/ai/providers/amazon-bedrock-mantle": openaiResponses,
   "@opencode/ai/providers/alibaba/responses": openaiResponses,
   "@opencode/ai/providers/meta": openaiResponses,
   "@opencode/ai/providers/meta/responses": openaiResponses,
@@ -608,15 +620,16 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openai-compatible/responses": openResponses,
   "@opencode/ai/providers/openai-compatible-responses": openResponses,
   "@opencode/ai/providers/google-vertex/responses": openResponses,
-  "@opencode/ai/providers/google-vertex-responses": openResponses,
   "@opencode/ai/providers/xai": openResponses,
+  "@opencode/ai/providers/digitalocean/responses": openResponses,
+  "@opencode/ai/providers/openrouter/responses": openResponses,
+  "@opencode/ai/providers/venice/responses": openResponses,
 
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
   "@opencode/ai/providers/openai/chat": openaiChat,
   "@opencode/ai/providers/azure/chat": openaiChat,
   "@opencode/ai/providers/amazon-bedrock/mantle/chat": openaiChat,
   "@opencode/ai/providers/google-vertex/chat": vertexChat,
-  "@opencode/ai/providers/google-vertex-chat": vertexChat,
   "@opencode/ai/providers/alibaba": alibabaChat,
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
@@ -632,7 +645,6 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/minimax/chat": openaiChat,
   "@opencode/ai/providers/mistral": openaiChat,
   "@opencode/ai/providers/google-vertex/mistral": openaiChat,
-  "@opencode/ai/providers/google-vertex-mistral": openaiChat,
   "@opencode/ai/providers/moonshot": moonshotChat,
   "@opencode/ai/providers/moonshot/chat": moonshotChat,
   "@opencode/ai/providers/togetherai": openaiChat,
@@ -645,6 +657,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/anthropic": anthropicMessages,
   "@opencode/ai/providers/anthropic-compatible": anthropicMessages,
   "@opencode/ai/providers/amazon-bedrock/mantle/messages": anthropicMessages,
+  "@opencode/ai/providers/azure/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex-messages": anthropicMessages,
   "@opencode/ai/providers/alibaba/messages": alibabaMessages,
@@ -657,9 +670,10 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google": gemini,
   "@opencode/ai/providers/google-vertex": gemini,
   "@opencode/ai/providers/google-vertex/gemini": gemini,
+  "@opencode/ai/providers/google/images": gemini,
+  "@opencode/ai/providers/google-vertex/images": gemini,
   "@opencode/ai/providers/google/interactions": googleInteractions,
   "@opencode/ai/providers/google-vertex/interactions": googleInteractions,
-  "@opencode/ai/providers/google-vertex-interactions": googleInteractions,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
   "@opencode/ai/providers/cohere": cohere,

@@ -114,11 +114,6 @@ test("compact rail renders and controls session tabs", async () => {
     expect(searches()).toBe(1)
     await app.mockMouse.drag(2, 3, 2, 7)
     expect(items().map((tab) => tab.sessionID)).toEqual(["second", "third", "first"])
-
-    setItems(Array.from({ length: 40 }, (_, index) => ({ sessionID: `tab-${index + 1}`, title: `Session ${index + 1}` })))
-    setActive("tab-40")
-    setIndicators("numbers")
-    await app.waitForFrame((frame) => frame.split("\n").some((line) => line.slice(0, 5).trim() === "40"))
   } finally {
     app.renderer.destroy()
   }

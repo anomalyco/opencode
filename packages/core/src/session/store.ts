@@ -20,6 +20,7 @@ const ListInputBase = {
   limit: PositiveInt.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
   parentID: Schema.NullOr(Session.ID).pipe(Schema.optional),
+  archived: Schema.Boolean.pipe(Schema.optional),
   anchor: Session.ListAnchor.pipe(Schema.optional),
 }
 
@@ -55,12 +56,26 @@ export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Session.Info[]>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
+  /**
+   * The newest completed, error-free assistant message above the sequence
+   * bound. Reads newest-first in pages so a long run of incomplete steps does
+   * not decode the whole history.
+   */
+  readonly lastAssistantAfter: (input: {
+    readonly sessionID: Session.ID
+    readonly afterSeq?: number
+  }) => Effect.Effect<SessionMessage.Assistant | undefined, MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
+  /** {@link Interface.messages} for clients that fetch media themselves: files stored in `blob` stay `media:` refs. */
+  readonly messagesWithRefs: (input: MessagesInput) => Effect.Effect<SessionMessage.MediaInfo[], MessageDecodeError>
+  /** {@link Interface.message} for clients that fetch media themselves. */
+  readonly messageWithRefs: (
+    messageID: SessionMessage.ID,
+  ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.MediaInfo } | undefined>
   /**
-   * Top-level Sessions holding an execution claim. Recoverable background
-   * children are resumed separately through their durable Job records.
+   * Sessions holding an execution claim, including directly driven children.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
   /**
@@ -73,10 +88,9 @@ export interface Interface {
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
-   * Clears orphaned child claims except children owned by recoverable
-   * background subagent jobs.
+   * Release abandoned claims when the child's parent was deleted.
    */
-  readonly releaseChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<void>
+  readonly releaseOrphanedChildClaims: () => Effect.Effect<void>
   /**
    * Durably counts one more resume of an orphaned claim, returning the new
    * total — or undefined when the Session no longer exists.
@@ -90,6 +104,45 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
+
+    /** One page of a session's message rows, oldest first within the page when paging backwards. */
+    const messageRows = Effect.fnUntraced(function* (input: MessagesInput) {
+      const direction = input.cursor?.direction ?? "next"
+      const requestedOrder = input.order ?? "desc"
+      const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
+      const anchor = input.cursor
+        ? yield* db
+            .select({ seq: SessionMessageTable.seq })
+            .from(SessionMessageTable)
+            .where(
+              and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)),
+            )
+            .get()
+            .pipe(Effect.orDie)
+        : undefined
+      if (input.cursor && !anchor) return []
+      const boundary = anchor
+        ? order === "asc"
+          ? gt(SessionMessageTable.seq, anchor.seq)
+          : lt(SessionMessageTable.seq, anchor.seq)
+        : undefined
+      const query = db
+        .select()
+        .from(SessionMessageTable)
+        .where(
+          and(
+            eq(SessionMessageTable.session_id, input.sessionID),
+            boundary,
+            input.type === undefined ? undefined : eq(SessionMessageTable.type, input.type),
+          ),
+        )
+        .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
+      const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(Effect.orDie)
+      return direction === "previous" ? rows.toReversed() : rows
+    })
+
+    const messageRow = (messageID: SessionMessage.ID) =>
+      db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, messageID)).get().pipe(Effect.orDie)
 
     return Service.of({
       get: Effect.fnUntraced(function* (sessionID) {
@@ -111,6 +164,8 @@ const layer = Layer.effect(
           conditions.push(
             input.parentID === null ? isNull(SessionTable.parent_id) : eq(SessionTable.parent_id, input.parentID),
           )
+        if (input.archived !== undefined)
+          conditions.push(input.archived ? isNotNull(SessionTable.time_archived) : isNull(SessionTable.time_archived))
         if (input.anchor) {
           conditions.push(
             order === "asc"
@@ -138,64 +193,55 @@ const layer = Layer.effect(
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
       messages: Effect.fn("SessionStore.messages")(function* (input) {
-        const direction = input.cursor?.direction ?? "next"
-        const requestedOrder = input.order ?? "desc"
-        const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const anchor = input.cursor
-          ? yield* db
-              .select({ seq: SessionMessageTable.seq })
-              .from(SessionMessageTable)
-              .where(
-                and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)),
-              )
-              .get()
-              .pipe(Effect.orDie)
-          : undefined
-        if (input.cursor && !anchor) return []
-        const boundary = anchor
-          ? order === "asc"
-            ? gt(SessionMessageTable.seq, anchor.seq)
-            : lt(SessionMessageTable.seq, anchor.seq)
-          : undefined
-        const query = db
-          .select()
-          .from(SessionMessageTable)
-          .where(
-            and(
-              eq(SessionMessageTable.session_id, input.sessionID),
-              boundary,
-              input.type === undefined ? undefined : eq(SessionMessageTable.type, input.type),
-            ),
-          )
-          .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
-        return yield* Effect.forEach(
-          direction === "previous" ? rows.toReversed() : rows,
-          SessionHistory.decodeMessageRow,
-        )
+        return yield* SessionHistory.decodeMessageRows(db, yield* messageRows(input))
+      }),
+      messagesWithRefs: Effect.fn("SessionStore.messagesWithRefs")(function* (input) {
+        return yield* SessionHistory.decodeMessageRowsWithRefs(db, yield* messageRows(input))
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
+      lastAssistantAfter: Effect.fn("SessionStore.lastAssistantAfter")(function* (input) {
+        let cursorSeq: number | undefined
+        while (true) {
+          const rows = yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(
+              and(
+                eq(SessionMessageTable.session_id, input.sessionID),
+                eq(SessionMessageTable.type, "assistant"),
+                input.afterSeq === undefined ? undefined : gt(SessionMessageTable.seq, input.afterSeq),
+                cursorSeq === undefined ? undefined : lt(SessionMessageTable.seq, cursorSeq),
+              ),
+            )
+            .orderBy(desc(SessionMessageTable.seq))
+            .limit(20)
+            .all()
+            .pipe(Effect.orDie)
+          for (const message of yield* SessionHistory.decodeMessageRows(db, rows)) {
+            if (message.type === "assistant" && message.time.completed !== undefined && message.error === undefined)
+              return message
+          }
+          if (rows.length < 20) return undefined
+          cursorSeq = rows[rows.length - 1]!.seq
+        }
+      }),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
-        const row = yield* db
-          .select()
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, messageID))
-          .get()
-          .pipe(Effect.orDie)
-        return row
-          ? {
-              sessionID: Session.ID.make(row.session_id),
-              message: yield* SessionHistory.decodeMessageRow(row).pipe(Effect.orDie),
-            }
-          : undefined
+        const row = yield* messageRow(messageID)
+        if (!row) return undefined
+        const [message] = yield* SessionHistory.decodeMessageRows(db, [row]).pipe(Effect.orDie)
+        return message && { sessionID: row.session_id, message }
+      }),
+      messageWithRefs: Effect.fn("SessionStore.messageWithRefs")(function* (messageID) {
+        const row = yield* messageRow(messageID)
+        if (!row) return undefined
+        const [message] = yield* SessionHistory.decodeMessageRowsWithRefs(db, [row]).pipe(Effect.orDie)
+        return message && { sessionID: row.session_id, message }
       }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
+          .where(isNotNull(SessionTable.time_suspended))
           .all()
           .pipe(
             Effect.orDie,
@@ -222,15 +268,14 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }),
-      releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
+      releaseOrphanedChildClaims: Effect.fn("SessionStore.releaseOrphanedChildClaims")(() =>
         db
           .update(SessionTable)
           .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
           .where(
             and(
               isNotNull(SessionTable.time_suspended),
-              isNotNull(SessionTable.parent_id),
-              recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
+              notInArray(SessionTable.parent_id, db.select({ id: SessionTable.id }).from(SessionTable)),
             ),
           )
           .run()

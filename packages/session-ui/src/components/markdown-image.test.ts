@@ -1,5 +1,6 @@
-import { expect, test } from "bun:test"
-import { localImagePath, localLinkPath } from "./markdown-image"
+import { GlobalRegistrator } from "@happy-dom/global-registrator"
+import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from "bun:test"
+import { createMarkdownImages, localImagePath, localLinkPath } from "./markdown-image"
 
 test.each([
   ["./out/report.html", "./out/report.html"],
@@ -57,4 +58,51 @@ test.each([
   "",
 ])("does not read non-local or invalid source %s", (source) => {
   expect(localImagePath(source)).toBeUndefined()
+})
+
+describe("createMarkdownImages", () => {
+  // Happy DOM's fetch cannot read `blob:` URLs; Bun's can, and fails once the URL is revoked.
+  const nativeFetch = fetch
+
+  // Lets the read's promise chain settle; fake timers do not drive microtasks.
+  const settle = (ticks = 10): Promise<void> =>
+    ticks === 0 ? Promise.resolve() : Promise.resolve().then(() => settle(ticks - 1))
+
+  beforeAll(() => GlobalRegistrator.register())
+
+  afterAll(() => GlobalRegistrator.unregister())
+
+  afterEach(() => jest.useRealTimers())
+
+  test("retries a failed read and shows the image without another update", async () => {
+    jest.useFakeTimers()
+    const reads: string[] = []
+
+    const images = createMarkdownImages(async (path) => {
+      reads.push(path)
+
+      if (reads.length === 1) throw new Error("not written yet")
+
+      return new Blob(["png"], { type: "image/png" })
+    })
+
+    const root = document.createElement("div")
+    root.innerHTML = '<img data-local-image="./out/chart.png" alt="chart">'
+    document.body.replaceChildren(root)
+    const image = root.querySelector("img")!
+
+    images.update(root)
+    await settle()
+    expect(image.getAttribute("src")).toBeNull()
+
+    jest.advanceTimersToNextTimer()
+    await settle()
+    const url = image.getAttribute("src")
+    expect(reads).toEqual(["./out/chart.png", "./out/chart.png"])
+    expect(url).toStartWith("blob:")
+    expect(await nativeFetch(url!).then((response) => response.text())).toBe("png")
+
+    images.dispose()
+    await expect(nativeFetch(url!)).rejects.toThrow()
+  })
 })

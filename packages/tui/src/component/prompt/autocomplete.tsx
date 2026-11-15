@@ -1,25 +1,41 @@
-import type { BoxRenderable, TextareaRenderable, ScrollBoxRenderable } from "@opentui/core"
+import {
+  measureEditText,
+  type RGBA,
+  type BoxRenderable,
+  type TextareaRenderable,
+  type ScrollBoxRenderable,
+} from "@opentui/core"
 import { pathToFileURL } from "node:url"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { firstBy } from "remeda"
-import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
+import {
+  createMemo,
+  createResource,
+  createEffect,
+  onMount,
+  onCleanup,
+  Index,
+  Show,
+  createSignal,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useEditorContext } from "../../context/editor"
 import { useClient } from "../../context/client"
 import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
-import { useConfig } from "../../config"
+import { useConfig, useNewDesigns } from "../../config"
 import { useLocation } from "../../context/location"
 import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
-import { useTerminalDimensions } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
 import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
-import { displayCharAt, mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
+import { mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode/client"
 import { Skill } from "@opencode/schema/skill"
 import { stringWidth } from "../../util/string-width"
@@ -73,6 +89,7 @@ export function Autocomplete(props: {
   promptPartTypeId: () => number
 }) {
   const editor = useEditorContext()
+  const renderer = useRenderer()
   const client = useClient()
   const data = useData()
   const keymap = Keymap.use()
@@ -81,6 +98,7 @@ export function Autocomplete(props: {
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const config = useConfig().data
+  const newDesigns = useNewDesigns()
   const paths = useTuiPaths()
   const location = useLocation()
   const [store, setStore] = createStore({
@@ -161,8 +179,7 @@ export function Autocomplete(props: {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
 
-    const charAfterCursor = displayCharAt(props.value, currentCursorOffset)
-    const needsSpace = charAfterCursor !== " "
+    const needsSpace = input.getTextRange(currentCursorOffset, currentCursorOffset + 1) !== " "
     const prefix = "@"
     const append = prefix + text + (needsSpace ? " " : "")
 
@@ -176,7 +193,7 @@ export function Autocomplete(props: {
 
     const virtualText = prefix + text
     const extmarkStart = store.index
-    const extmarkEnd = extmarkStart + stringWidth(virtualText)
+    const extmarkEnd = extmarkStart + measureEditText(virtualText, { widthMethod: renderer.widthMethod })
 
     const styleId =
       part.type === "file" ? props.fileStyleId : part.type === "skill" ? props.skillStyleId : props.agentStyleId
@@ -468,7 +485,7 @@ export function Autocomplete(props: {
     const cursor = props.input().logicalCursor
     props.input().deleteRange(0, 0, cursor.row, cursor.col)
     props.input().insertText(newText)
-    props.input().cursorOffset = stringWidth(newText)
+    props.input().cursorOffset = measureEditText(newText, { widthMethod: renderer.widthMethod })
   }
 
   const commands = createMemo((): AutocompleteOption[] => {
@@ -780,8 +797,15 @@ export function Autocomplete(props: {
       onInput(value) {
         if (dismissedValue() === value) return
         setDismissedValue(undefined)
-        const offset = props.input().cursorOffset
-        const argument = slashArgumentAutocomplete(value, offset, keymapCommands(), props.argumentAutocomplete)
+        const input = props.input()
+        const offset = input.cursorOffset
+        const beforeCursor = input.getTextRange(0, offset)
+        const argument = slashArgumentAutocomplete(
+          beforeCursor,
+          renderer.widthMethod,
+          keymapCommands(),
+          props.argumentAutocomplete,
+        )
         if (argument?.type === "directory") {
           show("directory", argument.index)
           return
@@ -802,7 +826,7 @@ export function Autocomplete(props: {
         // Check if autocomplete should reopen (e.g., after backspace deleted a space)
         if (offset === 0) return
 
-        const slash = slashTriggerIndex(value, offset)
+        const slash = slashTriggerIndex(beforeCursor, renderer.widthMethod)
         if (slash === 0) {
           show("command")
           setStore("index", slash)
@@ -810,7 +834,7 @@ export function Autocomplete(props: {
         }
 
         // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
-        const idx = mentionTriggerIndex(value, offset)
+        const idx = mentionTriggerIndex(beforeCursor, renderer.widthMethod)
         if (idx !== undefined) {
           show("reference")
           setStore("index", idx)
@@ -842,6 +866,8 @@ export function Autocomplete(props: {
     return "No matching files, agents, or references"
   })
   const emptyError = createMemo(() => store.visible === "reference" && !files.loading && visibleFiles().failed)
+  // The scrollbox paints this under the classic design; new designs paint it per row.
+  const rowBackground = () => (newDesigns() ? theme.background.raised.high : undefined)
   const labels = {
     skill: "skill",
     agent: "agent",
@@ -857,6 +883,8 @@ export function Autocomplete(props: {
       width={position().width}
       zIndex={100}
       {...SplitBorder}
+      // Under new designs each row draws its own left rail so the selected row can show the selection bar.
+      border={newDesigns() ? ["right"] : SplitBorder.border}
       borderColor={theme.border.base}
     >
       <scrollbox
@@ -865,7 +893,8 @@ export function Autocomplete(props: {
           scroll = r
           scroll.verticalScrollBar.on("change", syncSelectionWindow)
         }}
-        backgroundColor={theme.background.raised.high}
+        // Under new designs rows paint the background themselves so the rail cell stays transparent like the border.
+        backgroundColor={newDesigns() ? undefined : theme.background.raised.high}
         height={height()}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
@@ -873,9 +902,22 @@ export function Autocomplete(props: {
         <Index
           each={options()}
           fallback={
-            <box paddingLeft={1} paddingRight={1}>
-              <text fg={emptyError() ? theme.text.feedback.error.base : theme.text.muted}>{emptyMessage()}</text>
-            </box>
+            <AutocompleteRail enabled={newDesigns()}>
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                flexGrow={newDesigns() ? 1 : undefined}
+                backgroundColor={rowBackground()}
+              >
+                {/* Under new designs the 1-row popup keeps the message on one line, so it never scrolls past the rail. */}
+                <text
+                  fg={emptyError() ? theme.text.feedback.error.base : theme.text.muted}
+                  wrapMode={newDesigns() ? "none" : undefined}
+                >
+                  {newDesigns() ? Locale.truncate(emptyMessage(), Math.max(1, position().width - 4)) : emptyMessage()}
+                </text>
+              </box>
+            </AutocompleteRail>
           }
         >
           {(option, index) => {
@@ -893,61 +935,89 @@ export function Autocomplete(props: {
               return action !== undefined && action.id === confirming()
             }
             return (
-              <box
-                paddingLeft={1}
-                paddingRight={1}
-                backgroundColor={
+              <AutocompleteRail
+                enabled={newDesigns()}
+                color={
                   confirmingAction()
-                    ? theme.background.action.destructive.focused
+                    ? theme.text.feedback.error.base
                     : index === store.selected
-                      ? theme.background.action.primary.focused
+                      ? theme.text.formfield.focused
                       : undefined
                 }
-                flexDirection="row"
-                onMouseMove={() => moveTo(index)}
-                onMouseDown={() => moveTo(index)}
-                onMouseUp={() => select()}
               >
-                <text
-                  fg={
+                <box
+                  paddingLeft={1}
+                  paddingRight={1}
+                  flexGrow={newDesigns() ? 1 : undefined}
+                  backgroundColor={
                     confirmingAction()
-                      ? theme.text.action.destructive.focused
+                      ? theme.background.action.destructive.focused
                       : index === store.selected
-                        ? theme.text.action.primary.focused
-                        : theme.text.base
+                        ? theme.background.action.primary.focused
+                        : rowBackground()
                   }
-                  flexShrink={0}
-                  wrapMode="none"
+                  flexDirection="row"
+                  onMouseMove={() => moveTo(index)}
+                  onMouseDown={() => moveTo(index)}
+                  onMouseUp={() => select()}
                 >
-                  {Locale.truncateMiddle(
-                    confirmingAction() ? (destructive()?.confirm ?? "") : option().display,
-                    contentWidth(),
-                  )}
-                </text>
-                <Show when={!confirmingAction() && option().description}>
                   <text
-                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.muted}
-                    wrapMode="none"
-                    flexShrink={1}
-                    minWidth={0}
-                  >
-                    {" " + option().description?.replace(/\s+/g, " ").trim()}
-                  </text>
-                </Show>
-                <Show when={!confirmingAction() && label()}>
-                  <box flexGrow={1} minWidth={2} />
-                  <text
+                    fg={
+                      confirmingAction()
+                        ? theme.text.action.destructive.focused
+                        : index === store.selected
+                          ? theme.text.action.primary.focused
+                          : theme.text.base
+                    }
                     flexShrink={0}
-                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.muted}
+                    wrapMode="none"
                   >
-                    {label()}
+                    {Locale.truncateMiddle(
+                      confirmingAction() ? (destructive()?.confirm ?? "") : option().display,
+                      contentWidth(),
+                    )}
                   </text>
-                </Show>
-              </box>
+                  <Show when={!confirmingAction() && option().description}>
+                    <text
+                      fg={index === store.selected ? theme.text.action.primary.focused : theme.text.muted}
+                      wrapMode="none"
+                      flexShrink={1}
+                      minWidth={0}
+                    >
+                      {" " + option().description?.replace(/\s+/g, " ").trim()}
+                    </text>
+                  </Show>
+                  <Show when={!confirmingAction() && label()}>
+                    <box flexGrow={1} minWidth={2} />
+                    <text
+                      flexShrink={0}
+                      fg={index === store.selected ? theme.text.action.primary.focused : theme.text.muted}
+                    >
+                      {label()}
+                    </text>
+                  </Show>
+                </box>
+              </AutocompleteRail>
             )
           }}
         </Index>
       </scrollbox>
     </box>
+  )
+}
+
+// Under new designs the popup's left border is drawn per row, so the selected row's segment
+// becomes the selection bar, matching dialog rows. `color` overrides the border color.
+function AutocompleteRail(props: { enabled: boolean; color?: RGBA; children: JSX.Element }) {
+  const theme = useTheme()
+  return (
+    <Show when={props.enabled} fallback={props.children}>
+      <box flexDirection="row">
+        <text width={1} flexShrink={0} fg={props.color ?? theme.border.base}>
+          ┃
+        </text>
+        {props.children}
+      </box>
+    </Show>
   )
 }

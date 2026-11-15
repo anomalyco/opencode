@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, SystemPart } from "../../src/index.js"
+import { ai, LLMEvent, SystemPart } from "../../src/effect.js"
 import { Cohere } from "../../src/providers/cohere.js"
 import { LLMClient } from "../../src/route.js"
 import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios.js"
@@ -14,10 +14,10 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: cohere.model("command-a-03-2025"),
           prompt: "Reply exactly: OK",
-          generation: { maxTokens: 64 },
+          maxTokens: 64,
         }),
       )
       expect(response.text.trim()).toMatch(/^OK\.?$/)
@@ -34,11 +34,11 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: cohere.model("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { thinking: { type: "enabled", tokenBudget: 128 } },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
         }),
       )
       expect(response.reasoning.length).toBeGreaterThan(0)
@@ -54,22 +54,18 @@ recorded.effect(
   "continues a native tool call",
   () =>
     Effect.gen(function* () {
-      const events = yield* runWeatherToolLoop(
-        LLMRequest.update(
-          goldenWeatherToolLoopRequest({
-            id: "cohere-tool-loop",
-            model: cohere.model("command-a-plus-05-2026"),
-            maxTokens: 2048,
-            temperature: false,
-          }),
-          {
-            system: [
-              SystemPart.make("Use the get_weather tool exactly once."),
-              SystemPart.make("After the tool result, reply exactly: Paris is sunny."),
-            ],
-          },
-        ),
-      )
+      const events = yield* runWeatherToolLoop({
+        ...goldenWeatherToolLoopRequest({
+          id: "cohere-tool-loop",
+          model: cohere.model("command-a-plus-05-2026"),
+          maxTokens: 2048,
+          temperature: false,
+        }),
+        system: [
+          SystemPart.make("Use the get_weather tool exactly once."),
+          SystemPart.make("After the tool result, reply exactly: Paris is sunny."),
+        ],
+      })
       expectWeatherToolLoop(events)
       expect(events.some(LLMEvent.is.toolInputDelta)).toBe(true)
     }),
@@ -81,11 +77,11 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: cohere.chat("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { reasoningEffort: "high" },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
         }),
       )
       expect(response.reasoning.length).toBeGreaterThan(0)

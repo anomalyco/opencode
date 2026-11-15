@@ -9,6 +9,7 @@ export function createSimpleContext<T, Props extends Record<string, any>>(
   const ctx = createContext<T>()
 
   return {
+    context: ctx,
     provider: (props: ParentProps<Props>) => {
       const init = input.init(props)
       const gate = input.gate ?? true
@@ -19,10 +20,10 @@ export function createSimpleContext<T, Props extends Record<string, any>>(
 
       // Access init.ready inside the memo to make it reactive for getter properties
       const isReady = createMemo(() => {
-        // @ts-expect-error
-        const ready = init.ready as Accessor<boolean> | boolean | undefined
+        // SAFETY: contexts whose value has `ready` must pass `gate`, and their `ready` is a boolean or its accessor.
+        const ready = (init as { ready?: Accessor<boolean> | boolean }).ready
 
-        return ready === undefined || (typeof ready === "function" ? ready() : ready)
+        return ready === undefined || (ready instanceof Function ? ready() : ready)
       })
 
       return (

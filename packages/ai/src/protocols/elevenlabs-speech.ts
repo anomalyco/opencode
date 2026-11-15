@@ -3,7 +3,7 @@ import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
+import { SpeechModel, type SpeechEvent, type SpeechRequest } from "../speech.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
@@ -58,7 +58,7 @@ export type ElevenLabsSpeechOptions = {
   readonly apply_text_normalization?: OpenString<"auto" | "on" | "off">
 } & Record<string, unknown>
 
-export type Request = SpeechRequestFor<ElevenLabsSpeechOptions>
+export type Request = SpeechRequest<SpeechModel<ElevenLabsSpeechOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema
@@ -169,10 +169,7 @@ const describeOutput = (format: string) => {
   return encoding === undefined ? SpeechStream.container(codec, sampleRate) : SpeechStream.pcm(encoding, sampleRate)
 }
 
-const finish = Effect.fnUntraced(function* (
-  state: State,
-  context: MediaProtocol.ResponseContext<Request>,
-) {
+const finish = Effect.fnUntraced(function* (state: State, context: MediaProtocol.ResponseContext<Request>) {
   const requestID = context.http.headers["request-id"]
   return yield* SpeechStream.finish(route, state, {
     ...describeOutput(yield* outputFormat(context.request)),

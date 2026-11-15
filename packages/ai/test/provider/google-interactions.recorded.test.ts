@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent, Message } from "../../src/index.js"
+import { ai, LLMEvent, Message } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { LLMClient, RequestExecutor } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
@@ -20,10 +20,10 @@ describe("Google Interactions recorded", () => {
   recorded.effect("streams text and reports usage", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model,
           prompt: "Reply with exactly one word: hello",
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
           providerOptions: { thinkingLevel: "low" },
         }),
       )
@@ -43,11 +43,11 @@ describe("Google Interactions recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
-          LLM.request({
+          ai.request({
             model,
             prompt:
               "Find the smallest positive integer that leaves remainder 1 modulo 7, 2 modulo 9, and 3 modulo 11. Explain briefly.",
-            generation: { maxTokens: 4096 },
+            maxTokens: 4096,
             providerOptions: { thinkingLevel: "high", thinkingSummaries: "auto" },
           }),
         )
@@ -71,13 +71,13 @@ describe("Google Interactions recorded", () => {
     "replays native tool results and signatures statelessly",
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.request({
           model,
           system: "Use get_weather for weather questions. Answer concisely after receiving the result.",
           prompt: "What is the weather in Paris?",
           tools: [weatherTool],
           toolChoice: { type: "tool", name: weatherTool.name },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
           providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto" },
         })
         const first = yield* LLMClient.generate(request)
@@ -91,12 +91,12 @@ describe("Google Interactions recorded", () => {
         expect(call.input).toEqual({ city: "Paris" })
         expect(call.providerMetadata?.google).toHaveProperty("interactionSignature")
         const second = yield* LLMClient.generate(
-          LLM.request({
+          ai.request({
             model,
             system: request.system,
             tools: [weatherTool],
             toolChoice: "none",
-            generation: { maxTokens: 2048 },
+            maxTokens: 2048,
             providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto" },
             messages: [
               ...request.messages,
@@ -118,13 +118,13 @@ describe("Google Interactions recorded", () => {
     "continues tool results with previous interaction id",
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.request({
           model,
           system: "Use get_weather for weather questions. Answer concisely after receiving the result.",
           prompt: "What is the weather in Paris?",
           tools: [weatherTool],
           toolChoice: "required",
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
           providerOptions: { thinkingLevel: "low", store: true },
         })
         const first = yield* LLMClient.generate(request)
@@ -145,12 +145,12 @@ describe("Google Interactions recorded", () => {
           const call = first.toolCalls[0]
           if (!call) throw new Error("Missing recorded weather tool call")
           const second = yield* LLMClient.generate(
-            LLM.request({
+            ai.request({
               model,
               system: request.system,
               tools: [weatherTool],
               toolChoice: "none",
-              generation: { maxTokens: 2048 },
+              maxTokens: 2048,
               providerOptions: { thinkingLevel: "low", previousInteractionId: metadata.interactionId, store: false },
               messages: [
                 Message.tool({ id: call.id, name: call.name, result: { temperature: 22, condition: "sunny" } }),

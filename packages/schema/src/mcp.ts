@@ -36,6 +36,10 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  pool: Schema.Boolean.pipe(optional).annotate({
+    description:
+      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to false.',
+  }),
 }) {}
 
 export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
@@ -61,6 +65,10 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  pool: Schema.Boolean.pipe(optional).annotate({
+    description:
+      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to false.',
+  }),
 }) {}
 
 export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))
@@ -87,10 +95,29 @@ export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsA
   Schema.toTaggedUnion("status"),
 )
 
+/**
+ * An MCP Events subscription: `pending` until its server confirms the stream, `active` while it does, and `ended` when
+ * the server terminated or rejected it, or no longer offers events. Pending covers a server that is not connected.
+ * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ */
+export const SubscriptionStatus = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("pending") }),
+  Schema.Struct({ status: Schema.Literal("active") }),
+  Schema.Struct({ status: Schema.Literal("ended"), reason: Schema.Literal("unavailable") }),
+  Schema.Struct({
+    status: Schema.Literal("ended"),
+    reason: Schema.Literals(["terminated", "rejected"]),
+    error: Schema.Struct({ code: Schema.Number, message: Schema.String }),
+  }),
+]).annotate({ identifier: "Mcp.SubscriptionStatus" })
+export type SubscriptionStatus = typeof SubscriptionStatus.Type
+
 export interface Server extends Schema.Schema.Type<typeof Server> {}
 export const Server = Schema.Struct({
   name: Schema.String,
   status: Status,
+  // Display title from the connected server's `serverInfo.title`; absent while disconnected or when not provided.
+  title: optional(Schema.String),
   // Set for remote servers registered as OAuth integrations; lets clients act on the right integration
   // without matching by name, which could collide with provider or plugin integrations.
   integrationID: optional(IntegrationID),

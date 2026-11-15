@@ -1,8 +1,10 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import {
   batch,
+  children,
   createContext,
   createEffect,
+  createSignal,
   For,
   onCleanup,
   Show,
@@ -16,7 +18,7 @@ import { InputRenderable, MouseButton, Renderable, RGBA, TextAttributes } from "
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { useClipboard } from "../context/clipboard"
-import { useConfig } from "../config"
+import { useConfig, useNewDesigns } from "../config"
 import { copy, copyOnSelectRelease } from "../util/selection"
 
 export type DialogSize = "medium" | "large" | "xlarge"
@@ -94,14 +96,17 @@ export function DialogHeader(
     closeLabel?: string
     onClose?: () => void
     gap?: number
+    /** Muted line below the title. Shown only under the "new-designs" experiment. */
+    description?: string
   }>,
 ) {
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
-  return (
+  const newDesigns = useNewDesigns()
+  const row = () => (
     <box flexDirection="row" justifyContent="space-between" gap={props.gap}>
       {props.titleView ?? (
-        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
+        <text attributes={newDesigns() ? undefined : TextAttributes.BOLD} fg={theme.text.base}>
           {props.title}
         </text>
       )}
@@ -110,6 +115,16 @@ export function DialogHeader(
         {props.closeLabel ?? "esc"}
       </text>
     </box>
+  )
+  return (
+    <Show when={newDesigns() && props.description} fallback={row()}>
+      <box>
+        {row()}
+        <text fg={theme.text.muted} wrapMode="word">
+          {props.description}
+        </text>
+      </box>
+    </Show>
   )
 }
 
@@ -122,18 +137,67 @@ export function DialogLayout(
     id?: string
     /** Usually a `DialogHeader`. */
     header: JSX.Element
-    /** Usually a `DialogFooter` or a row of buttons. */
-    footer?: JSX.Element
+    /** Rendered as a `DialogFooter`. */
+    footer?: DialogFooterProps
+    /** Footer shown while the "new-designs" experiment is off. Remove when the experiment graduates. */
+    legacyFooter?: JSX.Element
+    /** A `DialogButtons` row, shown in place of the footer in both designs. */
+    buttons?: JSX.Element
     /** Side padding in cells. Defaults to DIALOG_INSET. */
     inset?: number
+    /**
+     * Blank rows between the body and the footer under the "new-designs" experiment. Defaults to 1.
+     * 0 lets a raised `DialogBleed` body meet the footer band.
+     */
+    footerGap?: number
   }>,
 ) {
   const inset = () => props.inset ?? DIALOG_INSET
+  const newDesigns = useNewDesigns()
+  const footerGap = () => (newDesigns() && props.footer && props.buttons === undefined ? (props.footerGap ?? 1) : 1)
   return (
     <box id={props.id} paddingLeft={inset()} paddingRight={inset()} paddingBottom={1} gap={1}>
       {props.header}
-      <box>{props.children}</box>
-      {props.footer}
+      <box paddingBottom={Math.max(0, footerGap() - 1)} marginBottom={Math.min(0, footerGap() - 1)}>
+        {props.children}
+      </box>
+      <Show when={props.buttons === undefined} fallback={props.buttons}>
+        <Show when={newDesigns() || props.legacyFooter === undefined} fallback={props.legacyFooter}>
+          <Show when={props.footer}>
+            {(footer) => (
+              <DialogFooter actions={footer().actions} inset={footer().inset}>
+                {footer().children}
+              </DialogFooter>
+            )}
+          </Show>
+        </Show>
+      </Show>
+    </box>
+  )
+}
+
+export type DialogButton = { label: string; run: () => void }
+
+/** A right-aligned row of buttons; the active one is highlighted. Arrow keys and Enter are bound by the dialog. */
+export function DialogButtons(props: { buttons: DialogButton[]; active: number; onActive?: (index: number) => void }) {
+  const theme = useTheme().surface("dialog")
+  return (
+    <box flexDirection="row" justifyContent="flex-end">
+      <For each={props.buttons}>
+        {(button, index) => (
+          <box
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={props.active === index() ? theme.background.action.primary.focused : undefined}
+            onMouseOver={() => props.onActive?.(index())}
+            onMouseUp={() => button.run()}
+          >
+            <text fg={props.active === index() ? theme.text.action.primary.focused : theme.text.muted}>
+              {button.label}
+            </text>
+          </box>
+        )}
+      </For>
     </box>
   )
 }
@@ -154,58 +218,90 @@ export type DialogFooterAction = {
   /** Keymap command id whose first shortcut is shown when `key` is not set. The action hides when it has no shortcut. */
   command?: string
   onTrigger?: () => void
-  side?: "left" | "right"
   disabled?: boolean
-  /** Overrides the title color, e.g. for a "✓ copied" confirmation. */
+  /** Overrides the title and key color, e.g. for a "copied ✓" confirmation. */
   color?: RGBA
 }
 
-export function DialogFooter(
-  props: ParentProps<{
-    actions?: DialogFooterAction[]
-    /** Side padding in cells, e.g. DIALOG_INSET or DIALOG_LIST_INSET. Omit when the parent already pads. */
-    inset?: number
-  }>,
-) {
+/**
+ * Alignment separates scope: `secondary` holds dialog-level actions on the left, `primary` holds actions
+ * on the selected item (or the dialog's main action) on the right.
+ */
+export type DialogFooterActions = {
+  secondary?: DialogFooterAction[]
+  primary?: DialogFooterAction[]
+}
+
+export type DialogFooterProps = ParentProps<{
+  actions?: DialogFooterActions
+  /** Side padding in cells, e.g. DIALOG_INSET or DIALOG_LIST_INSET. Omit when the parent already pads. */
+  inset?: number
+}>
+
+export function DialogFooter(props: DialogFooterProps) {
   const dimensions = useTerminalDimensions()
   const shortcuts = Keymap.useShortcuts()
+  const theme = useTheme().surface("dialog")
+  const newDesigns = useNewDesigns()
   const narrow = () => dimensions().width < 60
-  const actions = () =>
-    (props.actions ?? []).flatMap((action) => {
+  const resolve = (actions: DialogFooterAction[] = []) =>
+    actions.flatMap((action) => {
       if (action.key !== undefined || action.command === undefined) return [action]
       const key = shortcuts.get(action.command)
       return key ? [{ ...action, key }] : []
     })
-  const left = () => actions().filter((action) => action.side !== "right")
-  const right = () => actions().filter((action) => action.side === "right")
+  const secondary = () => resolve(props.actions?.secondary)
+  const primary = () => resolve(props.actions?.primary)
+  const content = children(() => props.children)
+  // The raised band bleeds across the parent's DIALOG_INSET padding and the layout's bottom row,
+  // so it spans the dialog edge to edge and sits flush with its bottom.
+  const band = () => newDesigns() && (secondary().length > 0 || primary().length > 0 || content.toArray().length > 0)
+  // Hoverable actions carry one cell of padding on each side; the band gives that cell back so labels keep their column.
+  const bandInset = () => DIALOG_INSET + (props.inset ?? 0) - 1
   return (
     <box
-      paddingLeft={props.inset}
-      paddingRight={props.inset}
+      marginLeft={band() ? -DIALOG_INSET : undefined}
+      marginRight={band() ? -DIALOG_INSET : undefined}
+      marginBottom={band() ? -1 : undefined}
+      paddingLeft={band() ? bandInset() : props.inset}
+      paddingRight={band() ? bandInset() : props.inset}
+      paddingTop={band() ? 1 : undefined}
+      paddingBottom={band() ? 1 : undefined}
+      backgroundColor={band() ? theme.background.raised.high : undefined}
       flexDirection="row"
       justifyContent="space-between"
+      gap={newDesigns() ? 2 : undefined}
       flexShrink={0}
     >
-      <box flexDirection={narrow() ? "column" : "row"} gap={narrow() ? 0 : 2}>
-        {props.children}
-        <For each={left()}>{(action) => <DialogFooterItem action={action} />}</For>
+      <box
+        flexDirection={narrow() ? "column" : "row"}
+        gap={narrow() || newDesigns() ? 0 : 2}
+        columnGap={newDesigns() && !narrow() ? 1 : undefined}
+        // Under new designs the primary group keeps its width and the secondary group wraps instead of overlapping.
+        flexWrap={newDesigns() ? "wrap" : undefined}
+        flexShrink={newDesigns() ? 1 : undefined}
+        minWidth={newDesigns() ? 0 : undefined}
+      >
+        {content()}
+        <For each={secondary()}>{(action) => <DialogFooterItem action={action} variant="secondary" />}</For>
       </box>
-      <box flexDirection="row" gap={2}>
-        <For each={right()}>{(action) => <DialogFooterItem action={action} />}</For>
+      <box flexDirection="row" gap={newDesigns() ? 1 : 2} flexShrink={newDesigns() ? 0 : undefined}>
+        <For each={primary()}>{(action) => <DialogFooterItem action={action} variant="primary" />}</For>
       </box>
     </box>
   )
 }
 
-function DialogFooterItem(props: { action: DialogFooterAction }) {
+function DialogFooterItem(props: { action: DialogFooterAction; variant: "primary" | "secondary" }) {
   const theme = useTheme().surface("dialog")
-  return (
-    <text
-      onMouseUp={() => {
-        if (props.action.disabled) return
-        props.action.onTrigger?.()
-      }}
-    >
+  const newDesigns = useNewDesigns()
+  const [hovered, setHovered] = createSignal(false)
+  const trigger = () => {
+    if (props.action.disabled) return
+    props.action.onTrigger?.()
+  }
+  const label = (key: RGBA) => (
+    <>
       <span
         style={{
           fg: props.action.disabled ? theme.text.action.primary.disabled : (props.action.color ?? theme.text.base),
@@ -214,11 +310,28 @@ function DialogFooterItem(props: { action: DialogFooterAction }) {
         {props.action.title}
       </span>
       <Show when={props.action.key}>
-        <span style={{ fg: props.action.disabled ? theme.text.action.primary.disabled : theme.text.muted }}>
+        <span style={{ fg: props.action.disabled ? theme.text.action.primary.disabled : (props.action.color ?? key) }}>
           {" " + props.action.key}
         </span>
       </Show>
-    </text>
+    </>
+  )
+  return (
+    <Show when={newDesigns()} fallback={<text onMouseUp={trigger}>{label(theme.text.muted)}</text>}>
+      <box
+        paddingLeft={1}
+        paddingRight={1}
+        flexShrink={0}
+        backgroundColor={
+          hovered() && !props.action.disabled ? theme.background.action[props.variant].hovered : undefined
+        }
+        onMouseOver={() => setHovered(true)}
+        onMouseOut={() => setHovered(false)}
+        onMouseUp={trigger}
+      >
+        <text>{label(theme.text.muted)}</text>
+      </box>
+    </Show>
   )
 }
 

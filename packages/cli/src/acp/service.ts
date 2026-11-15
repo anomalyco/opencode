@@ -1,6 +1,6 @@
 import type { OpenCodeClient } from "@opencode/client/effect"
-import { SessionsCursor } from "@opencode/protocol/groups/session"
 import { AbsolutePath } from "@opencode/schema/schema"
+import { Session } from "@opencode/schema/session"
 import { FSUtil } from "@opencode/util/fs-util"
 import { DateTime, Effect, Ref, Schema } from "effect"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
@@ -62,6 +62,7 @@ export interface Interface {
   ) => Effect.Effect<SetSessionConfigOptionResponse, ACPError.Failure>
   readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, ACPError.Failure>
   readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, ACPError.Failure>
+  readonly steer: (input: ACPTurn.SteeringRequest) => Effect.Effect<ACPTurn.SteeringResponse, ACPError.Failure>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void>
 }
 
@@ -102,6 +103,19 @@ export function make(input: {
     return session
   })
 
+  // Clients often open a session and close it without prompting; closing removes those instead of keeping an empty session.
+  const unprompted = new Set<string>()
+  const discardUnprompted = Effect.fnUntraced(
+    function* (sessionId: string) {
+      if (!unprompted.delete(sessionId)) return
+      const sessionID = yield* ACPClient.decodeSessionID(sessionId)
+      // Another client of the same server may have used it.
+      const messages = yield* input.client.message.list({ sessionID, limit: 1 })
+      if (messages.data.length === 0) yield* input.client.session.remove({ sessionID })
+    },
+    Effect.catch((error) => Effect.logWarning("ACP could not remove an unused session", error)),
+  )
+
   return {
     initialize: Effect.fnUntraced(function* (params) {
       yield* Ref.set(input.capabilities, ACPCapabilities.parse(params.clientCapabilities))
@@ -126,6 +140,7 @@ export function make(input: {
           _meta: { [ACPCapabilities.ChildSessionUpdates]: true },
         },
         authMethods: [authMethod],
+        _meta: { steering: { supported: true } },
         agentInfo: { name: "OpenCode", version: OPENCODE_VERSION },
       }
     }),
@@ -143,6 +158,7 @@ export function make(input: {
         .create({ location: { directory: AbsolutePath.make(params.cwd) }, ...ACPDirectories.grant(directories) })
         .pipe(Effect.catch(ACPClient.classify))
       const attachment = yield* input.sessions.attach(created, params.cwd, mcpServers)
+      unprompted.add(attachment.attached.id)
       return { sessionId: attachment.attached.id, configOptions: attachment.configOptions }
     }),
     loadSession: Effect.fnUntraced(function* (params) {
@@ -170,7 +186,7 @@ export function make(input: {
             : {}),
           order: "desc",
           limit: 100,
-          ...(params.cursor ? { cursor: Schema.decodeSync(SessionsCursor)(params.cursor) } : {}),
+          ...(params.cursor ? { cursor: Schema.decodeSync(Session.ListCursor)(params.cursor) } : {}),
         })
         .pipe(Effect.catch(ACPClient.classify))
       return {
@@ -191,6 +207,7 @@ export function make(input: {
       }
     }),
     deleteSession: Effect.fnUntraced(function* (params) {
+      unprompted.delete(params.sessionId)
       yield* input.turn.cancel({ sessionId: params.sessionId })
       yield* ACPClient.decodeSessionID(params.sessionId).pipe(
         Effect.flatMap((sessionID) => input.client.session.remove({ sessionID })),
@@ -211,6 +228,7 @@ export function make(input: {
     closeSession: Effect.fnUntraced(function* (params) {
       yield* input.turn.close(params.sessionId)
       yield* input.sessions.detach(params.sessionId)
+      yield* discardUnprompted(params.sessionId)
       return {}
     }),
     forkSession: Effect.fnUntraced(function* (params) {
@@ -235,7 +253,12 @@ export function make(input: {
       yield* withReload(attached, select(attached, "mode", params.modeId))
       return {}
     }),
-    prompt: input.turn.prompt,
+    prompt: (params, signal) =>
+      Effect.suspend(() => {
+        unprompted.delete(params.sessionId)
+        return input.turn.prompt(params, signal)
+      }),
+    steer: input.turn.steer,
     cancel: input.turn.cancel,
   }
 }

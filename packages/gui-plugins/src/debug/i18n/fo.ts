@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Vís ella fjala kembibjálkan",
+  providerAriaLabel: "Avriksgreining hjá veitara",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "Tíð frá fyrispurninginum, sum byrjaði seinasta umfar, til svarið var liðugt.",
+  "tps.label": "TPS",
+  "tps.tip": "Úttaks- og hugsunarmerki um sekundið í seinasta umfarsins fyrispurningum til modellið, uttan amboðstíð.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Tvinga fokus stílar á øll samvirkin element",
+  "focus.on": "Á",
+  "focus.off": "SLÁKT",
+  "direction.label": "DIR",
+  "direction.tip": "Tvinga alla app-uppsetingina uttan at broyta valda málið",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

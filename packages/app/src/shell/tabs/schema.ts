@@ -47,16 +47,17 @@ export const Info = Persistence.struct({
 
 export const Infos = Schema.Record(Schema.String, Schema.mutableKey(Info))
 
-// The dock and side regions keep the names they were stored under before extensions.
+// The side region keeps the name it was stored under before plugins.
 export const Regions = Schema.Record(
   Schema.String,
   Schema.mutableKey(
     Persistence.struct({
-      dock: Schema.optional(Schema.Boolean),
       side: Schema.optional(Schema.Boolean),
-      dockHeight: Schema.optional(Schema.Finite),
       sessionWidth: Schema.optional(Schema.Finite),
-    }).pipe(Schema.encodeKeys({ dock: "terminal", side: "review", dockHeight: "terminalHeight" })),
+      bottom: Schema.optional(Schema.Boolean),
+      bottomHeight: Schema.optional(Schema.Finite),
+      splitRatio: Schema.optional(Schema.Finite),
+    }).pipe(Schema.encodeKeys({ side: "review" })),
   ),
 )
 
@@ -64,6 +65,7 @@ export const ClosedTab = Persistence.struct({
   tab: SessionCodec,
   index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   info: Persistence.optional(Info),
+  closed: Persistence.optional(Schema.Finite),
 })
 
 export const Closed = Persistence.array(ClosedTab)

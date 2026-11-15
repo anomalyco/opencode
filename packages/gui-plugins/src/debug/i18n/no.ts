@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Vis eller skjul feilsøkingslinjen",
+  providerAriaLabel: "Ytelsesdiagnostikk for leverandør",
+  na: "i/t",
+  "duration.label": "TIME",
+  "duration.tip": "Tid fra ledeteksten som startet siste tur, til svaret var ferdig.",
+  "tps.label": "TPS",
+  "tps.tip": "Utdata- og resonneringstokener per sekund på tvers av modellforespørslene i siste tur, uten verktøytid.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Tving fokusstiler på alle interaktive elementer",
+  "focus.on": "PÅ",
+  "focus.off": "AV",
+  "direction.label": "DIR",
+  "direction.tip": "Tving layoutretningen for hele appen uten å endre valgt språk",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

@@ -1,46 +1,41 @@
-import { onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createSizingState, isSizingActive, transitionSizing, type SizingEvent } from "./sizing-machine"
 
 export const createSizing = () => {
-  const [state, setState] = createStore({ active: false })
-  let t: number | undefined
+  const [state, setState] = createSignal(createSizingState())
+  let timer: ReturnType<typeof setTimeout> | undefined
 
-  const stop = () => {
-    if (t !== undefined) {
-      clearTimeout(t)
-      t = undefined
-    }
+  const dispatch = (event: SizingEvent) => {
+    const prev = untrack(state)
+    const result = transitionSizing(prev, event)
 
-    setState("active", false)
-  }
+    if (result.state !== prev) setState(result.state)
+    result.effects.forEach((effect) => {
+      clearTimeout(timer)
+      timer = undefined
 
-  const start = () => {
-    if (t !== undefined) {
-      clearTimeout(t)
-      t = undefined
-    }
-
-    setState("active", true)
+      if (effect.type === "cancel-settle") return
+      timer = setTimeout(() => dispatch({ type: "settle.due", attempt: effect.attempt }), effect.delayMs)
+    })
   }
 
   onMount(() => {
-    makeEventListener(window, "pointerup", stop)
-    makeEventListener(window, "pointercancel", stop)
-    makeEventListener(window, "blur", stop)
+    makeEventListener(window, "pointerup", () => dispatch({ type: "pointer.up" }))
+    makeEventListener(window, "pointercancel", () => dispatch({ type: "pointer.up" }))
+    makeEventListener(window, "blur", () => dispatch({ type: "reset" }))
   })
 
-  onCleanup(() => {
-    if (t !== undefined) clearTimeout(t)
-  })
+  onCleanup(() => dispatch({ type: "reset" }))
 
   return {
-    active: () => state.active,
-    start,
-    touch() {
-      start()
-      t = window.setTimeout(stop, 120)
+    active: () => isSizingActive(state()),
+    // Only the primary button drags a resize handle.
+    start(event: PointerEvent) {
+      if (event.button !== 0) return
+      dispatch({ type: "pointer.down" })
     },
+    touch: () => dispatch({ type: "resize.touched" }),
   }
 }
 

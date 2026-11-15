@@ -12,8 +12,6 @@ export default Runtime.handler(
     logout({
       target: Option.getOrUndefined(input.target),
       credential: Option.getOrUndefined(input.credential),
-      server: Option.getOrUndefined(input.server),
-      standalone: input.standalone,
     }).pipe(handlePromptErrors),
   ),
 )
@@ -21,15 +19,13 @@ export default Runtime.handler(
 const logout = Effect.fn("cli.auth.logout.run")(function* (input: {
   target?: string
   credential?: string
-  server?: string
-  standalone: boolean
 }) {
   if (!input.target)
     yield* requireInteractive("Pass an integration ID or name when running without an interactive terminal")
   if (!input.credential)
     yield* requireInteractive("Pass a credential ID or label when running without an interactive terminal")
   intro("Log out of an account")
-  const client = yield* createClient({ server: input.server, standalone: input.standalone })
+  const client = yield* createClient()
   const integrations = yield* loadIntegrations(client)
   const integration = yield* chooseIntegration(integrations, input.target)
   const credentialID = yield* chooseCredential(integration, "log out", input.credential)

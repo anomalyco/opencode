@@ -4,8 +4,8 @@
     "composite": false,
     "emitDeclarationOnly": false,
     "noEmit": true,
-    "rootDir": "..",
+    "rootDir": "../..",
     "types": ["node", "bun"]
   },
-  "include": ["./**/*.ts", "./**/*.tsx", "../component-tests/**/*.ts", "../src/types.ts"]
+  "include": ["./**/*.ts", "./**/*.tsx", "../component-tests/**/*.ts", "../perf/**/*.ts", "../src/types.ts"]
 }

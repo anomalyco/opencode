@@ -22,10 +22,12 @@ describe("client retry", () => {
       hostname: "127.0.0.1",
       port: 0,
       socket: {
-        open(socket) {
+        // Reset only once the request has arrived. Resetting on accept races the client's request
+        // write, and on Windows a lost race surfaces as a write or connect failure instead of a
+        // connection reset.
+        data(socket) {
           socket.terminate()
         },
-        data() {},
       },
     })
     const failures: unknown[] = []

@@ -60,5 +60,3 @@ export const ALL = ATOM | COLLECTION
  * The default is to allow all types to be partially parsed, which in most cases is the best option.
  */
 export const Allow = { STR, NUM, ARR, OBJ, NULL, BOOL, NAN, INFINITY, _INFINITY, INF, SPECIAL, ATOM, COLLECTION, ALL }
-
-export default Allow

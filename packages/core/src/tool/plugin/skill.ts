@@ -1,7 +1,7 @@
 export * as SkillTool from "./skill.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Skill } from "../../skill.js"
@@ -14,9 +14,8 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Struct({
-  name: Skill.Name,
   directory: Schema.String,
-  output: Schema.String,
+  content: Schema.String,
 })
 export const description = [
   "Load a specialized skill's instructions and resources into the current conversation when the task at hand matches its description.",
@@ -52,19 +51,17 @@ export const Plugin = {
                   action: name,
                   resources: [skill.id],
                   save: [skill.id],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: { type: "tool", messageID: context.messageID, id: context.id },
+                  ...Permission.invocation(context),
                 })
-                return { name: skill.name, ...(yield* Skill.prepare(fs, skill)) }
+                const files = yield* skills.files(skill.id)
+                const { directory, output: content } = yield* Skill.prepare(fs, skill, files)
+                return {
+                  output: { directory, content },
+                  content,
+                  metadata: { name: skill.name, directory },
+                }
               }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
-            }).pipe(
-              Effect.map((output) => ({
-                output,
-                content: output.output,
-                metadata: { name: output.name, directory: output.directory },
-              })),
-            ),
+            }),
         }),
       )
       .pipe(Effect.orDie)

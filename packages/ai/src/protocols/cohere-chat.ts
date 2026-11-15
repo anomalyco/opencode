@@ -1,10 +1,10 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { LLMEvent, Usage, type FinishReasonDetails, type LLMRequest } from "../schema/index.js"
-import { ProviderShared } from "./shared.js"
+import { JsonObject, ProviderShared } from "./shared.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
@@ -49,7 +49,7 @@ const Body = Schema.Struct({
         function: Schema.Struct({
           name: Schema.String,
           description: Schema.optional(Schema.String),
-          parameters: Schema.Unknown,
+          parameters: JsonObject,
         }),
       }),
     ),
@@ -75,6 +75,28 @@ const NativeUsage = Schema.Struct({
   billed_units: Schema.optional(TokenCounts),
   cached_tokens: Schema.optional(Schema.Number),
 })
+const KNOWN_EVENT_TYPES = new Set([
+  "message-start",
+  "content-start",
+  "content-delta",
+  "content-end",
+  "tool-plan-delta",
+  "tool-call-start",
+  "tool-call-delta",
+  "tool-call-end",
+  "message-end",
+  "citation-start",
+  "citation-end",
+])
+// Cohere may add stream event types. Unknown types are ignored, while a malformed known type still fails decoding.
+const UnknownEvent = Schema.Struct({
+  type: Schema.String.check(Schema.makeFilter((type) => !KNOWN_EVENT_TYPES.has(type))),
+}).pipe(
+  Schema.decodeTo(Schema.Struct({ type: Schema.Literal("unknown") }), {
+    decode: SchemaGetter.transform(() => ({ type: "unknown" as const })),
+    encode: SchemaGetter.forbidden(() => "Unknown Cohere stream events are decode-only"),
+  }),
+)
 const Event = Schema.Union([
   Schema.Struct({ type: Schema.Literal("message-start") }),
   Schema.Struct({
@@ -110,6 +132,7 @@ const Event = Schema.Union([
   }),
   // Citation output is outside this basic chat surface.
   Schema.Struct({ type: Schema.Literals(["citation-start", "citation-end"]) }),
+  UnknownEvent,
 ])
 type Event = typeof Event.Type
 type State = {
@@ -210,16 +233,16 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
       token_budget:
         options.thinking.tokenBudget === undefined
           ? undefined
-          : ProviderShared.fitThinkingBudget(options.thinking.tokenBudget, request.generation?.maxTokens),
+          : ProviderShared.fitThinkingBudget(options.thinking.tokenBudget, request.maxTokens),
     },
-    max_tokens: request.generation?.maxTokens,
-    temperature: request.generation?.temperature,
-    p: request.generation?.topP,
-    k: request.generation?.topK,
-    seed: request.generation?.seed,
-    stop_sequences: request.generation?.stop,
-    frequency_penalty: request.generation?.frequencyPenalty,
-    presence_penalty: request.generation?.presencePenalty,
+    max_tokens: request.maxTokens,
+    temperature: request.temperature,
+    p: request.topP,
+    k: request.topK,
+    seed: request.seed,
+    stop_sequences: request.stop,
+    frequency_penalty: request.frequencyPenalty,
+    presence_penalty: request.presencePenalty,
   }
 })
 
@@ -317,10 +340,6 @@ export const protocol = Protocol.make({
     initial: (): State => ({ lifecycle: Lifecycle.initial(), tools: ToolStream.empty(), finished: false }),
     step,
     terminal: (event) => event.type === "message-end",
-    onHalt: (state) =>
-      state.finished
-        ? Effect.succeed([])
-        : Effect.fail(ProviderShared.eventError(ADAPTER, "Cohere stream ended without message-end")),
   },
 })
 export const route = Route.make({

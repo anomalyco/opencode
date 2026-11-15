@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test"
 import type { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigWatch } from "@opencode/core/config/watch"
 import { AbsolutePath } from "@opencode/core/schema"
+import { FSUtil } from "@opencode/util/fs-util"
 
 const project = path.resolve("watch-plan-project")
 const root = AbsolutePath.make(path.join(project, ".opencode"))
@@ -26,8 +27,8 @@ describe("ConfigWatch.plan", () => {
       project: [{ path: root, present: true }],
     })
     expect(Array.from(present.values())).toEqual([
-      { path: system, type: "directory", ignore: ["node_modules", ".git", "**/{node_modules,.git}/**"] },
-      { path: root, type: "directory", ignore: ["node_modules", ".git", "**/{node_modules,.git}/**"] },
+      { path: system, type: "directory", ignore: FSUtil.ignoreGlobs },
+      { path: root, type: "directory", ignore: FSUtil.ignoreGlobs },
       {
         path: project,
         type: "entries",

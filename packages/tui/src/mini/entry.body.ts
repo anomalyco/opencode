@@ -84,6 +84,8 @@ function monoBody(body: RunEntryBody): RunEntryBody {
   if (body.type === "none" || body.type === "text" || body.type === "markdown") return body
   if (body.type === "code") return textBody(body.content)
   const snapshot = body.snapshot
+  // Todo cards are not flattened: the writer draws them with ASCII markers in mono.
+  if (snapshot.kind === "todo") return body
   if (snapshot.kind === "code") return textBody(`${snapshot.title}\n${snapshot.content}`)
   if (snapshot.kind === "diff") {
     return textBody(

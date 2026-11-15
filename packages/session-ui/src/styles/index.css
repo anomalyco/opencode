@@ -6,10 +6,14 @@
 @import "../components/message-part.css" layer(components);
 @import "../components/message-nav.css" layer(components);
 @import "../components/question-prompt.css" layer(components);
+@import "../components/question-prompt-experimental.css" layer(components);
+@import "../components/quote-highlight.css" layer(components);
 @import "../components/session-review.css" layer(components);
+@import "../components/session-compaction.css" layer(components);
 @import "../components/session-turn.css" layer(components);
 @import "../components/shell-submessage.css" layer(components);
 @import "../components/tool-count-label.css" layer(components);
 @import "../components/tool-count-summary.css" layer(components);
 @import "../components/tool-error-card.css" layer(components);
+@import "../timeline-next/timeline-next.css" layer(components);
 @import "../components/tool-status-title.css" layer(components);

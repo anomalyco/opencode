@@ -9,6 +9,7 @@ import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
 import { usePlugin } from "../../plugin/context"
 import { DIALOG_INSET, DialogBleed, DialogFooter, DialogHeader, DialogLayout } from "../../ui/dialog"
+import { useSessionLinks } from "../../ui/session-link"
 import { useToast } from "../../ui/toast"
 import { getScrollAcceleration } from "../../util/scroll"
 
@@ -139,14 +140,25 @@ export function Answer(props: {
           </text>
         </DialogHeader>
       }
-      footer={
-        <DialogFooter
-          actions={[
+      footer={{
+        actions: {
+          primary: [
             copied()
               ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: copy }
-              : { title: "copy", key: "c", onTrigger: copy },
-            { title: "scroll", key: "j/k ↑/↓" },
-          ]}
+              : { title: "copy response", key: "c", onTrigger: copy },
+          ],
+        },
+      }}
+      legacyFooter={
+        <DialogFooter
+          actions={{
+            secondary: [
+              copied()
+                ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: copy }
+                : { title: "copy", key: "c", onTrigger: copy },
+              { title: "scroll", key: "j/k ↑/↓" },
+            ],
+          }}
         />
       }
     >
@@ -161,6 +173,7 @@ export function Answer(props: {
         >
           <box paddingLeft={DIALOG_INSET} paddingRight={DIALOG_INSET} paddingTop={1} paddingBottom={1}>
             <markdown
+              ref={useSessionLinks()}
               syntaxStyle={syntax()}
               renderNode={props.markdown()}
               content={props.answer}

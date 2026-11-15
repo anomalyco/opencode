@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Nosozliklarni tuzatish panelini almashtirish",
+  providerAriaLabel: "Provayder unumdorligi diagnostikasi",
+  na: "yo'q",
+  "duration.label": "TIME",
+  "duration.tip": "Oxirgi navbatni boshlagan so'rovdan javob tugaguncha o'tgan vaqt.",
+  "tps.label": "TPS",
+  "tps.tip": "Oxirgi navbatdagi model so'rovlari bo'yicha soniyada chiqish va mulohaza tokenlari, vosita vaqtisiz.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Fokus uslublarini barcha interaktiv elementlarga majburlash",
+  "focus.on": "ON",
+  "focus.off": "OFF",
+  "direction.label": "DIR",
+  "direction.tip": "Tanlangan tilni oʻzgartirmasdan ilovaning toʻliq joylashuvi yoʻnalishini majburlang",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

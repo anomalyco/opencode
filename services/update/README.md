@@ -8,8 +8,7 @@ curl 'https://opencode.ai/update/api/latest/cli'
 curl 'https://opencode.ai/update/api/latest/cli/npm'
 ```
 
-The same Worker also serves the original `https://update.opencode.ai` hostname without
-the `/update` prefix. Admin forms, pagination, and redirects preserve the request's mount.
+The Worker serves only `opencode.ai/update/*`; any other host or path returns 404.
 
 ## Desktop update feeds
 
@@ -53,9 +52,11 @@ Apply the `0004_channel_rollout.sql` migration before deploying.
 
 ## Minimum releases
 
-Each channel/name/distribution can mark one retained artifact as `minimum`, independently
+Each `latest` name/distribution can mark one retained artifact as `minimum`, independently
 of its `active` artifact. Set or clear it from the admin page. Publishing a new active
-release preserves the minimum marker.
+release preserves the minimum marker. Preview build numbers reset, so `dev` and `beta`
+cannot set a minimum and lookups ignore any existing preview minimum; the admin page
+still lets you clear one.
 
 Clients send their running version as `?current=<version>` and use the CLI's default
 `User-Agent: opencode/<channel>/<version>/cli`. When `current` is absent, the service
@@ -78,14 +79,14 @@ Choose a minimum that older clients can install and that can itself consume the 
 release. For the CLI package migration, retain a package-aware release published as
 `@opencode-ai/cli` as the minimum before activating releases under `@opencode/cli`.
 
-Both admin mounts must be protected by the same Cloudflare Access self-hosted application:
+The admin pages are protected by the `update-admin-production` Cloudflare Access application
+on `opencode.ai/update/admin*`. The Worker also verifies the Access JWT
+(`Cf-Access-Jwt-Assertion` or the `CF_Authorization` cookie) against that application's
+audience on every admin route and returns 403 without a valid one. Admin mutations log
+the authenticated email.
 
-- Public hostname/path: `update.opencode.ai/admin*`
-- Public hostname/path: `opencode.ai/update/admin*`
-- Policy: allow the OpenCode team identity group
-
-Configure Access before deploying the new Worker route. The Worker has `workers_dev`
-and preview URLs disabled; it is exposed through its custom hostname and the `/update` routes.
+The Worker has `workers_dev` and preview URLs disabled; it is exposed only through the
+`/update` routes.
 
 ## Request logging
 
@@ -93,8 +94,7 @@ Every request reaching the Worker emits an unsampled event at request start to t
 Cloudflare lake stream through the `EVENTS` Pipelines binding. Events use
 `source: "update"`, `type: "request"`, an ISO `timestamp`, and a `payload` containing
 the method, path, `useragent`, `ip` (from Cloudflare's `CF-Connecting-IP` header),
-country, and Cloudflare colo. The path is normalized without `/update` so both mounts
-share the existing analytics paths. Query strings, request bodies, cookies, and authorization
+country, and Cloudflare colo. The path is recorded without the `/update` prefix. Query strings, request bodies, cookies, and authorization
 headers are not included. Response status and duration are not recorded.
 
 Delivery runs in `waitUntil` without delaying the response. Delivery failures are
@@ -108,7 +108,7 @@ has a single public deployment.
 
 ## Publishing
 
-The publish workflow also registers direct binary downloads with distribution
+The release workflow also registers direct binary downloads with distribution
 `opencode`, after uploading every file to the public files bucket:
 
 ```sh
@@ -120,14 +120,16 @@ curl 'https://opencode.ai/update/api/latest/desktop/opencode'
 `metadata.files` maps each filename to its direct
 `https://opencode.ai/files/bin/<version>/<filename>` URL, SHA-256 checksum, and
 byte size. Desktop records additionally contain `metadata.manifests`, with
-the CDN URLs and the original Electron update checksums. Existing `npm`,
+the CDN URLs and SHA-512 checksums computed from the final signed files. Existing `npm`,
 `github`, and `aur` distributions are published independently.
 
 GitHub Actions publishes artifacts through `POST https://opencode.ai/update/api/publish`
-using a short-lived OIDC token with audience `https://update.opencode.ai`. The original
-hostname and token audience remain supported. The Worker accepts only tokens signed by
-GitHub for repository ID `975734319`, owner ID `66570915`, and `.github/workflows/publish.yml`
-on configured publishing refs.
+using a short-lived OIDC token with audience `https://update.opencode.ai` (an identifier only;
+that hostname is not served). The Worker accepts only tokens signed by
+GitHub for repository ID `975734319`, owner ID `66570915`, `.github/workflows/release.yml`
+and environment `release`. Pushes to `dev` may publish only to `dev`; only a
+`workflow_dispatch` on `dev` (a versioned release) may publish to `latest`, and `beta`
+publishes only to `beta`.
 
 Apply migrations and deploy from this directory:
 

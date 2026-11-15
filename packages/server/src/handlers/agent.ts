@@ -7,11 +7,7 @@ import { AgentNotFoundError } from "@opencode/protocol/errors"
 
 export const AgentHandler = HttpApiBuilder.group(Api, "server.agent", (handlers) =>
   handlers
-    .handle("agent.list", () =>
-      Effect.gen(function* () {
-        return yield* response(Agent.Service.use((agent) => agent.list()))
-      }),
-    )
+    .handle("agent.list", () => response(Agent.Service.use((agent) => agent.list())))
     .handle(
       "agent.get",
       Effect.fn(function* (ctx) {

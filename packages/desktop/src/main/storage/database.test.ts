@@ -11,7 +11,7 @@ const tables = (db: ReturnType<typeof drizzle>) =>
     .all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`)
     .map((row) => row.name)
 
-const expected = ["blob", "document", "extension", "extension_file", "migration", "state"]
+const expected = ["blob", "document", "migration", "plugin", "state"]
 
 describe("database", () => {
   test("bootstraps every table on a fresh database and is idempotent", () => {
@@ -31,6 +31,33 @@ describe("database", () => {
     expect(tables(db)).toEqual(expected)
     expect(db.all<{ value: string }>(sql`SELECT value FROM document`)).toEqual([{ value: "v" }])
     expect(migrate(db)).toEqual([])
+  })
+
+  test("dropping archive files keeps every saved enable state and the columns older versions read", () => {
+    const native = new DatabaseSync(":memory:")
+    native.exec("CREATE TABLE migration (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)")
+    const archived = migrations.findIndex((migration) => migration.id === "20260930041551_extension") + 1
+    migrations.slice(0, archived).forEach((migration) => {
+      migration.statements.forEach((statement) => native.exec(statement))
+      native.prepare("INSERT INTO migration (id, time_completed) VALUES (?, 0)").run(migration.id)
+    })
+    native.exec(
+      "INSERT INTO extension VALUES ('browser', 0, NULL, NULL), ('acme', 1, '{}', 'r1'); INSERT INTO extension_file VALUES ('acme', 'index.js', x'00')",
+    )
+    const db = drizzle({ client: native })
+
+    expect(migrate(db)).toEqual(migrations.slice(archived).map((migration) => migration.id))
+    expect(tables(db)).toEqual(expected)
+
+    const saved = [
+      { id: "acme", enabled: 1, manifest: "{}", revision: "r1" },
+      { id: "browser", enabled: 0, manifest: null, revision: null },
+    ]
+
+    expect(db.all(sql`SELECT id, enabled, manifest, revision FROM plugin ORDER BY id`)).toEqual(saved)
+    // Releases from 2.0.24 until the rename read the table by its old name; a downgraded app still finds the same rows there.
+    expect(db.all(sql`SELECT id, enabled, manifest, revision FROM extension ORDER BY id`)).toEqual(saved)
+    native.close()
   })
 
   test("a failed migration rolls back the journal without losing existing data", () => {

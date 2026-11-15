@@ -107,16 +107,34 @@ test("replaces the composer when the location is not found and recovers by movin
   })
 
   await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
-  const status = page.getByRole("status").filter({ hasText: "Session location unavailable" })
+  const status = page.getByRole("group", { name: "Session location unavailable", exact: true })
+  await expect(status).toHaveAccessibleDescription(`${directory} Choose another directory to continue this session.`)
   await expect(status).toContainText(directory)
   await expect(page.getByText("Keep this session history", { exact: true })).toBeVisible()
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toHaveCount(0)
   // A typed not-found answer is final; retrying cannot succeed until the folder changes.
   expect(requests).toBe(1)
 
-  await transport.waitForConnection()
+  const connection = await transport.waitForConnection()
   await page.getByRole("button", { name: "Choose worktree", exact: true }).click()
-  await page.getByRole("menuitem", { name: "existing-worktree", exact: true }).click()
+  const worktree = page.getByRole("menuitem", { name: "existing-worktree", exact: true })
+  await expect(worktree).toBeVisible()
+
+  // Reconnecting checks the folder again without remounting the missing view, so the open menu survives.
+  const rechecked = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).searchParams.get("location[directory]") === directory && response.status() === 404,
+  )
+
+  await transport.close()
+  await transport.waitForConnection({ after: connection.id })
+  await rechecked
+  expect(requests).toBe(2)
+  await expect(worktree).toBeVisible()
+  // The open menu hides the page from role locators.
+  await expect(page.getByText("Session location unavailable", { exact: true })).toBeVisible()
+
+  await worktree.click()
   await expect.poll(() => moves).toEqual([{ directory: destination }])
 
   session.directory = destination
@@ -238,7 +256,7 @@ test("keeps the side panel's tabs and selection when the session moves", async (
     await page.keyboard.press("ControlOrMeta+Shift+P")
 
     const dialog = page.getByRole("dialog")
-    const search = dialog.getByRole("textbox")
+    const search = dialog.getByRole("combobox")
     await search.fill(name)
     await expect(dialog.getByRole("option", { name: `/ ${name}.md`, exact: true })).toHaveAttribute(
       "aria-selected",

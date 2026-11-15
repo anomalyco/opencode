@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Message, ToolResultPart, Media } from "@opencode/ai"
+import { Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
 import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
@@ -149,14 +149,15 @@ describe("SessionModelRequest.unsupportedParts", () => {
         ],
       },
     })
-    const unsupported = Message.make({ role: "tool", content: [tool, Message.text("caption")] })
+    const untouched = ToolResultPart.make({ id: "call_3", name: "read", result: "done" })
+    const unsupported = Message.make({ role: "tool", content: [tool, untouched] })
     const result = unsupportedParts([text, supported, unsupported], capabilities(["text"]))
 
     expect(result[0]).toBe(text)
     expect(result[1]).toBe(supported)
     expect(result[2]).not.toBe(unsupported)
-    expect(result[2]).toBeInstanceOf(Message)
-    expect(result[2]?.content[1]).toEqual(Message.text("caption"))
+    expect(result[2]).toBeInstanceOf(ToolMessage)
+    expect(result[2]?.content[1]).toEqual(untouched)
     expect(result[2]?.content[0]).toMatchObject({
       type: "tool-result",
       result: {
@@ -195,12 +196,27 @@ describe("SessionModelRequest.boundImages", () => {
     ]
     const result = boundImages(messages)
 
-    expect(result[0]).toBeInstanceOf(Message)
+    expect(result[0]).toBeInstanceOf(UserMessage)
     expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("image was removed"))])
     expect(result[1]).toBe(text)
     expect(result[2]).not.toBe(messages[2])
     expect(result[2]?.content[0]).toMatchObject({ type: "text" })
     expect(result[3]).toBe(third)
+  })
+
+  test("keeps the replaced prefix stable as new images arrive, so the prompt cache survives", () => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("a".repeat(3 * 1024 * 1024), "image/png"), filename: name })
+    const removed = (messages: ReturnType<typeof boundImages>) =>
+      messages.filter((message) => message.content[0]?.type === "text").length
+    const history = Array.from({ length: 9 }, (_, i) => image(`${i}.png`))
+
+    // 27 MiB passes the 25 MiB trigger: the oldest four go, leaving 15 MiB.
+    expect(removed(boundImages(history))).toBe(4)
+    // Each later image used to move the cut by one; now the cut holds until the kept payload passes the trigger again.
+    expect(removed(boundImages([...history, image("9.png")]))).toBe(4)
+    expect(removed(boundImages([...history, image("9.png"), image("10.png"), image("11.png")]))).toBe(4)
+    expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
   })
 
   test("replaces images nested in tool results", () => {

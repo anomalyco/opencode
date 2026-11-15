@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRequestQueue } from "./request-queue"
+import type { RequestStallSnapshot } from "./request-queue-machine"
 
 function setup(input?: {
   limit?: number
@@ -9,7 +10,7 @@ function setup(input?: {
   setupHeadersTimeoutMs?: number
 }) {
   const pending: Array<{ url: string; signal: AbortSignal; resolve: () => void }> = []
-  const logs: Array<{ message: string; data: Record<string, unknown> }> = []
+  const logs: Array<{ message: string; data: RequestStallSnapshot }> = []
   let clock = 0
 
   const queue = createRequestQueue({
@@ -102,6 +103,53 @@ describe("createRequestQueue", () => {
     expect(input.queue.inflight()).toBe(0)
   })
 
+  test("writes, then navigation reads, take the next free slot in order without promoting history or indexes", async () => {
+    const input = setup({ limit: 1 })
+
+    const requests: [string, string][] = [
+      ["GET", "/api/a"],
+      ["GET", "/api/b"],
+      ["GET", "/api/session/ses_1/message?cursor=older&order=desc"],
+      ["GET", "/api/session/ses_1/message?limit=25&before=msg_1"],
+      ["GET", "/api/session/ses_1/message?type=user&order=desc"],
+      ["GET", "/api/session/ses_1/message?order=asc"],
+      ["GET", "/api/session/ses_1/message/msg_1"],
+      ["GET", "/api/session?limit=1"],
+      ["GET", "/api/session/ses_1/message?limit=40&order=desc"],
+      ["POST", "/api/session/ses_1/message"],
+      ["GET", "/api/session?limit=2"],
+      ["GET", "/api/session/ses_2/message"],
+      ["DELETE", "/api/session/ses_2"],
+      ["GET", "/api/session/ses_1"],
+    ]
+
+    const responses = requests.map(([method, path]) => input.queue.fetch(`http://server${path}`, { method }))
+    await input.settle()
+
+    for (const _ of requests) {
+      input.pending.at(-1)?.resolve()
+      await input.settle()
+    }
+
+    expect(input.pending.map((item) => new URL(item.url).pathname + new URL(item.url).search)).toEqual([
+      "/api/a",
+      "/api/session/ses_1/message",
+      "/api/session/ses_2",
+      "/api/session?limit=1",
+      "/api/session/ses_1/message?limit=40&order=desc",
+      "/api/session?limit=2",
+      "/api/session/ses_2/message",
+      "/api/b",
+      "/api/session/ses_1/message?cursor=older&order=desc",
+      "/api/session/ses_1/message?limit=25&before=msg_1",
+      "/api/session/ses_1/message?type=user&order=desc",
+      "/api/session/ses_1/message?order=asc",
+      "/api/session/ses_1/message/msg_1",
+      "/api/session/ses_1",
+    ])
+    await Promise.all(responses)
+  })
+
   test("never counts the event stream against the budget", async () => {
     const input = setup({ limit: 1 })
     void input.queue.fetch("http://server/api/session")
@@ -111,17 +159,41 @@ describe("createRequestQueue", () => {
     expect(input.queue.inflight()).toBe(1)
   })
 
-  test("aborted requests leave the queue without being sent", async () => {
-    const input = setup({ limit: 1 })
+  test("a queued request leaves without being sent as soon as its caller aborts, while every slot stays stuck", async () => {
+    const input = setup({ limit: 1, stallMs: 5 })
     const controller = new AbortController()
-    void input.queue.fetch("http://server/api/first")
+    void input.queue.fetch("http://server/api/stuck").catch(() => undefined)
     const aborted = input.queue.fetch("http://server/api/second", { signal: controller.signal })
+    expect(input.queue.queued()).toBe(1)
     controller.abort()
-    await input.settle()
-    input.pending[0]!.resolve()
     await expect(aborted).rejects.toBeInstanceOf(DOMException)
-    expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/first"])
+    expect(input.queue.queued()).toBe(0)
+    input.tick(1_000)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(input.logs).toEqual([])
+    expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/stuck"])
+  })
+
+  test("an already-aborted request never joins a full queue", async () => {
+    const input = setup({ limit: 1 })
+    void input.queue.fetch("http://server/api/stuck").catch(() => undefined)
+    await expect(input.queue.fetch("http://server/api/next", { signal: AbortSignal.abort() })).rejects.toBeInstanceOf(
+      DOMException,
+    )
+    expect(input.queue.queued()).toBe(0)
+  })
+
+  test("disposing cancels queued and in-flight requests and rejects later ones", async () => {
+    const input = setup({ limit: 1 })
+    const inflight = input.queue.fetch("http://server/api/a")
+    const queued = input.queue.fetch("http://server/api/b")
+    input.queue.dispose()
+    const errors = await Promise.all([inflight, queued].map((request) => request.catch((cause: unknown) => cause)))
+    expect(errors.map((error) => error instanceof DOMException && error.name)).toEqual(["AbortError", "AbortError"])
+    expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/a"])
     expect(input.queue.inflight()).toBe(0)
+    await expect(input.queue.fetch("http://server/api/c")).rejects.toBeInstanceOf(DOMException)
+    expect(input.pending).toHaveLength(1)
   })
 
   test("a request the server never answers times out and frees its slot", async () => {
@@ -131,7 +203,7 @@ describe("createRequestQueue", () => {
     expect(input.queue.queued()).toBe(1)
     const error = await dead.catch((cause: unknown) => cause)
     expect(error).toBeInstanceOf(DOMException)
-    expect((error as DOMException).name).toBe("TimeoutError")
+    expect(error instanceof DOMException && error.name).toBe("TimeoutError")
     expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/dead", "/api/next"])
     input.pending[1]!.resolve()
     await expect(next).resolves.toBeInstanceOf(Response)
@@ -149,7 +221,7 @@ describe("createRequestQueue", () => {
     ]
 
     const errors = await Promise.all(others.map((request) => request.catch((cause: unknown) => cause)))
-    expect(errors.map((error) => (error as DOMException).name)).toEqual([
+    expect(errors.map((error) => error instanceof DOMException && error.name)).toEqual([
       "TimeoutError",
       "TimeoutError",
       "TimeoutError",

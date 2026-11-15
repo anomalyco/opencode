@@ -4,7 +4,7 @@ import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FilePath } from "../ui/file-path"
 import { useTheme } from "../context/theme"
-import { useConfig } from "../config"
+import { useConfig, useNewDesigns } from "../config"
 import {
   DIALOG_INSET,
   DialogBleed,
@@ -36,6 +36,8 @@ export function DialogWorkspaceFileChanges(props: {
   onSelect: (choice: WorkspaceFileChangesChoice) => void
   title?: string
   message?: string
+  /** Footer action for the "yes" choice under the "new-designs" experiment, e.g. `{ title: "delete", key: "d" }`. */
+  confirm?: { title: string; key: string }
 }) {
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
@@ -43,6 +45,7 @@ export function DialogWorkspaceFileChanges(props: {
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
+  const newDesigns = useNewDesigns()
   const [store, setStore] = createStore({ active: "yes" as WorkspaceFileChangesChoice })
   const height = createMemo(() => Math.min(props.files.length, 8))
   const fileNameWidth = createMemo(() =>
@@ -55,16 +58,26 @@ export function DialogWorkspaceFileChanges(props: {
     ),
   )
 
-  function confirm() {
-    props.onSelect(store.active)
+  function choose(choice: WorkspaceFileChangesChoice) {
+    props.onSelect(choice)
     dialog.clear()
   }
 
+  const confirmAction = () => props.confirm ?? { title: "confirm", key: "enter" }
+
   useKeyboard((evt) => {
+    // Escape needs no handling here: the dialog closes on escape, which resolves as a cancel.
+    if (newDesigns()) {
+      if (evt.name !== (confirmAction().key === "enter" ? "return" : confirmAction().key)) return
+      evt.preventDefault()
+      evt.stopPropagation()
+      choose("yes")
+      return
+    }
     if (evt.name === "return") {
       evt.preventDefault()
       evt.stopPropagation()
-      confirm()
+      choose(store.active)
       return
     }
     if (evt.name === "left") {
@@ -85,7 +98,15 @@ export function DialogWorkspaceFileChanges(props: {
   return (
     <DialogLayout
       header={<DialogHeader title={props.title ?? "File Changes Found"} />}
-      footer={
+      footer={{
+        actions: {
+          primary: [
+            { title: "cancel", key: "esc", onTrigger: () => choose("no") },
+            { title: confirmAction().title, key: confirmAction().key, onTrigger: () => choose("yes") },
+          ],
+        },
+      }}
+      legacyFooter={
         <box flexDirection="row" justifyContent="flex-end">
           <For each={options}>
             {(item) => (
@@ -155,7 +176,7 @@ export function DialogWorkspaceFileChanges(props: {
 DialogWorkspaceFileChanges.show = (
   dialog: DialogContext,
   files: VcsFileStatus[],
-  options?: { title?: string; message?: string },
+  options?: { title?: string; message?: string; confirm?: { title: string; key: string } },
 ) => {
   return new Promise<WorkspaceFileChangesChoice | undefined>((resolve) => {
     dialog.replace(

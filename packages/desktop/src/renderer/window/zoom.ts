@@ -2,8 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
+import { nextDesktopZoomLevel, type DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import { createSignal } from "solid-js"
 import { api } from "../api"
+import {
+  createZoomState,
+  selectRequestedZoom,
+  selectWebviewZoom,
+  selectZoomLevel,
+  transitionZoom,
+  WHEEL_PINCH_END_DELAY,
+  type ZoomEffect,
+  type ZoomEvent,
+} from "./zoom-machine"
 
 const OS_NAME = (() => {
   if (navigator.userAgent.includes("Mac")) return "macos"
@@ -17,83 +28,124 @@ const OS_NAME = (() => {
 
 const [webviewZoom, setWebviewZoom] = createSignal(1)
 
-let requestedZoom = 1
+const [zoomLevel, setZoomLevelSignal] = createSignal<DesktopZoomLevel>(1)
 
-let pinchZoomEnabled = false
+let state = createZoomState()
 
-let wheelPinch = undefined as
-  | {
-      active: boolean
-      startZoom: number
-      totalDelta: number
-      timeout: ReturnType<typeof setTimeout> | undefined
-    }
-  | undefined
+let pinchTimer: ReturnType<typeof setTimeout> | undefined
 
-const MAX_ZOOM_LEVEL = 10
+// Reused for every wheel frame, so a pinch gesture allocates no event objects.
+const wheelEvent: Extract<ZoomEvent, { type: "wheel.pinched" }> = { type: "wheel.pinched", delta: 0 }
 
-const MIN_ZOOM_LEVEL = 0.2
+const endPinch: ZoomEvent = { type: "pinch.ended" }
 
-const WHEEL_PINCH_THRESHOLD = 20
+const dispatch = (event: ZoomEvent) => {
+  const next = transitionZoom(state, event)
 
-const WHEEL_PINCH_STEP = 0.2
+  if (next.state !== state) {
+    state = next.state
+    setWebviewZoom(selectWebviewZoom(state))
+    setZoomLevelSignal(selectZoomLevel(state))
+  }
 
-const WHEEL_PINCH_END_DELAY = 160
-
-const clamp = (value: number) => Math.min(Math.max(value, MIN_ZOOM_LEVEL), MAX_ZOOM_LEVEL)
-
-const applyZoom = (next: number) => {
-  requestedZoom = next
-  void api
-    .setZoomFactor(next)
-    .then(() => {
-      if (requestedZoom !== next) return
-      setWebviewZoom(next)
-    })
-    .catch(() => {
-      if (requestedZoom !== next) return
-      requestedZoom = webviewZoom()
-    })
+  next.effects.forEach(run)
 }
 
-// A renderer reload keeps the window's zoom, so seed the signal from main.
-void api.getZoomFactor().then((factor) => {
-  if (requestedZoom !== 1) return
-  requestedZoom = clamp(factor)
-  setWebviewZoom(requestedZoom)
-})
+const run = (effect: ZoomEffect) => {
+  if (effect.type === "arm-pinch-timer") {
+    clearTimeout(pinchTimer)
+    pinchTimer = setTimeout(() => dispatch(endPinch), WHEEL_PINCH_END_DELAY)
 
-api.onZoomFactorChanged((factor) => {
-  requestedZoom = clamp(factor)
-  setWebviewZoom(requestedZoom)
-})
+    return
+  }
 
-void api.getPinchZoomEnabled().then((enabled) => {
-  pinchZoomEnabled = enabled
-})
+  if (effect.type === "cancel-pinch-timer") {
+    clearTimeout(pinchTimer)
+    pinchTimer = undefined
 
-api.onPinchZoomEnabledChanged((enabled) => {
-  pinchZoomEnabled = enabled
-  resetWheelPinch()
-})
+    return
+  }
+
+  // A cancelable window wheel listener makes every scroll gesture wait for the main thread, so it
+  // is only attached while pinch zoom is on. Main's zoom-changed handler covers Ctrl+wheel otherwise.
+  if (effect.type === "sync-wheel-listener") {
+    if (!effect.enabled) return window.removeEventListener("wheel", onWheelPinch)
+    window.addEventListener("wheel", onWheelPinch, { passive: false })
+
+    return
+  }
+
+  if (effect.type === "set-zoom-factor") {
+    void api.setZoomFactor(effect.factor).then(
+      () => dispatch({ type: "factor.succeeded", attempt: effect.attempt }),
+      () => dispatch({ type: "factor.failed", attempt: effect.attempt }),
+    )
+
+    return
+  }
+
+  // The caller's promise follows main's answer, after the machine has seen it.
+  if (effect.type === "set-zoom-level") {
+    const call = api.setZoomLevel(effect.level)
+    void call.then(
+      () => dispatch({ type: "level.succeeded", attempt: effect.attempt }),
+      () => dispatch({ type: "level.failed", attempt: effect.attempt }),
+    )
+
+    return effect.reply.resolve(call)
+  }
+
+  const call = api.setPinchZoomEnabled(effect.enabled)
+  void call.then(
+    () => dispatch({ type: "pinch.succeeded", attempt: effect.attempt }),
+    () => dispatch({ type: "pinch.failed", attempt: effect.attempt }),
+  )
+  effect.reply.resolve(call)
+}
+
+// A renderer reload keeps the window's zoom, so seed it from main unless something newer already set it.
+void api.getZoomFactor().then(
+  (factor) => dispatch({ type: "factor.seeded", factor }),
+  () => dispatch({ type: "factor.seed-failed" }),
+)
+
+void api.getZoomLevel().then(
+  (level) => dispatch({ type: "level.seeded", level }),
+  () => dispatch({ type: "level.seed-failed" }),
+)
+
+api.onZoomChanged((zoom) => dispatch({ type: "zoom.changed", factor: zoom.factor, level: zoom.level }))
+
+void api.getPinchZoomEnabled().then(
+  (enabled) => dispatch({ type: "pinch.seeded", enabled }),
+  () => undefined,
+)
+
+api.onPinchZoomEnabledChanged((enabled) => dispatch({ type: "pinch.changed", enabled }))
 
 const setPinchZoomEnabled = (enabled: boolean) => {
-  pinchZoomEnabled = enabled
-  resetWheelPinch()
+  const reply = Promise.withResolvers<void>()
+  dispatch({ type: "pinch.requested", enabled, reply })
 
-  return api.setPinchZoomEnabled(enabled)
+  return reply.promise
 }
 
-const resetZoom = () => applyZoom(1)
+// Main saves the level and applies it to every window, then reports the new zoom back.
+const setZoomLevel = (level: DesktopZoomLevel) => {
+  const reply = Promise.withResolvers<void>()
+  dispatch({ type: "level.requested", level, reply })
 
-const zoomIn = () => applyZoom(clamp(requestedZoom + 0.2))
-
-const zoomOut = () => applyZoom(clamp(requestedZoom - 0.2))
-
-const resetWheelPinch = () => {
-  clearTimeout(wheelPinch?.timeout)
-  wheelPinch = undefined
+  return reply.promise
 }
+
+// A refused step was already rolled back by the machine; the keyboard shortcuts have no caller to report it to.
+const stepZoom = (level: DesktopZoomLevel) => void setZoomLevel(level).catch(() => undefined)
+
+const resetZoom = () => stepZoom(1)
+
+const zoomIn = () => stepZoom(nextDesktopZoomLevel(selectRequestedZoom(state), "in"))
+
+const zoomOut = () => stepZoom(nextDesktopZoomLevel(selectRequestedZoom(state), "out"))
 
 const normalizeWheelDelta = (event: WheelEvent) => {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
@@ -103,44 +155,13 @@ const normalizeWheelDelta = (event: WheelEvent) => {
   return event.deltaY
 }
 
-const updateWheelPinch = (event: WheelEvent) => {
-  wheelPinch ??= {
-    active: false,
-    startZoom: requestedZoom,
-    totalDelta: 0,
-    timeout: undefined,
-  }
+const onWheelPinch = (event: WheelEvent) => {
+  if (!event.ctrlKey) return
 
-  clearTimeout(wheelPinch.timeout)
-  wheelPinch.timeout = setTimeout(resetWheelPinch, WHEEL_PINCH_END_DELAY)
-  wheelPinch.totalDelta += normalizeWheelDelta(event)
-
-  if (!wheelPinch.active && Math.abs(wheelPinch.totalDelta) < WHEEL_PINCH_THRESHOLD) return
-
-  if (!wheelPinch.active) {
-    wheelPinch.active = true
-    wheelPinch.startZoom = requestedZoom
-    wheelPinch.totalDelta = 0
-
-    return
-  }
-
-  wheelPinch.active = true
-  applyZoom(clamp(wheelPinch.startZoom - (wheelPinch.totalDelta / WHEEL_PINCH_THRESHOLD) * WHEEL_PINCH_STEP))
+  event.preventDefault()
+  wheelEvent.delta = normalizeWheelDelta(event)
+  dispatch(wheelEvent)
 }
-
-window.addEventListener(
-  "wheel",
-  (event) => {
-    if (!pinchZoomEnabled) return
-
-    if (!event.ctrlKey) return
-
-    event.preventDefault()
-    updateWheelPinch(event)
-  },
-  { passive: false },
-)
 
 window.addEventListener("keydown", (event) => {
   if (!(OS_NAME === "macos" ? event.metaKey : event.ctrlKey)) return
@@ -165,4 +186,4 @@ window.addEventListener("keydown", (event) => {
   }
 })
 
-export { webviewZoom, resetZoom, setPinchZoomEnabled, zoomIn, zoomOut }
+export { webviewZoom, zoomLevel, resetZoom, setPinchZoomEnabled, setZoomLevel, zoomIn, zoomOut }

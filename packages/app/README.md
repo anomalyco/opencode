@@ -39,7 +39,7 @@ bun run test:e2e:local
 bun run test:e2e:local -- --grep "settings"
 ```
 
-CI builds the app once and runs the same suite against Vite preview, serving production assets from `dist`. Managed built runs never reuse an existing server, so a running dev server cannot silently replace the production build. To run this mode locally:
+CI builds the app once and runs the same suite against a static Bun server (`e2e/utils/serve.ts`) that serves the production assets in `dist` with Vite preview's SPA fallback rules. Managed built runs never reuse an existing server, so a running dev server cannot silently replace the production build. To run this mode locally:
 
 ```bash
 bun run test:e2e:built
@@ -64,30 +64,18 @@ Compiled CLI startup and service lifecycle coverage runs separately in CI via `p
 
 Environment options:
 
-- `PLAYWRIGHT_BUILD=1` (build and preview locally; always enabled when `CI` is set)
+- `PLAYWRIGHT_BUILD=1` (build and serve `dist` locally; always enabled when `CI` is set)
 - `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (dev fixture API address, default: `127.0.0.1:4096`; built runs use the app's origin, matching production)
-- `PLAYWRIGHT_PORT` (managed dev or preview server port, default: `3000`)
+- `PLAYWRIGHT_PORT` (managed dev or static server port, default: `3000`)
 - `PLAYWRIGHT_BASE_URL` (use an externally managed app instead of starting a server; otherwise defaults to `http://127.0.0.1:<PLAYWRIGHT_PORT>`)
 
-## Deployment
-
-The `deploy` GitHub Actions workflow uses SST to deploy the web app from these branches in `anomalyco/opencode`:
-
-| Branch       | Site                  |
-| ------------ | --------------------- |
-| `dev`        | `app.dev.opencode.ai` |
-| `production` | `app.opencode.ai`     |
-| `beta`       | `beta.opencode.ai`    |
-
-Changes merged into `v2` reach the beta site when they are promoted to `beta`. The beta SST stage deploys
-only the web app, using the same `WebApp` StaticSite definition as production. It sets the build channel
-and Sentry environment to `beta` without deploying the API, console, database, or billing infrastructure.
+## Server mode
 
 `VITE_OPENCODE_SERVER_MODE` controls which server the web build provides at startup:
 
 | Mode               | Initial server                                                                       |
 | ------------------ | ------------------------------------------------------------------------------------ |
-| `none`             | No initial server. The beta deployment uses this mode.                               |
+| `none`             | No initial server.                                                                   |
 | `origin` (default) | The current page's origin. CLI builds explicitly use this mode for `opencode serve`. |
 
 In Vite development mode, `origin` uses `VITE_OPENCODE_SERVER_HOST` / `VITE_OPENCODE_SERVER_PORT`
@@ -117,11 +105,3 @@ HTTPS-to-HTTP error instead of the generic connection failure. HTTP servers on `
 browser local-network permissions can allow some HTTP LAN connections.
 QR scanning is enabled only in a browser-reported secure context with camera support and an available
 video input; insecure pages and unavailable cameras show an explanation beside the disabled action.
-
-The workflow reuses the repository's `CLOUDFLARE_API_TOKEN` and web Sentry settings. The Cloudflare token
-must cover SST's R2 state storage, KV assets, Workers, and custom-domain management in the account that
-owns `opencode.ai`. The beta GitHub environment must allow deployments from the `beta` branch; it does not
-need AWS credentials.
-
-SST manages the beta site's custom domain. The first deployment creates its DNS record and TLS certificate.
-Do not create a CNAME for `beta.opencode.ai` first, because it would conflict with the Workers custom domain.

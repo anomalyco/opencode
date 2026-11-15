@@ -4,10 +4,12 @@
 @import "./theme.css" layer(theme);
 
 @import "./base.css" layer(base);
+@import "./scrollbar.css" layer(base);
 @import "katex/dist/katex.min.css" layer(base);
 
 @import "../data-display/accordion/accordion.css" layer(components);
 @import "../components/animated-number.css" layer(components);
+@import "../components/rolling-number.css" layer(components);
 @import "../components/app-icon.css" layer(components);
 @import "../components/card.css" layer(components);
 @import "../forms/checkbox/checkbox.css" layer(components);
@@ -17,6 +19,7 @@
 @import "../components/hover-card.css" layer(components);
 @import "../components/provider-icon.css" layer(components);
 @import "../components/dock-surface.css" layer(components);
+@import "../components/diagram-preview.css" layer(components);
 @import "../components/image-preview.css" layer(components);
 @import "../forms/inline-input/inline-input.css" layer(components);
 @import "../components/text-field.css" layer(components);
@@ -26,6 +29,7 @@
 @import "../components/progress.css" layer(components);
 @import "../components/resize-handle.css" layer(components);
 @import "../components/spinner.css" layer(components);
+@import "../components/error-details.css" layer(components);
 @import "../components/scroll-view.css" layer(components);
 @import "../components/sticky-accordion-header.css" layer(components);
 @import "../navigation/tabs/tabs.css" layer(components);

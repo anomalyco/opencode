@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { Service } from "../src/effect/service"
 import { ensure, stop } from "../src/promise/service"
 import type { EnsureOptions, EnsureReason, StopOptions } from "../src/service"
-import { serviceFixture } from "./fixture/service-fixture"
+import { serviceFixture, stopSignal, stoppedExitCode } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
 
 const effect = accelerate(Service.ensure)
@@ -71,8 +71,8 @@ for (const client of clients) {
     const replacement = await Bun.file(fixture.registration).json()
     fixture.track(replacement.pid)
 
-    expect(await owner.exited).toBe(0)
-    expect(await Bun.file(fixture.registration + ".signal").text()).toBe("SIGTERM")
+    expect(await owner.exited).toBe(stoppedExitCode)
+    expect(await fixture.signal()).toBe(stopSignal)
     expect(await Bun.file(fixture.registration + ".handoff-request").exists()).toBe(true)
     expect(starts).toEqual(["version-mismatch"])
     expect(replacement.pid).not.toBe(owner.pid)
@@ -87,8 +87,8 @@ for (const client of clients) {
     await Bun.write(fixture.registration + ".missing-health", "")
 
     await client.stop({ file: fixture.registration })
-    expect(await owner.exited).toBe(0)
-    expect(await Bun.file(fixture.registration + ".signal").text()).toBe("SIGTERM")
+    expect(await owner.exited).toBe(stoppedExitCode)
+    expect(await fixture.signal()).toBe(stopSignal)
     expect(await Bun.file(fixture.registration).exists()).toBe(false)
   })
 }

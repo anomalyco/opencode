@@ -1,7 +1,7 @@
 import { NodeFileSystem, NodePath, NodeRuntime } from "@effect/platform-node"
 import { app } from "electron"
 import { Effect, Layer } from "effect"
-import { Extensions } from "./extension"
+import { Plugins } from "./plugin"
 import { Ipc } from "./ipc"
 import { DesktopInitialization } from "./lifecycle/desktop-initialization"
 import { installContextMenu } from "./lifecycle/environment"
@@ -16,14 +16,14 @@ marks.bundle = Date.now()
 
 const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   const lifecycle = yield* ApplicationLifecycle.Service
-  const extensions = yield* Extensions.Service
+  const plugins = yield* Plugins.Service
   marks.layers = Date.now()
   yield* Effect.logInfo("layers ready", { marks })
   const ipc = yield* Ipc.registerIpcHandlers
-  // Main GUI extensions start with the window: servers they restore feed the first paint's server
+  // Main GUI plugins start with the window: servers they restore feed the first paint's server
   // list, and menu items they contribute are present at startup. Their heavy modules load lazily on
   // first use.
-  yield* Effect.forkScoped(extensions.start)
+  yield* Effect.forkScoped(plugins.start)
 
   if (lifecycle.restoreWindows().length) ipc.installMenu()
   // The first window's renderer now has its IPC port and is hydrating its stores over it. The crash

@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 for (const split of [false, true]) {
   for (const theme of ["light", "dark"]) {

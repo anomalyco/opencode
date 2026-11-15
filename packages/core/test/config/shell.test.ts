@@ -21,7 +21,7 @@ describe("ConfigShellPlugin.Plugin", () => {
       const bus = yield* Bus.Service
       const config = yield* Config.Test
       const plugins = yield* Plugin.Service
-      yield* ConfigShellPlugin.Plugin.effect(yield* PluginHost.make(plugins))
+      yield* ConfigShellPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
 
       const configured = process.platform === "win32" ? FSUtil.windowsPath(process.execPath) : process.execPath
       expect(yield* shell.resolve({ priority: "config" })).toBe(configured)
