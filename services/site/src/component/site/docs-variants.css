@@ -576,7 +576,7 @@
 
   /* On the red tint the code header label steps one shade darker, to keep a margin over 4.5:1. */
   &[data-type="danger"] {
-    --code-label: light-dark(#5e5e5e, #8f8f8f);
+    --code-label: light-dark(#5c5c5c, #8f8f8f);
   }
 
   /* The label in the mono font's bold, a confident semibold at 12px (the label only, not bold text
@@ -1184,9 +1184,9 @@
     display: block;
     margin: 0 -1rem 0.875rem;
     padding: 0.5rem 1rem;
-    border-bottom: 1px solid #2e2e2e;
+    border-bottom: 1px solid var(--fixed-dark-line);
     font-size: var(--anno-size);
-    color: #a0a0a0;
+    color: var(--fixed-dark-muted);
   }
 }
 
@@ -1199,12 +1199,12 @@
     display: block;
     height: 2rem;
     margin: 0 -1rem 0.875rem;
-    border-bottom: 1px solid #2e2e2e;
+    border-bottom: 1px solid var(--fixed-dark-line);
     background:
-      radial-gradient(circle, #555 3.5px, transparent 4px) 1rem center / 8px 8px no-repeat,
-      radial-gradient(circle, #555 3.5px, transparent 4px) 1.75rem center / 8px 8px no-repeat,
-      radial-gradient(circle, #555 3.5px, transparent 4px) 2.5rem center / 8px 8px no-repeat,
-      #161616;
+      radial-gradient(circle, var(--fixed-dark-line-strong) 3.5px, transparent 4px) 1rem center / 8px 8px no-repeat,
+      radial-gradient(circle, var(--fixed-dark-line-strong) 3.5px, transparent 4px) 1.75rem center / 8px 8px no-repeat,
+      radial-gradient(circle, var(--fixed-dark-line-strong) 3.5px, transparent 4px) 2.5rem center / 8px 8px no-repeat,
+      var(--fixed-dark-raised);
   }
 }
 
@@ -2155,8 +2155,8 @@
 }
 
 [data-page="docs"][data-docs-variants~="cli-4"] [data-component="docs-article"] [data-component="cli-command"] pre {
-  background: #0a0a0a;
-  color: #eeeeee;
+  background: var(--fixed-dark);
+  color: var(--fixed-dark-text);
 }
 
 [data-page="docs"][data-docs-variants~="cli-5"] [data-component="docs-article"] [data-component="cli-command"] pre {
@@ -2745,20 +2745,20 @@
    block type sits on it: a white body lifted off the off-white page (a step lighter than the page in
    dark), a header row in the page's tone with the label (file mark and name, ">_ Terminal", Files,
    Usage) and an always-visible Copy, a 1px border round the block and a divider under the header.
-   Like Vercel, the header is the darker of the two in both themes (#fafafa over #fff, #000 over
-   #0a0a0a there). The border is decorative (about 1.3:1); the marks that carry meaning (highlight
+   Like Vercel, the header is the darker of the two in both themes: the page colour over the raised
+   body. The border is decorative (about 1.3:1); the marks that carry meaning (highlight
    and diff bars, the selected tab) are 3:1 or more, and all text is 4.5:1 or more. */
 
 [data-page="docs"] {
-  --code-body: light-dark(#ffffff, #161616);
-  --code-head: light-dark(#f7f7f7, #111111);
-  --code-border: light-dark(#e0e0e0, #2e2e2e);
-  --code-text: light-dark(#141414, #f2f2f2);
-  --code-label: light-dark(#666666, #8f8f8f);
+  --code-body: var(--grey-2);
+  --code-head: var(--grey-1);
+  --code-border: var(--grey-5);
+  --code-text: var(--grey-11);
+  --code-label: var(--grey-8);
   /* Reference table heads (Tables 5, API, CLI): the label style in ink with the titles' faux medium
      (the site serves no 500 weight); 12px uppercase keeps them reading as labels. */
   --ref-head: var(--text-strong);
-  --code-number: light-dark(#737373, #858585);
+  --code-number: var(--grey-8);
   --code-mark: light-dark(#3b5cf6, #6b8fff);
   --code-mark-tint: light-dark(#eff2fe, #1e2637);
   --code-del: light-dark(#d61f1f, #f04c4c);
@@ -2770,7 +2770,7 @@
   --token-flag: light-dark(#7a3fc4, #9d7cd8);
   --token-string: light-dark(#2b7a3d, #7fd88f);
   --token-operator: light-dark(#0f6e7a, #56b6c2);
-  --token-output: light-dark(#666666, #8f8f8f);
+  --token-output: var(--grey-8);
 }
 
 /* Outside option 6 the frame folds away and its header hides, so the older options look as before. */
@@ -3277,9 +3277,9 @@
   :is(p, li, td, th, dd, dt, h2, h3, h4, a, strong, em, small, span[data-slot])
   > code {
   padding: 0.1em 0.35em;
-  border: 1px solid light-dark(#e6e6e6, #262626);
+  border: 1px solid var(--grey-5);
   border-radius: 0;
-  background: light-dark(#f2f2f2, #161616);
+  background: var(--grey-3);
   color: var(--text-strong);
 }
 
@@ -4211,7 +4211,7 @@
   :not(pre) > code:not([data-component="code-frame"] *) {
     padding: 0.1em 0.35em;
     border: 1px solid var(--surface-chip-edge);
-    background: linear-gradient(light-dark(#f2f2f2, #161616), light-dark(#f2f2f2, #161616)), var(--surface-layer);
+    background: linear-gradient(var(--grey-3), var(--grey-3)), var(--surface-layer);
     background-blend-mode: var(--blend), normal;
     color: var(--text-strong);
   }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
+import { mergeRootSessionIndex } from "@/runtime/server/session-index"
 import {
   HOME_SESSION_INDEX_LIMIT,
   HOME_SESSION_LIMIT,
@@ -96,6 +97,18 @@ describe("Home session index", () => {
       ]).map((item) => item.id),
     ).toEqual(["root"])
   })
+
+  test.each([
+    { surface: "Home", merge: mergeHomeSessionIndex },
+    { surface: "Inbox", merge: mergeRootSessionIndex },
+  ])("$surface shows live metadata and advances an indexed row when idle advances", ({ merge }) => {
+    const index = session("root", { time: { created: 1, idle: 5, updated: 10 } })
+    const live = { ...index, title: "Loaded", time: { ...index.time, updated: 30 } }
+    const created = session("new")
+    expect(merge([index], [live, created])).toEqual([{ ...live, time: index.time }, created])
+    const ended = { ...live, time: { ...live.time, idle: 25 } }
+    expect(merge([index], [ended])).toEqual([ended])
+  })
 })
 
 // Home merges locally known sessions and pending removals into the fetched
@@ -125,7 +138,7 @@ describe("Home session index parity with the complete index", () => {
     const known = [
       session("a-fresh", { time: { created: now, updated: now }, location: { directory: "/a" } }),
       // A fetched session that fell outside retention but was updated locally.
-      { ...complete[300], time: { created: now - 1, updated: now } },
+      { ...complete[300], time: { created: now - 1, updated: now, idle: now } },
       session("d-new", { time: { created: now, updated: now }, location: { directory: "/d" } }),
     ]
 

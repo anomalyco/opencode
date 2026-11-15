@@ -6,7 +6,7 @@ import { v1Locales, v1Section } from "~/docs/lib/v1-navigation"
 import { dict as en } from "~/i18n/en"
 
 // The V1 docs in their Starlight app's folders (src/docs/config.ts), English at the root.
-const content = path.resolve(import.meta.dir, "../../../packages/web/src/content/docs")
+const content = path.resolve(import.meta.dir, "../src/docs/v1/content")
 const pages = (folder: string) =>
   readdirSync(path.join(content, folder))
     .filter((file) => file.endsWith(".mdx"))

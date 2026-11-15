@@ -16,7 +16,7 @@ export type DocsModule = {
 // Globs take literal patterns, so each set's folder (config.ts `content`) is spelled out here.
 const modules = {
   latest: import.meta.glob<DocsModule>("./**/*.mdx", { base: "./content" }),
-  v1: import.meta.glob<DocsModule>("./**/*.mdx", { base: "../../../../packages/web/src/content/docs" }),
+  v1: import.meta.glob<DocsModule>("./**/*.mdx", { base: "./v1/content" }),
 } satisfies Record<DocsSet["id"], unknown>
 
 /** Every content page's loader, by set and slug (`index`, `config`, `cli`, `build/plugins`, …). */

@@ -1,4 +1,4 @@
-import { onCleanup } from "solid-js"
+import { onCleanup, untrack } from "solid-js"
 import { Predicate } from "effect"
 import { INITIAL_FOCUS_LOCK_STATE, transitionFocusLock, type FocusLockEvent } from "./focus-lock-machine"
 
@@ -75,6 +75,44 @@ export function createNotificationCoordinator() {
   }
 
   return {
+    tip(show: () => () => void) {
+      const lifetime = new AbortController()
+
+      const closed = new Promise<void>((resolve) =>
+        lifetime.signal.addEventListener("abort", () => resolve(), { once: true }),
+      )
+
+      let hide: VoidFunction | undefined
+
+      const open = () => {
+        if (hide || lifetime.signal.aborted || !document.hasFocus() || document.hidden) return
+        hide = untrack(show)
+
+        return closed
+      }
+
+      const focus = () => {
+        if (!locks) return void open()
+        void locks
+          .request("opencode:tip", { ifAvailable: true }, (lock) => (lock ? open() : undefined))
+          .catch(() => undefined)
+      }
+
+      // Plain HTTP has no Web Locks. Only its focused window keeps a toast mounted.
+      const blur = () => {
+        if (locks) return
+        hide?.()
+        hide = undefined
+      }
+
+      window.addEventListener("focus", focus, { signal: lifetime.signal })
+      window.addEventListener("blur", blur, { signal: lifetime.signal })
+      onCleanup(() => {
+        lifetime.abort()
+        hide?.()
+      })
+      focus()
+    },
     sound<T>(eventID: string, run: () => Promise<T> | void) {
       return once("sound", eventID, run)
     },

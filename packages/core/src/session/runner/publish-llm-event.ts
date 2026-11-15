@@ -30,6 +30,14 @@ type Input = {
 
 const asRecord = (value: unknown): Record<string, unknown> => (isRecord(value) ? value : { value })
 
+/** Provider events that carry a step's first generated token, matching how the stream counts output. */
+const beginsOutput = (event: LLMEvent) =>
+  event.type === "text-start" ||
+  event.type === "reasoning-start" ||
+  event.type === "tool-input-start" ||
+  event.type === "tool-input-error" ||
+  event.type === "tool-call"
+
 const INPUT_EXCERPT_LIMIT = 2048
 
 type InputExcerpt = {
@@ -138,6 +146,15 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     stepStarted ? Effect.succeed(assistantMessageID) : Effect.die(new Error("Tool event before assistant step start"))
   const streamed = Effect.fnUntraced(function* () {
     yield* bus.publish(SessionEvent.Step.Streamed, {
+      sessionID: input.sessionID,
+      assistantMessageID: yield* startAssistant(),
+    })
+  })
+  let firstTokenPublished = false
+  const firstToken = Effect.fnUntraced(function* () {
+    if (firstTokenPublished) return
+    firstTokenPublished = true
+    yield* bus.publish(SessionEvent.Step.FirstToken, {
       sessionID: input.sessionID,
       assistantMessageID: yield* startAssistant(),
     })
@@ -413,6 +430,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   )
 
   const publish = Effect.fnUntraced(function* (event: LLMEvent) {
+    if (beginsOutput(event)) yield* firstToken()
     switch (event.type) {
       case "step-start":
         yield* startAssistant()

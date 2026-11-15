@@ -1,14 +1,17 @@
-import type { Eval } from "../interpreter/runner.js"
-import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
-import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH } from "../interpreter/limits.js"
-import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
+import { Invoke } from "../runtime/signals.js"
+import type { Builtins } from "../runtime/intrinsics.js"
+import { builtinCursor } from "../runtime/operations.js"
+import { constructor, methods, prototypeFrom, receiver, iteratorMethods } from "../runtime/native.js"
+import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH } from "../runtime/limits.js"
+import { invalidData, IteratorSymbol, rangeError, typeError } from "../runtime/model.js"
 import {
+  changed,
   define,
   get,
   hidden,
   Arr,
+  Bytes,
   GeneratorObj,
-  hostIterator,
   Obj,
   PromiseObj,
   coerceToInteger,
@@ -16,10 +19,10 @@ import {
   coerceToString,
   rejectAddition,
   type Value,
-} from "../interpreter/objects.js"
-import { describeValue, rejectCircularInsertion } from "../interpreter/references.js"
-import { applyCollectionCallback, invoke, preserveConsumerError, withPrimitives } from "../interpreter/callback.js"
-import type { Interpreter } from "../interpreter/interpreter.js"
+} from "../runtime/objects.js"
+import { describeValue, rejectCircularInsertion } from "../runtime/references.js"
+import { requireCallback, withPrimitives } from "../runtime/callback.js"
+import type { Interpreter } from "../runtime/interpreter.js"
 import { compareText } from "../tool-runtime.js"
 
 const arrayLikeSource = (source: Value): { readonly length: number; readonly source: Obj } => {
@@ -32,70 +35,112 @@ const arrayLikeSource = (source: Value): { readonly length: number; readonly sou
   throw invalidData(`Array.from expects an iterable or array-like value, received ${describeValue(source)}.`)
 }
 
-function* arrayFrom<R>(ctx: Interpreter<R>, args: Array<Value>): Eval<Value> {
-  const source = args[0]
-  const proto = ctx.builtins.Array
-  const apply =
-    args.length < 2 || args[1] === undefined ? undefined : applyCollectionCallback(ctx, args[1], "Array.from")
-  const cursor = yield* ctx.iterate(source)
-  if (cursor === undefined) {
-    if (source instanceof GeneratorObj) {
-      throw typeError(
-        `Array.from expects a synchronous iterable or array-like value, received ${describeValue(source)}.`,
-      )
-    }
-    const arrayLike = arrayLikeSource(source)
-    const values: Array<Value> = []
-    for (let index = 0; index < arrayLike.length; index += 1) {
-      const item = get(arrayLike.source, index)
-      values.push(apply === undefined ? item : yield* apply([item, index], args[2]))
-    }
-    return new Arr(proto, values)
-  }
-  const values: Array<Value> = []
-  let index = 0
-  while (true) {
-    const step = yield* cursor.next()
-    if (step.done) return new Arr(proto, values)
-    values.push(
-      apply === undefined
-        ? step.value
-        : yield* preserveConsumerError(cursor.close, apply([step.value, index], args[2])),
-    )
-    index += 1
-  }
+const iterable = (builtins: Builtins, value: Value) => {
+  if (builtinCursor(builtins, value) !== undefined) return true
+  if (!(value instanceof Obj)) return false
+  const method = get(value, IteratorSymbol)
+  return method !== undefined && method !== null
 }
 
-export function* sortArray<R>(
+const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Value | Invoke => {
+  const source = args[0]
+  const mapper = args.length < 2 || args[1] === undefined ? undefined : requireCallback(args[1], "Array.from")
+  if (iterable(ctx.builtins, source)) {
+    return new Invoke(ctx.prelude.fn("arrayFromIterable"), undefined, [source, mapper, args[2]], undefined)
+  }
+  if (source instanceof GeneratorObj) {
+    throw typeError(`Array.from expects a synchronous iterable or array-like value, received ${describeValue(source)}.`)
+  }
+  const arrayLike = arrayLikeSource(source)
+  if (mapper === undefined) {
+    return new Arr(
+      ctx.builtins.Array,
+      Array.from({ length: arrayLike.length }, (_, index) => get(arrayLike.source, index)),
+    )
+  }
+  return new Invoke(
+    ctx.prelude.fn("arrayFromLike"),
+    undefined,
+    [arrayLike.source, arrayLike.length, mapper, args[2]],
+    undefined,
+  )
+}
+
+/** Where a sort puts its result: back into an array or bytes, or into a new array. */
+export type SortInto = "Array.sort" | "Array.toSorted" | "Uint8Array.sort"
+
+/** The most values the default sort sorts in one native call; more sort in bounded steps (see `sortDefault`). */
+export const SORT_RUN = 4096
+
+/**
+ * Sorts `target`'s values: at once without a comparator, unless there are many, otherwise in the prelude
+ * (`sortWith`), which calls it. The merges of a top-down merge sort are planned here, in post-order, so the prelude
+ * compares in the same order as the recursive sort. Holes and undefined values sort last without being compared.
+ */
+export const sortArray = <R>(
   ctx: Interpreter<R>,
-  target: Array<Value>,
+  target: Arr | Bytes,
   comparator: Value,
-  name: string,
-): Eval<Array<Value>> {
-  if (comparator === undefined) {
-    return [...target].sort((a, b) => compareText(coerceToString(a), coerceToString(b)))
+  into: SortInto,
+): Value | Invoke => {
+  const builtins = ctx.builtins
+  const items = target instanceof Arr ? [...target.items] : [...target.bytes]
+  // Counted before any comparator runs; a comparator that changes the array does not change where holes go.
+  let holes = 0
+  if (target instanceof Arr) for (let index = 0; index < items.length; index++) if (!(index in target.items)) holes++
+  const callback = comparator === undefined ? undefined : requireCallback(comparator, into)
+  if (callback === undefined && items.length <= SORT_RUN) {
+    return sorted(
+      builtins,
+      target,
+      into,
+      holes,
+      items.sort((a, b) => compareText(coerceToString(a), coerceToString(b))),
+    )
   }
-  const apply = applyCollectionCallback(ctx, comparator, name)
-  const mergeSort = function* (items: Array<Value>): Eval<Array<Value>> {
-    if (items.length <= 1) return items
-    const midpoint = Math.floor(items.length / 2)
-    const left = yield* mergeSort(items.slice(0, midpoint))
-    const right = yield* mergeSort(items.slice(midpoint))
-    const merged: Array<Value> = []
-    let leftIndex = 0
-    let rightIndex = 0
-    while (leftIndex < left.length && rightIndex < right.length) {
-      // Treat a NaN comparator result as equal to preserve stable ordering.
-      const order = coerceToNumber(yield* apply([left[leftIndex], right[rightIndex]]))
-      if (Number.isNaN(order) || order <= 0) merged.push(left[leftIndex++])
-      else merged.push(right[rightIndex++])
-    }
-    return [...merged, ...left.slice(leftIndex), ...right.slice(rightIndex)]
+  const defined = new Arr(
+    builtins.Array,
+    items.filter((item) => item !== undefined),
+  )
+  const undefs = items.length - defined.items.length
+  if (callback === undefined) {
+    return new Invoke(ctx.prelude.fn("sortDefault"), undefined, [target, into, holes, defined, undefs], undefined)
   }
-  const defined = target.filter((item) => item !== undefined)
-  const undefinedCount = target.length - defined.length
-  const sorted = yield* mergeSort(defined)
-  return [...sorted, ...Array(undefinedCount).fill(undefined)]
+  const merges: Array<number> = []
+  const plan = (low: number, high: number) => {
+    if (high - low <= 1) return
+    const middle = low + Math.floor((high - low) / 2)
+    plan(low, middle)
+    plan(middle, high)
+    merges.push(low, middle, high)
+  }
+  plan(0, defined.items.length)
+  const args = [target, into, holes, callback, defined, undefs, new Arr(builtins.Array, merges)]
+  return new Invoke(ctx.prelude.fn("sortWith"), undefined, args, undefined)
+}
+
+export const sorted = (
+  builtins: Builtins,
+  target: Arr | Bytes,
+  into: SortInto,
+  holes: number,
+  result: Array<Value>,
+) => {
+  if (target instanceof Bytes) {
+    target.bytes.set(Uint8Array.from(result, coerceToNumber))
+    return target
+  }
+  if (into === "Array.toSorted") return new Arr(builtins.Array, result)
+  changed(target)
+  const items = target.items
+  const count = result.length - holes
+  result.slice(0, count).forEach((item, index) => {
+    items[index] = item
+  })
+  Array.from({ length: holes }, (_, index) => count + index).forEach((index) => {
+    delete items[index]
+  })
+  return target
 }
 
 // Array constructs identically with or without new, like JS.
@@ -136,6 +181,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     if (!target.elements.writable && (length > 0 || growth !== undefined)) {
       throw typeError(`Cannot assign to read only property '${length > 0 ? 0 : "length"}'.`)
     }
+    changed(target)
     return target
   }
   const optNumber = (value: Value): number | undefined => (value === undefined ? undefined : coerceToInteger(value))
@@ -147,16 +193,11 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       (thisValue, args) => {
         // .map would keep holes, which the conversion would then hand to the body as undefined.
         const parts = Array.from(self(thisValue, "join").items, (item) => item ?? "")
-        return withPrimitives(
-          ctx,
-          "string",
-          [args[0] === undefined ? "," : args[0], ...parts],
-          ([separator, ...items]) => {
-            const joined = items.map(coerceToString).join(coerceToString(separator))
-            checkStringLength(joined.length)
-            return joined
-          },
-        )
+        return withPrimitives("string", [args[0] === undefined ? "," : args[0], ...parts], ([separator, ...items]) => {
+          const joined = items.map(coerceToString).join(coerceToString(separator))
+          checkStringLength(joined.length)
+          return joined
+        })
       },
     ],
     [
@@ -164,7 +205,6 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       0,
       (thisValue) =>
         withPrimitives(
-          ctx,
           "string",
           Array.from(self(thisValue, "toString").items, (item) => item ?? ""),
           (items) => items.map(coerceToString).join(","),
@@ -226,32 +266,8 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         return target
       },
     ],
-    [
-      "sort",
-      1,
-      function* (thisValue, args) {
-        const target = mutable(self(thisValue, "sort"))
-        const items = target.items
-        const length = items.length
-        const holeCount = Array.from({ length }, (_, index) => Object.hasOwn(items, index)).filter((o) => !o).length
-        const itemCount = length - holeCount
-        const sorted = yield* sortArray(ctx, items, args[0], "Array.sort")
-        sorted.slice(0, itemCount).forEach((item, index) => {
-          items[index] = item
-        })
-        Array.from({ length: holeCount }, (_, index) => itemCount + index).forEach((index) => {
-          delete items[index]
-        })
-        return target
-      },
-    ],
-    [
-      "toSorted",
-      1,
-      function* (thisValue, args) {
-        return wrap(yield* sortArray(ctx, self(thisValue, "toSorted").items, args[0], "Array.toSorted"))
-      },
-    ],
+    ["sort", 1, (thisValue, args) => sortArray(ctx, mutable(self(thisValue, "sort")), args[0], "Array.sort")],
+    ["toSorted", 1, (thisValue, args) => sortArray(ctx, self(thisValue, "toSorted"), args[0], "Array.toSorted")],
     ["toReversed", 0, (thisValue) => wrap([...self(thisValue, "toReversed").items].reverse())],
     [
       "with",
@@ -334,201 +350,9 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         return target
       },
     ],
-    [
-      "toLocaleString",
-      0,
-      function* (thisValue) {
-        const items = self(thisValue, "toLocaleString").items
-        const length = items.length
-        const parts: Array<string> = []
-        for (let index = 0; index < length; index += 1) {
-          const item = items[index]
-          parts.push(
-            item === null || item === undefined
-              ? ""
-              : coerceToString(yield* invoke(ctx, item, "toLocaleString", "Array.prototype.toLocaleString")),
-          )
-        }
-        return parts.join(",")
-      },
-    ],
-    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").items.keys())],
-    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").items.values())],
-    [
-      "entries",
-      0,
-      (thisValue) =>
-        hostIterator(
-          builtins,
-          self(thisValue, "entries")
-            .items.entries()
-            .map(([index, item]) => wrap([index, item])),
-        ),
-    ],
-    [
-      "flatMap",
-      1,
-      function* (thisValue, args) {
-        const target = self(thisValue, "flatMap")
-        const apply = applyCollectionCallback(ctx, args[0], "Array.flatMap")
-        const length = target.items.length
-        const values: Array<Value> = []
-        for (let index = 0; index < length; index += 1) {
-          if (!(index in target.items)) continue
-          const mapped = yield* apply([target.items[index], index, target], args[1])
-          if (mapped instanceof Arr) {
-            // forEach skips holes, as flattening does; spreading would turn them into undefined.
-            mapped.items.forEach((item) => values.push(item))
-            continue
-          }
-          values.push(mapped)
-        }
-        return wrap(values)
-      },
-    ],
-    ...callbackMethods(ctx, "Array", self, (target) => target.items, wrap),
+    ...iteratorMethods(builtins, self),
+    // The callback methods are the prelude's.
   ])
   define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return array
-}
-
-/**
- * The callback methods Array and Uint8Array share. They fix the iteration length while reading existing elements
- * live; `wrap` builds the collection `map` and `filter` return.
- */
-export const callbackMethods = <R, T extends Obj>(
-  ctx: Interpreter<R>,
-  label: string,
-  self: (thisValue: Value, name: string) => T,
-  elements: (target: T) => ArrayLike<Value>,
-  wrap: (values: Array<Value>) => Value,
-): Array<Method> => {
-  const iterate = (
-    name: string,
-    length: number,
-    body: (
-      target: ArrayLike<Value>,
-      receiver: T,
-      apply: (args: Array<Value>) => Eval<Value>,
-      args: Array<Value>,
-    ) => Eval<Value>,
-  ): Method => [
-    name,
-    length,
-    (thisValue, args) => {
-      const target = self(thisValue, name)
-      const call = applyCollectionCallback(ctx, args[0], `${label}.${name}`)
-      // reduce and reduceRight take an initial value where the others take a thisArg.
-      const thisArg = name.startsWith("reduce") ? undefined : args[1]
-      return body(elements(target), target, (callbackArgs) => call(callbackArgs, thisArg), args)
-    },
-  ]
-  return [
-    iterate("map", 1, function* (target, receiver, apply) {
-      const length = target.length
-      const values: Array<Value> = []
-      values.length = length
-      for (let index = 0; index < length; index += 1) {
-        if (!(index in target)) continue
-        values[index] = yield* apply([target[index], index, receiver])
-      }
-      return wrap(values)
-    }),
-    iterate("filter", 1, function* (target, receiver, apply) {
-      const length = target.length
-      const values: Array<Value> = []
-      for (let index = 0; index < length; index += 1) {
-        if (!(index in target)) continue
-        const item = target[index]
-        if (yield* apply([item, index, receiver])) values.push(item)
-      }
-      return wrap(values)
-    }),
-    iterate("find", 1, function* (target, receiver, apply) {
-      const length = target.length
-      for (let index = 0; index < length; index += 1) {
-        const item = target[index]
-        if (yield* apply([item, index, receiver])) return item
-      }
-      return undefined
-    }),
-    iterate("findIndex", 1, function* (target, receiver, apply) {
-      const length = target.length
-      for (let index = 0; index < length; index += 1) {
-        if (yield* apply([target[index], index, receiver])) return index
-      }
-      return -1
-    }),
-    iterate("findLast", 1, function* (target, receiver, apply) {
-      for (let index = target.length - 1; index >= 0; index -= 1) {
-        const item = target[index]
-        if (yield* apply([item, index, receiver])) return item
-      }
-      return undefined
-    }),
-    iterate("findLastIndex", 1, function* (target, receiver, apply) {
-      for (let index = target.length - 1; index >= 0; index -= 1) {
-        if (yield* apply([target[index], index, receiver])) return index
-      }
-      return -1
-    }),
-    iterate("some", 1, function* (target, receiver, apply) {
-      const length = target.length
-      for (let index = 0; index < length; index += 1) {
-        if (!(index in target)) continue
-        if (yield* apply([target[index], index, receiver])) return true
-      }
-      return false
-    }),
-    iterate("every", 1, function* (target, receiver, apply) {
-      const length = target.length
-      for (let index = 0; index < length; index += 1) {
-        if (!(index in target)) continue
-        if (!(yield* apply([target[index], index, receiver]))) return false
-      }
-      return true
-    }),
-    iterate("forEach", 1, function* (target, receiver, apply) {
-      const length = target.length
-      for (let index = 0; index < length; index += 1) {
-        if (index in target) yield* apply([target[index], index, receiver])
-      }
-      return undefined
-    }),
-    iterate("reduce", 1, function* (target, receiver, apply, args) {
-      const length = target.length
-      let start = 0
-      let accumulator = args[1]
-      if (args.length < 2) {
-        while (start < length && !(start in target)) start += 1
-        if (start === length) {
-          throw typeError(`${label}.reduce of an empty array with no initial value.`)
-        }
-        accumulator = target[start]
-        start += 1
-      }
-      for (let index = start; index < length; index += 1) {
-        if (!(index in target)) continue
-        accumulator = yield* apply([accumulator, target[index], index, receiver])
-      }
-      return accumulator
-    }),
-    iterate("reduceRight", 1, function* (target, receiver, apply, args) {
-      let start = target.length - 1
-      let accumulator = args[1]
-      if (args.length < 2) {
-        while (start >= 0 && !(start in target)) start -= 1
-        if (start < 0) {
-          throw typeError(`${label}.reduceRight of an empty array with no initial value.`)
-        }
-        accumulator = target[start]
-        start -= 1
-      }
-      for (let index = start; index >= 0; index -= 1) {
-        if (!(index in target)) continue
-        accumulator = yield* apply([accumulator, target[index], index, receiver])
-      }
-      return accumulator
-    }),
-  ]
 }

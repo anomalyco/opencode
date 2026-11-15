@@ -136,6 +136,63 @@ describe("acp turn events over the wire", () => {
     },
   )
 
+  test("streams resumed parent turns after background children report across prompts", async () => {
+    await using acp = await startSession({
+      permission: () => ({ outcome: { outcome: "selected", optionId: "once" } }),
+      onPrompt: ({ sessionID, id, text }) => {
+        if (text === "launch")
+          return turn(
+            sessionID,
+            id,
+            childCreated("ses_first", sessionID, "First"),
+            childCreated("ses_second", sessionID, "Second"),
+          )
+        if (text === "followup")
+          return turn(sessionID, id, durableEvent("session.execution.started", { sessionID: "ses_first" }))
+        return turn(
+          sessionID,
+          id,
+          textDelta("ses_second", "msg_child_2", "older child during chat"),
+          textDelta(sessionID, "msg_chat", "chat reply"),
+        )
+      },
+    })
+    const sessionID = acp.sessionId
+
+    expect((await acp.prompt(sessionID, "launch")).stopReason).toBe("end_turn")
+    acp.server.send(
+      textDelta("ses_first", "msg_child", "child only"),
+      succeeded("ses_first"),
+      ...turn(sessionID, "msg_report_1", textDelta(sessionID, "msg_reaction_1", "first reaction")),
+      textDelta(sessionID, "msg_stale", "stale"),
+    )
+    await acp.waitForUpdate(({ update }) => JSON.stringify(update).includes("first reaction"))
+
+    expect((await acp.prompt(sessionID, "chat")).stopReason).toBe("end_turn")
+    acp.server.send(
+      permissionAsked("ses_second", "perm_second", { action: "read" }),
+      succeeded("ses_second"),
+      ...turn(sessionID, "msg_report_2", textDelta(sessionID, "msg_reaction_2", "second reaction")),
+    )
+    await acp.waitForUpdate(({ update }) => JSON.stringify(update).includes("second reaction"))
+    await acp.until(() => acp.server.replies.length === 1, "second child permission reply")
+
+    expect((await acp.prompt(sessionID, "followup")).stopReason).toBe("end_turn")
+    acp.server.send(
+      succeeded("ses_first"),
+      ...turn(sessionID, "msg_report_3", textDelta(sessionID, "msg_reaction_3", "followup reaction")),
+    )
+    await acp.waitForUpdate(({ update }) => JSON.stringify(update).includes("followup reaction"))
+
+    expect(acp.server.replies).toEqual([{ sessionID: "ses_second", requestID: "perm_second", decision: "once" }])
+    expect(turnUpdates(acp.updates).map(({ update }) => update)).toMatchObject([
+      { messageId: "msg_reaction_1", content: { text: "first reaction" } },
+      { messageId: "msg_chat", content: { text: "chat reply" } },
+      { messageId: "msg_reaction_2", content: { text: "second reaction" } },
+      { messageId: "msg_reaction_3", content: { text: "followup reaction" } },
+    ])
+  })
+
   test("cancels unsupported session forms so execution can continue", async () => {
     await using acp = await startSession({
       onPrompt: ({ sessionID, id }) => [

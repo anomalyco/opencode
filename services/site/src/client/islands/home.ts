@@ -1,7 +1,10 @@
+import { carouselNav } from "~/component/site/carousel-nav"
 import { consoleDots } from "~/component/site/console-dots"
+import { logoWall } from "~/component/site/logo-wall-motion"
 import { onEntrance, revealMotion, washColumns, washItem, washStartTime, washStep } from "~/component/site/reveal"
 import { siteSettings } from "~/component/site/settings"
 import { spinReel } from "~/component/site/slot-stat"
+import { logoWalls } from "~/lib/logo-walls"
 import { $, $$, reducedMotion } from "../dom"
 
 /**
@@ -36,13 +39,22 @@ export default function home() {
   $$<HTMLElement>('[data-component="console-field"]').forEach((field) =>
     consoleDots(field, () => Number(field.dataset.dot) || 2),
   )
-  // The logo row and, for a mouse, the carousel's arrows render in the browser, with the framework
-  // (solid.tsx). Touch screens swipe the cards and never load the arrows.
+  // The logo row (logo-wall.tsx) and, for a mouse, the carousel's arrows (products-arrows.tsx); touch
+  // screens swipe the cards.
   const wall = $('[data-component="logo-wall"]')
-  if (wall) void import("./logo-wall").then((module) => module.default(wall))
-  const carousel = $('[data-component="products"][data-layout="carousel"]')
-  if (carousel && matchMedia("(pointer: fine)").matches)
-    void import("./carousel").then((module) => module.default(carousel))
+  if (wall) {
+    const kind = wall.dataset.kind === "providers" ? "providers" : "companies"
+    logoWall(wall, {
+      label: wall.dataset.layout ?? "none",
+      items: logoWalls[kind],
+      interval: siteSettings.logoInterval,
+      stagger: siteSettings.logoStagger,
+      duration: siteSettings.logoTuning[siteSettings.logoAnimation].duration,
+    })
+  }
+  const nav = $('[data-component="products"][data-layout="carousel"] > [data-slot="carousel-nav"]')
+  const track = $("#products-track")
+  if (nav && track && matchMedia("(pointer: fine)").matches) carouselNav(nav, track)
 }
 
 // The numbers start a fifth of a window early, so they already spin as they come into view; with

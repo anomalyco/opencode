@@ -173,6 +173,31 @@ describe("transitionShellFollower", () => {
     expect(stopped.effects).toEqual([{ type: "read", attempt: 3, cursor: 1 }])
   })
 
+  test("keeps the retained tail on a whole character when the window cuts an emoji", () => {
+    // Each page is valid text; only the rolling 65,536-unit window would start on the second half of the emoji.
+    const first = fresh(false)
+
+    if (first.status !== "reading") throw new Error(`expected a read, got ${first.status}`)
+
+    const next = transitionShellFollower(first, {
+      type: "read.succeeded",
+      attempt: first.attempt,
+      page: { output: "😀", cursor: 4, size: 65_539 },
+    }).state
+
+    if (next.status !== "reading") throw new Error(`expected a read, got ${next.status}`)
+
+    const done = transitionShellFollower(next, {
+      type: "read.succeeded",
+      attempt: next.attempt,
+      page: { output: "x".repeat(65_535), cursor: 65_539, size: 65_539 },
+    })
+
+    expect(done.state).toMatchObject({ status: "complete", output: "x".repeat(65_535) })
+    expect(done.effects).toContainEqual({ type: "emit", output: "x".repeat(65_535) })
+    expect(done.effects).toContainEqual({ type: "cache", cursor: 65_539, output: "x".repeat(65_535), complete: true })
+  })
+
   test("a missing shell is remembered and never read again", () => {
     const missing = transitionShellFollower(fresh(true), { type: "read.missing", attempt: 1 })
 

@@ -2,6 +2,220 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.3.0 — 2026-11-13
+
+### Highlights
+
+- **Background Subagents by Default**: Subagents now return immediately, continue in the background, and report back whenever they become idle. You can keep working in the parent session while multiple subagents run concurrently. ([#63382](https://github.com/anomalyco/opencode/pull/63382))
+- **Quieter Transcripts by Default**: The TUI now summarizes each run of tool calls and thoughts into one collapsible activity row, so the answer is easier to follow. To see every step again, set **Verbosity** to `medium` or `high` in settings, or set `session.verbosity` in your TUI config; an existing setting is kept. ([#63207](https://github.com/anomalyco/opencode/pull/63207))
+- **Jump to an Earlier Prompt**: In the desktop app, open **Jump to message** from the command palette or press `Cmd+Alt+G` (`Ctrl+Alt+G` on Windows and Linux) to search prompts across the current session and jump directly to one. ([#63585](https://github.com/anomalyco/opencode/pull/63585))
+
+### Core
+
+#### Improvements
+
+- Subagents now always run in the background, return their session ID immediately, and report results to their parent whenever they become idle. ([#63382](https://github.com/anomalyco/opencode/pull/63382))
+- Added experimental support for MCP events, behind the `mcp_events` flag. ([#63254](https://github.com/anomalyco/opencode/pull/63254), [#63261](https://github.com/anomalyco/opencode/pull/63261), [#63269](https://github.com/anomalyco/opencode/pull/63269))
+- Shell commands now survive server handoffs and keep their output when interrupted.
+- Added experimental support for moving a shell command to the background when its timeout expires, behind the `shell_timeout_background` flag. With the flag on, an explicit timeout on a background command stops it. ([#63024](https://github.com/anomalyco/opencode/pull/63024), [#63703](https://github.com/anomalyco/opencode/pull/63703))
+- Local Windows shell commands now run through the process daemon.
+- Added support for freeform tool input on compatible models.
+- Added LM Studio decision-model support.
+- Agents are now told when their session is a fork. Thanks @hasta84. ([#63235](https://github.com/anomalyco/opencode/pull/63235))
+- Tool output truncation now keeps the beginning of the output and preserves a usable preview if the full output cannot be saved.
+- Tail reads no longer load the entire file into memory.
+- Providers can present a client certificate for gateways that require mutual TLS. Set `settings.tls` with `cert`, `key` and an optional `passphrase` on the provider; values accept `{file:}` and `{env:}` like `apiKey`. ([#61832](https://github.com/anomalyco/opencode/pull/61832))
+- When a subagent goes idle while its own background work is still running, its report to the parent now says it is still running, so the parent waits for the final report instead of treating the partial answer as done. ([#63675](https://github.com/anomalyco/opencode/pull/63675))
+- Code Mode gets simpler structured results from file and skill tools: `write` and `edit` return their confirmation as a string, `patch` returns an empty result, and `skill` returns the skill's directory and content. ([#63616](https://github.com/anomalyco/opencode/pull/63616), [#63635](https://github.com/anomalyco/opencode/pull/63635), [#63618](https://github.com/anomalyco/opencode/pull/63618), [#63623](https://github.com/anomalyco/opencode/pull/63623))
+
+#### Bug fixes
+
+- Fixed case-only file renames in patches on case-insensitive filesystems.
+- Fixed stale thinking being retained after Claude Agent prompts or tools change.
+- Fixed directly driven child sessions not resuming after a restart.
+- Fixed plugin replacement stopping when cleanup of an earlier plugin fails.
+- Fixed MCP OAuth refreshes and localhost redirects when a server rewrites `127.0.0.1`.
+- Fixed saved API keys being omitted from local-model discovery.
+- Local model discovery (Ollama, LM Studio, vLLM) waits up to 15 seconds per request instead of 1, so remote or tunnelled endpoints list their models, and a slow endpoint no longer delays other endpoints or config reloads. ([#63700](https://github.com/anomalyco/opencode/pull/63700))
+- In Code Mode, calling a namespace as if it were a tool now suggests up to three real tools under it. ([#63697](https://github.com/anomalyco/opencode/pull/63697))
+- Fixed retryable provider streams losing completed work when interrupted.
+- Fixed GitHub Copilot requests using the wrong endpoint before models finish loading.
+- Fixed exhausted request rate limits being treated as terminal. Thanks @Kyle-j-bush. ([#59816](https://github.com/anomalyco/opencode/pull/59816))
+- Fixed LM Studio models with a null context length and accepted decision-type models. Thanks @tomzhu1024. ([#56214](https://github.com/anomalyco/opencode/pull/56214))
+
+### TUI
+
+#### Improvements
+
+- Transcript verbosity now defaults to `low`, which summarizes each run of tools and thoughts into one activity row. A `session.verbosity` you already set is kept. ([#63207](https://github.com/anomalyco/opencode/pull/63207))
+- Session IDs found in messages can now be opened directly.
+- Activity tabs are clickable and open the correct view.
+- Shell mode has its own prompt color under the new designs.
+
+#### Bug fixes
+
+- Restored pasted text when undo brings back its placeholder.
+- Restored the live draft after browsing prompt history.
+- Fixed copying a paste from within the prompt selection.
+- Preserved the Mini composer caret when closing the command palette.
+- Prevented image bytes from being retained in transcript storage when image previews are disabled.
+- Fixed paste-chip contrast across light and dark themes.
+- Fixed plugin-provided themes updating live.
+- Session lists now open at the top rather than at the current session.
+- Mini scrollback now shows the subagent card instead of obsolete launch instructions.
+
+### Desktop
+
+#### Improvements
+
+- Added **Jump to message** to the command palette with `Cmd+Alt+G` / `Ctrl+Alt+G`, including prompts not yet loaded in the timeline. Thanks @usrnk1. ([#63585](https://github.com/anomalyco/opencode/pull/63585))
+- Added the experimental **Recent** sessions sidebar, with cross-server recency, local pins, reordering, and standard session-row actions.
+- Recent sessions are limited to the last seven days and 30 rows, and can be hidden or muted.
+- Added an experimental customizable sessions sidebar.
+- Mermaid diagrams can now be maximized for zooming and panning. ([#59250](https://github.com/anomalyco/opencode/pull/59250))
+- Added `Alt+Enter` to place a follow-up first in the queue and `Mod+Enter` to steer the next queued prompt.
+- Holding the modifier key now shows tab shortcut numbers.
+- Each server’s terminal shell can be selected from its menu.
+- Added a free-limit panel in place of the composer when applicable.
+- Session IDs are easier to find and copy.
+
+#### Bug fixes
+
+- Recent sessions now keep stable recency ordering through list reloads, renames, and completed runs.
+- Fixed browser panes not retrying after server plugins finish loading.
+- Fixed mention suggestions being recreated while typing.
+- Fixed SSH prompts failing to advance or close after connection.
+- Fixed pasted provider-auth redirect URLs being rejected.
+- Restored message footers in the New timeline.
+- Fixed links whose labels contain inline code.
+- Fixed the desktop main process freezing while probing the login-shell environment.
+- Fixed the drag region after changing layout direction.
+- Fixed vertical-tab previews snapping to the wrong tab.
+- Fixed the file-tree sidebar opening animation.
+- Fixed pairing QR-code contrast in light themes. Thanks @ssskay. ([#63220](https://github.com/anomalyco/opencode/pull/63220))
+- Fixed activity-tab navigation and click handling. Thanks @OpeOginni. ([#60168](https://github.com/anomalyco/opencode/pull/60168))
+
+### SDK
+
+#### Improvements
+
+- Event subscriptions can now receive `experimental.mcp.event` events from MCP event subscriptions.
+- Model capability schemas now advertise supported freeform tool-input formats.
+- Session throughput is now measured from the first streamed token.
+- Session creation documentation now clarifies the `parentID` field.
+
+### Extensions
+
+#### Improvements
+
+- Promise-based tools can cooperatively stop through `ToolContext.signal`.
+- Added the experimental `session.fork` hook.
+- Promise plugin cleanup failures no longer prevent subsequent plugin replacements.
+- `@opencode/plugin/effect` now exports `Tool`, so an `execute.before` hook can reject a call with `Tool.Error` without importing `@opencode/schema/tool`. ([#63698](https://github.com/anomalyco/opencode/pull/63698))
+
+## v2.2.7 — 2026-11-10
+
+### Highlights
+
+- **GitHub Copilot Auto**: Pick **Auto** in the model picker when your Copilot account has an Auto pool, and Copilot's router chooses the model for each session at the Auto discount. If routing fails, OpenCode falls back to the account's default chat model. ([#62997](https://github.com/anomalyco/opencode/pull/62997))
+- **Side Panel Tab Shortcuts**: Right-click a side panel tab and choose **Close tabs to the right**. `⌘W` now closes side panel tabs wherever focus is, `⌥⌘W` or `Ctrl+Alt+W` always closes the session tab, and `⌘⇧T` reopens the last closed tab of either kind where it was. ([#62922](https://github.com/anomalyco/opencode/pull/62922))
+- **Mark Sessions Read or Unread**: Open the menu on a tab, Home row, project row or inbox card and choose **Mark as unread** to keep its dot until you next visit. ([#62889](https://github.com/anomalyco/opencode/pull/62889))
+
+### Breaking changes
+
+#### `@opencode/ai`: `ImageResponse.image` is removed
+
+This affects code that imports `@opencode/ai` directly. Read `response.images[0]` instead of `response.image`. ([#63011](https://github.com/anomalyco/opencode/pull/63011))
+
+#### SDK: fewer endpoints wait for plugins to load
+
+On a Location that is still loading plugins, `agent.list` returns the agents loaded so far, and `integration.list`, `usage.limits`, `vcs.init`, `rpc.call` and `artifact.*` no longer wait up to 5 seconds. Entries and actions that a plugin provides appear when it finishes loading, so refresh on the matching `*.updated` event. Model, provider, `generate.*`, `voice.*` and `websearch.query` endpoints still wait. ([#62796](https://github.com/anomalyco/opencode/pull/62796), [#63040](https://github.com/anomalyco/opencode/pull/63040))
+
+### Core
+
+#### Improvements
+
+- **MCP Logins Stay Signed In**: Remote MCP servers that rotate refresh tokens no longer sign you out when several clients refresh at once or the token endpoint fails for a moment. ([#62827](https://github.com/anomalyco/opencode/pull/62827), [#63012](https://github.com/anomalyco/opencode/pull/63012))
+- `read` accepts a negative `offset` to read from the end of a file, such as `-50` for the last 50 lines. An offset past the end returns the last lines and the file's line count instead of failing. ([#62147](https://github.com/anomalyco/opencode/pull/62147))
+- When `read` can't find a file, it suggests close names: different capitalization, another extension, a small typo, or the matching path inside the project. ([#62147](https://github.com/anomalyco/opencode/pull/62147))
+- Shell results end with `Exit code: N`. Commands killed by a signal show the signal name, and timeouts say how long they waited and suggest a larger timeout. ([#62141](https://github.com/anomalyco/opencode/pull/62141))
+- Prompt cache warming times its pings from the model's `cache.ttl` by default (`interval: "auto"`), or every 4 minutes without a TTL. Models whose cache outlasts the warming `duration` are no longer pinged. ([#62831](https://github.com/anomalyco/opencode/pull/62831))
+- When MCP servers connect, disconnect or change tools, Code Mode sends the model a short list of what changed instead of the whole tool catalog. ([#62176](https://github.com/anomalyco/opencode/pull/62176))
+
+#### Bug fixes
+
+- GitHub Copilot session costs use the amount Copilot charged instead of the catalog estimate, and content-filter errors name the filter that blocked the response. ([#62034](https://github.com/anomalyco/opencode/pull/62034))
+- GitHub Copilot picks up a new API endpoint after a plan change on its next model refresh, so you no longer have to sign in again. ([#62171](https://github.com/anomalyco/opencode/pull/62171))
+- Remote MCP servers that rotate refresh tokens no longer log you out when the TUI, desktop app, background service or several projects refresh the same login at once. ([#62827](https://github.com/anomalyco/opencode/pull/62827))
+- A temporary failure while refreshing an MCP OAuth token keeps your login for the next try instead of marking the server `needs_auth`. ([#63012](https://github.com/anomalyco/opencode/pull/63012))
+- MCP tool calls no longer fail when the server's result doesn't match the tool's own output schema, so completed actions aren't reported as failed. ([#61254](https://github.com/anomalyco/opencode/pull/61254))
+- MCP prompts stay available when refreshing a server's prompt list fails. ([#62266](https://github.com/anomalyco/opencode/pull/62266))
+- With `background_compaction` on, a background summary no longer stops a running Claude Agent session mid tool call. ([#63025](https://github.com/anomalyco/opencode/pull/63025))
+- After `opencode auth logout` on a `.well-known` integration, its remote providers and policies stop applying until you log back in. ([#62760](https://github.com/anomalyco/opencode/pull/62760))
+- OpenCode Console workspace policies still apply when Console's instructions or skills fail to load. ([#62702](https://github.com/anomalyco/opencode/pull/62702))
+- Cloudflare AI Gateway providers set up with only `gatewayApiKey` now send that key. ([#62574](https://github.com/anomalyco/opencode/pull/62574))
+- A v1 model override that sets only some capabilities no longer resets the others, so catalog capabilities like PDF input are kept. ([#62573](https://github.com/anomalyco/opencode/pull/62573))
+- A v1 provider config that sets both `api` and `options.baseURL` keeps `options.baseURL`. ([#62570](https://github.com/anomalyco/opencode/pull/62570))
+- Legacy model references with an inline variant, such as `"openai/gpt-5#high"`, keep the variant. ([#62254](https://github.com/anomalyco/opencode/pull/62254))
+- A fresh install imports saved provider credentials from the legacy `auth.json`, and skips an invalid one with a warning instead of stopping setup. ([#62568](https://github.com/anomalyco/opencode/pull/62568))
+- Cache warming stops for a session when a ping rebuilds the cache instead of reading it, counts its interval from when a request was sent, and no longer pings during compaction or after the session is deleted. ([#62926](https://github.com/anomalyco/opencode/pull/62926), [#62941](https://github.com/anomalyco/opencode/pull/62941), [#62972](https://github.com/anomalyco/opencode/pull/62972))
+- Tokens and cost from `session.generate` requests, including cache warming pings, count toward the session's totals. ([#63006](https://github.com/anomalyco/opencode/pull/63006))
+- Under zsh, a glob that matches nothing, like `rm *.tmp`, is passed through as bash does instead of stopping the command. ([#62141](https://github.com/anomalyco/opencode/pull/62141))
+- Truncated shell output that starts mid-line drops the partial first line, so the "showing lines X–Y" notice is exact. ([#62141](https://github.com/anomalyco/opencode/pull/62141))
+- On Windows, multi-line commands no longer lose everything after the first line with PowerShell 7 from the Microsoft Store. ([#62522](https://github.com/anomalyco/opencode/pull/62522))
+- `read` no longer cuts an emoji in half when it shortens a long line. ([#62575](https://github.com/anomalyco/opencode/pull/62575))
+- Generated session titles no longer include the model's commentary. Thanks [@shanebishop1](https://github.com/shanebishop1). ([#62267](https://github.com/anomalyco/opencode/pull/62267))
+- Markdown agents whose `description` starts with a bracketed tag, like `[Beta] Reviews code`, now load. ([#62250](https://github.com/anomalyco/opencode/pull/62250))
+- Markdown agent and command files that fail to load log a warning with the file path and frontmatter error. ([#62464](https://github.com/anomalyco/opencode/pull/62464), [#62251](https://github.com/anomalyco/opencode/pull/62251))
+- Markdown agent discovery skips `node_modules`. ([#62571](https://github.com/anomalyco/opencode/pull/62571))
+- Failed plugin installs from git show git's own error instead of "An unknown git error occurred". ([#62261](https://github.com/anomalyco/opencode/pull/62261))
+
+### TUI
+
+#### Improvements
+
+- The update and confirm dialogs have buttons you can move between with `←`/`→` and `Tab`/`Shift+Tab`. ([#62906](https://github.com/anomalyco/opencode/pull/62906))
+- The model picker no longer has a **Usage** action; use `/usage` instead. ([#62927](https://github.com/anomalyco/opencode/pull/62927))
+
+#### Bug fixes
+
+- Session exports are saved in the current working directory instead of the system temp folder. ([#62253](https://github.com/anomalyco/opencode/pull/62253))
+- Typing a child session's exact ID in the open-session menu lists that session. ([#62262](https://github.com/anomalyco/opencode/pull/62262))
+- The TUI follows the terminal's current light or dark mode instead of a cached palette. ([#62248](https://github.com/anomalyco/opencode/pull/62248))
+
+### Desktop
+
+#### Improvements
+
+- Right-click a side panel tab to **Close tabs to the right**. `⌘W` closes side panel tabs wherever focus is, the new **Close session tab** command (`⌥⌘W` or `Ctrl+Alt+W`) always closes the session tab, and `⌘⇧T` reopens the last closed side panel or session tab where it was. ([#62922](https://github.com/anomalyco/opencode/pull/62922))
+- Added **Mark as read** and **Mark as unread** to the menus for tabs, Home rows, project rows and inbox cards, and **Rename** to inbox cards. ([#62889](https://github.com/anomalyco/opencode/pull/62889))
+- The answer you pick in the question dock shows as a raised card. ([#62896](https://github.com/anomalyco/opencode/pull/62896))
+- Inline rename and custom-answer fields no longer show a focus border. ([#62919](https://github.com/anomalyco/opencode/pull/62919))
+
+#### Bug fixes
+
+- On Windows and Linux, `Ctrl+Shift+R` toggles the review panel again instead of reloading the window. ([#62567](https://github.com/anomalyco/opencode/pull/62567))
+- Closing the last side panel tab slides the panel shut. ([#62758](https://github.com/anomalyco/opencode/pull/62758))
+- Selects, menus, tooltips and toasts opened from a dialog are reachable by screen readers. ([#62913](https://github.com/anomalyco/opencode/pull/62913))
+- An error appears when a path can't be opened in its default app. ([#62572](https://github.com/anomalyco/opencode/pull/62572))
+- Cut, Copy, Paste and Select All in the right-click menu follow the app language. ([#62252](https://github.com/anomalyco/opencode/pull/62252))
+- Ukrainian tool titles use nouns. ([#62263](https://github.com/anomalyco/opencode/pull/62263))
+- Scrolling titlebar search results no longer jumps back when late results arrive, the inbox no longer announces already-running sessions as working on load, and the quote toolbar comes back after `Escape`. ([#62597](https://github.com/anomalyco/opencode/pull/62597))
+
+### SDK
+
+#### Improvements
+
+- `session.generate` returns `tokens` and `cost` along with `text`. ([#62835](https://github.com/anomalyco/opencode/pull/62835))
+- `credential.updated` includes the `integrationID` and `credentialID` of the login that changed. ([#62762](https://github.com/anomalyco/opencode/pull/62762))
+- Predicate questions in `client.experimental.generate.decisions` accept optional `criteria: { true?, false? }`. ([#62819](https://github.com/anomalyco/opencode/pull/62819))
+
+### Extensions
+
+#### Improvements
+
+- ACP clients can redirect a running turn with the `_session/steering` extension, advertised as `_meta.steering.supported` in `initialize`. Thanks [@smagnuso](https://github.com/smagnuso). ([#54394](https://github.com/anomalyco/opencode/pull/54394))
+
 ## v2.2.6 — 2026-11-06
 
 ### Highlights

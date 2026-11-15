@@ -208,6 +208,13 @@ export function createNewSessionWorkspaceController(input: {
     }),
   )
 
+  // Missing until the main checkout's Git info loads; a detached HEAD loads without a branch.
+  const checkout = createMemo(() => {
+    const info = data.location.vcs.info({ directory: projectRoot() })
+
+    return info ? { branch: info.branch.current } : undefined
+  })
+
   const remember = (worktree = value()) => {
     const project = currentProject()
 
@@ -269,6 +276,7 @@ export function createNewSessionWorkspaceController(input: {
     bar: {
       visible,
       branch,
+      checkout,
     },
     branches: (search: string, signal?: AbortSignal) =>
       serverSDK.api.vcs.branch

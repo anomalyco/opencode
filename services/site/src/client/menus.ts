@@ -42,7 +42,8 @@ export function startMenus() {
   onCloseMenus(closeNav)
   on("opencode-nav-menu-open" as keyof DocumentEventMap, () => runMenuClosers(closeNav))
 
-  // One highlighted row per menu: keyboard focus follows the pointer into another row (as Site does).
+  // One highlighted row per menu: keyboard focus follows the pointer into another row (as Site and the
+  // docs' lockup do, src/docs/client.ts).
   on("pointerover", (event) => {
     if (event.pointerType !== "mouse") return
     const row = target(event).closest<HTMLElement>(

@@ -35,6 +35,7 @@ const it = testEffect(NodeServices.layer)
           check: () => unused,
           apply: () => unused,
           method: () => Effect.succeed("npm"),
+          managed: () => unused,
           latest: () => unused,
           upgrade: () => unused,
           removal: () => ({

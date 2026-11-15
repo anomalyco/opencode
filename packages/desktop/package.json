@@ -1,7 +1,7 @@
 {
   "name": "@opencode/desktop",
   "private": true,
-  "version": "2.2.6",
+  "version": "2.3.0",
   "type": "module",
   "license": "MIT",
   "homepage": "https://opencode.ai",
@@ -50,7 +50,6 @@
     "electron": "44.9.1",
     "electron-builder": "26.15.7",
     "electron-vite": "6.0.0-beta.1",
-    "htmlparser2": "8.0.2",
     "magic-string": "0.30.21",
     "solid-js": "catalog:",
     "typescript": "catalog:",
