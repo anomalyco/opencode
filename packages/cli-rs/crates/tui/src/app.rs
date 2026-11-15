@@ -660,7 +660,7 @@ pub fn run_on(app: App, launch: Launch, started: impl FnOnce(&Rc<Tui>) -> opentu
     drop(launch.keep);
     result?;
     if let Some(text) = epilogue {
-        println!("{text}");
+        crate::features::epilogue::print(&text);
     }
     Ok(())
 }
