@@ -9,7 +9,7 @@ use opentui::testing::TestApp;
 use super::slot::{self, Kind, Placed, Placement, Resolution};
 use super::*;
 
-struct TestHost {
+pub(crate) struct TestHost {
     app: TestApp,
     keymap: DialogKeymap,
     /// The registry nested slots mount from.
@@ -45,7 +45,7 @@ fn dynamic(host: &Rc<TestHost>) -> Rc<dyn Host> {
     host.clone()
 }
 
-fn host() -> Rc<TestHost> {
+pub(crate) fn host() -> Rc<TestHost> {
     Rc::new(TestHost {
         app: TestApp::new(40, 6),
         keymap: DialogKeymap::new(Keybinds::defaults(), Options::default()),
