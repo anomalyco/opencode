@@ -12,9 +12,21 @@ built-ins (`-<id>`, `<id>`, `*`, `<prefix>.*`) exactly as TS does. The loader (`
 found (`OPENCODE_BUN`, the local server's opencode binary run as its own Bun, or `bun` on the path) and `OPENCODE_PLUGIN_JS` is `1` (off by default), it runs on the JS host, a Bun process
 the client starts (`docs/P.4.md`, "TypeScript plugins on the JS host"), through the V2 compatibility layer (P8), which
 gives a V2 `{ id, setup }` module the context and the modules TS gives it. Without Bun, or without `OPENCODE_PLUGIN_JS=1`,
-the registry lists it with status `Skipped` and the message "TypeScript TUI plugins do not run in opencode-native yet",
-and the TUI logs it once at startup; its slot claims, commands and routes are absent. Plugins installed from npm by name
-are not installed or loaded, and the server's TUI plugins (`GET /api/plugin` with `features.tui`) are not loaded.
+the registry lists it with status `Skipped` and the reason "TypeScript TUI plugins run on the JS host, which is off: set
+OPENCODE_PLUGIN_JS=1 (with Bun installed) to turn it on"; its slot claims, commands and routes are absent. Plugins named
+by npm package are not installed or loaded ("opencode-native does not install or load TUI plugins named by npm
+package"), with the JS host on or off. The TUI parts of the server's plugins (`GET /api/plugin`, active with
+`features.tui`, which TS loads as `serverTuiPlugins`) are not loaded either ("opencode-native does not load the TUI part
+of a server plugin"); each is listed by its package target or path beside the server plugin's own row.
+
+Where TS draws these plugins, the Rust client tells the user once a run, in the host's notice lane (a warning toast that
+stays, with "Open plugins", as its "Plugin failed" toast is told; no plugin's toast hides it): "N TypeScript plugins
+not loaded", then one line per reason naming the plugins, then "Run /plugins to view details." It waits for the server's
+plugin list, so the server plugins' TUI parts are in the same notice; one found later (a config change, a new
+directory, a new server plugin) is told then, once. `/plugins` lists each as a TUI row `skipped`, named by the `name` of
+its directory's `package.json` where there is one, else by its target, with the reason as its error; the log has
+`plugin <target> skipped: <reason>` once for each. `scenarios/F16/ts-plugins-skipped.pty.ts` drives it: a server plugin
+whose TUI part TS loads and Rust lists as skipped, with the notice.
 
 What runs on the JS host differs from TS as `F16-v2-compat-layer` says, and one found in a project's
 `.opencode/plugins` waits for the user's approval first (`F16-project-plugin-approval`). It is a second timing tier: a

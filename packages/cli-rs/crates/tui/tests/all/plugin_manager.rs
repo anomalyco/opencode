@@ -1009,6 +1009,72 @@ fn a_skipped_entry_added_to_the_config_is_heard_on() {
     assert!(heard.last().is_some_and(|list| list.iter().any(|row| row.starts_with("./added.ts Skipped"))), "{heard:?}");
 }
 
+// Expected (FT-10, FT-15): the TypeScript plugins `opencode-native` does not load, a plugin directory while the JS host
+// is off, a `plugins` entry by npm name and the TUI part of a server plugin, are told once in one notice, each with why
+// and, for the directory, how to turn the JS host on. `/plugins` lists each as skipped, the directory by its package's
+// name, and the server part beside its server row. A reconcile tells nothing again.
+#[test]
+fn typescript_plugins_not_loaded_are_told_once_and_listed() {
+    let fake = Fake::new(|seen| match seen.path.as_str() {
+        "/api/plugin" => {
+            let energy = serde_json::json!({
+                "id": "energy", "source": { "type": "package", "target": "opencode-energy@1.0.0" },
+                "features": { "server": true, "tui": true }, "state": { "status": "active" },
+            });
+            (200, serde_json::json!({ "location": support::location("/tmp/app"), "data": [energy] }))
+        }
+        _ => support::base(seen, "/tmp/app"),
+    });
+    let config = serde_json::json!({ "animations": false, "plugins": ["opencode-tokens@0.1.3"] });
+    let deps = Deps {
+        route: Route::Home,
+        config: support::config(support::decode(&config.to_string())),
+        ..support::deps(Arc::new(fake))
+    };
+    let harness = support::mount(120, 30, deps);
+    settle(&harness);
+    let root = opencode_util::temp::tempdir().unwrap();
+    std::fs::create_dir(root.path().join(".git")).unwrap();
+    let pulse = root.path().join("config").join("plugins").join("pulse");
+    std::fs::create_dir_all(&pulse).unwrap();
+    std::fs::write(pulse.join("package.json"), r#"{ "name": "opencode-pulse-ticker" }"#).unwrap();
+    let external = opencode_tui::plugins::host::External {
+        config_dir: root.path().join("config"),
+        cwd: root.path().to_path_buf(),
+        dev: Vec::new(),
+    };
+    opencode_tui::plugins::host::external_with(&harness.tui, external, None);
+    // Told once the server's plugins were heard, whichever came first.
+    harness.wait("the notice", || {
+        settle(&harness);
+        harness.tui.toasts.current().is_some()
+    });
+    let toast = harness.tui.toasts.current().expect("the notice");
+    assert_eq!(toast.title.as_deref(), Some("3 TypeScript plugins not loaded"));
+    for line in [
+        format!("opencode-tokens@0.1.3: {}.", opencode_plugin::SKIPPED_NPM),
+        format!("opencode-pulse-ticker: {}.", opencode_plugin::SKIPPED_JS_OFF),
+        format!("opencode-energy@1.0.0: {}.", opencode_plugin::SKIPPED_SERVER_TUI),
+        "Run /plugins to view details.".to_owned(),
+    ] {
+        assert!(toast.message.lines().any(|known| known == line), "{line:?} in {:?}", toast.message);
+    }
+    harness.tui.toasts.dismiss();
+    opencode_tui::plugins::host::reconcile(&harness.tui);
+    settle(&harness);
+    assert!(harness.tui.toasts.current().is_none(), "told again");
+    harness.tui.keymap.dispatch("plugins.list", None);
+    harness.wait("the list", || {
+        settle(&harness);
+        screen(&harness).contains("opencode-energy@1.0.0")
+    });
+    let screen = screen(&harness);
+    for row in ["opencode-pulse-ticker", "opencode-tokens@0.1.3", "opencode-energy@1.0.0", "energy"] {
+        assert!(screen.contains(row), "{row}: {screen}");
+    }
+    assert!(!screen.contains(&*pulse.to_string_lossy()), "{screen}");
+}
+
 /// A gate the test opens, which a server's check waits on.
 type Gate = Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>;
 
