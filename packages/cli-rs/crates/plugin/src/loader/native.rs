@@ -1566,7 +1566,8 @@ fn reply_to(
 }
 
 /// Queues `effects` of plugin `id` on the effect queue, as the host would for a built-in; a fetch replies to `guest`, and
-/// a dialog belongs to activation `generation`.
+/// a dialog belongs to activation `generation`. Each effect is an entry of its own, as on the linked carrier, so each
+/// counts against the frame's bound and the dispatch depth (review carbon new-1).
 pub(crate) fn apply(
     host: &Weak<dyn Host>,
     id: String,
@@ -1574,49 +1575,50 @@ pub(crate) fn apply(
     generation: Option<u64>,
     effects: Vec<Effect>,
 ) {
-    if effects.is_empty() {
-        return;
+    let id: Rc<str> = Rc::from(id);
+    for effect in effects {
+        let (id, guest) = (id.clone(), guest.clone());
+        let plugin = id.clone();
+        crate::request(host, &plugin, move |host| run(host, effect, &id, &guest, generation));
     }
-    defer(host, move |host| {
-        for effect in effects {
-            match effect {
-                Effect::Toast(toast) => host.toast(&toast),
-                Effect::Route(name) => host.open_route(&id, &name),
-                Effect::Dispatch(name, input) => crate::dispatch(host, &name, input.as_deref()),
-                Effect::Attention(attention) => host.attention(&attention),
-                Effect::Stored => host.storage_changed(),
-                Effect::Navigate(route) => host.navigate(&id, &route),
-                Effect::Fetch(request, fetch) => {
-                    reply_to(&guest, host, request, |host, reply| host.fetch(fetch, reply));
-                }
-                // The host shows it only while its activation is live. What a setup that failed or a destroyed
-                // instance asked for has none, and shows nowhere.
-                Effect::Dialog(dialog) => {
-                    if let Some(generation) = generation {
-                        host.dialog(&id, generation, *dialog);
-                    }
-                }
-                Effect::Copy(text, then) => crate::copy(host, &text, then),
-                Effect::Composer(edit) => host.edit_composer(edit),
-                Effect::Variant(variant) => host.set_variant(variant.as_deref()),
-                Effect::Model(provider, model) => host.set_model(&provider, &model),
-                Effect::Tab(edit) => host.edit_tab(edit),
-                Effect::ClearSelection => host.clear_selection(),
-                Effect::Foreground(request, program) => {
-                    // The program starts later, once the turn is done: only if the instance is still live then.
-                    let owner = guest.clone();
-                    let alive = Box::new(move || owner.upgrade().is_some_and(|guest| guest.running()));
-                    reply_to(&guest, host, request, |host, reply| host.foreground(program, alive, reply));
-                }
-                Effect::Title(title) => host.set_title(&title),
-                Effect::Theme(name) => host.set_theme(&name),
-                Effect::InstallTheme(name, theme) => host.install_theme(&name, theme),
-                Effect::Setting(name, value) => host.set_setting(&name, value),
-                Effect::Scroll(scroll) => scroll(),
-                Effect::Input(effect) => effect(host),
+}
+
+/// Does `effect` of plugin `id`.
+fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, generation: Option<u64>) {
+    match effect {
+        Effect::Toast(toast) => host.toast(&toast),
+        Effect::Route(name) => host.open_route(id, &name),
+        Effect::Dispatch(name, input) => crate::dispatch(host, &name, input.as_deref()),
+        Effect::Attention(attention) => host.attention(&attention),
+        Effect::Stored => host.storage_changed(),
+        Effect::Navigate(route) => host.navigate(id, &route),
+        Effect::Fetch(request, fetch) => reply_to(guest, host, request, |host, reply| host.fetch(fetch, reply)),
+        // The host shows it only while its activation is live. What a setup that failed or a destroyed instance asked
+        // for has none, and shows nowhere.
+        Effect::Dialog(dialog) => {
+            if let Some(generation) = generation {
+                host.dialog(id, generation, *dialog);
             }
         }
-    });
+        Effect::Copy(text, then) => crate::copy(host, &text, then),
+        Effect::Composer(edit) => host.edit_composer(edit),
+        Effect::Variant(variant) => host.set_variant(variant.as_deref()),
+        Effect::Model(provider, model) => host.set_model(&provider, &model),
+        Effect::Tab(edit) => host.edit_tab(edit),
+        Effect::ClearSelection => host.clear_selection(),
+        Effect::Foreground(request, program) => {
+            // The program starts later, once the turn is done: only if the instance is still live then.
+            let owner = guest.clone();
+            let alive = Box::new(move || owner.upgrade().is_some_and(|guest| guest.running()));
+            reply_to(guest, host, request, |host, reply| host.foreground(program, alive, reply));
+        }
+        Effect::Title(title) => host.set_title(&title),
+        Effect::Theme(name) => host.set_theme(&name),
+        Effect::InstallTheme(name, theme) => host.install_theme(&name, theme),
+        Effect::Setting(name, value) => host.set_setting(&name, value),
+        Effect::Scroll(scroll) => scroll(),
+        Effect::Input(effect) => effect(host),
+    }
 }
 
 /// Registers what the manifest lists, each calling into `guest`.

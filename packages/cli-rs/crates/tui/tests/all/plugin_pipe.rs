@@ -486,6 +486,28 @@ fn gone(pid: u32) -> bool {
     !cfg!(target_os = "linux")
 }
 
+// Expected (review carbon new-1): on the pipe carrier too each effect of an answer is an entry of its own: of 100
+// answers of 100 dispatches each, a turn of the run loop, with its one paint, runs at most two frames' bounds (the rest
+// of one frame and the next), and the rest in later turns; the plugin stays active.
+#[test]
+fn many_effects_of_one_answer_wait_for_the_next_paint() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe_and_twin(config, true);
+    NOTED.with(|noted| noted.borrow_mut().clear());
+    let noted = || NOTED.with(|noted| noted.borrow().len());
+    pipe.harness.tui.keymap.dispatch("probe.burst", Some("100"));
+    let (begun, mut most) = (Instant::now(), 0);
+    while noted() < 100 * 100 {
+        assert!(begun.elapsed() < Duration::from_secs(60), "{} noted, {:?}", noted(), pipe.status(PROBE));
+        let before = noted();
+        turn(&pipe.harness);
+        most = most.max(noted() - before);
+        std::thread::sleep(Duration::from_micros(200));
+    }
+    assert!(most <= 2048, "{most} ran in one turn");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+}
+
 // Expected (containment, a plugin that throws; `no-effects` and `reported-once` over the pipe): a handler that throws
 // fails its plugin alone, once, with none of what it asked for before the throw; the other plugin on the same JS host
 // goes on, and the JS host was not started again.
