@@ -22,6 +22,7 @@ import sessionInboxMigration from "@opencode/core/database/migration/20260812181
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
+import stepOwnershipMigration from "@opencode/core/database/migration/20261115165607_step-ownership"
 import scheduleMigration from "@opencode/core/database/migration/20261026223005_schedule"
 import scheduleChecksMigration from "@opencode/core/database/migration/20261029165540_schedule_checks"
 import automationMigration from "@opencode/core/database/migration/20261116043204_automation"
@@ -70,6 +71,39 @@ const parkedClient = (arrived: Deferred.Deferred<void>, gate: Deferred.Deferred<
   ).pipe(Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Layer.provide(Reactivity.layer))
 
 describe("DatabaseMigration", () => {
+  test("adds Step ownership without inferring legacy generations or rebuilding messages", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`PRAGMA foreign_keys = ON`)
+        yield* db.run(sql`CREATE TABLE session_message (
+          id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL,
+          time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
+        )`)
+        yield* db.run(sql`CREATE TABLE session_part (
+          message_id text NOT NULL REFERENCES session_message(id) ON DELETE CASCADE, data text NOT NULL
+        )`)
+        yield* db.run(sql`INSERT INTO session_message VALUES
+          ('assistant', 'session', 'assistant', 10, 1, 2, '{}'),
+          ('user', 'session', 'user', 11, 3, 4, '{}')`)
+        yield* db.run(sql`INSERT INTO session_part VALUES ('assistant', 'preserved')`)
+        yield* DatabaseMigration.applyOnly(db, [stepOwnershipMigration])
+        yield* DatabaseMigration.applyOnly(db, [stepOwnershipMigration])
+        expect(yield* db.all(sql`SELECT id, seq, step_started_seq, data FROM session_message ORDER BY seq`)).toEqual([
+          { id: "assistant", seq: 10, step_started_seq: null, data: "{}" },
+          { id: "user", seq: 11, step_started_seq: null, data: "{}" },
+        ])
+        expect(yield* db.all(sql`SELECT * FROM session_part`)).toEqual([{ message_id: "assistant", data: "preserved" }])
+        expect(yield* db.all(sql`SELECT * FROM session_pending_step`)).toEqual([])
+        expect(yield* db.all(sql`SELECT * FROM session_question`)).toEqual([])
+        expect(
+          yield* db.run(sql`INSERT INTO session_pending_step VALUES ('session', 'assistant', 10)`).pipe(Effect.exit),
+        ).toMatchObject({ _tag: "Failure" })
+        expect(yield* db.all(sql`PRAGMA foreign_key_check`)).toEqual([])
+      }),
+    )
+  })
+
   test("defaults missing workspace names while preserving legacy workspace data", async () => {
     await run(
       Effect.gen(function* () {
