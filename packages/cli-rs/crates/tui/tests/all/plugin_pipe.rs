@@ -2742,6 +2742,125 @@ export default {{ id: "example.flooded", setup(api) {{
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "settled Ok 0\n");
 }
 
+/// What queues behind a fetch's reduced admission answer, in [`a_fetch_settles_once_whatever_queues_behind_its_answer`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Behind {
+    /// Its mount closed: the fetch is cancelled.
+    Cancelled,
+    /// The server answered: its reply.
+    Reply,
+}
+
+// Expected (bigboi's pipe pass): a fetch's admission answer too large for the JS host's queue goes reduced in its place,
+// so what queues behind it reaches the JS host after it: its cancellation rejects the fetch with an `AbortError`, and its
+// reply resolves it, once, and nothing stays pending in either of the JS host's maps. Before, the reduced answer went
+// to the tail, behind them: the JS host found no fetch for them, and the fetch the late answer made waited forever.
+#[test]
+fn a_fetch_settles_once_whatever_queues_behind_its_answer() {
+    for behind in [Behind::Cancelled, Behind::Reply] {
+        queued_behind(behind);
+    }
+}
+
+fn queued_behind(behind: Behind) {
+    let Some(mut config) = config() else { return };
+    // A queue smaller than the fetch's admission answer, which its reads make about 30 KiB; room for the backlog.
+    (config.limits.queued, config.limits.inbox) = (4 << 10, 1 << 20);
+    let root = opencode_util::temp::tempdir().unwrap();
+    let (log, stalled, gate) = (root.path().join("settled"), root.path().join("stalled"), root.path().join("gate"));
+    let plugin = root.path().join("config").join("plugins").join("queued");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        r#"import {{ appendFileSync, existsSync, writeFileSync }} from "node:fs"
+const [LOG, STALLED, GATE] = {paths}
+let carrier
+const settled = (how) => appendFileSync(LOG, "settled " + how + " " + carrier.pendingFetches() + "\n")
+// A fetch, with reads that make its answer large; then the JS host reads nothing until the gate opens.
+const go = () => {{
+  carrier.fetch({{ method: "GET", path: "/api/hold" }}).then(
+    (result) => settled(Object.keys(result ?? {{}}).join(",")),
+    (error) => settled(error.name),
+  )
+  for (let read = 0; read < 8; read++) carrier.effect({{ type: "keymap-commands" }})
+  setTimeout(() => {{
+    writeFileSync(STALLED, "")
+    while (!existsSync(GATE)) {{}}
+  }}, 0)
+}}
+export default {{ id: "example.queued", setup(api) {{
+  carrier = api[Symbol.for("opencode.carrier")]
+  carrier.surface("queued", {{ type: "route", name: "queued" }}, () => ({{ type: "text", spans: [{{ text: "queued route" }}] }}))
+  carrier.command({{ name: "queued.route", title: "queued.route", scope: {{ route: "queued" }} }}, go)
+  carrier.command({{ name: "queued.global", title: "queued.global" }}, go)
+  carrier.command({{ name: "queued.noop", title: "queued.noop" }}, () => {{}})
+}} }}
+"#,
+        paths = serde_json::json!([log, stalled, gate]),
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let (fake, server_gate, served, asked) = crate::plugin_surface::held();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.queued");
+    let (h, scripts) = (&pipe.harness, pipe.scripts());
+    let route = Route::Plugin { id: "example.queued".into(), name: "queued".into() };
+    // The fetch is its route mount's when it is to be cancelled, the activation's when its reply is to come.
+    if behind == Behind::Cancelled {
+        h.tui.navigate(route);
+        h.wait_for("queued route");
+    }
+    // The call's answer waits until a backlog fills the overflow, behind which its effects then go.
+    scripts.hold_answers(true);
+    let command = if behind == Behind::Cancelled { "queued.route" } else { "queued.global" };
+    h.tui.keymap.dispatch(command, None);
+    h.wait("the JS host stalled", || {
+        h.app.advance(Duration::from_millis(1));
+        stalled.exists()
+    });
+    for _ in 0..10_000 {
+        if scripts.overflow_bytes() > 0 {
+            break;
+        }
+        h.tui.keymap.dispatch("queued.noop", Some(&"x".repeat(2 << 10)));
+    }
+    assert!(scripts.overflow_bytes() > 0, "{behind:?}: no backlog");
+    scripts.hold_answers(false);
+    h.app.advance(Duration::from_millis(1));
+    // Behind the fetch's answer: its cancellation, or its reply.
+    match behind {
+        Behind::Cancelled => h.tui.navigate(Route::Home),
+        Behind::Reply => {
+            h.wait("the fetch was sent", || {
+                h.app.advance(Duration::from_millis(1));
+                asked.load(std::sync::atomic::Ordering::SeqCst) == 1
+            });
+            *server_gate.0.lock().unwrap() = true;
+            server_gate.1.notify_all();
+            h.wait("the server answered", || served.load(std::sync::atomic::Ordering::SeqCst) == 1);
+        }
+    }
+    for _ in 0..5 {
+        h.app.advance(Duration::from_millis(1));
+    }
+    std::fs::write(&gate, "").unwrap();
+    h.wait("the fetch settled", || {
+        h.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    // Once, and nothing pending: a second settling or a late one would show here.
+    h.app.wait_until(Duration::from_millis(300), || {
+        h.app.advance(Duration::from_millis(1));
+        false
+    });
+    let expected = match behind {
+        Behind::Cancelled => "settled AbortError 0\n",
+        Behind::Reply => "settled Ok 0\n",
+    };
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), expected, "{behind:?}");
+}
+
 // Expected (bigboi P8-6): `data.session.pending` lists the session's inbox items the server has not delivered, as the
 // host holds them, where it listed none.
 #[test]
