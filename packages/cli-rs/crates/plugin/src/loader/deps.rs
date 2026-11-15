@@ -25,8 +25,10 @@
 //! - The user's own loader settings are the user's choice and trusted: `LD_LIBRARY_PATH` and `LD_PRELOAD` on ELF
 //!   systems, the `DYLD_*` paths on macOS, and the system's loader configuration. So a project's build is not
 //!   promised libraries from the system alone. One part of them is not the user's: an empty or relative entry in
-//!   `LD_LIBRARY_PATH` or a `DYLD_*` path is read against the current directory, so a build that names a library the
-//!   loader searches for is refused while one is set.
+//!   `LD_LIBRARY_PATH` (whose entries glibc splits at `:` and at `;`) or a `DYLD_*` path is read against the current
+//!   directory, so a build that names a library the loader searches for is refused while one is set: on ELF a bare
+//!   name, on Mach-O any library, as `dyld` looks for every library's leaf name in those paths, `@rpath` ones too
+//!   (final re-review big-boi 2).
 //!
 //! Windows needs no reading: `win::load_library` searches no directory a project controls. A file that is neither
 //! ELF nor Mach-O passes here; the platform loader refuses it.
@@ -48,7 +50,11 @@ pub(crate) fn check_with(bytes: &[u8], project: bool, policy: &Policy) -> Result
             return Err(format!("the library depends on {:?}, {reason}", name.text()));
         }
     }
-    let searched = names.iter().any(|name| matches!(name, Name::Library(text) if !text.contains('/')));
+    let searched = names.iter().any(|name| match (loader, name) {
+        (Loader::Elf, Name::Library(text)) => !text.contains('/'),
+        (Loader::Dyld, Name::Library(_)) => true,
+        _ => false,
+    });
     if let (true, Some((variable, entry))) = (searched, policy.relative_entry(loader)) {
         return Err(format!(
             "the library names a library the loader searches for, and {variable} holds {entry:?}, which the loader \
@@ -151,13 +157,14 @@ impl Policy {
 
     /// The first entry of the loader's path settings that it reads against the current directory: empty or relative.
     fn relative_entry(&self, loader: Loader) -> Option<(&'static str, String)> {
-        let wanted = match loader {
-            Loader::Elf => "LD_",
-            Loader::Dyld => "DYLD_",
+        // glibc splits `LD_LIBRARY_PATH` at both separators; dyld its paths at `:` alone.
+        let (wanted, separators): (&str, &[char]) = match loader {
+            Loader::Elf => ("LD_", &[':', ';']),
+            Loader::Dyld => ("DYLD_", &[':']),
             Loader::None => return None,
         };
         self.settings.iter().filter(|(name, _)| name.starts_with(wanted)).find_map(|(name, value)| {
-            let entry = value.split(':').find(|entry| !entry.starts_with('/'))?;
+            let entry = value.split(separators).find(|entry| !entry.starts_with('/'))?;
             Some((*name, entry.to_owned()))
         })
     }
@@ -296,24 +303,59 @@ const DT_NEEDED: u64 = 1;
 const DT_STRTAB: u64 = 5;
 const DT_RPATH: u64 = 15;
 const DT_RUNPATH: u64 = 29;
-const DT_DEPAUDIT: u64 = 0x6fff_fefb;
-const DT_AUDIT: u64 = 0x6fff_fefc;
-const DT_AUXILIARY: u64 = 0x7fff_fffd;
-const DT_USED: u64 = 0x7fff_fffe;
-const DT_FILTER: u64 = 0x7fff_ffff;
 
-/// Whether dynamic tag `tag` is one the policy knows brings in no code but what it reads: the generic tags up to
-/// `DT_RELRENT` (37), the GNU ones (`DT_GNU_HASH`, versions, `DT_FLAGS_1` and the like) but the audit libraries, and
-/// the processor's but the filters and `DT_USED`.
-fn known(tag: u64) -> bool {
-    match tag {
-        0..=37 => true,
-        DT_AUDIT | DT_DEPAUDIT => false,
-        0x6fff_fd00..=0x6fff_ffff => true,
-        DT_AUXILIARY | DT_USED | DT_FILTER => false,
-        0x7000_0000..=0x7fff_ffff => true,
-        _ => false,
-    }
+const EM_X86_64: u64 = 62;
+const EM_AARCH64: u64 = 183;
+const EM_RISCV: u64 = 243;
+
+/// The GNU and Sun tags glibc defines that load nothing: prelink and conflict tables, checksums, sizes, `DT_GNU_HASH`,
+/// TLS descriptors, symbol info, versions, the relocation counts and the flags. Not the audit libraries, `DT_CONFIG`,
+/// the filters or `DT_USED`.
+const GNU_TAGS: &[u64] = &[
+    0x6fff_fdf4,
+    0x6fff_fdf5,
+    0x6fff_fdf6,
+    0x6fff_fdf7,
+    0x6fff_fdf8,
+    0x6fff_fdf9,
+    0x6fff_fdfa,
+    0x6fff_fdfb,
+    0x6fff_fdfc,
+    0x6fff_fdfd,
+    0x6fff_fdfe,
+    0x6fff_fdff,
+    0x6fff_fef5,
+    0x6fff_fef6,
+    0x6fff_fef7,
+    0x6fff_fef8,
+    0x6fff_fef9,
+    0x6fff_fefd,
+    0x6fff_fefe,
+    0x6fff_feff,
+    0x6fff_fff0,
+    0x6fff_fff9,
+    0x6fff_fffa,
+    0x6fff_fffb,
+    0x6fff_fffc,
+    0x6fff_fffd,
+    0x6fff_fffe,
+    0x6fff_ffff,
+];
+
+/// Whether dynamic tag `tag` of a file for `machine` is one the policy knows loads no code but what it reads: each
+/// generic tag up to `DT_RELRENT` (37), each of [`GNU_TAGS`], and the processor tags its machine defines (x86-64's
+/// PLT tags; AArch64's BTI, PAC, variant PCS and memory tags; RISC-V's variant calling convention). A tag in a range
+/// but not named here is refused (final re-review big-boi 2).
+fn known(tag: u64, machine: u64) -> bool {
+    let processor: &[u64] = match machine {
+        EM_X86_64 => &[0x7000_0000, 0x7000_0001, 0x7000_0003],
+        EM_AARCH64 => {
+            &[0x7000_0001, 0x7000_0003, 0x7000_0005, 0x7000_0009, 0x7000_000b, 0x7000_000c, 0x7000_000d, 0x7000_000f]
+        }
+        EM_RISCV => &[0x7000_0001],
+        _ => &[],
+    };
+    tag <= 37 || GNU_TAGS.contains(&tag) || processor.contains(&tag)
 }
 
 /// An ELF file's `DT_NEEDED` names and `DT_RPATH` and `DT_RUNPATH` entries.
@@ -329,6 +371,7 @@ fn elf(bytes: &[u8]) -> Option<Vec<Name>> {
         _ => return None,
     };
     let read = Reader { bytes, big };
+    let machine = read.u16(0x12)?;
     let (phoff, phentsize, phnum) = match wide {
         true => (read.u64(0x20)?, read.u16(0x36)?, read.u16(0x38)?),
         false => (read.u32(0x1c)?, read.u16(0x2a)?, read.u16(0x2c)?),
@@ -360,7 +403,7 @@ fn elf(bytes: &[u8]) -> Option<Vec<Name>> {
     // A tag that brings in code, or one the policy does not know, is refused by its number (big-boi 2, carbon-7).
     let mut out: Vec<Name> = entries
         .iter()
-        .filter(|(tag, _)| !known(*tag))
+        .filter(|(tag, _)| !known(*tag, machine))
         .map(|(tag, _)| Name::Mechanism(format!("ELF dynamic tag {tag:#x}")))
         .collect();
     let names: Vec<&(u64, u64)> =
@@ -469,9 +512,15 @@ pub(crate) fn elf64(needed: &[&str], runpath: Option<&str>) -> Vec<u8> {
     elf64_tags(&tags)
 }
 
-/// [`elf64`] with the dynamic entries `tags`, each naming a string.
+/// [`elf64`] with the dynamic entries `tags`, each naming a string, for x86-64.
 #[cfg(test)]
 pub(crate) fn elf64_tags(tags: &[(u64, &str)]) -> Vec<u8> {
+    elf64_for(EM_X86_64, tags)
+}
+
+/// [`elf64_tags`] for the machine `machine`.
+#[cfg(test)]
+pub(crate) fn elf64_for(machine: u64, tags: &[(u64, &str)]) -> Vec<u8> {
     let mut strings = vec![0u8];
     let mut add = |text: &str| {
         let at = strings.len() as u64;
@@ -488,6 +537,7 @@ pub(crate) fn elf64_tags(tags: &[(u64, &str)]) -> Vec<u8> {
     let mut out = vec![0u8; 64];
     out[..4].copy_from_slice(b"\x7fELF");
     (out[4], out[5]) = (2, 1);
+    out[0x12..0x14].copy_from_slice(&(machine as u16).to_le_bytes());
     out[0x20..0x28].copy_from_slice(&phoff.to_le_bytes());
     out[0x36..0x38].copy_from_slice(&56u16.to_le_bytes());
     out[0x38..0x3a].copy_from_slice(&(phnum as u16).to_le_bytes());
@@ -511,6 +561,12 @@ pub(crate) fn elf64_tags(tags: &[(u64, &str)]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const DT_DEPAUDIT: u64 = 0x6fff_fefb;
+    const DT_AUDIT: u64 = 0x6fff_fefc;
+    const DT_AUXILIARY: u64 = 0x7fff_fffd;
+    const DT_USED: u64 = 0x7fff_fffe;
+    const DT_FILTER: u64 = 0x7fff_ffff;
 
     /// A little-endian 64-bit Mach-O file with one load command per `(command, path)`.
     fn macho64(commands: &[(u64, &str)]) -> Vec<u8> {
@@ -598,21 +654,50 @@ mod tests {
         assert_eq!(check(b"MZ\x90\x00", true), Ok(()));
     }
 
-    // Expected (final review carbon-7, big-boi 2): a dynamic tag that brings in code the policy does not read, a
-    // filter, an auxiliary filter, an audit library, `DT_USED`, or a tag it does not know, is refused for every build;
-    // the tags a toolchain writes pass.
+    // Expected (final review carbon-7, big-boi 2; final re-review big-boi 2): a dynamic tag that brings in code the
+    // policy does not read, a filter, an auxiliary filter, an audit library, `DT_USED`, `DT_CONFIG`, or a tag it does
+    // not know, is refused for every build, also one inside the ranges the known tags are in, and a processor tag of
+    // another machine; the tags a toolchain writes pass, a processor's own on its machine.
     #[test]
     fn elf_mechanisms_that_load_code_are_refused() {
-        for tag in [DT_FILTER, DT_AUXILIARY, DT_AUDIT, DT_DEPAUDIT, DT_USED, 0x6000_000f, 38] {
-            let bytes = elf64_tags(&[(DT_NEEDED, "libc.so.6"), (tag, "libc.so.6")]);
-            assert_eq!(passes(&bytes), (false, false), "{tag:#x}");
+        let refused = [
+            (EM_X86_64, DT_FILTER),
+            (EM_X86_64, DT_AUXILIARY),
+            (EM_X86_64, DT_AUDIT),
+            (EM_X86_64, DT_DEPAUDIT),
+            (EM_X86_64, DT_USED),
+            (EM_X86_64, 0x6fff_fefa),
+            (EM_X86_64, 0x6000_000f),
+            (EM_X86_64, 38),
+            (EM_X86_64, 0x6fff_fe00),
+            (EM_X86_64, 0x6fff_fff5),
+            (EM_X86_64, 0x7000_0005),
+            (EM_X86_64, 0x7123_4567),
+            (EM_AARCH64, 0x7000_0000),
+            (0, 0x7000_0001),
+        ];
+        for (machine, tag) in refused {
+            let bytes = elf64_for(machine, &[(DT_NEEDED, "libc.so.6"), (tag, "libc.so.6")]);
+            assert_eq!(passes(&bytes), (false, false), "{machine} {tag:#x}");
             let error = check_with(&bytes, false, &policy()).unwrap_err();
             assert!(error.contains(&format!("{tag:#x}")) && error.contains("loads code"), "{error}");
         }
-        // `DT_GNU_HASH`, `DT_VERNEED`, `DT_FLAGS_1`, `DT_RELACOUNT`, `DT_INIT_ARRAY`, an AArch64 tag.
-        for tag in [0x6fff_fef5, 0x6fff_fffe, 0x6fff_fffb, 0x6fff_fff9, 25, 0x7000_0001] {
-            let bytes = elf64_tags(&[(DT_NEEDED, "libc.so.6"), (tag, "")]);
-            assert_eq!(passes(&bytes), (true, true), "{tag:#x}");
+        // `DT_GNU_HASH`, `DT_VERNEED`, `DT_FLAGS_1`, `DT_RELACOUNT`, `DT_INIT_ARRAY`, `DT_RELR`, x86-64's PLT size,
+        // AArch64's variant PCS, RISC-V's variant calling convention.
+        let passed = [
+            (EM_X86_64, 0x6fff_fef5),
+            (EM_X86_64, 0x6fff_fffe),
+            (EM_X86_64, 0x6fff_fffb),
+            (EM_X86_64, 0x6fff_fff9),
+            (EM_X86_64, 25),
+            (EM_X86_64, 36),
+            (EM_X86_64, 0x7000_0001),
+            (EM_AARCH64, 0x7000_0005),
+            (EM_RISCV, 0x7000_0001),
+        ];
+        for (machine, tag) in passed {
+            let bytes = elf64_for(machine, &[(DT_NEEDED, "libc.so.6"), (tag, "")]);
+            assert_eq!(passes(&bytes), (true, true), "{machine} {tag:#x}");
         }
     }
 
@@ -632,6 +717,32 @@ mod tests {
             // The other loader's settings do not apply to it.
             let dyld = Policy { settings: vec![("DYLD_LIBRARY_PATH", value.to_owned())], ..policy() };
             assert_eq!(check_with(&searched, false, &dyld), Ok(()), "{value:?}");
+        }
+        // glibc splits `LD_LIBRARY_PATH` at `;` too (final re-review big-boi 2).
+        for value in ["/opt/lib;lib", ";/opt/lib", "/opt/lib;"] {
+            let ld = Policy { settings: vec![("LD_LIBRARY_PATH", value.to_owned())], ..policy() };
+            assert!(check_with(&searched, false, &ld).is_err(), "{value:?}");
+        }
+    }
+
+    // Expected (final re-review big-boi 2): `dyld` looks for every library's leaf name in its `DYLD_*` paths, an
+    // `@rpath` name's and an absolute one's too: a relative entry refuses a build that names any library, and an
+    // absolute one does not; it splits them at `:` alone, so a `;` is part of an absolute entry.
+    #[test]
+    fn a_relative_dyld_path_refuses_any_library() {
+        for name in ["@rpath/libx.dylib", "@loader_path/libx.dylib", "/usr/lib/libSystem.B.dylib"] {
+            let bytes = macho64(&[(LC_LOAD_DYLIB, name)]);
+            for (variable, value, ok) in [
+                ("DYLD_LIBRARY_PATH", "/opt/lib", true),
+                ("DYLD_LIBRARY_PATH", "/opt/lib;lib", true),
+                ("DYLD_LIBRARY_PATH", "lib", false),
+                ("DYLD_FALLBACK_LIBRARY_PATH", "/usr/lib:", false),
+                ("DYLD_FRAMEWORK_PATH", ":/Library/Frameworks", false),
+                ("LD_LIBRARY_PATH", "lib", true),
+            ] {
+                let policy = Policy { settings: vec![(variable, value.to_owned())], ..policy() };
+                assert_eq!(check_with(&bytes, false, &policy).is_ok(), ok, "{name} {variable}={value:?}");
+            }
         }
     }
 
