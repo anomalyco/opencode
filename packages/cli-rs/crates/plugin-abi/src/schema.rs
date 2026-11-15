@@ -1,7 +1,8 @@
-//! The JSON Schema of contract 2.0 (synthesis 4.6), generated from the Rust types without a dependency (O-132). Each
+//! The JSON Schema of the plugin ABI 2.0 (synthesis 4.6), generated from the Rust types without a dependency (O-132):
+//! the tree a view returns and the calls of P3 here, the envelopes and replies of the C ABI in [`wire`]. Each
 //! definition names every field and variant of its type, without `..`, so a field or a variant added to a type does
 //! not compile until its schema has it; enum values are what serde writes. A test checks a corpus of trees against
-//! both the schema and serde.
+//! both the schema and serde, and every message of the conformance transcripts against the schema.
 
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -34,9 +35,10 @@ macro_rules! object {
 macro_rules! tagged {
     ($ty:ident, $description:expr, {
         $($(#[$meta:meta])* $variant:ident { $($required:ident: $rs:expr),* $(,)? } { $($optional:ident: $os:expr),* $(,)? }),* $(,)?
-    }) => {{
+    } $(, newtype { $($new:ident: $inner:expr),* $(,)? })?) => {{
         let _ = |value: &$ty| match value {
             $($(#[$meta])* $ty::$variant { $($required: _,)* $($optional: _,)* } => (),)*
+            $($($ty::$new(_) => (),)*)?
         };
         let mut variants: Vec<Value> = Vec::new();
         $(
@@ -48,6 +50,10 @@ macro_rules! tagged {
                 "",
             ));
         )*
+        // A variant of one value, whose fields sit beside the tag.
+        $($(
+            variants.push(json!({ "allOf": [$inner, object(&[], &[], Some(&kebab(stringify!($new))), "")] }));
+        )*)?
         described(json!({ "oneOf": variants }), $description)
     }};
 }
@@ -77,11 +83,13 @@ macro_rules! unit {
     }};
 }
 
-/// The JSON Schema of contract 2.0. The root is a [`Node`], the tree a view returns; a host validates what a view
-/// gets against `#/$defs/SurfaceInput`, a mount against `#/$defs/MountId`, and what a draw gets against
-/// `#/$defs/Frame`. The scroll verbs ([`Scroll`] on a [`Target`]), the reads ([`ScrollState`], [`AnchorAt`],
-/// [`TranscriptView`]), the scroll events ([`ScrollEvent`]) and the `layout` call ([`Geometry`] in, [`LayoutReply`]
-/// out) are under their names too.
+mod wire;
+
+/// The JSON Schema of the plugin ABI 2.0, versioned by its `$id` and `x-abi`. Its definitions are normative: what
+/// `describe` and `create` answer (`Metadata`, `Manifest`), the requests of each side (`Request`, `HostRequest`, with
+/// `InputTo`), what each is answered with (`x-messages` names the definition of each request type's reply:
+/// `ViewReply`, `ClaimReply`, `LayoutReply`, `Handled`, ...), the tree a view returns (`Node`), and the binary list a
+/// draw returns (`DrawList`).
 pub fn schema() -> Value {
     let mut node = tagged!(Node, "A node of a surface's tree.", {
         Box { } { id: nullable(string()), row: boolean(), gap: uint16(), padding: pair(uint16(), uint16()),
@@ -408,14 +416,19 @@ pub fn schema() -> Value {
         ),
     ];
     let defs: serde_json::Map<String, Value> =
-        defs.into_iter().map(|(name, schema)| (name.to_owned(), schema)).collect();
+        defs.into_iter().chain(wire::definitions()).map(|(name, schema)| (name.to_owned(), schema)).collect();
     json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "opencode plugin contract 2.0",
-        "description": "Generated from opencode_plugin_abi::v2 by `examples/schema.rs`; do not edit. The root is a Node, \
-                        the tree a view returns; SurfaceInput and MountId are what a view gets, and Frame what a \
-                        draw gets.",
-        "$ref": "#/$defs/Node",
+        "$id": format!("https://opencode.ai/schema/plugin-abi/{}.{}.json", crate::ABI_MAJOR, crate::ABI_MINOR),
+        "title": format!("opencode plugin ABI {}.{}", crate::ABI_MAJOR, crate::ABI_MINOR),
+        "description": "Generated from opencode_plugin_abi by `examples/schema.rs`; do not edit. Normative for every \
+                        binding: `describe` answers Metadata and `create` a Manifest; the host's `call` sends a \
+                        Request and the plugin's sends a HostRequest, each answered as `x-messages` says by the \
+                        request's type; a view answers a ViewReply whose tree is a Node, and a draw a DrawList. A \
+                        field the schema leaves out of `required` may be left out; a reader ignores a field it does \
+                        not know. A later 2.x minor only adds optional fields, request types and node kinds.",
+        "x-abi": { "major": crate::ABI_MAJOR, "minor": crate::ABI_MINOR, "features": crate::FEATURES },
+        "x-messages": wire::messages(),
         "$defs": defs,
     })
 }
@@ -524,6 +537,9 @@ mod tests {
         if let Some(any) = schema.get("anyOf").and_then(Value::as_array) {
             return any.iter().any(|schema| conforms(value, schema, defs));
         }
+        if let Some(all) = schema.get("allOf").and_then(Value::as_array) {
+            return all.iter().all(|schema| conforms(value, schema, defs));
+        }
         if let Some(one) = schema.get("oneOf").and_then(Value::as_array) {
             return one.iter().filter(|schema| conforms(value, schema, defs)).count() == 1;
         }
@@ -585,6 +601,120 @@ mod tests {
         let read = serde_json::from_value::<T>(value.clone()).is_ok();
         assert_eq!(conforms(&value, &defs[name], defs), read, "{name}: {value} (serde reads it: {read})");
         read
+    }
+
+    // Expected (big-boi 14, carbon-13): every message of the golden transcripts, as the reference and the C library
+    // wrote them, conforms to the schema: each request to its side's envelope, each answer of status OK to the
+    // definition `x-messages` names for its request's type, and each draw's bytes to the list's format. A request type
+    // `x-messages` does not name is answered with null.
+    #[test]
+    fn the_schema_takes_every_message_of_the_transcripts() {
+        let schema = schema();
+        let defs = &schema["$defs"];
+        let messages = &schema["x-messages"];
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/conformance/transcripts.jsonl");
+        let text = std::fs::read_to_string(file).unwrap();
+        let answer = |side: &str, kind: &str| messages[side].get(kind).unwrap_or(&messages[side]["*"]).clone();
+        // What the next `return` answers: the schema of its reply, or `None` for a draw's bytes.
+        let mut waiting: Vec<Option<Value>> = Vec::new();
+        let (mut requests, mut replies) = (0, 0);
+        for (number, line) in text.lines().enumerate() {
+            let entry: Value = serde_json::from_str(line).unwrap();
+            let at = format!("transcripts.jsonl:{}", number + 1);
+            if entry == json!("describe") {
+                waiting.push(Some(messages["describe"].clone()));
+            } else if entry.get("create").is_some() {
+                waiting.push(Some(messages["create"].clone()));
+            } else if let Some(call) = entry.get("call") {
+                let request = &call["request"];
+                assert!(conforms(request, &defs["Request"], defs), "{at}: {request}");
+                requests += 1;
+                let kind = request["type"].as_str().unwrap();
+                waiting.push((kind != "draw").then(|| answer("call", kind)));
+            } else if let Some(host) = entry.get("host") {
+                let request = &host["request"];
+                assert!(conforms(request, &defs["HostRequest"], defs), "{at}: {request}");
+                requests += 1;
+                if host["status"] == json!(crate::OK) {
+                    let reply = answer("host", request["type"].as_str().unwrap());
+                    assert!(conforms(&host["reply"], &reply, defs), "{at}: {} as {reply}", host["reply"]);
+                    replies += 1;
+                }
+            } else if let Some(returned) = entry.get("return") {
+                let expected = waiting.pop().unwrap_or_else(|| panic!("{at}: a return of no call"));
+                if returned["status"] != json!(crate::OK) {
+                    continue;
+                }
+                match expected {
+                    Some(expected) => {
+                        let reply = &returned["reply"];
+                        assert!(conforms(reply, &expected, defs), "{at}: {reply} as {expected}");
+                    }
+                    None => {
+                        let hex = returned["reply"]["list"].as_str().unwrap_or_default();
+                        let bytes: Vec<u8> = (0..hex.len())
+                            .step_by(2)
+                            .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
+                            .collect();
+                        assert_eq!(bytes.first().copied().map(u64::from), defs["DrawList"]["x-version"].as_u64());
+                        assert!(crate::canvas::check(&bytes).is_ok(), "{at}: {hex}");
+                    }
+                }
+                replies += 1;
+            }
+        }
+        assert!(requests > 100 && replies > 100, "{requests} requests and {replies} replies checked");
+    }
+
+    // Expected (big-boi 14): the envelopes take and refuse what serde takes and refuses: an unknown request type, a
+    // field left out that is required, a newtype variant's fields beside its tag, and a mount left out of a surface's
+    // input, which a mount's begin and end do.
+    #[test]
+    fn the_envelopes_take_what_serde_takes() {
+        for (value, taken) in [
+            (json!({ "type": "plugins" }), true),
+            (json!({ "type": "later" }), false),
+            (json!({ "type": "unmount" }), false),
+            (
+                json!({ "type": "input", "to": { "type": "surface", "surface": 0 }, "event": { "type": "paste", "text": "x" } }),
+                true,
+            ),
+            (json!({ "type": "input", "to": { "type": "surface" }, "event": { "type": "paste", "text": "x" } }), false),
+            (
+                json!({ "type": "render-fence", "language": "a", "info": "", "code": "", "streaming": false, "closed": false, "key": 1 }),
+                true,
+            ),
+            (json!({ "type": "render-fence", "language": "a" }), false),
+        ] {
+            assert_eq!(agree::<crate::Request>("Request", value), taken);
+        }
+        for (value, taken) in [
+            (json!({ "type": "toast", "variant": "info", "message": "m" }), true),
+            (json!({ "type": "toast", "variant": "info" }), false),
+            (json!({ "type": "fetch", "method": "GET", "path": "/x" }), true),
+            (json!({ "type": "open-panel", "surface": "s", "fullscreen": true }), true),
+            (json!({ "type": "overlay", "surface": "s", "anchor": { "edge": "top" }, "width": 1, "height": 1 }), true),
+            (json!({ "type": "overlay", "surface": "s", "anchor": "top", "width": 1, "height": 1 }), false),
+            (json!({ "type": "dialog", "dialog": { "type": "alert", "title": "t", "message": "m" } }), true),
+            (json!({ "type": "model" }), true),
+            (json!({ "type": "terminal" }), false),
+        ] {
+            assert_eq!(agree::<crate::HostRequest>("HostRequest", value), taken);
+        }
+        assert!(agree::<crate::Manifest>("Manifest", serde_json::to_value(crate::Manifest::default()).unwrap()));
+        assert!(!agree::<crate::Manifest>("Manifest", json!({ "commands": [] })));
+        assert!(agree::<crate::ViewReply>("ViewReply", json!({ "node": { "type": "box" }, "content": [[1, "x"]] })));
+        assert!(agree::<crate::ViewReply>(
+            "ViewReply",
+            json!({ "node": { "type": "box" }, "content": [[1, { "base64": "AA==" }]] })
+        ));
+        assert!(!agree::<crate::ViewReply>("ViewReply", json!({ "content": [] })));
+        assert!(agree::<crate::Render>("Render", json!({ "type": "show", "node": { "type": "slot", "path": "p" } })));
+        assert!(!agree::<crate::Render>("Render", json!({ "type": "show" })));
+        assert!(agree::<crate::claim::Part>(
+            "ClaimPart",
+            json!({ "type": "fence", "language": "l", "info": "", "code": "", "streaming": false, "closed": true })
+        ));
     }
 
     // Expected (O-132): what serde writes for every variant, with every field set, conforms to its definition, and a
