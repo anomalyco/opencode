@@ -26,9 +26,23 @@ import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { homedir } from "node:os"
 import { OpenCode } from "../../../../../../client/src/promise/generated/index"
 import { RGBA, hexToRgb } from "./core"
+import { rendererMethods, rendererPromises } from "./opentui.gen"
 import { legacy, missing, mount, serialize, type Mounted, type Screen, type VNode } from "./render"
 
 type Json = any
+
+// The methods of an event emitter, which return it.
+const EMITTER = new Set<string | symbol>([
+  "on",
+  "off",
+  "once",
+  "addListener",
+  "removeListener",
+  "prependListener",
+  "prependOnceListener",
+  "removeAllListeners",
+  "setMaxListeners",
+])
 
 // The carrier the JS host gives each plugin (`host.ts`).
 export interface Carrier {
@@ -636,10 +650,15 @@ export function context(base: Base, carrier: Carrier) {
       },
     } as Json,
     {
+      // A method of OpenTUI's `CliRenderer` the layer lacks warns once and does nothing (FT-6): an emitter's returns
+      // the renderer, as Node's does, so its calls chain; one declared async a resolved promise; any other nothing.
+      // Another member is undefined.
       get(target, name) {
         if (name in target || typeof name === "symbol") return target[name]
         unsupported(`renderer.${String(name)}`)
-        return undefined
+        if (!rendererMethods.includes(String(name))) return undefined
+        if (EMITTER.has(name)) return () => renderer
+        return rendererPromises.includes(String(name)) ? async () => undefined : () => undefined
       },
     },
   )

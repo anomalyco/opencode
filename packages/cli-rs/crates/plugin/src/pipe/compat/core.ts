@@ -1,5 +1,6 @@
 // What a V2 plugin imports from `@opentui/core` that the JS host can give without a renderer: colors and text
-// attributes. A plugin that imports a renderable class or the renderer itself fails to load, and says which.
+// attributes. The package's other exports are inert (`inert.ts`): a plugin that imports a renderable class loads, and
+// the class does nothing.
 
 export const TextAttributes = {
   NONE: 0,
