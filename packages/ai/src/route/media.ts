@@ -349,7 +349,7 @@ const makeTransport = <Request extends MediaRequest>(
     })
     const response = yield* RequestExecutor.withTls(execute, call.request.http?.tls)(
       encoded.apply(HttpClientRequest.make(call.method)(url).pipe(HttpClientRequest.setHeaders(headers))),
-      RequestExecutor.withFetch(fetch),
+      RequestExecutor.withTransport(call.request.http?.socketPath, fetch),
     )
     return { response }
   })

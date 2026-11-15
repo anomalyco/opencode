@@ -33,7 +33,15 @@ import {
   type ToolMessage,
   type UsageInput,
 } from "@opencode/ai/effect"
-import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
+import {
+  Auth,
+  Endpoint,
+  ProviderShared,
+  RequestExecutor,
+  unixSocketFetch,
+  type AnyRoute,
+  type HttpMiddleware,
+} from "@opencode/ai/route"
 import { isRecord } from "@opencode/util/record"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream, Struct } from "effect"
 import { makeParser } from "effect/encoding/Sse"
@@ -134,6 +142,7 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
   }
 
   const customFetch = settings.fetch
+  const socketPath = Provider.socketPath(settings)
   const timeouts = Provider.timeouts(settings)
   const tls = Provider.tls(settings)
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -167,7 +176,16 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
     if (tls && https && !certified) throw new Error("Client certificates aren't supported on this runtime")
     // A followed redirect keeps the TLS options, so it would present the client certificate to another host.
     if (certified) Object.assign(opts, certified.init, { redirect: "error" })
-    const send: Fetch = certified ? certified.fetch : isFetch(customFetch) ? customFetch : outbound
+    // A configured socket wins over a custom fetch so a provider never silently falls back to TCP. It is plain HTTP,
+    // so a client certificate has no TLS handshake to join.
+    const send: Fetch =
+      socketPath === undefined
+        ? certified
+          ? certified.fetch
+          : isFetch(customFetch)
+            ? customFetch
+            : outbound
+        : (unixSocketFetch(socketPath) as Fetch)
     const middleware = httpMiddleware.getStore()
     const res = await (
       middleware

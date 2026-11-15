@@ -260,7 +260,11 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
           ...runtime.options,
           ...mergeTransport(runtime.options, {
             timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
-            http: { encoding: Provider.encoding(configured), tls: Provider.tls(configured) },
+            http: {
+              encoding: Provider.encoding(configured),
+              socketPath: Provider.socketPath(configured),
+              tls: Provider.tls(configured),
+            },
           }),
         },
       })
@@ -331,12 +335,16 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
         })
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
-  if (!tls || !(adapted instanceof DecisionModel || adapted instanceof ImageModel)) return adapted
-  // Media and decision models are plain classes with readonly fields, so copy onto the same prototype.
-  const copy: Runtime = Object.assign(Object.create(Object.getPrototypeOf(adapted)), adapted, {
-    http: { ...adapted.http, tls },
-  })
-  return copy
+  const socketPath = Provider.socketPath(configured)
+  if (socketPath === undefined && tls === undefined) return adapted
+  if (!(adapted instanceof DecisionModel || adapted instanceof ImageModel)) return adapted
+  const http = {
+    ...adapted.http,
+    ...(socketPath === undefined ? {} : { socketPath }),
+    ...(tls === undefined ? {} : { tls }),
+  }
+  if (adapted instanceof DecisionModel) return new DecisionModel({ ...adapted, http }) as Runtime
+  return new ImageModel({ ...adapted, http }) as Runtime
 })
 
 const constructionError = (model: RuntimeInfo, cause: unknown) =>
@@ -510,8 +518,12 @@ export const layer = Layer.effect(
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,
         cache: runtimeInfo.settings?.cache,
-        // The WebSocket transport can't present a client certificate, so `tls` keeps the model on HTTP.
-        transport: Provider.tls(provider?.settings ?? {}) ? "http" : provider?.settings?.transport,
+        // A WebSocket transport can neither dial a Unix socket nor present a client certificate, so either keeps the
+        // model on HTTP.
+        transport:
+          Provider.socketPath(runtimeInfo.settings ?? {}) !== undefined || Provider.tls(runtimeInfo.settings ?? {})
+            ? "http"
+            : provider?.settings?.transport,
         chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
       }
     })

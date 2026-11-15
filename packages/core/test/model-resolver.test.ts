@@ -322,6 +322,21 @@ describe("ModelResolver", () => {
     ),
   )
 
+  it.effect("keeps an empty provider socket path instead of dropping it", () =>
+    withConfigEnv({}, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model("@opencode/ai/providers/openai-compatible", {
+            settings: { baseURL: "http://localhost/v1", socketPath: "" },
+          }),
+        )
+
+        // Preserved so the transport rejects it; turning "" into undefined would silently use TCP.
+        expect(resolved.options?.http?.socketPath).toBe("")
+      }),
+    ),
+  )
+
   it.effect("uses no native API-key auth for explicitly enabled providers without credentials", () => {
     const selected = model(Provider.aisdk("@ai-sdk/google"), {
       providerID: Provider.ID.make("gateway"),

@@ -124,7 +124,7 @@ export const make = (
         headers: parts.headers,
         encoding: request.http?.encoding,
       }),
-      RequestExecutor.withFetch(request.fetch, options?.http),
+      RequestExecutor.withTransport(request.http?.socketPath, request.fetch, options?.http),
     )
     const text = yield* RequestExecutor.responseStream(response).pipe(
       Stream.decodeText(),

@@ -18,6 +18,7 @@ import {
   type Interface,
 } from "./executor-service.js"
 import type { ClientTls } from "../schema/options.js"
+import { unixSocketFetch } from "./unix-socket.js"
 
 export { CurrentTls, responseHttp, Service } from "./executor-service.js"
 export type { HttpHandler, HttpMiddleware, Interface, RequestExecutorService } from "./executor-service.js"
@@ -275,15 +276,34 @@ export const withTls = (execute: Interface["execute"], tls: ClientTls | undefine
 export const withFetch = (
   fetch: typeof globalThis.fetch | undefined,
   middleware?: HttpMiddleware,
+  requestInit?: RequestInit,
 ): HttpMiddleware | undefined => {
   if (fetch === undefined) return middleware
-  const send = (request: HttpClientRequest.HttpClientRequest) =>
-    HttpClient.execute(request).pipe(
+  const send = (request: HttpClientRequest.HttpClientRequest) => {
+    const executed = HttpClient.execute(request).pipe(
       Effect.provide(FetchHttpClient.layer),
       Effect.provideService(FetchHttpClient.Fetch, fetch),
     )
+    return requestInit === undefined
+      ? executed
+      : executed.pipe(Effect.provideService(FetchHttpClient.RequestInit, requestInit))
+  }
   return middleware === undefined ? send : (request) => middleware(request, send)
 }
+
+/**
+ * The per-call middleware that chooses the transport. A configured Unix socket wins over a per-call `fetch`, so a
+ * provider request cannot silently fall back to TCP. Keeping the decision here also means a new send site only has to
+ * pass its `HttpOptions` through.
+ */
+export const withTransport = (
+  socketPath: string | undefined,
+  fetch: typeof globalThis.fetch | undefined,
+  middleware?: HttpMiddleware,
+): HttpMiddleware | undefined =>
+  socketPath === undefined
+    ? withFetch(fetch, middleware)
+    : withFetch(unixSocketFetch(socketPath), middleware, { timeout: false } as BunFetchRequestInit)
 
 /** Run `fn` on every request: it sees the raw response before status classification, inside middleware already on `executor`, and outside per-call middleware. */
 export const middleware = (fn: HttpMiddleware, executor: Layer.Layer<Service> = fetchLayer): Layer.Layer<Service> =>

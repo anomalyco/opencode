@@ -1,6 +1,10 @@
 import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { randomUUID } from "node:crypto"
+import { rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { AISDK } from "@opencode/core/aisdk"
 import { ModelRetry } from "@opencode/core/model-retry"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
@@ -752,6 +756,51 @@ testEffect(Layer.empty).effect("sends AI SDK requests through the embedder's fet
 
     expect(sent).toEqual(["https://example.test/v1/chat/completions"])
     expect(response.text).toBe("embedded")
+  }),
+)
+
+const unixSocketTest = process.platform === "win32" ? it.effect.skip : it.effect
+
+unixSocketTest("dials the provider's Unix socket instead of the base URL's host", () =>
+  Effect.gen(function* () {
+    const socket = join(tmpdir(), `oc-aisdk-${randomUUID()}.sock`)
+    const seen: string[] = []
+    const server = Bun.serve({
+      unix: socket,
+      fetch(request) {
+        seen.push(new URL(request.url).pathname)
+        return new Response(chatChunk("over socket"), { headers: { "content-type": "text/event-stream" } })
+      },
+    })
+    const response = yield* Effect.gen(function* () {
+      const aisdk = yield* AISDK.Service
+      yield* aisdk.hook.sdk((event) => {
+        event.sdk = createOpenAICompatible({
+          ...event.options,
+          name: String(event.options.name),
+          baseURL: String(event.options.baseURL),
+        })
+      })
+      const resolved = yield* aisdk.model(
+        model("@ai-sdk/openai-compatible", {
+          apiKey: "test",
+          baseURL: "http://unused.invalid/v1",
+          socketPath: socket,
+        }),
+      )
+      // The harness refuses non-loopback URLs, and this socket bypasses the outbound fetch, so a TCP fallback fails.
+      return yield* LLMClient.generate(ai.request({ model: resolved, prompt: "Hello" })).pipe(Effect.provide(client))
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          server.stop(true)
+          rmSync(socket, { force: true })
+        }),
+      ),
+    )
+
+    expect(seen).toEqual(["/v1/chat/completions"])
+    expect(response.text).toBe("over socket")
   }),
 )
 
