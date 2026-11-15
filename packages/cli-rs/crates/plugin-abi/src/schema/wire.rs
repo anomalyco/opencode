@@ -552,10 +552,12 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             let _ = |value: &RequestId| {
                 let RequestId(_) = value;
             };
+            // 0 names no request: it is what the 1.x SDK answers for a refused one (bigboi's last pass).
             described(
-                uint64(),
-                "What a `fetch` or a `foreground` the host takes answers, which its one reply names. One the host does \
-                 not take, as when its queue of effects is full, answers an error, and no reply comes.",
+                json!({ "type": "integer", "minimum": 1, "maximum": u64::MAX }),
+                "What a `fetch` or a `foreground` the host takes answers, which its one reply names; never 0, which \
+                 names no request. One the host does not take, as when its queue of effects is full, answers an \
+                 error, and no reply comes.",
             )
         }),
         ("Handled", unit!(Handled { Consume, Pass })),
