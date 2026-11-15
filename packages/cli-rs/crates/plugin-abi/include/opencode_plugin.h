@@ -224,7 +224,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * - A "scroll" of the transcript is taken only from a call that answers the user's input (a key, a click, an edit,
  *   the palette, the user's scroll): the host answers OPENCODE_ERROR to any other. None of the input requests ("focus",
  *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet.
- * - "fetch" and "foreground" answer the ID their one reply comes back with ("reply"). One the host does not take, as
+ * - "fetch" and "foreground" answer the ID their one reply comes back with ("reply"), never 0, which names no
+ *   request: an SDK refuses an answer of 0 as malformed. One the host does not take, as
  *   while the effects that wait fill its queue, answers OPENCODE_ERROR with why, and no reply comes for it: the Rust
  *   SDK's `Host::try_fetch` returns that as an `Err`, and its 1.x `Host::fetch` as `RequestId(0)`. A request a
  *   mount's call asks for (a "command" of the route it shows, an "input" to that mount) is the mount's: once it

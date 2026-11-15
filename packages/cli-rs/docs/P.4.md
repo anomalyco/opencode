@@ -488,7 +488,8 @@ characters; `UnexpectedStatus: 404` without one), `Transport: …` when the requ
 origin, or `MalformedResponse: …` when the body is not JSON. With `bytes` (2.0), the reply is the body's bytes in
 base64 as a JSON string, whatever they are. A fetch asked for by a failed setup or by a dispose callback is not sent.
 
-A fetch is given an ID only when its reply can come, on every carrier. The host's queue of effects is bounded; while
+A fetch is given an ID only when its reply can come, on every carrier. An ID is never 0, which names no request: the
+schema's `RequestId` starts at 1, and the SDK refuses an answer of 0 as malformed. The host's queue of effects is bounded; while
 the effects that wait fill it (a plugin that fans out without end), or a chain of dispatches is too deep, the host
 does not take a fetch or a `foreground`, and no reply comes for it. In the 2.x Rust SDK `try_fetch` and
 `try_foreground` return an `Err` with why; over the C ABI the request answers `OPENCODE_ERROR`; over the pipe, the

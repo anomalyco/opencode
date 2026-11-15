@@ -799,6 +799,13 @@ mod tests {
         assert!(conforms(&Value::Null, session, defs));
         assert!(!conforms(&json!({ "info": 1, "status": "idle" }), session, defs));
         assert!(!conforms(&json!({ "info": {}, "status": "idle" }), session, defs), "an empty Session.Info");
+        // A request ID is never 0, in what `fetch` answers and in a reply (bigboi's last pass).
+        let fetched = &schema["x-messages"]["host"]["fetch"];
+        assert!(conforms(&json!(1), fetched, defs) && !conforms(&json!(0), fetched, defs));
+        let reply = |id| {
+            serde_json::to_value(crate::Request::Reply { id: crate::RequestId(id), result: Ok(Value::Null) }).unwrap()
+        };
+        assert!(conforms(&reply(1), &defs["Request"], defs) && !conforms(&reply(0), &defs["Request"], defs));
     }
 
     // Expected (big-boi 14): the envelopes take and refuse what serde takes and refuses: an unknown request type, a
