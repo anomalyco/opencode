@@ -16,6 +16,7 @@ import type { Instruction } from "@opencode/schema/instruction"
 import type { Session } from "@opencode/schema/session"
 import type { CompactionPayload, MovePayload, SyntheticPayload } from "@opencode/schema/session-inbox"
 import type { RevertV1 } from "@opencode/schema/session-revert"
+import type { ServerIdentity } from "@opencode/schema/server-identity"
 import type { Schema } from "effect"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -37,6 +38,7 @@ export const SessionTable = sqliteTable(
     parent_id: text().$type<SessionSchema.ID>(),
     fork_session_id: text().$type<SessionSchema.ID>(),
     fork_boundary: text({ mode: "json" }).$type<Session.ForkBoundary>(),
+    created_by: text().$type<ServerIdentity.UserID>(),
     slug: text().notNull(),
     directory: directoryColumn().notNull(),
     path: pathColumn(),

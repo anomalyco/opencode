@@ -25,6 +25,7 @@ import type { EventLog } from "@opencode/schema/event-log"
 import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
+import type { ServerIdentity } from "@opencode/schema/server-identity"
 import type { Shell } from "@opencode/schema/shell"
 import type { Generate } from "@opencode/schema/generate"
 import type { Provider } from "@opencode/schema/provider"
@@ -644,6 +645,7 @@ export type ExperimentalSessionLogOutput =
             readonly agent?: Agent.ID | undefined
             readonly model?: Model.Ref | undefined
             readonly metadata?: Session.Metadata | undefined
+            readonly createdBy?: ServerIdentity.UserID | undefined
             readonly permissions?: Permission.Ruleset | undefined
             readonly version: string
           }
@@ -784,6 +786,7 @@ export type ExperimentalSessionLogOutput =
             readonly sessionID: Session.ID
             readonly parentID: Session.ID
             readonly boundary: Session.ForkBoundary
+            readonly createdBy?: ServerIdentity.UserID | undefined
             readonly instructions?: { readonly [x: Instruction.Key]: Instruction.Hash } | undefined
             readonly instructionEntries?: InstructionEntry.Snapshot | undefined
           }

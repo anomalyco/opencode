@@ -110,11 +110,11 @@ it.live("servers without local accounts keep the shared password and refuse the 
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-auth-password-")))
     const server = yield* start({ local: false, directory: tmp.path })
     const base = HttpServer.formatAddress(server.address)
-    const post = (path: string, body: unknown) =>
+    const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
       Effect.promise(() =>
         fetch(new URL(path, base), {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...headers },
           body: JSON.stringify(body),
         }),
       )
@@ -137,5 +137,58 @@ it.live("servers without local accounts keep the shared password and refuse the 
     expect(register.status).toBe(503)
     const login = yield* post("/api/experimental/auth/login", { username: "ada", password: "s3cure-passw" })
     expect(login.status).toBe(503)
+
+    // Shared-password access has no account, so its sessions record no creator.
+    const created = yield* post("/api/session", {}, { authorization: basic("opencode", "secret") })
+    expect(created.status).toBe(200)
+    const made = (yield* Effect.promise(() => created.json())) as { data: { createdBy?: string } }
+    expect(made.data.createdBy).toBeUndefined()
+  }),
+)
+
+it.live("sessions record the local account that created them", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-auth-created-by-")))
+    const server = yield* start({ local: true, directory: tmp.path })
+    const base = HttpServer.formatAddress(server.address)
+    const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+      Effect.promise(() =>
+        fetch(new URL(path, base), {
+          method: "POST",
+          headers: { "content-type": "application/json", ...headers },
+          body: JSON.stringify(body),
+        }),
+      )
+    const register = Effect.fnUntraced(function* (username: string) {
+      const response = yield* post("/api/experimental/auth/register", { username, password: "s3cure-passw" })
+      expect(response.status).toBe(200)
+      return ((yield* Effect.promise(() => response.json())) as { token: string }).token
+    })
+    const createSession = Effect.fnUntraced(function* (token: string) {
+      const response = yield* post("/api/session", {}, { authorization: basic("opencode", token) })
+      expect(response.status).toBe(200)
+      return ((yield* Effect.promise(() => response.json())) as { data: { createdBy?: string } }).data.createdBy
+    })
+
+    // Each account signs its own sessions, so two accounts never share a creator.
+    const adaToken = yield* register("ada")
+    const ada = yield* createSession(adaToken)
+    const grace = yield* createSession(yield* register("grace"))
+    expect(ada).toMatch(/^usr_/)
+    expect(grace).toMatch(/^usr_/)
+    expect(grace).not.toBe(ada)
+
+    // A pairing token is a database session without an account, so its sessions record no creator.
+    const pair = yield* Effect.promise(() =>
+      fetch(new URL("/api/pair", base), { method: "POST", headers: { authorization: basic("opencode", adaToken) } }),
+    )
+    expect(pair.status).toBe(200)
+    const { code } = (yield* Effect.promise(() => pair.json())) as { code: string }
+    const connect = yield* Effect.promise(() =>
+      fetch(new URL(`/auth/connect/${code}`, base), { headers: { accept: "application/json" } }),
+    )
+    expect(connect.status).toBe(200)
+    const pairing = ((yield* Effect.promise(() => connect.json())) as { token: string }).token
+    expect(yield* createSession(pairing)).toBeUndefined()
   }),
 )

@@ -3,6 +3,7 @@ export * as SessionTransfer from "./transfer.js"
 import { SessionTransfer } from "@opencode/schema/session-transfer"
 import { Tool } from "@opencode/schema/tool"
 import { Skill } from "@opencode/schema/skill"
+import type { ServerIdentity } from "@opencode/schema/server-identity"
 import { eq } from "drizzle-orm"
 import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect"
 import { map } from "effect/Array"
@@ -41,6 +42,8 @@ export interface Interface {
   readonly import: (input: {
     data: Data
     location: Location.Ref
+    /** The local account importing the session; the server's request layer fills it, other callers have no account. */
+    createdBy?: ServerIdentity.UserID
   }) => Effect.Effect<Session.Info, ImportConflictError | Session.NotFoundError>
 }
 
@@ -120,6 +123,7 @@ const layer = Layer.effect(
               model: input.data.info.model,
               metadata: input.data.info.metadata,
               permissions: input.data.info.permissions,
+              createdBy: input.createdBy,
             },
             {
               location: input.location,

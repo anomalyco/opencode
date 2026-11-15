@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "9d83d500-bf4b-4436-a51a-6e66012309e9",
-  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
+  "id": "660523c0-75af-4bfc-809a-e6b9a5bcea68",
+  "prevIds": ["9d83d500-bf4b-4436-a51a-6e66012309e9"],
   "ddl": [
     {
       "name": "account_state",
@@ -1771,6 +1771,16 @@
       "default": null,
       "generated": null,
       "name": "fork_boundary",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_by",
       "entityType": "columns",
       "table": "session_v2"
     },

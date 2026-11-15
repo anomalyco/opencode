@@ -207,7 +207,7 @@ function dispatch(
     if (request.method === "GET" && url.pathname === "/api/info" && !ready) {
       // The application is not built yet, so database sessions cannot verify here: local-mode clients
       // holding one retry until ready, while the shared password keeps boot-window polling working.
-      if (!(yield* authorizedRequest(request, auth, undefined)))
+      if (!(yield* authorizedRequest(request, auth)))
         return unauthorizedResponse(request, authMethods(auth))
       return yield* infoResponse(status, version, urls, tmp)
     }
@@ -220,7 +220,7 @@ function dispatch(
       !hasPtyConnectTicketURL(url) &&
       !hasPersistentPtyConnectTicketURL(url) &&
       !hasMcpClientTicketURL(url)
-    if ((!ready || !local) && gated && !(yield* authorizedRequest(request, auth, undefined)))
+    if ((!ready || !local) && gated && !(yield* authorizedRequest(request, auth)))
       return unauthorizedResponse(request, authMethods(auth))
     if (ready) return yield* app.value
     return unavailable(state)

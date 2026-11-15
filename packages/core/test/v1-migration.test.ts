@@ -43,6 +43,7 @@ const session = (
   parent_id: null,
   fork_session_id: null,
   fork_boundary: null,
+  created_by: null,
   slug: "test",
   directory: "/tmp/test",
   path: null,

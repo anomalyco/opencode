@@ -28,6 +28,7 @@ import {
 } from "@opencode/protocol/errors"
 import { AbsolutePath } from "@opencode/core/schema"
 import { locationErrors } from "../location"
+import { RequestIdentity } from "../request-identity"
 import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
 
 function missingForm(id: Form.ID) {
@@ -110,6 +111,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 model: ctx.payload.model,
                 metadata: ctx.payload.metadata,
                 permissions: ctx.payload.permissions,
+                createdBy: (yield* RequestIdentity)?.user?.id,
                 ...(ctx.payload.parentID === undefined
                   ? { location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) } }
                   : { parentID: ctx.payload.parentID }),
@@ -126,6 +128,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               .import({
                 data: { info: ctx.payload.info, messages: ctx.payload.messages },
                 location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
+                createdBy: (yield* RequestIdentity)?.user?.id,
               })
               .pipe(
                 Effect.catchTag("Session.NotFoundError", missingSession),
@@ -202,7 +205,13 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.fork",
         Effect.fn(function* (ctx) {
           return {
-            data: yield* session.fork({ sessionID: ctx.params.sessionID, before: ctx.payload.before }).pipe(
+            data: yield* session
+              .fork({
+                sessionID: ctx.params.sessionID,
+                before: ctx.payload.before,
+                createdBy: (yield* RequestIdentity)?.user?.id,
+              })
+              .pipe(
               Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.MessageNotFoundError", missingMessage),
               Effect.catchTag(

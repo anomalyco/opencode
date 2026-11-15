@@ -7,6 +7,7 @@ import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
 import { AbsolutePath, DateTimeUtcFromMillis, optional, RelativePath, statics } from "./schema.js"
+import { ServerIdentity } from "./server-identity.js"
 import { SessionEvent } from "./session-event.js"
 import { SessionID } from "./session-id.js"
 import { SessionMetadata } from "./session-metadata.js"
@@ -57,6 +58,8 @@ export const Info = Schema.Struct({
   location: Location.Ref,
   subpath: RelativePath.pipe(optional),
   metadata: Metadata.pipe(optional),
+  /** The local account that created the session; absent when no account was involved, such as shared-password access. */
+  createdBy: ServerIdentity.UserID.pipe(optional),
   /** Evaluated after the agent's rules; the last matching rule wins. */
   permissions: Permission.Ruleset.pipe(optional),
   revert: Revert.pipe(optional),

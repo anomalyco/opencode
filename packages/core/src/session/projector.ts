@@ -177,6 +177,8 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       metadata: parent.metadata,
       permission: parent.permission,
       version: parent.version,
+      // The fork is a new session made by whoever forked it, not by the parent's creator.
+      created_by: event.data.createdBy,
       cost: 0,
       tokens_input: 0,
       tokens_output: 0,
@@ -883,6 +885,7 @@ const layer = Layer.effectDiscard(
             metadata: event.data.metadata,
             permission: event.data.permissions,
             version: event.data.version,
+            created_by: event.data.createdBy,
             time_created: event.created,
             time_updated: event.created,
           })

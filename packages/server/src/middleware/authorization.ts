@@ -1,4 +1,5 @@
 import { ServerAuth } from "../auth"
+import { RequestIdentity } from "../request-identity"
 import { UnauthorizedError } from "@opencode/protocol/errors"
 import { Authorization } from "@opencode/protocol/middleware/authorization"
 export { Authorization } from "@opencode/protocol/middleware/authorization"
@@ -70,42 +71,49 @@ function sessionCookieToken(request: HttpServerRequest.HttpServerRequest) {
   return token
 }
 
+const denied = (request: HttpServerRequest.HttpServerRequest, methods: ReadonlyArray<"password" | "local">) =>
+  Effect.gen(function* () {
+    if (challengeRequest(request))
+      yield* HttpEffect.appendPreResponseHandler((_request, response) =>
+        Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
+      )
+    return yield* new UnauthorizedError({
+      message: UNAUTHORIZED_MESSAGE,
+      methods: [...methods],
+    })
+  })
+
 function authorizedSessionCookie(request: HttpServerRequest.HttpServerRequest, config: ServerAuth.Info) {
   const token = sessionCookieToken(request)
   return token !== undefined && ServerAuth.verifySession(token, config)
 }
 
-export function authorizedRequest(
-  request: HttpServerRequest.HttpServerRequest,
-  config: ServerAuth.Info,
-  identity: ServerIdentity.Interface | undefined,
-) {
+/** Whether the request carries the shared password or its cookie: the only credential outside local accounts. */
+export function authorizedRequest(request: HttpServerRequest.HttpServerRequest, config: ServerAuth.Info) {
   return credentialFromRequest(request).pipe(
-    Effect.flatMap((credential) => {
-      if (identity === undefined)
-        return Effect.succeed(
-          ServerAuth.authorized(credential, config) || authorizedSessionCookie(request, config),
-        )
-      // Local accounts authorize only with database sessions; the shared password grants nothing. The token
-      // rides the Basic password field (query tokens decode into it too) or the session cookie.
-      return authorizedIdentityRequest(credential, request, identity)
-    }),
+    Effect.flatMap((credential) =>
+      Effect.succeed(ServerAuth.authorized(credential, config) || authorizedSessionCookie(request, config)),
+    ),
   )
 }
 
-function authorizedIdentityRequest(
-  credential: ServerAuth.DecodedCredentials,
+/** The database session verified by the request's Basic password or session cookie, or undefined when neither works. */
+function verifiedIdentityRequest(
   request: HttpServerRequest.HttpServerRequest,
   identity: ServerIdentity.Interface,
-) {
-  const token = Redacted.value(credential.password)
-  const cookieToken = sessionCookieToken(request)
-  if (token === "" && cookieToken === undefined) return Effect.succeed(false)
-  return Effect.gen(function* () {
-    const verified = token === "" ? undefined : yield* identity.verify(token)
-    if (verified !== undefined) return true
-    return cookieToken !== undefined && (yield* identity.verify(cookieToken)) !== undefined
-  })
+): Effect.Effect<ServerIdentity.Verified | undefined> {
+  return credentialFromRequest(request).pipe(
+    Effect.flatMap((credential) => {
+      const token = Redacted.value(credential.password)
+      const cookieToken = sessionCookieToken(request)
+      if (token === "" && cookieToken === undefined) return Effect.succeed(undefined)
+      return Effect.gen(function* () {
+        const verified = token === "" ? undefined : yield* identity.verify(token)
+        if (verified !== undefined) return verified
+        return cookieToken !== undefined ? yield* identity.verify(cookieToken) : undefined
+      })
+    }),
+  )
 }
 
 export const authorizationLayer = Layer.effect(
@@ -113,6 +121,7 @@ export const authorizationLayer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* ServerAuth.Config
     if (!ServerAuth.required(config)) return Authorization.of((effect) => effect)
+    const methods = config.local ? (["local"] as const) : (["password"] as const)
     return Authorization.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
@@ -137,15 +146,16 @@ export const authorizationLayer = Layer.effect(
           route.route.path === AUTH_LOGIN_PATH
         )
           return yield* effect
-        if (yield* authorizedRequest(request, config, identity)) return yield* effect
-        if (challengeRequest(request))
-          yield* HttpEffect.appendPreResponseHandler((_request, response) =>
-            Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
-          )
-        return yield* new UnauthorizedError({
-          message: UNAUTHORIZED_MESSAGE,
-          methods: config.local ? ["local"] : ["password"],
-        })
+        if (identity !== undefined) {
+          // Local accounts authorize only with database sessions; the shared password grants nothing. The
+          // token rides the Basic password field (query tokens decode into it too) or the session cookie.
+          // Verification happens once here so handlers see the account the request belongs to.
+          const verified = yield* verifiedIdentityRequest(request, identity)
+          if (verified === undefined) return yield* denied(request, methods)
+          return yield* Effect.provideService(effect, RequestIdentity, verified)
+        }
+        if (yield* authorizedRequest(request, config)) return yield* effect
+        return yield* denied(request, methods)
       }),
     )
   }),

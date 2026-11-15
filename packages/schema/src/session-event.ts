@@ -23,6 +23,7 @@ import { Snapshot } from "./snapshot.js"
 import { TokenUsage } from "./token-usage.js"
 import { SessionInbox } from "./session-inbox.js"
 import { Project } from "./project.js"
+import { ServerIdentity } from "./server-identity.js"
 import { SessionFork } from "./session-fork.js"
 import { Permission } from "./permission.js"
 
@@ -51,6 +52,8 @@ export const Created = Event.durable({
     model: Model.Ref.pipe(optional),
     /** Host-supplied annotations resolved at creation, including any inherited from a parent. */
     metadata: SessionMetadata.pipe(optional),
+    /** The local account that created the session; absent when no account was involved, such as shared-password access. */
+    createdBy: ServerIdentity.UserID.pipe(optional),
     permissions: Permission.Ruleset.pipe(optional),
     version: Schema.String,
   },
@@ -199,6 +202,8 @@ export const Forked = Event.durable({
     ...Base,
     parentID: SessionID,
     boundary: SessionFork.Boundary,
+    /** The local account that forked the parent session; absent when no account was involved, such as shared-password access. */
+    createdBy: ServerIdentity.UserID.pipe(optional),
     instructions: Instruction.Values.pipe(optional),
     instructionEntries: InstructionEntry.Snapshot.pipe(optional),
   },

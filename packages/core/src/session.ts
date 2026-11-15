@@ -21,6 +21,7 @@ import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
 import { Agent } from "@opencode/schema/agent"
 import type { Permission } from "@opencode/schema/permission"
+import type { ServerIdentity } from "@opencode/schema/server-identity"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
 import path from "path"
@@ -91,6 +92,8 @@ type CreateBaseInput = {
   model?: Model.Ref
   metadata?: SessionSchema.Metadata
   permissions?: Permission.Ruleset
+  /** The local account creating the session; the server's request layer fills it, other callers have no account. */
+  createdBy?: ServerIdentity.UserID
 }
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
@@ -100,6 +103,7 @@ type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: Sess
 type ForkInput = {
   sessionID: SessionSchema.ID
   before?: SessionMessage.ID
+  createdBy?: ServerIdentity.UserID
 }
 
 export {
@@ -313,6 +317,7 @@ const layer = Layer.effect(
               metadata: input.metadata ?? parent?.metadata,
               permissions: input.permissions ?? parent?.permissions,
               model: input.model,
+              createdBy: input.createdBy,
             },
             { location },
           )
@@ -376,6 +381,7 @@ const layer = Layer.effect(
             sessionID,
             parentID: parent.id,
             boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
+            createdBy: input.createdBy,
             ...inherited,
           })
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))

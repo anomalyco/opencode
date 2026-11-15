@@ -68,6 +68,8 @@ export type RelativePath = string
 
 export type SessionMetadata = { [x: string]: JsonValue }
 
+export type ServerIdentityUserID = string
+
 export type SnapshotID = string
 
 export type FileDiffInfo = {
@@ -1269,6 +1271,7 @@ export type SessionForked = {
     sessionID: SessionID
     parentID: SessionID
     boundary: SessionForkBoundary
+    createdBy?: ServerIdentityUserID
     instructions?: { [x: InstructionKey]: InstructionHash }
     instructionEntries?: InstructionEntrySnapshot
   }
@@ -2330,6 +2333,7 @@ export type SessionInfo = {
   title?: string
   subpath?: RelativePath
   metadata?: SessionMetadata
+  createdBy?: ServerIdentityUserID
   permissions?: PermissionRuleset
   revert?: SessionRevert
   location: LocationPublicRef
@@ -2353,6 +2357,7 @@ export type SessionCreated = {
     agent?: AgentID
     model?: ModelRef
     metadata?: SessionMetadata
+    createdBy?: ServerIdentityUserID
     permissions?: PermissionRuleset
     version: string
   }
@@ -3837,6 +3842,7 @@ export type ExperimentalSessionImportInput = {
     readonly title?: string
     readonly subpath?: string
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly createdBy?: string
     readonly permissions?: ReadonlyArray<{
       readonly action: string
       readonly resource: string

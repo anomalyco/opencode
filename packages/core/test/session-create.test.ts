@@ -5,6 +5,7 @@ import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
+import { ServerIdentity } from "@opencode/schema/server-identity"
 import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
 import { Agent } from "@opencode/core/agent"
@@ -471,6 +472,48 @@ describe("Session.create", () => {
       expect(
         yield* session.setMetadata({ sessionID: Session.ID.create(), metadata: replacement }).pipe(Effect.flip),
       ).toBeInstanceOf(Session.NotFoundError)
+    }),
+  )
+
+  it.effect("records the account that created a session", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const account = ServerIdentity.UserID.make("usr_test")
+
+      const created = yield* session.create({ location, createdBy: account })
+      expect(created.createdBy).toBe(account)
+      // The creator is a durable creation fact, not just projected state.
+      expect(
+        yield* db
+          .select({ data: EventTable.data })
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, created.id))
+          .get()
+          .pipe(Effect.orDie),
+      ).toMatchObject({ data: { createdBy: account } })
+      expect(
+        yield* db
+          .select({ by: SessionTable.created_by })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, created.id))
+          .get()
+          .pipe(Effect.orDie),
+      ).toMatchObject({ by: account })
+
+      // Children record their own creator, not the parent's.
+      expect((yield* session.create({ parentID: created.id })).createdBy).toBeUndefined()
+      expect((yield* session.create({ parentID: created.id, createdBy: account })).createdBy).toBe(account)
+
+      // The fork belongs to whoever forked it, not to the parent's creator.
+      yield* session.prompt({ sessionID: created.id, text: "Fork context", resume: false })
+      yield* SessionInbox.promote(db, bus, created.id, "steer")
+      expect((yield* session.fork({ sessionID: created.id })).createdBy).toBeUndefined()
+      expect((yield* session.fork({ sessionID: created.id, createdBy: account })).createdBy).toBe(account)
+
+      // Absent stays absent: no empty-value normalization.
+      expect((yield* session.create({ location })).createdBy).toBeUndefined()
     }),
   )
 
