@@ -794,7 +794,7 @@ fn a_content_handle_names_nothing_in_another_mount() {
 /// A route with a command of its own and a global one, each of which fetches `/api/hold`; the replies are logged.
 fn owned(setup: &mut abi::Setup) -> Result<(), String> {
     let fetch = |host: &dyn abi::Host, _: Option<&str>| {
-        host.fetch(abi::Fetch::default().with_method("GET".into()).with_path("/api/hold".into()));
+        let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/api/hold".into()));
     };
     let command = |name: &str, scope| abi::Command::default().with_name(name.into()).with_scope(scope);
     setup.command(command("owned.route", abi::Scope::Route("owned".into())), fetch);

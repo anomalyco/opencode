@@ -104,7 +104,10 @@ pub fn query(host: &dyn Host, diffs: &Diffs, search: String) {
     let call = Client::vcs_branch_list_call(&input).expect("the branch input encodes");
     let request = picker.request;
     drop(picker);
-    diffs.fetch(host, fetch_of(call), Asked::Branches { request });
+    // A fetch the host did not take ends as a failed reply does.
+    if let Err((_, error)) = diffs.fetch(host, fetch_of(call), Asked::Branches { request }) {
+        reply(host, diffs, request, Err(error));
+    }
 }
 
 /// The branches of search `request` arrived, or did not.

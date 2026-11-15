@@ -2548,6 +2548,56 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err\n");
 }
 
+// Expected (bigboi's final pass): a TypeScript plugin's fetch that the host does not take, while another plugin's
+// fan-out fills the queue of effects, ends with an error, where its await never ended; once the queue drains, a fetch
+// gets its reply.
+#[test]
+fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("fetched");
+    let plugin = root.path().join("config/plugins/refused");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.refused\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"refused.fetch\", title: \"refused.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/session\" }})\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let server = support::Fake::new(|seen| match seen.path.as_str() {
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.refused");
+    let h = &pipe.harness;
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "probe", setup: crate::plugins::chain }.into());
+    h.wait_for("chain ready");
+    let lines = || std::fs::read_to_string(&log).unwrap_or_default();
+    h.tui.keymap.dispatch("chain.fan", None);
+    for _ in 0..80 {
+        h.app.render();
+    }
+    h.tui.keymap.dispatch("refused.fetch", None);
+    h.wait("the refused fetch ended", || {
+        h.app.advance(Duration::from_millis(1));
+        lines().ends_with('\n')
+    });
+    assert_eq!(lines(), "Err\n");
+    h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "probe", false);
+    h.wait("the queue drained", || {
+        h.app.render();
+        opencode_plugin::effects_waiting() == 0
+    });
+    h.tui.keymap.dispatch("refused.fetch", None);
+    h.wait("the fetch ended", || {
+        h.app.advance(Duration::from_millis(1));
+        lines().lines().count() == 2
+    });
+    assert_eq!(lines(), "Err\nOk\n");
+}
+
 // Expected (bigboi P8-6): `data.session.pending` lists the session's inbox items the server has not delivered, as the
 // host holds them, where it listed none.
 #[test]
