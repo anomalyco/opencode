@@ -175,6 +175,8 @@ struct Seen {
     /// The fetches the server was asked for, and the programs that started.
     sent: usize,
     launched: usize,
+    /// The begins (`true`) and ends of the second mount, the overlay.
+    other: Vec<bool>,
 }
 
 fn run(carrier: Carrier, row: Row) -> Result<(), String> {
@@ -284,6 +286,7 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         replies: probe.replies(),
         sent: asked.load(Ordering::SeqCst),
         launched: launched(),
+        other: probe.other(),
     };
     drop(probe);
     check(carrier, row, &seen)
@@ -317,11 +320,17 @@ fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
         Outcome::Cancelled => cancelled,
         Outcome::Unanswered => seen.replies.is_empty() && seen.launched == 1,
     };
-    match accepted && named && held {
+    // The control closed another mount, which began and ended, or it would be told from no close at all (bigboi's
+    // verification).
+    let other = match row.close {
+        Close::Other => seen.other == [true, false],
+        _ => seen.other.is_empty(),
+    };
+    match accepted && named && held && other {
         true => Ok(()),
         false => Err(format!(
-            "{carrier:?} {row:?}: expected {outcome:?}; asked {:?}, replies {:?}, sent {}, launched {}",
-            seen.asked, seen.replies, seen.sent, seen.launched
+            "{carrier:?} {row:?}: expected {outcome:?}; asked {:?}, replies {:?}, sent {}, launched {}, other {:?}",
+            seen.asked, seen.replies, seen.sent, seen.launched, seen.other
         )),
     }
 }
@@ -340,6 +349,8 @@ thread_local! {
     static MARK: RefCell<PathBuf> = RefCell::default();
     /// What its `try_` call returned, and the replies it got.
     static SEEN: RefCell<Probed> = const { RefCell::new((Vec::new(), Vec::new())) };
+    /// The overlay's begins and ends.
+    static OTHER: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
 }
 
 type Probed = (Vec<Result<abi::RequestId, String>>, Vec<(abi::RequestId, String)>);
@@ -367,6 +378,7 @@ impl Probe {
         ROW.set(Some(row));
         MARK.replace(mark.to_path_buf());
         SEEN.with_borrow_mut(|seen| *seen = Default::default());
+        OTHER.with_borrow_mut(Vec::clear);
         let harness = support::mount(80, 24, Deps { route: Route::Home, ..deps });
         let host = opencode_tui::plugins::host::host(&harness.tui);
         let definition = match carrier {
@@ -398,6 +410,18 @@ impl Probe {
     fn hold(&self, held: bool) {
         if let Probe::Pipe(pipe, _) = self {
             pipe.scripts().hold_answers(held);
+        }
+    }
+
+    /// The overlay's begins (`true`) and ends.
+    fn other(&self) -> Vec<bool> {
+        match self {
+            Probe::Native(_) => OTHER.with_borrow(Vec::clone),
+            Probe::Pipe(_, log) => lines(log)
+                .iter()
+                .filter_map(|line| line.strip_prefix("other "))
+                .map(|mounted| mounted == "true")
+                .collect(),
         }
     }
 
@@ -506,9 +530,17 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
         _ => Handled::Pass,
     });
     setup.surface(surface);
-    setup.surface(v2::Surface::new("other", v2::Place::Overlay("other".into()), |_| {
+    let other = v2::Surface::new("other", v2::Place::Overlay("other".into()), |_| {
         v2::Node::text(vec![abi::Span::new("other overlay")])
-    }));
+    })
+    .mounts()
+    .on(|_, event| {
+        if let Event::Mount { mounted, .. } = event {
+            OTHER.with_borrow_mut(|other| other.push(*mounted));
+        }
+        Handled::Pass
+    });
+    setup.surface(other);
     Ok(())
 }
 
@@ -555,7 +587,12 @@ export default {{ id: "example.probe", setup(api) {{
       if (event.type === "key" && event.bind === "probe") ask("Input")
     }},
   }})
-  carrier.surface("other", {{ type: "overlay", name: "other" }}, () => ({{ type: "text", spans: [{{ text: "other overlay" }}] }}))
+  carrier.surface("other", {{ type: "overlay", name: "other" }}, () => ({{ type: "text", spans: [{{ text: "other overlay" }}] }}), {{
+    mounts: true,
+    on: (event) => {{
+      if (event.type === "mount") log("other " + event.mounted)
+    }},
+  }})
   carrier.command({{ name: "probe.route", title: "probe.route", scope: {{ route: "probe" }} }}, () => ask("Route"))
   carrier.command({{ name: "probe.global", title: "probe.global" }}, () => ask("Global"))
   carrier.command({{ name: "probe.overlay", title: "probe.overlay" }}, () =>
