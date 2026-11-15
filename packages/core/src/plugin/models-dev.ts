@@ -15,6 +15,7 @@ const API_KEY_VALIDATION: Record<string, Integration.KeyMethod["validation"]> = 
   deepseek: { prefixes: ["sk-"] },
   digitalocean: { prefixes: ["dop_v1_", "doo_v1_"] },
   google: { prefixes: ["AQ."] },
+  openai: { prefixes: ["sk-"] },
   groq: { prefixes: ["gsk_"] },
   huggingface: { prefixes: ["hf_"] },
   openrouter: { prefixes: ["sk-or-v1-"] },

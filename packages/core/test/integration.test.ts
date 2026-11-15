@@ -200,6 +200,11 @@ describe("Integration", () => {
           keys: ["dop_v1_test-fixture", "doo_v1_test-fixture"],
         },
         { id: "google", prefixes: ["AQ."], keys: ["AQ.test-fixture"] },
+        {
+          id: "openai",
+          prefixes: ["sk-"],
+          keys: ["sk-test-fixture", "sk-proj-test-fixture", "sk-svcacct-test-fixture"],
+        },
         { id: "groq", prefixes: ["gsk_"], keys: ["gsk_test-fixture"] },
         { id: "huggingface", prefixes: ["hf_"], keys: ["hf_test-fixture"] },
         { id: "openrouter", prefixes: ["sk-or-v1-"], keys: ["sk-or-v1-test-fixture"] },
@@ -229,7 +234,18 @@ describe("Integration", () => {
           yield* integrations.connection.key({ integrationID, key })
         }
         const before = yield* credentials.list(integrationID)
-        const invalidKeys = ["1", ...provider.prefixes, ...provider.prefixes.map((prefix) => prefix + "  \t ")]
+        const providerSpecificInvalidKeys =
+          provider.id === "digitalocean"
+            ? ["dor_v1_refresh-fixture"]
+            : provider.id === "google"
+              ? ["AIzaSy-test-fixture"]
+              : []
+        const invalidKeys = [
+          "1",
+          ...provider.prefixes,
+          ...provider.prefixes.map((prefix) => prefix + "  \\t "),
+          ...providerSpecificInvalidKeys,
+        ]
         for (const key of invalidKeys) {
           const invalid = yield* integrations.connection
             .key({ integrationID, key })
