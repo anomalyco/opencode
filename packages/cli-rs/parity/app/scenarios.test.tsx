@@ -123,6 +123,7 @@ async function record(name: string, file: string) {
       released.add(step.release)
       waiting.filter((held) => held.path === step.release).forEach((held) => held.go())
     }
+    if ("wait" in step) await Bun.sleep(step.wait)
     if ("ide" in step) {
       if (!ide) throw new Error(`${name}: an ide step needs \`ide: true\``)
       await ide.notify(step.ide)

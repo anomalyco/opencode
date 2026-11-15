@@ -32,6 +32,9 @@ export default defineApp({
     { type: "/lastprompt" },
     { keys: ["enter"] },
     { checkpoint: "dialog", until: "Esc · Close" },
+    // FT-4: the dialog stays once the plugin's registrations settled; a reload of them closed it in Rust.
+    { wait: 800 },
+    { checkpoint: "kept", until: "Esc · Close" },
     { keys: ["escape"] },
     { checkpoint: "closed", until: "Open full prompt" },
   ],

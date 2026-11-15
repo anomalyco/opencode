@@ -1879,6 +1879,11 @@ impl Setup<'_> {
         self.registration.generation
     }
 
+    /// The activations this one goes on from, whose dialog it owns ([`Registry::owns`]).
+    pub(crate) fn continues(&mut self, generations: Vec<u64>) {
+        self.registration.continues = generations;
+    }
+
     /// Tells the registry how to learn that a call of this activation panicked: then it contributes nothing more.
     pub(crate) fn failure(&mut self, failure: ErrorFn) {
         self.registration.failure = Some(failure);
@@ -2149,6 +2154,9 @@ impl Setup<'_> {
 struct Registration {
     /// The activation, unique in the registry.
     generation: u64,
+    /// The activations it goes on from: a reload of a JS plugin's registrations hands it their activation of the JS
+    /// host, so the dialog they showed is its own ([`Registry::owns`], FT-4).
+    continues: Vec<u64>,
     /// A call of the activation that panicked, if one did.
     failure: Option<ErrorFn>,
     claims: Vec<(Placement, ClaimRender)>,
@@ -2956,6 +2964,19 @@ impl Registry {
                 .active
                 .as_ref()
                 .is_some_and(|(_, registration)| registration.generation == generation && !registration.panicked())
+        })
+        .unwrap_or(false)
+    }
+
+    /// Whether what activation `generation` of plugin `id` showed is the running activation's: it is that one, or one
+    /// it goes on from (a reload of a JS plugin's registrations, FT-4), and it has not failed. A dialog of such an
+    /// activation stays open and acts.
+    pub fn owns(&self, id: &str, generation: u64) -> bool {
+        self.with_plugin(id, |plugin| {
+            plugin.active.as_ref().is_some_and(|(_, registration)| {
+                (registration.generation == generation || registration.continues.contains(&generation))
+                    && !registration.panicked()
+            })
         })
         .unwrap_or(false)
     }

@@ -74,6 +74,8 @@ pub(crate) struct Loaded {
     pub effects: RefCell<Option<Vec<HostRequest>>>,
     /// The reads a handed-over activation watched, which it goes on watching (P8).
     pub watches: RefCell<Vec<(String, HostRequest)>>,
+    /// The registry's activations a reload handed their JS host's activation on from, whose dialog stays (FT-4).
+    pub continues: Vec<u64>,
 }
 
 /// The definition of the plugin `loaded` names, whose setup registers what it listed.
@@ -88,6 +90,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
             *current.borrow_mut() = failure.clone();
             let failed = failure.clone();
             setup.failure(Rc::new(move || failed.borrow().clone()));
+            setup.continues(loaded.continues.clone());
             let wake = Arc::new(Wake::new(Some(setup.host().app().proxy())));
             let mailbox = Mailbox::new(setup.id(), wake);
             mailbox.refuse_messages();
@@ -291,6 +294,7 @@ impl Guest {
                 holds,
                 effects: RefCell::new(Some(Vec::new())),
                 watches: RefCell::new(watches),
+                continues: [self.loaded.continues.as_slice(), &[self.generation]].concat(),
             };
             (load.state, load.registered) = (super::Loading::Loaded(Rc::new(loaded)), false);
         }
