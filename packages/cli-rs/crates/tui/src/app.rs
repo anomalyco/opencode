@@ -593,9 +593,11 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     crate::dialogs::pair::install(&tui);
     crate::dialogs::model::install(&tui);
     crate::dialogs::integration::install(&tui);
-    crate::plugins::host::install(&tui);
+    // TS loads the built-in plugins once the first route has mounted, so the palette lists their commands first.
+    let held = tui.keymap.hold(|| crate::plugins::host::install(&tui));
     tui.startup.aim(&deps.route, deps.continue_);
     tui.navigate(deps.route);
+    drop(held);
     // After the first route's reads, as in TS, where they start during mount and the event stream connects later.
     // Otherwise `session.active` can answer first and read again the running sessions the route's family read brings.
     let status = deps.events.then(|| connect(&tui));
@@ -755,6 +757,7 @@ fn install_keys(tui: &Rc<Tui>) {
         )));
     }));
 
+    tui.keymap.set_first_layer(app_commands());
     // As `app.tsx:1303-1335`: the commands live in a global layer without bindings, so the palette
     // reaches them over a dialog, and separate layers bind their keys.
     let weak = tui.weak();
@@ -835,6 +838,63 @@ fn install_keys(tui: &Rc<Tui>) {
             Err(error) => log::error!("app keymap layer: {error}"),
         }
     }
+}
+
+/// `appCommands` (`app.tsx:752-1300`) in its order, the layer the palette lists last (D131).
+fn app_commands() -> Vec<String> {
+    let names = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect::<Vec<_>>();
+    let numbered = |prefix: &str, count: usize| (1..=count).map(|n| format!("{prefix}{n}")).collect::<Vec<_>>();
+    [
+        names(&[COMMAND_PALETTE_COMMAND, "session.list", "session.new", "session.clear", "open.menu"]),
+        numbered("session.quick_switch.", 9),
+        names(&[
+            "session.tab.next",
+            "session.tab.previous",
+            "session.tab.next_unread",
+            "session.tab.previous_unread",
+            "session.tab.close",
+            "session.tab.reopen",
+        ]),
+        numbered("session.tab.select.", 10),
+        names(&[
+            "model.list",
+            "model.cycle_recent",
+            "model.cycle_recent_reverse",
+            "model.cycle_favorite",
+            "model.cycle_favorite_reverse",
+            "agent.list",
+            "usage.show",
+            "mcp.list",
+            "agent.cycle",
+            "variant.cycle",
+            "variant.list",
+            "agent.cycle.reverse",
+            "provider.connect",
+            "opencode.highlights",
+            "opencode.settings",
+            "opencode.status",
+            "opencode.update",
+            "server.pair",
+            "service.restart",
+            "location.reload",
+            "opencode.debug",
+            "theme.switch",
+            "theme.switch_mode",
+            "theme.mode.lock",
+            "help.show",
+            "docs.open",
+            "app.exit",
+            "app.debug",
+            "app.console",
+            "terminal.suspend",
+            "terminal.title.toggle",
+            "app.toggle.animations",
+            "app.toggle.file_context",
+            "app.toggle.diffwrap",
+            "app.toggle.paste_summary",
+        ]),
+    ]
+    .concat()
 }
 
 fn install_theme(tui: &Rc<Tui>) {
@@ -1094,6 +1154,29 @@ mod tests {
 
     fn event(kind: &str) -> Arc<V2Event> {
         Arc::new(serde_json::from_value(serde_json::json!({ "id": "evt_1", "type": kind, "data": {} })).unwrap())
+    }
+
+    // Expected: the first layer is `appCommands` of the TS source, name for name; a `${i + 1}` name stands for each
+    // number its `Array.from({ length })` makes.
+    #[test]
+    fn the_first_layer_follows_app_tsx() {
+        let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tui/src/app.tsx")).unwrap();
+        let start = source.find("const appCommands = createMemo").unwrap();
+        let end = start + source[start..].find("Keymap.createLayer").unwrap();
+        let mut length = 0;
+        let mut names = Vec::new();
+        for line in source[start..end].lines().map(str::trim) {
+            if let Some(count) = line.strip_prefix("...Array.from({ length: ").and_then(|rest| rest.split(' ').next()) {
+                length = count.parse().unwrap();
+            }
+            let Some(name) = line.strip_prefix("name: ").and_then(|rest| rest.strip_suffix(',')) else { continue };
+            match name.strip_suffix("${i + 1}`") {
+                Some(prefix) => names.extend((1..=length).map(|n| format!("{}{n}", &prefix[1..]))),
+                None if name == "COMMAND_PALETTE_COMMAND" => names.push(COMMAND_PALETTE_COMMAND.to_owned()),
+                None => names.push(name.trim_matches('"').to_owned()),
+            }
+        }
+        assert_eq!(app_commands(), names);
     }
 
     // Expected: a full UI queue (a burst, a suspended terminal) delays the pump's store revisions, signals and
