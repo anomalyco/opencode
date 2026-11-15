@@ -68,7 +68,7 @@ describe("ShellParse native parity", () => {
     ["2>> output", [{ resource: "2>> output", save: "2>> *" }]],
   ] as const)("retains commandless redirects with matching saved prefixes: %s", async (command, commands) => {
     const parsed = await Effect.runPromise(ShellParse.scan(command, "bash", "/workspace"))
-    expect(parsed).toEqual({ commands: [...commands], directories: [] })
+    expect(parsed).toEqual({ commands: [...commands], directories: [], writes: ["output"] })
     for (const item of parsed.commands) expect(Wildcard.match(item.resource, item.save)).toBe(true)
   })
 })

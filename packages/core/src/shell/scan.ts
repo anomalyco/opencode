@@ -23,7 +23,13 @@ type Command = {
   redirectWordCount?: number
   // Exclusive prefix end relative to resource for commandless or group redirects.
   redirectPrefixEnd?: number
+  // Redirect targets that name a filesystem path, as source and cooked text. Duplicated descriptors and
+  // here-documents have no path to report.
+  redirects?: Redirect[]
 }
+
+// A redirect target that names a path the command writes to, kept apart from the words it runs with.
+type Redirect = { raw: string; word: string }
 
 // Opaque describes a parsing limitation, not a permission decision.
 export type Result = { kind: "scanned"; commands: Command[] } | { kind: "opaque"; reason: OpaqueReason }
@@ -175,6 +181,8 @@ type BashState = {
   nestedCommands: Command[]
   words: string[]
   rawWords: string[]
+  // Filesystem redirect targets of the command being scanned, in source order.
+  redirects: Redirect[]
   // Pending heredocs, shared with nested groups: a body starts after the next newline token at any nesting.
   heredocs: BashHeredoc[]
   structures: Array<{
@@ -202,6 +210,8 @@ type BashState = {
   assignmentHeadUnsafe: boolean
   invalid: OpaqueReason | undefined
   redirectTarget: boolean
+  // Whether the pending redirect target names a path the command writes to, rather than one it reads.
+  redirectWrite: boolean
   dupRedirect: boolean
   hereString: boolean
   hasRedirect: boolean
@@ -297,11 +307,17 @@ function finishBashWord(state: BashState) {
     state.rawWords.push(state.input.slice(state.wordStart, state.wordEnd))
   }
   if (state.redirectTarget) {
-    if (!state.dupRedirect || !/^(?:\d+-?|-)$/.test(state.input.slice(state.wordStart, state.wordEnd)))
+    const operand = state.input.slice(state.wordStart, state.wordEnd)
+    // `2>&1` and `>&-` duplicate a descriptor instead of naming a path.
+    if (!state.dupRedirect || !/^(?:\d+-?|-)$/.test(operand)) {
       state.hasFileRedirect = true
+      // `<`, `<&`, and `<<<` name a path or text the command reads, not one it writes.
+      if (state.redirectWrite) state.redirects.push({ raw: operand, word: state.word })
+    }
     state.redirectPrefixEnd ??= state.wordEnd
   }
   state.redirectTarget = false
+  state.redirectWrite = false
   state.dupRedirect = false
   state.hereString = false
   state.word = ""
@@ -397,6 +413,7 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
       ...(state.redirectWordCount !== undefined && state.redirectWordCount < state.words.length
         ? { redirectWordCount: state.redirectWordCount - name }
         : {}),
+      ...(state.redirects.length > 0 ? { redirects: [...state.redirects] } : {}),
     }
     state.commands.push(command)
     const builtin = bashBuiltinIndex(state)
@@ -457,6 +474,7 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
         words: [prefixToken],
         rawWords: [prefixToken],
         redirectPrefixEnd: prefixEnd,
+        ...(state.redirects.length > 0 ? { redirects: [...state.redirects] } : {}),
       }
       state.commands.push(command)
       owner = command
@@ -476,9 +494,11 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
   if (!inHeader && (state.words.length > 0 || state.hasRedirect)) bashStatement(state)
   state.words.length = 0
   state.rawWords.length = 0
+  state.redirects.length = 0
   state.commandWordIndex = -1
   state.commandStart = undefined
   state.dupRedirect = false
+  state.redirectWrite = false
   state.hasRedirect = false
   state.hasFileRedirect = false
   state.redirectWordCount = undefined
@@ -506,6 +526,7 @@ function scanBash(
     nestedCommands: [],
     words: [],
     rawWords: [],
+    redirects: [],
     heredocs: heredocs ?? [],
     structures: [],
     word: "",
@@ -523,6 +544,7 @@ function scanBash(
     assignmentHeadUnsafe: false,
     invalid: undefined,
     redirectTarget: false,
+    redirectWrite: false,
     dupRedirect: false,
     hereString: false,
     hasRedirect: false,
@@ -746,6 +768,7 @@ function scanBashOperatorOrSeparator(
     }
     if (" \t\n".includes(input[index + redirect.length] ?? "")) state.redirectPrefixEnd ??= index + redirect.length
     state.redirectTarget = true
+    state.redirectWrite = redirect !== "<" && redirect !== "<&" && redirect !== "<<<"
     state.dupRedirect = redirect === "<&" || redirect === ">&"
     state.hereString = redirect === "<<<"
     return index + redirect.length - 1
@@ -1856,6 +1879,7 @@ function scanPowerShellList(
   let memberChainStart: number | undefined
   let hasMemberAccess = false
   let hasFileRedirect = false
+  const redirects: Redirect[] = []
   let stopParsing = false
   let commandEnd = start
   let statementHead = true
@@ -1891,7 +1915,7 @@ function scanPowerShellList(
       rawWords.push(input.slice(wordStart, end))
       wordEnds.push(end)
       dangling = false
-    }
+    } else redirects.push({ raw: input.slice(wordStart, end), word })
     commandEnd = end
     redirectTarget = false
     word = ""
@@ -1906,6 +1930,7 @@ function scanPowerShellList(
         rawWords: [...rawWords],
         wordEnds: wordEnds.map((value) => value - segment),
         ...(statementHead && !invocation && !expression && !clause ? { statementHead: true as const } : {}),
+        ...(redirects.length > 0 ? { redirects: [...redirects] } : {}),
       })
     else if (
       (!expression && !clause && invocation) ||
@@ -1918,6 +1943,7 @@ function scanPowerShellList(
     words.length = 0
     rawWords.length = 0
     wordEnds.length = 0
+    redirects.length = 0
     redirectTarget = false
     hasFileRedirect = false
     invocation = false

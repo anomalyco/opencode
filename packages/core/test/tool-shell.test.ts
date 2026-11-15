@@ -313,7 +313,8 @@ const withScanner = <A, E, R>(
           const agents = yield* Agent.Service
           yield* agents.transform((editor) =>
             editor.update(toolIdentity.agent, (agent) => {
-              agent.permissions = []
+              // Redirect targets are asserted as `edit`, so the suite allows edits unless a test says otherwise.
+              agent.permissions = [{ action: "edit", resource: "*", effect: "allow" }]
             }),
           )
           return yield* body(registry, fixture)
@@ -474,13 +475,103 @@ describe("ShellTool scanner permissions", () => {
       }),
     ))
 
+  // A redirect target is not part of the words the command rule matches, so it needs its own check.
+  const redirectAgent = (permissions: Permission.Ruleset) =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) =>
+        editor.update(toolIdentity.agent, (agent) => {
+          agent.permissions = [...permissions]
+        }),
+      )
+    })
+
+  test("a redirect the command rule allows still asks for the file it writes", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        yield* redirectAgent([{ action: "shell", resource: "git status *", effect: "allow" }])
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, `git status > '${marker}'`, marker, ["reject"])
+        expect(result.requests).toMatchObject([{ action: "edit", resources: ["marker"], save: ["*"] }])
+        expect(Exit.isFailure(result.exit)).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
+  test("a denied edit rule blocks a redirect the command rule allows", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        yield* redirectAgent([
+          { action: "shell", resource: "git status *", effect: "allow" },
+          { action: "edit", resource: "*", effect: "deny" },
+        ])
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, `git status > '${marker}'`, marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({
+          _tag: "Success",
+          value: { status: "error", error: { message: expect.stringContaining("Permission denied: edit") } },
+        })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
+  test("a matching edit allow permits the redirect without a prompt", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        yield* redirectAgent([
+          { action: "shell", resource: "git status *", effect: "allow" },
+          { action: "edit", resource: "marker", effect: "allow" },
+        ])
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, `git status > '${marker}'`, marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({ _tag: "Success", value: { status: "completed" } })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(true)
+      }),
+    ))
+
+  test("a command without a redirect asserts no edit", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        yield* redirectAgent([
+          { action: "shell", resource: "git *", effect: "allow" },
+          { action: "edit", resource: "*", effect: "deny" },
+        ])
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, "git status", marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({ _tag: "Success", value: { status: "completed" } })
+      }),
+    ))
+
+  test("an external redirect target needs the directory approval the write tools need", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        yield* redirectAgent([
+          { action: "shell", resource: "git status *", effect: "allow" },
+          { action: "edit", resource: "*", effect: "allow" },
+        ])
+        const target = path.join(fixture.outside, "marker")
+        const result = yield* runPermissionCommand(registry, `git status > '${target}'`, target, ["reject"])
+        expect(result.requests).toMatchObject([
+          { action: "external_directory", resources: [path.join(fixture.outside, "*")] },
+        ])
+        expect(Exit.isFailure(result.exit)).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(target).exists())).toBe(false)
+      }),
+    ))
+
   test("external-directory rejection stops execution before a workspace marker is written", () =>
     withScanner((registry, fixture) =>
       Effect.gen(function* () {
         const agents = yield* Agent.Service
         yield* agents.transform((editor) =>
           editor.update(toolIdentity.agent, (agent) => {
-            agent.permissions = [{ action: "shell", resource: "*", effect: "allow" }]
+            agent.permissions = [
+              { action: "shell", resource: "*", effect: "allow" },
+              { action: "edit", resource: "*", effect: "allow" },
+            ]
           }),
         )
         const marker = path.join(fixture.active, "marker")
@@ -523,6 +614,7 @@ describe("ShellTool scanner permissions", () => {
           editor.update(toolIdentity.agent, (agent) => {
             agent.permissions = [
               { action: "shell", resource: "*", effect: "allow" },
+              { action: "edit", resource: "*", effect: "allow" },
               { action: "external_directory", resource: "*", effect: "deny" },
             ]
           }),

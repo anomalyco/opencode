@@ -123,7 +123,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       { CDPATH: "/outside" },
       { commands: [{ resource: "pwd", save: "pwd *" }], directories: ["child"] },
     ],
-    ["bash", "cd /workspace > output", {}, { commands: [], directories: ["/workspace"] }],
+    ["bash", "cd /workspace > output", {}, { commands: [], directories: ["/workspace"], writes: ["output"] }],
     [
       "bash",
       "export X=value; unset X; git status",
@@ -140,6 +140,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
           { resource: "git status > output", save: "git status *" },
         ],
         directories: [],
+        writes: ["output"],
       },
     ],
     [
@@ -152,6 +153,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
           { resource: "cat < input > output", save: "cat *" },
         ],
         directories: [],
+        writes: ["output"],
       },
     ],
     [
@@ -335,7 +337,11 @@ describe("scanner behavior on former tree-sitter gaps", () => {
       name: "retains redirect resource for an assignment with redirection",
       shell: "bash",
       command: "FOO=bar > output",
-      expected: { commands: [{ resource: "FOO=bar > output", save: "FOO=bar > *" }], directories: [] },
+      expected: {
+        commands: [{ resource: "FOO=bar > output", save: "FOO=bar > *" }],
+        directories: [],
+        writes: ["output"],
+      },
     },
     {
       name: "retains both redirect resource and nested executable commands on assignment redirection",
@@ -347,6 +353,7 @@ describe("scanner behavior on former tree-sitter gaps", () => {
           { resource: "printf value", save: "printf *" },
         ],
         directories: [],
+        writes: ["output"],
       },
     },
     {

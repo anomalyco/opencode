@@ -128,6 +128,7 @@ describe("native shell syntax compatibility", () => {
         { resource: "git add -p file.rs <<< $'n\\ny\\n' >/dev/null", save: "git add *" },
       ],
       directories: [],
+      writes: ["/dev/null"],
     })
   })
 
@@ -148,6 +149,7 @@ describe("native shell syntax compatibility", () => {
         { resource: "echo started", save: "echo *" },
       ],
       directories: [],
+      writes: ["/dev/null"],
     })
 
     for (const unsafe of [

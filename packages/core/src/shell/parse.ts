@@ -16,6 +16,8 @@ const POWERSHELL_STACK_FLAG_RE = /^-(?:stack(?:name|nam|na|n)?|st):?$/i
 export type Result = {
   commands: Array<{ resource: string; save: string }>
   directories: string[]
+  /** Filesystem paths the command redirects output into, in source order. */
+  writes?: string[]
 }
 
 const ARITY: Record<string, number> = {
@@ -173,6 +175,8 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
     for (const item of scanned.commands) {
       // Declarations are skipped as standalone permission resources, while nested substitutions remain.
       if (item.declaration) continue
+      const writes = redirectWrites(item, powershell, cwd, shell)
+      if (writes.length > 0) output.writes = [...(output.writes ?? []), ...writes]
       if (item.redirectPrefixEnd !== undefined) {
         const head = item.resource.slice(0, item.redirectPrefixEnd)
         const next = item.resource[item.redirectPrefixEnd]
@@ -245,6 +249,24 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
       })
     }
     return Effect.succeed(output)
+  })
+}
+
+// Filesystem paths a command's redirects name, skipping targets the shell only knows at run time.
+function redirectWrites(
+  item: { redirects?: ReadonlyArray<{ raw: string; word: string }> },
+  powershell: boolean,
+  cwd: string,
+  shell: string,
+) {
+  return (item.redirects ?? []).flatMap((redirect): string[] => {
+    if (powershell) {
+      const value = directoryArgument(redirect.word, true, cwd, shell)
+      return value === undefined ? [] : [value]
+    }
+    if (!isStaticBashWord(redirect.raw)) return []
+    const value = expandKnownDirectory(redirect.word.replaceAll("$", "\0"), false, cwd, redirect.raw.startsWith("~"))
+    return value === undefined ? [] : [value]
   })
 }
 

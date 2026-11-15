@@ -292,12 +292,26 @@ export const Plugin = {
           kind: "directory",
         }),
       )
-      yield* access.authorizeExternal([target, ...directories], context)
+      // A redirect names a path the command writes, which the command rule alone does not cover.
+      const writes = yield* Effect.forEach(parsed.writes ?? [], (write) =>
+        access.resolve({
+          path: FileAccess.resolvePath(target.absolute, write),
+          kind: "file",
+        }),
+      )
+      yield* access.authorizeExternal([target, ...directories, ...writes], context)
       if (parsed.commands.length > 0)
         yield* permission.assert({
           action: name,
           resources: parsed.commands.map((command) => command.resource),
           save: parsed.commands.map((command) => command.save),
+          ...Permission.invocation(context),
+        })
+      if (writes.length > 0)
+        yield* permission.assert({
+          action: "edit",
+          resources: writes.map((write) => write.resource),
+          save: ["*"],
           ...Permission.invocation(context),
         })
       // Approval can outlive the directory, so validate immediately before spawning.

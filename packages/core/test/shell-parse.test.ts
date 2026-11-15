@@ -212,6 +212,7 @@ describe("ShellParse", () => {
         { resource: "export -p > ~/.bashrc", save: "export *" },
       ],
       directories: [],
+      writes: [path.join(os.homedir(), ".zshrc"), path.join(os.homedir(), ".bashrc")],
     })
 
     const methods = await Effect.runPromise(
@@ -224,7 +225,39 @@ describe("ShellParse", () => {
         { resource: '"x" >> ~/.bashrc', save: '"x" *' },
       ],
       directories: [],
+      writes: [path.join(os.homedir(), ".bashrc")],
     })
+  })
+
+  test("extracts the paths a command redirects output into", async () => {
+    const writes = async (command: string, shell = "/bin/bash", cwd = "/workspace") =>
+      (await Effect.runPromise(ShellParse.scan(command, shell, cwd))).writes
+
+    expect(await writes("git status > /tmp/x")).toEqual(["/tmp/x"])
+    expect(await writes("git status >> out")).toEqual(["out"])
+    expect(await writes("git status 2> err")).toEqual(["err"])
+    expect(await writes("git status &> out")).toEqual(["out"])
+    expect(await writes("git status >| out")).toEqual(["out"])
+    expect(await writes("git status <> both")).toEqual(["both"])
+    expect(await writes("git status > 'out file'")).toEqual(["out file"])
+    expect(await writes("git status > ~/out")).toEqual([path.join(os.homedir(), "out")])
+    expect(await writes("git status > a > b")).toEqual(["a", "b"])
+    expect(await writes("printf hello | cat > marker")).toEqual(["marker"])
+    expect(await writes("> out")).toEqual(["out"])
+    expect(await writes("Write-Output hi > out.txt", "pwsh", "C:\\workspace")).toEqual(["out.txt"])
+
+    // Descriptor duplication, here-documents, here-strings, and read redirects name no path the command writes.
+    expect(await writes("git status 2>&1")).toBeUndefined()
+    expect(await writes("git status >&2")).toBeUndefined()
+    expect(await writes("git status < in")).toBeUndefined()
+    expect(await writes("cat <<< 'x'")).toBeUndefined()
+    expect(await writes("cat <<'EOF'\nbody\nEOF")).toBeUndefined()
+    expect(await writes("Get-ChildItem 2>&1", "pwsh", "C:\\workspace")).toBeUndefined()
+    expect(await writes("git status")).toBeUndefined()
+
+    // Targets the shell only knows at run time are left to the command rule, as for `cd`.
+    expect(await writes("git status > $HOME/out")).toBeUndefined()
+    expect(await writes("git status > $(printf out)")).toBeUndefined()
   })
 
   test("extracts PowerShell directory parameters", async () => {
