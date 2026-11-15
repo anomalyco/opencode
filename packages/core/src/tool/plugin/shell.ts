@@ -15,6 +15,7 @@ import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
 import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
+import { Sandbox } from "../../sandbox.js"
 import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
@@ -23,6 +24,9 @@ import { toolFailure } from "../runtime.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
+// Leaving the OS sandbox is its own permission, asserted before the ordinary `shell` approval, so approving a
+// sandboxed command never approves running it unsandboxed.
+export const UNSANDBOXED = "shell_unsandboxed"
 // How long a call the user interrupted waits for its stopped command to exit before settling with the output so far.
 const INTERRUPT_WAIT = "500 millis"
 
@@ -61,6 +65,10 @@ export const Input = Schema.Struct({
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
+  }),
+  sandbox: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Set to false to run this command outside the OS sandbox. This asks the user for a separate approval and is only meaningful when the sandbox is enabled in configuration.",
   }),
 })
 
@@ -280,6 +288,7 @@ export const Plugin = {
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
+    const sandbox = yield* Sandbox.Service
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
@@ -342,6 +351,46 @@ export const Plugin = {
       })
     })
 
+    // Runs a command inside the OS sandbox of a Location with a sandbox policy. The sandbox backend captures the
+    // output, the timeout stops the command, and there is no background mode or interactive terminal.
+    const sandboxed = Effect.fnUntraced(function* (input: typeof Input.Type, context: Tool.Context) {
+      if (input.background === true)
+        return yield* new ToolFailure({
+          message:
+            "A sandboxed command cannot run in the background. Run it in the foreground, or set sandbox to false.",
+        })
+      const started = yield* Clock.currentTimeMillis
+      const invocation = {
+        command: input.command,
+        cwd: input.workdir ?? ".",
+        timeout: input.timeout || DEFAULT_TIMEOUT_MS,
+        shell: yield* compatibleShell,
+        env: {} as Record<string, string | undefined>,
+      }
+      // The same directory and permission checks as an unsandboxed command.
+      yield* prepare(invocation, context)
+      invocation.env.AGENT = "1"
+      invocation.env.OPENCODE = "1"
+      invocation.env.AI_AGENT ||= "opencode"
+      invocation.env.OPENCODE_SESSION_ID = context.sessionID
+      const result = yield* sandbox.execute({
+        command: invocation.command,
+        cwd: invocation.cwd,
+        shell: invocation.shell,
+        timeout: invocation.timeout,
+        environment: invocation.env,
+      })
+      const end = yield* Clock.currentTimeMillis
+      return {
+        output: [result.stdout, result.stderr].filter(Boolean).join("\n"),
+        exit: result.exitCode,
+        status: "completed" as const,
+        truncated: false,
+        ...(result.timedOut ? { timeout: true as const } : {}),
+        wallTimeSeconds: Math.max(0, end - started) / 1_000,
+      }
+    })
+
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
@@ -369,6 +418,31 @@ export const Plugin = {
                     )
                   : undefined
                 return yield* Effect.gen(function* () {
+                  const policy = yield* sandbox.policy()
+                  if (policy !== undefined && input.sandbox !== false) {
+                    return yield* restore(sandboxed(input, context))
+                  }
+                  if (policy !== undefined) {
+                    // Leaving the sandbox needs its own approval, asserted before the ordinary shell approval in
+                    // `prepare`, so a saved `shell` allow can never authorize escaping it.
+                    yield* restore(
+                      Effect.raceFirst(
+                        permission.assert({
+                          action: UNSANDBOXED,
+                          resources: [input.command],
+                          save: [input.command],
+                          ...Permission.invocation(context),
+                        }),
+                        Deferred.await(stopped).pipe(
+                          Effect.andThen(
+                            Effect.fail(
+                              new ToolFailure({ message: "Command interrupted by the user before it started." }),
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  }
                   const info = yield* shell.create(
                     {
                       command: input.command,

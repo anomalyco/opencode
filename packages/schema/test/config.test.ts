@@ -192,3 +192,18 @@ test("no flag is named after the everything-on switches", () => {
   expect(ConfigFlag.registry).not.toHaveProperty("all_flags")
   expect(ConfigFlag.registry).not.toHaveProperty(ConfigFlag.wildcard)
 })
+
+test("round-trips sandbox settings and rejects invalid sandbox values", () => {
+  const input = {
+    sandbox: { enabled: true, mode: "workspace-write", network: "deny", writable_roots: ["dist"] },
+  } as const
+  const decoded = Schema.decodeUnknownSync(Config.Info)(input)
+  expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
+  expect(decoded.sandbox?.enabled).toBe(true)
+  expect(decoded.sandbox?.mode).toBe("workspace-write")
+
+  expect(() => Schema.decodeUnknownSync(Config.Info)({ sandbox: { enabled: true, mode: "full-access" } })).toThrow()
+  expect(() => Schema.decodeUnknownSync(Config.Info)({ sandbox: { enabled: "yes" } })).toThrow()
+  expect(() => Schema.decodeUnknownSync(Config.Info)({ sandbox: { network: "sometimes" } })).toThrow()
+})
+

@@ -829,4 +829,27 @@ describe("ConfigNormalize", () => {
     })
     expect(result.encoded.share).toBeUndefined()
   })
+
+  test("keeps a valid sandbox block as-is", () => {
+    const result = normalized({
+      sandbox: { enabled: true, mode: "workspace-write", network: "deny", writable_roots: ["dist"] },
+    })
+    expect(result.encoded.sandbox).toEqual({
+      enabled: true,
+      mode: "workspace-write",
+      network: "deny",
+      writable_roots: ["dist"],
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("resolves an invalid sandbox block to the strictest policy instead of dropping it", () => {
+    for (const invalid of [null, "off", { enabled: true, mode: "write-everything" }, { network: 1 }, [true]]) {
+      const result = ConfigNormalize.normalize({ sandbox: invalid })
+      expect(result.type).toBe("normalized")
+      if (result.type !== "normalized") throw new Error("expected normalized config")
+      expect(result.encoded.sandbox).toEqual({ enabled: true, mode: "read-only", network: "deny" })
+      expect(result.diagnostics.some((diagnostic) => diagnostic.path[0] === "sandbox")).toBe(true)
+    }
+  })
 })

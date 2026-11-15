@@ -70,6 +70,7 @@ import { SessionInstructions } from "../session/instructions.js"
 import { SubagentJob } from "../session/subagent-job.js"
 import { SharedCache } from "../shared-cache.js"
 import { Shell } from "../shell.js"
+import { Sandbox } from "../sandbox.js"
 import { ShellSelect } from "../shell/select.js"
 import { Snapshot } from "../snapshot.js"
 import { Skill } from "../skill.js"
@@ -162,6 +163,7 @@ const services = [
   WebSearch.Service,
   Ripgrep.Service,
   Schedule.Service,
+  Sandbox.Service,
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
@@ -212,6 +214,7 @@ export const requirements = LayerNode.group([
   Job.node,
   Shell.daemonNode,
   KV.node,
+  Sandbox.node,
   llmClient,
   Location.node,
   ModelsDev.node,
