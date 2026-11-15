@@ -149,6 +149,14 @@ fn today(count: usize, narrow: bool, drive: Drive) {
         ..support::deps(Arc::new(memory.clone()))
     };
     let harness = mount(width, height, deps);
+    // A probe of the viewer's work, not of its budget: on a slow runner (Windows CI) its frames pass the 1 ms budget,
+    // and the "Plugin is slow" notice would change the screen each action compares. The times it writes stay real.
+    harness.tui.plugins.monitor().set_limits(opencode_plugin::contain::Limits {
+        frame: Duration::from_secs(1),
+        all: Duration::from_secs(1),
+        overrun: Duration::from_secs(10),
+        ..opencode_plugin::contain::Limits::default()
+    });
     harness.wait_for("/project");
     frames(&harness, Instant::now(), &|_| false);
     // The open: the dispatch, the load and the first frame that shows the first file, all timed.
