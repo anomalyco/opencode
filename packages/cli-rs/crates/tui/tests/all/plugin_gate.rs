@@ -174,15 +174,25 @@ fn today(count: usize, narrow: bool, drive: Drive) {
         "usable_us": usable, "frames": all }));
     // Each action is checked after its frames, outside the time: a step that did nothing fails the probe.
     let shown = RefCell::new(harness.app.text());
+    // The viewer's own calls (what its frame budget counts) and the host's work for its nodes, apart.
+    let monitor = harness.tui.plugins.monitor();
+    let spent = || {
+        let us = |took: Duration| took.as_secs_f64() * 1e6;
+        (us(monitor.calls_time("opencode.diffs")), us(monitor.host_time("opencode.diffs")))
+    };
     let action = |name: &str, step: usize, moves: bool, run: &dyn Fn()| {
+        let (calls, host) = spent();
+        let work = reconcile::work();
         let started = Instant::now();
         if !drive.noop {
             run();
         }
         let dispatch_us = micros(started);
         let (frames, _, text) = frames(&harness, started, &|_| false);
+        let ((calls_now, host_now), done) = (spent(), reconcile::work().since(work));
         write(json!({ "part": part, "files": count, "action": name, "step": step, "dispatch_us": dispatch_us,
-            "frames": frames }));
+            "frames": frames, "plugin_us": calls_now - calls, "host_us": host_now - host, "touched": done.touched(),
+            "items": done.items, "kept": done.kept }));
         let before = shown.replace(text.clone());
         assert_eq!(
             text != before,
@@ -193,6 +203,24 @@ fn today(count: usize, narrow: bool, drive: Drive) {
     };
     let app = &harness.app;
     let key = |key: &'static str| move || app.press(key);
+    let theme = |step: usize| {
+        let name = if step.is_multiple_of(2) { "tokyonight" } else { "opencode" };
+        assert!(harness.tui.theme.borrow_mut().set(name));
+        harness.tui.theme_changed();
+    };
+    // One rebuild again and again, for a profile of it: `GATE_REPEAT=toggle_view:40` (or `mark_reviewed`, `theme`).
+    if let Ok(repeat) = std::env::var("GATE_REPEAT") {
+        let (name, times) = repeat.split_once(':').expect("GATE_REPEAT is <action>:<times>");
+        for step in 0..times.parse().expect("GATE_REPEAT's times") {
+            match name {
+                "toggle_view" => action(name, step, !narrow, &key("v")),
+                "mark_reviewed" => action(name, step, true, &key("m")),
+                "theme" => action(name, step, false, &|| theme(step)),
+                _ => panic!("GATE_REPEAT names no rebuild: {name}"),
+            }
+        }
+        return;
+    }
     for step in 0..5 {
         action("jump_hunk", step, true, &key("]"));
     }
@@ -205,6 +233,10 @@ fn today(count: usize, narrow: bool, drive: Drive) {
     // At 48 columns split has no room, so the toggle changes nothing, as in TS.
     for step in 0..2 {
         action("toggle_view", step, !narrow, &key("v"));
+    }
+    // The palette changes no text: the viewer's surfaces read it, so a switch calls its view.
+    for step in 0..2 {
+        action("theme", step, false, &|| theme(step));
     }
     for step in 0..30 {
         action("wheel", step, true, &|| harness.app.scroll(wheel.0, wheel.1, true));
