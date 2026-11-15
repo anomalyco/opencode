@@ -228,7 +228,7 @@ export const Playground = {
         </div>
         <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
           <div class="mx-auto py-6" style={{ "max-width": `${state.width}px` }}>
-            <CurrentSessionProviders document={replay().document}>
+            <CurrentSessionProviders document={replay().document} sessionStatus={replay().children}>
               <Show
                 when={state.activity}
                 fallback={
