@@ -1052,8 +1052,8 @@ fn the_oracles_can_fail_on(carrier: Carrier) {
     assert!(clean.iter().zip(&bare).any(|(clean, bare)| clean.a_draws && frame_diff(clean, bare).is_some()));
 }
 
-// Expected: a part streaming several revisions in one frame gets one view at once and one at the next paint, with the
-// newest content; the frame between keeps the last tree.
+// Expected (final re-review big-boi 12): a part streaming several revisions before a paint gets one view, as that
+// paint starts, with the newest content; the paint after views nothing. A phase change is viewed at once.
 #[test]
 fn a_streaming_part_gets_one_view_a_frame() {
     CARRIERS.into_iter().for_each(a_streaming_part_gets_one_view_a_frame_on);
@@ -1071,11 +1071,11 @@ fn a_streaming_part_gets_one_view_a_frame_on(carrier: Carrier) {
         }
         world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
     }
-    assert_eq!(views(), 1, "the first revision of the frame is viewed at once, the rest wait");
+    assert_eq!(views(), 0, "a streaming revision is viewed as the paint starts");
     world.harness.app.render();
-    assert_eq!(views(), 1, "the paint of the frame that viewed does not view again");
+    assert_eq!(views(), 1, "the paint views the newest content once");
     world.harness.app.render();
-    assert_eq!(views(), 2, "the next paint views the newest content once");
+    assert_eq!(views(), 1, "the paint after views nothing");
     assert_eq!(stream_whole(&world, &expected), Ok(1));
     // A revision that changes the phase is viewed at once, also in a frame that viewed the part already.
     world.send(&Command::Delta(0, 0), &mut expected);
@@ -1814,14 +1814,14 @@ fn a_view_at_the_paint_that_does_not_draw_hands_the_row_back() {
             world.send(&Command::Start(0), &mut expected);
             world.send(&Command::Delta(0, 0), &mut expected);
             COLD.set(false);
-            // Two revisions in one frame: the first is viewed at once, the second at the paint.
+            assert!(world.frame().text().contains("probe call_1"), "{carrier:?} {fault:?}: no tree before the paint");
+            // Two revisions before a paint: both are viewed once, as the paint starts.
             world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": "x" }));
             match fault {
                 None => drop(DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()))),
                 Some(fault) => ARMED.set(Some(("call_1".to_owned(), fault))),
             }
             world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": "y" }));
-            assert!(world.frame().text().contains("probe call_1"), "{carrier:?} {fault:?}: no tree before the paint");
             for _ in 0..3 {
                 world.settle();
             }
@@ -1856,8 +1856,9 @@ fn a_fence_view_at_the_paint_that_declines_shows_the_host_code() {
     }
 }
 
-// Expected (4.11, review finding M7): a part gets at most one view a frame while it streams, also while its claim
-// declines it and the host's row shows it; the view at the paint that accepts takes the row back in that paint.
+// Expected (4.11, review finding M7, final re-review big-boi 12): a part gets at most one view a frame while it streams,
+// also while its claim declines it and the host's row shows it; the view at the paint that accepts takes the row back
+// in that paint.
 #[test]
 fn a_declined_part_gets_one_view_a_frame_and_the_paint_takes_it_back() {
     for carrier in CARRIERS {
@@ -1865,18 +1866,16 @@ fn a_declined_part_gets_one_view_a_frame_and_the_paint_takes_it_back() {
         let mut expected = Expected::new();
         DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
         world.send(&Command::Start(0), &mut expected);
+        assert!(world.frame().text().contains("⋯ probe"), "{carrier:?}");
         VIEWS.with_borrow_mut(Vec::clear);
         let views = || VIEWS.with_borrow(|views| views.iter().filter(|(plugin, _, _)| *plugin == 'a').count());
         for delta in TOKENS {
             world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
         }
-        assert_eq!(views(), 1, "{carrier:?}: the first revision of the frame is viewed, the rest wait");
-        assert!(world.frame().text().contains("⋯ probe"), "{carrier:?}");
+        assert_eq!(views(), 0, "{carrier:?}: a streaming revision is viewed as the paint starts");
         DECLINE.with_borrow_mut(HashSet::clear);
-        world.harness.app.render();
-        world.harness.app.render();
-        assert_eq!(views(), 2, "{carrier:?}: the paint views the newest revision once");
-        let screen = world.frame().text();
+        let screen = world.harness.app.render().text();
+        assert_eq!(views(), 1, "{carrier:?}: the paint views the newest revision once");
         assert!(screen.contains("probe call_1 Pending") && !screen.contains("⋯ probe"), "{carrier:?}:\n{screen}");
     }
 }
@@ -2770,10 +2769,10 @@ fn plugin_coalesce(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.11, 4.14 `work`; review bigboi 12): a part's revision and a handler of its plugin in the same frame give
-// the part one view in that frame, and the next paint views it once with the newest of both: the command's effect and
-// the newest content; a frame between keeps the tree. A view at that paint that declines hands the row back at that
-// paint. On both carriers.
+// Expected (4.11, 4.14 `work`; review bigboi 12, final re-review big-boi 12): a part's revision and a handler of its
+// plugin before a paint give the part one view, at that first paint, with the newest of both: the command's effect and
+// the newest content, which that paint shows; the paint after views nothing. A view at that paint that declines hands
+// the row back at that paint. On both carriers.
 #[test]
 fn a_revision_and_a_handler_in_one_frame_give_a_part_one_view() {
     for carrier in CARRIERS {
@@ -2788,17 +2787,18 @@ fn a_revision_and_a_handler_in_one_frame_give_a_part_one_view() {
             let views = || COALESCED.with_borrow(Vec::len);
             world.harness.app.advance(Duration::from_millis(20));
             world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": if refuse { "b" } else { "a" } }));
-            assert_eq!(views(), 1, "{carrier:?}: the revision is viewed at once");
+            assert_eq!(views(), 0, "{carrier:?}: a streaming revision is viewed as the paint starts");
             DECLINES.set(refuse);
             world.harness.tui.keymap.dispatch("claim.coalesce", None);
-            assert_eq!(views(), 1, "{carrier:?}: the handler's redraw viewed the part again in the frame");
-            world.harness.app.render();
-            assert_eq!(views(), 1, "{carrier:?}: the paint of the frame that viewed does not view again");
-            world.harness.app.render();
+            assert_eq!(views(), 0, "{carrier:?}: the handler viewed the part before the paint");
+            let first = world.harness.app.render();
             let log = COALESCED.with_borrow(Clone::clone);
             let input = if refuse { "in ab" } else { "in a" };
-            assert_eq!(log.last(), Some(&(BUMPS.get(), input.to_owned())), "{carrier:?}: the paint saw the newest");
-            assert_eq!(views(), 2, "{carrier:?}: one view at the next paint: {log:?}");
+            assert_eq!(log, [(BUMPS.get(), input.to_owned())], "{carrier:?}: one view at the first paint, of the newest");
+            let drawn = format!("coalesced {} {input}", BUMPS.get());
+            assert_eq!(first.text().contains(&drawn), !refuse, "{carrier:?}: the first paint:\n{}", first.text());
+            world.harness.app.render();
+            assert_eq!(views(), 1, "{carrier:?}: the paint after viewed again");
             let screen = world.frame().text();
             let drawn = format!("coalesced {} {input}", BUMPS.get());
             assert_eq!(screen.contains(&drawn), !refuse, "{carrier:?}: refuse {refuse}:\n{screen}");

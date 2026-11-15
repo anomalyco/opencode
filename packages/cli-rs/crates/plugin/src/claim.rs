@@ -14,11 +14,12 @@
 //!   without its claims, as it does when the user disables or reloads it.
 //!
 //! A revision that changes the part's phase ([`abi::claim::Phase`]) is viewed at once, as is a part's first. One that
-//! only streams new content is viewed at once too, unless this part had a view in this frame already, whichever row
-//! shows it: then the newest content waits for the next paint, and the row that shows stays until then. So a part
-//! gets at most one view a frame while it streams, besides its first, a phase change and the whole tree asked for
-//! after a refusal. A view at the paint that changes which row shows the part tells the owner ([`Mount::on_switch`]),
-//! which swaps its rows in that paint.
+//! only streams new content is viewed as the next paint starts, with the newest content then, and the row that shows
+//! stays until then; a wake of the plugin or a handler of it that ran before that paint joins that one view, which
+//! sees the plugin's state as it is then (final re-review big-boi 12). So a part gets at most one view a frame while it
+//! streams, besides its first, a phase change and the whole tree asked for after a refusal, and what changed before a
+//! paint shows in that paint. A view at the paint that changes which row shows the part tells the owner
+//! ([`Mount::on_switch`]), which swaps its rows in that paint.
 //!
 //! A theme change restyles a tool call's tree in place with no call, unless the claim reads the palette: then it is
 //! viewed again, also where it declined the revision. Markdown builds a claimed fence again in the new theme, once for
@@ -403,9 +404,9 @@ impl Core {
         if previous.as_ref() == Some(&part) && self.input_width() == self.width.get() {
             return self.shows.get();
         }
-        // A part that streams gets one view a frame, whichever row shows it: the newest content waits for the paint.
-        let streams = previous.is_some_and(|previous| previous.phase() == part.phase());
-        if streams && self.viewed.get() == Some(host.app().frame_number()) {
+        // A part that streams is viewed as the next paint starts, whichever row shows it: once, with the newest content
+        // and what the plugin's handlers changed meanwhile.
+        if previous.is_some_and(|previous| previous.phase() == part.phase()) {
             self.wait();
             return self.shows.get();
         }
@@ -747,10 +748,12 @@ impl Shows for Core {
 /// A wake of the plugin, or a handler of it that ran, draws the part again: the plugin's own state may have changed
 /// what its view returns. A part the host's row shows for the rest of its mount is not asked. A part viewed in this
 /// frame already, by a revision or another wake, is viewed at the next paint with what is newest then, as a revision
-/// that streams is (review bigboi 12): one view a frame, whichever way it is asked for.
+/// that streams is (review bigboi 12): one view a frame, whichever way it is asked for. A part whose view waits for
+/// the paint already gets the plugin's change there.
 impl Drawn for Core {
     fn woken(&self, host: &dyn Host) {
-        if self.fallen.get() || self.part.borrow().is_none() {
+        // A view that waits for the paint sees the plugin's state then.
+        if self.fallen.get() || self.part.borrow().is_none() || self.waiting.get() {
             return;
         }
         if self.viewed.get() == Some(host.app().frame_number()) {
