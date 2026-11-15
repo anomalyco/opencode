@@ -899,7 +899,9 @@ fn named(name: &str) -> abi::Command {
 /// The plugin `acme`, with the dotted key `cloud.token`.
 fn acme(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("cloud.token");
-    setup.command(named("acme.read"), |host, _| STORED.with_borrow_mut(|read| read.push(("acme", host.storage_get("cloud.token")))));
+    setup.command(named("acme.read"), |host, _| {
+        STORED.with_borrow_mut(|read| read.push(("acme", host.storage_get("cloud.token"))))
+    });
     setup.command(named("acme.merge"), |host, _| {
         host.storage_merge("cloud.token", serde_json::Map::from_iter([("m".to_owned(), json!(1))]));
     });
@@ -909,7 +911,9 @@ fn acme(setup: &mut abi::Setup) -> Result<(), String> {
 /// The plugin `acme.cloud`, with the key `token`: TS names both keys `plugin.acme.cloud.token`.
 fn cloud(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("token");
-    setup.command(named("cloud.read"), |host, _| STORED.with_borrow_mut(|read| read.push(("cloud", host.storage_get("token")))));
+    setup.command(named("cloud.read"), |host, _| {
+        STORED.with_borrow_mut(|read| read.push(("cloud", host.storage_get("token"))))
+    });
     setup.command(named("cloud.set"), |host, _| host.storage_set("token", json!({ "other": 2 })));
     Ok(())
 }
