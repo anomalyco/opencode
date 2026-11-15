@@ -7,7 +7,7 @@ import type definition from "./index"
 
 const CHANGELOG_URL = "https://opencode.ai/changelog.json"
 
-type Highlight = {
+export type Highlight = {
   title: string
   description: string
   media?: { type: "image" | "video"; src: string; alt?: string }
@@ -49,42 +49,27 @@ const Changelog = Schema.Union([Releases, Schema.Struct({ releases: Releases })]
 const decodeChangelog = Schema.decodeUnknownOption(Changelog)
 
 /**
- * Shows the desktop highlights of the releases since `previous` once the changelog loads, and remembers the current
- * version as seen. A changelog without highlights only remembers the version; a failed request leaves it for the next
- * start.
+ * The desktop highlights of the releases since `previous`, from the changelog; none when it holds none. Rejects when the
+ * request fails, so the release stays unseen for the next start.
  */
-export function showWhatsNew(
-  ctx: SetupContext<typeof definition>,
-  input: { readonly previous: string; readonly current: string; readonly markSeen: () => void },
-) {
-  const timers = new Set<ReturnType<typeof setTimeout>>()
+export async function loadWhatsNewHighlights(input: {
+  readonly previous: string
+  readonly current: string
+  readonly signal: AbortSignal
+}): Promise<readonly Highlight[]> {
+  const response = await fetch(CHANGELOG_URL, { signal: input.signal, headers: { Accept: "application/json" } })
 
-  ctx.signal.addEventListener("abort", () => timers.forEach(clearTimeout))
+  if (!response.ok) throw new Error(`The changelog request failed with ${response.status}`)
 
-  fetch(CHANGELOG_URL, { signal: ctx.signal, headers: { Accept: "application/json" } })
-    .then((response) => (response.ok ? response.json() : undefined))
-    .then((json) => {
-      if (!json) return
+  return Option.match(decodeChangelog(await response.json()), {
+    onNone: () => [],
+    onSome: (changelog) => sliceHighlights(releases(changelog), input.current, input.previous),
+  })
+}
 
-      const highlights = Option.match(decodeChangelog(json), {
-        onNone: () => [],
-        onSome: (changelog) => sliceHighlights(releases(changelog), input.current, input.previous),
-      })
-
-      if (ctx.signal.aborted) return
-
-      if (highlights.length === 0) return input.markSeen()
-
-      timers.add(
-        setTimeout(() => {
-          input.markSeen()
-          ctx.dialogs.open((dialog) => <DialogReleaseNotes highlights={highlights} dialog={dialog} />, {
-            replace: true,
-          })
-        }, 500),
-      )
-    })
-    .catch(() => undefined)
+/** Opens What's New above any open dialog. */
+export function openWhatsNew(ctx: SetupContext<typeof definition>, highlights: readonly Highlight[]) {
+  ctx.dialogs.open((dialog) => <DialogReleaseNotes highlights={highlights} dialog={dialog} />)
 }
 
 function releases(changelog: typeof Changelog.Type) {
@@ -182,7 +167,7 @@ function sliceHighlights(list: { tag?: string; highlights: Highlight[] }[], curr
     .slice(0, 5)
 }
 
-function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHandle }) {
+function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: DialogHandle }) {
   const ctx = usePlugin<typeof definition>()
   const [index, setIndex] = createSignal(0)
 

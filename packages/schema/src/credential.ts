@@ -14,9 +14,10 @@ export const ID = Schema.String.pipe(
 )
 export type ID = typeof ID.Type
 
+// A login was added, renamed or removed. Every change is to exactly one credential.
 const Updated = ephemeral({
   type: "credential.updated",
-  schema: {},
+  schema: { integrationID: IntegrationID, credentialID: ID },
 })
 const Switched = ephemeral({
   type: "credential.switched",

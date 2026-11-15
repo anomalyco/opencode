@@ -16,19 +16,9 @@ export function sshName(config: Pick<SshConfig, "name" | "target">) {
   return config.name || sshHostname(config.target)
 }
 
-export function isSshConnecting(stage: SshItem["stage"]) {
-  return (
-    stage === "connecting" ||
-    stage === "checking" ||
-    stage === "downloading" ||
-    stage === "uploading" ||
-    stage === "starting"
-  )
-}
-
 /** Another window answering the challenge reads as connecting here, not as a prompt of its own. */
 export function sshServerState(item: SshItem): ServerState {
-  if (isSshConnecting(item.stage) || item.authenticatingElsewhere) return "starting"
+  if (item.stage === "connecting" || item.authenticatingElsewhere) return "starting"
 
   if (item.stage === "authentication") return "auth"
 

@@ -6,9 +6,5 @@ export default {
   loading: "Cargando terminal…",
   "title.numbered": "Terminal {{number}}",
   close: "Cerrar terminal",
-  "connectionLost.title": "Conexión perdida",
-  "connectionLost.abnormalClose": "WebSocket cerrado anormalmente: {{code}}",
-  "connectionLost.description":
-    "La conexión del terminal se interrumpió. Esto puede ocurrir cuando el servidor se reinicia.",
   "tab.title": "Terminal",
 }

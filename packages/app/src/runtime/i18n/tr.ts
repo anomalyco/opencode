@@ -171,11 +171,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "70'ten fazla sağlayıcı daha görüntüle",
 
   "dialog.provider.viewAll": "Daha fazla sağlayıcı göster",
-
   "provider.connect.title": "{{provider}} bağla",
+
   "provider.connect.method.apiKey": "API anahtarı",
   "provider.connect.status.inProgress": "Yetkilendirme devam ediyor…",
-  "provider.connect.status.waiting": "Yetkilendirme bekleniyor…",
+  "provider.connect.status.waiting": "Yetkilendirme bekleniyor",
   "provider.connect.status.failed": "Yetkilendirme başarısız: {{error}}",
   "provider.connect.apiKey.description":
     "{{provider}} hesabınızı bağlamak ve OpenCode'da {{provider}} modellerini kullanmak için API anahtarınızı girin.",
@@ -385,7 +385,6 @@ export const dict = {
   "session.new.project.search": "Proje ara",
   "session.new.project.add": "Proje ekle",
   "session.new.workspace.runIn": "Oturumu şurada çalıştır",
-  "session.new.workspace.triggerLocal": "Yerel",
   "session.new.workspace.local": "Yerel depo",
   "session.new.git.none": "Git yok",
 
@@ -806,6 +805,7 @@ export const dict = {
   "dialog.server.menu.remove": "Kaldır",
   "home.workspaceTip": "Değişiklikleri izole tutmak için sonraki oturumu yeni bir çalışma alanında başlatın",
   "session.tab.add": "Sekme ekle",
+  "session.tab.closeOthers": "Diğer sekmeleri kapat",
   "session.queue.attachments.one": "Artı {{count}} eklentisi",
   "session.queue.attachments.other": "Ayrıca {{count}} eklentileri",
   "settings.backToSettings": "Ayarlara geri dön",
@@ -895,7 +895,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Veriler taşınıyor {{current}}/{{total}}",
   "command.session.location.cycle": "Oturum konumunu değiştir",
   "dialog.provider.anthropic.note": "API anahtarıyla Claude modellerine doğrudan erişim",
-  "provider.connect.title.anthropicProMax": "Anthropic ile giriş yap",
   "prompt.toast.uploading.percent": "%{{percent}}",
   "prompt.toast.uploading.cancelFile": "{{filename}} yüklemesini iptal et",
   "prompt.toast.uploadFailed.title": "Yükleme başarısız",

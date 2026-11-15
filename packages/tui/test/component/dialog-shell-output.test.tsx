@@ -20,7 +20,7 @@ import { createApi, createEventStream, createFetch, json } from "../fixture/tui-
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-async function setup(width: number, output = "") {
+async function setup(width: number, output = "", newDesigns = false) {
   const temporary = await tmpdir()
   const location = { directory: `${temporary.path}/original` }
   const shell: ShellInfo = {
@@ -70,7 +70,7 @@ async function setup(width: number, output = "") {
       <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
-            <ConfigProvider config={createTuiResolvedConfig()}>
+            <ConfigProvider config={createTuiResolvedConfig({ experimental: { "new-designs": newDesigns } })}>
               <RouteProvider initialRoute={{ type: "session", sessionID: "ses_fixture" }}>
                 <ClientProvider api={api}>
                   <DataProvider directory={temporary.path}>
@@ -222,4 +222,15 @@ test("large captures open at a bounded tail and clicking a shell opens the viewe
   expect(reads[0]?.url.searchParams.get("cursor")).toBe(String(Number.MAX_SAFE_INTEGER))
   expect(reads[1]?.url.searchParams.get("cursor")).toBe(String(Buffer.byteLength(app.state.output) - 65536))
   expect(reads[1]?.url.searchParams.get("limit")).toBe("65536")
+})
+
+test("new designs show footer actions instead of the legacy hint line", async () => {
+  await using app = await setup(100, "Frame 1\n", true)
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Shell output") && frame.includes("Frame 1"))
+  const frame = app.captureCharFrame()
+  expect(frame).toContain("follow end")
+  expect(frame).toContain("copy command c")
+  expect(frame).toContain("copy output o")
+  expect(frame).not.toContain("back esc")
 })

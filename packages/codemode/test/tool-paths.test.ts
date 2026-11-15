@@ -118,7 +118,21 @@ describe("callable namespaces", () => {
     const nested = CodeMode.make({ tools: { "issues.list": echo("List issues", "list") } })
     const diagnostic = await failure(nested, `return await tools.issues({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
-    expect(diagnostic.message).toContain("Tool 'issues' is not callable")
+    expect(diagnostic.message).toBe("Tool 'issues' is not callable, it is a namespace. Did you mean tools.issues.list?")
+    expect(diagnostic.suggestions).toEqual(["Use search to find available tools."])
+  })
+
+  test("calling a namespace names a few of its tools and counts the rest", async () => {
+    const nested = CodeMode.make({
+      tools: Object.fromEntries(
+        ["archive", "create", "get", "issues", "list"].map((name) => [`issues.${name}`, echo(`Issue ${name}`, name)]),
+      ),
+    })
+    const diagnostic = await failure(nested, `return await tools.issues({})`)
+    expect(diagnostic.message).toBe(
+      "Tool 'issues' is not callable, it is a namespace. Did you mean tools.issues.issues, tools.issues.archive, or tools.issues.create?",
+    )
+    expect(diagnostic.suggestions).toEqual([`2 more under 'issues'. Use search({ namespace: "issues" }) to list them.`])
   })
 })
 
@@ -352,6 +366,65 @@ describe("tools.search alias", () => {
   test("a registered root-level search tool takes precedence", async () => {
     const runtime = CodeMode.make({ tools: { search: echo("Custom search", "custom") } })
     expect(await value(runtime, `return await tools.search({})`)).toBe("custom")
+  })
+})
+
+describe("search results used like a Promise", () => {
+  const runtime = CodeMode.make({ tools: { api: { list: echo("List things", "listed") } } })
+
+  test("search(...) can be read, awaited, or chained", async () => {
+    const call = "search"
+    expect(
+      await value(
+        runtime,
+        `
+        const query = { query: "list" }
+        return [
+          ${call}(query).items[0].path,
+          (await ${call}(query)).items[0].path,
+          await ${call}(query).then((result) => result.items[0].path),
+          (await ${call}(query).catch(() => "unused")).items[0].path,
+          (await ${call}(query).finally(() => "ignored")).items[0].path,
+          (await Promise.all([${call}(query), ${call}({})])).map((result) => result.items.length),
+        ]
+        `,
+      ),
+    ).toStrictEqual(["tools.api.list", "tools.api.list", "tools.api.list", "tools.api.list", "tools.api.list", [1, 1]])
+  })
+
+  test("the Promise methods stay out of data views", async () => {
+    const expected = { items: [{ path: "tools.api.list" }], remaining: 0, next: null }
+    const result = await value(
+      runtime,
+      `
+      const result = search({ query: "list" })
+      const forIn = []
+      for (const key in result) forIn.push(key)
+      return {
+        json: JSON.parse(JSON.stringify(result)),
+        keys: Object.keys(result),
+        spread: Object.keys({ ...result }),
+        forIn,
+        returned: result,
+      }
+      `,
+    )
+    expect(result).toMatchObject({
+      json: expected,
+      keys: ["items", "remaining", "next"],
+      spread: ["items", "remaining", "next"],
+      forIn: ["items", "remaining", "next"],
+      returned: expected,
+    })
+  })
+
+  test("invalid input throws at the call, so try/catch sees it in either style", async () => {
+    expect((await failure(runtime, `return search({ limit: "ten" }).items`)).message).toContain(
+      "Invalid input for tool 'search'",
+    )
+    expect(
+      await value(runtime, `try { await search({ limit: "ten" }) } catch (error) { return error.message }`),
+    ).toContain("Invalid input for tool 'search'")
   })
 })
 

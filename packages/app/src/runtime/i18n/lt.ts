@@ -72,7 +72,7 @@ const desktop = [
 ]
 
 export const dict = {
-  ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
+  ...Object.fromEntries(desktop.map((value, index) => [DESKTOP_NATIVE_KEYS[index], value])),
   "command.category.suggested": "Siūloma",
   "command.category.view": "Rodinys",
   "command.category.project": "Projektas",
@@ -161,7 +161,7 @@ export const dict = {
   "provider.connect.title": "Prijunkite {{provider}}",
   "provider.connect.method.apiKey": "API raktas",
   "provider.connect.status.inProgress": "Vykdoma prieigos teisė…",
-  "provider.connect.status.waiting": "Laukiama įgaliojimo…",
+  "provider.connect.status.waiting": "Laukiama įgaliojimo",
   "provider.connect.status.failed": "Autorizacija nepavyko: {{error}}",
   "provider.connect.apiKey.description":
     "Įveskite {{provider}} API raktą, kad susietumėte paskyrą ir naudotumėte {{provider}} modelius programoje OpenCode.",
@@ -352,7 +352,6 @@ export const dict = {
   "session.new.project.search": "Ieškoti projektų",
   "session.new.project.add": "Pridėti projektą",
   "session.new.workspace.runIn": "Vykdykite sesiją",
-  "session.new.workspace.triggerLocal": "Vietinis",
   "session.new.workspace.local": "Vietinė saugykla",
   "session.new.git.none": "Nėra Git",
   "session.header.open.finder": "Finder",
@@ -751,6 +750,7 @@ export const dict = {
   "dialog.server.menu.remove": "Pašalinti",
   "home.workspaceTip": "Pradėkite kitą seansą naujoje darbo srityje, kad pakeitimai būtų atskirti",
   "session.tab.add": "Pridėti skirtuką",
+  "session.tab.closeOthers": "Uždaryti kitus skirtukus",
   "session.queue.attachments.one": "Plus {{count}} tvirtinimas",
   "session.queue.attachments.other": "Plus {{count}} priedai",
   "settings.backToSettings": "Atgal į nustatymus",
@@ -851,7 +851,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Perkeliami duomenys {{current}}/{{total}}",
   "command.session.location.cycle": "Keisti seanso vietą",
   "dialog.provider.anthropic.note": "Tiesioginė prieiga prie „Claude“ modelių naudojant API raktą",
-  "provider.connect.title.anthropicProMax": "Prisijungti naudojant „Anthropic“",
   "prompt.toast.uploading.percent": "{{percent}} %",
   "prompt.toast.uploading.cancelFile": "Atšaukti failo {{filename}} įkėlimą",
   "prompt.toast.uploadFailed.title": "Įkelti nepavyko",

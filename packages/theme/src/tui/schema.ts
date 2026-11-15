@@ -11,7 +11,7 @@ export const ActionState = Schema.Literals(["disabled", "pressed", "focused", "s
 export type ActionState = Schema.Schema.Type<typeof ActionState>
 export type ActionStateKey = `$${ActionState}`
 
-export const SurfaceName = Schema.Literal("dialog")
+export const SurfaceName = Schema.Literals(["dialog", "dialog.footer"])
 export type SurfaceName = Schema.Schema.Type<typeof SurfaceName>
 
 export const FormfieldState = ActionState
@@ -201,6 +201,12 @@ const ThemeTokensDefinition = Schema.Struct({
 })
 export type ThemeTokensDefinition = Schema.Schema.Type<typeof ThemeTokensDefinition>
 
+const DialogTokensDefinition = Schema.Struct({
+  ...ThemeTokensDefinition.fields,
+  "@footer": Schema.optional(ThemeTokensDefinition),
+})
+export type DialogTokensDefinition = Schema.Schema.Type<typeof DialogTokensDefinition>
+
 const CompleteStatefulColorDefinition = Schema.Struct({
   base: ColorValue,
   $hovered: Schema.optional(ColorValue),
@@ -264,7 +270,7 @@ const ThemeDefinitionFields = Schema.Struct({
   hue: HueDefinition,
   categorical: CategoricalDefinition,
   ...CompleteThemeTokensDefinition.fields,
-  "@dialog": Schema.optional(ThemeTokensDefinition),
+  "@dialog": Schema.optional(DialogTokensDefinition),
 })
 export const ThemeDefinition = ThemeDefinitionFields
 export type ThemeDefinition = Schema.Schema.Type<typeof ThemeDefinition>
@@ -272,7 +278,7 @@ export type ThemeDefinition = Schema.Schema.Type<typeof ThemeDefinition>
 export const BaseThemeDefinition = Schema.Struct({
   categorical: CategoricalDefinition,
   ...CompleteThemeTokensDefinition.fields,
-  "@dialog": Schema.optional(ThemeTokensDefinition),
+  "@dialog": Schema.optional(DialogTokensDefinition),
 })
 export type BaseThemeDefinition = Schema.Schema.Type<typeof BaseThemeDefinition>
 
@@ -280,7 +286,7 @@ export const ModeDefinition = Schema.Struct({
   hue: HueDefinition,
   categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
-  "@dialog": Schema.optional(ThemeTokensDefinition),
+  "@dialog": Schema.optional(DialogTokensDefinition),
 })
 export type ModeDefinition = Schema.Schema.Type<typeof ModeDefinition>
 

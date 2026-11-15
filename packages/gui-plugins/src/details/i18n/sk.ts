@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Nie sú nakonfigurované žiadne pluginy",
   skills: "Schopnosti",
   "skills.empty": "Nie sú nakonfigurované žiadne schopnosti",
-  lsp: "LSP",
-  "lsp.empty": "Nie sú nakonfigurované žiadne LSP servery",
   failed: "Zlyhalo",
   retry: "Skúsiť znova",
   connecting: "Pripájanie…",

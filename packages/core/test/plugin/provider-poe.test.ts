@@ -1,4 +1,4 @@
-import { LLM } from "@opencode/ai/effect"
+import { ai } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
@@ -48,7 +48,7 @@ const fixture = Effect.gen(function* () {
     editor.models.update(providerID, modelID, () => {})
   })
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* PoePlugin.effect(host).pipe(Effect.provideService(HttpClient.HttpClient, http))
   const status = (attemptID: Integration.AttemptID) =>
     integrations.oauth.status({ integrationID, attemptID }).pipe(
@@ -71,7 +71,7 @@ const fixture = Effect.gen(function* () {
     const resolved = yield* resolver.resolve(Model.Ref.make({ providerID, id: modelID }))
     if (!resolved) throw new Error("Expected Poe model")
     expect(resolved.model.route.id).toBe("openai-compatible-chat")
-    return yield* LLMClient.stream(LLM.request({ model: resolved.model, prompt: "Hello" })).pipe(
+    return yield* LLMClient.stream(ai.request({ model: resolved.model, prompt: "Hello" })).pipe(
       Stream.runCollect,
       Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.fresh)),
       Effect.provideService(HttpClient.HttpClient, http),
@@ -170,6 +170,34 @@ for (const expiry of [3600, null, undefined]) {
     }),
   )
 }
+
+// The browser runs on another machine, so its redirect never reaches this server's callback listener.
+it.live("completes a login from a pasted redirect URL and keeps waiting after a wrong paste", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture
+    const login = yield* test.connect
+    const complete = (code: string) =>
+      test.integrations.oauth.complete({ integrationID, attemptID: login.attempt.attemptID, code })
+
+    const foreign = new URL(login.callback)
+    foreign.searchParams.set("state", "another-login")
+    expect(yield* complete(foreign.href).pipe(Effect.flip)).toMatchObject({
+      cause: { message: "This URL belongs to a different sign-in" },
+    })
+    expect((yield* test.integrations.oauth.status({ integrationID, attemptID: login.attempt.attemptID })).status).toBe(
+      "pending",
+    )
+
+    test.replies.push(Response.json({ api_key: "poe-key", api_key_expires_in: 3600 }))
+    yield* complete(login.callback.href)
+    expect((yield* test.status(login.attempt.attemptID)).status).toBe("complete")
+    expect(Object.fromEntries(new URLSearchParams(yield* Effect.promise(() => test.requests[0].text())))).toMatchObject(
+      {
+        code: "auth-code",
+      },
+    )
+  }),
+)
 
 it.live("isolates overlapping login attempts and closes cancelled listeners", () =>
   Effect.gen(function* () {

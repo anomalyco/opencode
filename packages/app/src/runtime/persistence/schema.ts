@@ -97,8 +97,18 @@ export function struct<const Fields extends Schema.Struct.Fields>(fields: Fields
   return Schema.Struct(fields).mapFields(Struct.map(Schema.mutableKey))
 }
 
+// Record values can't have an optional encoded side (as `fallback` does), so each entry decodes from
+// `Unknown` and keeps its own recovery.
+export function entry<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
+  return Schema.mutableKey(
+    Schema.Unknown.pipe(
+      Schema.decodeTo(schema, { decode: SchemaGetter.passthrough(), encode: SchemaGetter.passthrough() }),
+    ),
+  )
+}
+
 export function record<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
-  const entries = Schema.Record(Schema.String, Schema.mutableKey(schema))
+  const entries = Schema.Record(Schema.String, entry(schema))
 
   return fallback(entries, () => Schema.decodeUnknownSync(entries)({}))
 }

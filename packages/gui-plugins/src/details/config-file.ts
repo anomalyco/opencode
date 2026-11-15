@@ -1,5 +1,4 @@
 import type { ConfigEntry } from "@opencode/client"
-import { Predicate } from "effect"
 
 type ConfigInfo = Extract<ConfigEntry, { type: "document" }>["info"]
 
@@ -7,7 +6,7 @@ type ConfigInfo = Extract<ConfigEntry, { type: "document" }>["info"]
  * The configuration file that holds a service's entries: the last one that lists any, else the last one that sets the
  * service, else the first. An empty `"mcp": {}` in a project file does not hide the servers the global file lists.
  */
-export function serviceConfigFile(entries: readonly ConfigEntry[], service: "mcp" | "plugins" | "skills" | "lsp") {
+export function serviceConfigFile(entries: readonly ConfigEntry[], service: "mcp" | "plugins" | "skills") {
   const documents = configDocuments(entries)
 
   return (
@@ -37,11 +36,8 @@ function configDocuments(entries: readonly ConfigEntry[]) {
   )
 }
 
-function lists(info: ConfigInfo, service: "mcp" | "plugins" | "skills" | "lsp") {
+function lists(info: ConfigInfo, service: "mcp" | "plugins" | "skills") {
   if (service === "mcp") return Object.keys(info.mcp?.servers ?? {}).length > 0
-
-  if (service === "lsp")
-    return info.lsp !== undefined && !Predicate.isBoolean(info.lsp) && Object.keys(info.lsp).length > 0
 
   return (info[service]?.length ?? 0) > 0
 }

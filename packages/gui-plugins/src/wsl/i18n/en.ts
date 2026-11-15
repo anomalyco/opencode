@@ -39,6 +39,7 @@ export default {
   "error.installDistro": "Failed to install distro: {{distro}}",
   "error.installOpencode": "OpenCode installation failed",
   "error.alreadyAdded": "{{distro}} is already added",
+  "error.busy": "{{distro}} is busy with another task. Try again when it finishes.",
   "error.opencodeMissing": "opencode is not installed in this distro",
   "error.opencodeCannotRun": "opencode is installed but could not run",
   "error.opencodeNotInstalled": "OpenCode is not installed in {{distro}}",

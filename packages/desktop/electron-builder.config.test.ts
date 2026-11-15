@@ -88,6 +88,31 @@ test("legacy Linux launcher stays hidden", async () => {
   expect(desktop).toContain("NoDisplay=true")
 })
 
+test.each(channels)("macOS bundle for $channel", ({ channel }) => {
+  const config = load(channel)
+  expect(config.mac?.icon).toBe(channel === "prod" ? "resources/icons/icon.icon" : "resources/icons/icon.icns")
+  expect(config.dmg?.icon).toBe(channel === "prod" ? "resources/icons/icon.icns" : undefined)
+  // The prod override must keep the rest of the shared macOS settings.
+  expect(config.mac?.target).toEqual(["dmg", "zip"])
+
+  for (const key of [
+    "NSMicrophoneUsageDescription",
+    "NSDocumentsFolderUsageDescription",
+    "NSDesktopFolderUsageDescription",
+    "NSDownloadsFolderUsageDescription",
+    "NSNetworkVolumesUsageDescription",
+    "NSRemovableVolumesUsageDescription",
+  ])
+    expect(config.mac?.extendInfo?.[key], key).toMatch(/\S/)
+})
+
+test("the production Icon Composer package references its bundled artwork", async () => {
+  const icon = await Bun.file(path.join(import.meta.dirname, "icons/prod/icon.icon/icon.json")).json()
+  expect(icon["supported-platforms"]).toEqual({ squares: ["macOS"] })
+  const image = icon.groups[0].layers[0]["image-name"]
+  expect(await Bun.file(path.join(import.meta.dirname, "icons/prod/icon.icon/Assets", image)).exists()).toBe(true)
+})
+
 test("shared packaging defaults", async () => {
   const config = load("dev")
   // Packaging runs in secretless build jobs; the release workflow signs and notarizes afterwards.

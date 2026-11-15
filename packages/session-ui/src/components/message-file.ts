@@ -1,12 +1,39 @@
 import { getFilename } from "@opencode/util/path"
-import type { PromptFileAttachment } from "@opencode/client/promise"
+import type { PromptAttachment } from "@opencode/client/promise"
 
-export function attached(file: PromptFileAttachment) {
+export const MIN_IMAGE_PLACEHOLDER_PX = 96
+
+export function imageAttachmentPlaceholderStyle(input: {
+  readonly width?: number
+  readonly height?: number
+  readonly loaded: boolean
+}) {
+  if (input.width && input.height && input.loaded) return { "aspect-ratio": `${input.width} / ${input.height}` }
+
+  if (input.width && input.height) {
+    return {
+      "aspect-ratio": `${input.width} / ${input.height}`,
+      "min-width": `${Math.min(input.width, MIN_IMAGE_PLACEHOLDER_PX)}px`,
+      "min-height": `${Math.min(input.height, MIN_IMAGE_PLACEHOLDER_PX)}px`,
+    }
+  }
+
+  return input.loaded
+    ? undefined
+    : {
+        "min-width": `${MIN_IMAGE_PLACEHOLDER_PX}px`,
+        "min-height": `${MIN_IMAGE_PLACEHOLDER_PX}px`,
+      }
+}
+
+export function attached(file: PromptAttachment) {
   if (file.mention) return false
 
-  if (file.source.type === "inline") return true
+  const source = file.source
 
-  return file.source.uri.startsWith("data:") || file.source.uri.startsWith("blob:")
+  if (!source || source.type === "inline") return true
+
+  return source.uri.startsWith("data:") || source.uri.startsWith("blob:")
 }
 
 // Display names for common source extensions; any other extension is shown in upper case.

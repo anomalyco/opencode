@@ -1,6 +1,6 @@
 import { Duration, Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
@@ -23,7 +23,7 @@ export type ZAIImageOptions = {
   readonly userID?: string
 } & Record<string, unknown>
 
-export type Request = ImageRequestFor<ZAIImageOptions>
+export type Request = ImageRequest<ImageModel<ZAIImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema

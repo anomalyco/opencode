@@ -125,6 +125,10 @@
 }
 
 /* --- Editor --- */
+[data-component="line-comment-v2"] [data-slot="line-comment-v2-input"] {
+  display: contents;
+}
+
 [data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-shell"] {
   display: flex;
   flex-direction: column;
@@ -194,6 +198,93 @@
   gap: 8px;
   flex-shrink: 0;
   margin-inline-start: auto;
+}
+
+[data-component="line-comment-v2"][data-layout="compact"] {
+  display: flex;
+  max-height: var(--line-comment-max-height, none);
+
+  [data-slot="line-comment-v2-shell"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-height: inherit;
+    padding: 12px;
+    gap: 10px;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+
+  [data-slot="line-comment-v2-preview"] {
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 0;
+    border-inline-start: 2px solid var(--v2-background-bg-layer-03);
+    padding-inline-start: 12px;
+    color: var(--v2-text-text-muted);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
+
+    > span {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: var(--line-comment-preview-lines, 2);
+      overflow-wrap: anywhere;
+    }
+  }
+
+  [data-slot="line-comment-v2-input"] {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    min-height: var(--line-height-base);
+    flex: 1 1 auto;
+  }
+
+  [data-slot="line-comment-v2-field"] {
+    flex: 1 1 auto;
+    width: auto;
+    min-height: 0;
+    align-self: stretch;
+  }
+
+  [data-slot="line-comment-v2-textarea"] {
+    field-sizing: content;
+    height: auto;
+    flex: 1 1 auto;
+    min-height: var(--line-height-base);
+    max-height: 160px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    line-height: var(--line-height-base);
+
+    &::placeholder {
+      color: var(--v2-text-text-faint);
+    }
+  }
+
+  [data-slot="line-comment-v2-submit"] {
+    position: relative;
+    flex-shrink: 0;
+
+    @media (hover: none) {
+      &::after {
+        content: "";
+        position: absolute;
+        inset: -12px;
+      }
+    }
+  }
+
+  [data-slot="line-comment-v2-submit-icon"] {
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+  }
 }
 
 [data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-list"] {

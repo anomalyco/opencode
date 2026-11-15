@@ -6,8 +6,5 @@ export default {
   loading: "Načítava sa terminál…",
   "title.numbered": "Terminál {{number}}",
   close: "Zavrieť terminál",
-  "connectionLost.title": "Pripojenie prerušené",
-  "connectionLost.abnormalClose": "WebSocket bol abnormálne ukončený: {{code}}",
-  "connectionLost.description": "Pripojenie terminálu bolo prerušené. Môže sa to stať pri reštarte servera.",
   "tab.title": "Terminál",
 }

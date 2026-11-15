@@ -72,7 +72,7 @@ const desktop = [
 ]
 
 export const dict = {
-  ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
+  ...Object.fromEntries(desktop.map((value, index) => [DESKTOP_NATIVE_KEYS[index], value])),
   "command.category.suggested": "Javasolt",
   "command.category.view": "Nézet",
   "command.category.project": "Projekt",
@@ -161,7 +161,7 @@ export const dict = {
   "provider.connect.title": "Csatlakoztassa a {{provider}}-t",
   "provider.connect.method.apiKey": "API kulcs",
   "provider.connect.status.inProgress": "Az engedélyezés folyamatban…",
-  "provider.connect.status.waiting": "Várakozás az engedélyezésre…",
+  "provider.connect.status.waiting": "Várakozás az engedélyezésre",
   "provider.connect.status.failed": "Az engedélyezés sikertelen: {{error}}",
   "provider.connect.apiKey.description":
     "Enter az Ön {{provider}} API kulcsa fiókja összekapcsolásához és a {{provider}} modellek használatához a OpenCode-ben.",
@@ -350,7 +350,6 @@ export const dict = {
   "session.new.project.search": "Projektek keresése",
   "session.new.project.add": "Projekt hozzáadása",
   "session.new.workspace.runIn": "Futtassa a munkamenetet",
-  "session.new.workspace.triggerLocal": "Helyi",
   "session.new.workspace.local": "Helyi adattár",
   "session.new.git.none": "Nincs Git",
   "session.header.open.finder": "Finder",
@@ -741,6 +740,7 @@ export const dict = {
   "home.workspaceTip":
     "Indítsa el a következő munkamenetet egy új munkaterületen, hogy a változtatások elszigeteltek maradjanak",
   "session.tab.add": "Tabulátor hozzáadása",
+  "session.tab.closeOthers": "Többi lap bezárása",
   "session.queue.attachments.one": "Plusz {{count}} rögzítés",
   "session.queue.attachments.other": "Plusz {{count}} tartozékok",
   "settings.backToSettings": "Vissza a beállításokhoz",
@@ -832,7 +832,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Adatok migrálása {{current}}/{{total}}",
   "command.session.location.cycle": "Munkamenet helyének váltása",
   "dialog.provider.anthropic.note": "Közvetlen hozzáférés a Claude-modellekhez API-kulccsal",
-  "provider.connect.title.anthropicProMax": "Bejelentkezés az Anthropic használatával",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "A(z) {{filename}} feltöltésének megszakítása",
   "prompt.toast.uploadFailed.title": "A feltöltés sikertelen",

@@ -38,6 +38,7 @@ export const dict = {
   "dialog.server.menu.remove": "Quitar",
   "home.workspaceTip": "Inicie la próxima sesión en un nuevo espacio de trabajo para mantener los cambios aislados",
   "session.tab.add": "Agregar pestaña",
+  "session.tab.closeOthers": "Cerrar otras pestañas",
   "session.queue.attachments.one": "Más accesorio {{count}}",
   "session.queue.attachments.other": "Más accesorios {{count}}",
   "settings.backToSettings": "Volver a la configuración",
@@ -374,11 +375,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "Ver más de 70 proveedores",
 
   "dialog.provider.viewAll": "Ver más proveedores",
-
   "provider.connect.title": "Conectar {{provider}}",
+
   "provider.connect.method.apiKey": "Clave API",
   "provider.connect.status.inProgress": "Autorización en progreso…",
-  "provider.connect.status.waiting": "Esperando autorización…",
+  "provider.connect.status.waiting": "Esperando autorización",
   "provider.connect.status.failed": "Autorización fallida: {{error}}",
   "provider.connect.apiKey.description":
     "Introduce tu clave API de {{provider}} para conectar tu cuenta y usar modelos de {{provider}} en OpenCode.",
@@ -589,7 +590,6 @@ export const dict = {
   "session.new.project.search": "Buscar proyectos",
   "session.new.project.add": "Añadir proyecto",
   "session.new.workspace.runIn": "Ejecutar sesión en",
-  "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Repositorio local",
   "session.new.git.none": "Sin Git",
 
@@ -907,7 +907,6 @@ export const dict = {
   "session.background.runningCount.many": "{{count}} de elementos en curso en segundo plano",
   "command.session.location.cycle": "Cambiar la ubicación de la sesión",
   "dialog.provider.anthropic.note": "Acceso directo a los modelos Claude mediante una clave de API",
-  "provider.connect.title.anthropicProMax": "Iniciar sesión con Anthropic",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Cancelar carga de {{filename}}",
   "prompt.toast.uploadFailed.title": "Error al cargar",

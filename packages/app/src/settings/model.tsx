@@ -7,6 +7,7 @@ import { setNewIcons } from "@opencode/ui/icon"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
+import { usePlatform } from "@/runtime/platform/platform"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
 export type Settings = typeof settingsSchema.Type
@@ -20,6 +21,8 @@ export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
 export type BackgroundActivity = Settings["general"]["backgroundActivity"]
 
 export type TimelineWidth = Settings["general"]["timelineWidth"]
+
+export type SidebarOrganize = Settings["general"]["sidebarOrganize"]
 
 export type TabLayout = Settings["appearance"]["tabLayout"]
 
@@ -129,8 +132,13 @@ const generalSchema = Persistence.struct({
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
   // The "New icons" design experiment, off until it ships.
   newIcons: Schema.Boolean,
-  // The "New model picker" design experiment, off until it ships.
-  newModelPicker: Schema.Boolean,
+  // The "Fold long messages" experiment, off until it ships.
+  foldUserMessages: Schema.Boolean,
+  // The redesigned keyboard-first question dock, off until it ships.
+  newQuestionUI: Schema.Boolean,
+  // The redesigned session timeline, off until it ships.
+  newTimeline: Persistence.optional(Schema.Boolean),
+  sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -167,6 +175,7 @@ const workspacesSchema = Persistence.struct({
 const notificationsSchema = Persistence.struct({
   agent: Schema.Boolean,
   permissions: Schema.Boolean,
+  questions: Schema.Boolean,
   errors: Schema.Boolean,
 })
 
@@ -175,6 +184,8 @@ const soundsSchema = Persistence.struct({
   agent: Schema.String,
   permissionsEnabled: Schema.Boolean,
   permissions: Schema.String,
+  questionsEnabled: Schema.Boolean,
+  questions: Schema.String,
   errorsEnabled: Schema.Boolean,
   errors: Schema.String,
   interfaceEnabled: Schema.optional(Schema.Boolean),
@@ -294,12 +305,14 @@ export const settingsPersistence = Persistence.migrate(
 export const defaultSettings: Settings = {
   general: {
     timelineDetail: { ...timelinePresets[2].value },
-    showCustomAgents: false,
+    showCustomAgents: true,
     showTurnDiffs: false,
     backgroundActivity: "left",
     timelineWidth: "comfortable",
     newIcons: false,
-    newModelPicker: false,
+    foldUserMessages: false,
+    newQuestionUI: false,
+    sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
   },
@@ -307,12 +320,14 @@ export const defaultSettings: Settings = {
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
-  notifications: { agent: false, permissions: true, errors: false },
+  notifications: { agent: false, permissions: true, questions: true, errors: false },
   sounds: {
     agentEnabled: true,
     agent: "staplebops-01",
     permissionsEnabled: true,
     permissions: "staplebops-02",
+    questionsEnabled: true,
+    questions: "staplebops-05",
     errorsEnabled: true,
     errors: "nope-03",
     interfaceEnabled: true,
@@ -323,11 +338,23 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
 
+/** Only local/dev desktop builds offer the Recent side-tab organization. */
+export function recentSessionsAvailable(platform: "web" | "desktop", channel: ImportMetaEnv["VITE_OPENCODE_CHANNEL"]) {
+  return platform === "desktop" && (channel === "local" || channel === "dev")
+}
+
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   gate: false,
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
+
+    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(
+      usePlatform().platform,
+      import.meta.env.VITE_OPENCODE_CHANNEL,
+    )
+      ? ["list", "projects", "customize", "recent"]
+      : ["list", "projects", "customize"]
 
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
@@ -408,9 +435,26 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setNewIcons(value: boolean) {
           setStore("general", "newIcons", value)
         },
-        newModelPicker: withFallback(() => store.general?.newModelPicker, defaultSettings.general.newModelPicker),
-        setNewModelPicker(value: boolean) {
-          setStore("general", "newModelPicker", value)
+        foldUserMessages: withFallback(() => store.general?.foldUserMessages, defaultSettings.general.foldUserMessages),
+        setFoldUserMessages(value: boolean) {
+          setStore("general", "foldUserMessages", value)
+        },
+        newTimeline: withFallback(() => store.general?.newTimeline, false),
+        setNewTimeline(value: boolean) {
+          setStore("general", "newTimeline", value)
+        },
+        newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
+        setNewQuestionUI(value: boolean) {
+          setStore("general", "newQuestionUI", value)
+        },
+        sidebarOrganizeOptions,
+        sidebarOrganize: createMemo(() => {
+          const value = store.general?.sidebarOrganize
+
+          return sidebarOrganizeOptions.includes(value) ? value : defaultSettings.general.sidebarOrganize
+        }),
+        setSidebarOrganize(value: SidebarOrganize) {
+          setStore("general", "sidebarOrganize", value)
         },
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,
@@ -533,6 +577,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setPermissions(value: boolean) {
           setStore("notifications", "permissions", value)
         },
+        questions: withFallback(() => store.notifications?.questions, defaultSettings.notifications.questions),
+        setQuestions(value: boolean) {
+          setStore("notifications", "questions", value)
+        },
         errors: withFallback(() => store.notifications?.errors, defaultSettings.notifications.errors),
         setErrors(value: boolean) {
           setStore("notifications", "errors", value)
@@ -557,6 +605,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         permissions: withFallback(() => store.sounds?.permissions, defaultSettings.sounds.permissions),
         setPermissions(value: string) {
           setStore("sounds", "permissions", value)
+        },
+        questionsEnabled: withFallback(() => store.sounds?.questionsEnabled, defaultSettings.sounds.questionsEnabled),
+        setQuestionsEnabled(value: boolean) {
+          setStore("sounds", "questionsEnabled", value)
+        },
+        questions: withFallback(() => store.sounds?.questions, defaultSettings.sounds.questions),
+        setQuestions(value: string) {
+          setStore("sounds", "questions", value)
         },
         errorsEnabled: withFallback(() => store.sounds?.errorsEnabled, defaultSettings.sounds.errorsEnabled),
         setErrorsEnabled(value: boolean) {

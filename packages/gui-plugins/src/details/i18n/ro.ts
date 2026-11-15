@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Nu au fost configurate pluginuri",
   skills: "Abilități",
   "skills.empty": "Nicio abilitate configurată",
-  lsp: "LSP",
-  "lsp.empty": "Nu au fost configurate servere LSP",
   failed: "A eșuat",
   retry: "Reîncercați",
   connecting: "Se conectează…",

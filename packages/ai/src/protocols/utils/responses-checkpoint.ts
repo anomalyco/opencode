@@ -1,7 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import { Route, type RouteBody, type TriggerCompactOperation } from "../../route/client.js"
 import { Protocol } from "../../route/protocol.js"
-import { CompactionCheckpointResponse, LLMEvent, LLMRequest } from "../../schema/index.js"
+import { CompactionCheckpointResponse, LLMEvent, type LLMRequest } from "../../schema/index.js"
 import { OpenResponses } from "../open-responses.js"
 import { ProviderShared } from "../shared.js"
 
@@ -11,10 +11,7 @@ interface State {
   readonly responseID?: string
 }
 
-const onOutputItem = Effect.fnUntraced(function* (
-  state: State,
-  input: OpenResponses.Event,
-) {
+const onOutputItem = Effect.fnUntraced(function* (state: State, input: OpenResponses.Event) {
   const event = OpenResponses.normalize(state.parser, input)
   const item = event.item
   if (!item) return state

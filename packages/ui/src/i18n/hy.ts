@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Նիստի փոփոխություններ",
   "ui.sessionReview.title.git": "Git փոփոխություններ",
   "ui.sessionReview.title.branch": "Ճյուղի փոփոխություններ",
@@ -71,10 +71,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Բաժանորդագրվեք OpenCode Go-ին՝ բաց կոդով լավագույն մոդելներին հուսալի մուտք ունենալու համար՝ ամսական $10 արժեքով:",
   "dialog.usageExceeded.freeTier.actionLabel": "Բաժանորդագրվել",
-  "dialog.usageExceeded.accountRateLimit.title": "Գնալ սահմանաչափը հասել է",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Օգտագործման սահմանաչափը հասել է։ Այս մոդելն այժմ օգտագործելու համար միացրեք օգտագործումը ձեր հասանելի մնացորդից",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Բացել կարգավորումները",
   "ui.sessionTurn.status.delegating": "Պատվիրակում է աշխատանքը",
   "ui.sessionTurn.status.planning": "Հաջորդ քայլերի պլանավորում",
   "ui.sessionTurn.status.gatheringContext": "Ուսումնասիրում",
@@ -164,6 +160,7 @@ export const dict: Record<string, string> = {
   "ui.common.dismiss": "Փակել",
   "ui.common.close": "Փակել",
   "ui.common.next": "Հաջորդ",
+  "ui.common.continue": "Շարունակել",
   "ui.common.submit": "Ներկայացնել",
   "ui.common.showMore": "Ցույց տալ ավելին",
   "ui.permission.deny": "Մերժել",

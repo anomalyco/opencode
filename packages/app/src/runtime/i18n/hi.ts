@@ -154,7 +154,7 @@ export const dict = {
   "provider.connect.title": "{{provider}} कनेक्ट करें",
   "provider.connect.method.apiKey": "API कुंजी",
   "provider.connect.status.inProgress": "प्राधिकरण प्रगति पर है…",
-  "provider.connect.status.waiting": "प्राधिकरण की प्रतीक्षा हो रही है…",
+  "provider.connect.status.waiting": "प्राधिकरण की प्रतीक्षा हो रही है",
   "provider.connect.status.failed": "प्राधिकरण विफल: {{error}}",
   "provider.connect.apiKey.description":
     "अपने खाते को कनेक्ट करने के लिए अपनी {{provider}} API कुंजी दर्ज करें और OpenCode में {{provider}} मॉडल का उपयोग करें।",
@@ -345,7 +345,6 @@ export const dict = {
   "session.new.project.search": "प्रोजेक्ट खोजें",
   "session.new.project.add": "प्रोजेक्ट जोड़ें",
   "session.new.workspace.runIn": "सेशन यहाँ चलाएँ",
-  "session.new.workspace.triggerLocal": "स्थानीय",
   "session.new.workspace.local": "स्थानीय रिपॉजिटरी",
   "session.new.git.none": "कोई Git नहीं",
   "session.header.open.finder": "Finder",
@@ -749,6 +748,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "डेटा माइग्रेट करना {{current}}/{{total}}",
   "home.workspaceTip": "परिवर्तनों को पृथक रखने के लिए अगले सत्र को एक नए कार्यक्षेत्र में प्रारंभ करें",
   "session.tab.add": "टैब जोड़ें",
+  "session.tab.closeOthers": "अन्य टैब बंद करें",
   "session.queue.attachments.one": "साथ ही {{count}} अनुलग्नक",
   "session.queue.attachments.other": "प्लस {{count}} अनुलग्नक",
   "settings.backToSettings": "सेटिंग्स पर वापस जाएँ",
@@ -826,7 +826,6 @@ export const dict = {
 
   "command.session.location.cycle": "सेशन की लोकेशन क्रम से बदलें",
   "dialog.provider.anthropic.note": "API कुंजी के माध्यम से Claude मॉडल का सीधा ऐक्सेस",
-  "provider.connect.title.anthropicProMax": "Anthropic से लॉग इन करें",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}} का अपलोड रद्द करें",
   "prompt.toast.uploadFailed.title": "अपलोड विफल रहा",

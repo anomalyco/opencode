@@ -165,12 +165,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "查看另外 70 多個提供者",
 
   "dialog.provider.viewAll": "查看更多提供者",
-
   "provider.connect.title": "連線 {{provider}}",
-  "provider.connect.title.anthropicProMax": "登入 Anthropic",
+
   "provider.connect.method.apiKey": "API 金鑰",
   "provider.connect.status.inProgress": "正在授權…",
-  "provider.connect.status.waiting": "等待授權…",
+  "provider.connect.status.waiting": "等待授權",
   "provider.connect.status.failed": "授權失敗: {{error}}",
   "provider.connect.apiKey.description":
     "輸入你的 {{provider}} API 金鑰以連線帳戶，並在 OpenCode 中使用 {{provider}} 模型。",
@@ -376,7 +375,6 @@ export const dict = {
   "session.new.project.search": "搜尋專案",
   "session.new.project.add": "新增專案",
   "session.new.workspace.runIn": "工作階段執行位置",
-  "session.new.workspace.triggerLocal": "本機",
   "session.new.workspace.local": "本機儲存庫",
   "session.new.git.none": "無 Git",
 
@@ -791,6 +789,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "正在遷移資料 {{current}}/{{total}}",
   "home.workspaceTip": "在新工作區啟動下一個工作階段，以保持變更彼此獨立",
   "session.tab.add": "新增分頁",
+  "session.tab.closeOthers": "關閉其他分頁",
   "session.queue.attachments.one": "另加 {{count}} 個附件",
   "session.queue.attachments.other": "另加 {{count}} 個附件",
   "settings.backToSettings": "返回設定",

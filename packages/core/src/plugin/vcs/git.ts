@@ -196,18 +196,13 @@ const numstat = (text: string) =>
     if (a === -1 || b === -1) return []
     const file = item.slice(b + 1)
     if (!file) return []
-    const adds = item.slice(0, a)
-    const dels = item.slice(a + 1, b)
-    const additions = adds === "-" ? 0 : Number.parseInt(adds || "0", 10)
-    const deletions = dels === "-" ? 0 : Number.parseInt(dels || "0", 10)
-    return [
-      {
-        file,
-        additions: Number.isFinite(additions) ? additions : 0,
-        deletions: Number.isFinite(deletions) ? deletions : 0,
-      } satisfies Stat,
-    ]
+    return [{ file, additions: count(item.slice(0, a)), deletions: count(item.slice(a + 1, b)) } satisfies Stat]
   })
+
+const count = (value: string) => {
+  const parsed = value === "-" ? 0 : Number.parseInt(value || "0", 10)
+  return Number.isFinite(parsed) ? parsed : 0
+}
 
 function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   const run = Effect.fnUntraced(
@@ -413,40 +408,40 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     )
   })
 
-  const patch = Effect.fn("VcsGit.patch")(function* (cwd: string, ref: string, file: string, options?: PatchOptions) {
+  const diffPatch = Effect.fnUntraced(function* (
+    cwd: string,
+    args: string[],
+    options: PatchOptions | undefined,
+    mode: { dropTruncated: boolean; noIndex?: boolean },
+  ) {
     const result = yield* run(
       [
         "diff",
+        ...(mode.noIndex ? ["--no-index"] : []),
         "--patch",
         "--no-ext-diff",
         "--no-renames",
         `--unified=${options?.context ?? 3}`,
-        ref,
-        ...(options?.target ? [options.target] : []),
-        "--",
-        file,
+        ...args,
       ],
       { cwd, maxOutputBytes: options?.maxOutputBytes },
     )
-    return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch
+    return {
+      text: mode.dropTruncated && result.truncated ? "" : result.text(),
+      truncated: result.truncated,
+    } satisfies Patch
+  })
+
+  const patch = Effect.fn("VcsGit.patch")(function* (cwd: string, ref: string, file: string, options?: PatchOptions) {
+    return yield* diffPatch(cwd, [ref, ...(options?.target ? [options.target] : []), "--", file], options, {
+      dropTruncated: true,
+    })
   })
 
   const patchAll = Effect.fn("VcsGit.patchAll")(function* (cwd: string, ref: string, options?: PatchOptions) {
-    const result = yield* run(
-      [
-        "diff",
-        "--patch",
-        "--no-ext-diff",
-        "--no-renames",
-        `--unified=${options?.context ?? 3}`,
-        ref,
-        ...(options?.target ? [options.target] : []),
-        "--",
-        ".",
-      ],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
-    )
-    return { text: result.text(), truncated: result.truncated } satisfies Patch
+    return yield* diffPatch(cwd, [ref, ...(options?.target ? [options.target] : []), "--", "."], options, {
+      dropTruncated: false,
+    })
   })
 
   const patchUntracked = Effect.fn("VcsGit.patchUntracked")(function* (
@@ -456,21 +451,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   ) {
     // A folder entry has no patch of its own.
     if (file.endsWith("/")) return { text: "", truncated: false } satisfies Patch
-    const result = yield* run(
-      [
-        "diff",
-        "--no-index",
-        "--patch",
-        "--no-ext-diff",
-        "--no-renames",
-        `--unified=${options?.context ?? 3}`,
-        "--",
-        "/dev/null",
-        file,
-      ],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
-    )
-    return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch
+    return yield* diffPatch(cwd, ["--", "/dev/null", file], options, { dropTruncated: true, noIndex: true })
   })
 
   const statUntracked = Effect.fn("VcsGit.statUntracked")(function* (cwd: string, file: string) {
@@ -484,13 +465,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     const parts = result.text().split("\t")
     if (parts.length < 2) return
 
-    const additions = parts[0] === "-" ? 0 : Number.parseInt(parts[0] || "0", 10)
-    const deletions = parts[1] === "-" ? 0 : Number.parseInt(parts[1] || "0", 10)
-    return {
-      file,
-      additions: Number.isFinite(additions) ? additions : 0,
-      deletions: Number.isFinite(deletions) ? deletions : 0,
-    } satisfies Stat
+    return { file, additions: count(parts[0]), deletions: count(parts[1]) } satisfies Stat
   })
 
   // Paths are literal so names containing pathspec magic such as `*` or `[` match only themselves.
@@ -517,11 +492,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   const worktreePatch = Effect.fn("VcsGit.worktreePatch")(function* (cwd: string, options?: PatchOptions) {
-    const result = yield* run(
-      ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`],
-      { cwd, maxOutputBytes: options?.maxOutputBytes },
-    )
-    return { text: result.text(), truncated: result.truncated } satisfies Patch
+    return yield* diffPatch(cwd, [], options, { dropTruncated: false })
   })
 
   return {

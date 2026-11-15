@@ -71,10 +71,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "Ба OpenCode Go бо нархи $10 дар як моҳ обуна шавед, то ба беҳтарин моделҳои кушодаасос дастрасии боэътимод дошта бошед.",
   "dialog.usageExceeded.freeTier.actionLabel": "Обуна шавед",
-  "dialog.usageExceeded.accountRateLimit.title": "Ба маҳдудияти рафтан расид",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Ба ҳадди ниҳоии истифода расид. Барои идома додани истифодаи ин модел ҳоло, истифода аз тавозуни дастрасатонро фаъол созед",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Танзимотро кушоед",
   "ui.sessionTurn.status.delegating": "Супоридани кор",
   "ui.sessionTurn.status.planning": "Банақшагирии қадамҳои оянда",
   "ui.sessionTurn.status.gatheringContext": "Таҳқиқ кардан",
@@ -164,6 +160,7 @@ export const dict = {
   "ui.common.dismiss": "Рад кардан",
   "ui.common.close": "Пӯшед",
   "ui.common.next": "Баъдӣ",
+  "ui.common.continue": "Давом додан",
   "ui.common.submit": "Пешниҳод кунед",
   "ui.common.showMore": "Бештар нишон диҳед",
   "ui.permission.deny": "Инкор кардан",

@@ -9,7 +9,7 @@ import { Location } from "@opencode/core/location"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const provide = (directory: string, workspaceID?: Workspace.ID) =>
@@ -27,10 +27,7 @@ const provide = (directory: string, workspaceID?: Workspace.ID) =>
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
-  Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
+  tmpdirScoped().pipe(Effect.flatMap((tmp) => f(tmp.path)))
 
 describe("FileSystem", () => {
   it.live("reads text and binary files", () =>

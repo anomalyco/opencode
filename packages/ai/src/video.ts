@@ -1,9 +1,16 @@
-import { Effect, Schema, Stream } from "effect"
-import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
+import { Duration, Effect, Schema } from "effect"
+import type { Status } from "./generation.js"
 import { Media } from "./media.js"
-import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
+import { MediaModel, composeQueuedRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata, ProviderOptions, type OpenString } from "./schema/index.js"
+import {
+  AIError,
+  MediaUsage,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+  type BaseRequest,
+} from "./schema/index.js"
 import { VideoClient, Service } from "./video-client.js"
 
 // ---------------------------------------------------------------------------
@@ -12,26 +19,15 @@ import { VideoClient, Service } from "./video-client.js"
 
 export type VideoOptions = MediaModel.Options
 
-export type VideoRoute = MediaRoute.AnyRoute<VideoRequestFor, VideoEvent, VideoResponse>
+/** Video generation is always a queued job: submit, then read its status and result by the provider's job ID. */
+export type VideoRoute = MediaRoute.QueuedRoute<VideoRequest, VideoResponse>
 
 export class VideoModel<Options extends VideoOptions = VideoOptions> extends MediaModel<VideoRoute, Options> {
   declare protected readonly _VideoModel: void
 
-  /** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
+  /** A video route's token is the provider's job ID, so `VideoJob.id` is exactly what `status` and `result` take. */
   static fromRoute<Options extends VideoOptions>(
-    route: MediaModel.InlineRouteInput<VideoRequestFor<Options>, VideoResponse>,
-    input: MediaRoute.ModelInput,
-  ): VideoModel<Options>
-  static fromRoute<Options extends VideoOptions, Frame, State>(
-    route: MediaModel.StreamRouteInput<VideoRequestFor<Options>, VideoEvent, Frame, State>,
-    input: MediaRoute.ModelInput,
-  ): VideoModel<Options>
-  static fromRoute<Options extends VideoOptions, Token>(
-    route: MediaModel.QueuedRouteInput<VideoRequestFor<Options>, VideoResponse, Token>,
-    input: MediaRoute.ModelInput,
-  ): VideoModel<Options>
-  static fromRoute<Options extends VideoOptions, Frame, State, Token>(
-    route: MediaModel.AnyRouteInput<VideoRequestFor<Options>, VideoEvent, VideoResponse, Frame, State, Token>,
+    route: MediaModel.QueuedRouteInput<VideoRequest<VideoModel<Options>>, VideoResponse, string>,
     input: MediaRoute.ModelInput,
   ) {
     return new VideoModel<Options>({
@@ -39,7 +35,7 @@ export class VideoModel<Options extends VideoOptions = VideoOptions> extends Med
       provider: route.protocol.provider,
       http: input.http,
       providerOptions: input.providerOptions,
-      route: composeRoute(route, input, collectResponse) as VideoRoute,
+      route: composeQueuedRoute(route, input) as VideoRoute,
     })
   }
 }
@@ -52,63 +48,76 @@ export const VideoModelSchema = Schema.declare((value): value is VideoModel => v
 // Request
 // ---------------------------------------------------------------------------
 
-export type VideoAspectRatio = Media.AspectRatio
-export const VideoAspectRatio = Media.AspectRatio
+/** A `width:height` ratio, or `auto` to follow the input image. */
+export type VideoAspectRatio = Media.AspectRatio | "auto"
+export const VideoAspectRatio = Schema.Union([Media.AspectRatio, Schema.Literal("auto")])
 
+/** Common output resolutions; protocols convert them to their provider's spelling and pass other values through. */
 export type VideoResolution = OpenString<"480p" | "720p" | "1080p" | "4k">
 
-/** Pinned frames. Routes that accept only a first frame fail typed when `last` is present. */
-export const VideoFrames = Schema.Struct({
-  first: Schema.optional(Media.AssetSchema),
-  last: Schema.optional(Media.AssetSchema),
-}).annotate({ identifier: "Video.Frames" })
-export type VideoFrames = Schema.Schema.Type<typeof VideoFrames>
+/** Output length as an Effect duration string in seconds, such as `"8 seconds"`. */
+export type VideoDuration = `${number} second` | `${number} seconds`
+export const VideoDuration = Schema.declare<VideoDuration>(
+  (value): value is VideoDuration => typeof value === "string" && /^\d+(?:\.\d+)? seconds?$/.test(value),
+  { title: "Video.Duration" },
+)
 
-export class VideoRequest extends Schema.Class<VideoRequest>("Video.Request")({
+const VideoRequestSchema = Schema.Struct({
   model: VideoModelSchema,
   prompt: Schema.String,
-  frames: Schema.optional(VideoFrames),
-  /** Style or subject references that guide the output without pinning a frame. */
+  /** Image the video starts on exactly. */
+  start: Schema.optional(Media.ImageAssetSchema),
+  /** Image the video ends on exactly. */
+  end: Schema.optional(Media.ImageAssetSchema),
+  /** Images, videos or audio that guide the subject or style without pinning a frame. */
   references: Schema.optional(Schema.Array(Media.AssetSchema)),
-  /** Source video for edit or extension routes. */
-  video: Schema.optional(Media.AssetSchema),
-  durationSeconds: Schema.optional(Schema.Number),
+  duration: Schema.optional(VideoDuration),
   aspect: Schema.optional(VideoAspectRatio),
   resolution: Schema.optional(Schema.String),
-  /** Whether to generate an audio track; routes whose audio is always on fail typed on `false`. */
-  audio: Schema.optional(Schema.Boolean),
-  n: Schema.optional(Schema.Int),
-  seed: Schema.optional(Schema.Number),
-  negativePrompt: Schema.optional(Schema.String),
+  /** Whether the video has a generated soundtrack; unset leaves the model's default. */
+  sound: Schema.optional(Schema.Boolean),
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
-}) {
-  declare protected readonly _VideoRequest: void
-}
+})
 
-export type VideoRequestFor<Options extends VideoOptions = VideoOptions> = Omit<
-  VideoRequest,
-  "model" | "providerOptions"
-> & {
-  readonly model: VideoModel<Options>
-  readonly providerOptions?: Options
-}
+/** A normalized video request, the plain object `ai.video.request(...)` returns. */
+export type VideoRequest<Model extends VideoModel = VideoModel> = Omit<
+  typeof VideoRequestSchema.Type,
+  "model" | "providerOptions" | "resolution"
+> &
+  BaseRequest<Model, VideoModelOptions<Model>> & { readonly resolution?: VideoResolution }
 
 export type VideoModelOptions<Model> = Model extends VideoModel<infer Options> ? Options : never
 
+/** Input accepted by `ai.video.request` and `ai.video.start`; a `VideoRequest` is also a valid input. */
 export type VideoRequestInput<Model extends VideoModel = VideoModel> = Omit<
-  ConstructorParameters<typeof VideoRequest>[0],
-  "model" | "providerOptions" | "http" | "resolution"
+  VideoRequest<Model>,
+  "start" | "end" | "references" | "providerOptions"
 > & {
-  readonly model: Model
-  readonly resolution?: VideoResolution
+  /** An image: `Media.image(...)`, or a URL, data URL, base64 string or bytes, which must not be a known non-image. */
+  readonly start?: Media.ImageAsset | Media.Data
+  readonly end?: Media.ImageAsset | Media.Data
+  readonly references?: ReadonlyArray<Media.Input>
   readonly providerOptions?: NoInfer<VideoModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
 
+/** Seconds in a request's `duration`, for protocols that send a number. */
+export const seconds = (duration: VideoDuration) => Duration.toSeconds(Duration.fromInputUnsafe(duration))
+
 // ---------------------------------------------------------------------------
-// Response and events
+// Job, status and response
 // ---------------------------------------------------------------------------
+
+/** A submitted generation. Store `id` with the model to read the job later, from any process. */
+export interface VideoJob {
+  /** The provider's job ID. */
+  readonly id: string
+}
+
+export interface VideoStatus {
+  readonly status: Status
+  /** 0..1, only when the provider reports progress. */
+  readonly progress?: number
+}
 
 export class VideoResponse extends Schema.Class<VideoResponse>("Video.Response")({
   videos: Schema.Array(Media.AssetSchema),
@@ -120,93 +129,51 @@ export class VideoResponse extends Schema.Class<VideoResponse>("Video.Response")
   }
 }
 
-export const VideoOutputEvent = Schema.Struct({
-  type: Schema.tag("video"),
-  index: Schema.Number,
-  video: Media.AssetSchema,
-}).annotate({ identifier: "Video.Event.Video" })
+// ---------------------------------------------------------------------------
+// Call API
+// ---------------------------------------------------------------------------
 
-export const VideoFinishEvent = Schema.Struct({
-  type: Schema.tag("finish"),
-  usage: Schema.optional(MediaUsage),
-  providerMetadata: Schema.optional(ProviderMetadata),
-}).annotate({ identifier: "Video.Event.Finish" })
-
-const videoEventTagged = Schema.Union([QueuedEvent, ProgressEvent, VideoOutputEvent, VideoFinishEvent]).pipe(
-  Schema.toTaggedUnion("type"),
-)
-export const VideoEvent = Object.assign(videoEventTagged, {
-  is: {
-    generationQueued: videoEventTagged.guards["generation-queued"],
-    generationProgress: videoEventTagged.guards["generation-progress"],
-    video: videoEventTagged.guards.video,
-    finish: videoEventTagged.guards.finish,
-  },
+/** Normalize video request input into a plain `VideoRequest`. */
+export const request = <const Model extends VideoModel>(input: VideoRequestInput<Model>): VideoRequest<Model> => ({
+  ...input,
+  start: input.start === undefined ? undefined : Media.image(input.start),
+  end: input.end === undefined ? undefined : Media.image(input.end),
+  references: input.references?.map((reference) => Media.make(reference)),
 })
-export type VideoEvent = Schema.Schema.Type<typeof videoEventTagged>
 
-const collectResponse = (events: ReadonlyArray<VideoEvent>): Effect.Effect<VideoResponse> => {
-  const finish = events.find(VideoEvent.is.finish)
-  // A streaming video protocol's `finish` emits the terminal event or fails, so a completed stream always has one.
-  if (finish === undefined) return Effect.die(new Error("The video stream completed without a finish event"))
-  return Effect.succeed(
-    new VideoResponse({
-      videos: events.filter(VideoEvent.is.video).map((event) => event.video),
-      usage: finish.usage,
-      providerMetadata: finish.providerMetadata,
-    }),
-  )
-}
+const validate = Schema.decodeUnknownSync(VideoRequestSchema)
 
-// ---------------------------------------------------------------------------
-// Request-shaped call API
-// ---------------------------------------------------------------------------
-
-export function request<const Model extends VideoModel>(
-  input: VideoRequestInput<Model>,
-): VideoRequestFor<VideoModelOptions<Model>>
-export function request(input: VideoRequest): VideoRequest
-export function request(input: VideoRequest | VideoRequestInput) {
-  if (input instanceof VideoRequest) return input
-  return new VideoRequest({
-    ...input,
-    http: HttpOptions.make(input.http),
+const requestEffect = (input: VideoRequestInput) =>
+  tryRequest(() => {
+    const normalized = request(input)
+    validate(normalized)
+    return normalized
   })
-}
 
-const requestEffect = (input: VideoRequest | VideoRequestInput) => tryRequest(() => request(input))
-
+/** Submit a generation and return at once; nothing polls. */
 export function start<const Model extends VideoModel>(
-  input: VideoRequest | VideoRequestInput<Model>,
-): Effect.Effect<Generation<VideoResponse>, AIError, Service>
-export function start(input: VideoRequest | VideoRequestInput) {
+  input: VideoRequestInput<Model>,
+): Effect.Effect<VideoJob, AIError, Service>
+export function start(input: VideoRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => VideoClient.start(request)))
 }
 
-export function generate<const Model extends VideoModel>(
-  input: VideoRequest | VideoRequestInput<Model>,
-  options?: AwaitOptions,
-): Effect.Effect<VideoResponse, AIError, Service>
-export function generate(input: VideoRequest | VideoRequestInput, options?: AwaitOptions) {
-  return requestEffect(input).pipe(Effect.flatMap((request) => VideoClient.generate(request, options)))
-}
+/** One status read for a job ID. */
+export const status = (model: VideoModel, id: string): Effect.Effect<VideoStatus, AIError, Service> =>
+  VideoClient.status(model, id)
 
-/** Rebuild a generation handle from a persisted `Generation.token`, refreshing its status once. */
-export const resume = (model: VideoModel, token: unknown): Effect.Effect<Generation<VideoResponse>, AIError, Service> =>
-  VideoClient.resume(model, token)
+/** The finished videos; fails while the job is still running, or with the provider's reason when it failed. */
+export const result = (model: VideoModel, id: string): Effect.Effect<VideoResponse, AIError, Service> =>
+  VideoClient.result(model, id)
 
-export function stream<const Model extends VideoModel>(
-  input: VideoRequest | VideoRequestInput<Model>,
-  options?: AwaitOptions,
-): Stream.Stream<VideoEvent, AIError, Service>
-export function stream(input: VideoRequest | VideoRequestInput, options?: AwaitOptions) {
-  return Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => VideoClient.stream(request, options))))
-}
+/** Ask the provider to stop the job; fails with `UnsupportedOperation` when the provider has no cancel call. */
+export const cancel = (model: VideoModel, id: string): Effect.Effect<void, AIError, Service> =>
+  VideoClient.cancel(model, id)
 
 export const Video = {
   request,
   start,
-  generate,
-  resume,
-  stream,
+  status,
+  result,
+  cancel,
 } as const

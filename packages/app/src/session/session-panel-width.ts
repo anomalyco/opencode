@@ -4,10 +4,11 @@
 // minimum for the review pane and let the chat panel take everything else.
 // Until the user drags the divider, the default width keeps roomier minimums
 // (wider still for split diffs); a drag can take either side down to the hard
-// minimum.
-export const SESSION_PANEL_WIDTH_MIN = 320
+// minimum. The chat minimum leaves the session header room for its title beside
+// its controls, macOS traffic lights included.
+export const SESSION_PANEL_WIDTH_MIN = 400
 
-const SIDE_PANE_WIDTH_MIN = 320
+export const SIDE_PANE_WIDTH_MIN = 320
 
 const SESSION_PANEL_WIDTH_FIT = 450
 
@@ -28,7 +29,13 @@ export function sessionPanelWidthCss(input: { width: number; split: boolean; res
   const minimum = input.resized ? SESSION_PANEL_WIDTH_MIN : SESSION_PANEL_WIDTH_FIT
   const pane = input.resized ? SIDE_PANE_WIDTH_MIN : input.split ? REVIEW_PANE_WIDTH_FIT_SPLIT : REVIEW_PANE_WIDTH_FIT
 
-  return `min(${input.width}px, max(${minimum}px, 100% - ${pane + 8}px))`
+  // The outer floor raises a width stored below the minimum, e.g. dragged before it rose.
+  return `max(${SESSION_PANEL_WIDTH_MIN}px, min(${input.width}px, max(${minimum}px, 100% - ${pane + 8}px)))`
+}
+
+// A panel with a side width of its own: the chat panel takes the rest of the row, keeping at least its minimum.
+export function sidePanelWidthCss(side: number) {
+  return `max(${SESSION_PANEL_WIDTH_MIN}px, 100% - ${Math.max(SIDE_PANE_WIDTH_MIN, side) + 8}px)`
 }
 
 // `available` is undefined until the layout row is first measured; render the
@@ -39,7 +46,9 @@ export function clampSessionPanelWidth(input: {
   split: boolean
   resized: boolean
 }) {
-  if (input.available === undefined) return input.width
+  const width = Math.max(SESSION_PANEL_WIDTH_MIN, input.width)
 
-  return Math.min(input.width, sessionPanelWidthMax({ ...input, available: input.available }))
+  if (input.available === undefined) return width
+
+  return Math.min(width, sessionPanelWidthMax({ ...input, available: input.available }))
 }

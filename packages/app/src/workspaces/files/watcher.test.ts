@@ -80,10 +80,25 @@ describe("file watcher invalidation", () => {
     expect(refresh).toEqual(["src"])
   })
 
-  test("ignores invalid or git watcher updates", () => {
+  test("refreshes the parent of a Windows path", () => {
     const refresh: string[] = []
 
-    invalidateFromWatcher(filesystemEvent(".git/index.lock", "change"), {
+    invalidateFromWatcher(filesystemEvent("src\\sub\\new.ts", "add"), {
+      normalize: (input) => input,
+      hasFile: () => false,
+      loadFile: () => {},
+      node: () => undefined,
+      isDirLoaded: (path) => path === "src/sub",
+      refreshDir: (path) => refresh.push(path),
+    })
+
+    expect(refresh).toEqual(["src/sub"])
+  })
+
+  test.each([".git/index.lock", ".git\\index.lock"])("ignores git watcher update %p", (file) => {
+    const refresh: string[] = []
+
+    invalidateFromWatcher(filesystemEvent(file, "change"), {
       normalize: (input) => input,
       hasFile: () => true,
       loadFile: () => {

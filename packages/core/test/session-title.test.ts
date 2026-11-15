@@ -1,6 +1,7 @@
 import { beforeEach, expect } from "bun:test"
 import {
   AIError,
+  InvalidRequestError,
   LLMClient,
   LLMEvent,
   LanguageModel,
@@ -9,7 +10,7 @@ import {
   TransportError,
   type LLMRequest,
 } from "@opencode/ai/effect"
-import { OpenAIChat } from "@opencode/ai/protocols"
+import { OpenAIChat, OpenAIResponses } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -34,7 +35,7 @@ import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
@@ -61,6 +62,9 @@ const cost = [
     },
   },
 ]
+const providerRejected = (input: { readonly message: string }) =>
+  new AIError({ reason: new InvalidRequestError(input) })
+
 const successfulTitle = () =>
   Stream.make(
     LLMEvent.textDelta({ id: "title", text: "Generated Title\n" }),
@@ -80,11 +84,11 @@ const successfulTitle = () =>
       reason: { normalized: "stop" },
     }),
   )
-let titleStream: () => Stream.Stream<LLMEvent, AIError> = successfulTitle
+let titleStream: (request: LLMRequest) => Stream.Stream<LLMEvent, AIError> = successfulTitle
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
-    return titleStream()
+    return titleStream(request)
   },
   generate: () => Effect.die("unused"),
 })
@@ -213,7 +217,7 @@ it.effect("generates a title from the sole user message and renames the session"
     yield* title.generate(sessionID)
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.http?.headers).toEqual({
+    expect(requests[0]?.headers).toEqual({
       "x-opencode-session-id": sessionID,
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,
@@ -232,6 +236,50 @@ it.effect("generates a title from the sole user message and renames the session"
     expect(renamed?.cost).toBeCloseTo(0.0000233)
   }),
 )
+
+for (const timing of ["start", "end"] as const)
+  it.effect(`excludes commentary from titles when the response phase arrives at ${timing}`, () =>
+    Effect.gen(function* () {
+      yield* enableTitleAgent
+      const sessionID = Session.ID.make(`ses_title_phase_${timing}`)
+      yield* insertSession(sessionID)
+      yield* prompt(sessionID, "Investigate performance across four hosts without making changes")
+      // Sanitized shape of a live Luna response: both messages are output_text, not reasoning.
+      titleStream = (request) =>
+        Stream.fromIterable([
+          {
+            type: "response.output_item.added",
+            item: { type: "message", id: "commentary", ...(timing === "start" ? { phase: "commentary" } : {}) },
+          },
+          {
+            type: "response.output_text.delta",
+            item_id: "commentary",
+            delta: "We need title only. Need capture investigation four machines performance read-only. Title concise.",
+          },
+          {
+            type: "response.output_item.done",
+            item: { type: "message", id: "commentary", phase: "commentary" },
+          },
+          { type: "response.output_item.added", item: { type: "message", id: "final", phase: "final_answer" } },
+          { type: "response.output_text.delta", item_id: "final", delta: "Read-only performance investigation" },
+          { type: "response.output_item.done", item: { type: "message", id: "final", phase: "final_answer" } },
+          { type: "response.completed", response: { id: "response_title" } },
+        ]).pipe(
+          Stream.map((event) => Schema.decodeUnknownSync(OpenAIResponses.protocol.stream.event)(JSON.stringify(event))),
+          Stream.mapAccumEffect(
+            () => OpenAIResponses.protocol.stream.initial(request),
+            OpenAIResponses.protocol.stream.step,
+          ),
+        )
+
+      const title = yield* SessionTitle.Service
+      yield* title.generate(sessionID)
+
+      const store = yield* SessionStore.Service
+      expect(requests).toHaveLength(1)
+      expect((yield* store.get(sessionID))?.title).toBe("Read-only performance investigation")
+    }),
+  )
 
 it.effect("runs title hooks instead of context hooks", () =>
   Effect.gen(function* () {
@@ -261,7 +309,7 @@ it.effect("runs title hooks instead of context hooks", () =>
     expect(requests).toHaveLength(1)
     expect(requests[0]?.system.map((part) => part.text)).toEqual(["You are a title generator.", "Prefer short titles."])
     expect(JSON.stringify(requests[0]?.messages)).not.toContain("Redact this message")
-    expect(requests[0]?.generation).toEqual(expect.objectContaining({ maxTokens: 32 }))
+    expect(requests[0]?.maxTokens).toBe(32)
     expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "low" })
   }),
 )
@@ -310,9 +358,7 @@ it.effect("uses a small model from the primary provider", () =>
 it.effect("falls back to the primary model when the small model fails", () =>
   Effect.gen(function* () {
     titleStream = () =>
-      requests.length === 1
-        ? Stream.make(LLMEvent.providerError({ message: "Small model unavailable" }))
-        : successfulTitle()
+      requests.length === 1 ? Stream.fail(providerRejected({ message: "Small model unavailable" })) : successfulTitle()
     selectedSmall = lowSmall
     yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_small_fallback")
@@ -392,7 +438,7 @@ it.effect("uses the primary model at its lowest variant without a small model", 
 it.effect("falls back to the selected primary variant when the lowest variant fails", () =>
   Effect.gen(function* () {
     titleStream = () =>
-      requests.length === 1 ? Stream.make(LLMEvent.providerError({ message: "Variant rejected" })) : successfulTitle()
+      requests.length === 1 ? Stream.fail(providerRejected({ message: "Variant rejected" })) : successfulTitle()
     selectedPrimary = primaryInfo(["low", "high"])
     const result = yield* titleAttempts(
       Session.ID.make("ses_title_primary_fallback"),
@@ -594,7 +640,7 @@ it.effect("preserves the existing title when regeneration fails", () =>
     const sessionID = Session.ID.make("ses_title_regenerate_failure")
     yield* insertSession(sessionID, "Original title")
     yield* prompt(sessionID, "Fail to regenerate this title")
-    titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable" }))
+    titleStream = () => Stream.fail(providerRejected({ message: "Provider unavailable" }))
 
     const title = yield* SessionTitle.Service
     yield* title.generate(sessionID)
@@ -612,7 +658,7 @@ it.effect("retries after a failed title request", () =>
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Retry this title")
     const title = yield* SessionTitle.Service
-    titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable" }))
+    titleStream = () => Stream.fail(providerRejected({ message: "Provider unavailable" }))
 
     yield* title.generate(sessionID)
     titleStream = successfulTitle

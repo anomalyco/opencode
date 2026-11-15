@@ -13,7 +13,7 @@ it.live("Effect plugins list sessions with the same pages as Core", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const parent = yield* context.session.create({ title: "match parent" })
     yield* sessions.create({ parentID: parent.id, title: "match child" })
     yield* context.session.create({ title: "match root" })
@@ -32,7 +32,7 @@ it.live("Promise plugins list sessions and follow cursors", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const parent = yield* context.session.create({ title: "match parent" })
     yield* sessions.create({ parentID: parent.id, title: "match child" })
     yield* context.session.create({ title: "match root" })

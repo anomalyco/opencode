@@ -72,7 +72,7 @@ const desktop = [
 ]
 
 export const dict = {
-  ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
+  ...Object.fromEntries(desktop.map((value, index) => [DESKTOP_NATIVE_KEYS[index], value])),
   "command.category.suggested": "Predloženo",
   "command.category.view": "Prikaz",
   "command.category.project": "Projekt",
@@ -161,7 +161,7 @@ export const dict = {
   "provider.connect.title": "Povežite {{provider}}",
   "provider.connect.method.apiKey": "Ključ API",
   "provider.connect.status.inProgress": "Autorizacija u tijeku…",
-  "provider.connect.status.waiting": "Čeka se autorizacija…",
+  "provider.connect.status.waiting": "Čeka se autorizacija",
   "provider.connect.status.failed": "Autorizacija nije uspjela: {{error}}",
   "provider.connect.apiKey.description":
     "Enter vaš {{provider}} API ključ za povezivanje vašeg računa i korištenje {{provider}} modela u OpenCode.",
@@ -352,7 +352,6 @@ export const dict = {
   "session.new.project.search": "Pretražite projekte",
   "session.new.project.add": "Dodaj projekt",
   "session.new.workspace.runIn": "Pokrenite sesiju",
-  "session.new.workspace.triggerLocal": "Lokalni",
   "session.new.workspace.local": "Lokalno spremište",
   "session.new.git.none": "Ne Git",
   "session.header.open.finder": "Finder",
@@ -757,6 +756,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Migracija podataka {{current}}/{{total}}",
   "home.workspaceTip": "Pokrenite sljedeću sesiju u novom radnom prostoru kako bi promjene ostale izolovane",
   "session.tab.add": "Dodaj karticu",
+  "session.tab.closeOthers": "Zatvori ostale kartice",
   "session.queue.attachments.one": "Još {{count}} prilog",
   "session.queue.attachments.few": "Još {{count}} priloga",
   "session.queue.attachments.other": "Još {{count}} priloga",
@@ -838,7 +838,6 @@ export const dict = {
   "workspace.delete.location": "Lokacija",
   "command.session.location.cycle": "Promijeni lokaciju sesije",
   "dialog.provider.anthropic.note": "Izravan pristup modelima Claude putem API ključa",
-  "provider.connect.title.anthropicProMax": "Prijava putem Anthropic-a",
   "prompt.toast.uploading.cancelFile": "Otkaži prijenos datoteke {{filename}}",
   "prompt.toast.uploadFailed.title": "Prijenos nije uspio",
   "prompt.toast.uploading.percent": "{{percent}}%",

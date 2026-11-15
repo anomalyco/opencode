@@ -41,8 +41,12 @@ export function Link(props: LinkProps) {
  * terminal's own hyperlink handling.
  */
 export function clickedLink(renderer: CliRenderer, event: MouseEvent) {
-  if (!event.isDragging || Object.values(event.modifiers).some(Boolean)) return
-  const selection = renderer.getSelection()
-  if (!selection?.isStart || selection.behavior !== "cell") return
+  if (!plainClick(renderer, event)) return
   return renderer.getLinkAt(event.x, event.y) ?? undefined
+}
+
+export function plainClick(renderer: CliRenderer, event: MouseEvent) {
+  if (!event.isDragging || Object.values(event.modifiers).some(Boolean)) return false
+  const selection = renderer.getSelection()
+  return selection?.isStart === true && selection.behavior === "cell"
 }

@@ -68,6 +68,12 @@ export const groupNames = {
   "server.config": "config",
 } as const
 
+// Experimental routes carry no compatibility promise, so the generated clients nest them under
+// `client.experimental` instead of beside stable methods. The URL decides rather than the OpenAPI
+// id, because the URL is what callers depend on and an id can miss its `experimental.` prefix.
+export const clientNamespace = (endpoint: { readonly path: string }) =>
+  endpoint.path === "/api/experimental" || endpoint.path.startsWith("/api/experimental/") ? "experimental" : undefined
+
 export const promiseOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",
@@ -78,6 +84,7 @@ export const effectOmitEndpoints = new Set([
   "fs.read",
   "fs.write",
   "media.get",
+  "artifacts.view",
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
