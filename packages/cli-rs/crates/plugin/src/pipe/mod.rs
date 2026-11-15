@@ -812,6 +812,13 @@ impl Scripts {
             }
             return;
         }
+        // A cancellation is all that settles the fetch that waits for it in the JS host (bigboi's freeze pass).
+        if let Down::Cancelled { .. } = message {
+            if !self.overflow.borrow().0.is_empty() || !self.encode(message) {
+                self.overflow.borrow_mut().0.push_back((message.clone(), 0));
+            }
+            return;
+        }
         if let Some(seq) = seq {
             // In the message's place: after what waits before it.
             let skipped = Down::Skipped { seq };
@@ -1434,6 +1441,23 @@ pub(crate) fn evaluate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Expected (bigboi's freeze pass): a cancellation the overflow has no room for is kept in its place, as a fetch's
+    // failed reply is, so the fetch that waits for it in the JS host settles; another message without a sequence goes.
+    #[test]
+    fn a_cancellation_is_kept_past_a_full_overflow() {
+        let mut config = Config::new("bun".into());
+        config.limits.inbox = 16;
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(config, &host);
+        let held = Down::Ping { seq: 1 };
+        scripts.overflowed(held.clone(), 16);
+        let cancelled = Down::Cancelled { activation: 1, request: opencode_plugin_abi::RequestId(5) };
+        scripts.overflowed(cancelled.clone(), 64);
+        scripts.overflowed(Down::Answered { id: "p".into(), key: "c1".into(), results: Vec::new() }, 64);
+        let kept: Vec<Down> = scripts.overflow.borrow().0.iter().map(|(message, _)| message.clone()).collect();
+        assert_eq!(kept, [held, cancelled]);
+    }
 
     // Expected (carbon-1): Bun is found only in an absolute `PATH` entry outside the project the client works in (an
     // empty or relative entry is that directory); a home directory is no project.
