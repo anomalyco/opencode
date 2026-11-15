@@ -678,10 +678,28 @@ fn usable_action(tui: &Tui, action: &abi::SelectAction) -> bool {
     usable
 }
 
-/// Whether `key` parses as keys of the host's keymap and is not the reserved chord.
+/// Whether `key` parses as keys of the host's keymap and holds neither the reserved chord nor escape: the dialog's two
+/// close keys, which a plugin's layer above them would take, keeping the user in its dialog (review carbon-5).
 fn usable_key(tui: &Tui, key: &str) -> bool {
-    let parsed = tui.keymap.keymap().parse_key_sequence(key).is_ok_and(|parts| !parts.is_empty());
-    parsed && !key.trim().is_empty() && !opencode_plugin::interact::reserved(tui, key)
+    let keymap = tui.keymap.keymap();
+    let escape = keymap.parse_key("escape").map(|chord| chord.stroke).ok();
+    // Each binding as the host's keymap expands the key: a comma separates bindings, and `esc` is `escape`.
+    key.split(',').map(str::trim).all(|binding| {
+        let spelled: String = binding
+            .split_inclusive(|character: char| character == '+' || character.is_whitespace())
+            .map(|token| {
+                let name = token.trim_end_matches(|character: char| character == '+' || character.is_whitespace());
+                match name.eq_ignore_ascii_case("esc") {
+                    true => format!("escape{}", &token[name.len()..]),
+                    false => token.to_owned(),
+                }
+            })
+            .collect();
+        let parsed = keymap
+            .parse_key_sequence(spelled.as_str())
+            .is_ok_and(|parts| !parts.is_empty() && parts.iter().all(|part| Some(&part.stroke) != escape.as_ref()));
+        parsed && !binding.is_empty() && !opencode_plugin::interact::reserved(tui, &spelled)
+    })
 }
 
 /// The select's extra keys: each runs its action with the selected row's value.
@@ -1035,6 +1053,13 @@ impl Live {
         let commands = panel
             .binds
             .into_iter()
+            .filter(|bind| {
+                let usable = usable_key(tui, &bind.key);
+                if !usable {
+                    log::warn!("a plugin's panel key {:?} cannot be bound; it is left out", bind.key);
+                }
+                usable
+            })
             .map(|bind| {
                 let (owner, action) = (self.owner.clone(), bind.action);
                 TuiCommand::inline(bind.key, bind!(tui, |tui, _, _| run(&tui, &owner, &action, None)))

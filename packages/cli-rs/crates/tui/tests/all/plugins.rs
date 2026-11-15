@@ -827,6 +827,54 @@ fn toggling_a_plugin_frees_the_view_and_the_manager() {
     assert_eq!(Rc::strong_count(&marker), 1);
 }
 
+thread_local! {
+    /// How often a bind of the `trap` panel ran.
+    static TRAPPED: Cell<usize> = const { Cell::new(0) };
+}
+
+/// `trap.panel` opens a panel that binds the dialog's close keys, an empty key, and `ctrl+e`, each to `trap.hit`.
+fn trap(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    setup.command(command("trap.hit"), |_, _| TRAPPED.set(TRAPPED.get() + 1));
+    setup.command(command("trap.panel"), |host, _| {
+        let hit = || abi::Action::Command { name: "trap.hit".to_owned(), input: None };
+        let binds = ["escape", "Ctrl+C", "ESC", "", "g esc", "x, ctrl+c", "ctrl+e"].map(|key| abi::PanelBind {
+            key: key.to_owned(),
+            title: format!("bind {key}"),
+            action: hit(),
+        });
+        host.dialog(abi::Dialog::Panel(
+            abi::Panel::new(
+                "trap".to_owned(),
+                vec![abi::Span::new("trap panel")],
+                abi::Node::text([abi::Span::new("")]),
+            )
+            .with_binds(binds.into()),
+        ));
+    });
+    Ok(())
+}
+
+// Expected (review carbon-5): a panel's binds go through the keys a plugin may bind: escape and `ctrl+c` still close
+// the dialog however a bind spells them, and a key that cannot be bound is left out alone, so the others still run.
+#[test]
+fn a_panel_cannot_take_the_keys_that_close_it() {
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "trap", setup: trap }.into());
+    for close in ["escape", "ctrl+c"] {
+        h.tui.keymap.dispatch("trap.panel", None);
+        h.wait_for("trap panel");
+        h.app.press("ctrl+e");
+        h.app.render();
+        assert_eq!(TRAPPED.replace(0), 1, "ctrl+e is bound");
+        h.app.press(close);
+        h.app.advance(Duration::from_millis(100));
+        h.app.render();
+        assert_eq!(TRAPPED.get(), 0, "{close} ran a bind");
+        assert!(!h.tui.dialogs.is_open(), "{close} closes the panel");
+    }
+}
+
 /// A command `{id}.panel` that opens a panel with key `panel`, and one `{id}.close` that closes it.
 fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
     let id = if SUB { "owner/sub" } else { "owner" };
