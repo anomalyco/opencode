@@ -1077,7 +1077,8 @@ const program = Effect.gen(function* () {
   job.id // the provider's job ID: store it with the provider and model ID
 
   const status = yield* ai.video.status(model, job.id)
-  status.status // "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
+  status.status // "running" | "completed" | "error"
+  status.reason // "failed" | "cancelled" | "expired", only when status is "error"
   status.progress // 0..1, only when the provider reports it
 
   const response = yield* ai.video.result(model, job.id)
@@ -1328,8 +1329,8 @@ const program = Effect.gen(function* () {
 })
 ```
 
-Inline routes emit only `finish` from `stream` (no faked deltas); queued routes emit `generation-queued` /
-`generation-progress` before it.
+Inline routes emit only `finish` from `stream` (no faked deltas); queued routes emit `generation-progress`
+before it.
 
 Provider notes:
 
