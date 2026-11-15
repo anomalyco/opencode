@@ -1486,6 +1486,9 @@ fn two(setup: &mut abi::Setup) -> Result<(), String> {
         let fields = host.storage_get("state").and_then(|value| value.as_object().cloned()).unwrap_or_default();
         TWO.with_borrow_mut(|two| two.push(fields.keys().cloned().collect()));
     });
+    // A second key, whose write goes to the writer after the merge.
+    setup.storage_key("note");
+    setup.command(named("two.note"), |host, _| host.storage_set("note", json!({ "n": 1 })));
     Ok(())
 }
 
@@ -1534,5 +1537,48 @@ fn two_clients_merging_a_key_stay_within_its_bound_together() {
             "{carrier:?}: this client still shows its own merge"
         );
         assert_eq!(TWO.with_borrow(|two| two.first().cloned()), Some(Vec::new()), "{carrier:?}");
+    }
+}
+
+// Expected (re-review last pass, the storage cache): a write refused under the lock leaves no value in this client's
+// cache that no file holds, also when the correction cannot reach the UI thread and another write is queued behind
+// it: the UI queue is full as the refusal is posted, and a second write of the plugin waits behind the refused merge.
+// A read of the plugin after both, before any watcher event, gives what the file holds, and the cache equals the files
+// for both keys. On both carriers.
+#[test]
+fn a_refused_write_leaves_the_cache_equal_to_the_file_when_its_notice_is_lost() {
+    for carrier in crate::plugin_surface::CARRIERS {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let paths = support::home_paths(&root.path().join("home"));
+        let other = opencode_local::storage::Storage::new(&paths.state, "test").unwrap();
+        TWO.with_borrow_mut(Vec::clear);
+        let deps = Deps {
+            route: Route::Home,
+            roots: support::roots(paths, "test"),
+            builtins: vec![crate::plugin_surface::builtin(carrier, abi::Plugin { id: "two", setup: two })],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(80, 24, deps);
+        harness.tui.keymap.dispatch("two.read", None);
+        let theirs = json!({ "b": "b".repeat(140 << 10) });
+        other
+            .update_within("plugin.two.state", &json!({}), opencode_plugin::storage::VALUE_BYTES, |value| {
+                *value = theirs.clone();
+            })
+            .unwrap();
+        // The UI queue is full: the refusal's notice cannot be posted.
+        let proxy = harness.app.proxy();
+        while proxy.send(()).is_ok() {}
+        harness.tui.keymap.dispatch("two.add", None);
+        harness.tui.keymap.dispatch("two.note", None);
+        opencode_tui::plugins::host::flush_storage(&harness.tui);
+        harness.app.advance(Duration::ZERO);
+        harness.tui.keymap.dispatch("two.read", None);
+        assert_eq!(TWO.take().last().cloned(), Some(vec!["b".to_owned()]), "{carrier:?}: the refused merge shows");
+        for key in ["plugin.two.state", "plugin.two.note"] {
+            let file =
+                other.load(key, &Value::Null).ok().filter(|value| !value.is_null()).map(|value| value.to_string());
+            assert_eq!(opencode_plugin::Host::storage_read(&*harness.tui, key), file, "{carrier:?}: {key}");
+        }
     }
 }
