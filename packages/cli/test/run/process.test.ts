@@ -53,6 +53,7 @@ async function serve(directory: string) {
         interrupted.resolve()
         return Response.json({ interrupted: true })
       }
+      if (url.pathname === "/api/session/ses_1/environment") return Response.json({})
       if (url.pathname.endsWith("/wait")) return interrupted.promise.then(() => new Response(null, { status: 204 }))
       if (request.method === "GET") return Response.json({ data: [] })
       return new Response(null, { status: 404 })
@@ -60,6 +61,44 @@ async function serve(directory: string) {
   })
   return { server, requests, prompted: prompted.promise }
 }
+
+test("a private standalone run does not replace session environment", async () => {
+  await using directory = await tmpdir()
+  const fake = await serve(directory.path)
+  const release = path.join(directory.path, "release")
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      path.join(import.meta.dir, "../fixture/standalone-run.ts"),
+      fake.server.url.toString(),
+      path.join(directory.path, "spawns"),
+      release,
+    ],
+    {
+      cwd: path.join(import.meta.dir, "../.."),
+      env: isolatedEnv(directory.path, { PWD: directory.path }),
+      signal: AbortSignal.timeout(25_000),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  )
+  try {
+    await Promise.race([
+      fake.prompted,
+      child.exited.then(() => {
+        throw new Error("Run exited before prompting")
+      }),
+    ])
+    expect(fake.requests.some((item) => item.path.endsWith("/environment"))).toBe(false)
+    await Bun.write(release, "done")
+    expect(await child.exited).toBe(0)
+  } finally {
+    child.kill("SIGKILL")
+    await child.exited
+    await fake.server.stop(true)
+  }
+}, 30_000)
 
 function spawnRun(url: string, directory: string, message: string[], stdin: "pipe" | "ignore") {
   return Bun.spawn([process.execPath, "run", "src/index.ts", "run", "--server", url, ...message], {

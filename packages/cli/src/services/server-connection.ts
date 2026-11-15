@@ -15,13 +15,18 @@ export type Args = {
   /** Start the background service when none is running. When false, use a standalone server instead. */
   readonly autostart?: boolean
   readonly onStart?: EnsureOptions["onStart"]
+  readonly standaloneCommand?: ReadonlyArray<string>
 }
 
 export type Resolved = {
   readonly endpoint: Endpoint
-  readonly service?: ReturnType<typeof managedService>
+  readonly service?: ReturnType<typeof managedService> | Effect.Success<ReturnType<typeof Standalone.connect>>
   /** A private server started for this command alone. */
   readonly standalone?: boolean
+}
+
+export function sessionEnvironment(server: Pick<Resolved, "service" | "standalone">) {
+  return server.service && !server.standalone ? Env.session() : undefined
 }
 
 export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args = {}) {
@@ -49,14 +54,18 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     return { endpoint } satisfies Resolved
   }
   if (standalone || (yield* ServiceConfig.read()).disabled === true) {
-    return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
+    const connection = yield* Standalone.connect({ command: args.standaloneCommand })
+    return { endpoint: connection.endpoint, service: connection, standalone: true } satisfies Resolved
   }
 
   const mismatch = args.mismatch ?? "ignore"
   const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
   if (args.autostart === false) {
     const endpoint = yield* Service.discover({ ...options, version: undefined })
-    if (!endpoint) return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
+    if (!endpoint) {
+      const connection = yield* Standalone.connect({ command: args.standaloneCommand })
+      return { endpoint: connection.endpoint, service: connection, standalone: true } satisfies Resolved
+    }
     return { endpoint, service: managedService(options) } satisfies Resolved
   }
   return {

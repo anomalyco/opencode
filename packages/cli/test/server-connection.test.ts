@@ -2,7 +2,7 @@ import { NodeFileSystem, NodeServices } from "@effect/platform-node"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
-import { Console, Effect, FileSystem, Option, Scope } from "effect"
+import { Console, Effect, Exit, FileSystem, Option, Scope } from "effect"
 import { Command } from "effect/cli"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -13,7 +13,45 @@ import { ServerConnection } from "../src/services/server-connection"
 import { ServiceConfig } from "../src/services/service-config"
 import { isolatedEnv } from "./fixture/environment"
 
-test("resolution groups Effect-native lifecycle operations only for the managed service", async () => {
+test("standalone resolution exposes scoped reconnect services without managed session environment", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-standalone-resolution-"))
+  const scope = Scope.makeUnsafe()
+  try {
+    const command = [
+      process.execPath,
+      path.join(import.meta.dir, "fixture/standalone-fake.ts"),
+      path.join(root, "spawns"),
+    ]
+    const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+    const resolved = await Effect.runPromise(
+      ServerConnection.resolve({
+        standalone: true,
+        standaloneCommand: command,
+      }).pipe(Effect.provideService(Scope.Scope, scope), Effect.provide(NodeFileSystem.layer), Effect.provide(layer)),
+    )
+    expect(resolved.standalone).toBe(true)
+    expect(resolved.service).toBeDefined()
+    expect(ServerConnection.sessionEnvironment(resolved)).toBeUndefined()
+    expect(await Effect.runPromise(resolved.service!.reconnect().pipe(Effect.provide(NodeFileSystem.layer)))).toEqual(
+      resolved.endpoint,
+    )
+    const fallback = await Effect.runPromise(
+      ServerConnection.resolve({ autostart: false, standaloneCommand: command }).pipe(
+        Effect.provideService(Scope.Scope, scope),
+        Effect.provide(NodeFileSystem.layer),
+        Effect.provide(layer),
+      ),
+    )
+    expect(fallback.standalone).toBe(true)
+    expect(fallback.service).toBeDefined()
+    expect(ServerConnection.sessionEnvironment(fallback)).toBeUndefined()
+  } finally {
+    await Effect.runPromise(Scope.close(scope, Exit.void))
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("resolution groups Effect-native lifecycle operations for the managed service", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-server-resolution-"))
   const id = "server-resolution-test"
   const server = Bun.serve({
@@ -46,6 +84,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
 
     expect(resolved.endpoint.url).toBe(server.url.toString())
     expect(resolved.service).toBeDefined()
+    expect(ServerConnection.sessionEnvironment(resolved)).toBeDefined()
     if (!resolved.service) throw new Error("Expected managed service capabilities")
     expect(Effect.isEffect(resolved.service.reconnect())).toBe(true)
     expect(Effect.isEffect(resolved.service.restart())).toBe(true)

@@ -25,6 +25,7 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
           endpoint: server.endpoint,
           reconnect: service ? (signal) => runServicePromise(service.reconnect(), { signal }) : undefined,
         },
+        environment: ServerConnection.sessionEnvironment(server),
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
         fork: input.fork,

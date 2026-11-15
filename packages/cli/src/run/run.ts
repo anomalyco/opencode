@@ -10,7 +10,6 @@ import { createWorktreeLocation, parseSessionTargetModel, resolveSessionTarget }
 import { toolInlineInfo } from "@opencode/tui/mini/tool"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
-import { Env } from "../env"
 import { errorMessage } from "../util/error"
 
 export type RunCommandInput = {
@@ -103,7 +102,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
       ? { providerID: explicit.model.providerID, id: explicit.model.modelID, variant: explicit.variant }
       : undefined,
     agent: input.agent,
-    environment: input.server.service ? Env.session() : undefined,
+    environment: ServerConnection.sessionEnvironment(input.server),
     prepare: async (next) => {
       if (explicit?.variant && !next.model)
         throw new RunTargetError("Cannot select a variant before selecting a model", next.session?.id)

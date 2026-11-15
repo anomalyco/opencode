@@ -6,13 +6,13 @@ import { setTimeout } from "node:timers/promises"
 import { readStdin } from "./util/io"
 import { createMiniHost, INTERACTIVE_INPUT_ERROR, usingInteractiveStdin } from "./mini-host"
 import { parseSessionTargetModel, resolveSessionTarget, type SessionTargetPreparation } from "./session-target"
-import { Env } from "./env"
 
 export type MiniCommandInput = {
   server: {
     endpoint: Endpoint
     reconnect?: (signal: AbortSignal) => Promise<Endpoint>
   }
+  environment?: Readonly<Record<string, string>>
   continue?: boolean
   session?: string
   fork?: boolean
@@ -40,7 +40,7 @@ export async function runMini(input: MiniCommandInput) {
       const directory = localDirectory()
       const connection = createMiniConnection(input.server)
       const sdk = connection.sdk
-      const environment = input.server.reconnect ? Env.session() : undefined
+      const environment = input.environment
       const requested = parseModel(input.model)
       const model = requested ? { providerID: requested.providerID, modelID: requested.id } : undefined
       const prepare = prepareTarget(input.agent)
