@@ -163,7 +163,8 @@ it.live("serves a local plugin's GUI bundle, and reloads it alone when only the 
 
     expect(edited.revision).toBe(first.revision)
     expect((yield* plugins.gui(id))?.revision).not.toBe(served?.revision)
-    expect(updates.length).toBe(published + 1)
+    // The new bundle, plus readiness flipping to false and back to true around the activation.
+    expect(updates.length).toBe(published + 3)
     expect(yield* Effect.promise(() => Bun.file(starts).text())).toBe("x")
   }).pipe(Effect.scoped),
 )

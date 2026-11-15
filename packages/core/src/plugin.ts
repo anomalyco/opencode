@@ -27,16 +27,26 @@ const layer = Layer.effect(
     const ready = yield* Latch.make(true)
     const pending = new Set<object>()
     let closed = false
+    // `plugin.list` reports readiness, so its flips are announced like inventory changes.
+    const announce = bus.publish(Plugin.Event.Updated, {}).pipe(Effect.asVoid)
     const holdUnsafe = () => {
       if (closed) return Effect.void
       const token = {}
       pending.add(token)
       ready.closeUnsafe()
-      return Effect.sync(() => {
-        if (pending.delete(token) && pending.size === 0) ready.openUnsafe()
+      return Effect.suspend(() => {
+        if (!pending.delete(token) || pending.size > 0) return Effect.void
+        ready.openUnsafe()
+        return announce
       })
     }
-    const hold = () => Effect.sync(holdUnsafe)
+    const isReady = Effect.sync(() => pending.size === 0)
+    const hold = () =>
+      Effect.suspend(() => {
+        const settled = pending.size === 0
+        const release = holdUnsafe()
+        return settled && !closed ? announce.pipe(Effect.as(release)) : Effect.succeed(release)
+      })
     const pendingFailures = yield* Queue.unbounded<PendingFailure>()
     let discovered: readonly Failure[] = []
     let inventory: Plugin.Info[] = []
@@ -76,7 +86,7 @@ const layer = Layer.effect(
           release: holdUnsafe(),
         })
       })
-      const host = yield* PluginHost.make({ list }, plugin.id).pipe(Effect.provideContext(hostContext))
+      const host = yield* PluginHost.make({ list, ready: isReady }, plugin.id).pipe(Effect.provideContext(hostContext))
       const exit = yield* Effect.suspend(() => plugin.effect(host)).pipe(
         grouped,
         inherit,
@@ -269,6 +279,7 @@ const layer = Layer.effect(
       activate,
       close,
       awaitActivation: ready.await,
+      ready: isReady,
       hold,
       list,
       gui,
