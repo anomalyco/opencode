@@ -589,7 +589,8 @@ impl Owner {
     /// Calls the mount's handler with `event`.
     fn send(self: &Rc<Self>, host: &dyn Host, event: &Event) -> Handled {
         match (&self.deliver, self.alive()) {
-            (Some(deliver), true) => delivered(deliver, host, self, event),
+            // What the handler asks for is one deeper than what made the router send it (review carbon new-1).
+            (Some(deliver), true) => crate::deeper(|| delivered(deliver, host, self, event)),
             _ => Handled::Pass,
         }
     }

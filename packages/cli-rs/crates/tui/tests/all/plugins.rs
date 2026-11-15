@@ -603,9 +603,96 @@ fn a_chain_of_dispatches_never_holds_the_ui_thread() {
         h.app.render();
         let second = CHAINED.get().1;
         assert!(second > first && second - first <= 2048, "loopback {loopback}: {first} then {second}");
+        // Each run adds two to the queue for the one it takes, but the queue stops growing at its bound (carbon new-1).
+        for _ in 0..80 {
+            h.app.render();
+        }
+        let waiting = opencode_plugin::effects_waiting();
+        assert!((60_000..=1 << 16).contains(&waiting), "loopback {loopback}: {waiting} effects wait");
         // The UI still takes input: the composer shows what was typed.
         h.app.type_text("still here");
         h.wait_for("still here");
+        h.tui.plugins.deactivate_all();
+        h.app.advance(Duration::from_millis(16));
+    }
+}
+
+thread_local! {
+    /// How often `burst.hit` ran, and how often the `ring` overlay heard it closed.
+    static BURST: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
+}
+
+/// `burst.go` dispatches `burst.hit` 3,000 times in one call. A press on `PAD` opens the overlay `ring` twice, and the
+/// pad opens it again each time it hears one closed: each open replaces the one before, which tells the pad it closed.
+fn burst(setup: &mut abi::Setup) -> Result<(), String> {
+    use abi::interact::{Anchor, Event, Handled, Interact, Overlay, PointerKind};
+    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let ring = || Overlay { surface: "ring".into(), anchor: Anchor::Point { x: 2, y: 2 }, width: 10, height: 1 };
+    setup.command(command("burst.go"), |host, _| (0..3000).for_each(|_| host.dispatch("burst.hit", None)));
+    setup.command(command("burst.hit"), |_, _| BURST.set((BURST.get().0 + 1, BURST.get().1)));
+    setup.surface(abi::v2::Surface::new("ring", abi::v2::Place::Overlay("ring".into()), |_| {
+        abi::v2::Node::text(vec![abi::Span::new("RING")])
+    }));
+    let pad = |_: &mut abi::v2::View<'_>| {
+        let interact = Interact { pointer: true, ..Interact::default() };
+        abi::v2::Node::row(vec![abi::v2::Node::text(vec![abi::Span::new("burst ready PAD")])])
+            .with_id("pad")
+            .interact(interact)
+    };
+    setup.surface(abi::v2::Surface::new("pad", abi::v2::Place::Slot(abi::Placement::append("home.footer")), pad).on(
+        move |host, event| {
+            match event {
+                // The second replaces the first, which tells the pad it closed.
+                Event::Pointer(pointer) if pointer.kind == PointerKind::Down => {
+                    host.overlay(ring());
+                    host.overlay(ring());
+                }
+                Event::Closed { .. } => {
+                    BURST.set((BURST.get().0, BURST.get().1 + 1));
+                    host.overlay(ring());
+                }
+                _ => {}
+            }
+            Handled::Consume
+        },
+    ));
+    Ok(())
+}
+
+// Expected (review carbon new-1): every effect is an entry of its own on every carrier: a call that dispatches 3,000
+// commands runs at most a frame's bound of them before a paint, as on the linked carrier; and an overlay opened again
+// each time the one it replaced tells it closed is a chain that ends, though no dispatch is in it.
+#[test]
+fn one_call_of_many_effects_and_a_chain_of_closes_are_bounded() {
+    for loopback in [false, true] {
+        let h = home_with(
+            burst,
+            abi::export_plugin!(@loopback "probe", burst),
+            loopback,
+            support::deps(Arc::new(fake(String::new()))),
+        );
+        h.wait_for("burst ready");
+        BURST.set((0, 0));
+        h.tui.keymap.dispatch("burst.go", None);
+        h.app.advance(Duration::from_millis(16));
+        let first = BURST.get().0;
+        assert!((1..=1024).contains(&first), "loopback {loopback}: {first} ran before the first paint");
+        while BURST.get().0 < 3000 {
+            let before = BURST.get().0;
+            h.app.render();
+            assert!(BURST.get().0 > before, "loopback {loopback}: stuck at {before}");
+        }
+        assert_eq!(BURST.get().0, 3000, "loopback {loopback}");
+        let (x, y) = h.find("PAD");
+        h.app.click(x, y);
+        for _ in 0..4 {
+            h.app.advance(Duration::from_millis(16));
+            h.app.render();
+        }
+        let closes = BURST.get().1;
+        assert!((2..=100).contains(&closes), "loopback {loopback}: the overlay closed {closes} times");
+        h.app.render();
+        assert_eq!(BURST.get().1, closes, "loopback {loopback}: the chain went on");
         h.tui.plugins.deactivate_all();
         h.app.advance(Duration::from_millis(16));
     }

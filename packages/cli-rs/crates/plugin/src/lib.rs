@@ -942,7 +942,7 @@ impl Scope {
                 outer.undo.0.extend(call.undo.0);
                 outer.staged = call.staged;
             }
-            (_, None) => call.effects.into_iter().for_each(|effect| defer(&self.host, effect)),
+            (_, None) => call.effects.into_iter().for_each(|effect| request(&self.host, &self.id, effect)),
         }
         out
     }
@@ -1519,7 +1519,7 @@ impl Scoped<'_> {
     fn defer(&self, effect: impl FnOnce(&dyn Host) + 'static) {
         match &mut *self.scope.call.borrow_mut() {
             Some(call) => call.effects.push(Box::new(effect)),
-            None => defer(&self.scope.host, effect),
+            None => request(&self.scope.host, &self.scope.id, effect),
         }
     }
 
@@ -1625,8 +1625,11 @@ thread_local! {
 /// such a chain, and the UI thread would never read input again (review carbon-2). Other effects, such as a reply a
 /// fetch got at once, keep the depth of the one that asked: only the frame's count bounds them.
 const CHAIN: u32 = 64;
-/// At most this many effects run in a frame without the queue going empty; the rest waits for the next paint, so a
-/// chain that fans out still lets the UI read input and paint (review carbon-2).
+/// At most this many effects wait: a plugin's request past them is dropped, so a chain that fans out over frames
+/// cannot grow the queue without bound (review carbon new-1). The host's own work is never dropped.
+const QUEUE: usize = 1 << 16;
+/// At most this many effects run in a frame; the rest waits for the next paint, so a chain that fans out, or many
+/// answers that arrive at once, still let the UI read input and paint (reviews carbon-2, carbon new-1).
 const FRAME_EFFECTS: usize = 1024;
 
 /// Acts on what the budget said of a call of plugin `id`: a plugin that became slow is told once a session, unless the
@@ -1673,12 +1676,7 @@ pub(crate) fn close_at_paint(host: &Weak<dyn Host>, monitor: &Rc<contain::Monito
 /// when the host routes its next message ([`flush`]).
 pub(crate) fn defer(host: &Weak<dyn Host>, effect: impl FnOnce(&dyn Host) + 'static) {
     let Some(strong) = host.upgrade() else { return };
-    let depth = DEPTH.get();
-    if depth > CHAIN {
-        log::warn!("a plugin effect asked for under {CHAIN} dispatches of effects was dropped");
-        return;
-    }
-    EFFECTS.with(|effects| effects.borrow_mut().push_back((host.clone(), depth, Box::new(effect))));
+    EFFECTS.with(|effects| effects.borrow_mut().push_back((host.clone(), DEPTH.get(), Box::new(effect))));
     // Each effect asks for a drain of its own, as each was deferred before; a drain finds the queue empty once an
     // earlier one or a message ran it.
     strong.app().defer(|_| flush());
@@ -1702,22 +1700,47 @@ pub fn flush() {
     FLUSHING.with(|flushing| flushing.set(false));
 }
 
-/// Runs command `name` for an effect a plugin asked for: what it asks for in turn is one dispatch deeper ([`CHAIN`]).
-pub(crate) fn dispatch(host: &dyn Host, name: &str, input: Option<&str>) {
-    let outer = DEPTH.get();
-    DEPTH.set(outer + 1);
-    host.dispatch(name, input);
-    DEPTH.set(outer);
+/// [`defer`] for what plugin `plugin` asked for, on every carrier, one entry an effect: dropped past [`CHAIN`] or
+/// [`QUEUE`].
+pub(crate) fn request(host: &Weak<dyn Host>, plugin: &str, effect: impl FnOnce(&dyn Host) + 'static) {
+    let depth = DEPTH.get();
+    if depth > CHAIN {
+        log::warn!("plugin {plugin}: an effect asked for under {CHAIN} dispatches and events of effects was dropped");
+        return;
+    }
+    if EFFECTS.with(|effects| effects.borrow().len()) >= QUEUE {
+        log::warn!("plugin {plugin}: an effect was dropped, as {QUEUE} effects wait");
+        return;
+    }
+    defer(host, effect);
 }
 
-/// The next effect to run, unless the queue is empty or [`FRAME_EFFECTS`] ran in this frame while it never was: then
-/// the rest runs as the next paint starts. Work that drains starts the count again, so only a chain that keeps the
-/// queue full waits, and never a run of ordinary turns between two paints.
+/// How many effects wait on this thread, for the tests of [`QUEUE`].
+#[doc(hidden)]
+pub fn effects_waiting() -> usize {
+    EFFECTS.with(|effects| effects.borrow().len())
+}
+
+/// Runs command `name` for an effect a plugin asked for: what it asks for in turn is one deeper ([`CHAIN`]).
+pub(crate) fn dispatch(host: &dyn Host, name: &str, input: Option<&str>) {
+    deeper(|| host.dispatch(name, input));
+}
+
+/// Runs `f`, a call into a plugin that what runs now causes (a dispatch, an event its input router sends it), one
+/// deeper: what it asks for counts toward [`CHAIN`], so a chain through events, such as an overlay opened again as
+/// the overlay it replaced tells it closed, ends too (review carbon new-1).
+pub(crate) fn deeper<R>(f: impl FnOnce() -> R) -> R {
+    let outer = DEPTH.get();
+    DEPTH.set(outer + 1);
+    let out = f();
+    DEPTH.set(outer);
+    out
+}
+
+/// The next effect to run, unless the queue is empty or [`FRAME_EFFECTS`] ran in this frame, whatever asked for them
+/// (many answers of a carrier arrive in one turn): then the rest runs as the next paint starts (review carbon new-1).
 fn next_effect() -> Option<Queued> {
-    let Some(next) = EFFECTS.with(|effects| effects.borrow_mut().pop_front()) else {
-        RAN.set(((0, 0), 0, false));
-        return None;
-    };
+    let next = EFFECTS.with(|effects| effects.borrow_mut().pop_front())?;
     // The effect of a host that is gone runs nothing.
     let Some(host) = next.0.upgrade() else { return Some(next) };
     let frame = (Rc::as_ptr(&host).cast::<()>() as usize, host.app().frame_number());
