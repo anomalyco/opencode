@@ -2748,3 +2748,61 @@ fn a_claimed_part_that_replaces_its_picture_holds_only_the_one_it_shows() {
         assert_eq!(held, (0, opencode_plugin::limits::Held::default()), "{carrier:?}: held once the part went");
     }
 }
+
+thread_local! {
+    /// Each view of a `coalesce` part, as the plugin logs it: the bumps it saw and the input it drew.
+    static COALESCED: RefCell<Vec<(u32, String)>> = const { RefCell::new(Vec::new()) };
+    /// `claim.coalesce` declines its parts.
+    static DECLINES: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Claims `coalesce` calls with a line of how often its command ran and the input so far, which it logs.
+fn plugin_coalesce(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command::default().with_name("claim.coalesce".into()), |_, _| BUMPS.set(BUMPS.get() + 1));
+    setup.claim(Claim::tool("coalesce", |_, part| {
+        let input = lines(part).get(1).cloned().unwrap_or_default();
+        COALESCED.with_borrow_mut(|log| log.push((BUMPS.get(), input.clone())));
+        if DECLINES.get() {
+            return None;
+        }
+        Some(v2::Node::text(vec![abi::Span::new(format!("coalesced {} {input}", BUMPS.get()))]))
+    }));
+    Ok(())
+}
+
+// Expected (4.11, 4.14 `work`; review bigboi 12): a part's revision and a handler of its plugin in the same frame give
+// the part one view in that frame, and the next paint views it once with the newest of both: the command's effect and
+// the newest content; a frame between keeps the tree. A view at that paint that declines hands the row back at that
+// paint. On both carriers.
+#[test]
+fn a_revision_and_a_handler_in_one_frame_give_a_part_one_view() {
+    for carrier in CARRIERS {
+        BUMPS.set(0);
+        DECLINES.set(false);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.coalesce", setup: plugin_coalesce })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "coalesce" }));
+        world.settle();
+        world.harness.wait_for("coalesced 0");
+        for refuse in [false, true] {
+            COALESCED.with_borrow_mut(Vec::clear);
+            let views = || COALESCED.with_borrow(Vec::len);
+            world.harness.app.advance(Duration::from_millis(20));
+            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": if refuse { "b" } else { "a" } }));
+            assert_eq!(views(), 1, "{carrier:?}: the revision is viewed at once");
+            DECLINES.set(refuse);
+            world.harness.tui.keymap.dispatch("claim.coalesce", None);
+            assert_eq!(views(), 1, "{carrier:?}: the handler's redraw viewed the part again in the frame");
+            world.harness.app.render();
+            assert_eq!(views(), 1, "{carrier:?}: the paint of the frame that viewed does not view again");
+            world.harness.app.render();
+            let log = COALESCED.with_borrow(Clone::clone);
+            let input = if refuse { "in ab" } else { "in a" };
+            assert_eq!(log.last(), Some(&(BUMPS.get(), input.to_owned())), "{carrier:?}: the paint saw the newest");
+            assert_eq!(views(), 2, "{carrier:?}: one view at the next paint: {log:?}");
+            let screen = world.frame().text();
+            let drawn = format!("coalesced {} {input}", BUMPS.get());
+            assert_eq!(screen.contains(&drawn), !refuse, "{carrier:?}: refuse {refuse}:\n{screen}");
+            assert_eq!(mounted().iter().any(|shown| shown.shows), !refuse, "{carrier:?}: {:?}", mounted());
+        }
+    }
+}
