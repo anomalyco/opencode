@@ -187,8 +187,11 @@ forbids the literals; that is a decision for 2.0, not a change a later 1.x can m
   only on a composer that shows, and a submit only where the composer may submit (no home form, its pane has the
   input).
 - `Read::abi_minor()`, the host's minor version, for a plugin that falls back on an older host; and
-  `export_plugin!("my.plugin", setup, requires_minor = 5)` for one that cannot, which a 1.4 host then refuses with a
-  message instead of running it with its 1.5 requests refused.
+  `export_plugin!(abi1, "my.plugin", setup, requires_minor = 5)` for one that cannot, which a 1.4 host then refuses
+  with a message instead of running it with its 1.5 requests refused. On 2.x, `Read::abi()` and `Setup::abi()` name
+  the major, minor and features the host serves, `View::or` lowers a node kind a later 2.x minor adds for an older
+  host, and `plugin!(id = "my.plugin", requires_minor = 1, setup)` (or `export_plugin!("my.plugin", setup,
+  requires_minor = 1)`) asks for host 2.1: both export the entry of ABI 2.
 - What a dispose callback that panics asked for is dropped, as for any call that panics; the others keep theirs.
 
 ## Moving from the 1.3 SDK to 1.4

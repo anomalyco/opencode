@@ -33,20 +33,22 @@ macro_rules! object {
 /// An enum of `$ty` tagged by `type`, of struct variants as [`object!`]'s.
 macro_rules! tagged {
     ($ty:ident, $description:expr, {
-        $($variant:ident { $($required:ident: $rs:expr),* $(,)? } { $($optional:ident: $os:expr),* $(,)? }),* $(,)?
+        $($(#[$meta:meta])* $variant:ident { $($required:ident: $rs:expr),* $(,)? } { $($optional:ident: $os:expr),* $(,)? }),* $(,)?
     }) => {{
         let _ = |value: &$ty| match value {
-            $($ty::$variant { $($required: _,)* $($optional: _,)* } => (),)*
+            $($(#[$meta])* $ty::$variant { $($required: _,)* $($optional: _,)* } => (),)*
         };
-        described(
-            json!({ "oneOf": [$(object(
+        let mut variants: Vec<Value> = Vec::new();
+        $(
+            $(#[$meta])*
+            variants.push(object(
                 &[$((stringify!($required), $rs)),*],
                 &[$((stringify!($optional), $os)),*],
                 Some(&kebab(stringify!($variant))),
                 "",
-            )),*] }),
-            $description,
-        )
+            ));
+        )*
+        described(json!({ "oneOf": variants }), $description)
     }};
 }
 
@@ -111,6 +113,8 @@ pub fn schema() -> Value {
             layout: reference("Layout") },
         Keep { key: string() } { },
         Canvas { } { id: nullable(string()), layout: reference("Layout"), version: uint64(), animate: boolean() },
+        #[cfg(any(test, feature = "next"))]
+        Later { text: string() } { id: nullable(string()) },
     });
     // A box's `interact` is flattened: its fields sit beside the box's own.
     let interact = object!(Interact, "", { } {
