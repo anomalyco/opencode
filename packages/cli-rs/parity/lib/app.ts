@@ -39,6 +39,8 @@ export type Step =
   | { pty: PtyStep }
   // Answers the requests a `hold` route of this path keeps waiting, and the ones that come after.
   | { release: string }
+  // Lets this many milliseconds pass with no input, so a later checkpoint sees what follows on its own.
+  | { wait: number }
   | {
       checkpoint: string
       // Text the TS frame contains once it is ready.

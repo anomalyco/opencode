@@ -25,6 +25,8 @@
   {"type":"/lastprompt"},
   {"keys":["enter"]},
   {"checkpoint":"dialog","until":"Esc · Close","fixture":"P.8/sidebar-prompt/dialog"},
+  {"wait":800},
+  {"checkpoint":"kept","until":"Esc · Close","fixture":"P.8/sidebar-prompt/kept"},
   {"keys":["escape"]},
   {"checkpoint":"closed","until":"Open full prompt","fixture":"P.8/sidebar-prompt/closed"}
  ],

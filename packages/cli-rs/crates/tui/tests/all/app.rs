@@ -172,6 +172,9 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             }
             Step::Event { event } => memory.emit(event),
             Step::Release { release } => memory.release(release),
+            Step::Wait { wait } => {
+                app.wait_until(Duration::from_millis(*wait), || false);
+            }
             Step::Drag { drag: [from, to] } => app.drag((from[0], from[1]), (to[0], to[1])),
             Step::Ide { ide: message } => {
                 let ide = ide.as_ref().expect("an ide step needs `ide` in the scenario");

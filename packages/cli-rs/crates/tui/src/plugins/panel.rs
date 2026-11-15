@@ -119,7 +119,7 @@ pub fn open(tui: &Tui, id: &str, key: &str) -> bool {
 /// `F16-plugin-dialog-ends-with-activation`). The dialogs replace each other, so the one on top is the only one.
 pub fn close(tui: &Tui, id: &str) {
     let owner = tui.reads.owner.borrow().clone();
-    if owner.is_some_and(|(owner, generation)| owner == id && !tui.plugins.live(id, generation)) {
+    if owner.is_some_and(|(owner, generation)| owner == id && !tui.plugins.owns(id, generation)) {
         tui.dialogs.clear();
     }
 }
@@ -1117,13 +1117,14 @@ impl Live {
 }
 
 /// Runs `owner`'s `action` once the current event is handled; `value`, a prompt's text, is its input. An action whose
-/// activation ended before then reaches nothing, not the build that replaced it (review carbon-pt-1).
+/// activation ended before then reaches nothing, not the build that replaced it (review carbon-pt-1), unless the
+/// activation that replaced it goes on from it (a reload of a JS plugin's registrations, FT-4).
 fn run(tui: &Tui, owner: &Owner, action: &abi::Action, value: Option<&str>) {
     let abi::Action::Command { name, input } = action.clone();
     let input = value.map(str::to_owned).or(input);
     let owner = owner.clone();
     tui.app.defer(bind!(tui, |tui, _| {
-        if tui.plugins.live(&owner.0, owner.1) {
+        if tui.plugins.owns(&owner.0, owner.1) {
             tui.keymap.dispatch(&name, input.as_deref());
         }
     }));
