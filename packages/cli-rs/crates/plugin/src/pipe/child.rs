@@ -155,6 +155,9 @@ struct Shared {
     acked: AtomicU64,
     /// The JS host said the protocol's hello: it started.
     hello: AtomicBool,
+    /// The reader waits for the host to take its trees: what the JS host sent after them is not read, so its silence
+    /// is the host's, not the JS host's (FT-1).
+    held: AtomicBool,
     /// Bytes read from the child, and of them in trees.
     read: AtomicU64,
     read_trees: AtomicU64,
@@ -215,6 +218,7 @@ impl Child {
             watch: Condvar::new(),
             acked: AtomicU64::new(0),
             hello: AtomicBool::new(false),
+            held: AtomicBool::new(false),
             read: AtomicU64::new(0),
             read_trees: AtomicU64::new(0),
             closed: AtomicBool::new(false),
@@ -610,10 +614,18 @@ fn read(shared: &Shared, stdout: ChildStdout) {
             shared.watch.notify_all();
         }
         if matches!(event, Event::Tree(_)) {
-            // Backpressure: past the bound of unread trees the child blocks on its own pipe.
+            // Backpressure: past the bound of unread trees the child blocks on its own pipe. Until the host takes them,
+            // what the child sent after them waits unread: the time is not the child's silence.
             let mut inbox = lock(&shared.inbox);
+            let held = inbox.trees >= shared.limits.trees;
+            shared.held.store(held, Ordering::Release);
             while inbox.trees >= shared.limits.trees && !shared.closed.load(Ordering::Acquire) {
                 inbox = shared.room.wait(inbox).unwrap_or_else(|poisoned| poisoned.into_inner());
+            }
+            drop(inbox);
+            if held {
+                lock(&shared.sent).progress = Instant::now();
+                shared.held.store(false, Ordering::Release);
             }
         }
         if !deliver(shared, event, len) {
@@ -681,6 +693,10 @@ fn watch(shared: &Shared) {
         }
         let now = Instant::now();
         let mut wait = shared.limits.poll.saturating_sub(now - polled);
+        // While the reader waits for the host to take its trees, the JS host's answers wait unread behind them.
+        if shared.held.load(Ordering::Acquire) {
+            owed.progress = now;
+        }
         if !owed.events.is_empty() {
             // The JS host's start and a setup that started may take the setup's time; anything else, the limit.
             let setup = !shared.hello.load(Ordering::Acquire)
@@ -959,6 +975,35 @@ mod tests {
             let hung = events.iter().any(|event| matches!(event, Event::Hung { seq: 1 }));
             assert_eq!(hung, late, "{wait:?}: {events:?}");
         }
+    }
+
+    // Expected (FT-1): an answer the JS host sent behind more trees than the host takes unread is not late while the host
+    // does not take them, however long that is: the time is the host's, not the JS host's. Once taken, it is read.
+    #[test]
+    fn an_answer_behind_unread_trees_is_not_late() {
+        let limits = Limits { ack: Duration::from_millis(100), trees: 2, ..Limits::default() };
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let (hello_file, answer_file) = (dir.path().join("hello"), dir.path().join("answer"));
+        std::fs::write(&hello_file, hello()).unwrap();
+        let mut answer: Vec<u8> = (1..=4).flat_map(tree).collect();
+        answer.extend(control(&Up::Done { seq: 1, effects: Vec::new(), error: None }));
+        std::fs::write(&answer_file, answer).unwrap();
+        // It answers once it read the event, never before it was sent.
+        let script = format!(
+            "cat '{}'; head -c 7 > /dev/null; cat '{}'; cat > /dev/null",
+            hello_file.display(),
+            answer_file.display()
+        );
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(script);
+        let child = Child::spawn(command, limits, || {}).unwrap();
+        child.send(wire::CONTROL, b"{}", Some(1), Wait::Answer).unwrap();
+        // The host takes nothing for well past the limit.
+        std::thread::sleep(Duration::from_millis(500));
+        let events = take_until(&child, |events| {
+            events.iter().any(|event| matches!(event, Event::Up(up) if matches!(**up, Up::Done { seq: 1, .. })))
+        });
+        assert!(!events.iter().any(|event| matches!(event, Event::Hung { .. })), "{events:?}");
     }
 
     // Expected: the JS host's start, until its hello, may take the setup's time, not the limit of an event, though the
