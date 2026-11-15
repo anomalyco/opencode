@@ -4882,8 +4882,14 @@ macro_rules! export_plugin {
             unsafe { $crate::runtime::create($id, $setup, host, options, instance, out) }
         }
     };
-    // The `create` of `$setup`, for tests that wire a plugin through the byte shims (`loader::native::loopback`).
+    // The `create` and `describe` of `$setup`, for tests that wire a plugin through the byte shims
+    // (`loader::native::loopback`); a 2.x library describes itself with its ID before any `create`.
     (@loopback $id:expr, $setup:expr) => {{
+        let (create, describe) = $crate::export_plugin!(@loopback_described $id, $setup);
+        $crate::runtime::Loopback { create, describe }
+    }};
+    // The `create` of `$setup` alone, for a test that builds its own table.
+    (@loopback_create $id:expr, $setup:expr) => {{
         #[allow(unsafe_code)]
         unsafe extern "C" fn create(
             host: *const $crate::HostApi,
@@ -4903,7 +4909,7 @@ macro_rules! export_plugin {
             // SAFETY: the loader passes what `PluginApi::describe` documents.
             unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), &[], out) }
         }
-        ($crate::export_plugin!(@loopback $id, $setup), describe)
+        ($crate::export_plugin!(@loopback_create $id, $setup), describe)
     }};
 }
 
@@ -4926,6 +4932,13 @@ pub mod runtime {
     /// SDK answers.
     pub const fn requires(minor: u32) -> u32 {
         if minor < 4 { 4 } else { minor }
+    }
+
+    /// The entries `export_plugin!(@loopback ..)` makes of a setup, for the loader's tests.
+    #[derive(Clone, Copy)]
+    pub struct Loopback {
+        pub create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
+        pub describe: unsafe extern "C" fn(*mut Owned) -> i32,
     }
 
     /// Runs `setup`. When it fails or panics, the dispose callbacks it registered run before this returns, while the

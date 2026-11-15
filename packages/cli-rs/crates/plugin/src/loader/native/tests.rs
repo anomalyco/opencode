@@ -616,11 +616,8 @@ fn stream(host: &Rc<TestHost>, registry: &Registry, chunks: &[&str]) -> Vec<Capt
 }
 
 /// A built-in whose `create` is `create`, wired through the byte shims of the C ABI (`Loopback`) and active.
-fn loopback(
-    host: &Rc<TestHost>,
-    create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
-) -> Registry {
-    let (definition, error) = super::loopback(&dynamic(host), create).unwrap();
+fn loopback(host: &Rc<TestHost>, entries: abi::runtime::Loopback) -> Registry {
+    let (definition, error) = super::loopback(&dynamic(host), entries).unwrap();
     let loopback = Registry::define(Vec::new(), []);
     loopback.load(&dynamic(host), definition.external("loopback.so", error));
     assert_eq!(entry(&loopback.entries(), "loopback.so").status, Status::Active);
@@ -1258,7 +1255,7 @@ fn the_version_gate_is_exact() {
         major,
         minor,
         requires_minor,
-        create: Some(abi::export_plugin!(@loopback "gate", first)),
+        create: Some(abi::export_plugin!(@loopback_create "gate", first)),
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
@@ -1728,13 +1725,13 @@ fn lifecycled(
 // runs it as it fails, leaves the plugin failed and not active, and acts the same on both paths.
 #[test]
 fn setup_and_dispose_effects_are_the_same_on_both_paths() {
-    let direct = lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), false, false);
+    let direct = lifecycled(lifecycle, abi::export_plugin!(@loopback_create "lifecycle", lifecycle), false, false);
     assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Active, true));
     assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
-    let through = lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), true, false);
+    let through = lifecycled(lifecycle, abi::export_plugin!(@loopback_create "lifecycle", lifecycle), true, false);
     assert_eq!((through.1, through.2), (direct.1, direct.2));
 
-    let failing = abi::export_plugin!(@loopback "lifecycle", lifecycle_failing);
+    let failing = abi::export_plugin!(@loopback_create "lifecycle", lifecycle_failing);
     let direct = lifecycled(lifecycle_failing, failing, false, false);
     assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Failed("lifecycle failed".to_owned()), false));
     assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
@@ -1752,7 +1749,7 @@ fn a_failed_plugin_gets_no_dispose_on_both_paths() {
     for (loopback, panic) in [(false, false), (false, true), (true, false), (true, true)] {
         LIFECYCLE_DISPOSED.set(0);
         let (_, toasts, fetches) =
-            lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), loopback, panic);
+            lifecycled(lifecycle, abi::export_plugin!(@loopback_create "lifecycle", lifecycle), loopback, panic);
         let calls: Vec<&str> =
             toasts.iter().map(String::as_str).filter(|toast| ["setup", "dispose"].contains(toast)).collect();
         let expected = if panic { (vec!["setup"], 0) } else { (vec!["setup", "dispose"], 1) };
@@ -2063,7 +2060,7 @@ fn panicking(host: &Rc<TestHost>, through: bool) -> Rc<Registry> {
         major: ABI_MAJOR,
         minor: ABI_MINOR,
         requires_minor: 0,
-        create: Some(abi::export_plugin!(@loopback "panicky", panicky)),
+        create: Some(abi::export_plugin!(@loopback_create "panicky", panicky)),
         call: Some(corrupting),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
@@ -3355,7 +3352,7 @@ fn a_refused_manifest_leaves_no_effect() {
         major: ABI_MAJOR,
         minor: ABI_MINOR,
         requires_minor: 0,
-        create: Some(abi::export_plugin!(@loopback "panicky", panicky)),
+        create: Some(abi::export_plugin!(@loopback_create "panicky", panicky)),
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
@@ -3403,6 +3400,101 @@ fn a_buffer_the_plugin_cannot_have_written_is_refused_unread() {
     }
 }
 
+thread_local! {
+    /// How the C-style setup below answers: 0 its manifest, 1 an error, 2 an error in a buffer it cannot have
+    /// written, 3 a panic.
+    static SETUP_ANSWER: Cell<u8> = const { Cell::new(0) };
+    static SETUP_CREATES: Cell<u32> = const { Cell::new(0) };
+    static SETUP_FREED: Cell<u32> = const { Cell::new(0) };
+    /// What the C-style `describe` answers.
+    static DESCRIBED: Cell<&'static str> = const { Cell::new("") };
+}
+
+/// A setup written in C: it asks for a toast, then answers as [`SETUP_ANSWER`] says.
+unsafe extern "C" fn c_create(host: *const HostApi, _: Bytes, instance: *mut *mut c_void, out: *mut Owned) -> i32 {
+    SETUP_CREATES.set(SETUP_CREATES.get() + 1);
+    Table(host).call(r#"{"type":"toast","variant":"info","message":"from setup"}"#);
+    let manifest = r#"{"id":"c","commands":[],"fences":[],"slots":[],"routes":[],"storage":[]}"#;
+    // SAFETY: the loader passes valid pointers; the instance pointer is never read.
+    unsafe {
+        let (status, written) = match SETUP_ANSWER.get() {
+            0 => {
+                *instance = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
+                (abi::OK, Owned::from_vec(manifest.as_bytes().to_vec()))
+            }
+            1 => (abi::ERROR, Owned::from_vec(b"no".to_vec())),
+            2 => (abi::ERROR, Owned { ptr: std::ptr::null_mut(), len: 5, cap: 5 }),
+            _ => (abi::PANIC, Owned::from_vec(b"boom".to_vec())),
+        };
+        *out = written;
+        status
+    }
+}
+
+unsafe extern "C" fn c_describe(out: *mut Owned) -> i32 {
+    // SAFETY: `out` is valid for writes.
+    unsafe { *out = Owned::from_vec(DESCRIBED.get().as_bytes().to_vec()) };
+    abi::OK
+}
+
+unsafe extern "C" fn c_call(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
+    // SAFETY: `out` is valid for writes.
+    unsafe { *out = Owned::from_vec(b"null".to_vec()) };
+    abi::OK
+}
+
+unsafe extern "C" fn c_free(owned: Owned) {
+    SETUP_FREED.set(SETUP_FREED.get() + 1);
+    // SAFETY: what the C-style plugin wrote, or a null pointer.
+    unsafe { owned.release() };
+}
+
+fn c_table(major: u32, describe: bool) -> PluginApi {
+    PluginApi {
+        size: size_of::<PluginApi>(),
+        major,
+        minor: if major == 1 { V1_MINOR } else { ABI_MINOR },
+        requires_minor: 0,
+        create: Some(c_create),
+        call: Some(c_call),
+        destroy: None,
+        free: Some(c_free),
+        describe: describe.then_some(c_describe as unsafe extern "C" fn(*mut Owned) -> i32),
+    }
+}
+
+// Expected (big-boi 6): a 2.x library names its ID in `describe` before anything of it runs: one without `describe`,
+// or whose `describe` names no ID or an empty one, is refused with what to do, and its setup never runs. A 1.x
+// library without an ID is still asked for it by one quiet setup, as 1.0 needs; a described one is set up only when it
+// is activated.
+#[test]
+fn a_2x_library_names_its_id_before_any_setup() {
+    let host = host();
+    for (major, describe, described, refusal, creates) in [
+        (ABI_MAJOR, false, "", Some("has no `describe`"), 0),
+        (ABI_MAJOR, true, r#"{"version":"1"}"#, Some("names no ID"), 0),
+        (ABI_MAJOR, true, r#"{"id":""}"#, Some("names no ID"), 0),
+        (ABI_MAJOR, true, r#"{"id":"c"}"#, None, 0),
+        (1, false, "", None, 1),
+        (1, true, r#"{"version":"1"}"#, None, 1),
+        (1, true, r#"{"id":"c"}"#, None, 0),
+    ] {
+        let case = format!("ABI {major}, describe {describe} {described}");
+        SETUP_ANSWER.set(0);
+        SETUP_CREATES.set(0);
+        DESCRIBED.set(described);
+        let defined = from_api(&dynamic(&host), &c_table(major, describe), major, None);
+        match refusal {
+            Some(needle) => {
+                let error = defined.err().unwrap_or_else(|| panic!("{case}: not refused"));
+                assert!(error.contains(needle) && error.contains("nonempty \"id\""), "{case}: {error}");
+            }
+            None => assert_eq!(defined.map(|(definition, _)| definition.id), Ok("c".to_owned()), "{case}"),
+        }
+        assert_eq!(SETUP_CREATES.get(), creates, "{case}: setup ran");
+    }
+}
+
 // Expected (big-boi 5, carbon-8): what a plugin lends the host's entries is checked as what it returns: `call`,
 // `send` and `report` refuse a null pointer with a length, and a length over the bound, before they read it or reach
 // the mailbox; `free` takes back the host's buffer by its pointer and capacity, whatever its length says.
@@ -3444,7 +3536,7 @@ fn the_host_answers_calls_on_its_ui_thread_only() {
         major: ABI_MAJOR,
         minor: ABI_MINOR,
         requires_minor: 0,
-        create: Some(abi::export_plugin!(@loopback "first", first)),
+        create: Some(abi::export_plugin!(@loopback_create "first", first)),
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),

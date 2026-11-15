@@ -6,7 +6,6 @@
 use crate::support::{self, Fake, Harness, deref_harness};
 
 use std::cell::{Cell, RefCell};
-use std::ffi::c_void;
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
@@ -513,7 +512,7 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
 /// The TUI's home with `setup` active, in process or wired through the C ABI's byte shims (`Loopback`).
 fn home_with(
     setup: fn(&mut abi::Setup) -> Result<(), String>,
-    create: unsafe extern "C" fn(*const abi::HostApi, abi::Bytes, *mut *mut c_void, *mut abi::Owned) -> i32,
+    create: abi::runtime::Loopback,
     loopback: bool,
     deps: Deps,
 ) -> Harness {
