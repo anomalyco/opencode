@@ -28,12 +28,19 @@ impl Epilogue {
 }
 
 /// The text to print after exit, or none when there is nothing to say. The session is the one the session
-/// route shows when the TUI quits, its title cut to 50 characters (`Locale.truncate`).
+/// route shows when the TUI quits, its title cut to 50 characters (`Locale.truncate`). An untitled session reads
+/// "New session" or "Child session" (`displayLabel`), where TS prints an empty title (D131-epilogue-untitled).
 pub fn text(tui: &Tui) -> Option<String> {
     let session = match tui.route() {
         Route::Session { id } => {
-            let title =
-                tui.data.read(|state| state.session(&id).and_then(|session| session.title.clone()).unwrap_or_default());
+            let title = tui.data.read(|state| {
+                let session = state.session(&id);
+                let child = session.is_some_and(|session| session.parent_id.is_some());
+                session
+                    .and_then(|session| session.title.clone())
+                    .filter(|title| !title.is_empty())
+                    .unwrap_or_else(|| crate::features::session_links::display_label(None, child))
+            });
             Some((opencode_ui::select::truncate(&title, 50), id))
         }
         _ => None,

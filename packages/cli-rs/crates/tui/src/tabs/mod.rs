@@ -341,11 +341,15 @@ pub fn route_changed(tui: &Tui) {
     tabs.history.borrow_mut().record(&root);
     if !open.iter().any(|tab| tab.session_id == root) {
         let fallback = tabs.new_tab.get().then(|| NEW_SESSION_TAB_TITLE.to_owned());
-        let known = title_of(tui, &root, None, None);
+        // `title`'s order: an untitled session's timestamped default comes after the new tab's "New session" (D131).
+        let (known, timestamped) = tui.data.read(|state| {
+            let info = state.session(&SessionID(root.clone()));
+            (info.and_then(|info| info.title.clone()), info.map(crate::dialogs::session_list::title))
+        });
         let session = root.clone();
         update(tui, move |scope| {
             let persisted = scope.tabs.iter().find(|tab| tab.session_id == session).and_then(|tab| tab.title.clone());
-            let title = known.clone().or(persisted).or(fallback.clone());
+            let title = known.clone().or(persisted).or(fallback.clone()).or(timestamped.clone());
             if let Some(tabs) = model::open(&scope.tabs, Tab::new(session.clone(), title)) {
                 scope.tabs = tabs;
             }
