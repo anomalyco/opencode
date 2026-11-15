@@ -6,7 +6,7 @@
   "x-abi": {
     "major": 2,
     "minor": 0,
-    "features": []
+    "features": ["image-bounds"]
   },
   "x-messages": {
     "describe": {
@@ -443,6 +443,9 @@
             "type": "null"
           }
         ]
+      },
+      "image-bounds": {
+        "$ref": "#/$defs/ImageBounds"
       },
       "fetch": {
         "$ref": "#/$defs/RequestId"
@@ -4462,6 +4465,15 @@
         {
           "type": "object",
           "properties": {
+            "type": {
+              "const": "image-bounds"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "name": {
               "type": "string"
             },
@@ -6664,6 +6676,23 @@
       },
       "required": ["version", "size", "location"],
       "description": "The host's version, size and location."
+    },
+    "ImageBounds": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "side": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": ["bytes", "side"],
+      "description": "The bounds of the images a host with `image-bounds` decodes."
     },
     "DrawList": {
       "description": "What a `draw` request answers: bytes, not JSON, and none to keep the list the host holds. A version byte (1), then records: an operation byte, the payload's length as a little-endian u32, and the payload. Every integer is little-endian; coordinates are cells from the canvas's top left corner. A color is r, g, b, a bytes. A style is 10 bytes: flags (1 a foreground, 2 a background), attributes (bold 1, dim 2, italic 4, underline 8, inverse 16, strikethrough 32), then the foreground and the background colors, each written whether it is set or not. A border is 0 single, 1 double, 2 rounded, 3 heavy. A reader skips a record of an operation it does not know, which is how a later 2.x adds one; a list the host cannot read fails the plugin, and one over a limit shows a placeholder.",
