@@ -1,7 +1,7 @@
 export * as SessionProjector from "./projector.js"
 
 import { castDraft, produce, type WritableDraft } from "immer"
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, notExists, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
 import path from "path"
 import { Config } from "../config.js"
@@ -16,7 +16,14 @@ import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionBlob } from "./blob.js"
-import { SessionInboxTable, SessionMessageTable, SessionPartTable, SessionTable, type SessionPartData } from "./sql.js"
+import {
+  SessionInboxTable,
+  SessionMessageTable,
+  SessionPartTable,
+  SessionPendingStepTable,
+  SessionTable,
+  type SessionPartData,
+} from "./sql.js"
 import { SessionStored } from "./stored.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import type { SQLiteUpdateSetSource } from "drizzle-orm/sqlite-core/query-builders/update"
@@ -1081,6 +1088,27 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Step.Started, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
+        const owners = yield* db
+          .update(SessionMessageTable)
+          .set({ step_started_seq: event.durable.seq, time_updated: sql`${SessionMessageTable.time_updated}` })
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, event.data.sessionID),
+              eq(SessionMessageTable.id, event.data.assistantMessageID),
+              eq(SessionMessageTable.type, "assistant"),
+              notExists(
+                db
+                  .select()
+                  .from(SessionPendingStepTable)
+                  .where(eq(SessionPendingStepTable.session_id, event.data.sessionID)),
+              ),
+            ),
+          )
+          .returning({ id: SessionMessageTable.id })
+          .all()
+          .pipe(Effect.orDie)
+        if (owners.length !== 1)
+          return yield* Effect.die(new Error("Step.Started requires exactly one assistant owner and no pending Step"))
         yield* touch(db, event)
       }),
     )

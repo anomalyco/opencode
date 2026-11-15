@@ -1,4 +1,14 @@
-import { blob, sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
+import {
+  blob,
+  sqliteTable,
+  text,
+  integer,
+  index,
+  primaryKey,
+  real,
+  uniqueIndex,
+  foreignKey,
+} from "drizzle-orm/sqlite-core"
 import { sql } from "drizzle-orm"
 import { directoryColumn, pathColumn } from "../database/path.js"
 import { ProjectTable } from "../project/sql.js"
@@ -17,6 +27,7 @@ import type { Session } from "@opencode/schema/session"
 import type { CompactionPayload, MovePayload, SyntheticPayload } from "@opencode/schema/session-inbox"
 import type { RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
+import type { Form } from "@opencode/schema/form"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 type SessionMessageData = DistributiveOmit<
@@ -93,14 +104,50 @@ export const SessionMessageTable = sqliteTable(
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionMessage.Type>().notNull(),
     seq: integer().notNull(),
+    step_started_seq: integer(),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<SessionMessageData>(),
   },
   (table) => [
+    // SQLite requires a matching non-partial unique key for the composite ownership foreign keys.
+    uniqueIndex("session_message_step_owner_unique").on(table.session_id, table.id, table.step_started_seq),
     uniqueIndex("session_message_session_seq_idx").on(table.session_id, table.seq),
     index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
     index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
     index("session_message_time_created_idx").on(table.time_created),
+  ],
+)
+
+export const SessionPendingStepTable = sqliteTable(
+  "session_pending_step",
+  {
+    session_id: text().$type<SessionSchema.ID>().notNull(),
+    assistant_message_id: text().$type<SessionMessage.ID>().notNull(),
+    generation: integer().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.session_id] }),
+    foreignKey({
+      columns: [table.session_id, table.assistant_message_id, table.generation],
+      foreignColumns: [SessionMessageTable.session_id, SessionMessageTable.id, SessionMessageTable.step_started_seq],
+    }).onDelete("cascade"),
+  ],
+)
+
+export const SessionQuestionTable = sqliteTable(
+  "session_question",
+  {
+    id: text().$type<Form.ID>().primaryKey(),
+    session_id: text().$type<SessionSchema.ID>().notNull(),
+    assistant_message_id: text().$type<SessionMessage.ID>().notNull(),
+    generation: integer().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.session_id, table.assistant_message_id, table.generation],
+      foreignColumns: [SessionMessageTable.session_id, SessionMessageTable.id, SessionMessageTable.step_started_seq],
+    }).onDelete("cascade"),
+    index("session_question_step_owner_idx").on(table.session_id, table.assistant_message_id, table.generation),
   ],
 )
 
