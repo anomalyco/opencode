@@ -738,22 +738,20 @@ impl Memo {
     }
 }
 
-/// A fingerprint of `node` and all it holds.
+/// A fingerprint of `node` and all it holds: its JSON, hashed at once. A hasher fed each token as JSON writes it costs
+/// several times more, a call per token (a view of 1,000 cards prints each card twice).
 fn print(node: &Node) -> u64 {
-    struct Hashing(std::collections::hash_map::DefaultHasher);
-    impl std::io::Write for Hashing {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            std::hash::Hasher::write(&mut self.0, bytes);
-            Ok(bytes.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
+    thread_local! {
+        static JSON: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
     }
-    let mut hashing = Hashing(Default::default());
-    // Writing to a hasher does not fail, and a node always serializes.
-    let _ = serde_json::to_writer(&mut hashing, node);
-    std::hash::Hasher::finish(&hashing.0)
+    JSON.with_borrow_mut(|json| {
+        json.clear();
+        // Writing to a vector does not fail, and a node always serializes.
+        let _ = serde_json::to_writer(&mut *json, node);
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hasher::write(&mut hasher, json);
+        std::hash::Hasher::finish(&hasher)
+    })
 }
 
 impl Node {
