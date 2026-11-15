@@ -2591,3 +2591,56 @@ fn a_run_is_a_record_a_row() {
         assert_eq!(rows, ["z           ", "     abcdefg", "     klmnopq"], "{step}");
     }
 }
+
+thread_local! {
+    /// The first byte of the 2 MiB list `test.huge`'s draw returns.
+    static HUGE: std::cell::Cell<u8> = const { std::cell::Cell::new(list::VERSION) };
+}
+
+/// A canvas in the home footer whose draw returns 2 MiB that start with [`HUGE`], twice the bytes one list may have.
+fn huge_setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let place = v2::Place::Slot(abi::Placement::append("home.footer.status"));
+    let view = |_: &mut v2::View<'_>| {
+        v2::Node::canvas("huge").layout(abi::Layout {
+            width: Some(abi::Width::Cells(30)),
+            height: Some(abi::Width::Cells(1)),
+            ..abi::Layout::default()
+        })
+    };
+    setup.surface(v2::Surface::new("huge", place, view).draw(|_| {
+        let mut bytes = vec![0; 2 << 20];
+        bytes[0] = HUGE.get();
+        Some(List::from_bytes(bytes))
+    }));
+    Ok(())
+}
+
+// Expected (P5's bounds; review bigboi 7): a draw's list past one list's bytes is over its limit and shows the
+// placeholder, and the plugin stays active; one whose first byte is no list's is malformed and fails the plugin, as
+// the canvas reads either. Through the C ABI the host takes neither in: it reads the list's length and first byte, and
+// copies none of its 2 MiB.
+#[test]
+fn a_draw_past_a_lists_bytes_is_over_and_not_copied() {
+    for carrier in crate::plugin_surface::CARRIERS {
+        for (first, over) in [(list::VERSION, true), (0, false)] {
+            HUGE.set(first);
+            let plugin = crate::plugin_surface::builtin(carrier, abi::Plugin { id: "test.huge", setup: huge_setup });
+            let before = opencode_plugin::loader::native::crossed();
+            let harness = open_tui(80, 24, vec![plugin]);
+            let screen = frame(&harness, Duration::from_millis(16)).text();
+            let received = opencode_plugin::loader::native::crossed().received - before.received;
+            assert!(received < 1 << 20, "{carrier:?}: the host copied {received} bytes");
+            let status = status(&harness, "test.huge");
+            match over {
+                true => {
+                    assert!(screen.contains(PLACEHOLDER), "{carrier:?}:\n{screen}");
+                    assert!(matches!(status, opencode_plugin::Status::Active), "{carrier:?}: {status:?}");
+                }
+                false => assert!(
+                    matches!(status, opencode_plugin::Status::Failed(ref error) if error.contains("cannot read")),
+                    "{carrier:?}: {status:?}"
+                ),
+            }
+        }
+    }
+}
