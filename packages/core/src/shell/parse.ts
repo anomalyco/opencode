@@ -18,7 +18,17 @@ export type Result = {
   directories: string[]
   /** Filesystem paths the command redirects output into, in source order. */
   writes?: string[]
+  /**
+   * True when a redirect target cannot be attributed to a path: its text is only known at run time, or it is
+   * relative and an earlier command changed directory. Such a write can only be checked against `*`.
+   */
+  writesUnresolved?: true
 }
+
+// Redirect targets that discard a stream instead of naming a file the command writes.
+const SINKS = new Set(["/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty"])
+// PowerShell discards a stream through `$null`, and `NUL` names the same device on Windows.
+const POWERSHELL_SINKS = /^(?:\$null|NUL)$/i
 
 const ARITY: Record<string, number> = {
   cat: 1,
@@ -172,12 +182,19 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
       return Effect.fail(new Error(`Portable shell scanner cannot analyze command: ${scanned.reason}`))
 
     const output: Result = { commands: [], directories: [] }
+    // A directory change rebases later relative redirect targets, which the scan cannot follow.
+    let moved = false
+    const record = (targets: { paths: string[]; unresolved: boolean }) => {
+      const relative = targets.paths.filter((value) => !path.isAbsolute(value))
+      if (targets.unresolved || (moved && relative.length > 0)) output.writesUnresolved = true
+      const checked = moved ? targets.paths.filter((value) => path.isAbsolute(value)) : targets.paths
+      if (checked.length > 0) output.writes = [...(output.writes ?? []), ...checked]
+    }
     for (const item of scanned.commands) {
       // Declarations are skipped as standalone permission resources, while nested substitutions remain.
       if (item.declaration) continue
-      const writes = redirectWrites(item, powershell, cwd, shell)
-      if (writes.length > 0) output.writes = [...(output.writes ?? []), ...writes]
       if (item.redirectPrefixEnd !== undefined) {
+        record(redirectWrites(item, powershell, cwd, shell))
         const head = item.resource.slice(0, item.redirectPrefixEnd)
         const next = item.resource[item.redirectPrefixEnd]
         const separator = next === "\t" || next === "\n" ? next : " "
@@ -221,11 +238,12 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
             }
           })
       const directoryCommand = unwrapDirectoryCommand(powershell ? words : item.rawWords, parts, powershell)
-      if (directoryCommand) {
-        const resolved = directoryArgs(directoryCommand, powershell, cwd, shell)
-        output.directories.push(...resolved.directories)
-        if (directoryCommand === parts && resolved.complete) continue
-      }
+      const directoryTargets = directoryCommand ? directoryArgs(directoryCommand, powershell, cwd, shell) : undefined
+      if (directoryTargets) output.directories.push(...directoryTargets.directories)
+      // A redirect on the directory command itself runs before the change takes effect.
+      record(redirectWrites(item, powershell, cwd, shell))
+      moved ||= directoryCommand !== undefined
+      if (directoryCommand === parts && directoryTargets?.complete) continue
       const selected = prefix(words.slice(0, PREFIX_LENGTH))
       const conventional = `${selected.join(" ")} *`
       const end = item.wordEnds?.[selected.length - 1]
@@ -252,22 +270,36 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
   })
 }
 
-// Filesystem paths a command's redirects name, skipping targets the shell only knows at run time.
+// Filesystem paths a command's redirects name, and whether any target could not be attributed to one.
 function redirectWrites(
   item: { redirects?: ReadonlyArray<{ raw: string; word: string }> },
   powershell: boolean,
   cwd: string,
   shell: string,
 ) {
-  return (item.redirects ?? []).flatMap((redirect): string[] => {
+  let unresolved = false
+  const paths = (item.redirects ?? []).flatMap((redirect): string[] => {
     if (powershell) {
+      if (POWERSHELL_SINKS.test(redirect.word)) return []
       const value = directoryArgument(redirect.word, true, cwd, shell)
-      return value === undefined ? [] : [value]
+      if (value === undefined) {
+        unresolved = true
+        return []
+      }
+      return SINKS.has(value) ? [] : [value]
     }
-    if (!isStaticBashWord(redirect.raw)) return []
+    if (!isStaticBashWord(redirect.raw)) {
+      unresolved = true
+      return []
+    }
     const value = expandKnownDirectory(redirect.word.replaceAll("$", "\0"), false, cwd, redirect.raw.startsWith("~"))
-    return value === undefined ? [] : [value]
+    if (value === undefined) {
+      unresolved = true
+      return []
+    }
+    return SINKS.has(value) ? [] : [value]
   })
+  return { paths, unresolved }
 }
 
 function unwrapDirectoryCommand(rawWords: string[], parts: Part[], powershell: boolean) {

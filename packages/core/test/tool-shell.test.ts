@@ -486,6 +486,90 @@ describe("ShellTool scanner permissions", () => {
       )
     })
 
+  // The built-in Plan agent allows everything except edits, which it denies outside its own directory.
+  const planAgent: Permission.Ruleset = [
+    { action: "*", resource: "*", effect: "allow" },
+    { action: "edit", resource: "*", effect: "deny" },
+  ]
+
+  test("the Plan agent still discards output to the null and standard devices", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        yield* redirectAgent(planAgent)
+        const marker = path.join(fixture.active, "marker")
+        for (const command of ["ls nope 2>/dev/null", "ls nope > /dev/null", "ls nope > /dev/stderr"]) {
+          const result = yield* runPermissionCommand(registry, command, marker, [])
+          expect(result.requests, command).toEqual([])
+          expect(result.exit, command).toMatchObject({ _tag: "Success", value: { status: "completed" } })
+        }
+      }),
+    ))
+
+  test("the Plan agent still blocks a redirect to a real file", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        yield* redirectAgent(planAgent)
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, `ls > '${marker}'`, marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({
+          _tag: "Success",
+          value: { status: "error", error: { message: expect.stringContaining("Permission denied: edit") } },
+        })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
+  test("a redirect target only known at run time is checked against the whole workspace", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const marker = path.join(fixture.active, "marker")
+        const command = `M='${marker}'; git status > "$M"`
+        yield* redirectAgent([
+          { action: "shell", resource: "git status *", effect: "allow" },
+          { action: "edit", resource: "*", effect: "deny" },
+        ])
+        const denied = yield* runPermissionCommand(registry, command, marker, [])
+        expect(denied.requests).toEqual([])
+        expect(denied.exit).toMatchObject({
+          _tag: "Success",
+          value: { status: "error", error: { message: expect.stringContaining("Permission denied: edit") } },
+        })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+
+        // The ruleset decides: an `edit` allow covers a target the scan cannot name.
+        yield* redirectAgent([
+          { action: "shell", resource: "git status *", effect: "allow" },
+          { action: "edit", resource: "*", effect: "allow" },
+        ])
+        const allowed = yield* runPermissionCommand(registry, command, marker, [])
+        expect(allowed.requests).toEqual([])
+        expect(allowed.exit).toMatchObject({ _tag: "Success", value: { status: "completed" } })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(true)
+      }),
+    ))
+
+  test("a relative target after a directory change is checked against the whole workspace", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(path.join(fixture.active, "sub")))
+        const marker = path.join(fixture.active, "sub", "marker")
+        // `marker` alone is allowed, so only the directory change makes this write unreachable by name.
+        yield* redirectAgent([
+          { action: "shell", resource: "*", effect: "allow" },
+          { action: "edit", resource: "*", effect: "deny" },
+          { action: "edit", resource: "marker", effect: "allow" },
+        ])
+        const denied = yield* runPermissionCommand(registry, "cd sub && printf reached > marker", marker, [])
+        expect(denied.requests).toEqual([])
+        expect(denied.exit).toMatchObject({
+          _tag: "Success",
+          value: { status: "error", error: { message: expect.stringContaining("Permission denied: edit") } },
+        })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
   test("a redirect the command rule allows still asks for the file it writes", () =>
     withScanner((registry, fixture) =>
       Effect.gen(function* () {

@@ -307,7 +307,16 @@ export const Plugin = {
           save: parsed.commands.map((command) => command.save),
           ...Permission.invocation(context),
         })
-      if (writes.length > 0)
+      // A target the scan cannot attribute to a path is checked against `*`, so the rules decide instead of
+      // the write going unchecked.
+      if (parsed.writesUnresolved)
+        yield* permission.assert({
+          action: "edit",
+          resources: ["*"],
+          save: ["*"],
+          ...Permission.invocation(context),
+        })
+      else if (writes.length > 0)
         yield* permission.assert({
           action: "edit",
           resources: writes.map((write) => write.resource),
