@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test"
+import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import path from "node:path"
 import { isolatedEnv } from "../fixture/environment"
 import { tmpdir } from "../fixture/tmpdir"
 
 // A server that admits the prompt and then keeps the Session running until interrupted.
 async function serve(directory: string) {
-  const requests: { method: string; path: string; body?: unknown }[] = []
+  const requests: { method: string; path: string; url: string; body?: unknown }[] = []
   const prompted = Promise.withResolvers<void>()
   const interrupted = Promise.withResolvers<void>()
   const location = { directory, project: { id: "project", directory, canonical: directory } }
@@ -16,7 +17,12 @@ async function serve(directory: string) {
     async fetch(request) {
       const url = new URL(request.url)
       const text = await request.text()
-      requests.push({ method: request.method, path: url.pathname, body: text ? JSON.parse(text) : undefined })
+      requests.push({
+        method: request.method,
+        path: url.pathname,
+        url: request.url,
+        body: text ? JSON.parse(text) : undefined,
+      })
       if (url.pathname === "/api/info")
         return Response.json({ version: "test", pid: 0, urls: [], paths: { tmp: directory } })
       if (request.method === "GET" && url.pathname === "/api/location") return Response.json(location)
@@ -85,6 +91,46 @@ test("run sends the message as typed", async () => {
     child.kill("SIGKILL")
     await child.exited
     await fake.server.stop(true)
+  }
+}, 30_000)
+
+test("run ignores a stale PWD and uses the actual cwd", async () => {
+  const base = await mkdtemp(path.join(import.meta.dir, ".pwd-repro-"))
+  const actual = path.join(base, "actual")
+  const stale = path.join(base, "stale")
+  await mkdir(actual, { recursive: true })
+  await mkdir(stale, { recursive: true })
+  const fake = await serve(actual)
+  const cli = path.join(import.meta.dir, "../..")
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      `--config=${path.join(cli, "bunfig.toml")}`,
+      "run",
+      path.join(cli, "src/index.ts"),
+      "run",
+      "--server",
+      fake.server.url.toString(),
+      "hello",
+    ],
+    {
+      cwd: actual,
+      env: isolatedEnv(actual, { PWD: stale }),
+      signal: AbortSignal.timeout(25_000),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  )
+  try {
+    await fake.prompted
+    const request = fake.requests.find((item) => item.path === "/api/location")
+    expect(new URL(request!.url).searchParams.get("location[directory]")).toBe(actual)
+  } finally {
+    child.kill("SIGKILL")
+    await child.exited
+    await fake.server.stop(true)
+    await rm(base, { recursive: true, force: true })
   }
 }, 30_000)
 

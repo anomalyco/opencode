@@ -202,7 +202,9 @@ function validate(input: MiniCommandInput) {
 }
 
 function localDirectory(): string {
-  const root = process.env.PWD ?? process.cwd()
+  // PWD is only a shell hint and can be stale when a parent process changes cwd
+  // without updating the environment. The actual process cwd is authoritative.
+  const root = process.cwd()
   try {
     process.chdir(root)
     return process.cwd()

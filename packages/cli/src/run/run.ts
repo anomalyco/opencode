@@ -59,7 +59,9 @@ async function run(input: RunCommandInput, signal: AbortSignal) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
   if (input.worktree !== undefined && (input.continue || input.session))
     fail("--worktree starts a new session and cannot be combined with --continue or --session")
-  const root = process.env.PWD ?? process.cwd()
+  // PWD is only a shell hint and can be stale when a parent process changes cwd
+  // without updating the environment. The actual process cwd is authoritative.
+  const root = process.cwd()
   const directory = localDirectory(root)
   const argument = input.message.join(" ") || undefined
   // With a message argument, stdin is extra context: a shell pipe is read in full, but the open, silent
