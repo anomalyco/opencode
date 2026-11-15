@@ -12,6 +12,7 @@
 pub mod approval;
 pub mod deps;
 pub mod native;
+pub mod quarantine;
 
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -29,6 +30,9 @@ pub fn entry_file() -> String {
     format!("plugin.{}", std::env::consts::DLL_EXTENSION)
 }
 
+/// A build to open: its digest, its bytes and its raw quarantine, read through one descriptor.
+type Build = (u64, Vec<u8>, Option<Vec<u8>>);
+
 /// Loads native builds.
 pub trait Backend {
     /// Loads the build `library`, read from the file `source`, against `host`, returning the definition, not yet
@@ -41,6 +45,21 @@ pub trait Backend {
         source: &Path,
         options: Option<&str>,
     ) -> Result<(Definition, ErrorFn), String>;
+
+    /// [`Backend::load`] of a build read whole through one descriptor, with the raw quarantine read through the same
+    /// one ([`quarantine::read`]): what the loaded copy carries is the attribute of the bytes that were read (final
+    /// review big-boi 3). A backend that keeps no quarantine loads the bytes alone.
+    fn load_read(
+        &self,
+        host: &Rc<dyn Host>,
+        library: &[u8],
+        quarantine: Option<&[u8]>,
+        source: &Path,
+        options: Option<&str>,
+    ) -> Result<(Definition, ErrorFn), String> {
+        let _ = quarantine;
+        self.load(host, library, source, options)
+    }
 }
 
 /// A `plugins` entry of `cli.json` that names no built-in: a TypeScript package or path, or a native build.
@@ -337,7 +356,7 @@ impl Loader {
             }
             return skip(SKIPPED);
         };
-        let (digest, bytes) = match self.admit(host, registry, target, &file, &listed) {
+        let (digest, bytes, quarantine) = match self.admit(host, registry, target, &file, &listed) {
             Ok(build) => build,
             Err(changed) => return changed,
         };
@@ -347,7 +366,9 @@ impl Loader {
         // Opening the library runs its code: the record names the build while it does, before its ID is known.
         let slot = registry.monitor().slot(&crate::contain::Artifact::external("", name, &format!("{digest:016x}")));
         let (loaded, _) = registry.monitor().call(slot, "load", || {
-            checked.and_then(|()| self.backend.load(host, &bytes, &file, target.options.as_deref()))
+            checked.and_then(|()| {
+                self.backend.load_read(host, &bytes, quarantine.as_deref(), &file, target.options.as_deref())
+            })
         });
         let loaded = loaded.and_then(|loaded| {
             if !registry.id_taken(&loaded.0.id, name) {
@@ -537,7 +558,8 @@ impl Loader {
     /// The one place that decides whether the library of `target`, at `file`, may be opened, before anything of it
     /// runs: a project's build waits for the user's approval (3.9), and the registry holds a build that crashed the
     /// client, every external one in safe mode, and every one in a client no parent guards (4.5). Returns the build's
-    /// digest and bytes to open, or, when it is held or unchanged, whether the manager's list changed.
+    /// digest, bytes and raw quarantine to open, all read through one descriptor, or, when it is held or unchanged,
+    /// whether the manager's list changed.
     fn admit(
         &self,
         host: &Rc<dyn Host>,
@@ -545,7 +567,7 @@ impl Loader {
         target: &Target,
         file: &Path,
         listed: &Option<Status>,
-    ) -> Result<(u64, Vec<u8>), bool> {
+    ) -> Result<Build, bool> {
         let name = target.target.as_str();
         // Setup runs with the options, so new options load the build again (TS `sameGeneration`).
         let digest = |build: &[u8]| {
@@ -555,7 +577,7 @@ impl Loader {
             hasher.finish()
         };
         let unchanged = |digest: u64| self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest);
-        let (digest, bytes) = match target.project {
+        let (digest, bytes, quarantine) = match target.project {
             // A project's build runs only once the user approved this artifact (3.9). Until then nothing of it is read
             // but its hash, nothing is opened, and it claims nothing. What is loaded is what was hashed. When it
             // cannot be identified, what ran from it stops (bigboi-8) and nothing is reported (carbon-5).
@@ -568,18 +590,32 @@ impl Loader {
                 if unchanged(digest) {
                     return Err(false);
                 }
-                match artifact.bytes(&mut handle) {
-                    Ok(bytes) => (digest, bytes),
+                // The quarantine of the file that was hashed, read through its descriptor (big-boi 3).
+                let read = artifact.bytes(&mut handle).and_then(|bytes| {
+                    let quarantine = quarantine::read(&handle).map_err(|error| format!("{}: {error}", file.display()));
+                    Ok((bytes, quarantine?))
+                });
+                match read {
+                    Ok((bytes, quarantine)) => (digest, bytes, quarantine),
                     Err(error) => return Err(self.hold(host, registry, name, Err(error), None)),
                 }
             }
             false => {
-                let read = std::fs::metadata(file).and_then(|metadata| match metadata.len() > approval::LIMIT {
-                    true => Err(std::io::Error::other(format!("larger than {} MiB", approval::LIMIT / 1024 / 1024))),
-                    false => std::fs::read(file),
+                // The bytes and their quarantine through one descriptor, as for a project's build.
+                let read = std::fs::File::open(file).and_then(|mut handle| {
+                    if handle.metadata()?.len() > approval::LIMIT {
+                        return Err(std::io::Error::other(format!(
+                            "larger than {} MiB",
+                            approval::LIMIT / 1024 / 1024
+                        )));
+                    }
+                    let mut bytes = Vec::new();
+                    std::io::Read::read_to_end(&mut std::io::Read::take(&mut handle, approval::LIMIT + 1), &mut bytes)?;
+                    let quarantine = quarantine::read(&handle).map_err(std::io::Error::other)?;
+                    Ok((bytes, quarantine))
                 });
-                let bytes = match read {
-                    Ok(bytes) => bytes,
+                let (bytes, quarantine) = match read {
+                    Ok(read) => read,
                     Err(error) => {
                         return Err(self.fail(
                             &**host,
@@ -595,7 +631,7 @@ impl Loader {
                 if unchanged(digest) {
                     return Err(false);
                 }
-                (digest, bytes)
+                (digest, bytes, quarantine)
             }
         };
         let build = format!("{digest:016x}");
@@ -608,7 +644,7 @@ impl Loader {
             }
             return Err(!was_held);
         }
-        Ok((digest, bytes))
+        Ok((digest, bytes, quarantine))
     }
 
     /// The one place that decides whether a project's plugin `target` may run: `artifact` (or why it cannot be read),
