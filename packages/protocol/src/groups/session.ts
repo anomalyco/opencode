@@ -820,6 +820,19 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         }),
       ),
     )
+    .add(
+      HttpApiEndpoint.post("session.presence", "/api/experimental/session/presence", {
+        payload: Session.PresenceReport,
+        success: HttpApiSchema.NoContent,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.session.presence",
+          summary: "Report open session tabs",
+          description:
+            "Experimental: may change without compatibility guarantees. Replaces the reporting client's open-tab set and refreshes its presence leases for idle compaction.",
+        }),
+      ),
+    )
     .annotateMerge(
       OpenApi.annotations({
         title: "session",

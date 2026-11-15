@@ -1,5 +1,7 @@
 import { Instance } from "@opencode/core/instance/service"
 import { Session } from "@opencode/core/session"
+import { SessionIdleCompaction } from "@opencode/core/session/idle-compaction"
+import { SessionPresence } from "@opencode/core/session/presence"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
@@ -37,6 +39,8 @@ function missingForm(id: Form.ID) {
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
+    const presence = yield* SessionPresence.Service
+    const idle = yield* SessionIdleCompaction.Service
     const transfer = yield* SessionTransfer.Service
     const instructions = yield* InstructionEntry.Service
     const instances = yield* Instance.Service
@@ -179,6 +183,15 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           yield* session
             .view({ sessionID: ctx.params.sessionID, idle: DateTime.toEpochMillis(ctx.payload.idle) })
             .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.presence",
+        Effect.fn(function* (ctx) {
+          const dropped = yield* presence.report({ client: ctx.payload.client, sessions: ctx.payload.sessions })
+          yield* Effect.forEach(ctx.payload.sessions, (sessionID) => idle.touch(sessionID), { discard: true })
+          yield* Effect.forEach(dropped, (sessionID) => idle.cancel(sessionID), { discard: true })
           return HttpApiSchema.NoContent.make()
         }),
       )

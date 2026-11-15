@@ -69,6 +69,14 @@ export const ListAnchor = Schema.Struct({
 }).annotate({ identifier: "Session.ListAnchor" })
 export interface ListAnchor extends Schema.Schema.Type<typeof ListAnchor> {}
 
+/** One client instance's full set of open session tabs; replaces that client's previous report. */
+export interface PresenceReport extends Schema.Schema.Type<typeof PresenceReport> {}
+export const PresenceReport = Schema.Struct({
+  /** Opaque per-instance identifier, persisted by the client. */
+  client: Schema.String,
+  sessions: Schema.Array(ID),
+}).annotate({ identifier: "Session.PresenceReport" })
+
 // These fields are also the session.list HTTP query parameters. Raw Schema.optional keeps that
 // endpoint's OpenAPI parameters unchanged.
 const ListFilterFields = {

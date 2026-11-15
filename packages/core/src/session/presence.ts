@@ -10,11 +10,14 @@ import { SessionStore } from "./store.js"
 const LEASE = Duration.hours(2)
 
 export interface Interface {
-  /** Replaces one client's open-tab set and refreshes its leases. Unknown and archived Sessions are ignored. */
+  /**
+   * Replaces one client's open-tab set and refreshes its leases. Unknown and archived Sessions are ignored.
+   * Returns the Sessions that lost their last lease.
+   */
   readonly report: (input: {
     readonly client: string
     readonly sessions: ReadonlyArray<Session.ID>
-  }) => Effect.Effect<void>
+  }) => Effect.Effect<ReadonlyArray<Session.ID>>
   /** Whether any client holds an unexpired lease for a live, unarchived Session. */
   readonly present: (sessionID: Session.ID) => Effect.Effect<boolean>
 }
@@ -37,15 +40,20 @@ export const layer = Layer.effect(
         store.get(sessionID).pipe(Effect.map((info) => (info && !info.time.archived ? sessionID : undefined))),
       )).filter((sessionID): sessionID is Session.ID => sessionID !== undefined)
 
+      const dropped: Session.ID[] = []
       for (const [sessionID, clients] of leases) {
         clients.delete(input.client)
-        if (clients.size === 0) leases.delete(sessionID)
+        if (clients.size === 0) {
+          leases.delete(sessionID)
+          if (!valid.includes(sessionID)) dropped.push(sessionID)
+        }
       }
       for (const sessionID of valid) {
         const clients = leases.get(sessionID) ?? new Map<string, number>()
         clients.set(input.client, expiry)
         leases.set(sessionID, clients)
       }
+      return dropped
     })
 
     const present = Effect.fn("SessionPresence.present")(function* (sessionID: Session.ID) {

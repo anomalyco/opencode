@@ -95,7 +95,10 @@ export type SessionInboxDelivery = "steer" | "queue"
 
 export type SessionInboxSyntheticPayload = { text: string; description?: string; metadata?: { [x: string]: JsonValue } }
 
-export type SessionInboxCompactionPayload = {}
+export type SessionInboxCompactionPayload = {
+  reason?: "manual" | "idle"
+  idle?: number | "Infinity" | "-Infinity" | "NaN"
+}
 
 export type ShellID = string
 
@@ -167,6 +170,8 @@ export type InstructionKey = string
 export type InstructionHash = string
 
 export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
+
+export type SessionInboxCompactionPayload1 = { reason?: "manual" | "idle"; idle?: number }
 
 export type SessionMessageNative1 = { [x: string]: any }
 
@@ -450,7 +455,7 @@ export type SessionMessageCompactionRunning = {
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "running"
-  reason: "auto" | "manual"
+  reason: "auto" | "manual" | "idle"
   summary: string
 }
 
@@ -576,7 +581,7 @@ export type SessionMessageCompactionFailed = {
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "failed"
-  reason: "auto" | "manual"
+  reason: "auto" | "manual" | "idle"
   error: SessionStructuredError
   cost?: MoneyUSD
   tokens?: TokenUsageInfo
@@ -1038,7 +1043,7 @@ export type SessionMessageCompactionCompleted = {
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "completed"
-  reason: "auto" | "manual"
+  reason: "auto" | "manual" | "idle"
   model?: ModelRef
   native?: SessionMessageNative
   summary: string
@@ -1576,7 +1581,7 @@ export type SessionCompactionStarted = {
   type: "session.compaction.started"
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
-  data: { sessionID: SessionID; reason: "auto" | "manual"; inputID?: SessionMessageID }
+  data: { sessionID: SessionID; reason: "auto" | "manual" | "idle"; inputID?: SessionMessageID }
 }
 
 export type SessionCompactionEnded = {
@@ -1588,7 +1593,7 @@ export type SessionCompactionEnded = {
   location?: LocationRef
   data: {
     sessionID: SessionID
-    reason: "auto" | "manual"
+    reason: "auto" | "manual" | "idle"
     model?: ModelRef
     native?: SessionMessageNative1
     text: string
@@ -1606,7 +1611,7 @@ export type SessionCompactionFailed = {
   location?: LocationRef
   data: {
     sessionID: SessionID
-    reason: "auto" | "manual"
+    reason: "auto" | "manual" | "idle"
     error: SessionStructuredError
     inputID?: SessionMessageID
     cost?: MoneyUSD
@@ -2472,7 +2477,12 @@ export type ConfigEntry =
                 }
           }
         }
-        compaction?: { auto?: boolean; keep?: { tokens?: number }; buffer?: ConfigCompactionPercent | number }
+        compaction?: {
+          auto?: boolean
+          keep?: { tokens?: number }
+          idle?: { min_tokens?: number }
+          buffer?: ConfigCompactionPercent | number
+        }
         skills?: Array<string>
         commands?: {
           [x: string]: {
@@ -2550,6 +2560,7 @@ export type ConfigEntry =
           background_compaction?: boolean
           media_blob?: boolean
           schedules?: boolean
+          idle_compaction?: boolean
           artifacts?: boolean
           codemode_vm?: boolean
           part_rows?: boolean
@@ -2610,7 +2621,7 @@ export type FormFields = [FormField, ...Array<FormField>]
 export type SessionInboxItem =
   | { type: "user"; payload: SessionInboxUserPayload1; delivery: SessionInboxDelivery }
   | { type: "synthetic"; payload: SessionInboxSyntheticPayload1; delivery: SessionInboxDelivery }
-  | { type: "compaction"; payload: SessionInboxCompactionPayload; delivery: SessionInboxDelivery }
+  | { type: "compaction"; payload: SessionInboxCompactionPayload1; delivery: SessionInboxDelivery }
   | { type: "move"; payload: SessionInboxMovePayload1; delivery: SessionInboxDelivery }
 
 export type SessionMessageAssistantTool1 = {
@@ -3894,6 +3905,10 @@ export type ExperimentalSessionLogInput = {
 
 export type ExperimentalSessionLogOutput = SessionLogItem
 
+export type ExperimentalSessionPresenceInput = { readonly client: string; readonly sessions: ReadonlyArray<string> }
+
+export type ExperimentalSessionPresenceOutput = void
+
 export type MessageListInput = {
   readonly sessionID: string
   readonly limit?: number | undefined
@@ -4910,6 +4925,12 @@ export type SessionLogInput = ExperimentalSessionLogInput
 
 /** @deprecated Use `ExperimentalSessionLogOutput`. Removed in the next minor. */
 export type SessionLogOutput = ExperimentalSessionLogOutput
+
+/** @deprecated Use `ExperimentalSessionPresenceInput`. Removed in the next minor. */
+export type SessionPresenceInput = ExperimentalSessionPresenceInput
+
+/** @deprecated Use `ExperimentalSessionPresenceOutput`. Removed in the next minor. */
+export type SessionPresenceOutput = ExperimentalSessionPresenceOutput
 
 /** @deprecated Use `ExperimentalGenerateTextInput`. Removed in the next minor. */
 export type GenerateTextInput = ExperimentalGenerateTextInput

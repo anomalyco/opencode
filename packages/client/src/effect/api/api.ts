@@ -474,6 +474,9 @@ export interface SessionApi<E = never> {
 
   /** @deprecated Use `client.experimental.session.log`. Removed in the next minor. */
   readonly log: ExperimentalSessionLogOperation<E>
+
+  /** @deprecated Use `client.experimental.session.presence`. Removed in the next minor. */
+  readonly presence: ExperimentalSessionPresenceOperation<E>
 }
 
 export type ExperimentalSessionStatsInput = {
@@ -1284,7 +1287,7 @@ export type ExperimentalSessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly reason: "auto" | "manual"
+            readonly reason: "auto" | "manual" | "idle"
             readonly inputID?: SessionMessage.ID | undefined
           }
         }
@@ -1299,7 +1302,7 @@ export type ExperimentalSessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly reason: "auto" | "manual"
+            readonly reason: "auto" | "manual" | "idle"
             readonly model?: Model.Ref | undefined
             readonly native?: SessionMessage.Native | undefined
             readonly text: string
@@ -1325,7 +1328,7 @@ export type ExperimentalSessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly reason: "auto" | "manual"
+            readonly reason: "auto" | "manual" | "idle"
             readonly error: {
               readonly type: string
               readonly message: string
@@ -1420,6 +1423,12 @@ export type ExperimentalSessionLogOperation<E = never> = (
   input: ExperimentalSessionLogInput,
 ) => Stream.Stream<ExperimentalSessionLogOutput, E>
 
+export type ExperimentalSessionPresenceInput = { readonly client: string; readonly sessions: ReadonlyArray<Session.ID> }
+export type ExperimentalSessionPresenceOutput = void
+export type ExperimentalSessionPresenceOperation<E = never> = (
+  input: ExperimentalSessionPresenceInput,
+) => Effect.Effect<ExperimentalSessionPresenceOutput, E>
+
 export interface ExperimentalSessionApi<E = never> {
   readonly stats: ExperimentalSessionStatsOperation<E>
   readonly import: ExperimentalSessionImportOperation<E>
@@ -1434,6 +1443,7 @@ export interface ExperimentalSessionApi<E = never> {
     }
   }
   readonly log: ExperimentalSessionLogOperation<E>
+  readonly presence: ExperimentalSessionPresenceOperation<E>
 }
 
 export type MessageListInput = {
@@ -2875,6 +2885,15 @@ export type SessionLogOutput = ExperimentalSessionLogOutput
 
 /** @deprecated Use `ExperimentalSessionLogOperation`. Removed in the next minor. */
 export type SessionLogOperation<E = never> = ExperimentalSessionLogOperation<E>
+
+/** @deprecated Use `ExperimentalSessionPresenceInput`. Removed in the next minor. */
+export type SessionPresenceInput = ExperimentalSessionPresenceInput
+
+/** @deprecated Use `ExperimentalSessionPresenceOutput`. Removed in the next minor. */
+export type SessionPresenceOutput = ExperimentalSessionPresenceOutput
+
+/** @deprecated Use `ExperimentalSessionPresenceOperation`. Removed in the next minor. */
+export type SessionPresenceOperation<E = never> = ExperimentalSessionPresenceOperation<E>
 
 /** @deprecated Use `ExperimentalGenerateTextInput`. Removed in the next minor. */
 export type GenerateTextInput = ExperimentalGenerateTextInput

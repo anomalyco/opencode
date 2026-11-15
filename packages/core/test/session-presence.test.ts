@@ -58,7 +58,7 @@ describe("SessionPresence", () => {
       expect(yield* presence.present(one.id)).toBe(true)
       expect(yield* presence.present(two.id)).toBe(true)
 
-      yield* presence.report({ client: "a", sessions: [one.id] })
+      expect(yield* presence.report({ client: "a", sessions: [one.id] })).toEqual([two.id])
       expect(yield* presence.present(one.id)).toBe(true)
       expect(yield* presence.present(two.id)).toBe(false)
     }),
@@ -72,10 +72,10 @@ describe("SessionPresence", () => {
 
       yield* presence.report({ client: "a", sessions: [created.id] })
       yield* presence.report({ client: "b", sessions: [created.id] })
-      yield* presence.report({ client: "a", sessions: [] })
+      expect(yield* presence.report({ client: "a", sessions: [] })).toEqual([])
       expect(yield* presence.present(created.id)).toBe(true)
 
-      yield* presence.report({ client: "b", sessions: [] })
+      expect(yield* presence.report({ client: "b", sessions: [] })).toEqual([created.id])
       expect(yield* presence.present(created.id)).toBe(false)
     }),
   )

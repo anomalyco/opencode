@@ -396,6 +396,19 @@ function normalizeCompaction(
     : undefined
   const buffer = prefer(legacyBuffer, nativeBuffer, ["compaction", "buffer"], diagnostics)
   if (buffer !== undefined) result.buffer = buffer
+  if (own(input.compaction, "idle")) {
+    if (!isRecord(input.compaction.idle)) {
+      invalid(["compaction", "idle"], diagnostics)
+    } else if (own(input.compaction.idle, "min_tokens")) {
+      const minTokens = decodeEncoded(
+        ConfigCompaction.Idle.fields.min_tokens,
+        input.compaction.idle.min_tokens,
+        ["compaction", "idle", "min_tokens"],
+        diagnostics,
+      )
+      if (minTokens !== undefined) result.idle = { min_tokens: minTokens }
+    }
+  }
   if (Object.keys(result).length || !Object.keys(input.compaction).length) encoded.compaction = result
 }
 

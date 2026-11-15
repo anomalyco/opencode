@@ -103,6 +103,8 @@ import type {
   ExperimentalSessionInstructionsEntryRemoveOutput,
   ExperimentalSessionLogInput,
   ExperimentalSessionLogOutput,
+  ExperimentalSessionPresenceInput,
+  ExperimentalSessionPresenceOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -1169,6 +1171,18 @@ export function make(options: ClientOptions) {
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
               empty: false,
+            },
+            requestOptions,
+          ),
+        presence: (input: ExperimentalSessionPresenceInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionPresenceOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/session/presence`,
+              body: { client: input["client"], sessions: input["sessions"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
             },
             requestOptions,
           ),
@@ -2717,6 +2731,8 @@ export function make(options: ClientOptions) {
       },
       /** @deprecated Use `client.experimental.session.log`. Removed in the next minor. */
       log: client.experimental.session.log,
+      /** @deprecated Use `client.experimental.session.presence`. Removed in the next minor. */
+      presence: client.experimental.session.presence,
     },
     /** @deprecated Use `client.experimental.generate`. Removed in the next minor. */
     generate: {

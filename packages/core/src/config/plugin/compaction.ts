@@ -22,6 +22,9 @@ export const Plugin = define({
           ...(entry.info.compaction.auto === undefined ? {} : { auto: entry.info.compaction.auto }),
           ...(entry.info.compaction.buffer === undefined ? {} : { buffer: entry.info.compaction.buffer }),
           ...(entry.info.compaction.keep?.tokens === undefined ? {} : { keep: entry.info.compaction.keep.tokens }),
+          ...(entry.info.compaction.idle?.min_tokens === undefined
+            ? {}
+            : { idleMinTokens: entry.info.compaction.idle.min_tokens }),
         })
       }
     })
