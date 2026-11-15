@@ -8,6 +8,7 @@ import type { DurableObjectStorage } from "@opencode/core/database/sqlite.worker
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { FileSystem } from "@opencode/core/filesystem"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
+import { Generation } from "@opencode/core/generation"
 import { Pty } from "@opencode/core/pty"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Vcs } from "@opencode/core/vcs"
@@ -30,6 +31,7 @@ import type { ServerOptions } from "./options"
  *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
  *   backs them; Npm fails package installs with a typed workerd error; Snapshot
  *   and Vcs degrade to no-op results.
+ * - Video generation reports itself unsupported: its videos are stored on a local disk.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
  *
@@ -88,6 +90,8 @@ export function replacements(options: Options): LayerNode.Replacements {
     FileSystemSearch.node.replace(fileSystemSearchLayer),
     Pty.node.replace(ptyLayer),
     Npm.node.replace(npmLayer),
+    // Stored videos need a local `blobs/` folder, which a Durable Object doesn't have.
+    Generation.node.replace(Generation.unsupportedLayer),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),

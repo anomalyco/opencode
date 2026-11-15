@@ -1,10 +1,11 @@
 export * as Generate from "./generate.js"
 
 import { Schema } from "effect"
+import { descending } from "./identifier.js"
 import { Model } from "./model.js"
 import { Money } from "./money.js"
-import { Base64 } from "./prompt.js"
-import { PositiveInt, optional } from "./schema.js"
+import { Base64, MediaRef } from "./prompt.js"
+import { PositiveInt, optional, statics } from "./schema.js"
 
 const description = (text: string) => ({ description: text })
 
@@ -76,6 +77,89 @@ export const ImageResult = Schema.Struct({
   tokens: Usage.pipe(optional),
   native: Native.pipe(optional),
 }).annotate({ identifier: "Generate.ImageResult" })
+
+// ---------------------------------------------------------------------------
+// Video
+// ---------------------------------------------------------------------------
+
+export const GenerationID = Schema.String.check(Schema.isStartingWith("gen_")).pipe(
+  Schema.brand("Generate.GenerationID"),
+  Schema.annotate({ identifier: "Generate.GenerationID" }),
+  statics((schema) => ({
+    create: () => schema.make("gen_" + descending()),
+  })),
+)
+export type GenerationID = typeof GenerationID.Type
+
+export type VideoAspect = `${number}:${number}` | "auto"
+export const VideoAspect: Schema.Codec<VideoAspect> = Schema.Union([ImageAspect, Schema.Literal("auto")]).annotate({
+  identifier: "Generate.VideoAspect",
+  description: "Aspect ratio as width:height, or auto to follow the start image",
+})
+
+/** Open-ended: providers spell other sizes their own way. */
+export type VideoResolution = "480p" | "720p" | "1080p" | "4k" | (string & {})
+export const VideoResolution: Schema.Codec<VideoResolution> = Schema.Union([
+  Schema.Literals(["480p", "720p", "1080p", "4k"]),
+  Schema.String,
+]).annotate({ identifier: "Generate.VideoResolution" })
+
+/** The longest `expiresAfter` a request may ask for: 30 days, in seconds. */
+export const MAX_VIDEO_EXPIRES_AFTER = 30 * 24 * 60 * 60
+
+export interface VideoRequest extends Schema.Schema.Type<typeof VideoRequest> {}
+export const VideoRequest = Schema.Struct({
+  model: Model.Ref,
+  prompt: Schema.String,
+  start: File.pipe(optional).annotate(description("Image the video starts on exactly")),
+  end: File.pipe(optional).annotate(description("Image the video ends on exactly")),
+  references: Schema.Array(File)
+    .pipe(optional)
+    .annotate(description("Images that guide the subject or style without pinning a frame")),
+  duration: PositiveInt.pipe(optional).annotate(description("Length in seconds")),
+  aspect: VideoAspect.pipe(optional),
+  resolution: VideoResolution.pipe(optional),
+  sound: Schema.Boolean.pipe(optional).annotate(
+    description("Whether the video has a generated soundtrack; unset leaves the model's default"),
+  ),
+  expiresAfter: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_VIDEO_EXPIRES_AFTER))
+    .pipe(optional)
+    .annotate(description("Seconds the finished video stays available; defaults to 86400 (24 hours)")),
+}).annotate({ identifier: "Generate.VideoRequest" })
+
+export const VideoErrorReason = Schema.Literals(["failed", "cancelled", "expired", "unknown"]).annotate({
+  identifier: "Generate.VideoErrorReason",
+  description:
+    "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider or the stored video expired. unknown: the outcome could not be determined, for example after a restart during submission",
+})
+export type VideoErrorReason = typeof VideoErrorReason.Type
+
+export interface VideoRunning extends Schema.Schema.Type<typeof VideoRunning> {}
+export const VideoRunning = Schema.Struct({
+  id: GenerationID,
+  status: Schema.Literal("running"),
+}).annotate({ identifier: "Generate.VideoRunning" })
+
+export interface VideoCompleted extends Schema.Schema.Type<typeof VideoCompleted> {}
+export const VideoCompleted = Schema.Struct({
+  id: GenerationID,
+  status: Schema.Literal("completed"),
+  media: Schema.Array(MediaRef).annotate(description("Read each with GET /api/experimental/media/:hash")),
+  expiresAt: Schema.Finite.annotate(description("Epoch milliseconds after which the video may be deleted")),
+}).annotate({ identifier: "Generate.VideoCompleted" })
+
+export interface VideoError extends Schema.Schema.Type<typeof VideoError> {}
+export const VideoError = Schema.Struct({
+  id: GenerationID,
+  status: Schema.Literal("error"),
+  error: Schema.String,
+  reason: VideoErrorReason,
+}).annotate({ identifier: "Generate.VideoError" })
+
+export type VideoJob = VideoRunning | VideoCompleted | VideoError
+export const VideoJob = Schema.Union([VideoRunning, VideoCompleted, VideoError]).annotate({
+  identifier: "Generate.VideoJob",
+})
 
 // ---------------------------------------------------------------------------
 // Decisions

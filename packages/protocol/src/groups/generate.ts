@@ -3,6 +3,8 @@ import { Model } from "@opencode/schema/model"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import {
+  ForbiddenError,
+  GenerationNotFoundError,
   InvalidRequestError,
   LocationNotFoundError,
   ModelNotFoundError,
@@ -66,6 +68,34 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         summary: "Generate images",
         description:
           "Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("generate.video.start", "/api/experimental/generate/video", {
+      payload: Generate.VideoRequest,
+      success: Schema.Struct({ data: Generate.VideoRunning }).annotate({ identifier: "GenerateVideoStartResponse" }),
+      error: [...errors, ForbiddenError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "experimental.generate.video.start",
+        summary: "Start a video generation",
+        description:
+          "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the video; read it with GET /api/experimental/generate/video/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("generate.video.get", "/api/experimental/generate/video/:id", {
+      params: { id: Generate.GenerationID },
+      success: Schema.Struct({ data: Generate.VideoJob }).annotate({ identifier: "GenerateVideoGetResponse" }),
+      error: [GenerationNotFoundError, ForbiddenError, LocationNotFoundError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "experimental.generate.video.get",
+        summary: "Read a video generation",
+        description:
+          "Read a video job: running, completed with media refs for GET /api/experimental/media/:hash and when they expire, or error with a reason. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )

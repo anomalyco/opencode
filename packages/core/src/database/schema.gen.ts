@@ -69,6 +69,22 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`generation\` (
+          \`id\` text PRIMARY KEY,
+          \`kind\` text NOT NULL,
+          \`model\` text NOT NULL,
+          \`provider_job_id\` text,
+          \`status\` text NOT NULL,
+          \`reason\` text,
+          \`error\` text,
+          \`media\` text,
+          \`request\` text NOT NULL,
+          \`expires_at\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`job\` (
           \`notification_id\` text PRIMARY KEY,
           \`id\` text NOT NULL,
@@ -177,7 +193,8 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`width\` integer,
           \`height\` integer,
           \`data\` blob NOT NULL,
-          \`time_created\` integer NOT NULL
+          \`time_created\` integer NOT NULL,
+          \`expires_at\` integer
         );
       `)
       yield* tx.run(`
@@ -310,6 +327,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       `)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
+      yield* tx.run(`CREATE INDEX \`generation_status_idx\` ON \`generation\` (\`status\`);`)
       yield* tx.run(`CREATE INDEX \`job_session_idx\` ON \`job\` (\`session_id\`);`)
       yield* tx.run(`CREATE INDEX \`job_child_session_idx\` ON \`job\` (\`child_session_id\`);`)
       yield* tx.run(`CREATE INDEX \`job_id_idx\` ON \`job\` (\`id\`);`)
@@ -322,6 +340,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       )
       yield* tx.run(`CREATE INDEX \`blob_ref_hash_idx\` ON \`blob_ref\` (\`hash\`);`)
       yield* tx.run(`CREATE INDEX \`blob_ref_session_seq_idx\` ON \`blob_ref\` (\`session_id\`,\`seq\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`blob_expires_at_idx\` ON \`blob\` (\`expires_at\`) WHERE "blob"."expires_at" IS NOT NULL;`,
+      )
       yield* tx.run(
         `CREATE INDEX \`session_inbox_session_delivery_seq_idx\` ON \`session_inbox\` (\`session_id\`,\`delivery\`,\`enqueued_seq\`);`,
       )

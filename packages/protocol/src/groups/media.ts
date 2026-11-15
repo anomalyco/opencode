@@ -16,7 +16,7 @@ export const MediaGetEndpoint = HttpApiEndpoint.get("media.get", "/api/experimen
     identifier: "experimental.media.get",
     summary: "Read media blob",
     description:
-      "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, and 304 Not Modified support. Only blobs a stored message or inbox item still references are served. Experimental: may change without compatibility guarantees.",
+      "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, 304 Not Modified and single byte Range support. Only blobs a stored message or inbox item still references, or that have not yet expired, are served. Experimental: may change without compatibility guarantees.",
     // The route shares the `server.experimental` group with the persistent PTY prototype; tag it on its own.
     transform: (operation) => ({ ...operation, tags: ["experimental"] }),
   }),

@@ -1,8 +1,8 @@
 export * as SessionBlob from "./blob.js"
 
 import { createHash } from "node:crypto"
-import { and, eq, exists, gte, inArray, notExists, type SQL, sql } from "drizzle-orm"
-import { Cause, Context, Effect, Option, Schema } from "effect"
+import { and, eq, exists, gt, gte, inArray, isNotNull, isNull, lte, notExists, or, type SQL, sql } from "drizzle-orm"
+import { Cause, Clock, Context, Effect, Option, Schema } from "effect"
 import { map } from "effect/Array"
 import type { Attachment, FileAttachment } from "@opencode/schema/prompt"
 import type { Tool } from "@opencode/schema/tool"
@@ -19,8 +19,8 @@ type DatabaseService = Database.Interface["db"]
 type MessageRow = typeof SessionMessageTable.$inferSelect
 type InboxRow = typeof SessionInboxTable.$inferSelect
 type Part = Extract<MessageRow["data"], { readonly content: unknown }>["content"][number]
-/** Base64 bytes by blob hash. */
-type Blobs = ReadonlyMap<string, string>
+/** Base64 bytes by blob hash, or `null` for a blob whose bytes live in a file. */
+type Blobs = ReadonlyMap<string, string | null>
 
 const isFileRef = Schema.is(SessionStored.FileRef)
 const isToolFileRef = Schema.is(SessionStored.ToolFileRef)
@@ -58,11 +58,21 @@ const unavailableToolItem = (item: Tool.Content & { readonly type: "file" }): To
   text: unavailable(item.mime, item.name),
 })
 
+/** A ref whose bytes live in a file reads as this text: inlining a video would put all of it in every history read. */
+const onServer = (ref: SessionStored.Ref, mime: string, name?: string) =>
+  `[media stored on the server: ${ref}, ${name === undefined ? mime : `${name} (${mime})`}]`
+
 function inlineFile(file: SessionStored.File, blobs: Blobs): SessionStored.File {
   if (!isFileRef(file)) return file
   const data = blobs.get(SessionStored.refHash(file.uri))
   if (data === undefined) return unavailableFile(file)
   const { uri: _, ...rest } = file
+  if (data === null)
+    return {
+      ...rest,
+      data: Buffer.from(onServer(file.uri, file.mime, file.name)).toString("base64"),
+      mime: "text/plain",
+    }
   return { ...rest, data }
 }
 
@@ -70,6 +80,7 @@ function inlineToolItem(item: Tool.Content, blobs: Blobs): Tool.Content {
   if (!isToolFileRef(item)) return item
   const data = blobs.get(SessionStored.refHash(item.uri))
   if (data === undefined) return unavailableToolItem(item)
+  if (data === null) return { type: "text", text: onServer(item.uri, item.mime, item.name) }
   return { ...item, uri: `data:${item.mime};base64,${data}` }
 }
 
@@ -104,15 +115,19 @@ function rewriteInbox(row: InboxRow, file: (file: SessionStored.File) => Session
 }
 
 const load = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
-  const blobs = new Map<string, string>()
+  const blobs = new Map<string, string | null>()
   for (const batch of DatabaseBatch.batches([...hashes], 1)) {
     const found = yield* db
-      .select({ hash: BlobTable.hash, data: BlobTable.data })
+      .select({ hash: BlobTable.hash, bytes: BlobTable.bytes, data: BlobTable.data })
       .from(BlobTable)
       .where(inArray(BlobTable.hash, batch))
       .all()
       .pipe(Effect.orDie)
-    for (const blob of found) blobs.set(blob.hash, view(blob.data).toString("base64"))
+    for (const blob of found)
+      blobs.set(
+        blob.hash,
+        onDisk({ bytes: blob.bytes, stored: blob.data.byteLength }) ? null : view(blob.data).toString("base64"),
+      )
   }
   return blobs
 })
@@ -152,7 +167,7 @@ export interface Meta {
 }
 
 /**
- * For clients that fetch media themselves: refs stay in `rows`, except those whose blob is gone or not referenced (the media route only serves referenced blobs), which become the
+ * For clients that fetch media themselves: refs stay in `rows`, except those whose blob is gone or no longer readable (the media route serves only those), which become the
  * same unavailable placeholder {@link hydrate} gives. Returns the size and dimensions of every blob still named.
  */
 export const keepRefs = Effect.fnUntraced(function* (db: DatabaseService, rows: ReadonlyArray<MessageRow>) {
@@ -172,21 +187,12 @@ export const keepInboxRefs = Effect.fnUntraced(function* (db: DatabaseService, r
 
 const loadMeta = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
   const meta = new Map<string, Meta>()
-  for (const batch of DatabaseBatch.batches([...hashes], 1)) {
+  const now = yield* Clock.currentTimeMillis
+  for (const batch of DatabaseBatch.batches([...hashes], 1, 1)) {
     const found = yield* db
       .select({ hash: BlobTable.hash, bytes: BlobTable.bytes, width: BlobTable.width, height: BlobTable.height })
       .from(BlobTable)
-      .where(
-        and(
-          inArray(BlobTable.hash, batch),
-          exists(
-            db
-              .select({ one: sql`1` })
-              .from(BlobRefTable)
-              .where(eq(BlobRefTable.hash, BlobTable.hash)),
-          ),
-        ),
-      )
+      .where(and(inArray(BlobTable.hash, batch), live(db, now)))
       .all()
       .pipe(Effect.orDie)
     for (const { hash, ...rest } of found) meta.set(hash, rest)
@@ -220,27 +226,86 @@ export function describe(files: ReadonlyArray<Attachment>, meta: ReadonlyMap<str
 }
 
 /**
- * One blob's type and bytes, for the experimental media route and `media:` prompt attachments. Only a blob some
- * message or inbox item still references is readable; an unreferenced one awaiting its sweep reads as missing.
+ * Whether a blob's bytes live in a file under `blobs/` rather than in `data`: an empty `data` (`stored` is its length)
+ * with a non-zero size. Every reader of `data` checks this first; {@link onDiskWhere} is the same check in SQL.
  */
-export const read = Effect.fnUntraced(function* (db: DatabaseService, hash: string) {
+export const onDisk = (row: { readonly bytes: number; readonly stored: number }) => row.bytes > 0 && row.stored === 0
+
+/** {@link onDisk} as a SQL condition. */
+export const onDiskWhere = sql`(length(${BlobTable.data}) = 0 AND ${BlobTable.bytes} > 0)`
+
+// SQLite reads a blob's length from its record header, without loading its bytes.
+const stored = sql<number>`length(${BlobTable.data})`
+
+/** A blob is readable while a message or inbox item references it or until its `expires_at`. */
+const live = (db: DatabaseService, now: number) =>
+  or(
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(BlobRefTable)
+        .where(eq(BlobRefTable.hash, BlobTable.hash)),
+    ),
+    gt(BlobTable.expires_at, now),
+  )
+
+/** The exact negation of {@link live}: no ref and no unexpired `expires_at`. */
+const dead = (db: DatabaseService, now: number) =>
+  and(
+    notExists(
+      db
+        .select({ one: sql`1` })
+        .from(BlobRefTable)
+        .where(eq(BlobRefTable.hash, BlobTable.hash)),
+    ),
+    or(isNull(BlobTable.expires_at), lte(BlobTable.expires_at, now)),
+  )
+
+export interface Stat {
+  readonly mime: string
+  readonly bytes: number
+  /** The bytes live in a file; see {@link onDisk}. */
+  readonly onDisk: boolean
+}
+
+/**
+ * One readable blob's type and size without its bytes, for the experimental media route and `media:` prompt
+ * attachments. A blob nothing references and whose `expires_at` has passed reads as missing while it awaits its sweep.
+ */
+export const stat = Effect.fnUntraced(function* (db: DatabaseService, hash: string) {
+  const now = yield* Clock.currentTimeMillis
   const blob = yield* db
-    .select({ mime: BlobTable.mime, data: BlobTable.data })
+    .select({ mime: BlobTable.mime, bytes: BlobTable.bytes, stored })
     .from(BlobTable)
-    .where(
-      and(
-        eq(BlobTable.hash, hash),
-        exists(
-          db
-            .select({ one: sql`1` })
-            .from(BlobRefTable)
-            .where(eq(BlobRefTable.hash, BlobTable.hash)),
-        ),
-      ),
-    )
+    .where(and(eq(BlobTable.hash, hash), live(db, now)))
     .get()
     .pipe(Effect.orDie)
-  return blob && { mime: blob.mime, data: view(blob.data) }
+  return blob && ({ mime: blob.mime, bytes: blob.bytes, onDisk: onDisk(blob) } satisfies Stat)
+})
+
+/** Whether a row for `hash` exists, live or not. */
+export const has = Effect.fnUntraced(function* (db: DatabaseService, hash: string) {
+  const row = yield* db
+    .select({ hash: BlobTable.hash })
+    .from(BlobTable)
+    .where(eq(BlobTable.hash, hash))
+    .get()
+    .pipe(Effect.orDie)
+  return row !== undefined
+})
+
+/** {@link stat} with the bytes of a blob stored in `data`; `data` is undefined when they live in a file. */
+export const read = Effect.fnUntraced(function* (db: DatabaseService, hash: string) {
+  const now = yield* Clock.currentTimeMillis
+  const blob = yield* db
+    .select({ mime: BlobTable.mime, bytes: BlobTable.bytes, data: BlobTable.data })
+    .from(BlobTable)
+    .where(and(eq(BlobTable.hash, hash), live(db, now)))
+    .get()
+    .pipe(Effect.orDie)
+  if (!blob) return undefined
+  const disk = onDisk({ bytes: blob.bytes, stored: blob.data.byteLength })
+  return { mime: blob.mime, bytes: blob.bytes, onDisk: disk, data: disk ? undefined : view(blob.data) }
 })
 
 /** A blob's hash is the lowercase hex SHA-256 of its raw bytes. */
@@ -313,13 +378,26 @@ function toolPartRefs(pending: Pending, part: AssistantPart): AssistantPart {
   return { ...part, state: { ...part.state, content: map(content, (item) => toolRef(pending, item)) } }
 }
 
-/** Inserts blobs, keeping any that already exist. */
+/**
+ * Inserts blobs, keeping any that already exist. Saving an existing hash with an `expires_at` extends the blob to the
+ * later of the two, so a second identical output gets its full retention; saving one without never shortens it.
+ */
 export const save = Effect.fnUntraced(function* (
   db: DatabaseService,
   blobs: ReadonlyArray<typeof BlobTable.$inferInsert>,
 ) {
   for (const batch of DatabaseBatch.insertBatches(BlobTable, blobs))
-    yield* db.insert(BlobTable).values(batch).onConflictDoNothing().run().pipe(Effect.orDie)
+    yield* db
+      .insert(BlobTable)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: BlobTable.hash,
+        set: {
+          expires_at: sql`CASE WHEN excluded.expires_at IS NOT NULL AND (${BlobTable.expires_at} IS NULL OR excluded.expires_at > ${BlobTable.expires_at}) THEN excluded.expires_at ELSE ${BlobTable.expires_at} END`,
+        },
+      })
+      .run()
+      .pipe(Effect.orDie)
 })
 
 /** {@link externalize} for a user message or pending inbox user payload. */
@@ -464,7 +542,10 @@ export const syncRefs = Effect.fnUntraced(function* (db: DatabaseService, owner:
     yield* release(db, ...own, inArray(BlobRefTable.hash, batch))
 })
 
-/** Deletes the matching refs, then every blob among theirs that no ref names anymore. */
+/**
+ * Deletes the matching refs, then every blob among theirs that no ref names anymore and whose `expires_at` has passed.
+ * Blobs whose bytes live in a file are left to {@link sweep}, which deletes the file after the row.
+ */
 const release = Effect.fnUntraced(function* (db: DatabaseService, ...where: readonly [SQL, ...SQL[]]) {
   const released = yield* db
     .delete(BlobRefTable)
@@ -472,22 +553,49 @@ const release = Effect.fnUntraced(function* (db: DatabaseService, ...where: read
     .returning({ hash: BlobRefTable.hash })
     .all()
     .pipe(Effect.orDie)
-  for (const batch of DatabaseBatch.batches([...new Set(released.map((ref) => ref.hash))], 1))
+  const now = yield* Clock.currentTimeMillis
+  for (const batch of DatabaseBatch.batches([...new Set(released.map((ref) => ref.hash))], 1, 1))
     yield* db
       .delete(BlobTable)
-      .where(
-        and(
-          inArray(BlobTable.hash, batch),
-          notExists(
-            db
-              .select({ one: sql`1` })
-              .from(BlobRefTable)
-              .where(eq(BlobRefTable.hash, BlobTable.hash)),
-          ),
-        ),
-      )
+      .where(and(inArray(BlobTable.hash, batch), dead(db, now), sql`NOT ${onDiskWhere}`))
       .run()
       .pipe(Effect.orDie)
+})
+
+/**
+ * Blobs {@link sweep} may delete at `now`: expired ones with no ref, and file blobs no ref holds that have no expiry,
+ * which {@link release} leaves behind.
+ */
+export const sweepable = Effect.fnUntraced(function* (db: DatabaseService, now: number) {
+  const rows = yield* db
+    .select({ hash: BlobTable.hash })
+    .from(BlobTable)
+    .where(
+      and(
+        or(
+          and(isNotNull(BlobTable.expires_at), lte(BlobTable.expires_at, now)),
+          and(isNull(BlobTable.expires_at), onDiskWhere),
+        ),
+        dead(db, now),
+      ),
+    )
+    .all()
+    .pipe(Effect.orDie)
+  return rows.map((row) => row.hash)
+})
+
+/**
+ * Deletes one blob row if it is still dead at `now`, rechecked in the delete itself, and returns whether its bytes
+ * lived in a file the caller must now delete. Undefined when the blob is alive again or already gone.
+ */
+export const sweep = Effect.fnUntraced(function* (db: DatabaseService, hash: string, now: number) {
+  const deleted = yield* db
+    .delete(BlobTable)
+    .where(and(eq(BlobTable.hash, hash), dead(db, now)))
+    .returning({ bytes: BlobTable.bytes, stored })
+    .get()
+    .pipe(Effect.orDie)
+  return deleted && onDisk(deleted)
 })
 
 /** Releases the blobs a removed message or cancelled inbox row referenced. */

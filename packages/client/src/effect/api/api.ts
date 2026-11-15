@@ -1520,6 +1520,29 @@ export type ExperimentalGenerateImageOperation<E = never> = (
   input: ExperimentalGenerateImageInput,
 ) => Effect.Effect<ExperimentalGenerateImageOutput, E>
 
+export type ExperimentalGenerateVideoStartInput = {
+  readonly model: Model.Ref
+  readonly prompt: string
+  readonly start?: Generate.File | undefined
+  readonly end?: Generate.File | undefined
+  readonly references?: ReadonlyArray<Generate.File> | undefined
+  readonly duration?: number | undefined
+  readonly aspect?: Generate.VideoAspect | undefined
+  readonly resolution?: Generate.VideoResolution | undefined
+  readonly sound?: boolean | undefined
+  readonly expiresAfter?: number | undefined
+}
+export type ExperimentalGenerateVideoStartOutput = Generate.VideoRunning
+export type ExperimentalGenerateVideoStartOperation<E = never> = (
+  input: ExperimentalGenerateVideoStartInput,
+) => Effect.Effect<ExperimentalGenerateVideoStartOutput, E>
+
+export type ExperimentalGenerateVideoGetInput = { readonly id: Generate.GenerationID }
+export type ExperimentalGenerateVideoGetOutput = Generate.VideoJob
+export type ExperimentalGenerateVideoGetOperation<E = never> = (
+  input: ExperimentalGenerateVideoGetInput,
+) => Effect.Effect<ExperimentalGenerateVideoGetOutput, E>
+
 export type ExperimentalGenerateDecisionsInput = {
   readonly model: Model.Ref
   readonly input: ReadonlyArray<Generate.DecisionPart>
@@ -1533,6 +1556,10 @@ export type ExperimentalGenerateDecisionsOperation<E = never> = (
 export interface ExperimentalGenerateApi<E = never> {
   readonly text: ExperimentalGenerateTextOperation<E>
   readonly image: ExperimentalGenerateImageOperation<E>
+  readonly video: {
+    readonly start: ExperimentalGenerateVideoStartOperation<E>
+    readonly get: ExperimentalGenerateVideoGetOperation<E>
+  }
   readonly decisions: ExperimentalGenerateDecisionsOperation<E>
 }
 
@@ -2916,6 +2943,24 @@ export type GenerateImageOutput = ExperimentalGenerateImageOutput
 /** @deprecated Use `ExperimentalGenerateImageOperation`. Removed in the next minor. */
 export type GenerateImageOperation<E = never> = ExperimentalGenerateImageOperation<E>
 
+/** @deprecated Use `ExperimentalGenerateVideoStartInput`. Removed in the next minor. */
+export type GenerateVideoStartInput = ExperimentalGenerateVideoStartInput
+
+/** @deprecated Use `ExperimentalGenerateVideoStartOutput`. Removed in the next minor. */
+export type GenerateVideoStartOutput = ExperimentalGenerateVideoStartOutput
+
+/** @deprecated Use `ExperimentalGenerateVideoStartOperation`. Removed in the next minor. */
+export type GenerateVideoStartOperation<E = never> = ExperimentalGenerateVideoStartOperation<E>
+
+/** @deprecated Use `ExperimentalGenerateVideoGetInput`. Removed in the next minor. */
+export type GenerateVideoGetInput = ExperimentalGenerateVideoGetInput
+
+/** @deprecated Use `ExperimentalGenerateVideoGetOutput`. Removed in the next minor. */
+export type GenerateVideoGetOutput = ExperimentalGenerateVideoGetOutput
+
+/** @deprecated Use `ExperimentalGenerateVideoGetOperation`. Removed in the next minor. */
+export type GenerateVideoGetOperation<E = never> = ExperimentalGenerateVideoGetOperation<E>
+
 /** @deprecated Use `ExperimentalGenerateDecisionsInput`. Removed in the next minor. */
 export type GenerateDecisionsInput = ExperimentalGenerateDecisionsInput
 
@@ -3095,6 +3140,15 @@ export interface AppApi<E = never> {
 
     /** @deprecated Use `client.experimental.generate.image`. Removed in the next minor. */
     readonly image: ExperimentalGenerateImageOperation<E>
+
+    /** @deprecated Use `client.experimental.generate.video`. Removed in the next minor. */
+    readonly video: {
+      /** @deprecated Use `client.experimental.generate.video.start`. Removed in the next minor. */
+      readonly start: ExperimentalGenerateVideoStartOperation<E>
+
+      /** @deprecated Use `client.experimental.generate.video.get`. Removed in the next minor. */
+      readonly get: ExperimentalGenerateVideoGetOperation<E>
+    }
 
     /** @deprecated Use `client.experimental.generate.decisions`. Removed in the next minor. */
     readonly decisions: ExperimentalGenerateDecisionsOperation<E>

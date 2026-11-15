@@ -14,6 +14,8 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
+import { BlobStore } from "@opencode/core/blob-store"
+import { Generation } from "@opencode/core/generation"
 import { Worktree } from "@opencode/core/worktree"
 import { Session } from "@opencode/core/session"
 import { Instance } from "@opencode/core/instance/service"
@@ -72,6 +74,8 @@ const applicationServiceNodes = [
   Job.node,
   Project.node,
   Project.sweepNode,
+  BlobStore.node,
+  BlobStore.sweepNode,
   Worktree.node,
   Session.node,
   Instance.node,
@@ -88,6 +92,8 @@ const applicationServiceNodes = [
   LocationActivity.node,
   SessionRestart.node,
   Schedule.node,
+  // Resumes video jobs a restart cut off; its fibers belong to the server.
+  Generation.node,
   Workspace.node,
   FileWatch.node,
 ] as const

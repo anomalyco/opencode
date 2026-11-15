@@ -178,7 +178,7 @@ export type SessionMessageToolStateRunning1 = {
   metadata: { [x: string]: JsonValue }
 }
 
-export type ModelType = "chat" | "decision" | "image" | (string & {})
+export type ModelType = "chat" | "decision" | "image" | "video" | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
@@ -197,6 +197,12 @@ export type GenerateTextResponse = { data: { text: string } }
 export type GenerateUsage = { input?: number; output?: number }
 
 export type GenerateNative = { [x: string]: JsonValue }
+
+export type GenerateGenerationID = string
+
+export type PromptMediaRef = string
+
+export type GenerateVideoErrorReason = "failed" | "cancelled" | "expired" | "unknown"
 
 export type GeneratePredicateAnswer = { type: "predicate"; name: string; probability: number }
 
@@ -728,6 +734,22 @@ export type ModelCost = {
   input: MoneyUSDPerMillionTokens
   output: MoneyUSDPerMillionTokens
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
+}
+
+export type GenerateVideoRunning = { id: GenerateGenerationID; status: "running" }
+
+export type GenerateVideoCompleted = {
+  id: GenerateGenerationID
+  status: "completed"
+  media: Array<PromptMediaRef>
+  expiresAt: number
+}
+
+export type GenerateVideoError = {
+  id: GenerateGenerationID
+  status: "error"
+  error: string
+  reason: GenerateVideoErrorReason
 }
 
 export type GenerateChoiceAnswer = {
@@ -2195,6 +2217,10 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type GenerateVideoStartResponse = { data: GenerateVideoRunning }
+
+export type GenerateVideoJob = GenerateVideoRunning | GenerateVideoCompleted | GenerateVideoError
+
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer
   | GenerateChoiceAnswer
@@ -2597,6 +2623,7 @@ export type ConfigEntry =
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
+          video_generate?: boolean
           console_watches?: boolean
           mcp_events?: boolean
           full_codemode?: boolean
@@ -2674,6 +2701,8 @@ export type SessionMessageAssistantTool1 = {
     | SessionMessageToolStateError1
   time: { created: number; ran?: number; completed?: number }
 }
+
+export type GenerateVideoGetResponse = { data: GenerateVideoJob }
 
 export type GenerateDecisionResult = {
   answers: Array<GenerateDecisionAnswer>
@@ -3179,6 +3208,18 @@ export type ProviderRequestError = {
 export const isProviderRequestError = (value: unknown): value is ProviderRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderRequestError"
 
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
+
+export type GenerationNotFoundError = {
+  readonly _tag: "GenerationNotFoundError"
+  readonly generationID: string
+  readonly message: string
+}
+export const isGenerationNotFoundError = (value: unknown): value is GenerationNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "GenerationNotFoundError"
+
 export type IntegrationNotFoundError = {
   readonly _tag: "IntegrationNotFoundError"
   readonly integrationID: string
@@ -3212,10 +3253,6 @@ export type McpServerNotFoundError = {
 }
 export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
-
-export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
-export const isForbiddenError = (value: unknown): value is ForbiddenError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type ProjectNotFoundError = {
   readonly _tag: "ProjectNotFoundError"
@@ -3969,7 +4006,7 @@ export type MessageListOutput = SessionMessagesResponse
 
 export type ModelListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | (string & {})> | undefined
+  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | "video" | (string & {})> | undefined
 }
 
 export type ModelListOutput = { location: LocationPublicRef; data: Array<ModelInfo> }
@@ -3995,6 +4032,27 @@ export type ExperimentalGenerateImageInput = {
 }
 
 export type ExperimentalGenerateImageOutput = GenerateImageResponse["data"]
+
+export type ExperimentalGenerateVideoStartInput = {
+  readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+  readonly prompt: string
+  readonly start?: { readonly data: string; readonly mime: string; readonly name?: string } | undefined
+  readonly end?: { readonly data: string; readonly mime: string; readonly name?: string } | undefined
+  readonly references?:
+    | ReadonlyArray<{ readonly data: string; readonly mime: string; readonly name?: string }>
+    | undefined
+  readonly duration?: number | undefined
+  readonly aspect?: (`${number}${":"}${number}` | "auto") | undefined
+  readonly resolution?: ("480p" | "720p" | "1080p" | "4k" | (string & {})) | undefined
+  readonly sound?: boolean | undefined
+  readonly expiresAfter?: number | undefined
+}
+
+export type ExperimentalGenerateVideoStartOutput = GenerateVideoStartResponse["data"]
+
+export type ExperimentalGenerateVideoGetInput = { readonly id: string }
+
+export type ExperimentalGenerateVideoGetOutput = GenerateVideoGetResponse["data"]
 
 export type ExperimentalGenerateDecisionsInput = {
   readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -4980,6 +5038,18 @@ export type GenerateImageInput = ExperimentalGenerateImageInput
 
 /** @deprecated Use `ExperimentalGenerateImageOutput`. Removed in the next minor. */
 export type GenerateImageOutput = ExperimentalGenerateImageOutput
+
+/** @deprecated Use `ExperimentalGenerateVideoStartInput`. Removed in the next minor. */
+export type GenerateVideoStartInput = ExperimentalGenerateVideoStartInput
+
+/** @deprecated Use `ExperimentalGenerateVideoStartOutput`. Removed in the next minor. */
+export type GenerateVideoStartOutput = ExperimentalGenerateVideoStartOutput
+
+/** @deprecated Use `ExperimentalGenerateVideoGetInput`. Removed in the next minor. */
+export type GenerateVideoGetInput = ExperimentalGenerateVideoGetInput
+
+/** @deprecated Use `ExperimentalGenerateVideoGetOutput`. Removed in the next minor. */
+export type GenerateVideoGetOutput = ExperimentalGenerateVideoGetOutput
 
 /** @deprecated Use `ExperimentalGenerateDecisionsInput`. Removed in the next minor. */
 export type GenerateDecisionsInput = ExperimentalGenerateDecisionsInput

@@ -5469,6 +5469,196 @@
         }
       }
     },
+    "/api/experimental/generate/video": {
+      "post": {
+        "tags": ["generate"],
+        "operationId": "experimental.generate.video.start",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GenerateVideoStartResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateVideoStartResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ModelNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UnsupportedModelError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedModelErrorEncoded"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ProviderRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the video; read it with GET /api/experimental/generate/video/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Start a video generation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Generate.VideoRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/generate/video/{id}": {
+      "get": {
+        "tags": ["generate"],
+        "operationId": "experimental.generate.video.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Generate.GenerationID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GenerateVideoGetResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateVideoGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "GenerationNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/GenerationNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Read a video job: running, completed with media refs for GET /api/experimental/media/:hash and when they expire, or error with a reason. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Read a video generation"
+      }
+    },
     "/api/experimental/generate/decisions": {
       "post": {
         "tags": ["generate"],
@@ -12083,7 +12273,7 @@
             }
           }
         },
-        "description": "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, and 304 Not Modified support. Only blobs a stored message or inbox item still references are served. Experimental: may change without compatibility guarantees.",
+        "description": "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, 304 Not Modified and single byte Range support. Only blobs a stored message or inbox item still references, or that have not yet expired, are served. Experimental: may change without compatibility guarantees.",
         "summary": "Read media blob"
       }
     },
@@ -16671,6 +16861,9 @@
               "artifacts": {
                 "type": "boolean"
               },
+              "video_generate": {
+                "type": "boolean"
+              },
               "console_watches": {
                 "type": "boolean"
               },
@@ -18934,6 +19127,10 @@
         "required": ["data", "mime"],
         "additionalProperties": false
       },
+      "Generate.GenerationID": {
+        "type": "string",
+        "pattern": "^gen_"
+      },
       "Generate.ImageAspect": {
         "type": "string",
         "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?:[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$",
@@ -19172,6 +19369,150 @@
         "additionalProperties": false,
         "description": "Token counts, when the provider reports them"
       },
+      "Generate.VideoAspect": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Generate.ImageAspect"
+          },
+          {
+            "type": "string",
+            "enum": ["auto"]
+          }
+        ],
+        "description": "Aspect ratio as width:height, or auto to follow the start image"
+      },
+      "Generate.VideoCompleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Generate.GenerationID"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["completed"]
+          },
+          "media": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.MediaRef"
+            },
+            "description": "Read each with GET /api/experimental/media/:hash"
+          },
+          "expiresAt": {
+            "type": "number",
+            "description": "Epoch milliseconds after which the video may be deleted"
+          }
+        },
+        "required": ["id", "status", "media", "expiresAt"],
+        "additionalProperties": false
+      },
+      "Generate.VideoError": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Generate.GenerationID"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["error"]
+          },
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/Generate.VideoErrorReason"
+          }
+        },
+        "required": ["id", "status", "error", "reason"],
+        "additionalProperties": false
+      },
+      "Generate.VideoErrorReason": {
+        "type": "string",
+        "enum": ["failed", "cancelled", "expired", "unknown"],
+        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider or the stored video expired. unknown: the outcome could not be determined, for example after a restart during submission"
+      },
+      "Generate.VideoJob": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Generate.VideoRunning"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.VideoCompleted"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.VideoError"
+          }
+        ]
+      },
+      "Generate.VideoRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "start": {
+            "$ref": "#/components/schemas/Generate.File"
+          },
+          "end": {
+            "$ref": "#/components/schemas/Generate.File"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Generate.File"
+            }
+          },
+          "duration": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          },
+          "aspect": {
+            "$ref": "#/components/schemas/Generate.VideoAspect"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/Generate.VideoResolution"
+          },
+          "sound": {
+            "type": "boolean"
+          },
+          "expiresAfter": {
+            "type": "integer",
+            "maximum": 2592000,
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": ["model", "prompt"],
+        "additionalProperties": false
+      },
+      "Generate.VideoResolution": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["480p", "720p", "1080p", "4k"]
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "Generate.VideoRunning": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Generate.GenerationID"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running"]
+          }
+        },
+        "required": ["id", "status"],
+        "additionalProperties": false
+      },
       "GenerateDecisionsResponse": {
         "type": "object",
         "properties": {
@@ -19207,6 +19548,43 @@
           }
         },
         "required": ["data"],
+        "additionalProperties": false
+      },
+      "GenerateVideoGetResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Generate.VideoJob"
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "GenerateVideoStartResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Generate.VideoRunning"
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "GenerationNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["GenerationNotFoundError"]
+          },
+          "generationID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "generationID", "message"],
         "additionalProperties": false
       },
       "Instruction.Hash": {
@@ -20806,7 +21184,7 @@
         "anyOf": [
           {
             "type": "string",
-            "enum": ["chat", "decision", "image"]
+            "enum": ["chat", "decision", "image", "video"]
           },
           {
             "type": "string"
@@ -21733,6 +22111,9 @@
             "additionalProperties": false
           }
         ]
+      },
+      "Prompt.MediaRef": {
+        "type": "string"
       },
       "Prompt.Mention": {
         "type": "object",

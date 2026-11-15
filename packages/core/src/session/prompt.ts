@@ -166,7 +166,13 @@ const readBlobAttachment = Effect.fn("SessionPrompt.readBlobAttachment")(functio
   const { db } = yield* Database.Service
   const blob = yield* SessionBlob.read(db, SessionStored.refHash(uri))
   if (!blob) return yield* new AttachmentError({ uri, message: `Attachment is no longer stored: ${uri}` })
-  return blob
+  // A blob stored as a file, such as a generated video, is too large to inline into a prompt.
+  if (blob.data === undefined)
+    return yield* new AttachmentError({
+      uri,
+      message: `Attachment is stored as a file and can't be attached yet: ${uri}`,
+    })
+  return { mime: blob.mime, data: blob.data }
 })
 
 const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(function* (uri: string) {
