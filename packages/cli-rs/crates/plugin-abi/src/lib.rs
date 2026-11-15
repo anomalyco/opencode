@@ -52,9 +52,9 @@
 //!
 //! Renders in this form (ABI 1.4) are opt-in on the wire: [`Setup`] sets [`Manifest::render`], and the host sends
 //! [`Request::RenderFence`] and [`Request::Render`] only to a plugin that sets it. A 1.3 plugin gets the old requests
-//! and answers in the old format. A 1.x plugin built with this crate (`export_plugin!(abi1, ..)`) sets
-//! [`PluginApi::requires_minor`] to at least 4, so a 1.3 host refuses it; a 2.x plugin sets the minimum of ABI 2 it
-//! asks for with `requires_minor` on [`plugin!`] or [`export_plugin!`], 0 by default.
+//! and answers in the old format. A 1.x plugin built with this crate (`export_plugin!(id, setup, requires_minor =
+//! N)`, deprecated) sets [`PluginApi::requires_minor`] to at least 4, so a 1.3 host refuses it; a 2.x plugin sets the
+//! minimum of ABI 2 it asks for with `requires_minor` on [`plugin!`], 0 by default.
 //!
 //! Session and catalog values are the HTTP API's generated types, re-exported as [`types`].
 
@@ -5005,29 +5005,27 @@ macro_rules! plugin {
 }
 
 /// Exports a plugin: `export_plugin!("my.plugin", setup)`, which [`plugin!`] calls. It exports the current
-/// [`PluginApi`] as [`ENTRY`], with the crate's version as its [`Metadata`]. `export_plugin!("my.plugin", setup,
-/// requires_minor = 1)` asks for host 2.1 or newer, as [`plugin!`]'s `requires_minor` does.
+/// [`PluginApi`] as [`ENTRY`], with the crate's version as its [`Metadata`].
 ///
 /// A plugin of ABI 1.x that cannot work without what a newer 1.x minor adds, such as the composer of 1.5, asks for that
 /// host, and an older host refuses it with a message naming both versions rather than run it with its requests refused:
 ///
 /// ```ignore
-/// export_plugin!(abi1, "my.plugin", setup, requires_minor = 5);
+/// export_plugin!("my.plugin", setup, requires_minor = 5);
 /// ```
 ///
-/// That form exports [`ENTRY_V1`] at [`V1_MINOR`]; below 4 it requires 4. A plugin that can do without reads
-/// [`Read::abi_minor`] and falls back instead.
+/// That form exports [`ENTRY_V1`] at [`V1_MINOR`]; below 4 it requires 4. It keeps that meaning until 3.0 (O-125), and
+/// warns as deprecated: a 2.x minimum is `plugin!(id = "my.plugin", requires_minor = 1, setup)`. A plugin that can do
+/// without reads [`Read::abi_minor`] and falls back instead.
 #[macro_export]
 macro_rules! export_plugin {
     ($id:expr, $setup:path) => {
         $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, 0, $id, $setup, []);
     };
-    ($id:expr, $setup:path, requires_minor = $requires:expr) => {
-        $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, $requires, $id, $setup, []);
-    };
-    // A plugin of ABI 1.x that needs host 1.`requires_minor`: the meaning the form above had before 2.0 froze.
-    (abi1, $id:expr, $setup:path, requires_minor = $requires:expr) => {
-        $crate::export_plugin!(@version 1, $crate::V1_MINOR, $crate::runtime::requires($requires), $id, $setup);
+    // ABI 1.x, which needs host 1.`requires_minor`. The deprecated function is named by the caller's own
+    // `requires_minor` token, so the warning shows in the caller's crate.
+    ($id:expr, $setup:path, $requires_minor:ident = $requires:expr) => {
+        $crate::export_plugin!(@version 1, $crate::V1_MINOR, $crate::runtime::legacy::$requires_minor($requires), $id, $setup);
     };
     // A plugin built against ABI 1.x, or that pretends to be built against another version, for the loader's tests.
     (@version $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path) => {
@@ -5150,6 +5148,18 @@ pub mod runtime {
             destroy: Some(destroy),
             free: Some(free),
             describe: Some(describe),
+        }
+    }
+
+    /// What the 1.x form `export_plugin!(id, setup, requires_minor = N)` calls.
+    pub mod legacy {
+        /// The host minor of ABI 1 a plugin of `export_plugin!(id, setup, requires_minor = N)` requires.
+        #[deprecated(
+            note = "`export_plugin!(id, setup, requires_minor = N)` exports ABI 1.x; for a 2.x minimum write \
+                    `plugin!(id = id, requires_minor = N, setup)`"
+        )]
+        pub const fn requires_minor(minor: u32) -> u32 {
+            super::requires(minor)
         }
     }
 
