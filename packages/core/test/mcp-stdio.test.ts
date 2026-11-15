@@ -62,6 +62,15 @@ test("accepts a frame of exactly 16 MiB", async () => {
   expect(output.messages).toEqual([expect.objectContaining({ id: 1, result: expect.anything() })])
 })
 
+test("keeps the stderr tail reported on exit from splitting a surrogate pair", async () => {
+  // The kept window starts on the emoji's low surrogate. `.slice` would leave that half in the error.
+  const stderr = encoder.encode(`😀${"e".repeat(999)}`)
+  const output = await read([encoder.encode('{"jsonrpc":"2.0","method":"ping"}\n')], { stderr })
+
+  expect(output.exits).toEqual([`MCP server process exited with code 0: ${"e".repeat(999)}`])
+  expect(output.exits[0]).toBe(output.exits[0]?.toWellFormed())
+})
+
 test("closes the connection on a line one byte over 16 MiB", async () => {
   // stdout stays open until the process is killed, so finishing at all means the transport closed
   // itself, which is what fails the client's pending requests.
@@ -84,10 +93,11 @@ function chunks(bytes: Uint8Array, size: number) {
 }
 
 /** Runs the transport against a process whose stdout yields `output`, then ends or, with `open`, waits to be killed. */
-async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean }) {
+async function read(output: ReadonlyArray<Uint8Array>, options?: { open?: boolean; stderr?: Uint8Array }) {
   const killed = Deferred.makeUnsafe<void>()
   const messages: Array<JSONRPCMessage> = []
   const errors: Array<string> = []
+  const exits: Array<string> = []
   const driver = Environment.makeMemoryDriver()
   const environment = Layer.succeed(
     Environment.Service,
@@ -106,7 +116,7 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
                 options?.open ? Stream.fromEffect(Deferred.await(killed)).pipe(Stream.drain) : Stream.empty,
               ),
             ),
-            stderr: Stream.empty,
+            stderr: options?.stderr === undefined ? Stream.empty : Stream.make(options.stderr),
             all: Stream.empty,
             getInputFd: () => Sink.drain,
             getOutputFd: () => Stream.empty,
@@ -131,7 +141,8 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
         transport.onmessage = (message) => messages.push(message)
         // stdout ending reports the exit; only framing errors matter here.
         transport.onerror = (error) => {
-          if (!error.message.startsWith("MCP server process exited")) errors.push(error.message)
+          if (error.message.startsWith("MCP server process exited")) exits.push(error.message)
+          else errors.push(error.message)
         }
         yield* Effect.promise(() => transport.start())
         yield* Effect.promise(() => closed)
@@ -139,5 +150,5 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
     ),
   )
 
-  return { messages, errors }
+  return { messages, errors, exits }
 }

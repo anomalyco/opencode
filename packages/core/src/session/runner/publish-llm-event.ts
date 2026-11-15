@@ -1,5 +1,6 @@
 import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode/ai/effect"
 import { isRecord } from "@opencode/util/record"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { RelativePath } from "@opencode/schema/schema"
@@ -623,7 +624,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 }
 
 function inputExcerpt(value: string): InputExcerpt {
-  return { text: value.slice(0, INPUT_EXCERPT_LIMIT), length: value.length }
+  return { text: TextBoundary.head(value, INPUT_EXCERPT_LIMIT), length: value.length }
 }
 
 function inputFailure(input: InputExcerpt | undefined, reason: InputFailureReason) {

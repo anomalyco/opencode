@@ -179,6 +179,27 @@ describe("watch_mcp_event", () => {
     }),
   )
 
+  it.live("keeps a truncated event payload from splitting a surrogate pair", () =>
+    Effect.gen(function* () {
+      const { state, wakes, watch, event } = yield* setup()
+      yield* watch({ server: "jobs", event: "job.finished" })
+      yield* until(() => state.streams.length === 1)
+      // JSON.stringify adds a leading quote, so the emoji's high surrogate lands on the 16384th code unit.
+      const payload = `${"a".repeat(16_382)}😀omitted-marker`
+      const data = JSON.stringify(payload)
+      expect(data.charCodeAt(16_383)).toBe(0xd83d)
+      yield* event(state.streams[0].id, "e1", "c1", { data: payload })
+      yield* until(() => wakes.length === 1)
+      const text = wakes[0].text
+      const fenced = text.split("```json\n")[1]?.split("\n```")[0]
+      expect(text).toContain(`Its data is ${data.length} characters, truncated to the first 16384.`)
+      expect(fenced).toBe(`"${"a".repeat(16_382)}`)
+      expect(fenced).toBe(fenced?.toWellFormed())
+      expect(text).toBe(text.toWellFormed())
+      expect(text).not.toContain("omitted-marker")
+    }),
+  )
+
   it.live("gives a replayed event the same message, and stops when the session is deleted", () =>
     Effect.gen(function* () {
       const { state, wakes, watch, event, deleted } = yield* setup()
