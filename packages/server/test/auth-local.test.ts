@@ -69,11 +69,13 @@ it.live("local accounts gate the server and the shared password stops authorizin
     )
     expect(withCookie.status).toBe(200)
 
-    // Signing in again works; wrong credentials report the same 401 for unknown and wrong alike.
+    // Signing in again works; wrong credentials report the same 401 for unknown and wrong alike, and
+    // advertise the local sign-in the shared password form should switch to.
     const login = yield* post("/api/experimental/auth/login", { username: "ada", password: "s3cure-passw" })
     expect(login.status).toBe(200)
     const badLogin = yield* post("/api/experimental/auth/login", { username: "ada", password: "wrong-passw" })
     expect(badLogin.status).toBe(401)
+    expect(yield* Effect.promise(() => badLogin.json())).toMatchObject({ methods: ["local"] })
 
     // Usernames are taken once registered, and weak passwords are rejected up front.
     const taken = yield* post("/api/experimental/auth/register", { username: "ada", password: "s3cure-passw" })
