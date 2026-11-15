@@ -159,7 +159,13 @@ pub struct Contents {
     pub load: u64,
     pub patches: HashMap<usize, ContentRef>,
     pub images: HashMap<String, ContentRef>,
+    /// Each card's path as its heading shows it, cut for the load and pane width they name: a resize cuts them again
+    /// once, and a view at the same width reads them.
+    pub headings: ((u64, i64), Headings),
 }
+
+/// Paths cut for a card's heading, by file and whether it is reviewed.
+pub type Headings = HashMap<(usize, bool), std::rc::Rc<str>>;
 
 pub struct Viewer {
     /// Its number among the plugin's viewers: a reply to an earlier one changes nothing of this one.

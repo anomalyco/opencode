@@ -3,6 +3,8 @@
 //! ([`v2::View::memo`]). A card's header sticks to the top of its card, its hunks are anchors a step walks, and the
 //! fixed edge above the list takes the color of the card at the top from `layout`.
 
+use std::rc::Rc;
+
 use opencode_plugin::abi::interact::Interact;
 use opencode_plugin::abi::v2::{self, ContentRef, DiffView, Edge, Fit, Geometry, LayoutReply, ListItem, Node, Source};
 use opencode_plugin::abi::{Click, Edges, Justify, Layout, Rgba, Span, Width, Wrap};
@@ -156,12 +158,15 @@ fn patches(viewer: &mut Viewer, cx: &mut v2::View<'_>, surface: &'static str) ->
         .with_id(EDGE)
         .bg("diff.background.context")
         .layout(Layout::default().height(Width::Cells(1)).shrink(false).margin(margin));
+    let pane = viewer.pane_width();
     let shape = Shape {
         load: viewer.loads,
         view: viewer.view(cx.read),
         compact: viewer.compact(),
         inset,
-        pane: viewer.pane_width(),
+        // A gap's run of half blocks is cut to its box: at least 256 cells, and past that in steps of 64, so a resize
+        // keeps every gap but where the pane crosses a step past 256 cells.
+        gap: (pane.clamp(256, i64::from(u16::MAX - 63)) as u16).div_ceil(64) * 64,
         mode: viewer.mode,
         surface,
         image_height: (cx.read.info().size.1 / 4).clamp(3, 8),
@@ -173,15 +178,21 @@ fn patches(viewer: &mut Viewer, cx: &mut v2::View<'_>, surface: &'static str) ->
         Load::Ready { files, .. } => files,
         _ => &[],
     };
+    if contents.headings.0 != (shape.load, pane) {
+        contents.headings = ((shape.load, pane), Default::default());
+    }
     let items = visible
         .into_iter()
         .enumerate()
         .filter_map(|(index, file)| {
             let entry = files.get(file)?;
+            let reviewed = reviewed.contains(&entry.file);
+            let heading = contents.headings.1.entry((file, reviewed)).or_insert_with(|| heading(entry, reviewed, pane));
             let card = Card {
                 shape: shape.clone(),
                 gap: index > 0,
-                reviewed: reviewed.contains(&entry.file),
+                reviewed,
+                heading: heading.clone(),
                 preview: previews.get(&entry.file).cloned(),
             };
             let estimate = estimate(entry, &card);
@@ -201,7 +212,8 @@ struct Shape {
     view: DiffView,
     compact: bool,
     inset: u16,
-    pane: i64,
+    /// The half blocks of a gap.
+    gap: u16,
     mode: Mode,
     surface: &'static str,
     image_height: u16,
@@ -212,7 +224,19 @@ struct Card {
     shape: Shape,
     gap: bool,
     reviewed: bool,
+    /// The path as the heading shows it, cut to the pane: a resize that cuts it the same keeps the card.
+    heading: Rc<str>,
     preview: Option<Preview>,
+}
+
+/// `path` as a card's heading shows it in a pane `pane` cells wide, beside its counts.
+fn heading(entry: &File, reviewed: bool, pane: i64) -> Rc<str> {
+    let counts = if is_image(&entry.file) {
+        6
+    } else {
+        entry.additions.to_string().len() as i64 + entry.deletions.to_string().len() as i64 + 5
+    } + if reviewed { 2 } else { 0 };
+    Rc::from(crate::dialogs::open::truncate_file_path(&entry.file, (pane - counts - 2).max(1)))
 }
 
 /// The rows the host assumes a card takes until it is laid out: its header and a row a patch line.
@@ -231,16 +255,40 @@ fn build(
 ) -> Node {
     let shape = &card.shape;
     let background = if card.reviewed { "background.raised.high" } else { "diff.background.context" };
-    let image = is_image(&entry.file);
     let path = &entry.file;
+    // A card's gap, heading and body are memoized apart, on what each shows: a view toggle builds the bodies again, and
+    // a resize only the headings it cuts otherwise, not every node of 1,000 cards.
     let mut children = Vec::new();
     if card.gap {
-        children.push(card_gap('▄', background, shape.surface, shape.inset, shape.pane));
+        let gap = (background, shape.surface, shape.inset, shape.gap);
+        children.push(cx.memo(format!("g:{path}"), gap, |_| card_gap('▄', gap.0, gap.1, gap.2, gap.3)));
     }
-    let counts =
-        if image { 6 } else { entry.additions.to_string().len() as i64 + entry.deletions.to_string().len() as i64 + 5 }
-            + if card.reviewed { 2 } else { 0 };
-    let shown = crate::dialogs::open::truncate_file_path(path, (shape.pane - counts - 2).max(1));
+    let heading = (card.reviewed, card.heading.clone(), shape.load, shape.compact);
+    // A press of the right button on it opens the file menu (the surface's handler).
+    let line = cx.memo(format!("h:{path}"), heading, |_| heading_line(entry, card));
+    let margin = Edges { left: shape.inset as i16, right: shape.inset as i16, ..Edges::default() };
+    let card_layout = Layout::default().shrink(false).margin(margin);
+    if card.reviewed {
+        // The reviewed card is its title; a half-row of the page closes it.
+        children.push(Node::column(vec![line]).with_id(format!("c:{path}")).bg(background).layout(card_layout));
+        children.push(card_gap('▀', background, shape.surface, shape.inset, shape.gap));
+    } else {
+        let header = Node::column(vec![line])
+            .bg(background)
+            .sticky(Edge::Top)
+            .layout(Layout::default().height(Width::Cells(super::viewer::FILE_HEADER_HEIGHT)).shrink(false));
+        let shown = (shape.load, shape.view, shape.compact, shape.mode, shape.image_height, card.preview.clone());
+        let body = cx.memo(format!("d:{path}"), shown, |cx| body(cx, contents, file, entry, card));
+        children.push(Node::column(vec![header, body]).with_id(format!("c:{path}")).bg(background).layout(card_layout));
+    }
+    Node::column(children)
+        .anchor("file", if card.reviewed { "reviewed" } else { "" })
+        .layout(Layout::default().shrink(false))
+}
+
+/// A card's heading row: the file's path, cut to the pane, and its counts.
+fn heading_line(entry: &File, card: &Card) -> Node {
+    let (shape, shown, image) = (&card.shape, &*card.heading, is_image(&entry.file));
     let split = shown.rfind('/').map_or(0, |at| at + 1);
     // As few nodes as the heading needs: a list of 1,000 cards holds each card's nodes in one tree, within what the
     // host takes of one tree (`limits::Limits::nodes`).
@@ -268,30 +316,11 @@ fn build(
         line.push(count(format!("+{}", entry.additions), "diff.text.added"));
         line.push(count(format!("-{}", entry.deletions), "diff.text.removed"));
     }
-    // A press of the right button on it opens the file menu (the surface's handler).
-    let line = Node::row(line)
-        .with_id(format!("h:{path}"))
+    Node::row(line)
         .gap(1)
         .padding_sides(Edges { left: if shape.compact { 2 } else { 1 }, right: 1, ..Edges::default() })
         .interact(Interact { pointer: true, ..Interact::default() })
-        .layout(Layout::default().height(Width::Cells(1)).shrink(false));
-    let margin = Edges { left: shape.inset as i16, right: shape.inset as i16, ..Edges::default() };
-    let card_layout = Layout::default().shrink(false).margin(margin);
-    if card.reviewed {
-        // The reviewed card is its title; a half-row of the page closes it.
-        children.push(Node::column(vec![line]).with_id(format!("c:{path}")).bg(background).layout(card_layout));
-        children.push(card_gap('▀', background, shape.surface, shape.inset, shape.pane));
-    } else {
-        let header = Node::column(vec![line])
-            .bg(background)
-            .sticky(Edge::Top)
-            .layout(Layout::default().height(Width::Cells(super::viewer::FILE_HEADER_HEIGHT)).shrink(false));
-        let body = body(cx, contents, file, entry, card);
-        children.push(Node::column(vec![header, body]).with_id(format!("c:{path}")).bg(background).layout(card_layout));
-    }
-    Node::column(children)
-        .anchor("file", if card.reviewed { "reviewed" } else { "" })
-        .layout(Layout::default().shrink(false))
+        .layout(Layout::default().height(Width::Cells(1)).shrink(false))
 }
 
 /// A card's body: its patch, its image, or a line that says why there is none.
@@ -366,15 +395,16 @@ fn image_body(cx: &mut v2::View<'_>, contents: &mut super::viewer::Contents, ent
 }
 
 /// A half-row of page between cards: the card's color over its width, the pane's surface over the insets (`CardGap`).
-fn card_gap(glyph: char, card: &'static str, surface: &'static str, inset: u16, width: i64) -> Node {
+fn card_gap(glyph: char, card: &'static str, surface: &'static str, inset: u16, width: u16) -> Node {
     let fixed = |cells: u16| Layout::default().width(Width::Cells(cells)).height(Width::Cells(1)).shrink(false);
     let mut row = Vec::new();
     // A zero-width inset still claims a cell, which would notch flush cards.
     if inset > 0 {
         row.push(half(glyph, surface, inset, fixed(inset)));
     }
-    let grows = Layout::default().height(Width::Cells(1)).shrink(false).grow().min_width_zero();
-    row.push(half(glyph, card, width.max(0) as u16, grows));
+    // It shrinks to its room: its run of glyphs may be longer (`Shape::gap`).
+    let grows = Layout::default().height(Width::Cells(1)).grow().min_width_zero();
+    row.push(half(glyph, card, width, grows));
     if inset > 0 {
         row.push(half(glyph, surface, inset, fixed(inset)));
     }

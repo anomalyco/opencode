@@ -587,6 +587,66 @@ fn a_resize_shows_the_new_size_in_its_first_frame() {
     });
 }
 
+// Expected (`work` for a rebuild, O-136; viewer-frames): each rebuild of the viewer at 1,000 files touches the widgets it
+// does at 410 (the cards near the view), and gives again only the list items whose cards or rows show something else:
+// a mark the marked card and its tree row, a view toggle every card and no row, a resize that cuts no heading nothing,
+// a theme every tree row (they take the palette) and no card. On both carriers.
+#[test]
+fn a_rebuild_at_1000_files_builds_what_it_changes() {
+    on_both(|| {
+        let rebuilds = |count: usize| {
+            let h = route(count, 4, 200, 40);
+            let step = |run: &dyn Fn()| {
+                h.settle();
+                let before = reconcile::work();
+                run();
+                h.settle();
+                let done = reconcile::work().since(before);
+                (done.touched(), done.items)
+            };
+            let theme = || {
+                assert!(h.tui.theme.borrow_mut().set("tokyonight"));
+                h.tui.theme_changed();
+            };
+            [step(&|| h.app.press("m")), step(&|| h.app.press("v")), step(&|| h.app.resize(140, 40)), step(&theme)]
+        };
+        let (small, large) = (rebuilds(410), rebuilds(1000));
+        let touched = |steps: &[(u64, u64); 4]| steps.map(|(touched, _)| touched);
+        assert_eq!(touched(&large), touched(&small), "widgets touched at 1,000 files and 410: {large:?} {small:?}");
+        // The tree's rows are the files' and the folder `src`'s.
+        assert_eq!(large.map(|(_, items)| items), [2, 1000, 0, 1001], "{large:?}");
+        assert_eq!(small.map(|(_, items)| items), [2, 410, 0, 411], "{small:?}");
+    });
+}
+
+// Expected (viewer-frames): a card's heading, kept through a resize that cuts its path the same, shows the path as cut
+// for the new width once it cuts it otherwise: as a viewer opened at that width does, on both carriers.
+#[test]
+fn a_resize_cuts_a_long_heading_for_the_new_width() {
+    on_both(|| {
+        let long = "src/a/rather/long/directory/that/the/heading/cuts/at/narrow/widths/f0000.rs";
+        let file = json!({ "file": long, "patch": "@@ -1,2 +1,2 @@\n line\n-old\n+new\n", "additions": 1,
+            "deletions": 1, "status": "modified" });
+        let heading = |h: &Diffs| {
+            let screen = h.settle();
+            screen.lines().find(|line| line.contains("f0000.rs") && line.contains("+1")).unwrap_or_default().to_owned()
+        };
+        let opened = |width: u16| {
+            let h = mount_with(Route::Home, json!([file.clone()]), width, 30);
+            h.wait_for("/project");
+            h.tui.keymap.dispatch("diff.open", None);
+            h.wait_for("f0000.rs");
+            h
+        };
+        let h = opened(160);
+        let wide = heading(&h);
+        h.app.resize(100, 30);
+        let resized = heading(&h);
+        assert_ne!(resized, wide, "the heading was not cut again");
+        assert_eq!(resized, heading(&opened(100)));
+    });
+}
+
 // Expected (4.9 "a menu on right button down"): the press opens the menu; the release does not close it.
 #[test]
 fn the_file_menu_opens_on_the_right_button_down() {
