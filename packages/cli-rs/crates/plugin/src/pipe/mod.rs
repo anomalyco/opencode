@@ -1547,11 +1547,14 @@ impl Drop for Scripts {
 fn post(proxy: &AppProxy, id: u64) {
     if proxy.send(Woken(id)) == Err(opentui::app::ProxyError::Full) {
         let proxy = proxy.clone();
-        let _ = std::thread::Builder::new().name("js-host-wake".to_owned()).spawn(move || {
+        let spawned = std::thread::Builder::new().name("js-host-wake".to_owned()).spawn(move || {
             while proxy.send(Woken(id)) == Err(opentui::app::ProxyError::Full) {
                 std::thread::sleep(Duration::from_millis(1));
             }
         });
+        if let Err(error) = spawned {
+            log::warn!("failed to start a js-host-wake thread: {error}; wake {id} is not posted");
+        }
     }
 }
 

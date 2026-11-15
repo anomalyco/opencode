@@ -224,7 +224,7 @@ impl Shutdown {
         let teardown = self.clone();
         // `runMain` reports every signal interruption as 130; the CLI turns a SIGTERM into 143.
         let code = if name == "SIGTERM" { 143 } else { 130 };
-        let _ = std::thread::Builder::new().name("opencode-shutdown".into()).spawn(move || {
+        let spawned = std::thread::Builder::new().name("opencode-shutdown".into()).spawn(move || {
             for (_, step) in steps {
                 if let Some(first) = lock(&teardown.queue).first_mut() {
                     first.1 = Some(Instant::now());
@@ -236,8 +236,11 @@ impl Shutdown {
                 (teardown.exit)(code);
             }
         });
+        if let Err(error) = spawned {
+            log::error!("failed to start the shutdown thread: {error}; no teardown runs, and the deadline exits");
+        }
         let timer = self.clone();
-        let _ = std::thread::Builder::new().name("opencode-shutdown-deadline".into()).spawn(move || {
+        let spawned = std::thread::Builder::new().name("opencode-shutdown-deadline".into()).spawn(move || {
             std::thread::sleep(timer.deadline);
             if timer.done.swap(true, Ordering::SeqCst) {
                 return;
@@ -252,6 +255,9 @@ impl Shutdown {
             );
             (timer.exit)(1);
         });
+        if let Err(error) = spawned {
+            log::error!("failed to start the shutdown deadline thread: {error}; a teardown that hangs is not ended");
+        }
     }
 
     /// The running step and the steps after it, as `<label> for <ms>ms`, like `Teardown.pending()`.

@@ -50,9 +50,12 @@ pub fn start(app: &App, addr: SocketAddr, version: String) -> std::io::Result<Se
         for stream in listener.incoming().flatten() {
             let proxy = proxy.clone();
             let version = version.clone();
-            let _ = std::thread::Builder::new()
+            if let Err(error) = std::thread::Builder::new()
                 .name("drive-ui-socket".into())
-                .spawn(move || serve(stream, &proxy, &version));
+                .spawn(move || serve(stream, &proxy, &version))
+            {
+                log::warn!("failed to start a drive-ui-socket thread: {error}; the connection is closed unanswered");
+            }
         }
     })?;
     Ok(Server { addr })

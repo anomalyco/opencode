@@ -75,12 +75,18 @@ pub fn install(options: Options) {
     log::set_max_level(logger.level);
     let _ = LOGGER.set(logger);
     if let Some(path) = logger.path.clone() {
-        let _ = std::thread::Builder::new().name("opencode-log-trim".into()).spawn(move || {
+        let spawned = std::thread::Builder::new().name("opencode-log-trim".into()).spawn(move || {
             loop {
                 let _ = trim(&path, LOG_MAX_BYTES, LOG_KEEP_BYTES);
                 std::thread::sleep(LOG_TRIM_INTERVAL);
             }
         });
+        if let Err(error) = spawned {
+            log::warn!("failed to start the log trim thread: {error}; the log file grows untrimmed");
+        }
+    }
+    if let Some(Err(error)) = &logger.otlp {
+        log::warn!("failed to start the OTLP exporter thread: {error}; log records are not exported");
     }
 }
 
@@ -141,7 +147,8 @@ struct Logger {
     path: Option<PathBuf>,
     file: Option<File>,
     print: bool,
-    otlp: Option<SyncSender<Message>>,
+    /// The exporter's queue, or why its thread did not start, which `install` logs once the logger is in place.
+    otlp: Option<io::Result<SyncSender<Message>>>,
 }
 
 impl Logger {
@@ -161,7 +168,7 @@ impl Logger {
     }
 
     fn export(&self) {
-        let Some(otlp) = &self.otlp else { return };
+        let Some(Ok(otlp)) = &self.otlp else { return };
         let (done, wait) = std::sync::mpsc::sync_channel(1);
         if otlp.send(Message::Flush(done)).is_ok() {
             let _ = wait.recv_timeout(OTLP_SHUTDOWN);
@@ -191,7 +198,7 @@ impl Log for Logger {
         if self.print {
             let _ = io::stderr().write_all(line.as_bytes());
         }
-        if let Some(otlp) = &self.otlp {
+        if let Some(Ok(otlp)) = &self.otlp {
             // A full queue drops the record rather than block the caller.
             let _ = otlp.try_send(Message::Record(log_record(now, record.level(), &message, &fields)));
         }
@@ -511,10 +518,10 @@ struct Otlp {
 impl Otlp {
     /// Starts the exporter thread. It posts a batch every second or at 1000 records. After a failed post it
     /// drops records for 60 s, as Effect's exporter does. The queue is bounded; a full queue drops records.
-    fn start(self) -> SyncSender<Message> {
+    fn start(self) -> io::Result<SyncSender<Message>> {
         let (sender, receiver) = std::sync::mpsc::sync_channel(OTLP_QUEUE);
-        let _ = std::thread::Builder::new().name("opencode-otlp".into()).spawn(move || self.run(receiver));
-        sender
+        std::thread::Builder::new().name("opencode-otlp".into()).spawn(move || self.run(receiver))?;
+        Ok(sender)
     }
 
     fn run(self, receiver: Receiver<Message>) {

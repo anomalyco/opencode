@@ -700,6 +700,7 @@ dependencies = [
 name = "opencode-drive"
 version = "0.1.0"
 dependencies = [
+ "log",
  "opencode-api-types",
  "opencode-util",
  "opentui",
