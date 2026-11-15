@@ -198,6 +198,9 @@ pub struct KeymapLayer<T> {
     pub commands: Vec<TuiCommand>,
     /// Names whose configured bindings join this layer.
     pub bindings: Vec<String>,
+    /// Keys of named commands of another layer, each `(key, name)`, which join this layer while the config binds that
+    /// name to nothing: a command a global layer lists, whose own key works only in this layer's mode.
+    pub keys: Vec<(String, String)>,
 }
 
 impl<T> Default for KeymapLayer<T> {
@@ -209,6 +212,7 @@ impl<T> Default for KeymapLayer<T> {
             priority: 0,
             commands: Vec::new(),
             bindings: Vec::new(),
+            keys: Vec::new(),
         }
     }
 }
@@ -246,6 +250,11 @@ impl<T> KeymapLayer<T> {
 
     pub fn bindings(mut self, names: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.bindings = names.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn keys(mut self, keys: Vec<(String, String)>) -> Self {
+        self.keys = keys;
         self
     }
 }
@@ -517,6 +526,14 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             }
         }
         bindings.extend(layer.bindings.iter().flat_map(|id| keybinds.get(id).iter().cloned()));
+        for (key, id) in &layer.keys {
+            if key.is_empty() {
+                return Err("Keymap command bindings cannot be empty".to_owned());
+            }
+            if keybinds.get(id).is_empty() && !generated::DEFINITIONS.iter().any(|definition| definition.name == id) {
+                bindings.push(Binding::new(key.as_str()).cmd(id.as_str()));
+            }
+        }
         let mut engine =
             Layer::new().priority(layer.priority).enabled(layer.enabled).commands(commands).bindings(bindings);
         engine.target = layer.target;

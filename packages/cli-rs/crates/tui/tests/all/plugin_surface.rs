@@ -1454,6 +1454,69 @@ fn a_route_opens_with_one_view() {
     }
 }
 
+thread_local! {
+    /// How often `tally.bump` ran.
+    static TALLIED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// A route with a palette command of its own, `tally.bump` on key `1`.
+fn tally(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = abi::Command::default()
+        .with_name("tally.bump".into())
+        .with_title("Bump the tally".into())
+        .with_keybind(Some("1".into()))
+        .with_palette(true)
+        .with_scope(abi::Scope::Route("tally".into()));
+    setup.command(command, |_, _| TALLIED.set(TALLIED.get() + 1));
+    setup.surface(v2::Surface::new("tally", v2::Place::Route("tally".into()), |_| {
+        v2::Node::text(vec![abi::Span::new("a tally")])
+    }));
+    Ok(())
+}
+
+// Expected (PL-3): a route's palette commands show in the palette while the route shows, as TS lists them, and run
+// from it on the route; their keys run them on the route, and not under a dialog. Elsewhere the palette has none.
+#[test]
+fn a_routes_commands_are_in_the_palette() {
+    for carrier in CARRIERS {
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![builtin(carrier, abi::Plugin { id: "test.tally", setup: tally })],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(80, 30, deps);
+        let palette = |harness: &Harness| {
+            harness.tui.keymap.dispatch("command.palette.show", None);
+            harness.wait_for("Search commands");
+            harness.app.type_text("Bump the tally");
+            settle(harness);
+            harness.app.render().text()
+        };
+        let screen = palette(&harness);
+        assert!(!screen.contains("Bump the tally\n") && screen.contains("No results"), "{carrier:?}: {screen}");
+        harness.app.press("escape");
+        settle(&harness);
+        harness.tui.navigate(Route::Plugin { id: "test.tally".into(), name: "tally".into() });
+        harness.wait_for("a tally");
+        TALLIED.set(0);
+        harness.app.press("1");
+        settle(&harness);
+        assert_eq!(TALLIED.get(), 1, "{carrier:?}: its key runs it on the route");
+        let screen = palette(&harness);
+        assert!(!screen.contains("No results"), "{carrier:?}: {screen}");
+        // Under the palette its key is the palette's: it filters.
+        harness.app.press("1");
+        settle(&harness);
+        assert_eq!(TALLIED.get(), 1, "{carrier:?}: its key ran it under a dialog");
+        harness.app.press("backspace");
+        settle(&harness);
+        harness.app.press("enter");
+        settle(&harness);
+        assert_eq!(TALLIED.get(), 2, "{carrier:?}: the palette runs it");
+        assert!(!harness.tui.dialogs.is_open() && harness.app.render().text().contains("a tally"), "{carrier:?}");
+    }
+}
+
 // Expected (4.3): leaving a 2.0 route over the C ABI tells the library, which drops the mount's memo table: one call
 // crosses, and nothing more.
 #[test]
