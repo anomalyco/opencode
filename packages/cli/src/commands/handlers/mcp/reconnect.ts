@@ -34,6 +34,8 @@ export default Runtime.handler(
       return status ? `${icon(status)} ${server} ${describe(status)}` : `${icon({ status: "pending" })} ${server}`
     })
     process.stdout.write(lines.join(EOL) + EOL)
+    // Let scripts branch on the outcome instead of parsing the lines above.
+    if (stillDown(after.data, targets).length > 0) process.exitCode = 1
   }),
 )
 
@@ -41,4 +43,12 @@ export default Runtime.handler(
 export function reconnectTargets(servers: McpServer[], name?: string) {
   if (name) return [name]
   return servers.filter((server) => server.status.status === "failed").map((server) => server.name)
+}
+
+/** Targets that are still not connected after the attempt. */
+export function stillDown(servers: McpServer[], targets: string[]) {
+  return targets.filter((name) => {
+    const status = servers.find((server) => server.name === name)?.status.status
+    return status === "failed" || status === "needs_auth"
+  })
 }

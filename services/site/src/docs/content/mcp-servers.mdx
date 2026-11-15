@@ -542,6 +542,8 @@ opencode mcp reconnect github    # one server
 
 This is the quick way out when a local server depends on something that was not ready yet, such as `docker run` while Docker was still starting.
 
+`opencode mcp reconnect` exits 1 when a server is still not connected afterwards, so scripts can branch on the result.
+
 Run `opencode mcp auth` without a name to pick from the OAuth-capable servers:
 
 ```sh

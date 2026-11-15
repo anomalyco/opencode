@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { McpServer } from "@opencode/client"
-import { reconnectTargets } from "../src/commands/handlers/mcp/reconnect"
+import { reconnectTargets, stillDown } from "../src/commands/handlers/mcp/reconnect"
 
 const server = (name: string, status: McpServer["status"] = { status: "pending" }): McpServer => ({ name, status })
 
@@ -25,5 +25,22 @@ describe("opencode mcp reconnect", () => {
     expect(reconnectTargets([server("github", { status: "connected" }), server("docs", { status: "disabled" })])).toEqual(
       [],
     )
+  })
+
+  test("reports targets that are still not connected", () => {
+    expect(
+      stillDown(
+        [
+          server("github", { status: "connected" }),
+          server("sentry", { status: "failed", error: "still down" }),
+          server("docs", { status: "needs_auth", error: "expired" }),
+        ],
+        ["github", "sentry", "docs"],
+      ),
+    ).toEqual(["sentry", "docs"])
+  })
+
+  test("reports nothing down when every target connected", () => {
+    expect(stillDown([server("github", { status: "connected" })], ["github"])).toEqual([])
   })
 })
