@@ -185,17 +185,25 @@ describe("Integration", () => {
     }),
   )
 
-  it.effect("validates provider-declared key prefixes before persisting credentials", () =>
+  it.effect("validates documented provider key prefixes before persisting credentials", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const credentials = yield* Credential.Service
       const providers = [
-        { id: "anthropic", prefix: "sk-ant-", key: "sk-ant-test-fixture" },
-        { id: "deepseek", prefix: "sk-", key: "sk-test-fixture" },
-        { id: "groq", prefix: "gsk_", key: "gsk_test-fixture" },
-        { id: "huggingface", prefix: "hf_", key: "hf_test-fixture" },
-        { id: "openrouter", prefix: "sk-or-v1-", key: "sk-or-v1-test-fixture" },
-        { id: "xai", prefix: "xai-", key: "xai-test-fixture" },
+        { id: "alibaba", prefixes: ["sk-"], keys: ["sk-test-fixture", "sk-ws-test-fixture"] },
+        { id: "alibaba-coding-plan-cn", prefixes: ["sk-"], keys: ["sk-sp-test-fixture"] },
+        { id: "anthropic", prefixes: ["sk-ant-"], keys: ["sk-ant-test-fixture"] },
+        { id: "deepseek", prefixes: ["sk-"], keys: ["sk-test-fixture"] },
+        {
+          id: "digitalocean",
+          prefixes: ["dop_v1_", "doo_v1_"],
+          keys: ["dop_v1_test-fixture", "doo_v1_test-fixture"],
+        },
+        { id: "google", prefixes: ["AQ."], keys: ["AQ.test-fixture"] },
+        { id: "groq", prefixes: ["gsk_"], keys: ["gsk_test-fixture"] },
+        { id: "huggingface", prefixes: ["hf_"], keys: ["hf_test-fixture"] },
+        { id: "openrouter", prefixes: ["sk-or-v1-"], keys: ["sk-or-v1-test-fixture"] },
+        { id: "xai", prefixes: ["xai-"], keys: ["xai-test-fixture"] },
       ]
       const opaqueID = Integration.ID.make("custom")
 
@@ -205,7 +213,7 @@ describe("Integration", () => {
             integrationID: Integration.ID.make(provider.id),
             method: {
               type: "key",
-              validation: { prefix: provider.prefix },
+              validation: { prefixes: provider.prefixes },
             },
           })
         }
@@ -217,24 +225,20 @@ describe("Integration", () => {
 
       for (const provider of providers) {
         const integrationID = Integration.ID.make(provider.id)
-        yield* integrations.connection.key({ integrationID, key: provider.key })
+        for (const key of provider.keys) {
+          yield* integrations.connection.key({ integrationID, key })
+        }
         const before = yield* credentials.list(integrationID)
-
-        const invalid = yield* integrations.connection
-          .key({ integrationID, key: "1" })
-          .pipe(Effect.flip)
-        expect(invalid.cause).toMatchObject({
-          message: `API key must start with "${provider.prefix}" and include a value after the prefix.`,
-        })
-        expect(yield* credentials.list(integrationID)).toEqual(before)
-
-        const prefixOnly = yield* integrations.connection
-          .key({ integrationID, key: provider.prefix })
-          .pipe(Effect.flip)
-        expect(prefixOnly.cause).toMatchObject({
-          message: `API key must start with "${provider.prefix}" and include a value after the prefix.`,
-        })
-        expect(yield* credentials.list(integrationID)).toEqual(before)
+        const invalidKeys = ["1", ...provider.prefixes, ...provider.prefixes.map((prefix) => prefix + "  \t ")]
+        for (const key of invalidKeys) {
+          const invalid = yield* integrations.connection
+            .key({ integrationID, key })
+            .pipe(Effect.flip)
+          expect(invalid.cause).toMatchObject({
+            message: `API key must start with one of the supported prefixes: ${provider.prefixes.join(", ")}.`,
+          })
+          expect(yield* credentials.list(integrationID)).toEqual(before)
+        }
       }
 
       const empty = yield* integrations.connection
@@ -243,7 +247,7 @@ describe("Integration", () => {
       expect(empty.cause).toMatchObject({ message: "API key cannot be empty." })
       expect(yield* credentials.list(opaqueID)).toEqual([])
 
-      // Providers without a declared format keep accepting opaque deployment-specific tokens.
+      // Providers without a documented stable format keep accepting opaque deployment-specific tokens.
       yield* integrations.connection.key({ integrationID: opaqueID, key: "1" })
       expect(yield* credentials.list(opaqueID)).toHaveLength(1)
     }),

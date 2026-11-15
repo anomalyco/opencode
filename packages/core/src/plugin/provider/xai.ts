@@ -95,7 +95,7 @@ export const XAIPlugin = define({
       editor.method.update(device(ctx.app))
       editor.method.update({
         integrationID: "xai",
-        method: { type: "key", label: "Manually enter API Key", validation: { prefix: "xai-" } },
+        method: { type: "key", label: "Manually enter API Key", validation: { prefixes: ["xai-"] } },
       })
     })
     yield* ctx.provider.transform((providers) => {

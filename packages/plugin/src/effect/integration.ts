@@ -26,7 +26,7 @@ export interface IntegrationKeyMethod {
   readonly type: "key"
   readonly label?: string
   readonly form?: Form.Fields
-  readonly validation?: { readonly prefix: string }
+  readonly validation?: { readonly prefixes: ReadonlyArray<string> }
 }
 
 export interface IntegrationExternalMethod {

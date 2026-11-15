@@ -721,10 +721,13 @@ const layer = Layer.effect(
           if (!input.key.trim()) {
             return yield* new AuthorizationError({ cause: new Error("API key cannot be empty.") })
           }
-          const prefix = method.validation?.prefix
-          if (prefix && (!input.key.startsWith(prefix) || input.key.length === prefix.length)) {
+          const prefixes = method.validation?.prefixes
+          if (
+            prefixes?.length &&
+            !prefixes.some((prefix) => input.key.startsWith(prefix) && input.key.slice(prefix.length).trim().length > 0)
+          ) {
             return yield* new AuthorizationError({
-              cause: new Error(`API key must start with "${prefix}" and include a value after the prefix.`),
+              cause: new Error(`API key must start with one of the supported prefixes: ${prefixes.join(", ")}.`),
             })
           }
           const answer = input.answer ?? {}
