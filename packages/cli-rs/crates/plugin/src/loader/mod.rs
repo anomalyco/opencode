@@ -552,7 +552,23 @@ impl Loader {
         if self.held.borrow().get(target) != Some(&Ok(artifact.clone())) {
             return Ok(false);
         }
+        // The build is identified again now, from the disk: one that changed since the question opened, before the
+        // watcher told the loader, leaves no decision behind for either build (final review big-boi 9). The load still
+        // hashes what it opens.
+        let now = self.targets().into_iter().find(|known| known.target == target).map(|known| self.identify(&known));
+        if now.as_ref().is_none_or(|now| now.as_ref() != Ok(artifact)) {
+            return Ok(false);
+        }
         self.approvals.decide(artifact, decision).map(|()| true)
+    }
+
+    /// The artifact `target` holds on the disk now, as a reconcile reads it: its TypeScript tree, or its library.
+    fn identify(&self, target: &Target) -> Result<Artifact, String> {
+        if let (true, Some(dir)) = (self.scripted(target), &target.local) {
+            return Artifact::tree(dir);
+        }
+        let file = target.library().ok_or_else(|| format!("{}: no build", target.target))?;
+        Artifact::open(target.local.as_deref().unwrap_or(&file), &file).map(|(artifact, _)| artifact)
     }
 
     /// The one place that decides whether the library of `target`, at `file`, may be opened, before anything of it

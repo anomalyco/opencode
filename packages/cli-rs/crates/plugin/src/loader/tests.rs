@@ -984,6 +984,34 @@ fn an_answer_records_nothing_for_a_build_replaced_while_it_was_asked() {
     }
 }
 
+// Expected (final review big-boi 9): when the library is replaced while the question is open and the answer comes
+// before the watcher's reconcile, neither answer saves anything, for the build shown or the new one; the reconcile
+// after asks about the new build, and the build shown, when it comes back, is still pending.
+#[test]
+fn an_answer_before_the_watcher_saves_nothing_for_a_changed_build() {
+    for decision in [approval::Decision::Approved, approval::Decision::Declined] {
+        let project = Project::new();
+        let target = project.plugin("proj", "id=a");
+        let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+        let loader = project.loader(fake.clone(), Vec::new());
+        loader.reconcile(&dynamic(&host), &registry);
+        let shown = loader.held(&target).unwrap().unwrap();
+        write(&library(&target), "id=b");
+        assert_eq!(loader.decide(&target, &shown, decision), Ok(false), "{decision:?}");
+        assert!(!project.store().exists(), "{decision:?}: a decision was saved");
+        loader.reconcile(&dynamic(&host), &registry);
+        assert_eq!(entry(&registry.entries(), &target).status, Status::Pending, "{decision:?}");
+        assert_eq!(asked(&host).len(), 2, "{decision:?}: the new build is asked about");
+        write(&library(&target), "id=a");
+        loader.reconcile(&dynamic(&host), &registry);
+        assert_eq!((entry(&registry.entries(), &target).status.clone(), fake.loads.get()), (Status::Pending, 0));
+        // The same build unchanged is saved, as before.
+        let again = loader.held(&target).unwrap().unwrap();
+        assert_eq!(loader.decide(&target, &again, decision), Ok(true), "{decision:?}");
+        assert!(project.store().exists(), "{decision:?}");
+    }
+}
+
 // Expected (bigboi-1): a directory link retargeted while the question is open is another build too.
 #[cfg(unix)]
 #[test]
