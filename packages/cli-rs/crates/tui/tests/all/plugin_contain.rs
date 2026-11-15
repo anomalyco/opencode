@@ -707,11 +707,11 @@ fn the_oracles_can_fail() {
     let titles: Vec<_> = toasts.iter().filter_map(|toast| toast.title.clone()).collect();
     assert_eq!(titles, ["Plugin is slow: model.a"]);
     assert!(slow.harness.tui.plugins.entries().iter().any(|entry| entry.id == "model.a" && entry.slow.is_some()));
-    // The manager shows what its calls cost; the toast's Disable turns it off.
+    // The manager says which of its calls cost (PL-5); the toast's Disable turns it off.
     let _ = slow.harness.tui.keymap.dispatch("plugins.list", None);
     slow.settle();
     let screen = rows(&slow.frame()).join("\n");
-    assert!(screen.contains("slow (p50/p99/worst)"), "{screen}");
+    assert!(screen.contains("slow: run-command"), "{screen}");
     (toasts[0].action.clone().expect("Disable").run)();
     slow.settle();
     assert_eq!(slow.status(A), Some(Status::Inactive));
