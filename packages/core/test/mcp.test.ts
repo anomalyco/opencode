@@ -229,7 +229,7 @@ function resourceServer(
           protocol.setRequestHandler("tools/call", async () => {
             const result = await protocol.elicitInput({
               mode: "form",
-              message: "Confirm",
+              message: "Send the report?",
               requestedSchema: { type: "object", properties: {} },
             })
             return {
@@ -1537,20 +1537,45 @@ const recordForm = (created: Deferred.Deferred<CreatedForm>, form: Form.Info) =>
     Effect.asVoid,
   )
 
-test("accepts empty MCP elicitations without creating forms", async () => {
+test.each([
+  [
+    "accepts an empty MCP elicitation with no content once the user confirms",
+    (forms: Form.Interface, id: Form.ID) => forms.reply({ id, answer: { confirm: true } }),
+    { action: "accept", content: {} },
+  ],
+  [
+    "declines an empty MCP elicitation the user refuses",
+    (forms: Form.Interface, id: Form.ID) => forms.reply({ id, answer: { confirm: false } }),
+    { action: "decline" },
+  ],
+  [
+    "cancels an empty MCP elicitation the user dismisses",
+    (forms: Form.Interface, id: Form.ID) => forms.cancel(id),
+    { action: "cancel" },
+  ],
+])("%s", async (_, settle, expected) => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const server = yield* resourceServer({ resources: false, emptyElicitation: true })
+        const created = yield* Deferred.make<CreatedForm>()
         const result = yield* Effect.gen(function* () {
           const service = yield* Mcp.Service
           const forms = yield* Form.Service
-          const result = yield* service.callTool({ server: "resources", name: "empty-elicitation" })
-          expect(yield* forms.list()).toEqual([])
-          return result
-        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+          const call = yield* service
+            .callTool({ server: "resources", name: "empty-elicitation" })
+            .pipe(Effect.forkScoped)
 
-        expect(result.structured).toEqual({ action: "accept", content: {} })
+          const { form } = yield* Deferred.await(created)
+          expect(form.metadata).toEqual({ kind: "mcp-elicitation", server: "resources", message: "Send the report?" })
+          expect(form.fields).toEqual([{ key: "confirm", type: "boolean", title: "Confirm", required: true }])
+          expect(call.pollUnsafe()).toBeUndefined()
+
+          yield* settle(forms, form.id)
+          return yield* Fiber.join(call)
+        }).pipe(Effect.provide(resourceMcpLayer(server.url, (form) => recordForm(created, form))))
+
+        expect(result.structured).toEqual(expected)
       }),
     ),
   )
