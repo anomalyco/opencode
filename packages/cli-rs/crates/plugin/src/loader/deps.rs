@@ -1,26 +1,59 @@
-//! What a native build asks the platform loader to load with it (bigboi-3): the dependencies and search paths an ELF
-//! or Mach-O file names. The loader opens a build from a private copy that holds only that one file, so a dependency
-//! comes from the system, from the paths the build names, or, for a relative path, from the current directory, which
-//! is the project. An approval names one file's bytes (rich-plugins 3.9), so what it covers must not reach code
-//! outside it.
+//! What a native build asks the platform loader to load with it (bigboi-3; final review big-boi 2, carbon-7): the
+//! dependencies and search paths an ELF or Mach-O file names, read as the loader that loads that format reads them,
+//! glibc's or musl's `ld.so` for ELF and `dyld` for Mach-O. The loader opens a build from a private copy that holds
+//! only that one file, so a dependency comes from the system, from the paths the build names, from the user's own
+//! loader settings, or, for a relative path, from the current directory, which is the project. An approval names one
+//! file's bytes (rich-plugins 3.9), so what it covers must not reach code outside it.
 //!
-//! - No build may name a path the loader resolves against the current directory, a search path with `..` beside its
-//!   own directory (which would leave the private copy), or an empty search path entry (which glibc reads as the
-//!   current directory).
-//! - A project's build may also name no absolute path outside the system's libraries (`/usr/lib`, and `/System` on
-//!   macOS), since such a path can point back into the project. Its dependencies are then system libraries and the
-//!   user's own `LD_LIBRARY_PATH` or `DYLD_*` settings.
+//! The policy is fail-closed: a name or a mechanism it does not know to be safe is refused, not passed.
+//!
+//! - No build may name a path the loader resolves against the current directory, a path with a `..` component
+//!   anywhere (which leaves the directory it starts in: the private copy, the client's, or a trusted root), an empty
+//!   search path entry (which glibc reads as the current directory), or a loader token other than the one leading
+//!   origin token, whole: `$ORIGIN` and `${ORIGIN}` on ELF (`$ORIGIN_X` is no token to `ld.so`, so it is a relative
+//!   path), `@loader_path`, `@executable_path` and `@rpath` on Mach-O, each followed by `/` or nothing. A bare name
+//!   is a library `ld.so` searches for; `dyld` reads one as a path, so on Mach-O it is refused.
+//! - No build may use a mechanism that brings in code the host does not read: ELF's `DT_FILTER`, `DT_AUXILIARY`,
+//!   `DT_AUDIT`, `DT_DEPAUDIT` and `DT_USED`, a dynamic tag the policy does not know, or Mach-O's
+//!   `LC_LOAD_DYLINKER` and `LC_DYLD_ENVIRONMENT`.
+//! - A project's build may also name no absolute path outside the system's libraries: `/usr/lib`, `/usr/lib64`,
+//!   `/lib` and `/lib64` on Linux and the other ELF systems, `/usr/lib` and `/System` on macOS, each matched by whole
+//!   components. A root is trusted once it and every directory above it, symbolic links resolved, are the
+//!   superuser's and no one else may write them; a path under one that exists must still be under one once its links
+//!   are resolved. A path that does not exist loads nothing (on macOS a system library is in the shared cache and not
+//!   on disk).
+//! - The user's own loader settings are the user's choice and trusted: `LD_LIBRARY_PATH` and `LD_PRELOAD` on ELF
+//!   systems, the `DYLD_*` paths on macOS, and the system's loader configuration. So a project's build is not
+//!   promised libraries from the system alone. One part of them is not the user's: an empty or relative entry in
+//!   `LD_LIBRARY_PATH` or a `DYLD_*` path is read against the current directory, so a build that names a library the
+//!   loader searches for is refused while one is set.
 //!
 //! Windows needs no reading: `win::load_library` searches no directory a project controls. A file that is neither
 //! ELF nor Mach-O passes here; the platform loader refuses it.
 
-/// Checks the dependencies `bytes` names, with the stricter rule for a project's build.
+use std::path::{Component, Path, PathBuf};
+
+/// Checks the dependencies `bytes` names, with the stricter rule for a project's build, against this machine's
+/// trusted roots and the loader settings this process inherited.
 pub fn check(bytes: &[u8], project: bool) -> Result<(), String> {
+    check_with(bytes, project, &Policy::host())
+}
+
+/// [`check`] under `policy`.
+pub(crate) fn check_with(bytes: &[u8], project: bool, policy: &Policy) -> Result<(), String> {
+    let loader = Loader::of(bytes);
     let names = named(bytes)?;
     for name in &names {
-        if let Some(reason) = refused(name, project) {
+        if let Some(reason) = refused(loader, name, project, policy) {
             return Err(format!("the library depends on {:?}, {reason}", name.text()));
         }
+    }
+    let searched = names.iter().any(|name| matches!(name, Name::Library(text) if !text.contains('/')));
+    if let (true, Some((variable, entry))) = (searched, policy.relative_entry(loader)) {
+        return Err(format!(
+            "the library names a library the loader searches for, and {variable} holds {entry:?}, which the loader \
+             reads against the current directory: the project"
+        ));
     }
     Ok(())
 }
@@ -32,45 +65,177 @@ pub enum Name {
     Library(String),
     /// One entry of an ELF `DT_RPATH` or `DT_RUNPATH`, or a Mach-O `LC_RPATH`.
     Search(String),
+    /// A mechanism that brings in code the policy does not read, which is refused: a dynamic tag or load command.
+    Mechanism(String),
 }
 
 impl Name {
     fn text(&self) -> &str {
         match self {
-            Name::Library(text) | Name::Search(text) => text,
+            Name::Library(text) | Name::Search(text) | Name::Mechanism(text) => text,
         }
     }
 }
 
-/// Why `name` is refused, if it is.
-fn refused(name: &Name, project: bool) -> Option<&'static str> {
-    let text = name.text();
-    // The directory of the private copy, which holds the build alone.
-    let own = ["$ORIGIN", "${ORIGIN}", "@loader_path"];
-    let here = |prefix: &str| text.strip_prefix(prefix).map(|rest| rest.trim_start_matches('/'));
-    if let Some(rest) = own.iter().find_map(|prefix| here(prefix)) {
-        return match rest.split('/').any(|part| part == "..") {
-            true => Some("which leaves the plugin's own directory"),
-            false => None,
-        };
+/// The loader that reads a file's names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Loader {
+    /// glibc's or musl's `ld.so`.
+    Elf,
+    Dyld,
+    /// Neither: the platform loader refuses the file.
+    None,
+}
+
+impl Loader {
+    fn of(bytes: &[u8]) -> Self {
+        if bytes.starts_with(b"\x7fELF") {
+            return Loader::Elf;
+        }
+        match bytes.get(..4).map(|magic| [magic[0], magic[1], magic[2], magic[3]]) {
+            Some([0xca, 0xfe, 0xba, 0xbe] | [0xca, 0xfe, 0xba, 0xbf]) => Loader::Dyld,
+            Some(magic) if macho_magic(magic).is_some() => Loader::Dyld,
+            _ => Loader::None,
+        }
     }
-    // The client's own directory, or a path found through the search paths, which are checked themselves.
-    if text.starts_with("@executable_path") || text.starts_with("@rpath") {
+
+    /// The leading tokens this loader expands, each to a directory a build may name below.
+    fn tokens(self) -> &'static [&'static str] {
+        match self {
+            Loader::Elf => &["$ORIGIN", "${ORIGIN}"],
+            Loader::Dyld => &["@loader_path", "@executable_path", "@rpath"],
+            Loader::None => &[],
+        }
+    }
+}
+
+/// The trusted roots of absolute paths a project's build may name, and the loader settings the process inherited.
+pub(crate) struct Policy {
+    roots: Vec<PathBuf>,
+    /// Who besides the superuser may own a trusted root and the directories above it: no one but in tests. Windows
+    /// trusts no root here.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    owner: u32,
+    /// The loader path settings, by name: their values as the process inherited them.
+    settings: Vec<(&'static str, String)>,
+}
+
+impl Policy {
+    /// This machine's.
+    fn host() -> Self {
+        let roots: &[&str] = match cfg!(target_os = "macos") {
+            true => &["/usr/lib", "/System"],
+            false => &["/usr/lib", "/usr/lib64", "/lib", "/lib64"],
+        };
+        let names: &[&'static str] = match cfg!(target_os = "macos") {
+            true => &[
+                "DYLD_LIBRARY_PATH",
+                "DYLD_FALLBACK_LIBRARY_PATH",
+                "DYLD_FRAMEWORK_PATH",
+                "DYLD_FALLBACK_FRAMEWORK_PATH",
+            ],
+            false => &["LD_LIBRARY_PATH"],
+        };
+        let settings = names
+            .iter()
+            .filter_map(|name| Some((*name, std::env::var_os(name)?.to_string_lossy().into_owned())))
+            .collect();
+        Self { roots: roots.iter().map(PathBuf::from).collect(), owner: 0, settings }
+    }
+
+    /// For tests: `roots`, owned by `owner`, and `settings`.
+    #[cfg(all(test, unix))]
+    pub(crate) fn new(roots: Vec<PathBuf>, owner: u32, settings: Vec<(&'static str, String)>) -> Self {
+        Self { roots, owner, settings }
+    }
+
+    /// The first entry of the loader's path settings that it reads against the current directory: empty or relative.
+    fn relative_entry(&self, loader: Loader) -> Option<(&'static str, String)> {
+        let wanted = match loader {
+            Loader::Elf => "LD_",
+            Loader::Dyld => "DYLD_",
+            Loader::None => return None,
+        };
+        self.settings.iter().filter(|(name, _)| name.starts_with(wanted)).find_map(|(name, value)| {
+            let entry = value.split(':').find(|entry| !entry.starts_with('/'))?;
+            Some((*name, entry.to_owned()))
+        })
+    }
+
+    /// Whether the absolute `path` is under a trusted root, as the loader will find it.
+    fn trusts(&self, path: &Path) -> bool {
+        let Some(root) = self.roots.iter().find(|root| path.starts_with(root)) else { return false };
+        let Some(real_root) = self.verified(root) else { return false };
+        match std::fs::canonicalize(path) {
+            Ok(real) => self.roots.iter().filter_map(|root| self.verified(root)).any(|root| real.starts_with(root)),
+            // Nothing there loads nothing; only the root's owner can put something there.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => real_root.exists(),
+            Err(_) => false,
+        }
+    }
+
+    /// `root` with its links resolved, if it and every directory above it are the superuser's and no one else may
+    /// write them.
+    fn verified(&self, root: &Path) -> Option<PathBuf> {
+        let real = std::fs::canonicalize(root).ok()?;
+        real.ancestors().all(|dir| self.owned(dir)).then_some(real)
+    }
+
+    #[cfg(unix)]
+    fn owned(&self, dir: &Path) -> bool {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(dir).is_ok_and(|meta| {
+            meta.is_dir() && (meta.uid() == 0 || meta.uid() == self.owner) && meta.mode() & 0o022 == 0
+        })
+    }
+
+    #[cfg(not(unix))]
+    fn owned(&self, _: &Path) -> bool {
+        false
+    }
+}
+
+/// Why `name` is refused, if it is, as `loader` reads it.
+fn refused(loader: Loader, name: &Name, project: bool, policy: &Policy) -> Option<String> {
+    let text = name.text();
+    if let Name::Mechanism(_) = name {
+        return Some("a mechanism that loads code the host does not check".into());
+    }
+    if text.is_empty() {
+        return Some(match name {
+            Name::Search(_) => "an empty search path, which means the current directory".into(),
+            _ => "an empty name".into(),
+        });
+    }
+    // A leading token, whole: followed by a separator or nothing.
+    let token = loader
+        .tokens()
+        .iter()
+        .find(|token| text.strip_prefix(**token).is_some_and(|rest| rest.is_empty() || rest.starts_with('/')));
+    let rest = token.map_or(text, |token| &text[token.len()..]);
+    if Path::new(rest).components().any(|part| part == Component::ParentDir) {
+        return Some("whose `..` leaves the directory it starts in".into());
+    }
+    let tokens: &[char] = match loader {
+        Loader::Elf => &['$'],
+        Loader::Dyld => &['@'],
+        Loader::None => &[],
+    };
+    if rest.contains(tokens) {
+        return Some("a loader token the host does not read as the loader does".into());
+    }
+    if token.is_some() {
         return None;
     }
-    if text.is_empty() && matches!(name, Name::Search(_)) {
-        return Some("an empty search path, which means the current directory");
-    }
     if !text.starts_with('/') {
-        return match name {
+        return match (loader, name) {
             // A bare name is searched for in the search paths and the system's directories.
-            Name::Library(_) if !text.contains('/') => None,
-            _ => Some("a path relative to the current directory, which is the project"),
+            (Loader::Elf, Name::Library(_)) if !text.contains('/') => None,
+            _ => Some("a path relative to the current directory, which is the project".into()),
         };
     }
-    let system = text.starts_with("/usr/lib/") || text.starts_with("/System/");
-    match project && !system {
-        true => Some("a path outside the system's libraries, which a project's plugin may not name"),
+    match project && !policy.trusts(Path::new(text)) {
+        true => Some("a path outside the system's libraries, which a project's plugin may not name".into()),
         false => None,
     }
 }
@@ -131,6 +296,25 @@ const DT_NEEDED: u64 = 1;
 const DT_STRTAB: u64 = 5;
 const DT_RPATH: u64 = 15;
 const DT_RUNPATH: u64 = 29;
+const DT_DEPAUDIT: u64 = 0x6fff_fefb;
+const DT_AUDIT: u64 = 0x6fff_fefc;
+const DT_AUXILIARY: u64 = 0x7fff_fffd;
+const DT_USED: u64 = 0x7fff_fffe;
+const DT_FILTER: u64 = 0x7fff_ffff;
+
+/// Whether dynamic tag `tag` is one the policy knows brings in no code but what it reads: the generic tags up to
+/// `DT_RELRENT` (37), the GNU ones (`DT_GNU_HASH`, versions, `DT_FLAGS_1` and the like) but the audit libraries, and
+/// the processor's but the filters and `DT_USED`.
+fn known(tag: u64) -> bool {
+    match tag {
+        0..=37 => true,
+        DT_AUDIT | DT_DEPAUDIT => false,
+        0x6fff_fd00..=0x6fff_ffff => true,
+        DT_AUXILIARY | DT_USED | DT_FILTER => false,
+        0x7000_0000..=0x7fff_ffff => true,
+        _ => false,
+    }
+}
 
 /// An ELF file's `DT_NEEDED` names and `DT_RPATH` and `DT_RUNPATH` entries.
 fn elf(bytes: &[u8]) -> Option<Vec<Name>> {
@@ -173,10 +357,16 @@ fn elf(bytes: &[u8]) -> Option<Vec<Name>> {
         .into_iter()
         .take_while(|(tag, _)| *tag != 0)
         .collect();
+    // A tag that brings in code, or one the policy does not know, is refused by its number (big-boi 2, carbon-7).
+    let mut out: Vec<Name> = entries
+        .iter()
+        .filter(|(tag, _)| !known(*tag))
+        .map(|(tag, _)| Name::Mechanism(format!("ELF dynamic tag {tag:#x}")))
+        .collect();
     let names: Vec<&(u64, u64)> =
         entries.iter().filter(|(tag, _)| matches!(*tag, DT_NEEDED | DT_RPATH | DT_RUNPATH)).collect();
     if names.is_empty() {
-        return Some(Vec::new());
+        return Some(out);
     }
     // The string table is named by its address; the loadable segment that holds it gives its place in the file.
     let address = entries.iter().find(|(tag, _)| *tag == DT_STRTAB)?.1;
@@ -185,7 +375,6 @@ fn elf(bytes: &[u8]) -> Option<Vec<Name>> {
         .filter(|header| header.0 == PT_LOAD)
         .find(|(_, _, start, size)| address >= *start && address - start < *size)
         .map(|(_, offset, start, _)| offset + (address - start))?;
-    let mut out = Vec::new();
     for (tag, value) in names {
         let text = read.string(usize::try_from(table.checked_add(*value)?).ok()?)?;
         match *tag {
@@ -202,6 +391,9 @@ const LC_RPATH: u64 = 0x8000_001c;
 const LC_REEXPORT_DYLIB: u64 = 0x8000_001f;
 const LC_LAZY_LOAD_DYLIB: u64 = 0x20;
 const LC_LOAD_UPWARD_DYLIB: u64 = 0x8000_0023;
+/// The loader a main executable asks for, and the `DYLD_*` settings it carries: neither belongs in a plugin.
+const LC_LOAD_DYLINKER: u64 = 0xe;
+const LC_DYLD_ENVIRONMENT: u64 = 0x27;
 
 /// Whether `magic` is a thin Mach-O header's: `(wide, big-endian)`.
 fn macho_magic(magic: [u8; 4]) -> Option<(bool, bool)> {
@@ -238,6 +430,9 @@ fn macho(bytes: &[u8]) -> Result<Vec<Name>, ()> {
                 out.push(Name::Library(name().ok_or(())?))
             }
             LC_RPATH => out.push(Name::Search(name().ok_or(())?)),
+            LC_LOAD_DYLINKER | LC_DYLD_ENVIRONMENT => {
+                out.push(Name::Mechanism(format!("Mach-O load command {command:#x}")));
+            }
             _ => {}
         }
         at = at.checked_add(usize::try_from(size).map_err(|_| ())?).ok_or(())?;
@@ -269,6 +464,14 @@ fn fat(bytes: &[u8]) -> Result<Vec<Name>, ()> {
 /// holding `needed` and `runpath`.
 #[cfg(test)]
 pub(crate) fn elf64(needed: &[&str], runpath: Option<&str>) -> Vec<u8> {
+    let mut tags: Vec<(u64, &str)> = needed.iter().map(|name| (DT_NEEDED, *name)).collect();
+    tags.extend(runpath.map(|path| (DT_RUNPATH, path)));
+    elf64_tags(&tags)
+}
+
+/// [`elf64`] with the dynamic entries `tags`, each naming a string.
+#[cfg(test)]
+pub(crate) fn elf64_tags(tags: &[(u64, &str)]) -> Vec<u8> {
     let mut strings = vec![0u8];
     let mut add = |text: &str| {
         let at = strings.len() as u64;
@@ -276,10 +479,7 @@ pub(crate) fn elf64(needed: &[&str], runpath: Option<&str>) -> Vec<u8> {
         strings.push(0);
         at
     };
-    let mut dynamic: Vec<(u64, u64)> = needed.iter().map(|name| (DT_NEEDED, add(name))).collect();
-    if let Some(path) = runpath {
-        dynamic.push((DT_RUNPATH, add(path)));
-    }
+    let mut dynamic: Vec<(u64, u64)> = tags.iter().map(|(tag, text)| (*tag, add(text))).collect();
     let (phoff, phnum) = (64u64, 2u64);
     let dynoff = phoff + 56 * phnum;
     let strtab = dynoff + 16 * (dynamic.len() as u64 + 2);
@@ -330,33 +530,67 @@ mod tests {
         out
     }
 
-    // Expected (bigboi-3): an ELF build names its libraries and search paths, and the policy refuses what the current
-    // directory or a path outside the private copy would supply; a project's build may name system libraries only.
+    /// This machine's roots, with no loader settings inherited.
+    fn policy() -> Policy {
+        Policy { settings: Vec::new(), ..Policy::host() }
+    }
+
+    /// Whether `bytes` pass for any build and for a project's, under [`policy`].
+    fn passes(bytes: &[u8]) -> (bool, bool) {
+        (check_with(bytes, false, &policy()).is_ok(), check_with(bytes, true, &policy()).is_ok())
+    }
+
+    // Expected (bigboi-3, final review big-boi 2 and carbon-7): an ELF build names its libraries and search paths,
+    // read as `ld.so` reads them, and the policy refuses what the current directory or a path outside where it starts
+    // would supply, `..` anywhere and a token `ld.so` does not expand; a project's build may name system libraries
+    // only, matched by whole components.
     #[test]
     fn elf_dependencies_follow_the_policy() {
         let plain = elf64(&["libc.so.6", "libm.so.6"], None);
         assert_eq!(named(&plain).unwrap(), [Name::Library("libc.so.6".into()), Name::Library("libm.so.6".into())]);
-        assert_eq!(check(&plain, true), Ok(()));
+        assert_eq!(passes(&plain), (true, true));
+        let unix = cfg!(unix);
         for (runpath, trusted, project) in [
             ("$ORIGIN", true, true),
             ("${ORIGIN}/", true, true),
+            ("$ORIGIN/lib", true, true),
             ("lib", false, false),
             ("", false, false),
             ("/usr/lib:", false, false),
             ("$ORIGIN/../lib", false, false),
             ("/opt/x/lib", true, false),
+            // `ld.so` takes `$ORIGIN` only as a whole token: `$ORIGIN_DIR` is a path from the current directory.
+            ("$ORIGIN_DIR", false, false),
+            ("$ORIGINlib", false, false),
+            ("${ORIGIN}x", false, false),
+            // A token past the start, and the tokens the policy does not read.
+            ("/usr/lib/$ORIGIN/x", false, false),
+            ("/usr/lib/$ORIGIN/../../home/me/repo", false, false),
+            ("/usr/$LIB", false, false),
+            ("$PLATFORM/x", false, false),
+            // A trusted root by its components: itself, not a sibling that starts with its name.
+            ("/usr/lib", true, unix),
+            ("/usr/libexec/x", true, false),
+            ("/usr/lib/../../home/me/repo", false, false),
+            ("/usr/lib/./x", true, unix),
         ] {
             let bytes = elf64(&["libc.so.6"], Some(runpath));
-            assert_eq!(check(&bytes, false).is_ok(), trusted, "{runpath:?}");
-            assert_eq!(check(&bytes, true).is_ok(), project, "{runpath:?}");
+            assert_eq!(passes(&bytes), (trusted, project), "{runpath:?}");
         }
-        for (needed, trusted, project) in
-            [("./libx.so", false, false), ("sub/libx.so", false, false), ("/opt/libx.so", true, false)]
-        {
+        for (needed, trusted, project) in [
+            ("./libx.so", false, false),
+            ("sub/libx.so", false, false),
+            ("/opt/libx.so", true, false),
+            ("$ORIGIN/libx.so", true, true),
+            ("$ORIGIN_X/libx.so", false, false),
+            ("/usr/lib/../../home/me/repo/evil.so", false, false),
+            ("/usr/lib/libz-test-absent.so", true, unix),
+            ("lib$x.so", false, false),
+        ] {
             let bytes = elf64(&[needed], None);
-            assert_eq!((check(&bytes, false).is_ok(), check(&bytes, true).is_ok()), (trusted, project), "{needed}");
+            assert_eq!(passes(&bytes), (trusted, project), "{needed}");
         }
-        let error = check(&elf64(&["libc.so.6"], Some("lib")), true).unwrap_err();
+        let error = check_with(&elf64(&["libc.so.6"], Some("lib")), true, &policy()).unwrap_err();
         assert!(error.contains("\"lib\"") && error.contains("current directory"), "{error}");
         // A file that claims to be ELF but is cut short is refused, not passed.
         assert!(check(&plain[..100], false).is_err());
@@ -364,14 +598,92 @@ mod tests {
         assert_eq!(check(b"MZ\x90\x00", true), Ok(()));
     }
 
-    // Expected (bigboi-3): the same policy for Mach-O load commands, also inside a universal file.
+    // Expected (final review carbon-7, big-boi 2): a dynamic tag that brings in code the policy does not read, a
+    // filter, an auxiliary filter, an audit library, `DT_USED`, or a tag it does not know, is refused for every build;
+    // the tags a toolchain writes pass.
+    #[test]
+    fn elf_mechanisms_that_load_code_are_refused() {
+        for tag in [DT_FILTER, DT_AUXILIARY, DT_AUDIT, DT_DEPAUDIT, DT_USED, 0x6000_000f, 38] {
+            let bytes = elf64_tags(&[(DT_NEEDED, "libc.so.6"), (tag, "libc.so.6")]);
+            assert_eq!(passes(&bytes), (false, false), "{tag:#x}");
+            let error = check_with(&bytes, false, &policy()).unwrap_err();
+            assert!(error.contains(&format!("{tag:#x}")) && error.contains("loads code"), "{error}");
+        }
+        // `DT_GNU_HASH`, `DT_VERNEED`, `DT_FLAGS_1`, `DT_RELACOUNT`, `DT_INIT_ARRAY`, an AArch64 tag.
+        for tag in [0x6fff_fef5, 0x6fff_fffe, 0x6fff_fffb, 0x6fff_fff9, 25, 0x7000_0001] {
+            let bytes = elf64_tags(&[(DT_NEEDED, "libc.so.6"), (tag, "")]);
+            assert_eq!(passes(&bytes), (true, true), "{tag:#x}");
+        }
+    }
+
+    // Expected (final review big-boi 2): the user's loader settings are trusted, but an empty or relative entry in them
+    // is read against the current directory: a build that names a library the loader searches for is refused while
+    // one is set, and one that names only paths is not.
+    #[test]
+    fn a_relative_loader_path_setting_refuses_a_searched_library() {
+        let searched = elf64(&["libc.so.6"], None);
+        let pathed = elf64(&["$ORIGIN/libx.so"], None);
+        for (value, ok) in
+            [("/opt/lib:/usr/local/lib", true), (":/opt/lib", false), ("/opt/lib:", false), ("lib", false)]
+        {
+            let ld = Policy { settings: vec![("LD_LIBRARY_PATH", value.to_owned())], ..policy() };
+            assert_eq!(check_with(&searched, false, &ld).is_ok(), ok, "{value:?}");
+            assert_eq!(check_with(&pathed, false, &ld), Ok(()), "{value:?}");
+            // The other loader's settings do not apply to it.
+            let dyld = Policy { settings: vec![("DYLD_LIBRARY_PATH", value.to_owned())], ..policy() };
+            assert_eq!(check_with(&searched, false, &dyld), Ok(()), "{value:?}");
+        }
+    }
+
+    // Expected (final review big-boi 2): a trusted root is trusted as the loader finds it: a path under one that leads
+    // through a symbolic link out of every root is refused, as is a root someone else may write; one that stays in it
+    // passes. Here the roots are a directory of the user's own, which only the tests may own.
+    #[cfg(unix)]
+    #[test]
+    fn a_trusted_root_is_checked_on_the_disk() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
+        let base =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../target/deps-roots-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        let base = std::fs::canonicalize(base).unwrap();
+        let root = base.join("root");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(root.join("lib")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(root.join("lib/libok.so"), b"").unwrap();
+        std::fs::write(outside.join("libevil.so"), b"").unwrap();
+        symlink(&outside, root.join("escape")).unwrap();
+        let owner = std::fs::metadata(&root).unwrap().uid();
+        let ancestors_ok = std::fs::canonicalize(&root)
+            .unwrap()
+            .ancestors()
+            .all(|dir| std::fs::metadata(dir).is_ok_and(|meta| meta.mode() & 0o022 == 0));
+        let roots = Policy::new(vec![root.clone()], owner, Vec::new());
+        let at = |path: &Path| check_with(&elf64(&[&path.to_string_lossy()], None), true, &roots).is_ok();
+        assert_eq!(at(&root.join("lib/libok.so")), ancestors_ok, "a library in the root");
+        assert_eq!(at(&root.join("lib/libabsent.so")), ancestors_ok, "nothing there loads nothing");
+        assert!(!at(&root.join("escape/libevil.so")), "a link out of the root");
+        assert!(!at(&outside.join("libevil.so")), "outside");
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(!at(&root.join("lib/libok.so")), "a root anyone may write");
+        std::fs::remove_dir_all(&base).unwrap();
+        // This machine's own roots, which the superuser owns.
+        #[cfg(target_os = "linux")]
+        assert!(policy().trusts(Path::new("/usr/lib")), "/usr/lib is not a trusted root here");
+    }
+
+    // Expected (bigboi-3, final review big-boi 2 and carbon-7): the same policy for Mach-O load commands, read as
+    // `dyld` reads them, also inside a universal file: a token followed by a separator or nothing, no `..` anywhere,
+    // a bare name refused (`dyld` reads it as a path), and the load commands of a main executable refused.
     #[test]
     fn macho_dependencies_follow_the_policy() {
         let system = macho64(&[(LC_LOAD_DYLIB, "/usr/lib/libSystem.B.dylib")]);
         assert_eq!(named(&system).unwrap(), [Name::Library("/usr/lib/libSystem.B.dylib".into())]);
-        assert_eq!(check(&system, true), Ok(()));
+        // `/usr/lib` is a trusted root on this machine on Linux and macOS alike.
+        assert_eq!(passes(&system), (true, cfg!(unix)));
+        let macos = cfg!(target_os = "macos");
         for (command, path, trusted, project) in [
-            (LC_LOAD_DYLIB, "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", true, true),
+            (LC_LOAD_DYLIB, "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", true, macos),
             (LC_LOAD_DYLIB, "@rpath/libx.dylib", true, true),
             (LC_LOAD_DYLIB, "@executable_path/libx.dylib", true, true),
             (LC_LOAD_DYLIB, "@loader_path/libx.dylib", true, true),
@@ -381,9 +693,19 @@ mod tests {
             (LC_RPATH, "@loader_path", true, true),
             (LC_RPATH, "build", false, false),
             (LC_RPATH, "/Users/me/repo/lib", true, false),
+            (LC_LOAD_DYLIB, "@rpath_dir/evil.dylib", false, false),
+            (LC_LOAD_DYLIB, "@rpath/../../evil.dylib", false, false),
+            (LC_LOAD_DYLIB, "@executable_path/../../../../Users/me/evil.dylib", false, false),
+            (LC_LOAD_DYLIB, "@loader_pathx/libx.dylib", false, false),
+            (LC_LOAD_DYLIB, "/System/../../Users/me/evil.dylib", false, false),
+            (LC_LOAD_DYLIB, "/usr/lib/@rpath/x.dylib", false, false),
+            (LC_LOAD_DYLIB, "libx.dylib", false, false),
+            (LC_RPATH, "@loader_path/../lib", false, false),
+            (LC_LOAD_DYLINKER, "/usr/lib/dyld", false, false),
+            (LC_DYLD_ENVIRONMENT, "DYLD_INSERT_LIBRARIES=/tmp/x.dylib", false, false),
         ] {
             let bytes = macho64(&[(LC_LOAD_DYLIB, "/usr/lib/libSystem.B.dylib"), (command, path)]);
-            assert_eq!((check(&bytes, false).is_ok(), check(&bytes, true).is_ok()), (trusted, project), "{path}");
+            assert_eq!(passes(&bytes), (trusted, project), "{path}");
         }
         // A universal file holding one slice.
         let universal = |slice: Vec<u8>| {
