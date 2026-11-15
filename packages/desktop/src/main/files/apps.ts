@@ -1,13 +1,20 @@
 import { execFile } from "node:child_process"
+import { access, constants, stat } from "node:fs/promises"
+import { delimiter, join } from "node:path"
 import util from "node:util"
 import { Effect, FileSystem, Path } from "effect"
 
 const execFilePromise = util.promisify(execFile)
 
 export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function* (appName: string) {
-  if (process.platform === "win32") return true
+  // Launch runs the resolved path on Windows and the bare command on Linux, so an app is installed only if that resolves.
+  if (process.platform === "win32")
+    return yield* resolveWindowsAppPath(appName).pipe(
+      Effect.map((path) => path !== null),
+      Effect.orElseSucceed(() => false),
+    )
 
-  if (process.platform === "linux") return true
+  if (process.platform === "linux") return yield* isExecutableOnPath(appName)
 
   return yield* checkMacosApp(appName)
 })
@@ -30,10 +37,7 @@ const checkMacosApp = Effect.fn("DesktopFiles.checkMacosApp")(function* (appName
     if (yield* exists(fs, location)) return true
   }
 
-  return yield* Effect.tryPromise(() => execFilePromise("which", [appName])).pipe(
-    Effect.as(true),
-    Effect.orElseSucceed(() => false),
-  )
+  return yield* isOnPath(appName)
 })
 
 const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(function* (appName: string) {
@@ -150,6 +154,31 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
 
   return paths[0] ?? null
 })
+
+function isOnPath(appName: string) {
+  return Effect.tryPromise(() => execFilePromise("which", [appName])).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
+  )
+}
+
+// Looks the command up on PATH directly, since minimal distros ship no `which` binary.
+function isExecutableOnPath(appName: string) {
+  const files = (process.env.PATH ?? "")
+    .split(delimiter)
+    .filter((dir) => dir.length > 0)
+    .map((dir) => join(dir, appName))
+
+  return Effect.promise(() => Promise.all(files.map(isExecutableFile))).pipe(
+    Effect.map((found) => found.includes(true)),
+  )
+}
+
+function isExecutableFile(file: string) {
+  return stat(file)
+    .then((info) => info.isFile() && access(file, constants.X_OK).then(() => true))
+    .catch(() => false)
+}
 
 function exists(fs: FileSystem.FileSystem, path: string) {
   return fs.exists(path).pipe(Effect.orElseSucceed(() => false))
