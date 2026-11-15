@@ -237,7 +237,12 @@
   padding-top: 4px;
 }
 
-[data-timeline="next"] :is([data-component="timeline-event-list"], [data-slot="context-tool-group-item"]) {
+[data-timeline="next"]
+  :is(
+    [data-component="timeline-event-list"],
+    [data-slot="context-tool-group-item"],
+    [data-component="timeline-subagent"]
+  ) {
   [data-slot="timeline-event-item"] {
     display: flex;
     align-items: center;
@@ -314,6 +319,25 @@
    padding above and below, taken back by margins of the same size, so neighbouring click areas meet without overlapping.
    An open row's header ends the small gap above its first nested row. */
 [data-timeline="next"] {
+  [data-component="timeline-subagent"] {
+    display: grid;
+
+    > [data-slot="timeline-event-item"] {
+      gap: 8px;
+      margin-inline: -6px;
+      padding-inline: 6px;
+      border-radius: var(--radius-sm);
+
+      @media (hover: hover) {
+        &:hover:not([aria-disabled]) {
+          cursor: pointer;
+          background-color: var(--v2-overlay-simple-overlay-hover);
+        }
+      }
+    }
+  }
+
+  [data-component="timeline-subagent"] > [data-slot="timeline-event-item"],
   [data-component="collapsible"].tool-collapsible > [data-slot="collapsible-trigger"],
   [data-component="card"][data-kind="tool-error-card"]
     > [data-component="collapsible"]

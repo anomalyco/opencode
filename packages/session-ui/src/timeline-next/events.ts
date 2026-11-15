@@ -3,16 +3,12 @@ import { Option, Schema } from "effect"
 import { currentToolInput, currentToolMetadata } from "../message/current-tool-state"
 import { toolRule } from "./rules"
 
-/**
- * Subagents and background shells read as events rather than tool rows: started, ran, finished and stopped, counted by
- * kind. Titles and commands stay in the background panel above the composer.
- */
 export type TimelineEventKind = "subagent" | "shell"
 
 export type TimelineEventVerb = "started" | "ran" | "finished" | "stopped"
 
 export type TimelineEvent = {
-  verb: TimelineEventVerb
+  verb: TimelineEventVerb | "updated"
   kind: TimelineEventKind
   failed: boolean
   /** What opening the row lists: a subagent's task or a shell's command, and where each leads. */
@@ -22,7 +18,7 @@ export type TimelineEvent = {
   shellID?: string
 }
 
-/** How an events row names each verb and kind: "Started 2 subagents". */
+/** Status labels shared by task rows and shell summaries. */
 export const verbKeys = {
   started: "ui.timeline.event.started",
   ran: "ui.timeline.activity.ran",
@@ -30,17 +26,12 @@ export const verbKeys = {
   stopped: "ui.timeline.event.stopped",
 } as const
 
-export const kindKeys = {
-  subagent: "ui.timeline.event.subagents",
-  shell: "ui.timeline.event.shells",
-} as const
-
 /** How a group's label counts work that runs on, beside its other calls: "1 command, started 1 shell". */
 export const launchKeys = {
-  started: { shell: "ui.timeline.activity.startedShells", subagent: "ui.timeline.activity.startedSubagents" },
-  ran: { shell: "ui.timeline.activity.commands", subagent: "ui.timeline.activity.subagents" },
-  finished: { shell: "ui.timeline.activity.finishedShells", subagent: "ui.timeline.activity.finishedSubagents" },
-  stopped: { shell: "ui.timeline.activity.stoppedShells", subagent: "ui.timeline.activity.stoppedSubagents" },
+  started: "ui.timeline.activity.startedShells",
+  ran: "ui.timeline.activity.commands",
+  finished: "ui.timeline.activity.finishedShells",
+  stopped: "ui.timeline.activity.stoppedShells",
 } as const
 
 // Text a call or notice carries, where it is not empty.
@@ -57,16 +48,17 @@ export function toolEvent(tool: SessionMessageAssistantTool): TimelineEvent | un
   if (state.status === "streaming") return undefined
   const input = currentToolInput(tool)
   const metadata = currentToolMetadata(tool)
+  const followUp = kind === "subagent" ? Option.getOrUndefined(decodeText(input.sessionID)) : undefined
 
   const item = {
     kind,
     title: Option.getOrUndefined(decodeText(kind === "shell" ? input.command : input.description)),
-    agent: kind === "subagent" ? Option.getOrUndefined(decodeText(input.agent)) : undefined,
-    sessionID: kind === "subagent" ? Option.getOrUndefined(decodeText(metadata.sessionID)) : undefined,
+    agent: kind === "subagent" ? Option.getOrUndefined(decodeText(input.agent ?? input.subagent_type)) : undefined,
+    sessionID: kind === "subagent" ? (Option.getOrUndefined(decodeText(metadata.sessionID)) ?? followUp) : undefined,
     shellID: kind === "shell" ? Option.getOrUndefined(decodeText(metadata.shellID)) : undefined,
   } as const
 
-  if (state.status === "running") return { ...item, verb: "started", failed: false }
+  if (state.status === "running") return { ...item, verb: followUp ? "updated" : "started", failed: false }
 
   const background =
     kind === "subagent" ? metadata.status !== "completed" : metadata.status === "running" || input.background === true
@@ -76,6 +68,8 @@ export function toolEvent(tool: SessionMessageAssistantTool): TimelineEvent | un
 
     return { ...item, verb: background ? "started" : "ran", failed: true }
   }
+
+  if (followUp) return { ...item, verb: "updated", failed: false }
 
   return { ...item, verb: background ? "started" : "ran", failed: false }
 }
@@ -108,26 +102,16 @@ export function workKey(event: TimelineEvent) {
   return id ? `${event.kind}:${id}` : undefined
 }
 
-/**
- * A run of events as one label: each verb once, in the order it first happened, with how many of each kind, and how
- * many failed overall. Two finishes in a row read "Finished 2 subagents".
- */
-export function summarizeEvents(events: readonly TimelineEvent[]) {
-  const verbs = events.reduce<{ verb: TimelineEventVerb; kinds: { kind: TimelineEventKind; count: number }[] }[]>(
-    (result, event) => {
-      const bucket = result.find((item) => item.verb === event.verb) ?? { verb: event.verb, kinds: [] }
+/** Count background shells by verb in the order they happened. Subagents have individual task rows. */
+export function summarizeShells(events: readonly TimelineEvent[]) {
+  const counts = new Map<TimelineEventVerb, number>()
+  const shells = events.filter((event) => event.kind === "shell")
+  shells.forEach(({ verb }) => {
+    if (verb !== "updated") counts.set(verb, (counts.get(verb) ?? 0) + 1)
+  })
 
-      if (!result.includes(bucket)) result.push(bucket)
-      const kind = bucket.kinds.find((item) => item.kind === event.kind)
-
-      if (kind) kind.count += 1
-
-      if (!kind) bucket.kinds.push({ kind: event.kind, count: 1 })
-
-      return result
-    },
-    [],
-  )
-
-  return { verbs, failed: events.filter((event) => event.failed).length }
+  return {
+    verbs: Array.from(counts, ([verb, count]) => ({ verb, count })),
+    failed: shells.filter((event) => event.failed).length,
+  }
 }
