@@ -16,6 +16,9 @@ host = []
 # No plugin and no host turns it on.
 next = []
 
+[lints]
+workspace = true
+
 # A plugin crate depends on this one alone, so it stays free of the TUI and its native libraries.
 [dependencies]
 # The session, message and catalog values renders read.
