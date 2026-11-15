@@ -235,6 +235,8 @@ struct Stats {
     /// The host's own work for its nodes ([`Monitor::host`]), and all of it so far.
     host: Samples,
     host_total: Duration,
+    /// All its calls since its setup, but the setup's.
+    calls_total: Duration,
     /// Its calls in a frame of the host's count, whatever closed P4c's window: what the scheduler's budget reads.
     counted: Option<(u64, Duration)>,
     /// The frames at the end of which its mailbox was full, the last [`Limits::window`] (synthesis 4.2, reviews
@@ -507,6 +509,11 @@ impl Monitor {
         self.latest(id, |stats| stats.host_total).unwrap_or_default()
     }
 
+    /// What plugin `id`'s newest build's calls took so far, its setup's apart: what its frame budget counts.
+    pub fn calls_time(&self, id: &str) -> Duration {
+        self.latest(id, |stats| stats.calls_total).unwrap_or_default()
+    }
+
     /// What the budget makes of a call of `kind` that took `took`.
     fn account(&self, slot: Slot, kind: &'static str, took: Duration) -> Timed {
         self.nest(took);
@@ -536,6 +543,7 @@ impl Monitor {
             }
         };
         samples.add(took);
+        stats.calls_total += took;
         stats.counted = Some(add(stats.counted, frame, took));
         self.counted.set(Some(add(self.counted.get(), frame, took)));
         let cold = std::mem::take(&mut stats.cold);
