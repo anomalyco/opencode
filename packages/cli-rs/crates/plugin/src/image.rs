@@ -278,6 +278,12 @@ pub enum Picture {
     Over,
 }
 
+impl Picture {
+    pub(crate) fn is_ready(&self) -> bool {
+        matches!(self, Picture::Ready(_))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

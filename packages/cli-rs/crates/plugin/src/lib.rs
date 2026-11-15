@@ -1902,9 +1902,13 @@ impl Setup<'_> {
     /// again when that activation is woken or a handler of the plugin ran.
     pub(crate) fn renderer_claim(&mut self, entry: abi::claim::Entry, viewer: Rc<dyn claim::Viewer>, owners: &Owners) {
         let target = entry.target.clone();
+        // What its parts hold is the plugin's, and the host's work for them its host time, as a surface's (bigboi 1).
+        let (monitor, slot) = (self.monitor.clone(), self.monitor.slot(&self.artifact()));
+        let host_time: surface::HostTime = Rc::new(move |work| monitor.host(slot, work));
         let registered = claim::Registered::new(
             entry,
             Rc::downgrade(self.host),
+            (Rc::from(self.id), host_time),
             viewer,
             owners.input.clone(),
             owners.activation.clone(),

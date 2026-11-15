@@ -297,13 +297,9 @@ pub(crate) struct Surface {
     viewed: RefCell<v2::SurfaceInput>,
     /// What the content the mount holds costs, read once a handle.
     measures: crate::reconcile::Measures,
-    /// The image sources an adoption admitted: a refused one gives them back (review carbon 3.2).
-    attempt: RefCell<Vec<ImageKey>>,
     /// A view waits for the next frame's rows, with what changed for it ([`Surface::draw_next_frame`]).
     deferred: RefCell<Option<abi::Changed>>,
-    /// Each image source's picture, admitted and decoded once however many nodes show it, and the decoded bytes it
-    /// charges to the plugin, or the job that holds them until it is done.
-    images: RefCell<HashMap<ImageKey, (Picture, Charge)>>,
+    images: Pictures,
     /// A panel or an overlay before its first layout: it draws first as that layout gives it its room, so a change
     /// before it draws nothing (it would draw at a size and a showing the panel does not have yet).
     pending: Cell<bool>,
@@ -331,13 +327,13 @@ pub(crate) type HostTime = Rc<dyn Fn(&mut dyn FnMut())>;
 
 /// An image's source: content by its handle, inline bytes by their hash.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum ImageKey {
+pub(crate) enum ImageKey {
     Content(ContentRef),
     Text(u64),
 }
 
 impl ImageKey {
-    fn of(source: &Source) -> Option<ImageKey> {
+    pub(crate) fn of(source: &Source) -> Option<ImageKey> {
         match source {
             Source::Content(handle) => Some(ImageKey::Content(*handle)),
             Source::Text(text) => {
@@ -349,6 +345,208 @@ impl ImageKey {
             Source::PartOutput(_) => None,
         }
     }
+}
+
+thread_local! {
+    /// The decoded pictures each plugin's mounts hold on this thread.
+    static PICTURES: RefCell<HashMap<Rc<str>, usize>> = RefCell::default();
+}
+
+/// The decoded pictures the mounts of `plugin` hold on this thread now, surfaces' and claimed parts' alike: the
+/// images themselves, beside the bytes [`limits`] charges for them.
+pub fn pictures(plugin: &str) -> usize {
+    PICTURES.with_borrow(|pictures| pictures.get(plugin).copied().unwrap_or(0))
+}
+
+fn count_pictures(plugin: &Rc<str>, by: isize) {
+    if by == 0 {
+        return;
+    }
+    PICTURES.with_borrow_mut(|pictures| {
+        let count = pictures.entry(plugin.clone()).or_default();
+        *count = count.saturating_add_signed(by);
+        if *count == 0 {
+            pictures.remove(plugin);
+        }
+    });
+}
+
+/// A mount that shows images: a surface's, or a claimed part's (review bigboi 1), which share one way to admit,
+/// decode, hold and give them back.
+pub(crate) trait Shows {
+    fn pictures(&self) -> &Pictures;
+    fn host_time(&self) -> &HostTime;
+    /// Shows `image` in every image node of `key`'s source.
+    fn show(&self, key: ImageKey, image: &opentui::native::Image);
+}
+
+/// The pictures a mount holds: each image source's, admitted and decoded once however many nodes show it, and the
+/// decoded bytes it charges to the plugin, or the job that holds them until it is done.
+pub(crate) struct Pictures {
+    plugin: Rc<str>,
+    held: RefCell<HashMap<ImageKey, (Picture, Charge)>>,
+    /// The image sources an adoption admitted: a refused one gives them back (review carbon 3.2).
+    attempt: RefCell<Vec<ImageKey>>,
+}
+
+impl Pictures {
+    pub(crate) fn new(plugin: Rc<str>) -> Self {
+        Self { plugin, held: RefCell::default(), attempt: RefCell::default() }
+    }
+
+    /// The picture of `source`, admitted and its decode started the first time, with the bytes `held` names a handle's
+    /// content by; `mount` shows it once it decodes.
+    pub(crate) fn of(
+        &self,
+        app: &App,
+        source: &Source,
+        held: impl FnOnce(&ContentRef) -> Option<Arc<[u8]>>,
+        mount: Weak<dyn Shows>,
+    ) -> Picture {
+        let Some(key) = ImageKey::of(source) else { return Picture::Pending };
+        if let Some((picture, _)) = self.held.borrow().get(&key) {
+            return picture.clone();
+        }
+        let bytes: Arc<[u8]> = match source {
+            Source::Content(handle) => match held(handle) {
+                Some(bytes) => bytes,
+                None => return Picture::Pending,
+            },
+            Source::Text(text) => Arc::from(text.as_bytes()),
+            Source::PartOutput(_) => return Picture::Pending,
+        };
+        self.admit(app, key, bytes, mount)
+    }
+
+    /// Admits the image of `bytes` under `key` by its header: within the bytes and the width and height of one image,
+    /// and the decoded bytes the plugin and all plugins may hold, which its job reserves. An admitted image decodes on
+    /// a worker; bytes that are no image show nothing, as before.
+    fn admit(&self, app: &App, key: ImageKey, bytes: Arc<[u8]>, mount: Weak<dyn Shows>) -> Picture {
+        self.attempt.borrow_mut().push(key);
+        let limits = limits::get();
+        // Past one image's bytes it is over, image or not (review carbon 3.1).
+        if bytes.len() as u64 > limits.image_bytes {
+            self.put(key, (Picture::Over, Charge::Held(0)));
+            return Picture::Over;
+        }
+        let Some((width, height)) = crate::image::size(&bytes) else {
+            log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
+            self.put(key, (Picture::Pending, Charge::Held(0)));
+            return Picture::Pending;
+        };
+        let decoded = (u64::from(width) * u64::from(height)).saturating_mul(4);
+        let admitted = u64::from(width.max(height)) <= limits.image_side
+            && limits::charge(&self.plugin, limits::Kind::Images, decoded);
+        if !admitted {
+            log::warn!(
+                "an image node of {width}x{height} pixels in {} bytes is past what the host decodes",
+                bytes.len()
+            );
+            self.put(key, (Picture::Over, Charge::Held(0)));
+            return Picture::Over;
+        }
+        let job = JOB.with(|job| job.replace(job.get() + 1));
+        self.put(key, (Picture::Pending, Charge::Job(job)));
+        crate::reconcile::count_decoded();
+        let reserved = crate::image::Reservation::new(self.plugin.clone(), decoded);
+        crate::image::submit(
+            app,
+            job,
+            &self.plugin,
+            (bytes, (width, height)),
+            reserved,
+            move |app, pixels, reserved| {
+                if let Some(mount) = mount.upgrade() {
+                    decoded_into(&*mount, app, key, job, pixels, reserved);
+                }
+            },
+        );
+        Picture::Pending
+    }
+
+    /// The sources admitted since the last time this was asked: a refused adoption gives them back.
+    pub(crate) fn take_attempt(&self) -> Vec<ImageKey> {
+        std::mem::take(&mut *self.attempt.borrow_mut())
+    }
+
+    /// Holds `entry` for `key`, counting the decoded pictures the plugin holds.
+    fn put(&self, key: ImageKey, entry: (Picture, Charge)) {
+        let ready = matches!(entry.0, Picture::Ready(_));
+        let old = self.held.borrow_mut().insert(key, entry);
+        count_pictures(&self.plugin, isize::from(ready) - isize::from(old.is_some_and(|(old, _)| old.is_ready())));
+    }
+
+    /// Drops the picture of `key`, if the mount holds one, and gives back what it charged; a job gives back its own.
+    pub(crate) fn release(&self, key: ImageKey) {
+        let held = self.held.borrow_mut().remove(&key);
+        if let Some((picture, charge)) = held {
+            count_pictures(&self.plugin, -isize::from(picture.is_ready()));
+            self.release_charge(charge);
+        }
+    }
+
+    /// Drops every picture the mount holds and gives back what they charged; a job gives back its own.
+    pub(crate) fn release_all(&self) {
+        let held = self.held.borrow_mut().drain().map(|(_, held)| held).collect::<Vec<_>>();
+        for (picture, charge) in held {
+            count_pictures(&self.plugin, -isize::from(picture.is_ready()));
+            self.release_charge(charge);
+        }
+    }
+
+    /// Drops the pictures of inline images `tree` no longer shows: nothing can name them again but their bytes.
+    pub(crate) fn keep_shown(&self, tree: &Tree) {
+        let mut shown = HashSet::new();
+        tree.each_image(&mut |source, _| shown.extend(ImageKey::of(source)));
+        let gone: Vec<ImageKey> = self
+            .held
+            .borrow()
+            .keys()
+            .filter(|key| matches!(key, ImageKey::Text(_)) && !shown.contains(*key))
+            .copied()
+            .collect();
+        gone.into_iter().for_each(|key| self.release(key));
+    }
+
+    fn release_charge(&self, charge: Charge) {
+        if let Charge::Held(bytes) = charge {
+            limits::release(&self.plugin, limits::Kind::Images, bytes);
+        }
+    }
+}
+
+/// Job `job` decoded the image of `key` for `mount`: the host copies its pixels into the app's context, as host time,
+/// shows it in every image node of the source, and holds what the job reserved. One the mount released meanwhile, or
+/// that did not decode, is dropped, and the job gives back what it reserved.
+fn decoded_into(
+    mount: &dyn Shows,
+    app: &App,
+    key: ImageKey,
+    job: u64,
+    pixels: Option<crate::image::Pixels>,
+    reserved: &mut crate::image::Reservation,
+) {
+    let pictures = mount.pictures();
+    if pictures.held.borrow().get(&key).is_none_or(|(_, charge)| *charge != Charge::Job(job)) {
+        return;
+    }
+    let mut image = None;
+    (mount.host_time())(&mut || {
+        image = pixels.as_ref().and_then(|pixels| {
+            let context = app.session().context();
+            opentui::native::Image::from_rgba(context, pixels.width, pixels.height, &pixels.rgba)
+                .map_err(|error| log::warn!("an image node does not decode: {error}"))
+                .ok()
+        });
+    });
+    let Some(image) = image else {
+        log::warn!("an image node's bytes do not decode");
+        pictures.put(key, (Picture::Pending, Charge::Held(0)));
+        return;
+    };
+    pictures.put(key, (Picture::Ready(image.clone()), Charge::Held(reserved.take())));
+    mount.show(key, &image);
+    app.request_redraw();
 }
 
 /// What one call of the view returned and asked for; the host takes it only with its tree.
@@ -415,6 +613,7 @@ impl Surface {
             behave: RefCell::default(),
             this: RefCell::default(),
             owner: owner.clone(),
+            images: Pictures::new(plugin.clone()),
             plugin,
             viewer,
             drawer: std::cell::OnceCell::new(),
@@ -434,9 +633,7 @@ impl Surface {
             watch: RefCell::new(None),
             revision: Cell::new(host.local_revision()),
             viewed: RefCell::default(),
-            images: RefCell::default(),
             measures: crate::reconcile::Measures::default(),
-            attempt: RefCell::default(),
             deferred: RefCell::new(None),
             pending: Cell::new(matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_))),
             input: input.clone(),
@@ -680,7 +877,7 @@ impl Surface {
     fn wipe(&self) {
         behave::detach(&self.app, self);
         *self.behave.borrow_mut() = behave::State::default();
-        self.release_images();
+        self.images.release_all();
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);
         state.last = None;
@@ -699,26 +896,6 @@ impl Surface {
             ledger.content -= content.len() as i64;
             ledger.content_bytes -= bytes as i64;
         });
-    }
-
-    /// Drops every picture the mount holds and gives back what they charged; a job gives back its own.
-    fn release_images(&self) {
-        let held = self.images.borrow_mut().drain().map(|(_, (_, charge))| charge).collect::<Vec<_>>();
-        held.into_iter().for_each(|charge| self.release_charge(charge));
-    }
-
-    /// Drops the picture of `key`, if the mount holds one, and gives back what it charged; a job gives back its own.
-    fn release_image(&self, key: ImageKey) {
-        let held = self.images.borrow_mut().remove(&key);
-        if let Some((_, charge)) = held {
-            self.release_charge(charge);
-        }
-    }
-
-    fn release_charge(&self, charge: Charge) {
-        if let Charge::Held(bytes) = charge {
-            limits::release(&self.plugin, limits::Kind::Images, bytes);
-        }
     }
 
     /// Takes the theme without a call: the last tree is adopted again in it. A surface that reads the palette
@@ -782,7 +959,7 @@ impl Surface {
         // A release is the plugin's word that it names the handle no more, so it holds also when the tree is
         // refused: the plugin forgot the handle either way.
         let mut release = |handle| {
-            self.release_image(ImageKey::Content(handle));
+            self.images.release(ImageKey::Content(handle));
             if given.borrow_mut().remove(&handle).is_some() {
                 return;
             }
@@ -853,7 +1030,7 @@ impl Surface {
             self.holder().map(|owner| owner.focused()).filter(|focused| focused.surface || focused.node.is_some());
         let mut state = self.state.borrow_mut();
         // Content past what the plugin may hold is not kept: a node that shows it is a placeholder (4.2).
-        let (admitted, over) = admit_content(&self.plugin, staged);
+        let (admitted, over) = admit_content(&self.plugin, &staged.given);
         let State { tree, content, last, dropped, .. } = &mut *state;
         let restyled = !tree.styled_in(theme);
         let unheld: HashSet<ContentRef> = dropped.union(&over).copied().collect();
@@ -863,27 +1040,18 @@ impl Surface {
                 tree.apply(env, &self.root, &nodes)
             });
         });
-        let attempt = std::mem::take(&mut *self.attempt.borrow_mut());
+        let attempt = self.images.take_attempt();
         if let Err(refused) = result {
             drop(state);
             // A refused view's content is not the mount's: neither are the pictures it started, its content's too.
-            attempt.into_iter().for_each(|key| self.release_image(key));
+            attempt.into_iter().for_each(|key| self.images.release(key));
             return Err(refused);
         }
-        // An image given inline that the tree no longer shows goes: nothing can name it again but its bytes.
-        let mut shown = HashSet::new();
-        tree.each_image(&mut |source, _| shown.extend(ImageKey::of(source)));
-        let gone: Vec<ImageKey> = self
-            .images
-            .borrow()
-            .keys()
-            .filter(|key| matches!(key, ImageKey::Text(_)) && !shown.contains(*key))
-            .copied()
-            .collect();
         if let Some(owner) = self.holder() {
             owner.set_tree(tree.ids().map(str::to_owned).collect(), tree.focusable());
         }
-        gone.into_iter().for_each(|key| self.release_image(key));
+        // An image given inline that the tree no longer shows goes: nothing can name it again but its bytes.
+        self.images.keep_shown(tree);
         self.reindex();
         behave::arm(host.app());
         if !self.fills {
@@ -980,19 +1148,8 @@ impl Surface {
         };
         // An image is admitted and decoded once a source: nodes that show the same content share it.
         let image = |source: &Source| {
-            let Some(key) = ImageKey::of(source) else { return Picture::Pending };
-            if let Some((picture, _)) = self.images.borrow().get(&key) {
-                return picture.clone();
-            }
-            let bytes: Arc<[u8]> = match source {
-                Source::Content(handle) => match held(handle) {
-                    Some(bytes) => bytes.clone(),
-                    None => return Picture::Pending,
-                },
-                Source::Text(text) => Arc::from(text.as_bytes()),
-                Source::PartOutput(_) => return Picture::Pending,
-            };
-            self.admit_image(host.app(), key, bytes)
+            let mount = self.weak() as Weak<dyn Shows>;
+            self.images.of(host.app(), source, |handle| held(handle).cloned(), mount)
         };
         let has = |handle: ContentRef| held(&handle).is_some() || unheld.contains(&handle);
         let dropped = |handle: ContentRef| unheld.contains(&handle);
@@ -1014,90 +1171,6 @@ impl Surface {
             item: false,
         };
         f(&env, tree)
-    }
-
-    /// Admits the image of `bytes` under `key` by its header: within the bytes and the width and height of one image,
-    /// and the decoded bytes the plugin and all plugins may hold, which its job reserves. An admitted image decodes on
-    /// a worker; bytes that are no image show nothing, as before.
-    fn admit_image(&self, app: &App, key: ImageKey, bytes: Arc<[u8]>) -> Picture {
-        self.attempt.borrow_mut().push(key);
-        let limits = limits::get();
-        // Past one image's bytes it is over, image or not (review carbon 3.1).
-        if bytes.len() as u64 > limits.image_bytes {
-            self.images.borrow_mut().insert(key, (Picture::Over, Charge::Held(0)));
-            return Picture::Over;
-        }
-        let Some((width, height)) = crate::image::size(&bytes) else {
-            log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
-            self.images.borrow_mut().insert(key, (Picture::Pending, Charge::Held(0)));
-            return Picture::Pending;
-        };
-        let decoded = (u64::from(width) * u64::from(height)).saturating_mul(4);
-        let admitted = u64::from(width.max(height)) <= limits.image_side
-            && limits::charge(&self.plugin, limits::Kind::Images, decoded);
-        if !admitted {
-            log::warn!(
-                "an image node of {width}x{height} pixels in {} bytes is past what the host decodes",
-                bytes.len()
-            );
-            self.images.borrow_mut().insert(key, (Picture::Over, Charge::Held(0)));
-            return Picture::Over;
-        }
-        let job = JOB.with(|job| job.replace(job.get() + 1));
-        self.images.borrow_mut().insert(key, (Picture::Pending, Charge::Job(job)));
-        crate::reconcile::count_decoded();
-        let reserved = crate::image::Reservation::new(self.plugin.clone(), decoded);
-        let weak = self.weak();
-        crate::image::submit(
-            app,
-            job,
-            &self.plugin,
-            (bytes, (width, height)),
-            reserved,
-            move |app, pixels, reserved| {
-                if let Some(mounted) = weak.upgrade() {
-                    mounted.decoded(app, key, job, pixels, reserved);
-                }
-            },
-        );
-        Picture::Pending
-    }
-
-    /// Job `job` decoded the image of `key`: the host copies its pixels into the app's context, as host time, shows it
-    /// in every image node of the source, and holds what the job reserved. One the mount released meanwhile, or that
-    /// did not decode, is dropped, and the job gives back what it reserved.
-    fn decoded(
-        &self,
-        app: &App,
-        key: ImageKey,
-        job: u64,
-        pixels: Option<crate::image::Pixels>,
-        reserved: &mut crate::image::Reservation,
-    ) {
-        if self.images.borrow().get(&key).is_none_or(|(_, charge)| *charge != Charge::Job(job)) {
-            return;
-        }
-        let mut image = None;
-        (self.host_time)(&mut || {
-            image = pixels.as_ref().and_then(|pixels| {
-                let context = app.session().context();
-                opentui::native::Image::from_rgba(context, pixels.width, pixels.height, &pixels.rgba)
-                    .map_err(|error| log::warn!("an image node does not decode: {error}"))
-                    .ok()
-            });
-        });
-        let Some(image) = image else {
-            log::warn!("an image node's bytes do not decode");
-            self.images.borrow_mut().insert(key, (Picture::Pending, Charge::Held(0)));
-            return;
-        };
-        self.images.borrow_mut().insert(key, (Picture::Ready(image.clone()), Charge::Held(reserved.take())));
-        self.state.borrow().tree.each_image(&mut |source, view| {
-            if ImageKey::of(source) == Some(key) {
-                view.image(Some(image.clone()));
-            }
-        });
-        app.request_redraw();
     }
 
     /// After a solve: the windows of the tree's lists. Whether one changed.
@@ -1189,13 +1262,31 @@ impl Drop for Surface {
         if let Some(owner) = self.holder.get_mut().take() {
             owner.end();
         }
-        self.release_images();
+        self.images.release_all();
         let state = self.state.get_mut();
         let (content, memo) = (std::mem::take(&mut state.content), state.booked);
         self.release_content(&content);
         book(&self.plugin, |ledger| {
             ledger.mounts -= 1;
             ledger.memo_entries -= memo;
+        });
+    }
+}
+
+impl Shows for Surface {
+    fn pictures(&self) -> &Pictures {
+        &self.images
+    }
+
+    fn host_time(&self) -> &HostTime {
+        &self.host_time
+    }
+
+    fn show(&self, key: ImageKey, image: &opentui::native::Image) {
+        self.state.borrow().tree.each_image(&mut |source, view| {
+            if ImageKey::of(source) == Some(key) {
+                view.image(Some(image.clone()));
+            }
         });
     }
 }
@@ -1284,9 +1375,9 @@ pub fn decoded_size(app: &App, bytes: &[u8]) -> Option<(u32, u32)> {
     }
 }
 
-/// The image `bytes` decode to in the frame, for a 1.x claim's part, which has no plugin in the host to charge: within
-/// one image's limits (4.2), else the placeholder; bytes that are no image, or do not decode, show nothing.
-pub(crate) fn decode(app: &App, bytes: &[u8]) -> Picture {
+/// The image `bytes` decode to in the frame, for [`decoded_size`]: within one image's limits (4.2), else the
+/// placeholder; bytes that are no image, or do not decode, show nothing.
+fn decode(app: &App, bytes: &[u8]) -> Picture {
     let Some((width, height)) = crate::image::size(bytes) else {
         log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
         return Picture::Pending;
@@ -1312,9 +1403,9 @@ pub(crate) fn decode(app: &App, bytes: &[u8]) -> Picture {
 
 /// Which content of `staged` plugin `plugin` may hold beside what it holds, in the order the view gave it: the bytes
 /// admitted, and the handles past its share or the total (4.2), which the host does not keep.
-fn admit_content(plugin: &str, staged: &Staged) -> (u64, HashSet<ContentRef>) {
+pub(crate) fn admit_content(plugin: &str, given: &HashMap<ContentRef, Arc<[u8]>>) -> (u64, HashSet<ContentRef>) {
     let mut room = limits::room(plugin, limits::Kind::Content, 0);
-    let mut given: Vec<(&ContentRef, &Arc<[u8]>)> = staged.given.iter().collect();
+    let mut given: Vec<(&ContentRef, &Arc<[u8]>)> = given.iter().collect();
     given.sort_by_key(|(handle, _)| handle.0);
     let (mut admitted, mut over) = (0, HashSet::new());
     for (handle, bytes) in given {

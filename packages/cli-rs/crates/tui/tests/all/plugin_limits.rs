@@ -627,7 +627,7 @@ fn a_plugin_spends_its_own_share_of_what_all_plugins_may_hold() {
 }
 
 /// A PNG of `width` by `height` pixels of `pixel`, stored without compression.
-fn png(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
+pub(crate) fn png(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
     fn chunk(out: &mut Vec<u8>, kind: &[u8], data: &[u8]) {
         out.extend((data.len() as u32).to_be_bytes());
         let mut checked = kind.to_vec();
