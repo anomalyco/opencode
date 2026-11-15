@@ -513,8 +513,11 @@ TypeScript handler's call ends at its first `await`: what it asks for after that
 activation's, not in the mount's call, and is the activation's, also when the mount closed meanwhile. A message that
 settles the JS host's work (a fetch's reply, the answers of a call's effects, which carry a fetch's ID, a cancellation,
 a skipped sequence) is never dropped while the JS host runs: past the overflow's bound it waits in a reserve as large
-again, charged its bytes, and one too large for a frame goes as a failed answer. A JS host that reads nothing past the
-reserve is ended, which settles everything it held. A Rust or C plugin hears nothing of a
+again, charged its bytes. One too large for a frame the JS host takes (the queue's bound, at most the wire's cap) goes
+reduced: a fetch's reply as a failed one, the answers of a call's effects with their request IDs and verbs' answers
+kept and the values of its reads dropped, so an accepted request is never read as refused. A JS host that reads
+nothing past the reserve, or whose work cannot be settled in a frame even so, is ended once, which settles everything
+it held. A Rust or C plugin hears nothing of a
 cancelled request, as it has no promise that waits.
 
 ### Events
