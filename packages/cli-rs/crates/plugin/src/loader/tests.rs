@@ -1090,7 +1090,7 @@ fn a_build_the_crash_record_cannot_name_is_not_opened() {
     loader.reconcile(&dynamic(&host), &registry);
     let Status::Failed(error) = entry(&registry.entries(), &target).status.clone() else { panic!() };
     assert!(error.contains("crash guard cannot name this build"), "{error}");
-    let short = project.config().join("plugins/short").to_string_lossy().into_owned();
+    let short = project.config().join("plugins").join("short").to_string_lossy().into_owned();
     assert_eq!(entry(&registry.entries(), &short).status, Status::Active);
     assert_eq!(fake.loads.get(), 1, "the deep build was opened");
 }
