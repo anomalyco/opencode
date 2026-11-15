@@ -2328,6 +2328,54 @@ fn a_read_over_its_bound_fails_alone() {
     assert_eq!(toasted(&pipe, "read error"), "read error none");
 }
 
+// Expected (bigboi's pipe sign-off): a watched read under its bound whose snapshot, with its envelope, is past the
+// frame's cap is pushed as a failed read: the plugin reads nothing and can ask why, never the value before with no
+// error; a small value after it is pushed as usual.
+#[test]
+fn a_read_past_the_frame_with_its_snapshot_fails_alone() {
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("lab.store", Some("previous"));
+    shows(&pipe, r#"note="{\"text\":\"previous\"}""#);
+    // The read is the stored text, a JSON string: 262,131 bytes of it, under the read's bound of 262,144.
+    let host = opencode_tui::plugins::host::host(tui);
+    let near = serde_json::json!({ "text": "x".repeat(262_131 - 17) }).to_string();
+    assert_eq!(serde_json::to_vec(&serde_json::json!(near)).unwrap().len(), 262_131);
+    opencode_plugin::Host::storage_write(&*host, "plugin.example.lab.note", &near).unwrap();
+    opencode_plugin::Host::storage_changed(&*host);
+    pipe.settle();
+    shows(&pipe, "note=null");
+    tui.keymap.dispatch("lab.readerror", None);
+    let error = toasted(&pipe, "read error");
+    assert!(error.contains("more than the JS host takes"), "{error}");
+    toasts(&pipe.harness);
+    assert_eq!(pipe.status(LAB), Some(Status::Active));
+    tui.keymap.dispatch("lab.store", Some("after"));
+    shows(&pipe, r#"note="{\"text\":\"after\"}""#);
+    tui.keymap.dispatch("lab.readerror", None);
+    assert_eq!(toasted(&pipe, "read error"), "read error none");
+}
+
+// Expected (bigboi's pipe sign-off): a load the JS host's queue refuses (here its options are past the frame's cap)
+// fails with why, as nothing else answers it; its neighbour on the same JS host is active, and once the JS host
+// answered a ping, nothing waits.
+#[test]
+fn a_load_past_the_frame_fails_and_its_neighbour_runs() {
+    let Some(config) = config() else { return };
+    let options = serde_json::json!({ "pad": "x".repeat(300 << 10) });
+    let pipe = open(&[("lab", None), ("twin", Some(options))], config, (100, 30));
+    pipe.active(LAB);
+    pipe.settle();
+    // It never imported: the loader names it by its directory.
+    let twin = pipe.root.path().join("config").join("plugins").join("twin");
+    let status = pipe.status(&twin.to_string_lossy());
+    let failed = matches!(&status, Some(Status::Failed(error)) if error.contains("no room for a load"));
+    assert!(failed, "{status:?}");
+    assert_eq!(pipe.status(LAB), Some(Status::Active));
+    assert_eq!(pipe.scripts().waiting(), 0);
+}
+
 // Expected (no orphans): a TUI that ends as usual leaves nothing a plugin started either, also a process outside the JS
 // host's group, which the host's kill of the group misses: the JS host ends it as its input ends.
 #[cfg(target_os = "linux")]
