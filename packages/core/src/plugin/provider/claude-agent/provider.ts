@@ -2,7 +2,7 @@ export * as ClaudeProvider from "./provider.js"
 
 import type { AccountInfo } from "@anthropic-ai/claude-agent-sdk"
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { Effect, Option, Schema, Stream, SubscriptionRef } from "effect"
+import { Clock, Effect, Option, Schema, Stream, SubscriptionRef } from "effect"
 import { Model } from "../../../model.js"
 import { Provider } from "../../../provider.js"
 import type { ClaudeIO } from "./claude/io.js"
@@ -63,7 +63,8 @@ export const register = Effect.fn("ClaudeProvider.register")(function* (
     })
   })
 
-  const checked = new Set<string>()
+  // Retry incomplete discovery on later chats, without repeatedly checking unsupported models.
+  const checked = new Map<string, { attempts: number; nextCheckAt: number }>()
   yield* SubscriptionRef.changes(status.state).pipe(
     Stream.runForEach((state) =>
       Effect.gen(function* () {
@@ -73,10 +74,22 @@ export const register = Effect.fn("ClaudeProvider.register")(function* (
           priceSource: priceSource(state.probe.account, baseURL),
           models: fromClaude(state.probe.models, current.catalog.models),
         }
-        const unknown = next.models.filter((model) => model.contextWindow === undefined && !checked.has(model.id))
-        if (state.fromChat && unknown.length > 0) {
-          for (const model of unknown) checked.add(model.id)
-          yield* status.refresh().pipe(Effect.forkScoped)
+        if (state.fromChat) {
+          const now = yield* Clock.currentTimeMillis
+          const unknown = next.models.filter((model) => {
+            if (model.contextWindow !== undefined) return false
+            const check = checked.get(model.id)
+            return !check || (check.attempts < 3 && now >= check.nextCheckAt)
+          })
+          if (unknown.length > 0) {
+            for (const model of unknown) {
+              checked.set(model.id, {
+                attempts: (checked.get(model.id)?.attempts ?? 0) + 1,
+                nextCheckAt: now + 5 * 60_000,
+              })
+            }
+            yield* status.refresh().pipe(Effect.forkScoped)
+          }
         }
         if (JSON.stringify(next) === JSON.stringify(current.catalog)) return
         current.catalog = next
