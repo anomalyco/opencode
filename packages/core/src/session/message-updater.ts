@@ -93,6 +93,7 @@ export function update(adapter: Adapter, event: ProjectedEvent) {
       "session.viewed": () => Effect.void,
       "session.archived": () => Effect.void,
       "session.unarchived": () => Effect.void,
+      "session.question.resolved": () => Effect.void,
       "session.message.content.updated": (event) =>
         adapter.replaceAssistantParts(event.data.messageID, decodeAssistantContent(event.data.content)),
       "session.usage.recorded": () => Effect.void,

@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "17fff8ee-c991-44d2-ae31-f7ef580519a1",
-  "prevIds": ["c2e6ab2b-a125-4693-86c7-dd449d8949ce"],
+  "id": "85681386-60a2-4f20-be6f-2efec1fda936",
+  "prevIds": ["17fff8ee-c991-44d2-ae31-f7ef580519a1"],
   "ddl": [
     {
       "name": "account_state",
@@ -1661,6 +1661,36 @@
       "default": null,
       "generated": null,
       "name": "prepared",
+      "entityType": "columns",
+      "table": "session_question"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'pending'",
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "session_question"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "answer",
+      "entityType": "columns",
+      "table": "session_question"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cancel_message",
       "entityType": "columns",
       "table": "session_question"
     },

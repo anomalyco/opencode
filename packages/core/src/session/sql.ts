@@ -146,6 +146,9 @@ export const SessionQuestionTable = sqliteTable(
     generation: integer().notNull(),
     call_id: text().notNull(),
     prepared: text({ mode: "json" }).$type<typeof QuestionContinuation.Prepared.Encoded>().notNull(),
+    status: text({ enum: ["pending", "answered", "cancelled"] }).notNull().default("pending"),
+    answer: text({ mode: "json" }).$type<Form.Answer | null>(),
+    cancel_message: text(),
   },
   (table) => [
     primaryKey({ columns: [table.id] }),

@@ -392,8 +392,8 @@ export namespace Step {
   export const ParkedPayload = Schema.Struct({
     ...Base,
     assistantMessageID: SessionMessage.ID,
-    /** Sequence of the owning session.step.started event. */
-    generation: PositiveInt,
+    /** Zero-based sequence of the owning session.step.started event. */
+    generation: NonNegativeInt,
     finish: FinishReason,
     rawFinish: Schema.String.pipe(optional),
     native: SessionMessage.Native.pipe(optional),
@@ -750,12 +750,36 @@ export const Definitions = Event.inventory(
   RevertEvent.Committed,
 )
 
+/** Internal, versioned admission of one terminal Question state. */
+export namespace QuestionResolution {
+  export const Resolved = Event.durable({
+    type: "session.question.resolved",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+      generation: NonNegativeInt,
+      questionID: Form.ID,
+      callID: Schema.String,
+      terminal: Schema.Union([
+        Schema.Struct({ status: Schema.Literal("answered"), answer: Form.Answer }),
+        Schema.Struct({
+          status: Schema.Literal("cancelled"),
+          message: Schema.String.pipe(optional),
+        }),
+      ]),
+    },
+  })
+  export type Resolved = typeof Resolved.Type
+}
+
 // Internal and replay-only events are excluded from the public manifest.
 export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
   MessageContentUpdated,
   Step.Parked,
+  QuestionResolution.Resolved,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

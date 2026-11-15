@@ -60,6 +60,7 @@ import m57 from "./migration/20261029165540_schedule_checks.js"
 import m58 from "./migration/20261030054400_job.js"
 import m59 from "./migration/20261115165607_step-ownership.js"
 import m60 from "./migration/20261115180731_step-parking.js"
+import m61 from "./migration/20261115190335_ambiguous_vapor.js"
 
 export const migrations = [
   m00,
@@ -123,4 +124,5 @@ export const migrations = [
   m58,
   m59,
   m60,
+  m61,
 ] satisfies DatabaseMigration.Migration[]

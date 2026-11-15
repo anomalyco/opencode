@@ -39,11 +39,16 @@ import type { SessionSchema } from "./schema.js"
 import { SessionHistory } from "./history.js"
 import { ProjectTable } from "../project/sql.js"
 import { SessionParking } from "./parking.js"
+import { QuestionTool } from "../tool/plugin/question.js"
+import { Form } from "../form.js"
 
 type DatabaseService = Database.Interface["db"]
 type MessageEvent = Exclude<
   SessionEvent.DurableEvent,
-  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type | SessionEvent.Step.Parked
+  | typeof SessionEvent.Forked.Type
+  | typeof SessionEvent.Deleted.Type
+  | SessionEvent.Step.Parked
+  | SessionEvent.QuestionResolution.Resolved
 >
 
 type StorageEvent = MessageEvent | SessionEvent.Step.Parked
@@ -410,6 +415,65 @@ const projectParked = Effect.fnUntraced(function* (db: DatabaseService, event: S
     })
   }), { discard: true })
   yield* setSession(db, event.data.sessionID, { time_updated: event.created })
+})
+
+/** Atomic admission only. Finalization of the original waiting tool belongs to P2-B2. */
+const projectQuestionResolved = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  event: SessionEvent.QuestionResolution.Resolved,
+) {
+  const data = event.data
+  const conflict = (message: string) =>
+    Effect.die(new SessionParking.ConflictError({ message }))
+
+  const pending = yield* db.select().from(SessionPendingStepTable).where(and(
+    eq(SessionPendingStepTable.session_id, data.sessionID),
+    eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
+    eq(SessionPendingStepTable.generation, data.generation),
+  )).get().pipe(Effect.orDie)
+  if (!pending) return yield* conflict("Question resolution requires its original pending Step")
+
+  const question = yield* db.select().from(SessionQuestionTable).where(and(
+    eq(SessionQuestionTable.id, data.questionID),
+    eq(SessionQuestionTable.session_id, data.sessionID),
+    eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+    eq(SessionQuestionTable.generation, data.generation),
+    eq(SessionQuestionTable.call_id, data.callID),
+    eq(SessionQuestionTable.status, "pending"),
+  )).get().pipe(Effect.orDie)
+  if (!question) return yield* conflict("Question is missing, stale, or already resolved")
+
+  const owner = yield* db.select().from(SessionMessageTable).where(and(
+    eq(SessionMessageTable.session_id, data.sessionID),
+    eq(SessionMessageTable.id, data.assistantMessageID),
+    eq(SessionMessageTable.type, "assistant"),
+    eq(SessionMessageTable.step_started_seq, data.generation),
+  )).get().pipe(Effect.orDie)
+  if (!owner) return yield* conflict("Question owner generation does not match")
+
+  if (question.prepared.adapter !== "question@1")
+    return yield* conflict("Unsupported Question continuation adapter")
+
+  if (data.terminal.status === "answered") {
+    const fields = question.prepared.input.questions.map(QuestionTool.toField)
+    const invalid = Form.validateAnswer(fields, data.terminal.answer)
+    if (invalid) return yield* conflict(`Invalid Question answer: ${invalid}`)
+  }
+
+  const updated = yield* db.update(SessionQuestionTable).set(
+    data.terminal.status === "answered"
+      ? { status: "answered", answer: data.terminal.answer, cancel_message: null }
+      : { status: "cancelled", answer: null, cancel_message: data.terminal.message ?? null },
+  ).where(and(
+    eq(SessionQuestionTable.id, data.questionID),
+    eq(SessionQuestionTable.session_id, data.sessionID),
+    eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+    eq(SessionQuestionTable.generation, data.generation),
+    eq(SessionQuestionTable.call_id, data.callID),
+    eq(SessionQuestionTable.status, "pending"),
+  )).returning({ id: SessionQuestionTable.id }).get().pipe(Effect.orDie)
+
+  if (!updated) return yield* conflict("Question was concurrently resolved")
 })
 
 function run(db: DatabaseService, event: MessageEvent) {
@@ -1203,6 +1267,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Step.FirstToken, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Parked, (event) => projectParked(db, event))
+    yield* bus.project(SessionEvent.QuestionResolution.Resolved, (event) => projectQuestionResolved(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
         yield* requireNoPending(db, event.data.sessionID)

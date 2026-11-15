@@ -90,6 +90,122 @@ const start = (sessionID: Session.ID, assistantMessageID: SessionMessage.ID) =>
     })
   })
 
+
+describe("Question resolution admission", () => {
+  const questionID = Form.ID.make("frm_owner")
+
+  const setup = Effect.gen(function* () {
+    const fixture = yield* seed
+    const owner = {
+      session_id: sessionID,
+      assistant_message_id: assistantMessageID,
+      generation: fixture.generation,
+    }
+    yield* fixture.db.insert(SessionPendingStepTable).values({
+      ...owner,
+      data: parkedData(sessionID, assistantMessageID, fixture.generation),
+    })
+    yield* fixture.db.insert(SessionQuestionTable).values({
+      id: questionID,
+      ...owner,
+      call_id: "call_owner",
+      prepared,
+    })
+    return { ...fixture, bus: yield* Bus.Service }
+  })
+
+  const resolve = (
+    generation: number,
+    terminal: SessionEvent.QuestionResolution.Resolved["data"]["terminal"],
+  ) => ({
+    sessionID,
+    assistantMessageID,
+    generation,
+    questionID,
+    callID: "call_owner",
+    terminal,
+  })
+
+  it.effect("accepts a valid answer exactly once without advancing the sequence on duplicate", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const input = resolve(fixture.generation, {
+        status: "answered",
+        answer: { q0: "Yes" },
+      })
+      yield* fixture.bus.publish(SessionEvent.QuestionResolution.Resolved, input)
+      const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+      expect(yield* fixture.db.select().from(SessionQuestionTable).get()).toMatchObject({
+        status: "answered",
+        answer: { q0: "Yes" },
+        cancel_message: null,
+      })
+      expect(yield* fixture.bus.publish(SessionEvent.QuestionResolution.Resolved, input).pipe(Effect.exit))
+        .toMatchObject({ _tag: "Failure" })
+      expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+    }),
+  )
+
+  it.effect("rejects invalid answers without changing the row or durable sequence", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+      const invalid: Form.Answer[] = [
+        { q0: ["Yes"] },
+        { unexpected: "Yes" },
+      ]
+      for (const answer of invalid) {
+        expect(yield* fixture.bus.publish(
+          SessionEvent.QuestionResolution.Resolved,
+          resolve(fixture.generation, { status: "answered", answer }),
+        ).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+        expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+      }
+      expect(yield* fixture.db.select().from(SessionQuestionTable).get()).toMatchObject({
+        status: "pending",
+        answer: null,
+        cancel_message: null,
+      })
+    }),
+  )
+
+  it.effect("rejects stale generations and mismatched call ownership", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+      const terminal = { status: "cancelled" as const }
+      for (const input of [
+        resolve(fixture.generation + 1, terminal),
+        { ...resolve(fixture.generation, terminal), callID: "other_call" },
+        { ...resolve(fixture.generation, terminal), assistantMessageID: otherMessageID },
+        { ...resolve(fixture.generation, terminal), sessionID: otherSessionID },
+      ]) {
+        expect(yield* fixture.bus.publish(SessionEvent.QuestionResolution.Resolved, input)
+          .pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+        expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+      }
+      expect(yield* fixture.db.select().from(SessionQuestionTable).get()).toMatchObject({
+        status: "pending",
+      })
+    }),
+  )
+
+  it.effect("preserves an explicitly empty cancellation message", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      yield* fixture.bus.publish(
+        SessionEvent.QuestionResolution.Resolved,
+        resolve(fixture.generation, { status: "cancelled", message: "" }),
+      )
+      expect(yield* fixture.db.select().from(SessionQuestionTable).get()).toMatchObject({
+        status: "cancelled",
+        answer: null,
+        cancel_message: "",
+      })
+    }),
+  )
+})
+
 describe("Step ownership", () => {
   it.effect("requires each child to reference the exact Session, assistant and generation with no NULL bypass", () =>
     Effect.gen(function* () {
@@ -204,7 +320,15 @@ describe("Step ownership", () => {
         expect(yield* start(sessionID, assistantMessageID).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
         expect(yield* fixture.db.select().from(SessionMessageTable)).toEqual(before)
         expect(yield* fixture.db.select().from(SessionQuestionTable)).toEqual([
-          { id: Form.ID.make("frm_retained"), ...owner, call_id: "call_retained", prepared },
+          {
+            id: Form.ID.make("frm_retained"),
+            ...owner,
+            call_id: "call_retained",
+            prepared,
+            status: "pending",
+            answer: null,
+            cancel_message: null,
+          },
         ])
         expect(
           yield* fixture.db

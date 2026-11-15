@@ -162,7 +162,7 @@ export const Plugin = {
   }),
 }
 
-function toField(question: Question.Prompt, index: number): Form.Field {
+export function toField(question: Question.Prompt, index: number): Form.Field {
   return {
     key: `q${index}`,
     title: question.header,
