@@ -10,6 +10,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+log.workspace = true
 opencode-api-types.workspace = true
 opencode-util.workspace = true
 opentui.workspace = true
