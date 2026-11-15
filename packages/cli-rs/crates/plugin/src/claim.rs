@@ -51,7 +51,7 @@ use crate::reconcile::{Env, Tree};
 use crate::surface::{self, HostTime, ImageKey, Pictures, Shows, Viewing};
 
 /// Runs a claim's view in process as one call of its plugin.
-pub(crate) type Call = Rc<dyn Fn(&dyn Host, &mut dyn FnMut(&dyn abi::Read)) -> Called>;
+pub(crate) type Call = Rc<dyn Fn(&dyn Host, &v2::MountId, &mut dyn FnMut(&dyn abi::Read)) -> Called>;
 
 /// How a call of a claim's view in process ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,7 +98,7 @@ impl Viewer for Linked {
     fn view(&self, host: &dyn Host, viewing: Viewing<'_>, part: &Part) -> Viewed {
         let Viewing { mount, input, memo, give, release, .. } = viewing;
         let mut node = None;
-        let called = (self.call)(host, &mut |read| {
+        let called = (self.call)(host, mount, &mut |read| {
             let mut content = |bytes: Vec<u8>| {
                 let handle = surface::new_content();
                 give(handle, bytes);

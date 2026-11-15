@@ -638,12 +638,14 @@ fn in_process(plugin: abi::Plugin) -> Definition {
         }
         for claim in api.claims() {
             let called = scope.clone();
-            let call: claim::Call =
-                Rc::new(move |host, view| match called.call_timed("view", host, |read| view(read)) {
+            // A claim's view reads the part's mount as `Read::mount`, as over the C ABI.
+            let call: claim::Call = Rc::new(move |host, mount, view| {
+                match called.owners.for_mount(mount, || called.call_timed("view", host, |read| view(read))) {
                     (None, _) => claim::Called::Failed,
                     (Some(()), true) => claim::Called::Overran,
                     (Some(()), false) => claim::Called::Returned,
-                });
+                }
+            });
             setup.renderer_claim(claim.into(), Rc::new(claim::Linked::new(claim.view.clone(), call)), &scope.owners);
         }
         // Disposal removes the plugin's commands, runs its dispose callbacks, then drops its replies and wakes.
@@ -715,6 +717,8 @@ pub(crate) struct Owners {
     activation: Rc<Activation>,
     /// The input owner of the running call: a mount's while its view or handler runs; else [`Owners::input`].
     current: RefCell<Option<Rc<interact::Owner>>>,
+    /// The mount of the running call that has no input owner: a claimed part's, while its view runs.
+    called: RefCell<Option<abi::v2::MountId>>,
     /// The activation's own input owner: the layers of its setup, and what a command asks for.
     input: Rc<interact::Owner>,
     /// The plugin's overlay surfaces, by name, each mounting into the frame the host gives it.
@@ -729,6 +733,7 @@ impl Owners {
             id: id.to_owned(),
             activation: activation.clone(),
             current: RefCell::default(),
+            called: RefCell::default(),
             input,
             overlays: RefCell::default(),
         })
@@ -773,7 +778,16 @@ impl Owners {
 
     /// The ID of the running call's mount (big-boi 4).
     pub(crate) fn mount_id(&self) -> Option<abi::v2::MountId> {
-        self.current.borrow().as_ref().and_then(|owner| owner.id().cloned())
+        let owned = self.current.borrow().as_ref().and_then(|owner| owner.id().cloned());
+        owned.or_else(|| self.called.borrow().clone())
+    }
+
+    /// Runs `f` as a call for `mount`, which has no input owner: [`Owners::mount_id`] names it.
+    pub(crate) fn for_mount<R>(&self, mount: &abi::v2::MountId, f: impl FnOnce() -> R) -> R {
+        let outer = self.called.replace(Some(mount.clone()));
+        let result = f();
+        *self.called.borrow_mut() = outer;
+        result
     }
 
     /// The mount of the running call's owner: the one a verb or a read of its scrolls names (P3).

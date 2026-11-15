@@ -2810,3 +2810,39 @@ fn a_revision_and_a_handler_in_one_frame_give_a_part_one_view() {
         }
     }
 }
+
+thread_local! {
+    /// What a claim view's `&dyn Read` helper read as its mount, beside the view's own mount.
+    static READ_MOUNTS: RefCell<Vec<(Option<v2::MountId>, v2::MountId)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The mount a helper that only has the host's reads finds.
+fn read_mount(read: &dyn abi::Read) -> Option<v2::MountId> {
+    read.mount()
+}
+
+fn mount_reader(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::tool("shell", |cx, part| {
+        READ_MOUNTS.with_borrow_mut(|seen| seen.push((read_mount(cx.read), cx.mount.clone())));
+        Some(v2::Node::text(vec![abi::Span::new(format!("read {}", key(part)))]))
+    }));
+    Ok(())
+}
+
+// Expected (bigboi's re-review): `Read::mount` names the part's mount in a claim's view on both carriers, as
+// `View::mount` does, so a helper that only takes the reads sees the same mount linked and over the C ABI.
+#[test]
+fn a_claim_view_reads_its_part_s_mount_on_both_carriers() {
+    for carrier in CARRIERS {
+        READ_MOUNTS.with_borrow_mut(Vec::clear);
+        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.mount", setup: mount_reader })]);
+        world.emit("session.tool.input.started", json!({ "id": "call_7", "name": "bash" }));
+        world.settle();
+        world.harness.wait_for("read call_7");
+        let seen = READ_MOUNTS.with_borrow(Vec::clone);
+        assert!(!seen.is_empty(), "{carrier:?}: no view ran");
+        for (read, mount) in seen {
+            assert_eq!(read.as_ref(), Some(&mount), "{carrier:?}");
+        }
+    }
+}
