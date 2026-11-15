@@ -1568,7 +1568,7 @@ pub(crate) fn apply(
             match effect {
                 Effect::Toast(toast) => host.toast(&toast),
                 Effect::Route(name) => host.open_route(&id, &name),
-                Effect::Dispatch(name, input) => host.dispatch(&name, input.as_deref()),
+                Effect::Dispatch(name, input) => crate::dispatch(host, &name, input.as_deref()),
                 Effect::Attention(attention) => host.attention(&attention),
                 Effect::Stored => host.storage_changed(),
                 Effect::Navigate(route) => host.navigate(&id, &route),
