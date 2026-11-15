@@ -396,7 +396,12 @@ struct Call {
     request: opencode_plugin_abi::Request,
     /// The input owner of a handler's event (P2): its effects are that mount's, as in process.
     owner: Option<Weak<crate::interact::Owner>>,
+    /// The mount of a route's command: what it asks for is that mount's, as in process.
+    routed: Option<Weak<()>>,
 }
+
+/// What owns a call's requests: the input owner of a handler's event, and the mount of a route's command.
+pub(crate) type Owning = (Option<Weak<crate::interact::Owner>>, Option<Weak<()>>);
 
 /// Whom an end of the JS host names.
 enum Blame {
@@ -1228,7 +1233,7 @@ impl Scripts {
         }
         for call in calls {
             if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()) {
-                self.call_as(&guest, call.export, call.request, false, call.user, call.owner);
+                self.call_as(&guest, call.export, call.request, false, call.user, (call.owner, call.routed));
             }
         }
         self.reconcile();
@@ -1244,15 +1249,15 @@ impl Scripts {
         }
     }
 
-    /// Runs a call of `guest`: a command, an event, an input event of `owner`. A command in `holds` holds the keys
-    /// after it.
+    /// Runs a call of `guest`: a command, an event, an input event of `owner`'s input owner, or a command of its route
+    /// mount. A command in `holds` holds the keys after it.
     fn call(
         self: &Rc<Self>,
         guest: &Rc<Guest>,
         export: &'static str,
         request: opencode_plugin_abi::Request,
         hold: bool,
-        owner: Option<Weak<crate::interact::Owner>>,
+        owner: Owning,
     ) {
         self.call_as(guest, export, request, hold, crate::behave::user(), owner);
     }
@@ -1265,12 +1270,12 @@ impl Scripts {
         request: opencode_plugin_abi::Request,
         hold: bool,
         user: bool,
-        owner: Option<Weak<crate::interact::Owner>>,
+        (owner, routed): Owning,
     ) {
         let seq = self.next();
         let (id, activation, route) = (guest.id().to_owned(), guest.activation(), guest.unwatched_route());
         let message = Down::Call { seq, id, activation, call: request.clone(), route };
-        let call = Call { guest: Rc::downgrade(guest), export, user, request, owner };
+        let call = Call { guest: Rc::downgrade(guest), export, user, request, owner, routed };
         self.send(message, Some(Waiting::Call(Box::new(call))));
         if hold {
             self.start_hold(seq);

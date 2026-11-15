@@ -282,8 +282,8 @@ wherever the tree puts it, so a scroll keeps its offset and the focus; a node of
 new. `View::memo(key, value, build)` returns `Node::Keep` when `value` equals the one the subtree was last built from
 in this mount; the host then adopts that subtree as it is. The value is remembered only once the host accepts a tree
 that holds what `build` made. Each showing is a mount with a new generation, which owns the widgets, the memo table
-and the content handles of `View::content`; all of it goes when the surface closes, and what a route's commands
-asked for, such as a fetch, ends with the mount. A handle lives until the mount ends or `View::release`. A tree with
+and the content handles of `View::content`; all of it goes when the surface closes, and what the mount's calls
+asked for, such as a fetch, ends with the mount (Fetch, below). A handle lives until the mount ends or `View::release`. A tree with
 an id twice, a keep of an id the host does not hold, a handle the mount lacks, a scroll without an id, more than 64
 layout levels or a size in percent that is not a finite number of 0 or more is refused whole: nothing of it shows,
 nor the content its view gave, the host asks at once for a whole tree (`SurfaceInput::full`, which may keep
@@ -481,7 +481,7 @@ fields another client stored stay (TS `update((draft) => …)`). On an older hos
 `fetch` sends a request through the host's own client, with its credentials, to the server the TUI talks to now (a
 managed service it follows across restarts). The path starts with `/` and stays on that server: a path that would
 reach another origin, such as `/https://elsewhere/`, is refused before the credentials go on. The reply comes back to
-the `on_reply` handlers on the UI thread, in order with the other effects, unless the plugin was disposed first. It
+the `on_reply` handlers on the UI thread, in order with the other effects, while what owns the fetch lives. It
 is the JSON body of any 2xx status, or `null` without a body. An error is text: a declared server error's message
 (else its tag), `UnexpectedStatus: 404: <body>` for another error status (the body trimmed and cut at 200
 characters; `UnexpectedStatus: 404` without one), `Transport: …` when the request could not be sent or would leave the
@@ -496,6 +496,13 @@ TypeScript fetch resolves as a failed reply. A fetch the host takes is admitted 
 gets its one reply. The 1.x calls are unchanged, in a 1.x binary and in 1.x source rebuilt on this SDK: `fetch` and
 `foreground` return `RequestId`, and `RequestId(0)` for any request the host refuses, as on a host without fetch;
 no reply carries that ID.
+
+A fetch or a `foreground` belongs to what asked for it, the same in process, over the C ABI and over the pipe. One a
+mount's call asks for, a command of the route the mount shows or a handler of the mount's events (its input and its
+mount event), is that mount's: once the mount closes, it is not sent (a program does not start), and a reply that
+arrives later is dropped, also when the surface opened again under the same key, whose mount is another. One from
+setup, a global or base command, an event, a wake, a message or a layer of setup is the activation's, and its reply
+comes unless the plugin is disposed first. Over the pipe, a TypeScript `fetch` of a mount that closed never resolves.
 
 ### Events
 

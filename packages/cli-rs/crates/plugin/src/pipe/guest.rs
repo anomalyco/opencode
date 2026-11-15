@@ -182,11 +182,11 @@ impl Guest {
 
     /// Runs a handler of the plugin on the JS host, after the snapshots of what it reads.
     fn call(self: &Rc<Self>, export: &'static str, request: Request, hold: bool) {
-        self.call_for(export, request, hold, None);
+        self.call_for(export, request, hold, (None, None));
     }
 
-    /// [`Guest::call`] for an input event of `owner`, whose effects are that owner's.
-    fn call_for(self: &Rc<Self>, export: &'static str, request: Request, hold: bool, owner: Option<Weak<Owner>>) {
+    /// [`Guest::call`] for an input event of an input owner, or a command of a route mount, whose effects are theirs.
+    fn call_for(self: &Rc<Self>, export: &'static str, request: Request, hold: bool, owner: super::Owning) {
         if self.ended() {
             return;
         }
@@ -211,7 +211,7 @@ impl Guest {
                 To::Layer(layer) => InputTo::Layer { layer },
             };
             let request = Request::Input { to, event: event.clone() };
-            guest.call_for("handle", request, false, Some(Rc::downgrade(owner)));
+            guest.call_for("handle", request, false, (Some(Rc::downgrade(owner)), None));
             match event {
                 Event::Key(key) if key.bind.is_some() => Handled::Consume,
                 Event::Paste { .. } => Handled::Consume,
@@ -308,9 +308,13 @@ impl Guest {
         }
         let owner = call.owner.as_ref().and_then(Weak::upgrade);
         let key = format!("c{seq}");
-        match owner {
-            Some(owner) => self.owners.as_owner(&owner, || self.effects(&key, effects, call.user, call.export)),
+        let apply = || match &call.routed {
+            Some(alive) => self.owners.for_route(alive, || self.effects(&key, effects, call.user, call.export)),
             None => self.effects(&key, effects, call.user, call.export),
+        };
+        match owner {
+            Some(owner) => self.owners.as_owner(&owner, apply),
+            None => apply(),
         }
     }
 
@@ -548,8 +552,9 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
             (command.scope.clone(), run)
         })
         .collect();
-    // A V2 layer's commands keep to the base mode unless it opts out, as TS's (bigboi P8-4).
-    let (layers, scoped) = route::split(commands);
+    // A V2 layer's commands keep to the base mode unless it opts out, as TS's (bigboi P8-4). A route's commands are
+    // bound to each of its mounts below.
+    let (layers, _) = route::split(commands);
     for layer in layers.into_iter().filter(|layer| !layer.commands.is_empty()) {
         match setup.host().keymap().layer(layer) {
             Ok(disposer) => guest.revoked.borrow_mut().push(disposer),
@@ -580,11 +585,25 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
     }
     for (index, claim) in manifest.surfaces.iter().enumerate() {
         let at: v2::Place = (&claim.place).into();
-        let commands = match &at {
-            v2::Place::Route(name) => route::commands(&scoped, name),
-            v2::Place::Slot(_) | v2::Place::Panel(_) | v2::Place::Overlay(_) => Vec::new(),
+        // A route's commands are bound to the mount they run for, as in process: what they ask for is that mount's.
+        let commands: surface::Commands = match &at {
+            v2::Place::Route(name) => {
+                let routed = crate::loader::native::routed(manifest, name);
+                let guest = guest.clone();
+                Rc::new(move |alive: &Weak<()>| {
+                    let command = |command: &opencode_plugin_abi::Command| {
+                        let (called, alive, name) = (guest.clone(), alive.clone(), command.name.clone());
+                        let hold = guest.loaded.holds.contains(&name);
+                        tui_command(command, move |input| {
+                            let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
+                            called.call_for("run-command", request, hold, (None, Some(alive.clone())));
+                        })
+                    };
+                    routed.iter().map(command).collect()
+                })
+            }
+            v2::Place::Slot(_) | v2::Place::Panel(_) | v2::Place::Overlay(_) => Rc::new(|_| Vec::new()),
         };
-        let commands: surface::Commands = Rc::new(move |_| commands.clone());
         let failing = Rc::downgrade(guest);
         let fail: surface::Fail = Rc::new(move |error| {
             if let Some(guest) = failing.upgrade() {

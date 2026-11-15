@@ -142,6 +142,11 @@ deprecated, naming the 2.x calls `Host::try_fetch` and `Host::try_foreground`. T
 String>`: an `Err` is a request the host did not take, as while the effects that wait fill its queue, and no reply
 comes for it; an ID always gets its one reply.
 
+A request belongs to what asked for it, on every carrier. One a mount's call asks for (a command of the route it
+shows, or a handler of the mount's events) is that mount's: once the mount closes, it is not sent, and its reply is
+dropped, also when the surface opens again under the same key. One from setup, a global command, an event or a wake
+is the activation's, and its reply comes unless the plugin is disposed first.
+
 ### The source promise of 2.x
 
 A plugin's source that builds on the 2.0 SDK builds on every later 2.x SDK (carbon-4, big-boi 14). So every type of
