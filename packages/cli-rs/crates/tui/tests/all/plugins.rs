@@ -1192,3 +1192,57 @@ fn a_failed_dev_build_says_so() {
     write_atomic(&log, b"");
     harness.wait_for("plugin dev: the build passes again");
 }
+
+thread_local! {
+    /// The field names and the first letter of each field's value `big` read back, in order.
+    static BIG: RefCell<Vec<Vec<(String, char)>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The plugin `big`, whose key `state` holds fields of 140 KiB.
+fn big(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key("state");
+    let field = |letter: char| json!(letter.to_string().repeat(140 << 10));
+    setup.command(named("big.set"), move |host, _| host.storage_set("state", json!({ "a": field('x') })));
+    setup.command(named("big.replace"), move |host, _| {
+        host.storage_merge("state", serde_json::Map::from_iter([("a".to_owned(), field('y'))]));
+    });
+    setup.command(named("big.add"), move |host, _| {
+        host.storage_merge("state", serde_json::Map::from_iter([("b".to_owned(), field('z'))]));
+    });
+    setup.command(named("big.read"), |host, _| {
+        let fields = host.storage_get("state").and_then(|value| value.as_object().cloned()).unwrap_or_default();
+        let read = fields
+            .iter()
+            .map(|(key, value)| (key.clone(), value.as_str().and_then(|text| text.chars().next()).unwrap_or('-')))
+            .collect();
+        BIG.with_borrow_mut(|big| big.push(read));
+    });
+    Ok(())
+}
+
+// Expected (final re-review big-boi, the storage medium): a merge is bounded by the value it makes, not by the old value
+// and the new fields together: replacing a field of 140 KiB with another keeps the value at 140 KiB and is kept; a
+// second such field would make 280 KiB, past 256 KiB, and is refused, leaving the value as it was. On both carriers.
+#[test]
+fn a_merge_is_bounded_by_the_value_it_makes() {
+    for carrier in crate::plugin_surface::CARRIERS {
+        BIG.with_borrow_mut(Vec::clear);
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![crate::plugin_surface::builtin(carrier, abi::Plugin { id: "big", setup: big })],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount(80, 24, deps);
+        for command in ["big.set", "big.read", "big.replace", "big.read", "big.add", "big.read"] {
+            harness.tui.keymap.dispatch(command, None);
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
+        }
+        let field = |name: &str, letter: char| (name.to_owned(), letter);
+        assert_eq!(
+            BIG.take(),
+            [vec![field("a", 'x')], vec![field("a", 'y')], vec![field("a", 'y')]],
+            "{carrier:?}: the replace was refused, or the addition kept"
+        );
+    }
+}

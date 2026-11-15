@@ -1002,8 +1002,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::StorageMerge { key: name, fields } => {
             let stored = key(ctx, &name)?;
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
-            let held = crate::storage::read(&*host, &stored).map_or(0, |json| json.len());
-            crate::storage::bounded(held + serde_json::Value::Object(fields.clone()).to_string().len())?;
+            crate::storage::bounded_merge(&*host, &stored, &fields)?;
             ctx.undo.record(&*host, &stored.now);
             crate::storage::migrate(&*host, &stored)?;
             host.storage_merge(&stored.now, fields)?;

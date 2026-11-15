@@ -85,6 +85,22 @@ pub(crate) fn declare(keys: &mut Vec<String>, key: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Refuses a merge of `fields` into what `name` holds when the value it makes is past [`VALUE_BYTES`]: the fields
+/// over the stored object, as the host merges them (a value that is no object is replaced by the fields). A merge that
+/// replaces a field with one of its size keeps the value's size, so it stays legal (final re-review big-boi).
+pub(crate) fn bounded_merge(
+    host: &dyn Host,
+    name: &Name,
+    fields: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), String> {
+    let mut merged = match read(host, name).and_then(|json| serde_json::from_str(&json).ok()) {
+        Some(serde_json::Value::Object(object)) => object,
+        _ => serde_json::Map::new(),
+    };
+    merged.extend(fields.iter().map(|(key, value)| (key.clone(), value.clone())));
+    bounded(serde_json::Value::Object(merged).to_string().len())
+}
+
 /// Refuses a value of `bytes` JSON bytes past [`VALUE_BYTES`].
 pub(crate) fn bounded(bytes: usize) -> Result<(), String> {
     match bytes <= VALUE_BYTES {
