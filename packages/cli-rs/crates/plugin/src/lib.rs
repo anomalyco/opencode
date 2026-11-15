@@ -21,7 +21,7 @@ pub mod reconcile;
 mod route;
 pub mod schedule;
 pub mod slot;
-mod storage;
+pub mod storage;
 pub mod surface;
 
 use std::any::Any;
