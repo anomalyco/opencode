@@ -1019,40 +1019,40 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             return Ok(serde_json::to_value(color).unwrap_or_default());
         }
         HostRequest::StorageKey { key } => crate::storage::declare(&mut ctx.keys, &key)?,
-        HostRequest::Session { id } => return read(ctx, |read| serde_json::to_value(read.session(&id))),
-        HostRequest::Family { id } => return read(ctx, |read| serde_json::to_value(read.family(&id))),
-        HostRequest::Sessions => return read(ctx, |read| serde_json::to_value(read.sessions())),
-        HostRequest::Pending { id } => return read(ctx, |read| serde_json::to_value(read.pending(&id))),
+        HostRequest::Session { id } => return read(ctx, &mut |read| serde_json::to_value(read.session(&id))),
+        HostRequest::Family { id } => return read(ctx, &mut |read| serde_json::to_value(read.family(&id))),
+        HostRequest::Sessions => return read(ctx, &mut |read| serde_json::to_value(read.sessions())),
+        HostRequest::Pending { id } => return read(ctx, &mut |read| serde_json::to_value(read.pending(&id))),
         HostRequest::Messages { id } => {
-            return read(ctx, |read| {
+            return read(ctx, &mut |read| {
                 let mut value = Ok(serde_json::Value::Null);
                 read.messages(&id, &mut |messages| value = serde_json::to_value(messages));
                 value
             });
         }
         HostRequest::Message { session, message } => {
-            return read(ctx, |read| {
+            return read(ctx, &mut |read| {
                 let mut value = Ok(serde_json::Value::Null);
                 read.message(&session, &message, &mut |found| value = serde_json::to_value(found));
                 value
             });
         }
         HostRequest::Models { location } => {
-            return read(ctx, |read| serde_json::to_value(read.models(location.as_ref())));
+            return read(ctx, &mut |read| serde_json::to_value(read.models(location.as_ref())));
         }
-        HostRequest::Model => return read(ctx, |read| serde_json::to_value(read.model())),
-        HostRequest::Limits => return read(ctx, |read| serde_json::to_value(read.limits())),
-        HostRequest::Providers => return read(ctx, |read| serde_json::to_value(read.providers())),
-        HostRequest::Info => return read(ctx, |read| serde_json::to_value(read.info())),
-        HostRequest::Plugins => return read(ctx, |read| serde_json::to_value(read.plugins())),
-        HostRequest::Setting { name } => return read(ctx, |read| serde_json::to_value(read.setting(&name))),
+        HostRequest::Model => return read(ctx, &mut |read| serde_json::to_value(read.model())),
+        HostRequest::Limits => return read(ctx, &mut |read| serde_json::to_value(read.limits())),
+        HostRequest::Providers => return read(ctx, &mut |read| serde_json::to_value(read.providers())),
+        HostRequest::Info => return read(ctx, &mut |read| serde_json::to_value(read.info())),
+        HostRequest::Plugins => return read(ctx, &mut |read| serde_json::to_value(read.plugins())),
+        HostRequest::Setting { name } => return read(ctx, &mut |read| serde_json::to_value(read.setting(&name))),
         HostRequest::ImageSize { bytes } => {
             // Bytes past what the host decodes show nothing, which their length says before they are decoded (PL-9).
             if (bytes.len() / 4 * 3) as u64 > crate::limits::get().image_bytes + 2 {
                 return Ok(serde_json::Value::Null);
             }
             let bytes = abi::base64::decode(&bytes).ok_or("image bytes that are not base64")?;
-            return read(ctx, |read| serde_json::to_value(read.image_size(&bytes)));
+            return read(ctx, &mut |read| serde_json::to_value(read.image_size(&bytes)));
         }
         HostRequest::ImageBounds => {
             let limits = crate::limits::get();
@@ -1062,13 +1062,15 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         }
         HostRequest::SetSetting { name, value } => ctx.effects.push(Effect::Setting(name, value)),
         HostRequest::McpServers { location } => {
-            return read(ctx, |read| serde_json::to_value(read.mcp_servers(location.as_ref())));
+            return read(ctx, &mut |read| serde_json::to_value(read.mcp_servers(location.as_ref())));
         }
         HostRequest::Integrations { location } => {
-            return read(ctx, |read| serde_json::to_value(read.integrations(location.as_ref())));
+            return read(ctx, &mut |read| serde_json::to_value(read.integrations(location.as_ref())));
         }
-        HostRequest::Vcs { location } => return read(ctx, |read| serde_json::to_value(read.vcs(location.as_ref()))),
-        HostRequest::Route => return read(ctx, |read| serde_json::to_value(read.route())),
+        HostRequest::Vcs { location } => {
+            return read(ctx, &mut |read| serde_json::to_value(read.vcs(location.as_ref())));
+        }
+        HostRequest::Route => return read(ctx, &mut |read| serde_json::to_value(read.route())),
         HostRequest::Dispatch { name, input } => ctx.effects.push(Effect::Dispatch(name, input)),
         HostRequest::Attention(attention) => ctx.effects.push(Effect::Attention(attention)),
         HostRequest::Navigate { route } => ctx.effects.push(Effect::Navigate(route)),
@@ -1083,13 +1085,13 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         }
         HostRequest::Dialog { dialog } => ctx.effects.push(Effect::Dialog(dialog)),
         HostRequest::Copy { text, then } => ctx.effects.push(Effect::Copy(text, then)),
-        HostRequest::Interactive => return read(ctx, |read| serde_json::to_value(read.interactive())),
-        HostRequest::Shortcut { name } => return read(ctx, |read| serde_json::to_value(read.shortcut(&name))),
+        HostRequest::Interactive => return read(ctx, &mut |read| serde_json::to_value(read.interactive())),
+        HostRequest::Shortcut { name } => return read(ctx, &mut |read| serde_json::to_value(read.shortcut(&name))),
         HostRequest::DialogOpen { key } => {
             let open = ctx.host.upgrade().is_some_and(|host| host.dialog_open(&ctx.id, &key));
             return Ok(serde_json::Value::Bool(open));
         }
-        HostRequest::Composer => return read(ctx, |read| serde_json::to_value(read.composer())),
+        HostRequest::Composer => return read(ctx, &mut |read| serde_json::to_value(read.composer())),
         HostRequest::ComposerEdit { edit } => ctx.effects.push(Effect::Composer(edit)),
         HostRequest::Checkpoint => return Ok(crate::mark(ctx.effects.len(), ctx.undo.len()).into()),
         HostRequest::Rollback { mark } => {
@@ -1098,10 +1100,11 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
             ctx.undo.restore_after(&*host, writes);
         }
-        HostRequest::Variants => return read(ctx, |read| serde_json::to_value(read.variants())),
+        HostRequest::Variants => return read(ctx, &mut |read| serde_json::to_value(read.variants())),
         HostRequest::SetVariant { variant } => {
             let staged = &ctx.staged;
-            let known = read(ctx, |read| Ok(serde_json::Value::Bool(staged.variant_known(read, variant.as_deref()))))?;
+            let known =
+                read(ctx, &mut |read| Ok(serde_json::Value::Bool(staged.variant_known(read, variant.as_deref()))))?;
             if known == serde_json::Value::Bool(true) {
                 ctx.effects.push(Effect::Variant(variant));
             }
@@ -1109,15 +1112,15 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         }
         HostRequest::SetModel { provider, model } => {
             let mut staged = std::mem::take(&mut ctx.staged);
-            read(ctx, |read| {
+            read(ctx, &mut |read| {
                 staged.set_model(read, &provider, &model);
                 Ok(serde_json::Value::Null)
             })?;
             ctx.staged = staged;
             ctx.effects.push(Effect::Model(provider, model));
         }
-        HostRequest::TabsEnabled => return read(ctx, |read| serde_json::to_value(read.tabs_enabled())),
-        HostRequest::Tabs => return read(ctx, |read| serde_json::to_value(read.tabs())),
+        HostRequest::TabsEnabled => return read(ctx, &mut |read| serde_json::to_value(read.tabs_enabled())),
+        HostRequest::Tabs => return read(ctx, &mut |read| serde_json::to_value(read.tabs())),
         HostRequest::Tab { edit } => {
             let allowed = ctx.host.upgrade().is_some_and(|host| ctx.staged.tab(&*host, &edit));
             if allowed {
@@ -1125,11 +1128,11 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             }
             return Ok(serde_json::Value::Bool(allowed));
         }
-        HostRequest::KeymapPending => return read(ctx, |read| serde_json::to_value(read.keymap_pending())),
-        HostRequest::KeymapActive => return read(ctx, |read| serde_json::to_value(read.keymap_active())),
-        HostRequest::KeymapCommands => return read(ctx, |read| serde_json::to_value(read.keymap_commands())),
-        HostRequest::Shortcuts { name } => return read(ctx, |read| serde_json::to_value(read.shortcuts(&name))),
-        HostRequest::Selection => return read(ctx, |read| serde_json::to_value(read.selection())),
+        HostRequest::KeymapPending => return read(ctx, &mut |read| serde_json::to_value(read.keymap_pending())),
+        HostRequest::KeymapActive => return read(ctx, &mut |read| serde_json::to_value(read.keymap_active())),
+        HostRequest::KeymapCommands => return read(ctx, &mut |read| serde_json::to_value(read.keymap_commands())),
+        HostRequest::Shortcuts { name } => return read(ctx, &mut |read| serde_json::to_value(read.shortcuts(&name))),
+        HostRequest::Selection => return read(ctx, &mut |read| serde_json::to_value(read.selection())),
         HostRequest::ClearSelection => ctx.effects.push(Effect::ClearSelection),
         HostRequest::Foreground(program) => {
             if !crate::has_room(ctx.effects.len()) {
@@ -1140,11 +1143,11 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             return Ok(serde_json::to_value(id).unwrap_or_default());
         }
         HostRequest::Title { title } => ctx.effects.push(Effect::Title(title)),
-        HostRequest::Theme => return read(ctx, |read| serde_json::to_value(read.theme())),
-        HostRequest::Themes => return read(ctx, |read| serde_json::to_value(read.themes())),
+        HostRequest::Theme => return read(ctx, &mut |read| serde_json::to_value(read.theme())),
+        HostRequest::Themes => return read(ctx, &mut |read| serde_json::to_value(read.themes())),
         HostRequest::SetTheme { name } => {
             let staged = &ctx.staged;
-            let known = read(ctx, |read| Ok(serde_json::Value::Bool(staged.theme_known(read, &name))))?;
+            let known = read(ctx, &mut |read| Ok(serde_json::Value::Bool(staged.theme_known(read, &name))))?;
             if known == serde_json::Value::Bool(true) {
                 ctx.effects.push(Effect::Theme(name));
             }
@@ -1319,12 +1322,12 @@ fn effect(request: &HostRequest) -> bool {
 /// Answers a read through the host's [`Host::read`], as a built-in reads in process.
 fn read(
     ctx: &Ctx,
-    answer: impl FnOnce(&dyn abi::Read) -> serde_json::Result<serde_json::Value>,
+    answer: &mut dyn FnMut(&dyn abi::Read) -> serde_json::Result<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     let host = ctx.host.upgrade().ok_or("the host is gone")?;
-    let (mut answer, mut value) = (Some(answer), Ok(serde_json::Value::Null));
+    let (mut answered, mut value) = (false, Ok(serde_json::Value::Null));
     host.read(&mut |read| {
-        if let Some(answer) = answer.take() {
+        if !std::mem::replace(&mut answered, true) {
             value = answer(read);
         }
     });

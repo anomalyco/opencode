@@ -940,8 +940,16 @@ impl Scope {
         host: &dyn Host,
         f: impl FnOnce(&Scoped<'_>) -> R,
     ) -> (Option<R>, bool) {
+        let (mut f, mut value) = (Some(f), None);
+        let overrun = self.call_erased(export, host, &mut |scoped| value = f.take().map(|f| f(scoped)));
+        (value, overrun)
+    }
+
+    /// [`Scope::call_timed`] with the result left to the caller, so one copy serves every result type. `f` sets it
+    /// only when it returns.
+    fn call_erased(self: &Rc<Self>, export: &'static str, host: &dyn Host, f: &mut dyn FnMut(&Scoped<'_>)) -> bool {
         if self.failure.borrow().is_some() || self.activation.disposed() {
-            return (None, false);
+            return false;
         }
         let (out, timed) = self.monitor.call(self.slot, export, || behave::calling(export, || self.attempt(host, f)));
         let panicked = matches!(out, Some(Err(_)));
@@ -951,16 +959,11 @@ impl Scope {
             let took = timed.cpu.unwrap_or(timed.took).as_millis();
             log::error!("plugin {}: {export} took {took} ms, a host bug in a built-in", self.id);
         }
-        let value = match out {
-            Some(Ok(value)) => Some(value),
-            Some(Err(panic)) => {
-                let (revoked, error) = (self.revoked.take(), format!("{export} panicked: {panic}"));
-                fail(&self.host, &self.id, &self.failure, revoked, &self.activation, error);
-                None
-            }
-            None => None,
-        };
-        (value, timed.overrun)
+        if let Some(Err(panic)) = out {
+            let (revoked, error) = (self.revoked.take(), format!("{export} panicked: {panic}"));
+            fail(&self.host, &self.id, &self.failure, revoked, &self.activation, error);
+        }
+        timed.overrun
     }
 
     /// Calls `f` with the host as the plugin reads and calls it. What it asks for waits on the effect queue until it
