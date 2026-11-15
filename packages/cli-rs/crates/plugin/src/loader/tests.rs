@@ -858,9 +858,20 @@ impl Project {
         self.root.path().join("state").join(approval::FILE)
     }
 
+    /// The project's plugins directory, one component at a time: a target is the path the loader finds, so on Windows
+    /// its separators are all `\`.
+    fn plugins(&self) -> std::path::PathBuf {
+        self.repo().join(".opencode").join("plugins")
+    }
+
+    /// The global plugin `global`'s directory.
+    fn global(&self) -> std::path::PathBuf {
+        self.config().join("plugins").join("global")
+    }
+
     /// Writes the build of the project plugin `name` and returns its target.
     fn plugin(&self, name: &str, text: &str) -> String {
-        let dir = self.repo().join(".opencode/plugins").join(name);
+        let dir = self.plugins().join(name);
         write(&dir.join(entry_file()), text);
         dir.to_string_lossy().into_owned()
     }
@@ -1020,7 +1031,7 @@ fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
     let (a, b) = (project.root.path().join("a"), project.root.path().join("b"));
     write(&a.join(entry_file()), "id=a");
     write(&b.join(entry_file()), "id=a");
-    let plugins = project.repo().join(".opencode/plugins");
+    let plugins = project.plugins();
     fs::create_dir_all(&plugins).unwrap();
     std::os::unix::fs::symlink(&a, plugins.join("p")).unwrap();
     let target = plugins.join("p").to_string_lossy().into_owned();
@@ -1043,13 +1054,13 @@ fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
 fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
     let project = Project::new();
     let target = project.plugin("proj", "id=proj");
-    fs::create_dir_all(project.config().join("plugins/global")).unwrap();
+    fs::create_dir_all(project.global()).unwrap();
     let elf = deps::elf64(&["libc.so.6"], Some("lib"));
     fs::write(project.config().join(format!("plugins/global/{}", entry_file())), elf).unwrap();
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
     let loader = project.loader(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
-    let global = project.config().join("plugins/global").to_string_lossy().into_owned();
+    let global = project.global().to_string_lossy().into_owned();
     let Status::Failed(error) = entry(&registry.entries(), &global).status.clone() else { panic!() };
     assert!(error.contains("current directory"), "{error}");
     assert_eq!(fake.loads.get(), 0);
@@ -1115,7 +1126,7 @@ fn an_approval_names_its_directory_and_the_real_path() {
     let project = Project::new();
     let real = project.root.path().join("real");
     write(&real.join(entry_file()), "id=real");
-    let plugins = project.repo().join(".opencode/plugins");
+    let plugins = project.plugins();
     fs::create_dir_all(&plugins).unwrap();
     std::os::unix::fs::symlink(&real, plugins.join("a")).unwrap();
     let (host, registry) = (host(), Registry::define(Vec::new(), []));
@@ -1226,7 +1237,7 @@ fn a_library_over_the_limit_is_not_read() {
     let project = Project::new();
     let target = project.plugin("proj", "");
     fs::File::options().write(true).open(library(&target)).unwrap().set_len(approval::LIMIT + 1).unwrap();
-    let global = project.config().join("plugins/global");
+    let global = project.global();
     write(&global.join(entry_file()), "");
     fs::File::options().write(true).open(global.join(entry_file())).unwrap().set_len(approval::LIMIT + 1).unwrap();
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
@@ -1461,7 +1472,7 @@ fn a_link_retargeted_while_it_is_hashed_is_not_identified() {
     let (a, b) = (project.root.path().join("a"), project.root.path().join("b"));
     write(&a.join(entry_file()), "id=a");
     write(&b.join(entry_file()), "id=a");
-    let plugins = project.repo().join(".opencode/plugins");
+    let plugins = project.plugins();
     fs::create_dir_all(&plugins).unwrap();
     std::os::unix::fs::symlink(&a, plugins.join("p")).unwrap();
     let link = plugins.join("p");
@@ -1544,7 +1555,7 @@ fn a_save_waits_for_a_lock_held_briefly() {
 #[test]
 fn a_cli_json_entry_for_a_global_library_is_another_target() {
     let project = Project::new();
-    let global = project.config().join("plugins/global");
+    let global = project.global();
     write(&global.join(entry_file()), "id=global");
     let file = global.join(entry_file()).to_string_lossy().into_owned();
     let (host, registry) = (host(), Registry::define(Vec::new(), [file.as_str()]));
