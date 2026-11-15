@@ -1,6 +1,6 @@
 export * as Bus from "./bus.js"
 
-import { Cause, Clock, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Clock, Context, Effect, Exit, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
@@ -15,6 +15,8 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import type { SessionID } from "@opencode/schema/session-id"
 import { AbsolutePath } from "@opencode/schema/schema"
+import { StorageEvent } from "@opencode/schema/storage-event"
+import { StorageFailure } from "./database/storage-failure.js"
 
 export type Subscriber<D extends Event.Definition = Event.Definition> = (event: Event.Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
@@ -287,6 +289,27 @@ export function configured(options?: Options) {
           }),
         )
 
+        // A failed write can't commit the event that would report it, so the first storage failure is announced
+        // ephemerally instead: no database read or write. Once per outage; the next committed write ends it.
+        const storage = { failing: false }
+        const trackStorage = <A, E>(write: Effect.Effect<A, E>) =>
+          write.pipe(
+            Effect.onExit((exit) =>
+              Effect.gen(function* () {
+                // A replay that found its event already stored commits without writing, which proves nothing.
+                if (Exit.isSuccess(exit)) {
+                  if (exit.value !== undefined) storage.failing = false
+                  return
+                }
+                const message = StorageFailure.message(exit.cause)
+                if (message === undefined || storage.failing) return
+                storage.failing = true
+                yield* Effect.logError("Storage failed", { message })
+                yield* notify(yield* makePayload(StorageEvent.Failed, { message }, { global: true }), true)
+              }),
+            ),
+          )
+
         function commitDurableEvent(
           definition: Event.Definition,
           event: Event.Payload,
@@ -433,7 +456,7 @@ export function configured(options?: Options) {
                       }),
                     { behavior: "immediate" },
                   )
-                  .pipe(Effect.orDie)
+                  .pipe(trackStorage, Effect.orDie)
                 if (committed) {
                   committed.route()
                   yield* Effect.forEach(
@@ -633,7 +656,7 @@ export function configured(options?: Options) {
                         }),
                       { behavior: "immediate" },
                     )
-                    .pipe(Effect.orDie)
+                    .pipe(trackStorage, Effect.orDie)
                   committed.route()
                   yield* Effect.forEach(
                     pubsub.durable.get(aggregateID) ?? [],

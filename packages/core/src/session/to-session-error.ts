@@ -3,6 +3,7 @@ import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
 import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
+import { StorageFailure } from "../database/storage-failure.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { ModelResolver } from "../model-resolver.js"
 import { ModelRetry } from "../model-retry.js"
@@ -96,6 +97,9 @@ export function toSessionError(cause: unknown): SessionError.Error {
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }
+  // A SQLite failure's own message is the failed statement; the reason sits a few causes down.
+  const storage = StorageFailure.message(cause)
+  if (storage) return { type: "storage", message: storage }
   return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
 }
 

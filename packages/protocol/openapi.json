@@ -10178,6 +10178,7 @@
                     "tui.session.select",
                     "installation.updated",
                     "installation.update-available",
+                    "storage.failed",
                     "vcs.branch.updated",
                     "mcp.status.changed",
                     "mcp.resources.changed",
@@ -10289,6 +10290,7 @@
                           "tui.session.select",
                           "installation.updated",
                           "installation.update-available",
+                          "storage.failed",
                           "vcs.branch.updated",
                           "mcp.status.changed",
                           "mcp.resources.changed",
@@ -25646,6 +25648,9 @@
             "$ref": "#/components/schemas/installation.update-available"
           },
           {
+            "$ref": "#/components/schemas/storage.failed"
+          },
+          {
             "$ref": "#/components/schemas/vcs.branch.updated"
           },
           {
@@ -30549,6 +30554,39 @@
             "not": {
               "type": "null"
             }
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "storage.failed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["storage.failed"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "data"],
