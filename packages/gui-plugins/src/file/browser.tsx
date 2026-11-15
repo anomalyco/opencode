@@ -32,6 +32,7 @@ import SessionFileList, { applyFileListKeyDown } from "./list"
 import OpenInAppButton, { useOpenInApp } from "./open-in-app"
 import { fileTabPath, isFileTab } from "./path"
 import PierreFileTree from "./pierre-tree"
+import TreeRefreshButton from "./tree-refresh"
 import {
   fileSearchView,
   INITIAL_FILE_SEARCH_STATE,
@@ -84,6 +85,21 @@ export function SessionFileBrowserTab(props: {
   // A file tab's header ends with "Open in": the tree's header while the tree is open, else the preview's.
   const openInShown = () => !props.mobile && !props.placeholder && !!file.root && !!openIn?.canOpen()
   const openInButton = () => <OpenInAppButton session={props.session} screen={props.screen} />
+
+  // The tree header's refresh sits before "Open in" and does not depend on it: the web has no "Open in", the mobile
+  // browse view and the "Open file" launcher show the tree header too, and a hidden tree's preview toolbar keeps
+  // neither duplicate. The sidebar unmounts when the tree is closed, so the actions slot gates its own visibility.
+  const headerActions = () =>
+    !file.root ? (
+      openInShown() ? (
+        openInButton()
+      ) : undefined
+    ) : (
+      <div class="flex items-center gap-1">
+        <TreeRefreshButton session={props.session} screen={props.screen} />
+        <Show when={openInShown()}>{openInButton()}</Show>
+      </div>
+    )
 
   // The filter's search. It asks the server directly: the screen's search reads a failure as no results.
   const [searchState, setSearchState] = createSignal<FileSearchState>(INITIAL_FILE_SEARCH_STATE)
@@ -257,7 +273,7 @@ export function SessionFileBrowserTab(props: {
           open={sidebarOpened()}
           transition={props.state.transition()}
           title={<span class="truncate font-[530]">{title()}</span>}
-          actions={openInShown() ? openInButton() : undefined}
+          actions={headerActions()}
           filter={filter()}
           onFilterChange={setFilter}
           onFilterKeyDown={onFilterKeyDown}

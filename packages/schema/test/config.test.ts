@@ -85,6 +85,17 @@ describe("Config.Entry", () => {
     expect(() => decode({ worktree: { directory: " " } })).toThrow()
     expect(() => decode({ worktree: { directory: false } })).toThrow()
   })
+
+  test("accepts a positive file-tree refresh concurrency and omits it when absent", () => {
+    const decode = Schema.decodeUnknownSync(Config.Info)
+    const input = { file_tree: { refresh_concurrency: 8 } }
+    expect(Schema.encodeSync(Config.Info)(decode(input))).toEqual(input)
+    expect(Schema.encodeSync(Config.Info)(new Config.Info({ file_tree: undefined }))).not.toHaveProperty("file_tree")
+    expect(() => decode({ file_tree: { refresh_concurrency: 0 } })).toThrow()
+    expect(() => decode({ file_tree: { refresh_concurrency: 1.5 } })).toThrow()
+    expect(() => decode({ file_tree: { refresh_concurrency: "4" } })).toThrow()
+  })
+
   test("round-trips canonical provider IDs without changing config keys", () => {
     const input = { providers: { "console-anthropic": { canonical: "anthropic" } } }
     const decoded = Schema.decodeUnknownSync(Config.Info)(input)

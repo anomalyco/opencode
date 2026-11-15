@@ -1,5 +1,7 @@
 export default {
   "tree.all": "All files",
+  "tree.refresh": "Refresh file tree",
+  "tree.refreshFailed": "Couldn't refresh the file tree",
   "tab.notFound": "File not found: {{name}}",
   "load.failed": "Failed to load file",
   "load.timeout": "Opening {{name}} took too long.",
