@@ -7,6 +7,12 @@ import type { Handoff } from "@opencode/schema/persistent-pty"
 
 const ProtocolVersion = 8
 const MaxFrameBytes = 8 * 1024 * 1024
+// How long a freshly spawned daemon has to register before the start counts as failed.
+const StartTimeoutMs = 5_000
+// A daemon that cannot start at all (sandbox denial, missing helper binary) is retried on this backoff
+// instead of on every request, so one failed start does not become one timeout per shell command.
+const RetryDelayMinMs = 5_000
+const RetryDelayMaxMs = 120_000
 
 const Lifecycle = Schema.Union([
   Schema.Struct({ status: Schema.Literal("running") }),
@@ -209,6 +215,12 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   let closed = false
   // Set once a daemon we spawned turned out to speak another protocol.
   let incompatible: DaemonError | undefined
+  // Set after a start fails outright: while `retryAt` is in the future, requests fail fast instead of
+  // paying another start timeout. The delay doubles up to `RetryDelayMaxMs` so a daemon that becomes
+  // startable again is still picked up.
+  let unavailable: DaemonError | undefined
+  let retryAt = 0
+  let retryDelay = RetryDelayMinMs
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       closed = true
@@ -286,7 +298,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       catch: (cause) => failure("spawn", cause),
     })
     return yield* Effect.gen(function* () {
-      const deadline = Date.now() + 5_000
+      const deadline = Date.now() + StartTimeoutMs
       let last: DaemonError | undefined
       while (Date.now() < deadline && child.exitCode === null && child.signalCode === null) {
         const found = yield* discover().pipe(
@@ -340,12 +352,25 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     id = crypto.randomUUID()
   }
 
+  const latch = (error: DaemonError) =>
+    Effect.gen(function* () {
+      const first = unavailable === undefined
+      unavailable = error
+      retryAt = Date.now() + retryDelay
+      retryDelay = Math.min(retryDelay * 2, RetryDelayMaxMs)
+      if (!first) return
+      yield* Effect.logWarning("opencode-pty is unavailable; shell commands run without it", { error: error.message })
+    })
+
   const connect = Effect.fn("PersistentPty.daemon.connect")(function* (shouldStart: boolean) {
     if (closed) return yield* Effect.fail(new DaemonError({ kind: "connect", message: "PTY owner scope is closed" }))
     if (registration) return registration
+    if (shouldStart && unavailable && Date.now() < retryAt) return yield* Effect.fail(unavailable)
     return yield* startup.withPermit(
       Effect.gen(function* () {
         if (registration) return registration
+        // Waiters released by a start that just failed must fail fast too, so check again under the permit.
+        if (shouldStart && unavailable && Date.now() < retryAt) return yield* Effect.fail(unavailable)
         const found = yield* discover().pipe(
           Effect.catch((error) => {
             // Starting the same incompatible binary again would only fail again.
@@ -357,6 +382,17 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         registration = found
         return found
       }),
+    ).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          unavailable = undefined
+          retryAt = 0
+          retryDelay = RetryDelayMinMs
+        }),
+      ),
+      Effect.tapError((error) =>
+        shouldStart && (error.kind === "connect" || error.kind === "spawn") ? latch(error) : Effect.void,
+      ),
     )
   })
 

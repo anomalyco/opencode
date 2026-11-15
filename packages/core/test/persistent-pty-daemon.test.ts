@@ -335,3 +335,44 @@ if (process.platform !== "win32")
       expect(count.trim().split("\n")).toHaveLength(1)
     }),
   )
+
+it.live("does not re-run a start that failed outright on every request", () =>
+  Effect.gen(function* () {
+    const root = yield* temporaryDirectory()
+    const runtime = path.join(root, "runtime")
+    let starts = 0
+    const daemon = yield* makeDaemonTransport(runtime, "daemon", () => {
+      starts++
+      return Promise.resolve(path.join(root, "missing-opencode-pty"))
+    })
+    const first = yield* daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip)
+    expect(first.kind).toBe("spawn")
+    // The backoff keeps the next request from paying another start attempt.
+    const second = yield* daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip)
+    expect(second.kind).toBe("spawn")
+    expect(starts).toBe(1)
+  }),
+)
+
+it.live("fails requests queued behind a failed start instead of starting the daemon again", () =>
+  Effect.gen(function* () {
+    const root = yield* temporaryDirectory()
+    const runtime = path.join(root, "runtime")
+    let starts = 0
+    const daemon = yield* makeDaemonTransport(runtime, "daemon", () => {
+      starts++
+      return Promise.resolve(path.join(root, "missing-opencode-pty"))
+    })
+    // All three race for the startup permit; only the first may reach a start attempt.
+    const results = yield* Effect.all(
+      [
+        daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip),
+        daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip),
+        daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip),
+      ],
+      { concurrency: "unbounded" },
+    )
+    expect(results.map((error) => error.kind)).toEqual(["spawn", "spawn", "spawn"])
+    expect(starts).toBe(1)
+  }),
+)
