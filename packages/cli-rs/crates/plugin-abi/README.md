@@ -39,7 +39,11 @@ opencode-plugin-abi = { git = "https://github.com/anomalyco/opencode", rev = "<c
 
 The crate is not on crates.io. Cargo finds it inside the repository by its name. A path to a checkout also works:
 `opencode-plugin-abi = { path = "<checkout>/packages/cli-rs/crates/plugin-abi" }`. Edition 2024 needs Rust 1.85
-or newer. Keep the default `panic = "unwind"`: the SDK catches a plugin's panics only when they unwind.
+or newer. Keep the default `panic = "unwind"`: the SDK catches a plugin's panics only when they unwind. It catches
+them on the calls the host makes and on the threads `Setup::spawner` starts, whose panic fails the plugin and is
+logged. A panic on a thread the plugin starts itself (`std::thread::spawn`) is silent: the SDK silences the plugin's
+panic hook for the whole process, so that thread ends, the plugin stays active, and nothing is logged or shown. Start
+threads with the `Spawner`.
 
 `src/lib.rs`:
 
