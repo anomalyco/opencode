@@ -46,6 +46,7 @@ mod plugin_machines;
 mod plugin_mail;
 mod plugin_manager;
 mod plugin_model;
+mod plugin_ownership;
 mod plugin_p0a;
 mod plugin_pipe;
 mod plugin_reads;

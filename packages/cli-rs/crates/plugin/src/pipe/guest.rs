@@ -211,7 +211,7 @@ impl Guest {
                 To::Layer(layer) => InputTo::Layer { layer },
             };
             let request = Request::Input { to, event: event.clone() };
-            guest.call_for("handle", request, false, (Some(Rc::downgrade(owner)), None));
+            guest.call_for("handle", request, false, (Some(Rc::downgrade(owner)), owner.mounted()));
             match event {
                 Event::Key(key) if key.bind.is_some() => Handled::Consume,
                 Event::Paste { .. } => Handled::Consume,
@@ -308,8 +308,8 @@ impl Guest {
         }
         let owner = call.owner.as_ref().and_then(Weak::upgrade);
         let key = format!("c{seq}");
-        let apply = || match &call.routed {
-            Some(alive) => self.owners.for_route(alive, || self.effects(&key, effects, call.user, call.export)),
+        let apply = || match &call.mount {
+            Some(alive) => self.owners.owned_by(alive, || self.effects(&key, effects, call.user, call.export)),
             None => self.effects(&key, effects, call.user, call.export),
         };
         match owner {

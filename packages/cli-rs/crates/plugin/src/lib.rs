@@ -719,8 +719,9 @@ pub(crate) struct Owners {
     current: RefCell<Option<Rc<interact::Owner>>>,
     /// The mount of the running call that has no input owner: a claimed part's, while its view runs.
     called: RefCell<Option<abi::v2::MountId>>,
-    /// The mount of the running command of a 2.0 surface's route, which has no input owner either.
-    routed: RefCell<Option<Weak<()>>>,
+    /// The mount the running call's requests belong to, when no input owner of its runs: a 2.0 route's command's, or
+    /// the mount of an input owner that went before its call's effects applied (the pipe).
+    owned: RefCell<Option<Weak<()>>>,
     /// The activation's own input owner: the layers of its setup, and what a command asks for.
     input: Rc<interact::Owner>,
     /// The plugin's overlay surfaces, by name, each mounting into the frame the host gives it.
@@ -736,7 +737,7 @@ impl Owners {
             activation: activation.clone(),
             current: RefCell::default(),
             called: RefCell::default(),
-            routed: RefCell::default(),
+            owned: RefCell::default(),
             input,
             overlays: RefCell::default(),
         })
@@ -750,11 +751,11 @@ impl Owners {
         result
     }
 
-    /// Runs `f` as a command of the route mount `alive` stands for: what it asks for is that mount's.
-    pub(crate) fn for_route<R>(&self, alive: &Weak<()>, f: impl FnOnce() -> R) -> R {
-        let outer = self.routed.replace(Some(alive.clone()));
+    /// Runs `f` as a call of the mount `alive` stands for: what it asks for is that mount's.
+    pub(crate) fn owned_by<R>(&self, alive: &Weak<()>, f: impl FnOnce() -> R) -> R {
+        let outer = self.owned.replace(Some(alive.clone()));
         let result = f();
-        *self.routed.borrow_mut() = outer;
+        *self.owned.borrow_mut() = outer;
         result
     }
 
@@ -762,7 +763,7 @@ impl Owners {
     /// its input owner's for a handler; `None` for the activation's own calls (setup, a global command, an event),
     /// whose requests are the activation's. Its reply comes only while the owner lives (bigboi's last pass).
     pub(crate) fn owning(&self) -> Option<Weak<()>> {
-        self.routed.borrow().clone().or_else(|| self.mounted())
+        self.owned.borrow().clone().or_else(|| self.mounted())
     }
 
     /// The input owner of the running call.
@@ -1384,10 +1385,13 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn try_foreground(&self, program: abi::Foreground) -> Result<abi::RequestId, String> {
-        // The program starts later, once the turn is done: only if its plugin is still active then.
-        let owner = Rc::downgrade(self.scope);
+        // The program starts later, once the turn is done: only if its plugin is still active then, and the mount that
+        // owns it is still open (bigboi's freeze pass).
+        let (owner, mount) = (Rc::downgrade(self.scope), self.scope.mount.borrow().clone());
         let alive = Box::new(move || {
-            owner.upgrade().is_some_and(|scope| !scope.activation.disposed() && scope.failure.borrow().is_none())
+            let active =
+                owner.upgrade().is_some_and(|scope| !scope.activation.disposed() && scope.failure.borrow().is_none());
+            active && mount.as_ref().is_none_or(|mount| mount.upgrade().is_some())
         });
         self.request(move |host, reply| host.foreground(program, alive, reply))
     }
