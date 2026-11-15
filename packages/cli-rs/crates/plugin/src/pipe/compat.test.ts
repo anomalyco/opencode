@@ -12,7 +12,7 @@ const turn = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 // A carrier as `host.ts` gives one, over a host that watches at most `limit` reads and answers each watch with the
 // value `answer` gives (`undefined`: never; a string: the error it fails with).
-function host(answer: (key: string) => Json = () => [], limit = 64) {
+function host(answer: (key: string) => Json = () => [], limit = 128) {
   const snapshots = new Map<string, Json>()
   const errors = new Map<string, string>()
   const listeners: Array<(key: string) => void> = []
@@ -97,21 +97,21 @@ function view(fake: Json, index: number, key: string, slot: Json = {}) {
 const text = (tree: Json): string =>
   tree === undefined ? "<none>" : [...(tree.spans ?? []).map((span: Json) => span.text), ...(tree.children ?? []).map(text)].join("")
 
-// Bigboi P8-2: syncing seventy sessions' messages, one after another, keeps within the host's 64 reads (a read no mount
+// Bigboi P8-2: syncing 140 sessions' messages, one after another, keeps within the host's 128 reads (a read no mount
 // holds goes when it is not used), each sync answers with its session's messages, and a new view draws.
 test("reads past the host's bound are released, not lost", async () => {
   const fake = host((key) => (key.startsWith("messages:") ? [{ id: key }] : []))
   const ctx = plugin("t.reads", fake)
-  for (let index = 0; index < 70; index++) {
+  for (let index = 0; index < 140; index++) {
     await ctx.data.session.message.sync(`s${index}`)
     expect(ctx.data.session.message.list(`s${index}`)).toEqual([{ id: `messages:s${index}` }])
   }
-  expect(fake.watches.size).toBeLessThanOrEqual(64)
+  expect(fake.watches.size).toBeLessThanOrEqual(128)
   ctx.ui.slot({
     append: "sidebar.content",
     render: (props: Json) => h(() => h("text", { children: `n ${ctx.data.session.message.list(props.sessionID).length}` })),
   })
-  const mount = view(fake, 0, "a", { session_id: "s99" })
+  const mount = view(fake, 0, "a", { session_id: "s199" })
   mount.draw()
   await turn()
   expect(text(mount.draw())).toBe("n 1")
