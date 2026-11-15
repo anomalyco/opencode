@@ -594,8 +594,9 @@ reports a version of 1.4.0 or newer: the executable of the server's process wher
 Windows), else the first `opencode` in an absolute `PATH` entry outside the project that answers so (its real path,
 so a `mise` shim answers for `mise` and is passed over); else `bun` in an absolute `PATH` entry outside the project.
 Without any, TypeScript plugins are skipped and the log says why. Bun starts in the JS host's private directory, with
-`--no-env-file`, an empty `bunfig.toml` of its own and an allowlisted environment, so nothing of the project the client
-works in loads as it starts; a project's plugin runs from a copy of the files the user approved, and imports nothing
+`--no-env-file`, an empty `bunfig.toml` of its own and an allowlisted environment (what locates the user, the
+language, the proxy, what names the terminal, such as `TERM`, `TERM_PROGRAM`, `COLORTERM` and `TMUX`, and the
+client's own; no `BUN_*` or `NODE_*`), so nothing of the project the client works in loads as it starts; a project's plugin runs from a copy of the files the user approved, and imports nothing
 outside it. It loads the directory's TUI module as TS does (`package.json`
 `name` and `exports`, else `tui.ts` and its kin) by file URL and describes its V2 `{ id, setup }` default export; its
 setup runs only once the loader knows the plugin is enabled, so a plugin that `cli.json` disables runs nothing. Each
