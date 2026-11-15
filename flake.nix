@@ -68,5 +68,19 @@
           };
         }
       );
+
+      checks = forEachSystem (
+        pkgs:
+        let
+          node_modules = pkgs.callPackage ./nix/node_modules.nix {
+            inherit rev;
+          };
+        in
+        {
+          dependency-identity = pkgs.callPackage ./nix/dependency-identity.nix {
+            inherit node_modules;
+          };
+        }
+      );
     };
 }
