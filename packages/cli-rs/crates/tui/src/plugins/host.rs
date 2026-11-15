@@ -102,9 +102,14 @@ impl Host for Tui {
             Some(serde_json::Value::Object(object)) => object.into_iter().chain(fields.clone()).collect(),
             _ => fields.clone(),
         };
-        store(self, key, serde_json::Value::Object(shown), move |stored| match stored.as_object_mut() {
-            Some(object) => object.extend(fields),
-            None => *stored = serde_json::Value::Object(fields),
+        // The plugin's bound holds for the value the merge makes under the lock, which another client's writes may have
+        // grown since this client read it (re-review final pass, the storage bound).
+        queue(self, key, Some(serde_json::Value::Object(shown).to_string()), move |storage, key| {
+            let merge = move |stored: &mut Value| match stored.as_object_mut() {
+                Some(object) => object.extend(fields),
+                None => *stored = serde_json::Value::Object(fields),
+            };
+            storage.update_within(key, &serde_json::json!({}), opencode_plugin::storage::VALUE_BYTES, merge).map(drop)
         });
         Ok(())
     }
@@ -603,15 +608,35 @@ fn queue(
     if let Some(storage) = tui.storage() {
         let pending = tui.reads.pending.clone();
         pending.fetch_add(1, Ordering::SeqCst);
-        let key = key.to_owned();
-        tui.reads.writer.get_or_init(|| Serial::new("plugin-storage")).run(move || {
-            if let Err(error) = write(&storage, &key) {
-                log::error!("Failed to store {key}: {error}");
-            }
+        let (key, proxy) = (key.to_owned(), tui.app.proxy());
+        let writer = tui.reads.writer.get_or_init(|| {
+            // A write refused under the lock leaves the disk as it was: what this client showed for it goes.
+            let weak = tui.weak();
+            tui.app.on_message(move |_, _: &Refused| {
+                if let Some(tui) = weak.upgrade() {
+                    reload_storage(&tui);
+                }
+            });
+            Serial::new("plugin-storage")
+        });
+        writer.run(move || {
+            let refused = match write(&storage, &key) {
+                Ok(()) => false,
+                Err(error) => {
+                    log::error!("Failed to store {key}: {error}");
+                    matches!(error, opencode_local::storage::Error::TooLarge(..))
+                }
+            };
             pending.fetch_sub(1, Ordering::SeqCst);
+            if refused {
+                let _ = proxy.send(Refused);
+            }
         });
     }
 }
+
+/// Posted when a plugin storage write was refused under the lock.
+struct Refused;
 
 /// Waits until every plugin storage write queued so far is on disk.
 pub fn flush_storage(tui: &Tui) {

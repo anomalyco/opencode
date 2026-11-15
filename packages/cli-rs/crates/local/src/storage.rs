@@ -21,6 +21,8 @@ pub enum Error {
     Segment(String),
     #[error("Storage values must be objects")]
     NotObject,
+    #[error("A stored value of {0} bytes is past {1}")]
+    TooLarge(usize, usize),
     #[error(transparent)]
     Lock(#[from] lock::Error),
     #[error(transparent)]
@@ -60,6 +62,19 @@ impl Storage {
 
     /// Changes `key` under the lock and returns the value written.
     pub fn update(&self, key: &str, initial: &Value, change: impl FnOnce(&mut Value)) -> Result<Value, Error> {
+        self.update_within(key, initial, usize::MAX, change)
+    }
+
+    /// [`Storage::update`] of a value that may be `bytes` long at most as it is written: the bound is checked on the
+    /// value the change makes of what the file holds under the lock, so writers that each fit it alone cannot make a
+    /// value past it together. Past it nothing is written.
+    pub fn update_within(
+        &self,
+        key: &str,
+        initial: &Value,
+        bytes: usize,
+        change: impl FnOnce(&mut Value),
+    ) -> Result<Value, Error> {
         let file = self.file(key)?;
         lock::with_lock(&self.locks, &file.to_string_lossy(), &self.lock, || {
             let mut draft = read(&file).unwrap_or_else(|| initial.clone());
@@ -67,7 +82,11 @@ impl Storage {
             if !is_object(&draft) {
                 return Err(Error::NotObject);
             }
-            write_json_atomic(&file, &draft)?;
+            let text = jsonc::stringify(&draft);
+            if text.len() > bytes {
+                return Err(Error::TooLarge(text.len(), bytes));
+            }
+            write_text_atomic(&file, &text)?;
             Ok(draft)
         })?
     }
@@ -145,5 +164,23 @@ mod tests {
         assert!(matches!(storage.file(".x"), Err(Error::Segment(_))));
         assert!(storage.file("plugin.sidebar.view").is_ok());
         assert!(matches!(storage.update("view", &initial, |value| *value = json!(1)), Err(Error::NotObject)));
+    }
+
+    // Expected (re-review final pass, the storage bound): a bounded update is measured on what the change makes of the
+    // file's value under the lock: a change that fits alone is refused when the file grew meanwhile, and nothing is
+    // written; one within the bound is written as `update` writes it.
+    #[test]
+    fn a_bounded_update_measures_the_locked_value() {
+        let state = opencode_util::temp::tempdir().unwrap();
+        let storage = Storage::new(state.path(), "dev").unwrap();
+        let add = |name: &str| {
+            let name = name.to_owned();
+            move |value: &mut Value| value[name] = json!("x".repeat(60))
+        };
+        let first = storage.update_within("k", &json!({}), 100, add("a")).unwrap();
+        assert_eq!(fs::read_to_string(storage.file("k").unwrap()).unwrap(), jsonc::stringify(&first));
+        let refused = storage.update_within("k", &json!({}), 100, add("b"));
+        assert!(matches!(refused, Err(Error::TooLarge(len, 100)) if len > 100), "{refused:?}");
+        assert_eq!(storage.load("k", &json!({})).unwrap(), first, "a refused update wrote");
     }
 }
