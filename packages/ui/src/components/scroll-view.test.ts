@@ -90,6 +90,40 @@ describe("scrollTopFromThumbPointer", () => {
     // maxScroll = 8000 - 800 = 7200 → 292/344 * 7200
     expect(scrollTopFromThumbPointer(input)).toBeCloseTo((292 / 344) * 7200)
   })
+
+  test("inverts the thumb rendering when a scroll adjustment is applied", () => {
+    // The thumb is rendered from scrollTop + adjustment over scrollHeight + adjustment.
+    // track usable = 600 - 16 - 60 = 524; maxScroll = (6000 + 400) - 600 = 5800.
+    // scrollTop 1000 renders at thumbStart = 8 + (1400 / 5800) * 524; dragging back
+    // to that position must return 1000, not 1400.
+    const thumbStart = 8 + (1400 / 5800) * 524
+
+    expect(
+      scrollTopFromThumbPointer({
+        pointer: 100 + 12 + thumbStart,
+        viewportTop: 100,
+        grabOffset: 12,
+        clientHeight: 600,
+        scrollHeight: 6_000,
+        thumbHeight: 60,
+        scrollAdjustment: 400,
+      }),
+    ).toBeCloseTo(1000)
+  })
+
+  test("clamps the adjusted offset to the scroll range", () => {
+    expect(
+      scrollTopFromThumbPointer({
+        pointer: 100,
+        viewportTop: 100,
+        grabOffset: 0,
+        clientHeight: 600,
+        scrollHeight: 6_000,
+        thumbHeight: 60,
+        scrollAdjustment: 400,
+      }),
+    ).toBe(0)
+  })
 })
 
 describe("scrollOffsetFromThumbPointer", () => {
