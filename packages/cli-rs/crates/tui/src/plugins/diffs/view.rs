@@ -490,8 +490,27 @@ fn tree_pane(viewer: &Viewer, cx: &mut v2::View<'_>) -> Node {
     )
 }
 
-/// The fixed top edge takes the reviewed color of the card at the top, in the frame that shows it.
+/// The fixed top edge takes the reviewed color of the card at the top, in the frame that shows it. The edge is there
+/// only with the cards, so a frame without their scroll (loading, a message) paints nothing, and logs no paint of a
+/// missing box (PL-10).
 pub fn layout(geometry: &Geometry) -> LayoutReply {
+    if geometry.scroll(FILES).is_none() {
+        return LayoutReply::default();
+    }
     let reviewed = geometry.top(FILES, "file").is_some_and(|anchor| anchor.variant == "reviewed");
     LayoutReply::default().paint(EDGE, if reviewed { "background.raised.high" } else { "diff.background.context" })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected (PL-10): the edge is painted only in a frame that has the cards' scroll.
+    #[test]
+    fn the_edge_is_painted_only_with_the_cards() {
+        assert!(layout(&Geometry::default()).paints.is_empty());
+        let shown = Geometry { scrolls: vec![(FILES.to_owned(), Default::default())], ..Geometry::default() };
+        let paints: Vec<String> = layout(&shown).paints.into_iter().map(|paint| paint.node).collect();
+        assert_eq!(paints, [EDGE]);
+    }
 }
