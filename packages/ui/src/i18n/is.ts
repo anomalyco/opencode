@@ -163,6 +163,7 @@ export const dict = {
   "ui.common.dismiss": "Loka",
   "ui.common.close": "Loka",
   "ui.common.next": "Næst",
+  "ui.common.continue": "Halda áfram",
   "ui.common.submit": "Sendu inn",
   "ui.common.showMore": "Sýna meira",
   "ui.permission.deny": "Neita",

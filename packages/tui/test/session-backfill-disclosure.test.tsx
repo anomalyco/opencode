@@ -60,7 +60,10 @@ test("clicking a backfilled thought group toggles it", async () => {
     run({
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
-      config: { get: async () => ({ animations: false, tabs: { enabled: false } }), update: async () => ({}) },
+      config: {
+        get: async () => ({ animations: false, session: { verbosity: "medium" }, tabs: { enabled: false } }),
+        update: async () => ({}),
+      },
       packages: { prepare: async () => ({ directory: "" }) },
       args: { sessionID: session.id },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),

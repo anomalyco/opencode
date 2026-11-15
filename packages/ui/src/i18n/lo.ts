@@ -165,6 +165,7 @@ export const dict = {
   "ui.common.dismiss": "ປິດ",
   "ui.common.close": "ປິດ",
   "ui.common.next": "ຕໍ່ໄປ",
+  "ui.common.continue": "ສືບຕໍ່",
   "ui.common.submit": "ສົ່ງ",
   "ui.common.showMore": "ສະແດງເພີ່ມເຕີມ",
   "ui.permission.deny": "ປະຕິເສດ",

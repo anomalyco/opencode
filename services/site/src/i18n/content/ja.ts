@@ -22,11 +22,6 @@ export const content = {
       body: "自分のスクリプト、CIジョブ、ツールからOpenCodeを操作できます。",
       action: "ドキュメント",
     },
-    ide: {
-      name: "IDE拡張機能",
-      body: "VS Code、Cursor、WindsurfでOpenCodeを開けます。ZedやJetBrains IDEではACP経由で使えます。",
-      action: "インストール",
-    },
     mini: {
       name: "Mini",
       body: "最小限のターミナルインターフェース。返答はスクロールバックに出力され、下にはプロンプトが1つだけ残ります。",
@@ -188,32 +183,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | VS Code、Cursor、Zed向けのエディタ連携",
-      description:
-        "エディタの中でOpenCodeを使えます。VS Code、Cursor、Windsurf、VSCodiumには拡張機能があり、Zed、JetBrains IDE、その他のACP対応エディタでは opencode acp を使います。",
-      intro:
-        "エディタの中でOpenCodeを使えます。VS Code、Cursor、Windsurf、VSCodiumでは、統合ターミナルで opencode を実行すると拡張機能が自動でインストールされます。Zed、JetBrains IDE、その他のAgent Client Protocol対応エディタでは、opencode acp でOpenCodeを実行します。",
-      features: {
-        "quick-launch": {
-          title: "すばやく起動",
-          body: "Cmd+Esc または Ctrl+Esc で、分割したターミナルにOpenCodeを開きます。",
-        },
-        "new-session": {
-          title: "新規セッション",
-          body: "Cmd+Shift+Esc または Ctrl+Shift+Esc で別のセッションを開始します。",
-        },
-        context: { title: "コンテキスト", body: "現在の選択範囲やタブをOpenCodeと共有します。" },
-        "file-references": {
-          title: "ファイル参照",
-          body: "Cmd+Option+K または Alt+Ctrl+K で @File#L37-42 を挿入します。",
-        },
-        "installs-itself": { title: "自動インストール", body: "統合ターミナルで opencode を実行すると追加されます。" },
-        "acp-editors": { title: "ACPエディタ", body: "Zed、JetBrains IDE、Avante.nvim、CodeCompanion.nvim。" },
-        "open-vsx": { title: "Open VSX", body: "Cursor、Windsurf、VSCodium向けにOpen VSXでも公開しています。" },
-        "same-agent": { title: "同じエージェント", body: "ターミナルで使うOpenCodeを、コードのすぐ横で。" },
-      },
-    },
     mini: {
       title: "OpenCode | Mini、エージェントのための最小限のターミナルUI",
       description:
@@ -362,7 +331,7 @@ export const content = {
     },
     colors: {
       title: "カラー",
-      body: "ロゴとワードマークは1つのインクを3段階の不透明度で使い、暗い背景にはより明るいインクを使います。下の値は、標準ファイルと同じく、白または#0B0B0Bの上にそのインクを重ねた色です。値をクリックするとコピーできます。",
+      body: "ロゴとワードマークは1つのインクを3段階の不透明度で使い、暗い背景にはより明るいインクを使います。下の値は標準ファイルの色です。これらはロゴとワードマークだけに使用し、ほかのテキストや背景には使用しないでください。値をクリックするとコピーできます。",
       palettes: {
         light: {
           name: "ライト",
@@ -719,14 +688,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "スクリプト" } } },
     sdk: { more: { label: "SDKのドキュメントを読む" } },
-    ide: {
-      lead: "エディタの統合ターミナルで opencode を実行すると拡張機能が自動でインストールされます。手動でインストールすることもできます。",
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX（Cursor、Windsurf、VSCodium）" },
-      },
-      more: { label: "Zed、JetBrains IDE、その他のACPエディタを設定" },
-    },
     mini: {
       commands: { curl: { name: "スクリプト" } },
       lead: "MiniはOpenCode CLIに含まれています。次のいずれかでインストールし、opencode mini を実行してください。",

@@ -14,7 +14,6 @@ export type FooterStatuslineGroup = {
     | "escape"
     | "queued"
     | "subagents"
-    | "background"
     | "agent"
     | "model"
     | "context"
@@ -29,7 +28,7 @@ export function footerStatuslinePolicy(input: {
   mono?: boolean
   status?: { text: string; expanded?: string }
   escape?: FooterAction
-  work: Array<FooterAction & { id: "queued" | "subagents" | "background" }>
+  work: Array<FooterAction & { id: "queued" | "subagents" }>
   model?: { name: string; variant?: string }
   agent?: string
   context?: { compact: string; full: string }
@@ -69,7 +68,6 @@ export function footerStatuslinePolicy(input: {
       "escape",
       "queued",
       "subagents",
-      "background",
       "agent",
       "model",
       "context",

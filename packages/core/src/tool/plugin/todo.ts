@@ -48,8 +48,8 @@ export const Plugin = {
     const permission = yield* Permission.Service
     // Internal plugins are not re-run on config changes, so reload the tool transform instead.
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
-    const flags = yield* Flag.resolver
-    const enabled = () => flags(loaded.entries).todo.enabled
+    const flags = yield* Flag.Service
+    const enabled = () => flags.resolve(loaded.entries).todo.enabled
 
     yield* ctx.tool
       .transform((editor) => {

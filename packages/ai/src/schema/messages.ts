@@ -369,12 +369,8 @@ export const Message = withStatics(messageSchema, {
  * Raw-text wire encoding for a tool with exactly one required string parameter. Models that accept the format
  * write that parameter's value directly instead of JSON arguments; calls still decode to the normal object input.
  */
-export const Freeform = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text") }),
-  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
-]).annotate({ identifier: "LLM.Freeform" })
-export type Freeform = Schema.Schema.Type<typeof Freeform>
+export const Freeform = Tool.Freeform
+export type Freeform = Tool.Freeform
 
 const toolDefinitionFields = {
   name: Schema.String,

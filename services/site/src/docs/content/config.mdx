@@ -396,21 +396,23 @@ budgeting and overflow recovery.
 ### Warming
 
 Keep recently active model sessions warm with periodic transient requests.
-Warming is disabled by default; set it to `true` to use the four-minute idle
-interval and 30-minute active window.
+Warming is disabled by default; set it to `true` to warm just before each
+model's cache expires, for up to 30 minutes.
 
 ```jsonc
 {
   "warming": {
     "prompt": "Do not perform any work. Reply with exactly: OK",
-    "interval": "4 minutes",
+    "interval": "auto",
     "duration": "30 minutes",
   },
 }
 ```
 
-See the [warming guide](/warming) for request behavior, customization,
-and cost considerations.
+A provider's or model's `settings.cache.warming` overrides it, and
+`settings.cache.ttl` sets how long the provider keeps the cache. See the
+[warming guide](/warming) for request behavior, customization, and cost
+considerations, and [cache lifetime](/models#cache-lifetime) for `cache.ttl`.
 
 ### Skills
 

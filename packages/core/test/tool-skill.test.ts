@@ -19,7 +19,7 @@ import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 
 const skillToolNode = makeLocationNode({
@@ -110,9 +110,8 @@ describe("SkillTool", () => {
             list: () => Effect.succeed(current),
           })
           const skillToolLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode]), [
-            Permission.node.replace(permission),
+            ...toolNodeReplacements(permission),
             Skill.node.replace(skills),
-            Image.node.replace(imagePassthrough),
           ])
 
           return yield* Effect.gen(function* () {
@@ -140,7 +139,7 @@ describe("SkillTool", () => {
               }),
             ).toEqual({
               status: "completed",
-              output: { name: "Effect", directory, output: Skill.toModelOutput(info, [reference]) },
+              output: { directory, content: Skill.toModelOutput(info, [reference]) },
               content: [{ type: "text", text: Skill.toModelOutput(info, [reference]) }],
               metadata: { name: "Effect", directory },
             })

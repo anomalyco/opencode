@@ -1,0 +1,157 @@
+---
+title: Reference
+description: Dodajte lokalne direktorije i Git repozitorije kao reference projekta.
+---
+
+Reference daju OpenCode pristup direktorijima izvan trenutnog projekta. Koristite ih da dokumentaciju, dijeljene biblioteke, primjere ili drugi repozitorij učinite dostupnim dok radite.
+
+Reference se konfigurišu po aliasu u `opencode.json` ili `opencode.jsonc`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## Lokalni direktoriji
+
+Koristite `path` da referencirate lokalni direktorij.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+Putanje mogu biti:
+
+- Relativne u odnosu na konfiguracijsku datoteku koja definira referencu
+- Apsolutne, na primjer `/home/user/docs`
+- Relativne u odnosu na vaš kućni direktorij, na primjer `~/docs`
+
+Možete koristiti i skraćeni zapis u obliku stringa:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Git repozitoriji
+
+Koristite `repository` da referencirate Git repozitorij. OpenCode materijalizira repozitorij u svom lokalnom kešu repozitorija i čini preuzeti izvorni kod dostupnim kao direktorij reference.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository` prihvata Git URL-ove, host/path reference i GitHub skraćenicu `owner/repo`. Opcionalno polje `branch` bira granu ili ref. Bez `branch`, OpenCode koristi zadanu granu repozitorija.
+
+Skraćeni zapis u obliku stringa možete koristiti kada vam ne trebaju grana, opis ili druge opcije:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+Git reference se osvježavaju asinhrono. Novokonfigurisanom repozitoriju može trebati trenutak da završi kloniranje ili ažuriranje.
+:::
+
+---
+
+## Opišite upotrebu
+
+Dodajte `description` da objasnite kada agent treba koristiti referencu.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode uključuje reference s opisima u kontekst agenta. Opisi trebaju biti kratki i dovoljno konkretni da razlikuju reference sa sličnim sadržajem. Reference bez opisa ostaju dostupne putem automatskog dovršavanja i direktne upotrebe, ali se ne predstavljaju agentima.
+
+---
+
+## Sakrijte unose automatskog dovršavanja
+
+Postavite `hidden` na `true` da izostavite referencu iz `@` automatskog dovršavanja u TUI.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` utiče samo na automatsko dovršavanje. Skrivena referenca s opisom i dalje je uključena u kontekst agenta.
+
+---
+
+## Koristite reference
+
+Konfigurisane reference pojavljuju se u `@` automatskom dovršavanju u TUI. Upišite `@alias` da priložite korijen reference ili `@alias/` da pretražite datoteke unutar nje.
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+Agenti u svom sistemskom kontekstu također dobijaju razriješene putanje i opise konfigurisanih referenci koje imaju opise, tako da mogu pregledati referencu kada je relevantna, bez da je vi ručno prilažete.
+
+OpenCode automatski dozvoljava direktorije referenci kroz svoju granicu dozvola za vanjske direktorije. Uobičajene dozvole alata i dalje važe; na primjer, agent koji ne može uređivati datoteke ne dobija pravo uređivanja samo zato što je direktorij konfigurisan kao referenca.
+
+---
+
+## Polja konfiguracije
+
+| Polje         | Lokalno | Git | Opis                                                   |
+| ------------- | ------- | --- | ------------------------------------------------------ |
+| `path`        | Da      | Ne  | Lokalni direktorij reference                           |
+| `repository`  | Ne      | Da  | Git URL, host/path ili GitHub `owner/repo` vrijednost  |
+| `branch`      | Ne      | Da  | Opcionalna Git grana ili ref                           |
+| `description` | Da      | Da  | Uputa koja opisuje kada koristiti referencu            |
+| `hidden`      | Da      | Da  | Sakriva referencu iz `@` automatskog dovršavanja u TUI |
+
+Aliasi referenci ne mogu biti prazni niti sadržavati `/`, razmake, backtick znakove ili zareze.
