@@ -626,8 +626,15 @@ input has a slot surface's `slot` and no `changed`: the JS host views again when
 `release-keys` among them), `watch`/`unwatch`/`read` (snapshots, at most 128), `invalidate`, `fetch`.
 `OPENCODE_JS_HOST_TRACE=<file>` appends every frame the JS host reads and writes to the file.
 
+A TypeScript plugin's files are read on a thread of their own, never on the UI thread, so no frame, the first
+included, waits on them (FT-2); the plugin is listed as starting until the first walk ended. A global plugin's build
+is its own files' bytes and its dependencies by version (each installed package's `package.json`, and the lockfiles),
+not every file under `node_modules`. A walk takes the hash again only once a stamp of the tree (the metadata of its
+own files and of its dependencies' packages) changed, or a file changed within the last 2 s.
 A project's TypeScript plugin waits for approval as a native build does (below): its artifact is the directory and a
-SHA-256 of every file in it, hidden ones and `node_modules` included, and nothing of it reaches the JS host before. A
+SHA-256 of every file in it, hidden ones and `node_modules` included, and nothing of it reaches the JS host before.
+The JS host imports the staged copy of the approved bytes, so a dependency changed after approval in a way the stamp
+does not see still runs only what was approved. A
 file outside the directory that it imports is not part of what was approved. Safe mode holds a TypeScript plugin as it
 holds a library. The JS host's standard output is the protocol's: a plugin's `console` (every method) and
 `process.stdout`, its own modules' and its dependencies' included, write to the JS host's standard error, which the
