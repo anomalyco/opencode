@@ -114,6 +114,9 @@ struct Owed {
 }
 
 struct Out {
+    /// A send was refused for the queue's bound: the writer wakes the UI thread once it takes a frame, so the host's
+    /// overflow moves on, whether or not the child answers what it reads (overflow-flake).
+    wants_room: bool,
     frames: VecDeque<Vec<u8>>,
     bytes: usize,
     closed: bool,
@@ -202,7 +205,7 @@ impl Child {
         let pid = process.id();
         let shared = Arc::new(Shared {
             limits,
-            out: Mutex::new(Out { frames: VecDeque::new(), bytes: 0, closed: false }),
+            out: Mutex::new(Out { frames: VecDeque::new(), bytes: 0, closed: false, wants_room: false }),
             out_ready: Condvar::new(),
             inbox: Mutex::default(),
             room: Condvar::new(),
@@ -269,6 +272,7 @@ impl Child {
         {
             let mut out = lock(&self.shared.out);
             if out.closed || out.bytes + frame.len() > self.shared.limits.queued {
+                out.wants_room = !out.closed;
                 return Err(Refused::Full);
             }
             out.bytes += frame.len();
@@ -435,20 +439,24 @@ fn contain(command: &mut Command) {
 
 fn write(shared: &Shared, mut stdin: ChildStdin) {
     loop {
-        let frame = {
+        let (frame, room) = {
             let mut out = lock(&shared.out);
             loop {
                 if let Some(frame) = out.frames.pop_front() {
                     out.bytes -= frame.len();
-                    break Some(frame);
+                    break (Some(frame), std::mem::take(&mut out.wants_room));
                 }
                 if out.closed {
-                    break None;
+                    break (None, false);
                 }
                 out = shared.out_ready.wait(out).unwrap_or_else(|poisoned| poisoned.into_inner());
             }
         };
         let Some(frame) = frame else { break };
+        // The queue has room the host waits for: it moves what waits in its overflow.
+        if room {
+            (shared.wake)();
+        }
         if stdin.write_all(&frame).and_then(|()| stdin.flush()).is_err() {
             break;
         }
@@ -790,6 +798,39 @@ mod tests {
             Event::Gone(why, _) => Some(why.as_str()),
             _ => None,
         })
+    }
+
+    // Expected (overflow-flake): a send refused for the queue's bound wakes the host once the writer takes a frame, also
+    // when the child answers nothing it reads, so the host's overflow moves on. Before, only the child's output woke the
+    // host: a full queue whose frames brought no answer, or whose answer came in the same turn as the drain, stranded the
+    // overflow while the child waited for input.
+    #[test]
+    fn a_full_queue_wakes_the_host_once_it_has_room() {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let file = dir.path().join("frames");
+        std::fs::write(&file, hello()).unwrap();
+        // It says hello, reads nothing for a while, then reads all and says nothing.
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(format!("cat '{}'; sleep 0.3; cat > /dev/null", file.display()));
+        let wakes = Arc::new(AtomicU64::new(0));
+        let woken = wakes.clone();
+        let limits = Limits { queued: 4 << 10, ..Limits::default() };
+        let child = Child::spawn(command, limits, move || {
+            woken.fetch_add(1, Ordering::SeqCst);
+        })
+        .unwrap();
+        // Its hello woke the host once, which takes it.
+        assert!(!take_until(&child, |events| !events.is_empty()).is_empty(), "no hello");
+        let payload = vec![b'x'; 1 << 10];
+        // The child's input and the queue fill: the OS pipe's buffer, then the queue's bound.
+        let full =
+            (0..10_000).find(|_| matches!(child.send(wire::CONTROL, &payload, None, Wait::Ack), Err(Refused::Full)));
+        assert!(full.is_some(), "the queue never filled");
+        let (before, begun) = (wakes.load(Ordering::SeqCst), Instant::now());
+        while wakes.load(Ordering::SeqCst) == before && begun.elapsed() < Duration::from_secs(2) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(wakes.load(Ordering::SeqCst) > before, "the host was not woken when the queue had room");
     }
 
     // Expected (review F4): a child whose first message is not the protocol's hello is refused, before anything of it
