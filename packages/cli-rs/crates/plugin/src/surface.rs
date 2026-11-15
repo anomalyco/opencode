@@ -1289,7 +1289,10 @@ impl Drop for Surface {
             owner.end();
         }
         // What the mount asked for and still waits ends once it is gone: the pipe's fetch settles now.
-        crate::defer(&self.owner, |_| crate::loader::native::cancel_closed());
+        let key = crate::loader::native::mount_key(&Rc::downgrade(&self.alive));
+        crate::defer(&self.owner, move |_| {
+            crate::loader::native::cancel_closed(key);
+        });
         self.images.release_all();
         let state = self.state.get_mut();
         let (content, memo) = (std::mem::take(&mut state.content), state.booked);
