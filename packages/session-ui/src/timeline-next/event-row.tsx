@@ -4,7 +4,6 @@ import { For, Match, Show, Switch, createMemo } from "solid-js"
 import { BasicTool } from "../components/basic-tool"
 import { useData } from "../context/data"
 import { taskAgentName } from "../tools/tool-renderer"
-import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 import { summarizeShells, verbKeys, type TimelineEvent } from "./events"
 
 /**
@@ -81,12 +80,7 @@ const statusKeys = {
 } as const
 
 /** One subagent or shell an events row or an opened activity group lists: who did it and what it was. */
-export function TimelineEventItem(props: {
-  event: TimelineEvent
-  /** The subagent this start launched is still working. */
-  running?: boolean
-  onRevealShell?: (shellID: string) => void
-}) {
+export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?: (shellID: string) => void }) {
   const i18n = useI18n()
   const data = useData()
 
@@ -140,12 +134,10 @@ export function TimelineEventItem(props: {
         open()
       }}
     >
-      {/* A subagent leads with its status chip; a still-running start spins instead of showing its ring. */}
+      {/* A subagent leads with its status chip. */}
       <Show when={props.event.kind === "subagent"}>
         <span data-slot="timeline-event-item-status" data-state={state()}>
-          <Show when={props.running && state() === "started"} fallback={<StatusGlyph state={state()} />}>
-            <SessionProgressIndicatorV2 width={12} height={12} />
-          </Show>
+          <StatusGlyph state={state()} />
           {i18n.t(statusKeys[state()])}
         </span>
       </Show>
