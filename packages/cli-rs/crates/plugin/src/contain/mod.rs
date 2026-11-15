@@ -207,6 +207,10 @@ pub struct Monitor {
     record: OnceCell<(Arc<Record>, Instant)>,
     /// Told when a call returns whose hang notice the watchdog painted: the plugin and how long the call took.
     on_notice: RefCell<Option<Rc<OnNotice>>>,
+    /// The plugins whose slow news the user was told this session, by ID: once a plugin and session, whatever the
+    /// cause and however often it is enabled again or rebuilt (4.14 `reported-once`; final review big-boi 10). Each
+    /// build's state, counters and causes stay its own.
+    told: RefCell<std::collections::HashSet<String>>,
 }
 
 /// What a host does when a call whose hang notice was painted returns.
@@ -238,6 +242,9 @@ struct Stats {
     backlog: VecDeque<u64>,
     told_backlog: bool,
     refused: u64,
+    /// Whether the backlog made it slow when the monitor last looked: a change of it is a change of slow too (review
+    /// carbon-12).
+    backlog_slow: bool,
 }
 
 #[derive(Default)]
@@ -303,6 +310,7 @@ impl Monitor {
             closing: Cell::new(false),
             record: OnceCell::new(),
             on_notice: RefCell::default(),
+            told: RefCell::default(),
         }
     }
 
@@ -344,7 +352,15 @@ impl Monitor {
     pub fn open_over(&self) -> bool {
         let limits = self.limits();
         self.all.get().is_some_and(|(_, sum)| sum > limits.all)
-            || self.plugins.borrow().iter().any(|stats| stats.window.is_some_and(|(_, sum)| sum > limits.frame))
+            || self.plugins.borrow().iter().any(|stats| {
+                // A backlog that makes it slow ends with frames, which the closes must see (review carbon-12).
+                stats.window.is_some_and(|(_, sum)| sum > limits.frame) || stats.backlog_slow
+            })
+    }
+
+    /// Whether the user is to be told that plugin `id` is slow: the first time a session.
+    fn tell(&self, id: &str) -> bool {
+        self.told.borrow_mut().insert(id.to_owned())
     }
 
     /// Calls `notice` when a call returns whose hang notice the watchdog painted.
@@ -502,7 +518,9 @@ impl Monitor {
         let cold = std::mem::take(&mut stats.cold);
         let overrun = took > limits.overrun && !cold;
         let (slow, opened) = stats.add(frame, took, &limits);
+        let id = stats.artifact.id.clone();
         drop(plugins);
+        let slow = slow.filter(|_| self.tell(&id));
         match self.all.get() {
             Some((open, sum)) if open == frame => self.all.set(Some((open, sum + took))),
             Some((_, sum)) => {
@@ -527,7 +545,10 @@ impl Monitor {
             {
                 news.push((stats.artifact.id.clone(), cost));
             }
+            // A backlog that left the window, with no mail since to say so, stops the slow it caused.
+            stats.look_at_backlog(&limits, frame);
         }
+        news.retain(|(id, _)| self.tell(id));
         if let Some((_, sum)) = self.all.get().filter(|(open, _)| *open < frame) {
             self.all.set(None);
             self.close_all(sum, &limits);
@@ -596,7 +617,8 @@ impl Monitor {
         if full && stats.backlog.back() != Some(&now) {
             stats.backlog.push_back(now);
         }
-        if !stats.backlogged(&limits, now) || std::mem::replace(&mut stats.told_backlog, true) {
+        stats.look_at_backlog(&limits, now);
+        if !stats.backlog_slow || std::mem::replace(&mut stats.told_backlog, true) {
             return None;
         }
         log::warn!(
@@ -604,7 +626,9 @@ impl Monitor {
             stats.artifact.id,
             stats.backlog.len()
         );
-        Some((stats.artifact.id.clone(), format!("Its mailbox is full; {refused} sends refused")))
+        let id = stats.artifact.id.clone();
+        drop(plugins);
+        self.tell(&id).then(|| (id, format!("Its mailbox is full; {refused} sends refused")))
     }
 
     /// The frames all plugins together went over [`Limits::all`].
@@ -661,6 +685,13 @@ impl Monitor {
 }
 
 impl Stats {
+    /// Takes whether its backlog makes it slow `now`, and marks a change of it as a change of slow.
+    fn look_at_backlog(&mut self, limits: &Limits, now: u64) {
+        let backlogged = self.backlogged(limits, now);
+        self.flipped |= backlogged != self.backlog_slow;
+        self.backlog_slow = backlogged;
+    }
+
     /// Whether its mailbox was full at the end of more than [`Limits::slow`] of the [`Limits::window`] frames before
     /// `now`.
     fn backlogged(&self, limits: &Limits, now: u64) -> bool {

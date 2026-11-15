@@ -574,16 +574,25 @@ fn flood(count: u32) -> usize {
 
 // Expected (the backlog cause of `slow`, synthesis 4.2; reviews bigboi 10, carbon 5.4): a burst the frame drains is not
 // full at its end. A mailbox a thread keeps full is full at the end of every frame: at the end of 12 of the last 120
-// frames its plugin is not slow, at the end of 13 it is, with one toast and the refused sends in its details; 120
-// frames after its mailbox drained, the backlog is gone from them. On both carriers.
+// frames its plugin is not slow, at the end of 13 it is, and the refused sends are in its details; 120 frames after its
+// mailbox drained, the backlog is gone from them. Its calls fill each frame's budget too, so it is slow by both causes:
+// the user is told once, a plugin and session, whichever cause comes first (4.14 `reported-once`; final review
+// big-boi 10). On both carriers.
 #[test]
 fn a_mailbox_full_at_the_end_of_13_frames_is_a_backlog() {
     for carrier in CARRIERS {
         let harness = open(carrier);
         let monitor = harness.tui.plugins.monitor().clone();
+        // Each toast as it shows, taken off the screen so the next one shows.
+        let told = std::cell::RefCell::new(Vec::new());
         let paint = || {
             harness.app.advance(Duration::from_millis(16));
-            harness.app.render()
+            let frame = harness.app.render();
+            while let Some(toast) = harness.tui.toasts.current() {
+                told.borrow_mut().push(toast.title.unwrap_or(toast.message));
+                harness.tui.toasts.dismiss();
+            }
+            frame
         };
         assert_eq!(flood(abi::BOUND as u32), abi::BOUND, "{carrier:?}: a burst to the bound");
         frame(&harness);
@@ -596,9 +605,8 @@ fn a_mailbox_full_at_the_end_of_13_frames_is_a_backlog() {
         // Its calls fill each frame's budget, which P4c's cause counts too: the backlog's own news tells them apart.
         let backlog = || monitor.report(ID).unwrap_or_default().contains("backlog");
         assert!(!backlog(), "{carrier:?}: a backlog after 12 full ends");
-        let screen = paint().text();
+        paint();
         assert!(monitor.is_slow(ID) && backlog(), "{carrier:?}: no backlog after 13 full ends");
-        assert!(screen.contains("Its mailbox is full"), "{carrier:?}: no toast\n{screen}");
         let report = monitor.report(ID).unwrap_or_default();
         assert!(report.contains("backlog") && report.contains("1 sends refused"), "{carrier:?}: {report}");
         mail(|mail| mail.refill = 0);
@@ -609,6 +617,21 @@ fn a_mailbox_full_at_the_end_of_13_frames_is_a_backlog() {
         // Its calls, which filled each frame's budget, may keep it slow by P4c's cause; the backlog has gone.
         let report = monitor.report(ID).unwrap_or_default();
         assert!(!report.contains("backlog"), "{carrier:?}: a backlog 120 frames after it ended: {report}");
+        // Disabled and enabled again, and backlogged again: slow again, and nothing more is told.
+        let host = opencode_tui::plugins::host::host(&harness.tui);
+        harness.tui.plugins.toggle(&host, ID, false).unwrap().unwrap();
+        harness.tui.plugins.toggle(&host, ID, true).unwrap().unwrap();
+        frame(&harness);
+        assert_eq!(flood(abi::BOUND as u32 + 1), abi::BOUND, "{carrier:?}: one refused after the enable");
+        mail(|mail| mail.refill = u32::MAX);
+        for _ in 0..14 {
+            paint();
+        }
+        assert!(monitor.is_slow(ID) && backlog(), "{carrier:?}: no backlog after the enable");
+        mail(|mail| mail.refill = 0);
+        let slow = format!("Plugin is slow: {ID}");
+        let told = told.take();
+        assert_eq!(told.iter().filter(|title| **title == slow).count(), 1, "{carrier:?}: {told:?}");
     }
 }
 
