@@ -398,7 +398,12 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
       const body = (await request.json()) as { label: string }
       accounts = accounts.map((account) => (account.id === id ? { ...account, label: body.label } : account))
       requests.push({ method: request.method, path: url.pathname, body })
-      events.emit({ id: `evt_updated_${id}`, created: Date.now(), type: "credential.updated", data: {} })
+      events.emit({
+        id: `evt_updated_${id}`,
+        created: Date.now(),
+        type: "credential.updated",
+        data: { integrationID: "openai", credentialID: id },
+      })
       return new Response(null, { status: 204 })
     }
 
@@ -407,7 +412,12 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
       const active = accounts[0]?.id === id
       accounts = accounts.filter((account) => account.id !== id)
       requests.push({ method: request.method, path: url.pathname })
-      events.emit({ id: `evt_deleted_${id}`, created: Date.now(), type: "credential.updated", data: {} })
+      events.emit({
+        id: `evt_deleted_${id}`,
+        created: Date.now(),
+        type: "credential.updated",
+        data: { integrationID: "openai", credentialID: id },
+      })
       if (active)
         events.emit({
           id: `evt_switched_${id}`,
@@ -474,5 +484,105 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
     get accounts() {
       return accounts
     },
+  }
+}
+
+test("leaves a blank row between the OAuth title and its instructions under new designs", async () => {
+  await using fixture = await renderOAuth({ paste: true, newDesigns: true })
+  const frame = await fixture.app.waitForFrame((frame) => frame.includes("Redirect URL"))
+  const lines = frame.split("\n")
+  const title = lines.findIndex((line) => line.includes("opensend") && line.includes("esc"))
+
+  expect(lines[title + 1]?.trim()).toBe("")
+  expect(lines[title + 2]).toContain("Authorize opensend in your browser.")
+})
+
+test("keeps the OAuth paste prompt layout without new designs", async () => {
+  await using fixture = await renderOAuth({ paste: true, newDesigns: false })
+  const frame = await fixture.app.waitForFrame((frame) => frame.includes("Redirect URL"))
+  const lines = frame.split("\n")
+  const title = lines.findIndex((line) => line.includes("opensend") && line.includes("esc"))
+
+  expect(lines[title + 1]?.trim()).toBe("")
+  expect(lines[title + 2]).toContain("Authorize opensend in your browser.")
+  expect(frame.split("Authorize opensend in your browser.").length).toBe(2)
+})
+
+async function renderOAuth(input: { paste?: true; newDesigns: boolean }) {
+  const calls = createFetch(async (url, request) => {
+    const directory = decodeURIComponent(request.headers.get("x-opencode-directory") ?? process.cwd())
+    const location = { directory, project: { id: "proj_test", directory, canonical: directory } }
+    if (url.pathname === "/api/integration")
+      return json({
+        location,
+        data: [
+          {
+            id: "opensend",
+            name: "opensend",
+            methods: [{ type: "oauth", id: "mcp", label: "opensend" }],
+            connections: [],
+            metadata: { source: "mcp" },
+          },
+        ],
+      })
+    if (request.method === "POST" && url.pathname === "/api/integration/opensend/connect/oauth")
+      return json({
+        location,
+        data: {
+          attemptID: "att_test",
+          url: "https://opensend.example.com/api/auth/oauth2/authorize?response_type=code",
+          instructions: "Authorize opensend in your browser. This window will close automatically.",
+          mode: "auto",
+          ...(input.paste ? { paste: true } : {}),
+          time: { created: Date.now(), expires: Date.now() + 60_000 },
+        },
+      })
+    if (request.method === "DELETE" && url.pathname === "/api/integration/opensend/connect/oauth/att_test")
+      return new Response(null, { status: 204 })
+    if (url.pathname === "/api/integration/opensend/connect/oauth/att_test")
+      return json({ location, data: { status: "pending" } })
+    return undefined
+  })
+
+  function Probe() {
+    const data = useData()
+    const dialog = useDialog()
+    onMount(() => {
+      void data.location.integration
+        .sync()
+        .then(() => dialog.replace(() => <DialogIntegration integrationID="opensend" autoConnect />))
+    })
+    return null
+  }
+
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ experimental: { "new-designs": input.newDesigns } })}>
+          <Keymap.Provider>
+            <ToastProvider>
+              <ClientProvider api={createApi(calls.fetch)}>
+                <DataProvider directory={process.cwd()}>
+                  <LocationProvider>
+                    <ThemeProvider mode="dark" source={emptyThemeSource}>
+                      <DialogProvider>
+                        <Probe />
+                      </DialogProvider>
+                    </ThemeProvider>
+                  </LocationProvider>
+                </DataProvider>
+              </ClientProvider>
+            </ToastProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 100, height: 30, kittyKeyboard: true },
+  )
+  app.renderer.start()
+
+  return {
+    app,
+    [Symbol.asyncDispose]: async () => app.renderer.destroy(),
   }
 }

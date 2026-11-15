@@ -163,6 +163,7 @@ export const dict = {
   "ui.common.dismiss": "Loobu",
   "ui.common.close": "Sule",
   "ui.common.next": "Edasi",
+  "ui.common.continue": "Jätka",
   "ui.common.submit": "Esita",
   "ui.common.showMore": "Näita rohkem",
   "ui.permission.deny": "Keela",

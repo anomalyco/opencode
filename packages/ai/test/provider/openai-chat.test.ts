@@ -1264,6 +1264,42 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("reads top-level reasoning tokens whether or not completion tokens include them", () =>
+    Effect.gen(function* () {
+      const generate = (usage: object) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hi" }, "stop"), usageChunk(usage)))),
+          Effect.map((response) => response.usage),
+        )
+
+      // Copilot's Gemini: total = prompt + completion + reasoning.
+      expect(
+        yield* generate({ prompt_tokens: 7, completion_tokens: 2, total_tokens: 62, reasoning_tokens: 53 }),
+      ).toMatchObject({ outputTokens: 55, reasoningTokens: 53, totalTokens: 62 })
+      // Copilot's Kimi: total = prompt + completion, which already includes reasoning.
+      expect(
+        yield* generate({ prompt_tokens: 96, completion_tokens: 50, total_tokens: 146, reasoning_tokens: 35 }),
+      ).toMatchObject({ outputTokens: 50, reasoningTokens: 35, totalTokens: 146 })
+    }),
+  )
+
+  it.effect("converts the GitHub Copilot billing beside usage to USD", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(deltaChunk({ content: "Hello" }, "stop"), {
+              ...usageChunk({ prompt_tokens: 5, completion_tokens: 2 }),
+              copilot_usage: { total_nano_aiu: 4_473_525_000, token_details: [] },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0.04473525 })
+    }),
+  )
+
   it.effect("drops a malformed billed cost without failing the stream", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

@@ -16,6 +16,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionLabel } from "@/session/title"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { shouldOpenSessionInBackground } from "./open"
 import { createAltHold } from "./alt-hold"
 import "./view.css"
@@ -704,7 +705,7 @@ function HomeSessionRow(
                 [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
                  ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
               `}
-                style={{ "--inline-input-shadow": "none", "text-align": "start" }}
+                style={{ "text-align": "start" }}
                 onInput={(event) =>
                   props.onRowEvent({ type: "editor.input", sessionID: sessionID(), draft: event.currentTarget.value })
                 }
@@ -867,6 +868,7 @@ function HomeSessionRow(
             >
               {props.language.t("common.export")}…
             </Menu.Item>
+            <SessionReadMenuItem server={props.server} session={props.record.session} />
             <Menu.Separator />
             <Menu.Item onSelect={() => props.onDeleteSession(props.server, props.record.session)}>
               {props.language.t("common.delete")}…

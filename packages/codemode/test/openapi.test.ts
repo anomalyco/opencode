@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
-import { CodeMode, OpenAPI, Tool } from "./lib/index.js"
+import { CodeMode, OpenAPI, Tool } from "../src/index.js"
 import { inputTypeScript, outputTypeScript } from "../src/tool-schema.js"
 
 const baseUrl = "http://localhost:4096"
@@ -31,6 +31,11 @@ const toolAt = (tools: OpenAPI.Tools, name: string) =>
     .reduce<
       Tool.Tool<HttpClient.HttpClient> | OpenAPI.Tools | undefined
     >((current, segment) => (current !== undefined && !Tool.isTool(current) ? current[segment] : undefined), tools)
+
+const invokeTool = <R>(tool: Tool.Tool<R>, input: unknown) => {
+  if (typeof tool.execute !== "function") throw new Error("expected a plain tool")
+  return tool.execute(input, { key: "test" })
+}
 
 const recordingClient = (respond: (request: HttpClientRequest.HttpClientRequest) => Response) => {
   const requests: Array<Recorded> = []
@@ -946,15 +951,13 @@ describe("OpenAPI.fromSpec", () => {
     if (!Tool.isTool(tool)) throw new Error("users.create was not generated")
 
     const result = await Effect.runPromise(
-      tool
-        .execute({
-          id: "ignored-top-level",
-          generated: "ignored-generated",
-          name: "Ada",
-          password: "request-secret",
-          profile: { createdAt: "sent-nested", secret: "nested-secret", label: "primary" },
-        })
-        .pipe(Effect.provide(client.layer)),
+      invokeTool(tool, {
+        id: "ignored-top-level",
+        generated: "ignored-generated",
+        name: "Ada",
+        password: "request-secret",
+        profile: { createdAt: "sent-nested", secret: "nested-secret", label: "primary" },
+      }).pipe(Effect.provide(client.layer)),
     )
 
     expect(client.requests[0]?.body).toEqual({
@@ -1021,16 +1024,14 @@ describe("OpenAPI.fromSpec", () => {
     if (!Tool.isTool(tool)) throw new Error("items was not generated")
 
     await Effect.runPromise(
-      tool
-        .execute({
-          keys: ["a!", "b*"],
-          tags: ["x", "y"],
-          filter: { state: "open", page: 2 },
-          nullable: null,
-          constructor: "safe",
-          meta: { a: "b", c: "d" },
-        })
-        .pipe(Effect.provide(client.layer)),
+      invokeTool(tool, {
+        keys: ["a!", "b*"],
+        tags: ["x", "y"],
+        filter: { state: "open", page: 2 },
+        nullable: null,
+        constructor: "safe",
+        meta: { a: "b", c: "d" },
+      }).pipe(Effect.provide(client.layer)),
     )
 
     const url = new URL(client.requests[0]!.url)
@@ -1042,7 +1043,7 @@ describe("OpenAPI.fromSpec", () => {
     expect(url.searchParams.get("constructor")).toBe("safe")
     expect(client.requests[0]!.headers.meta).toBe("a=b,c=d")
     await expect(
-      Effect.runPromise(tool.execute({ keys: [undefined] }).pipe(Effect.provide(client.layer))),
+      Effect.runPromise(invokeTool(tool, { keys: [undefined] }).pipe(Effect.provide(client.layer))),
     ).rejects.toThrow("unsupported nested value")
   })
 
@@ -1064,26 +1065,24 @@ describe("OpenAPI.fromSpec", () => {
     if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     await Effect.runPromise(
-      tool
-        .execute({
-          tags: ["first value", "second&value"],
-          filter: { state: "open now", page: 2 },
-          location: { directory: "/tmp/a b", workspace: "work&1" },
-        })
-        .pipe(Effect.provide(client.layer)),
+      invokeTool(tool, {
+        tags: ["first value", "second&value"],
+        filter: { state: "open now", page: 2 },
+        location: { directory: "/tmp/a b", workspace: "work&1" },
+      }).pipe(Effect.provide(client.layer)),
     )
 
     expect(client.requests[0]?.url).toBe(
       `${baseUrl}/test?tags=first+value&tags=second%26value&state=open+now&page=2&location%5Bdirectory%5D=%2Ftmp%2Fa+b&location%5Bworkspace%5D=work%261`,
     )
-    await expect(Effect.runPromise(tool.execute({ tags: [{}] }).pipe(Effect.provide(client.layer)))).rejects.toThrow(
+    await expect(Effect.runPromise(invokeTool(tool, { tags: [{}] }).pipe(Effect.provide(client.layer)))).rejects.toThrow(
       "Parameter 'tags' contains an unsupported nested value.",
     )
     await expect(
-      Effect.runPromise(tool.execute({ filter: { state: {} } }).pipe(Effect.provide(client.layer))),
+      Effect.runPromise(invokeTool(tool, { filter: { state: {} } }).pipe(Effect.provide(client.layer))),
     ).rejects.toThrow("Query parameter 'filter' contains an unsupported nested value.")
     await expect(
-      Effect.runPromise(tool.execute({ location: { directory: [] } }).pipe(Effect.provide(client.layer))),
+      Effect.runPromise(invokeTool(tool, { location: { directory: [] } }).pipe(Effect.provide(client.layer))),
     ).rejects.toThrow("Deep-object parameter 'location' contains an unsupported nested value.")
     expect(client.requests).toHaveLength(1)
   })
@@ -1165,7 +1164,7 @@ describe("OpenAPI.fromSpec", () => {
     )
     if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
-    await Effect.runPromise(tool.execute({}).pipe(Effect.provide(client.layer)))
+    await Effect.runPromise(invokeTool(tool, {}).pipe(Effect.provide(client.layer)))
 
     expect(inputTypeScript(tool)).toBe("{}")
     expect(client.requests[0]!.headers.authorization).toBe("Bearer secret")
@@ -1202,7 +1201,7 @@ describe("OpenAPI.fromSpec", () => {
     )
     if (!Tool.isTool(prototype)) throw new Error("prototype auth tool was not generated")
 
-    await Effect.runPromise(prototype.execute({}).pipe(Effect.provide(client.layer)))
+    await Effect.runPromise(invokeTool(prototype, {}).pipe(Effect.provide(client.layer)))
     expect(new URL(client.requests[0]!.url).searchParams.get("__proto__")).toBe("secret")
 
     const duplicate = toolAt(
@@ -1213,7 +1212,7 @@ describe("OpenAPI.fromSpec", () => {
       "test",
     )
     if (!Tool.isTool(duplicate)) throw new Error("duplicate auth tool was not generated")
-    await expect(Effect.runPromise(duplicate.execute({}).pipe(Effect.provide(client.layer)))).rejects.toThrow(
+    await expect(Effect.runPromise(invokeTool(duplicate, {}).pipe(Effect.provide(client.layer)))).rejects.toThrow(
       "multiple credentials",
     )
 
@@ -1239,7 +1238,7 @@ describe("OpenAPI.fromSpec", () => {
     })
     const alternativeTool = toolAt(alternative.tools, "test")
     if (!Tool.isTool(alternativeTool)) throw new Error("supported auth alternative was not generated")
-    await Effect.runPromise(alternativeTool.execute({}).pipe(Effect.provide(client.layer)))
+    await Effect.runPromise(invokeTool(alternativeTool, {}).pipe(Effect.provide(client.layer)))
     expect(client.requests.at(-1)?.headers.authorization).toBe("Bearer secret")
   })
 
@@ -1252,7 +1251,7 @@ describe("OpenAPI.fromSpec", () => {
     const tool = toolAt(OpenAPI.fromSpec({ spec }).tools, "test")
     if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
-    await Effect.runPromise(tool.execute({}).pipe(Effect.provide(client.layer)))
+    await Effect.runPromise(invokeTool(tool, {}).pipe(Effect.provide(client.layer)))
     expect(client.requests[0]?.url).toBe("https://operation.example/v1/test")
 
     const invalid = OpenAPI.fromSpec({ spec, baseUrl: "https://example.com/api?tenant=one" })
@@ -1326,7 +1325,7 @@ describe("OpenAPI.fromSpec", () => {
     if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
     await expect(
-      Effect.runPromise(tool.execute({ filter: { value: undefined } }).pipe(Effect.provide(client.layer))),
+      Effect.runPromise(invokeTool(tool, { filter: { value: undefined } }).pipe(Effect.provide(client.layer))),
     ).rejects.toThrow("unsupported nested value")
     expect(resolutions).toEqual([])
     expect(client.requests).toEqual([])
@@ -1351,11 +1350,11 @@ describe("OpenAPI.fromSpec", () => {
     )
     if (!Tool.isTool(tool)) throw new Error("test was not generated")
 
-    await Effect.runPromise(tool.execute({ body: { name: "updated" } }).pipe(Effect.provide(client.layer)))
+    await Effect.runPromise(invokeTool(tool, { body: { name: "updated" } }).pipe(Effect.provide(client.layer)))
     expect(client.requests[0]!.headers["content-type"]).toBe("application/merge-patch+json")
     const cyclic: Record<string, unknown> = {}
     cyclic.self = cyclic
-    await expect(Effect.runPromise(tool.execute({ body: cyclic }).pipe(Effect.provide(client.layer)))).rejects.toThrow(
+    await expect(Effect.runPromise(invokeTool(tool, { body: cyclic }).pipe(Effect.provide(client.layer)))).rejects.toThrow(
       "Invalid JSON body",
     )
   })
@@ -1369,13 +1368,13 @@ describe("OpenAPI.fromSpec", () => {
     const malformed = recordingClient(() => new Response("{", { headers: { "content-type": "application/json" } }))
     const chunked = recordingClient(() => new Response(new Uint8Array(50 * 1024 * 1024 + 1)))
 
-    await expect(Effect.runPromise(tool.execute({}).pipe(Effect.provide(oversized.layer)))).rejects.toThrow(
+    await expect(Effect.runPromise(invokeTool(tool, {}).pipe(Effect.provide(oversized.layer)))).rejects.toThrow(
       "response exceeds 50 MiB",
     )
-    await expect(Effect.runPromise(tool.execute({}).pipe(Effect.provide(malformed.layer)))).rejects.toThrow(
+    await expect(Effect.runPromise(invokeTool(tool, {}).pipe(Effect.provide(malformed.layer)))).rejects.toThrow(
       "returned malformed JSON",
     )
-    await expect(Effect.runPromise(tool.execute({}).pipe(Effect.provide(chunked.layer)))).rejects.toThrow(
+    await expect(Effect.runPromise(invokeTool(tool, {}).pipe(Effect.provide(chunked.layer)))).rejects.toThrow(
       "response exceeds 50 MiB",
     )
   })
@@ -1392,7 +1391,7 @@ describe("OpenAPI.fromSpec", () => {
     const client = recordingClient(() => new Response("123", { headers: { "content-type": "text/plain" } }))
 
     expect(outputTypeScript(tool)).toBe("string | null")
-    await expect(Effect.runPromise(tool.execute({}).pipe(Effect.provide(client.layer)))).resolves.toBe("123")
+    await expect(Effect.runPromise(invokeTool(tool, {}).pipe(Effect.provide(client.layer)))).resolves.toBe("123")
   })
 
   test("fails missing required parameters before auth and network", async () => {

@@ -14,7 +14,14 @@ import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { sessionHref } from "@/shell/routes/session"
 import { createTabMemory } from "./memory"
 import { createSessionPreview } from "./preview"
-import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed"
+import {
+  latestClosedTime,
+  nextTabAfterClose,
+  pushClosedTab,
+  removeClosedTabs,
+  takeClosedTab,
+  type ClosedTab,
+} from "./closed"
 import {
   createDraftComposerState,
   createMemoryComposerState,
@@ -638,6 +645,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         })
         entries.forEach((entry) => disposeTab(entry.tab))
       },
+      lastClosedTime: () => latestClosedTime(closed, store),
       reopenClosedTab(target?: SessionTab, options?: { append?: boolean }) {
         dispatchHydration({ type: "closed.op", op: { kind: "reopen", target, options } })
       },

@@ -37,6 +37,8 @@ describe("public event manifest", () => {
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(EventManifest.Server.get("mcp.status.changed")).toBe(McpEvent.StatusChanged)
     expect(EventManifest.Server.get("mcp.resources.changed")).toBe(McpEvent.ResourcesChanged)
+    expect(EventManifest.Server.get("experimental.mcp.event")).toBe(McpEvent.ExperimentalEvent)
+    expect(EventManifest.Server.has("experimental.mcp.subscription.changed")).toBe(false)
     expect(EventManifest.Server.get("session.created")).toBe(SessionEvent.Created)
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.get("project.updated")).toBe(Project.Event.Updated)
@@ -68,7 +70,13 @@ describe("public event manifest", () => {
     ])
     expect(Form.Event.Definitions).toEqual([Form.Event.Created, Form.Event.Replied, Form.Event.Cancelled])
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
-    expect(McpEvent.Definitions).toEqual([McpEvent.ToolsChanged, McpEvent.ResourcesChanged, McpEvent.StatusChanged])
+    expect(McpEvent.Definitions).toEqual([
+      McpEvent.ToolsChanged,
+      McpEvent.ResourcesChanged,
+      McpEvent.StatusChanged,
+      McpEvent.ExperimentalEvent,
+      McpEvent.ExperimentalSubscriptionChanged,
+    ])
     expect(EventManifest.Latest.has("mcp.browser.open.failed")).toBe(false)
     expect(EventManifest.Durable.get("session.step.ended.1")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Durable.has("session.step.ended.2")).toBe(false)
@@ -87,7 +95,7 @@ describe("public event manifest", () => {
       expect(EventManifest.Durable.has(definition.type)).toBe(false)
     }
 
-    expect(Credential.Event.Updated.data.make({})).toEqual({})
+    expect(Credential.Event.Updated.data.make({ integrationID, credentialID })).toEqual({ integrationID, credentialID })
     expect(Credential.Event.Switched.data.make({ integrationID, credentialID })).toEqual({
       integrationID,
       credentialID,
@@ -134,6 +142,7 @@ describe("public event manifest", () => {
         "session.shell.started.1",
         "session.shell.ended.1",
         "session.step.started.1",
+        "session.step.first-token.1",
         "session.step.streamed.1",
         "session.step.ended.1",
         "session.step.failed.1",

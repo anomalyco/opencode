@@ -15,7 +15,7 @@ import {
 import { Effect } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiSchema } from "effect/http-api"
-import { awaitPlugins, locationErrors, requestRef, response } from "../location"
+import { locationErrors, requestRef, response } from "../location"
 import { missingSession } from "./session-error"
 
 /** `artifacts.*` in the `server.experimental` group. Every route needs experimental.artifacts in the resolved Location. */
@@ -77,7 +77,7 @@ export const makeArtifact = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       const ref = yield* resolveLocation(request, options)
-      return yield* awaitPlugins.pipe(Effect.andThen(effect), Effect.provide(locations.get(ref)), locationErrors)
+      return yield* effect.pipe(Effect.provide(locations.get(ref)), locationErrors)
     })
 
   const mapCommon = <A, E>(effect: Effect.Effect<A, E>) =>

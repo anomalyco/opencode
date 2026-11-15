@@ -21,15 +21,33 @@ story("integration picker reveals keyboard choices without moving its search or 
       }
     })
 
+  const order = [
+    "anthropic",
+    "opencode",
+    "opencode-go",
+    "openai",
+    "github-copilot",
+    "google",
+    "acme-broken",
+    "acme-cli",
+    "acme-cloud",
+    "acme-code",
+    "acme-search",
+    "amazon-bedrock",
+    "claude-agent",
+    "gitlab",
+    "openrouter",
+    "snowflake-cortex",
+    "xai",
+  ]
+
   await expect(input).toBeFocused()
-  await expect(dialog.locator("[data-provider-id]")).toHaveCount(7)
+  await expect(dialog.locator("[data-provider-id]")).toHaveCount(order.length)
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   await input.hover()
   const initial = await geometry()
-  const last = dialog.locator('[data-provider-id="openrouter"]')
+  const last = dialog.locator('[data-provider-id="xai"]')
   await expect(last).not.toBeInViewport({ ratio: 1 })
-
-  const order = ["anthropic", "opencode", "opencode-go", "openai", "github-copilot", "google", "openrouter"]
 
   const moves = [
     ...order.map((id) => ({ key: "ArrowDown", id })),

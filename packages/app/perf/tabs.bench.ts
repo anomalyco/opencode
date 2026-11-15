@@ -36,10 +36,12 @@ const exported = exportFile ? (JSON.parse(readFileSync(exportFile, "utf8")) as S
 
 // The destination was rendered before and is cached: switching back and forth. A cached transcript is not fetched
 // again (`net.requests` on the history endpoint stays 0), and the switch moves nothing that was already on screen.
+// The run ends on the frame after the answer shows: headless, it ends at its last step, and the wait at the first
+// match, so the style and layout the switch left for that frame would count in main.work but not run.duration.
 const warm: Case<{}> = {
   primary: "main.work",
   metrics: ["run.duration", "interaction.p50", "net.requests{/api/session/*/message}", "layout.shift"],
-  run: ({ page, prepared }) => page.click(tab(prepared.target), { until: prepared.targetReady }),
+  run: ({ page, prepared }) => page.click(tab(prepared.target), { until: [prepared.targetReady, "frame"] }),
   async reset({ page, prepared }) {
     await page.click(tab(prepared.source), { until: prepared.sourceReady })
     await page.idle()
@@ -71,7 +73,7 @@ const cases = {
     ...warm,
     async run({ page, prepared }) {
       await page.click(tab(prepared.target), { until: prepared.targetReady })
-      await page.click(tab(prepared.source), { until: prepared.sourceReady })
+      await page.click(tab(prepared.source), { until: [prepared.sourceReady, "frame"] })
     },
     reset: ({ page }) => page.idle(),
   },

@@ -3,6 +3,7 @@ import { config } from "~/config"
 import { logoMetrics } from "~/component/site/logo-metrics"
 import type { Translate } from "~/i18n"
 import { rich } from "~/i18n/rich"
+import { logoWalls } from "~/lib/logo-walls"
 import type { RichText } from "~/lib/markdown"
 
 // Product order rule: whenever copy lists the products, name them in this order: desktop, terminal,
@@ -51,56 +52,16 @@ export function homeContent(t: Translate, route: (path: string) => string) {
       { text: "through ACP", href: docs("/cli/acp/") },
       { text: "listed in the docs", href: docs("/console/models/#privacy") },
     ],
-    // Below the hero: company wordmarks (sources in public/logos/companies/README.md), or the model
-    // providers OpenCode works with (marks from models.dev), cycling in slots on the carousel's grid.
+    // Below the hero, cycling in slots on the carousel's grid (logoWalls).
     companies: {
       label: t("home.companies.label"),
       // Shown instead of the label when its column is too narrow for it on one line (logo-wall.tsx).
       labelShort: t("home.companies.labelShort"),
-      items: [
-        { name: "NVIDIA", logo: "nvidia" },
-        { name: "Cloudflare", logo: "cloudflare" },
-        { name: "Microsoft", logo: "microsoft" },
-        { name: "GitHub", logo: "github" },
-        { name: "ByteDance", logo: "bytedance" },
-        { name: "Revolut", logo: "revolut" },
-        { name: "Salesforce", logo: "salesforce" },
-        { name: "Cisco", logo: "cisco" },
-        { name: "Red Hat", logo: "red-hat" },
-        { name: "Intel", logo: "intel" },
-        { name: "Adobe", logo: "adobe" },
-        { name: "IBM", logo: "ibm" },
-        { name: "SAP", logo: "sap" },
-        { name: "Lenovo", logo: "lenovo" },
-        { name: "Linear", logo: "linear" },
-        // Measured and ready to swap in: Shopee ("shopee"), Shopify ("shopify"), MongoDB ("mongodb"),
-        // Inditex ("inditex"), Zara ("zara"), HackerOne ("hackerone") and Bosch ("bosch").
-      ].map((item) => ({
-        name: item.name,
-        logo: `/logos/companies/${item.logo}.svg`,
-        metrics: logoMetrics.companies[item.logo],
-      })),
+      items: logoWalls.companies,
     },
     providers: {
       label: t("home.providers.label"),
-      items: [
-        { name: "Anthropic", logo: "anthropic" },
-        { name: "OpenAI", logo: "openai" },
-        { name: "Google", logo: "google" },
-        { name: "GitHub Copilot", logo: "github-copilot" },
-        { name: "xAI", logo: "xai" },
-        { name: "DeepSeek", logo: "deepseek" },
-        { name: "Mistral", logo: "mistral" },
-        { name: "Ollama", logo: "ollama" },
-        { name: "OpenRouter", logo: "openrouter" },
-        { name: "Amazon Bedrock", logo: "amazon-bedrock" },
-        { name: "Moonshot AI", logo: "moonshotai" },
-        { name: "Z.ai", logo: "zai" },
-      ].map((item) => ({
-        name: item.name,
-        logo: `/logos/providers/${item.logo}.svg`,
-        metrics: logoMetrics.providers[item.logo],
-      })),
+      items: logoWalls.providers,
     },
     // Services with official MCP servers (icons from Simple Icons), and the ways to extend OpenCode.
     tools: {

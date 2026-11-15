@@ -183,6 +183,7 @@ export const dict = {
   "ui.common.dismiss": "Tutup",
   "ui.common.close": "Tutup",
   "ui.common.next": "Berikutnya",
+  "ui.common.continue": "Lanjutkan",
   "ui.common.submit": "Kirim",
   "ui.common.showMore": "Tampilkan lebih banyak",
 

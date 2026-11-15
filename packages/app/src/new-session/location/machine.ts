@@ -12,6 +12,9 @@ export type LocationEntry =
       readonly value: string
       readonly directory: string
     }
+  /** The base-branch row of the worktree step; choosing it opens the branch list. */
+  | { readonly id: string; readonly type: "base"; readonly project: PromptProject; readonly directory: string }
+  | { readonly id: string; readonly type: "branch"; readonly branch: string }
 
 /** A step to return to, with the row that was active on it. */
 export type LocationHistoryItem =
@@ -23,10 +26,18 @@ export type LocationHistoryItem =
       readonly direct: boolean
       readonly query: string
       readonly active: string | undefined
+      readonly base: string | undefined
+    }
+  | {
+      readonly type: "branches"
+      readonly project: PromptProject
+      readonly direct: boolean
+      readonly query: string
+      readonly active: string | undefined
     }
 
 // One step of the location dialog. `history` holds the steps to step back through, so a step entered from any other
-// step returns to it intact. `direct` marks a worktree step the dialog opened on, where Escape closes the dialog.
+// step returns to it intact. `direct` marks a step the dialog opened on, where Escape closes the dialog.
 export type LocationDialogState =
   | { readonly type: "projects"; readonly query: string; readonly history: readonly LocationHistoryItem[] }
   | { readonly type: "others"; readonly query: string; readonly history: readonly LocationHistoryItem[] }
@@ -37,11 +48,21 @@ export type LocationDialogState =
       readonly direct: boolean
       readonly query: string
       readonly history: readonly LocationHistoryItem[]
+      /** A base branch chosen for the new worktree; omitted means the project root's current branch. */
+      readonly base: string | undefined
+    }
+  | {
+      readonly type: "branches"
+      readonly project: PromptProject
+      readonly direct: boolean
+      readonly query: string
+      readonly history: readonly LocationHistoryItem[]
     }
 
 export type LocationDialogEvent =
   | { readonly type: "query.changed"; readonly query: string }
   | { readonly type: "drilled"; readonly project: PromptProject }
+  | { readonly type: "branch.chosen"; readonly branch: string }
   /** `active` is the row active on the current step, restored when the user steps back to it. */
   | {
       readonly type: "chosen"
@@ -65,7 +86,12 @@ export type LocationDialogEffect =
   | { readonly type: "focus"; readonly active: string | undefined }
   | { readonly type: "project.add"; readonly server?: string }
   | { readonly type: "project.select"; readonly project: PromptProject }
-  | { readonly type: "workspace.select"; readonly project: PromptProject; readonly value: string }
+  | {
+      readonly type: "workspace.select"
+      readonly project: PromptProject
+      readonly value: string
+      readonly branch?: string
+    }
   | { readonly type: "close" }
 
 export type LocationDialogTransition = {
@@ -76,15 +102,23 @@ export type LocationDialogTransition = {
   readonly stop: boolean
 }
 
-export function createLocationDialogState(drilled?: PromptProject): LocationDialogState {
+export function createLocationDialogState(
+  drilled?: PromptProject,
+  options?: { readonly step?: "branches"; readonly base?: string },
+): LocationDialogState {
   if (!drilled) return { type: "projects", query: "", history: [] }
+
+  const history = [{ type: "projects", query: "", active: projectEntryID(drilled) }] as const
+
+  if (options?.step === "branches") return { type: "branches", project: drilled, direct: true, query: "", history }
 
   return {
     type: "worktrees",
     project: drilled,
     direct: true,
     query: "",
-    history: [{ type: "projects", query: "", active: projectEntryID(drilled) }],
+    history,
+    base: options?.base,
   }
 }
 
@@ -103,8 +137,11 @@ export function transitionLocationDialog(
       project: event.project,
       direct: false,
       query: "",
+      base: undefined,
     })
   }
+
+  if (event.type === "branch.chosen") return chooseBranch(state, event.branch)
 
   if (event.type === "chosen") return choose(state, event)
 
@@ -132,7 +169,53 @@ function choose(
 
   if (entry.type === "project") return to(state, [{ type: "project.select", project: entry.project }])
 
-  return to(state, [{ type: "workspace.select", project: entry.project, value: entry.value }])
+  if (entry.type === "base")
+    return state.type === "worktrees"
+      ? enter(state, entry.id, { type: "branches", project: entry.project, direct: false, query: "" })
+      : same(state)
+
+  if (entry.type === "branch") return chooseBranch(state, entry.branch)
+
+  return to(state, [
+    {
+      type: "workspace.select",
+      project: entry.project,
+      value: entry.value,
+      branch: entry.value === "create" && state.type === "worktrees" ? state.base : undefined,
+    },
+  ])
+}
+
+function chooseBranch(state: LocationDialogState, branch: string): LocationDialogTransition {
+  if (state.type !== "branches") return same(state)
+
+  const previous = state.history.at(-1)
+
+  // Choosing a base branch returns to the worktree step it came from, with the branch selected there.
+  if (previous?.type === "worktrees")
+    return to(
+      {
+        type: "worktrees",
+        project: previous.project,
+        direct: previous.direct,
+        query: previous.query,
+        history: state.history.slice(0, -1),
+        base: branch,
+      },
+      [{ type: "focus", active: previous.active }],
+    )
+
+  return to(
+    {
+      type: "worktrees",
+      project: state.project,
+      direct: state.direct,
+      query: "",
+      history: state.history,
+      base: branch,
+    },
+    [{ type: "focus", active: undefined }],
+  )
 }
 
 function back(state: LocationDialogState): LocationDialogTransition {
@@ -143,7 +226,20 @@ function back(state: LocationDialogState): LocationDialogTransition {
   const effects = [{ type: "focus", active: top.active }] as const
 
   if (top.type === "worktrees")
-    return to({ type: "worktrees", project: top.project, direct: top.direct, query: top.query, history }, effects)
+    return to(
+      {
+        type: "worktrees",
+        project: top.project,
+        direct: top.direct,
+        query: top.query,
+        history,
+        base: top.base,
+      },
+      effects,
+    )
+
+  if (top.type === "branches")
+    return to({ type: "branches", project: top.project, direct: top.direct, query: top.query, history }, effects)
 
   return to({ type: top.type, query: top.query, history }, effects)
 }
@@ -162,9 +258,12 @@ function key(state: LocationDialogState, event: Extract<LocationDialogEvent, { t
   if (event.key === forward && event.atEnd && active?.type === "other" && state.type === "projects")
     return handled(choose(state, { type: "chosen", entry: active, active: active.id, choosesServer: false }), false)
 
+  if (event.key === forward && event.atEnd && active?.type === "base")
+    return handled(choose(state, { type: "chosen", entry: active, active: active.id, choosesServer: false }), false)
+
   if (state.type === "projects") return same(state)
 
-  if (event.key === "Escape" && state.type === "worktrees" && state.direct)
+  if (event.key === "Escape" && (state.type === "worktrees" || state.type === "branches") && state.direct)
     return handled(to(state, [{ type: "close" }]), true)
 
   if (
@@ -211,6 +310,14 @@ export function locationDialogView(state: LocationDialogState) {
         ownsEscape: true,
         otherGroupHeader: false,
       } as const
+    case "branches":
+      return {
+        drilled: state.project,
+        titleKey: "session.new.workspace.runIn",
+        placeholderKey: "session.new.workspace.branch.search.placeholder",
+        ownsEscape: true,
+        otherGroupHeader: false,
+      } as const
   }
 }
 
@@ -224,14 +331,36 @@ function enter(
   active: string | undefined,
   next:
     | { type: "others" | "servers"; query: string }
-    | { type: "worktrees"; project: PromptProject; direct: boolean; query: string },
+    | { type: "worktrees"; project: PromptProject; direct: boolean; query: string; base: string | undefined }
+    | { type: "branches"; project: PromptProject; direct: boolean; query: string },
 ): LocationDialogTransition {
-  const frame: LocationHistoryItem =
-    state.type === "worktrees"
-      ? { type: "worktrees", project: state.project, direct: state.direct, query: state.query, active }
-      : { type: state.type === "others" ? "others" : "projects", query: state.query, active }
+  const frame = historyFrame(state, active)
 
   return to({ ...next, history: [...state.history, frame] }, [{ type: "focus", active: undefined }])
+}
+
+// Leaves the current step for `next`, remembering the current step and its active row to return to.
+function historyFrame(state: LocationDialogState, active: string | undefined): LocationHistoryItem {
+  if (state.type === "worktrees")
+    return {
+      type: "worktrees",
+      project: state.project,
+      direct: state.direct,
+      query: state.query,
+      active,
+      base: state.base,
+    }
+
+  if (state.type === "branches")
+    return {
+      type: "branches",
+      project: state.project,
+      direct: state.direct,
+      query: state.query,
+      active,
+    }
+
+  return { type: state.type === "others" ? "others" : "projects", query: state.query, active }
 }
 
 function to(state: LocationDialogState, effects: readonly LocationDialogEffect[] = []): LocationDialogTransition {

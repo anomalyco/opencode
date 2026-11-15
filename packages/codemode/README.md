@@ -61,6 +61,10 @@ only shape the model-visible signature. Without `output`, the signature uses `Pr
 
 Descriptions and schemas are model-visible contracts. Authorization belongs in `execute`.
 
+Set `freeform: true` on a tool whose input is one required string field to let programs pass that string directly. For
+`{ patchText: string }`, the catalog shows `tools.patch(patchText: string)`, and `tools.patch("*** Begin Patch...")`
+delivers `{ patchText: "*** Begin Patch..." }` to validation, hooks and the executor. The object form still works.
+
 Nested records are the shorthand for ordinary namespaces. Use `Namespace.make` when a namespace needs a description:
 
 ```ts
@@ -97,13 +101,9 @@ runs before the call reaches the host, and a failing one denies it: the host fun
 catches the failure as a thrown error. A denied call fails the way the call itself would: a tool call or asynchronous
 global rejects its promise, and a synchronous global throws.
 
-### Bytecode VM and suspending/resuming a run (experimental, `engine: "vm"`)
+### Suspending and resuming a run
 
-Pass `engine: "vm"` to `CodeMode.make` or `CodeMode.execute` to run programs on the bytecode VM instead of the default
-`"legacy"` AST interpreter. `runtime.execute(code, bindings?)` keeps the same `Effect<CodeMode.Result>` signature on
-both engines.
-
-On `engine: "vm"`, `CodeMode.make` returns a `CodeMode.VmRuntime`, which can also run a program step by step:
+`CodeMode.make` returns a `CodeMode.Runtime`, which can also run a program step by step:
 `runtime.program(code, bindings?, { runId }?)` makes a `CodeMode.Program`, and nothing runs until `program.run()`. Every
 host call gets a stable key `<runId>:<callId>` (using a generated UUID when `runId` is omitted), saved in the snapshot
 and passed to tools as `execute(input, { key })` and to hooks as `call.key`. `run()` runs the program in the current
@@ -115,7 +115,7 @@ type Suspended = {
   state: CodeMode.Snapshot // JSON; CodeMode.toBytes / CodeMode.fromBytes convert it
 }
 
-const runtime = CodeMode.make({ tools, engine: "vm" })
+const runtime = CodeMode.make({ tools })
 
 // inline
 const outcome = yield* runtime.program(code).run()
@@ -130,8 +130,7 @@ const outcome = yield* Fiber.join(fiber)
 yield* runtime.resume(CodeMode.toBytes(suspended.state)).run()
 ```
 
-The default runtime has no `program` or `resume`, and ignores `Tool.idempotent`, `Tool.durable`, and extension
-`snapshot` hooks. A program runs once: running it again is a defect, so make another with `runtime.program` or
+A program runs once: running it again is a defect, so make another with `runtime.program` or
 `runtime.resume`. `run()` owns the run's host calls: interrupting it interrupts the program and every call in progress
 (and cancels any started durable tool work).
 
@@ -173,8 +172,7 @@ Tool.make({
 - **`Tool.idempotent(execute)`:** idempotent/read-only work safe to run again. If a suspend lands while the call is
   running, the VM detaches and interrupts it without firing `tool.after`, saves the call in the snapshot as queued, and
   re-runs it on resume with the same `key` without double-counting it against `maxToolCalls`.
-- **`Tool.durable({ start, wait, cancel })`:** work that outlives a suspended run (when run without a suspend or on the
-  legacy engine, it runs `start` then `wait`):
+- **`Tool.durable({ start, wait, cancel })`:** work that outlives a suspended run:
   - `start(input, { key }) => Effect<Data /* Json */>` begins the work and returns JSON `data` (inferred into `wait`
     and `cancel`);
   - `wait(data, { key }) => Effect<Output>` connects to the running work and waits for its result;
@@ -205,7 +203,7 @@ extensions (and the same extension `snapshot` hooks). The state is checked when 
 fails with a `CodeMode.SnapshotError` when it can't be resumed here or is malformed. Built-ins are saved by name and
 only their changes are copied.
 
-Set `CODEMODE_ROUNDTRIP=1` (`bun run test:roundtrip`) to run the tests on the VM with every run saved to bytes and
+Set `CODEMODE_ROUNDTRIP=1` (`bun run test:roundtrip`) to run the tests with every run saved to bytes and
 restored into a brand-new runtime at every host call and every few steps.
 
 ### `Extension.make`
@@ -248,7 +246,7 @@ Every value crossing in either direction is converted, never shared: arguments c
 copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
 extension throws at `CodeMode.make`.
 
-Functions inside a result have no data form, so a suspended VM run loses them by default: after a resume, calling one
+Functions inside a result have no data form, so a suspended run loses them by default: after a resume, calling one
 throws a `TypeError`. An extension can preserve them across suspend and resume with `snapshot` hooks. `encode` receives
 a value one of the extension's functions returned, as the host function returned it, and returns plain data (JSON
 values and `Uint8Array`s); on resume, `decode` receives that data once per value and returns a host value of the same
