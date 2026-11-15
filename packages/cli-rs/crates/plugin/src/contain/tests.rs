@@ -187,6 +187,30 @@ fn time_on_a_run_queue_is_not_charged() {
     }
 }
 
+// Expected (FT-13): the overrun judges the CPU time the call used, where the OS tells it. A call that blocks for 250 ms
+// without the CPU (a sleep, as a page fault served from swap, a lock or a slow disk is) is no overrun, though its wall
+// time is over the limit; that wall time stays in what the frame budget and the slow report count. One that keeps the
+// CPU for 150 ms is an overrun. On the real clocks.
+#[cfg(any(unix, windows))]
+#[test]
+fn an_overrun_is_judged_by_cpu_time_not_wall_time() {
+    let monitor = Monitor::default();
+    let slot = monitor.slot(&Artifact::builtin("p"));
+    let ((), blocked) = monitor.call(slot, "run-command", || std::thread::sleep(Duration::from_millis(250)));
+    assert!(blocked.took >= Duration::from_millis(250), "{blocked:?}");
+    assert!(blocked.cpu.is_some_and(|cpu| cpu < Duration::from_millis(100)), "{blocked:?}");
+    assert!(!blocked.overrun, "{blocked:?}");
+    // Its wall time still counts where the slow report and `/plugins`' details read it.
+    assert!(monitor.calls_time("p") >= Duration::from_millis(250));
+    let ((), busy) = monitor.call(slot, "run-command", || {
+        let start = thread_cpu().unwrap();
+        while thread_cpu().unwrap() - start < Duration::from_millis(150) {
+            std::hint::spin_loop();
+        }
+    });
+    assert!(busy.cpu.is_some_and(|cpu| cpu >= Duration::from_millis(150)) && busy.overrun, "{busy:?}");
+}
+
 // Expected (Linux): what the kernel says this thread waited on a run queue grows while another thread holds its only
 // CPU, and the call that waited is charged less than its wall time by about that much.
 #[cfg(target_os = "linux")]
