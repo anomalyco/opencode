@@ -222,9 +222,19 @@ export function createComposerAttachments(
       return
     }
 
-    const files = event.dataTransfer?.files
+    const files = Array.from(event.dataTransfer?.files ?? [])
 
-    if (files) await addAttachments(Array.from(files))
+    if (files.length > 0) {
+      await addAttachments(files)
+
+      return
+    }
+
+    if (!plainText) return
+    const text = plainText.includes("\r") ? plainText.replace(/\r\n?/g, "\n") : plainText
+
+    input.focusEditor()
+    input.addPart({ type: "text", content: text, start: 0, end: 0 })
   }
 
   onMount(() => {
