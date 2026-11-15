@@ -365,6 +365,17 @@ impl Loader {
         let checked = deps::check(&bytes, target.project);
         // Opening the library runs its code: the record names the build while it does, before its ID is known.
         let slot = registry.monitor().slot(&crate::contain::Artifact::external("", name, &format!("{digest:016x}")));
+        // A crash in a build the record cannot name would restart into the same build: it does not run at all (final
+        // review big-boi 11).
+        let checked = checked.and_then(|()| match registry.monitor().attributed(slot) {
+            true => Ok(()),
+            false => Err(format!(
+                "the crash guard cannot name this build ({} builds this run at most, a path of about {} bytes at \
+                 most), so it does not run; restart opencode-native, or move the plugin to a shorter path",
+                crate::contain::record::NAMES,
+                crate::contain::record::NAME_BYTES
+            )),
+        });
         let (loaded, _) = registry.monitor().call(slot, "load", || {
             checked.and_then(|()| {
                 self.backend.load_read(host, &bytes, quarantine.as_deref(), &file, target.options.as_deref())

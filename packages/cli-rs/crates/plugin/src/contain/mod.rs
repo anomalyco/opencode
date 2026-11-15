@@ -391,23 +391,46 @@ impl Monitor {
         self.record.get().map(|(record, _)| record)
     }
 
-    /// The slot of `artifact`, made on first use: each build has its own.
+    /// The slot of `artifact`, made on first use: each build has its own. A library is opened (and its load timed)
+    /// before its ID is known: its build keeps that one slot once it is named, so a crash in its load and in its
+    /// activation names the same artifact (final review big-boi 11).
     pub fn slot(&self, artifact: &Artifact) -> Slot {
         let mut plugins = self.plugins.borrow_mut();
         if let Some(index) = plugins.iter().position(|stats| stats.artifact == *artifact) {
             return Slot(index as u16);
         }
-        // A library is opened (and its load timed) before its ID is known: the slot with the ID takes that load over.
-        let load = plugins
-            .iter()
-            .find(|stats| stats.artifact == Artifact { id: String::new(), ..artifact.clone() })
-            .and_then(|stats| stats.load);
-        plugins.push(Stats { artifact: artifact.clone(), load, ..Stats::default() });
+        let build = |stats: &Stats| {
+            artifact.target.is_some()
+                && (stats.artifact.target.as_ref(), stats.artifact.digest.as_ref())
+                    == (artifact.target.as_ref(), artifact.digest.as_ref())
+                && (stats.artifact.id.is_empty() || artifact.id.is_empty())
+        };
+        if let Some(index) = plugins.iter().position(build) {
+            let stats = &mut plugins[index];
+            // Named once its ID is known. A record that cannot hold the longer name keeps the build's target and
+            // digest, which name the artifact all the same.
+            if stats.artifact.id.is_empty() && !artifact.id.is_empty() {
+                if let Some((record, _)) = self.record.get() {
+                    record.name(index as u16, artifact);
+                }
+                stats.artifact = artifact.clone();
+            }
+            return Slot(index as u16);
+        }
+        plugins.push(Stats { artifact: artifact.clone(), ..Stats::default() });
         let slot = (plugins.len() - 1) as u16;
         if let Some((record, _)) = self.record.get() {
             record.name(slot, artifact);
         }
         Slot(slot)
+    }
+
+    /// Whether a crash in a call of `slot` names its artifact: always without a record, as no parent restarts the
+    /// client then. An external build the record cannot name is not admitted (final review big-boi 11).
+    pub fn attributed(&self, slot: Slot) -> bool {
+        let Some((record, _)) = self.record.get() else { return true };
+        let plugins = self.plugins.borrow();
+        plugins.get(usize::from(slot.0)).is_some_and(|stats| record.named(slot.0) == Some(stats.artifact.clone()))
     }
 
     /// Runs `f` as call `kind` of the plugin in `slot`: timed, and named in the record while it runs. A call within a
