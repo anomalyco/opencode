@@ -7,8 +7,9 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-# The host's own build: it constructs and matches the contract's types whole, so a type a later 2.x extends
-# breaks the host's build until it handles the addition. A plugin never turns it on: without it the types are
+# For the host only (provisional): the host constructs and matches the contract's types whole, so a type a later
+# 2.x extends breaks the host's build until it handles the addition. It is not part of the SDK's compatibility
+# promise: a crate that turns it on may break on any later 2.x. A plugin never turns it on; without it the types are
 # `#[non_exhaustive]`, and what a later 2.x adds is no break of a plugin's source (carbon-4).
 host = []
 # What a later 2.x adds, for the SDK's own test that a pinned plugin's source builds through it (`tests/sdk.rs`).

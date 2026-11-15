@@ -239,8 +239,10 @@ fn versions_follow_the_abi_rules() {
     );
 
     // A 1.x plugin that asks for the 1.5 host with `requires_minor = 5` loads here and is refused by a 1.4 host; one
-    // that asks for 1.6, the last minor of ABI 1, loads here and is refused by a 1.5 host.
+    // that asks for 1.6, the last minor of ABI 1, loads here and is refused by a 1.5 host. The form still builds what it
+    // built before 2.0, a table of ABI 1.6 behind `opencode_plugin_v1`, though it warns as deprecated (O-125).
     let needs = build("requires-1-5");
+    assert_eq!(Native.inspect(&needs).unwrap(), Inspected { major: 1, minor: 6, version: Some("0.1.0".to_owned()) });
     assert!(Library::open(&needs, None, V1_MINOR).is_ok());
     assert_eq!(
         Library::open(&needs, None, 4).err().unwrap(),

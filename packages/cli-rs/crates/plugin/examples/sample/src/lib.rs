@@ -248,10 +248,10 @@ export_plugin!(@v1_0 "sample", setup);
 
 // Needs the 1.5 host, as a plugin built around the composer asks.
 #[cfg(feature = "requires-1-5")]
-export_plugin!(abi1, "sample", setup, requires_minor = 5);
+export_plugin!("sample", setup, requires_minor = 5);
 // Needs the 1.6 host, as a plugin built around its reads asks.
 #[cfg(feature = "requires-1-6")]
-export_plugin!(abi1, "sample", setup, requires_minor = 6);
+export_plugin!("sample", setup, requires_minor = 6);
 // This plugin as one of ABI 1.6, through the entry of ABI 1.
 #[cfg(feature = "abi-1-6")]
 export_plugin!(@version 1, opencode_plugin_abi::V1_MINOR, 4, "sample", setup);

@@ -48,7 +48,7 @@ unsafe extern "C" fn reference_describe(out: *mut Owned) -> i32 {
 }
 
 /// The reference's table through the SDK's byte shims, as a library of `major` exports it: 2.0, or 1.x as
-/// `export_plugin!(abi1, .., requires_minor = 4)` does.
+/// `export_plugin!(.., requires_minor = 4)` does.
 fn reference(major: u32) -> PluginApi {
     PluginApi {
         size: size_of::<PluginApi>(),
