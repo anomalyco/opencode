@@ -39,7 +39,7 @@ pub struct Stats {
 }
 
 /// The longest panic report the host keeps, in bytes.
-const REPORT: usize = 4096;
+pub(crate) const REPORT: usize = 4096;
 
 pub(crate) struct Mailbox {
     state: Mutex<State>,

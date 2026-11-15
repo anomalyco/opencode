@@ -3389,7 +3389,7 @@ fn a_buffer_the_plugin_cannot_have_written_is_refused_unread() {
         (Owned { ptr: std::ptr::null_mut(), len: 0, cap: 0 }, Ok(b"")),
         (Owned { ptr: std::ptr::null_mut(), len: 5, cap: 5 }, Err("a null buffer of 5 bytes")),
         (Owned { ptr, len: 4, cap: 3 }, Err("a buffer of 4 bytes in 3 of room")),
-        (Owned { ptr, len: MAX_BUFFER + 1, cap: usize::MAX }, Err("over")),
+        (Owned { ptr, len: abi::MAX_BUFFER + 1, cap: usize::MAX }, Err("over")),
         (Owned { ptr, len: 3, cap: 3 }, Ok(b"abc")),
     ];
     for (index, (out, expected)) in rows.into_iter().enumerate() {
@@ -3401,6 +3401,36 @@ fn a_buffer_the_plugin_cannot_have_written_is_refused_unread() {
         }
         assert_eq!(FREED.load(Ordering::SeqCst), index + 1, "row {index} was not freed once");
     }
+}
+
+// Expected (big-boi 5, carbon-8): what a plugin lends the host's entries is checked as what it returns: `call`,
+// `send` and `report` refuse a null pointer with a length, and a length over the bound, before they read it or reach
+// the mailbox; `free` takes back the host's buffer by its pointer and capacity, whatever its length says.
+#[test]
+fn the_host_refuses_borrowed_bytes_a_plugin_cannot_have_lent() {
+    let bytes = *b"{}";
+    let bad = [
+        (Bytes { ptr: std::ptr::null(), len: 3 }, "a null buffer of 3 bytes"),
+        (Bytes { ptr: bytes.as_ptr(), len: abi::MAX_BUFFER + 1 }, "over"),
+    ];
+    for (borrowed, needle) in bad {
+        let mut out = Owned::EMPTY;
+        // SAFETY: refused before anything is read, as the test checks; `out` is valid for writes.
+        let status = unsafe { host_call(std::ptr::null_mut(), borrowed, &mut out) };
+        let text = String::from_utf8(unsafe { out.to_vec() }).unwrap();
+        unsafe { host_free(out) };
+        assert_eq!(status, abi::ERROR);
+        assert!(text.contains("a bad host request") && text.contains(needle), "{text}");
+        // Without a mailbox an intact send is `CLOSED`: the refusal comes first.
+        assert_eq!(unsafe { host_send(std::ptr::null_mut(), Bytes::new(b""), borrowed) }, abi::ERROR);
+        assert_eq!(unsafe { host_send(std::ptr::null_mut(), borrowed, Bytes::new(b"{}")) }, abi::ERROR);
+        unsafe { host_report(std::ptr::null_mut(), borrowed) };
+    }
+    assert_eq!(unsafe { host_send(std::ptr::null_mut(), Bytes::new(b""), Bytes::new(b"{}")) }, abi::CLOSED);
+    let mut owned = Owned::from_vec(b"abc".to_vec());
+    owned.len = usize::MAX;
+    // SAFETY: `ptr` and `cap` are the host's own.
+    unsafe { host_free(owned) };
 }
 
 // Expected (reviews bigboi-12, carbon-2): the host answers `call` on its UI thread only: one from another thread is
