@@ -252,10 +252,39 @@ fn command(config: &Config, dir: &Path) -> std::process::Command {
 }
 
 /// The variables of the client's environment the JS host gets (carbon-1): what locates the user, the language, the
-/// temporary directory and the proxy, and the client's own; not Bun's or Node's options, which could load code.
+/// temporary directory and the proxy, what names the terminal (FT-8: a plugin that detects it, as it does in the TS
+/// client's process), and the client's own; not Bun's or Node's options, which could load code.
 fn inherited(name: &std::ffi::OsStr) -> bool {
     let name = name.to_string_lossy().to_ascii_uppercase();
     const NAMES: &[&str] = &[
+        "TERM",
+        "TERM_PROGRAM",
+        "TERM_PROGRAM_VERSION",
+        "COLORTERM",
+        "COLORFGBG",
+        "NO_COLOR",
+        "FORCE_COLOR",
+        "TMUX",
+        "TMUX_PANE",
+        "STY",
+        "TERMINAL_EMULATOR",
+        "VTE_VERSION",
+        "KONSOLE_VERSION",
+        "ITERM_SESSION_ID",
+        "ITERM_PROFILE",
+        "WT_SESSION",
+        "WT_PROFILE_ID",
+        "WEZTERM_EXECUTABLE",
+        "WEZTERM_PANE",
+        "KITTY_WINDOW_ID",
+        "KITTY_PID",
+        "KITTY_INSTALLATION_DIR",
+        "GHOSTTY_RESOURCES_DIR",
+        "GHOSTTY_BIN_DIR",
+        "ALACRITTY_WINDOW_ID",
+        "CONEMUANSI",
+        "WSL_DISTRO_NAME",
+        "SSH_TTY",
         "PATH",
         "HOME",
         "USER",
@@ -1960,6 +1989,10 @@ mod tests {
             assert!(!inherits(name), "{name}");
         }
         assert!(inherits("HOME") && inherits("XDG_CONFIG_HOME") && inherits("OPENCODE_CHANNEL"));
+        // What names the terminal, which a plugin reads to detect it (FT-8).
+        for name in ["TERM", "TERM_PROGRAM", "COLORTERM", "TMUX", "WT_SESSION", "KITTY_WINDOW_ID", "LC_TERMINAL"] {
+            assert!(inherits(name), "{name}");
+        }
         let be_bun = |config: &Config| {
             let command = super::command(config, dir);
             command
