@@ -2,6 +2,16 @@ import { expect, test } from "bun:test"
 import { navigationTurn } from "./navigation-turn"
 import { createDocumentState, transitionDocument } from "./page-machine"
 
+test.each(["navigate", "reload"] as const)("%s joins the unissued preview restore that bootstraps CDP", async method => {
+  const issued: string[] = []
+  const turn = navigationTurn(undefined, () => {}, () => {})
+  const restore = turn.begin(new AbortController().signal)
+  const saved = "file:///work/report.html"
+  expect(turn.interrupt(method, saved)).toBe(method === "reload" ? saved : undefined)
+  await restore("oc-preview://test/report.html", () => { issued.push(saved) })
+  expect(issued).toEqual([saved])
+})
+
 test.each(["stop", "oc-preview://private/report", "https://next.test"])('a later %s wins over a deferred web navigation', async next => {
   const gate = Promise.withResolvers<void>()
   const issued: string[] = []
