@@ -35,7 +35,13 @@ nothing: run `opencode-native plugin add <spec>`", and named so in the notice be
 plugins (`GET /api/plugin`, active with `features.tui`, by the package target or the local path the server reports,
 TS `serverTuiPlugins`, `context.tsx:96-103`, `301-305`) load the same way, in TS's order: the discovered directories,
 then the server parts, then `cli.json`; one the cache does not hold is left out, as TS leaves out an optional target it
-cannot load (`context.tsx:362-363`). With the JS host off, an npm entry and a server part are listed as a directory is,
+cannot load (`context.tsx:362-363`). Approval goes by where a part's code lives (O-146). A part whose files are
+inside the project (the nearest directory with `.git` or `.hg`), as a local path in the project's `opencode.json` is,
+is a project plugin: it waits for the user's approval as a project's plugin directory does, keyed by the same
+artifact (the directory and the hash of its files). A part that names a project's plugin directory another way (a
+link) is that plugin, one target with one decision. A package from the user's npm cache needs no approval, even when a
+project's configuration names it: its code is not in the project, and TS loads it so. TS asks for no approval at all;
+`F16-project-plugin-approval` covers this. With the JS host off, an npm entry and a server part are listed as a directory is,
 with the JS-host reason, each server part by its package target or path beside the server plugin's own row.
 `scenarios/P.8/cache-cli.app.ts` and `cache-server.app.ts` drive both on each side from one cache holding a pinned
 tarball: equal screens and requests. `crates/tui/tests/all/plugin_npm.rs` checks the keys of 34 spec forms against
