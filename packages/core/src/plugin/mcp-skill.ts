@@ -86,6 +86,7 @@ export const Plugin = define({
           {
             id,
             name: Skill.Name.make(id),
+            server: skill.server,
             description: entry.frontmatter.description,
             ...(autoinvoke === undefined ? {} : { autoinvoke }),
             path: AbsolutePath.make(Skill.uri(id, MANIFEST)),

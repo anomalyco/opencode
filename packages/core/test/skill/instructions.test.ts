@@ -4,6 +4,7 @@ import { Effect, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { PermissionPolicy } from "@opencode/core/permission/policy"
+import { Mcp } from "@opencode/core/mcp/index"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
 import { SkillInstructions } from "@opencode/core/skill/instructions"
@@ -43,6 +44,7 @@ const manual = Skill.Info.make({
 const layer = (list: () => Skill.Info[]) =>
   AppNodeBuilder.build(SkillInstructions.node, [
     Skill.node.replace(Layer.mock(Skill.Service, { list: () => Effect.succeed(list()) })),
+    Mcp.node.replace(Layer.mock(Mcp.Service, {})),
   ])
 
 describe("SkillInstructions", () => {

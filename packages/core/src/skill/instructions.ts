@@ -2,7 +2,9 @@ export * as SkillInstructions from "./instructions.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import type { PermissionPolicy } from "../permission/policy.js"
+import { PermissionPolicy } from "../permission/policy.js"
+import { Mcp } from "../mcp/index.js"
+import { McpTool } from "../tool/mcp.js"
 import { Skill } from "../skill.js"
 import { Instructions } from "../instructions/index.js"
 
@@ -56,12 +58,28 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skills = yield* Skill.Service
+    const mcp = yield* Mcp.Service
 
     return Service.of({
       load: Effect.fn("SkillInstructions.load")(function* (policy) {
-        const available = Skill.available(yield* skills.list({ content: false }), policy)
+        const listed = Skill.available(yield* skills.list({ content: false }), policy)
+        // An MCP server's skills are hidden while the Session can use none of the tools it has; a server serving only
+        // skills keeps them.
+        const tools = listed.some((skill) => skill.server !== undefined) ? yield* mcp.tools() : []
+        const blocked = (server: string) => {
+          const owned = tools.filter((tool) => tool.server === server)
+          return (
+            owned.length > 0 &&
+            owned.every(
+              (tool) => PermissionPolicy.evaluate(policy, McpTool.name(tool.server, tool.name), "*").effect === "deny",
+            )
+          )
+        }
+        const available = listed
           .flatMap((skill) =>
-            skill.description === undefined || skill.autoinvoke === false
+            skill.description === undefined ||
+            skill.autoinvoke === false ||
+            (skill.server !== undefined && blocked(skill.server))
               ? []
               : [{ id: skill.id, name: skill.name, description: skill.description }],
           )
@@ -81,4 +99,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Skill.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Skill.node, Mcp.node] })

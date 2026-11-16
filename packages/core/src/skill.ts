@@ -30,7 +30,10 @@ export type Name = Skill.Name
 
 export { Event } from "@opencode/schema/skill"
 
-export type Summary = Omit<Info, "content">
+export type Summary = Omit<Info, "content"> & {
+  /** The MCP server that serves the skill, for a skill listed through MCP Skills. */
+  readonly server?: string
+}
 /** A skill's `SKILL.md` body, inline or loaded when the skill is. */
 export type Content = string | Effect.Effect<string, unknown>
 /** A supporting file, inline or read when it is. */

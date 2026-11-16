@@ -8,6 +8,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Document, Event } from "@opencode/schema/config"
+import { Mcp } from "@opencode/core/mcp/index"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
 import { SkillInstructions } from "@opencode/core/skill/instructions"
@@ -20,6 +21,7 @@ const configLayer = Config.testLayer()
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Skill.node, SkillInstructions.node, Agent.node, Bus.node, FSUtil.node]), [
     Config.node.replace(configLayer),
+    Mcp.node.replace(Layer.mock(Mcp.Service, {})),
   ]).pipe(Layer.provideMerge(configLayer)),
 )
 

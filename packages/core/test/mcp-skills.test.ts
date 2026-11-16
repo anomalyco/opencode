@@ -23,6 +23,7 @@ import { SessionInstructions } from "@opencode/core/session/instructions"
 import { Skill } from "@opencode/core/skill"
 import { SkillInstructions } from "@opencode/core/skill/instructions"
 import { Tool } from "@opencode/core/tool"
+import { McpTool } from "@opencode/core/tool/mcp"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { SkillTool } from "@opencode/core/tool/plugin/skill"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
@@ -152,7 +153,7 @@ const REVIEW = "---\nname: review\ndescription: Review changes\n---\nReview.\n"
  * below `skill://`, each mapping file paths to contents; `serve` overrides what a file read returns. Records every
  * `resources/read`, `skills/list` and the client's declared capabilities.
  */
-const skillServer = (skills: Record<string, Record<string, string | Uint8Array>>) =>
+const skillServer = (skills: Record<string, Record<string, string | Uint8Array>>, tools: ReadonlyArray<string> = []) =>
   Effect.acquireRelease(
     Effect.promise(async () => {
       const entries: ServedSkill[] = await Promise.all(
@@ -176,6 +177,7 @@ const skillServer = (skills: Record<string, Record<string, string | Uint8Array>>
           },
         },
       }).attach(server)
+      for (const tool of tools) server.registerTool(tool, { description: tool }, () => ({ content: [] }))
       const transport = new WebStandardStreamableHTTPServerTransport({
         sessionIdGenerator: () => crypto.randomUUID(),
         enableJsonResponse: true,
@@ -255,6 +257,7 @@ describe("MCP skills", () => {
           name: Skill.Name.make("team:deploy"),
           description: "Deploy the app",
           path: AbsolutePath.make("skill://team:deploy/SKILL.md"),
+          server: "team",
         },
       ])
       const skills = yield* Skill.Service
@@ -263,6 +266,23 @@ describe("MCP skills", () => {
       expect(yield* skills.files(Skill.ID.make("team:deploy"))).toEqual(["references/guide.md", "scripts/run.sh"])
       const instructions = yield* SkillInstructions.Service
       expect((yield* instructions.load([]).pipe(Effect.flatMap(readInitial))).text).toContain("<id>team:deploy</id>")
+      expect(reads).toEqual([])
+    }),
+  )
+
+  it.live("hides a server's skills while the Session can use none of its tools", () =>
+    Effect.gen(function* () {
+      const server = yield* skillServer({ deploy: deployFiles }, ["ping"])
+      const mcp = yield* Mcp.Service
+      yield* connect(server.url, ["team:deploy"])
+      yield* eventually(mcp.tools(), (tools) => tools.length === 1)
+      const instructions = yield* SkillInstructions.Service
+      const shown = yield* instructions.load([]).pipe(Effect.flatMap(readInitial))
+      expect(shown.text).toContain("<id>team:deploy</id>")
+      const denied = yield* instructions
+        .load([{ action: McpTool.name("team", "ping"), resource: "*", effect: "deny" }])
+        .pipe(Effect.flatMap(readInitial))
+      expect(denied.text).not.toContain("team:deploy")
       expect(reads).toEqual([])
     }),
   )
