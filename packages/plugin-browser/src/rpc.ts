@@ -380,7 +380,7 @@ export const Operations = [
   ),
   operation(
     "press",
-    "Press a named key or key chord in this tab, for example Enter, ArrowDown, Control+A, or Meta+A. Focus an input first when needed.",
+    "Press a page key or chord, for example Enter, ArrowDown, Control+A, or Meta+A. Clipboard and native menu shortcuts are refused; use fill for text and evaluate to read page text.",
     { ...tab, key: short },
     Tab,
   ),

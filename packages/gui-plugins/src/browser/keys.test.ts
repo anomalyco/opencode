@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test"
-import { pageLetter, pageReload, pageShortcut, type PageKey } from "./keys"
+import { agentKeyRefusal, pageLetter, pageReload, pageShortcut, type PageKey } from "./keys"
+
+test("agent key dispatch leaves the system clipboard and native menus to the user", () => {
+  for (const [key, flags] of [["V", 2], ["v", 4], ["c", 10], ["C", 4], ["X", 2], ["x", 4], ["Insert", 8], ["Insert", 2], ["Delete", 8], ["F10", 8], ["ContextMenu", 0]] as const)
+    expect(agentKeyRefusal(key, flags)).toContain("fill")
+  for (const [key, flags] of [["A", 2], ["A", 4], ["v", 0], ["Delete", 0], ["Enter", 0]] as const)
+    expect(agentKeyRefusal(key, flags)).toBeUndefined()
+})
 
 /** A key press with `mod` as the platform's modifier: Command on macOS, Control elsewhere. */
 const press = (modifiers: string, key: string, mac: boolean, code = ""): PageKey => {

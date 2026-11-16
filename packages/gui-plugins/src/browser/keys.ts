@@ -1,6 +1,18 @@
 /** A key press in the page, with Electron's `Input` field names. */
 export type PageKey = Pick<Electron.Input, "key" | "code" | "control" | "meta" | "shift" | "alt">
 
+/** Reject clipboard and native menu accelerators before a CDP key event reaches Blink's editor. */
+export function agentKeyRefusal(key: string, modifiers: number, virtualCode?: number) {
+  const shortcuts = (modifiers & 6) !== 0
+  const shift = (modifiers & 8) !== 0
+
+  if ((shortcuts && (/^[cvx]$/i.test(key) || [67, 86, 88].includes(virtualCode ?? 0))) ||
+    ((key === "Insert" || virtualCode === 45) && (shift || (modifiers & 2) !== 0)) ||
+    (shift && (key === "Delete" || virtualCode === 46 || key === "F10" || virtualCode === 121)) ||
+    key === "ContextMenu" || virtualCode === 93)
+    return "Agent input cannot use clipboard or context-menu shortcuts. Use fill/type to enter text and evaluate to read page text."
+}
+
 export type PageShortcut = {
   readonly key: string
   readonly code: string

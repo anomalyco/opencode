@@ -10,7 +10,7 @@ import { CodedError } from "./errors"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
-import { pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
+import { agentKeyRefusal, pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
 import {
   createDocumentState,
   documentGeneration,
@@ -1049,7 +1049,6 @@ export function createBrowserPage(
                   arguments: [{ objectId }],
                   awaitPromise: true,
                   returnByValue: true,
-                  userGesture: true,
                 },
                 element.sessionID,
               )
@@ -1061,7 +1060,6 @@ export function createBrowserPage(
                 contextId: (context ?? main)?.id,
                 awaitPromise: true,
                 returnByValue: true,
-                userGesture: true,
               },
               context?.sessionID,
             ))
@@ -1513,7 +1511,6 @@ export function createBrowserPage(
           arguments: args.map((value) => ({ value })),
           returnByValue: true,
           awaitPromise: true,
-          userGesture: true,
         },
         element.sessionID,
       )
@@ -1829,6 +1826,10 @@ export function createBrowserPage(
         : /^F([1-9]|1[0-2])$/.test(key)
           ? 111 + Number(key.slice(1))
           : undefined)
+
+    const refusal = agentKeyRefusal(key, modifiers, code)
+
+    if (refusal) throw new Error(refusal)
 
     if (code === undefined)
       throw new Error(
