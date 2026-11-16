@@ -256,6 +256,68 @@ test("ordinary prompts do not wait for the destination command catalog", async (
   expect(fixture.sent[0]).toMatchObject({ text: "Review the changes" })
 })
 
+test.each(["agent", "command"] as const)(
+  "a partial %s catalog waits for plugin startup before sending",
+  async (startup) => {
+    await using fixture = await workspace("model", {
+      startup,
+      text: startup === "command" ? "/review changed files" : undefined,
+    })
+    await fixture.switchWorkspace()
+    fixture.setup.mockInput.pressEnter()
+    await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
+    fixture.release()
+    await fixture.setup.waitForVisualIdle({ quietFrames: 3 })
+    expect(fixture.setup.captureCharFrame()).toContain("Loading workspace…")
+    expect(fixture.created).toHaveLength(0)
+    expect(fixture.sent).toHaveLength(0)
+    expect(fixture.commands).toHaveLength(0)
+
+    // The activation's update events have not arrived yet. Preparation must refresh
+    // the early catalog itself instead of consuming its empty or partial snapshot.
+    fixture.activate()
+    await fixture.setup.waitFor(() => fixture.sent.length + fixture.commands.length === 1)
+    expect(fixture.created[0]).toMatchObject({ location: { directory: fixture.target }, agent: "review" })
+    if (startup === "command") {
+      expect(fixture.commands[0]).toMatchObject({ name: "review", text: "changed files" })
+      expect(fixture.sent).toHaveLength(0)
+      return
+    }
+    expect(fixture.sent[0]).toMatchObject({ text: "Review the changes" })
+  },
+)
+
+test("an unknown slash remains ordinary text after the initialized command catalog is checked", async () => {
+  await using fixture = await workspace("model", { text: "/unknown changed files" })
+  await fixture.switchWorkspace()
+  fixture.setup.mockInput.pressEnter()
+  await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
+  fixture.release()
+  await fixture.setup.waitFor(() => fixture.sent.length === 1)
+  expect(fixture.sent[0]).toMatchObject({ text: "/unknown changed files" })
+  expect(fixture.commands).toHaveLength(0)
+})
+
+test("editing while plugin startup waits cancels the send until a fresh Enter", async () => {
+  await using fixture = await workspace("model", { startup: "agent" })
+  await fixture.switchWorkspace()
+  fixture.setup.mockInput.pressEnter()
+  await fixture.setup.waitForFrame((frame) => frame.includes("Loading workspace…"))
+  fixture.release()
+  await fixture.setup.waitForVisualIdle({ quietFrames: 3 })
+  expect(fixture.setup.captureCharFrame()).toContain("Loading workspace…")
+  await fixture.setup.mockInput.typeText(" and tests")
+  await fixture.setup.waitForFrame((frame) => !frame.includes("Loading workspace…"))
+  fixture.activate()
+  await fixture.setup.waitForVisualIdle({ quietFrames: 3 })
+  expect(fixture.created).toHaveLength(0)
+  expect(fixture.sent).toHaveLength(0)
+  expect(fixture.setup.renderer.currentFocusedEditor?.plainText).toBe("Review the changes and tests")
+  fixture.setup.mockInput.pressEnter()
+  await fixture.setup.waitFor(() => fixture.sent.length === 1)
+  expect(fixture.sent[0]).toMatchObject({ text: "Review the changes and tests" })
+})
+
 test("opening the external editor cancels a waiting send and keeps the edited draft", async () => {
   const editor = await import("../src/editor")
   const opened = Promise.withResolvers<void>()
@@ -298,6 +360,7 @@ async function workspace(
     animations?: boolean
     holdRetry?: boolean
     misplaced?: boolean
+    startup?: "agent" | "command"
     // Open an existing session in the source worktree instead of the home screen.
     session?: boolean
     // Give the existing session a queued prompt, which a blank Enter promotes.
@@ -326,6 +389,9 @@ async function workspace(
   if (!options.holdRetry) retry.resolve()
   const command = Promise.withResolvers<void>()
   if (!options.command) command.resolve()
+  const activation = Promise.withResolvers<void>()
+  if (!options.startup) activation.resolve()
+  let starting = options.startup !== undefined
   const created: unknown[] = []
   const sent: unknown[] = []
   const commands: unknown[] = []
@@ -364,13 +430,30 @@ async function workspace(
       }
       if (destination && url.pathname === "/api/command") await command.promise
       if (url.pathname === "/api/location") return json(location)
+      if (url.pathname === "/api/plugin") {
+        if (destination) await activation.promise
+        return json({
+          location,
+          data: [
+            {
+              id: "opencode.agent",
+              source: { type: "builtin" },
+              features: { server: true },
+              state: { status: "active" },
+            },
+          ],
+        })
+      }
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
       if (url.pathname === "/api/agent")
         return json({
           // A misplaced response publishes the destination's agents under another location's key.
           location:
             destination && options.misplaced ? { ...location, directory: path.join(target, "canonical") } : location,
-          data: [{ id: destination ? "review" : "build", mode: "primary", hidden: false, permissions: [] }],
+          data:
+            destination && starting && options.startup === "agent"
+              ? []
+              : [{ id: destination ? "review" : "build", mode: "primary", hidden: false, permissions: [] }],
         })
       if (destination && url.pathname === "/api/model") {
         modelLoads++
@@ -388,7 +471,14 @@ async function workspace(
         return json(destination ? [{ type: "document", info: { model: "provider/target-model" } }] : [])
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
       if (url.pathname === "/api/command")
-        return json({ location, data: [{ name: "review", description: "Review the changes" }] })
+        return json({
+          location,
+          data: [
+            destination && starting && options.startup === "command"
+              ? { name: "existing", description: "Already registered command" }
+              : { name: "review", description: "Review the changes" },
+          ],
+        })
       if (url.pathname === "/api/worktree") return json([{ directory: source }, { directory: target, strategy: "git" }])
       if (url.pathname === "/api/session" && request.method === "POST") {
         const body = await request.json()
@@ -470,6 +560,10 @@ async function workspace(
     requested: requested.promise,
     release: gate.resolve,
     releaseCommand: command.resolve,
+    activate() {
+      starting = false
+      activation.resolve()
+    },
     move(directory: string) {
       moves++
       setup.events.emit({
@@ -524,6 +618,7 @@ async function workspace(
     async [Symbol.asyncDispose]() {
       gate.resolve()
       command.resolve()
+      activation.resolve()
       retry.resolve()
       await setup[Symbol.asyncDispose]()
     },

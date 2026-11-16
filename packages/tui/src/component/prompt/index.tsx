@@ -1096,12 +1096,12 @@ export function Prompt(props: PromptProps) {
   })
 
   let submitting = false
+  const initializedCommands = new Set<string>()
   const [pendingSubmit, setPendingSubmit] = createSignal<{
     location: string
     sessionID?: string
     mode: "normal" | "shell"
     prompt: PromptInfo
-    delivery: SessionInbox.Delivery
   }>()
   // A waiting send only goes out for the draft, mode, session, and location it was made for.
   // Opening a dialog cancels it too, so it cannot go out behind the workspace picker, to the
@@ -1179,18 +1179,24 @@ export function Prompt(props: PromptProps) {
     // A worktree switch updates the active location before its catalogs arrive.
     // Wait for their loads instead of silently dropping this submission.
     const location = currentLocation.ref ?? data.location.default()
+    const locationID = locationKey(location)
     const slashHead = parseSlashHead(inputText, /\s/)
+    const knownCommand = () =>
+      slashHead !== undefined &&
+      (data.location.command.list(location) ?? []).some((command) => command.name === slashHead.name)
     // Slash input also needs the commands, or it would be sent as an ordinary prompt.
     const needsCommands = store.mode === "normal" && slashHead !== undefined
     const loaded = () =>
-      local.catalogsLoaded(location) && (!needsCommands || data.location.command.list(location) !== undefined)
+      local.catalogsLoaded(location) &&
+      !!local.agent.current() &&
+      (!needsCommands ||
+        (data.location.command.list(location) !== undefined && (knownCommand() || initializedCommands.has(locationID))))
     if (!loaded()) {
       const pending = {
-        location: locationKey(location),
+        location: locationID,
         sessionID: props.sessionID,
         mode: store.mode,
         prompt: structuredClone(unwrap(store.prompt)),
-        delivery,
       }
       setPendingSubmit(pending)
       const waiting = () => !disposed && pendingSubmit() === pending
@@ -1203,6 +1209,26 @@ export function Prompt(props: PromptProps) {
             local.loadMissingCatalogs(location),
             needsCommands && data.location.command.list(location) === undefined && data.location.command.sync(location),
           ])
+          if (!waiting() || loaded() || !local.catalogsLoaded(location)) return
+          if (needsCommands && data.location.command.list(location) === undefined) return
+          // A cold location can return successful but partial catalogs before its
+          // first plugin activation. Only classify an unresolved slash as text after
+          // that activation, and refresh early snapshots without waiting for SSE.
+          const plugins = await client.api.plugin.list({ location })
+          if (!waiting()) return
+          if (plugins.data.length === 0) throw new Error("Workspace plugins are still loading")
+          await Promise.all(
+            [
+              ...(!local.agent.current() ? [data.location.agent] : []),
+              ...(needsCommands ? [data.location.command] : []),
+            ].map((catalog) => {
+              catalog.invalidate(location)
+              return catalog.sync(location)
+            }),
+          )
+          if (!waiting()) return
+          if (!local.agent.current()) throw new Error("No agent is available in this workspace")
+          if (needsCommands) initializedCommands.add(locationID)
         },
         { retryIf: (error) => waiting() && !isLocationNotFoundError(error) },
       )
@@ -1224,9 +1250,7 @@ export function Prompt(props: PromptProps) {
     // This submission supersedes one still waiting for the catalogs. A blank Enter leaves the draft
     // unchanged, so the effect above would not cancel it, and its retry would submit a second time.
     setPendingSubmit(undefined)
-    const isCommand =
-      slashHead !== undefined &&
-      (data.location.command.list(location) ?? []).some((command) => command.name === slashHead.name)
+    const isCommand = knownCommand()
     const editorSelection = editorContext()
     const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
     if (delivery === "queue" && pendingEditorSelection) {
