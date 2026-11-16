@@ -175,7 +175,7 @@ describe("shell commands across a graceful restart", () => {
                 content: [
                   {
                     type: "text",
-                    text: expect.stringContaining(`Command moved to the background (shell ID: ${shellID})`),
+                    text: expect.stringContaining(`Shell ID: ${shellID}`),
                   },
                   { type: "text", text: expect.stringContaining("You will be notified automatically") },
                 ],

@@ -677,7 +677,7 @@ const backgroundWork: Beat[] = [
     kind: "tool",
     name: "shell",
     input: { command: "bun run dev", description: "Start the dev server", background: true },
-    output: "Command moved to the background (shell ID: shell_dev).",
+    output: "Shell ID: shell_dev",
     metadata: { shellID: "shell_dev", status: "running" },
   },
   { kind: "tool", name: "read", input: { path: "/workspace/src/theme/scheme.ts" }, output: schemeBefore },

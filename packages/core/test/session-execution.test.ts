@@ -815,7 +815,7 @@ describe("SessionRestart background recovery", () => {
             content: [
               {
                 type: "text",
-                text: `Command moved to the background (shell ID: ${info.id}).\nPID: ${info.pid}\nOutput is streaming to: ${info.file}`,
+                text: `Shell ID: ${info.id}\nPID: ${info.pid}\nOutput is streaming to: ${info.file}`,
               },
               { type: "text", text: expect.stringContaining("You will be notified automatically") },
             ],

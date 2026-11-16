@@ -113,14 +113,14 @@ const wallTimeSeconds = (time: ShellSchema.Time, end: number) => Math.max(0, end
 
 const backgroundText = (info: ShellSchema.Info, timeout?: number) =>
   [
-    `Command moved to the background (shell ID: ${info.id}).`,
+    `Shell ID: ${info.id}`,
     ...(info.pid === undefined ? [] : [`PID: ${info.pid}`]),
     `Output is streaming to: ${info.file}`,
     ...(timeout === undefined
       ? []
       : [
           "",
-          `The command did not finish within its timeout of ${timeout / 1_000} seconds and was moved to the background. Do not start another copy while it is running.`,
+          `The command did not finish within its timeout of ${timeout / 1_000} seconds. Do not start another copy while it is running.`,
         ]),
   ].join("\n")
 
