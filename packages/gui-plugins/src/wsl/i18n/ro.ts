@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} a expirat după {{timeout}} ms",
   "error.failedPort": "Nu s-a putut obține portul",
   "menu.remove": "Eliminați",
+  "error.busy": "{{distro}} este ocupat cu altă sarcină. Încearcă din nou după ce o termină.",
 }

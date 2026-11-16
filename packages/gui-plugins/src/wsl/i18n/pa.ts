@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "⁨{{command}}⁩ ⁨{{args}}⁩ لئی مقرر ویلا ⁨{{timeout}}⁩ms پچھوں مُک گیا",
   "error.failedPort": "پورٹ نئیں مل سکی",
   "menu.remove": "ہٹا دیں۔",
+  "error.busy": "⁨{{distro}}⁩ کسے ہور کم وچ رُجھیا اے۔ اوہ مُک جائے تے فیر کوشش کرو۔",
 }

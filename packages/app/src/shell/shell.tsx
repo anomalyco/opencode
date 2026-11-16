@@ -125,7 +125,8 @@ export default function Layout(props: ParentProps) {
       paintSidebarContents()
       paintCollapsedSlots(closed)
     },
-    measure: () => measureSidebarToggles(state.tabsWidth * sidebarHidden()),
+    // The contents slide by their own width, which a peek widens past the docked sidebar's.
+    measure: () => measureSidebarToggles((state.tabsMount?.offsetWidth ?? state.tabsWidth) * sidebarHidden()),
     // A dock from a peek already shows the sidebar, so reduced motion has nothing to fade in.
     element: () => (peek.handedOff() ? undefined : state.tabsPanel),
     distance: () => state.tabsWidth,
@@ -248,7 +249,11 @@ export default function Layout(props: ParentProps) {
             data-slot="vertical-tabs-sidebar"
             data-state={preferences.appearance.sidebarOpen() ? "open" : "closed"}
             data-peek={peek.shown() ? "" : undefined}
-            style={{ "--sidebar-peek-width": `${state.tabsWidth}px` }}
+            style={{
+              "--sidebar-peek-width": peek.shown()
+                ? `calc(${state.tabsWidth}px + var(--shell-inline-inset, 8px))`
+                : `${state.tabsWidth}px`,
+            }}
             ref={(element) => setState("tabsAside", element)}
             class="relative z-10 h-full min-h-0 shrink-0"
           >
@@ -270,14 +275,14 @@ export default function Layout(props: ParentProps) {
                 data-slot="vertical-tabs-peek-surface"
                 aria-hidden="true"
                 class="pointer-events-none absolute inset-y-0 end-0 bg-v2-background-bg-deep shadow-[var(--v2-elevation-floating)]"
-                style={{ width: `${state.tabsWidth}px` }}
+                style={{ width: "var(--sidebar-peek-width)" }}
               />
               <div
                 ref={(element) => setState("tabsMount", element)}
                 data-slot="vertical-tabs-mount"
                 class="absolute inset-y-0 end-0 contain-strict [overflow-clip-margin:var(--sidebar-divider-bleed,0px)] will-change-[opacity] flex min-h-0 flex-col bg-v2-background-bg-deep ps-[var(--sidebar-inset-start)] pe-[var(--sidebar-inset-end)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
                 style={{
-                  width: `${state.tabsWidth}px`,
+                  width: "var(--sidebar-peek-width)",
                   "padding-bottom": "max(10px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
                 }}
               />

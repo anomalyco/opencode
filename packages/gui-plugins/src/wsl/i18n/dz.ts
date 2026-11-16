@@ -55,4 +55,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms གི་ཤུལ་ལས་ དུས་ཚོད་རྫོགས་སོང།",
   "error.failedPort": "འདྲེན་ལམ་ཐོབ་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "menu.remove": "བཏོན་བཏང་",
+  "error.busy": "{{distro}} གིས་ ལཱ་གཞན་ཅིག་འབད་དོ། ཚར་ཞིནམ་ལས་ ལོག་འབད་རྩོལ་བསྐྱེད།",
 }

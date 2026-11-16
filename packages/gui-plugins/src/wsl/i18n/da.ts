@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} fik timeout efter {{timeout}} ms",
   "error.failedPort": "Kunne ikke hente porten",
   "menu.remove": "Fjern",
+  "error.busy": "{{distro}} er optaget af en anden opgave. Prøv igen, når den er færdig.",
 }

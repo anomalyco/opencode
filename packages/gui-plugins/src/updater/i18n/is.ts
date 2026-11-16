@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Næst",
   "releaseNotes.action.hideFuture": "Ekki sýna þetta í framtíðinni",
   "releaseNotes.media.alt": "Gefa út forskoðun",
+  "action.reload": "Endurhlaða til að uppfæra",
+  "action.reloading": "Endurhleður…",
+  "web.ready.title": "Uppfærsla tilbúin",
+  "web.ready.message": "Ný útgáfa af OpenCode er tilbúin. Endurhlaðaðu til að nota hana í öllum opnum gluggum.",
+  "web.reload": "Endurhlaða",
+  "web.reset.title": "Endurhlaða frá netþjóni",
+  "web.reset.description": "Hreinsa vistað afrit forritsins og hlaða núverandi útgáfu netþjónsins",
+  "web.reset.action": "Endurhlaða frá netþjóni",
 }
