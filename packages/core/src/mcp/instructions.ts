@@ -42,6 +42,10 @@ const update = Instructions.listUpdate<Summary>({
   },
 })
 
+/** Whether the ruleset allows at least one of a server's tools, so its instructions and skills are worth showing. */
+export const reachable = (tools: ReadonlyArray<Mcp.Tool>, permissions: Permission.Ruleset) =>
+  tools.some((tool) => Permission.evaluate(McpTool.name(tool.server, tool.name), "*", permissions).effect !== "deny")
+
 export interface Interface {
   /** Lists server instructions reachable under the given ruleset; callers pass the merged agent and Session permissions. */
   readonly load: (permissions: Permission.Ruleset) => Effect.Effect<Instructions.List>
@@ -77,13 +81,7 @@ export const layer = Layer.effect(
             const owned = tools.filter((tool) => tool.server === item.server)
             // Without execute, Code Mode server tools are exposed directly.
             const codemode = canExecute && owned[0]?.codemode !== false
-            if (
-              !owned.some(
-                (tool) =>
-                  Permission.evaluate(McpTool.name(tool.server, tool.name), "*", permissions).effect !== "deny",
-              )
-            )
-              return []
+            if (!reachable(owned, permissions)) return []
             return [
               codemode
                 ? { server: item.server, instructions: item.instructions }

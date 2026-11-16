@@ -3,6 +3,8 @@ export * as SkillInstructions from "./instructions.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Permission } from "../permission.js"
+import { Mcp } from "../mcp/index.js"
+import { McpInstructions } from "../mcp/instructions.js"
 import { Skill } from "../skill.js"
 import { Instructions } from "../instructions/index.js"
 
@@ -56,12 +58,23 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skills = yield* Skill.Service
+    const mcp = yield* Mcp.Service
 
     return Service.of({
       load: Effect.fn("SkillInstructions.load")(function* (permissions) {
-        const available = Skill.available(yield* skills.list({ content: false }), permissions)
+        const listed = Skill.available(yield* skills.list({ content: false }), permissions)
+        // An MCP server's skills are hidden while the Session can use none of the tools it has; a server serving only
+        // skills keeps them.
+        const tools = listed.some((skill) => skill.server !== undefined) ? yield* mcp.tools() : []
+        const blocked = (server: string) => {
+          const owned = tools.filter((tool) => tool.server === server)
+          return owned.length > 0 && !McpInstructions.reachable(owned, permissions)
+        }
+        const available = listed
           .flatMap((skill) =>
-            skill.description === undefined || skill.autoinvoke === false
+            skill.description === undefined ||
+            skill.autoinvoke === false ||
+            (skill.server !== undefined && blocked(skill.server))
               ? []
               : [{ id: skill.id, name: skill.name, description: skill.description }],
           )
@@ -81,4 +94,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Skill.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Skill.node, Mcp.node] })

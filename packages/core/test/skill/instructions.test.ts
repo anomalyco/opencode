@@ -3,6 +3,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Mcp } from "@opencode/core/mcp/index"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
 import { SkillInstructions } from "@opencode/core/skill/instructions"
@@ -42,6 +43,7 @@ const manual = Skill.Info.make({
 const layer = (list: () => Skill.Info[]) =>
   AppNodeBuilder.build(SkillInstructions.node, [
     Skill.node.replace(Layer.mock(Skill.Service, { list: () => Effect.succeed(list()) })),
+    Mcp.node.replace(Layer.mock(Mcp.Service, {})),
   ])
 
 describe("SkillInstructions", () => {
@@ -73,9 +75,7 @@ describe("SkillInstructions", () => {
 
       skills = []
       expect(
-        yield* instructions
-          .load(agent.permissions)
-          .pipe(Effect.flatMap((context) => readUpdate(context, initialized))),
+        yield* instructions.load(agent.permissions).pipe(Effect.flatMap((context) => readUpdate(context, initialized))),
       ).toMatchObject({ text: "Skill guidance is no longer available. Do not use any previously listed skill." })
     }).pipe(Effect.provide(layer(() => skills)))
   })
@@ -176,9 +176,9 @@ describe("SkillInstructions", () => {
     })
     return Effect.gen(function* () {
       const instructions = yield* SkillInstructions.Service
-      expect(
-        (yield* instructions.load(agent.permissions).pipe(Effect.flatMap(readInitial))).text,
-      ).toContain("<name>Effect</name>")
+      expect((yield* instructions.load(agent.permissions).pipe(Effect.flatMap(readInitial))).text).toContain(
+        "<name>Effect</name>",
+      )
     }).pipe(Effect.provide(layer(() => [effect])))
   })
 
