@@ -344,6 +344,11 @@ struct State {
     list: View,
     mode: RefCell<Option<Disposer>>,
     layer: OnceCell<Disposer>,
+    this: Weak<State>,
+    /// While the popup shows, the timer that follows the prompt's place ([`State::follow`]), and the place it last
+    /// drew at.
+    follow: Cell<Option<TimerId>>,
+    drawn: Cell<(f64, f64, f32)>,
 }
 
 impl Drop for State {
@@ -352,6 +357,9 @@ impl Drop for State {
         let mode = self.mode.take();
         let layer = self.layer.take();
         if let Some(tui) = self.tui.upgrade() {
+            if let Some(timer) = self.follow.take() {
+                tui.app.cancel_timer(timer);
+            }
             tui.app.defer(move |_| drop((mode, layer)));
         }
     }
@@ -370,7 +378,7 @@ pub fn mount(tui: &Tui, prompt: &Rc<Inner>, anchor: &View) -> Autocomplete {
         .visible(false)
         .child(&list);
     anchor.child(&popup);
-    let state = Rc::new(State {
+    let state = Rc::new_cyclic(|this| State {
         tui: tui.weak(),
         prompt: Rc::downgrade(prompt),
         visible: Cell::new(None),
@@ -392,6 +400,9 @@ pub fn mount(tui: &Tui, prompt: &Rc<Inner>, anchor: &View) -> Autocomplete {
         list,
         mode: RefCell::default(),
         layer: OnceCell::new(),
+        this: this.clone(),
+        follow: Cell::new(None),
+        drawn: Cell::new((0.0, 0.0, 0.0)),
     });
     install(tui, &state, prompt.textarea.id());
     Autocomplete(state)
@@ -432,7 +443,7 @@ impl Autocomplete {
         let (index, selected, offset) = (state.index.get(), state.selected.get(), state.offset.get());
         let results =
             (!state.loading.get()).then(|| (state.results.borrow().clone(), state.requested.borrow().clone()));
-        let (placed, entry) = (state.anchor.rect().screen_y, state.mode.take());
+        let (placed, entry) = (state.anchor_row(), state.mode.take());
         Some(Open { mode, index, selected, offset, placed, entry, results })
     }
 
@@ -519,6 +530,7 @@ impl State {
         if self.mode.borrow().is_none() {
             *self.mode.borrow_mut() = Some(tui.keymap.push_mode(MODE, Condition::Always));
         }
+        self.follow(&tui);
         if mode == Mode::Reference
             && let Some(prompt) = self.prompt.upgrade()
         {
@@ -551,10 +563,33 @@ impl State {
         self.visible.set(None);
         self.mode.take();
         if let Some(tui) = self.tui.upgrade() {
+            if let Some(timer) = self.follow.take() {
+                tui.app.cancel_timer(timer);
+            }
             tui.keymap.sync_mode();
         }
         self.popup.visible(false);
         self.request_redraw();
+    }
+
+    /// Follows the prompt's place while the popup shows, as TS polls its anchor every 50 ms
+    /// (`autocomplete.tsx:120-133`): a prompt laid out, moved or resized after the popup drew (one mounted again by a
+    /// plugin's load and typed into before its first frame) draws the popup again at its height
+    /// (select-search-flake).
+    fn follow(&self, tui: &Tui) {
+        if self.follow.get().is_some() {
+            return;
+        }
+        let this = self.this.clone();
+        let timer = tui.app.set_interval(Duration::from_millis(50), move |_| {
+            let Some(state) = this.upgrade() else { return };
+            let rect = state.anchor.rect();
+            if state.visible.get().is_some() && (rect.screen_x, rect.screen_y, rect.width) != state.drawn.get() {
+                let Some(tui) = state.tui.upgrade() else { return };
+                state.render(&tui);
+            }
+        });
+        self.follow.set(Some(timer));
     }
 
     fn request_redraw(&self) {
@@ -748,13 +783,19 @@ impl State {
 
     fn height(&self) -> usize {
         let count = self.options.borrow().len().max(1);
+        let anchor = self.anchor_row().max(0.0) as usize;
+        ROWS.min(count).min(anchor.max(1))
+    }
+
+    /// The prompt's row on the screen, or the row of the prompt this popup was reopened from while this one has no
+    /// layout yet: a second remount before the screen laid out again hands that row on, not the new prompt's 0
+    /// (select-search-flake).
+    fn anchor_row(&self) -> f64 {
         let rect = self.anchor.rect();
-        let anchor = match self.placed.get() {
+        match self.placed.get() {
             Some(placed) if rect.width <= 0.0 => placed,
             _ => rect.screen_y,
-        };
-        let anchor = anchor.max(0.0) as usize;
-        ROWS.min(count).min(anchor.max(1))
+        }
     }
 
     fn move_by(&self, delta: i64) {
@@ -901,6 +942,8 @@ impl State {
             self.popup.visible(false);
             return;
         };
+        let rect = self.anchor.rect();
+        self.drawn.set((rect.screen_x, rect.screen_y, rect.width));
         let app = &tui.app;
         let theme = tui.page();
         let height = self.height();

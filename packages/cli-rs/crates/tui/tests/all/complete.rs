@@ -561,6 +561,44 @@ fn an_open_list_stays_open_when_the_route_mounts_again() {
     assert_eq!(setup.text(), "");
 }
 
+/// Expected (select-search-flake, the lane's `P.8/select-search`): a list typed into a composer that a plugin's load
+/// mounted again, before the screen laid it out, lays out as the list of a composer that was never remounted: all its
+/// rows, the first selected, once the frame comes.
+#[test]
+fn a_list_typed_before_a_remounted_composer_lays_out_shows_every_row() {
+    let screen = |remount: bool| {
+        let setup = Setup::new();
+        setup.app.render();
+        if remount {
+            opencode_plugin::Host::remount(&*opencode_tui::plugins::host::host(&setup.tui));
+        }
+        setup.app.type_text("/se");
+        setup.wait_for("Open settings");
+        // The frame lays the prompt out; the popup follows its place within 50 ms, as TS polls it.
+        setup.app.render();
+        setup.app.advance(Duration::from_millis(50));
+        setup.app.render().text()
+    };
+    let twin = screen(false);
+    assert!(twin.contains("/sessions") && twin.contains("/settings"), "{twin}");
+    assert_eq!(screen(true), twin);
+}
+
+/// Expected (select-search-flake): two remounts before the screen lays out again, as a plugin's load and the reload of
+/// its registrations give in one turn, keep the open list as one remount does: its height, its rows and its selection.
+#[test]
+fn an_open_list_keeps_its_height_across_two_remounts_in_one_turn() {
+    let setup = Setup::new();
+    setup.app.type_text("/se");
+    setup.wait_for("/sessions");
+    setup.app.press("down");
+    let before = setup.app.render().text();
+    let host = opencode_tui::plugins::host::host(&setup.tui);
+    opencode_plugin::Host::remount(&*host);
+    opencode_plugin::Host::remount(&*host);
+    assert_eq!(setup.app.render().text(), before);
+}
+
 /// Expected (review jsnpm-1): a dialog opened over an open list keeps its keys across a remount, as without one. Escape
 /// closes it and the list is open again under it, and Ctrl+C closes the dialog and does not end the client.
 #[test]
