@@ -7,6 +7,7 @@ import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import { CAPTURE_DEADLINE_MS, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
+import { attachChildren, releaseWorker } from "./child-targets"
 import { CodedError } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
@@ -415,13 +416,7 @@ export function createBrowserPage(
   const extensionContexts = new Set<string>()
   const extensionFrames = () => new Set([...extensionTargets.values(), ...extensionContexts])
 
-  const attachFrames = (sessionID?: string) =>
-    cdp.send("Target.setAutoAttach", {
-      autoAttach: true,
-      waitForDebuggerOnStart: true,
-      flatten: true,
-      filter: [{ type: "iframe", exclude: false }, { exclude: true }],
-    }, sessionID)
+  const attachFrames = (sessionID?: string) => attachChildren(cdp, sessionID)
 
   const activity = options.activity
   const notices = noticeActions(options.refused, options.menu.open)
@@ -818,6 +813,9 @@ export function createBrowserPage(
     contexts.forEach((context, key) => { if (context.sessionID === sessionID) contexts.delete(key) })
   })
   cdp.on("Target.attachedToTarget", ({ sessionId, targetInfo }, parentSessionID) => {
+    // Paused at start by the auto-attach above; it must run, as it did before the tab guarded its children.
+    if (targetInfo.type === "worker") return void releaseWorker(cdp, sessionId)
+
     if (targetInfo.type !== "iframe") return
 
     // An extension's frame, such as an autofill overlay, stays out of `sessions`: no frame list, snapshot, picker or
