@@ -584,6 +584,30 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("keeps adjacent non-overlapping whitespace-only fallback matches", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "blank-lines.txt")
+      return Effect.promise(() => fs.writeFile(target, "\n\n\n")).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(
+              registry,
+              call({ path: "blank-lines.txt", oldString: "\n ", newString: "x", replaceAll: true }),
+            ),
+          ),
+        ),
+        Effect.tap((result) =>
+          Effect.sync(() =>
+            expect(result).toMatchObject({ status: "completed", output: "Edited blank-lines.txt (2 replacements)" }),
+          ),
+        ),
+        Effect.andThen(Effect.promise(() => fs.readFile(target, "utf8"))),
+        Effect.tap((content) => Effect.sync(() => expect(content).toBe("xx\n"))),
+      )
+    }),
+  )
+
   it.live("matches long repeated whitespace-tolerant regions without quadratic rescans", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
