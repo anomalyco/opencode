@@ -1226,7 +1226,8 @@ mod tests {
     #[test]
     fn ordered_messages_past_the_bound_end_the_stream() {
         let limits = Limits { ordered: 8, ..Limits::default() };
-        let effects = |id: &str| control(&Up::Effects { id: id.to_owned(), seq: 1, effects: Vec::new() });
+        let effects =
+            |id: &str| control(&Up::Effects { id: id.to_owned(), activation: 1, seq: 1, effects: Vec::new() });
         // With the hello and the quiet one: 8 messages, then 9.
         for (count, ends) in [(6, false), (7, true)] {
             let mut frames = hello();
@@ -1264,7 +1265,7 @@ mod tests {
         // Watches and logs name their plugin too (carbon-5), and a flood of bytes is blamed on the plugin whose bytes
         // are most of them, the one that overflowed counted, though another sent more messages.
         let watch = |id: &str, key: &str| {
-            control(&Up::Watch { id: id.to_owned(), key: key.to_owned(), request: HostRequest::Route })
+            control(&Up::Watch { id: id.to_owned(), activation: 1, key: key.to_owned(), request: HostRequest::Route })
         };
         let mut frames = hello();
         (0..9).for_each(|index| frames.extend(watch("watcher", &format!("k{index}"))));
@@ -1456,7 +1457,7 @@ mod tests {
             level: opencode_plugin_abi::Level::Info,
             message: "x".repeat(20 << 10),
         };
-        let effects = control(&Up::Effects { id: "loud".to_owned(), seq: 1, effects: vec![request] });
+        let effects = control(&Up::Effects { id: "loud".to_owned(), activation: 1, seq: 1, effects: vec![request] });
         for (count, ends) in [(2, false), (4, true)] {
             let mut frames = hello();
             (0..count).for_each(|_| frames.extend(&effects));

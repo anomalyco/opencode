@@ -333,7 +333,7 @@ function fail(plugin: Plugin, error: string) {
   if (plugin.failed || plugin.deactivated) return
   plugin.failed = true
   plugin.active = false
-  send({ type: "fail", id: plugin.id, error })
+  send({ type: "fail", id: plugin.id, activation: plugin.activation, error })
 }
 
 // Sends what `plugin` gave, which may not be JSON: then it fails, and the call `seq`, if any, is answered with that.
@@ -370,7 +370,7 @@ function effect(plugin: Plugin, request: Request): Promise<Json> {
     }
     const seq = ++plugin.batch
     plugin.answers.set(`b${seq}`, [resolve])
-    sendFor(plugin, { type: "effects", id: plugin.id, seq, effects: [request] })
+    sendFor(plugin, { type: "effects", id: plugin.id, activation: plugin.activation, seq, effects: [request] })
   })
 }
 
@@ -582,13 +582,13 @@ function context(plugin: Plugin) {
     },
     effect: (request: Request) => effect(plugin, request),
     watch(key: string, request: Request) {
-      const watch = { type: "watch", id: plugin.id, key, request }
+      const watch = { type: "watch", id: plugin.id, activation: plugin.activation, key, request }
       if (plugin.setting) plugin.setupWatches.push(watch)
       else send(watch)
     },
     unwatch(key: string) {
       plugin.snapshots.delete(key)
-      send({ type: "unwatch", id: plugin.id, key })
+      send({ type: "unwatch", id: plugin.id, activation: plugin.activation, key })
     },
     read: (key: string) => plugin.snapshots.get(key),
     // Why the read `key` watches is nothing: over the host's bound.
@@ -669,7 +669,7 @@ function tell(plugin: Plugin) {
   const told = JSON.stringify([manifest, holds])
   if (told === plugin.told) return
   plugin.told = told
-  sendFor(plugin, { type: "manifest", id: plugin.id, manifest, holds })
+  sendFor(plugin, { type: "manifest", id: plugin.id, activation: plugin.activation, manifest, holds })
 }
 
 function manifestOf(plugin: Plugin) {
