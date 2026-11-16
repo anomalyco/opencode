@@ -20,7 +20,8 @@ const fetch = (input: string | URL, init: Init = {}) =>
     // matching.
     const url = String(input).split("#")[0]
     const parsed = URL.parse(url)
-    if (parsed?.protocol === "file:") return yield* Effect.fail(new Error("fetch cannot be used for filesystem access."))
+    if (parsed?.protocol === "file:")
+      return yield* Effect.fail(new Error("fetch cannot be used for filesystem access."))
     // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
     if (parsed?.username || parsed?.password)
       return yield* Effect.fail(new TypeError("fetch cannot be used with credentials in the URL."))
@@ -54,35 +55,30 @@ const fetch = (input: string | URL, init: Init = {}) =>
         agent: execution.agent,
         source,
       })
-    const signal = AbortSignal.timeout(TIMEOUT_MS)
-    const follow = (
-      target: string,
-      request: Init,
-      redirects: number,
-    ): Effect.Effect<{ response: Response; url: string; redirects: number }, unknown> =>
-      Effect.tryPromise({
+    const signal = AbortSignal.any([execution.signal, AbortSignal.timeout(TIMEOUT_MS)])
+    let target = url
+    let request = init
+    for (let redirects = 0; ; redirects++) {
+      const response = yield* Effect.tryPromise({
         try: () => globalThis.fetch(target, { ...request, redirect: "manual", signal }),
         catch: (error) => error,
-      }).pipe(
-        Effect.flatMap((response) => {
-          const location = response.headers.get("location")
-          if (!redirectStatuses.has(response.status) || location === null)
-            return Effect.succeed({ response, url: target, redirects })
-          if (redirects >= MAX_REDIRECTS)
-            return Effect.fail(new Error(`Too many redirects (more than ${MAX_REDIRECTS})`))
-          const next = new URL(location, target)
-          if (next.protocol !== "http:" && next.protocol !== "https:")
-            return Effect.fail(new Error(`fetch cannot follow a redirect to ${next.protocol} URLs.`))
-          if (next.username || next.password)
-            return Effect.fail(new Error("fetch cannot follow a redirect with credentials in the URL."))
-          next.hash = ""
-          return check(next.href).pipe(
-            Effect.andThen(follow(next.href, redirected(request, response.status, target, next), redirects + 1)),
-          )
-        }),
-      )
-    const result = yield* follow(url, init, 0)
-    return yield* Effect.tryPromise({ try: () => read(result), catch: (error) => error })
+      })
+      const location = response.headers.get("location")
+      if (!redirectStatuses.has(response.status) || location === null)
+        return new Extension.StreamingResponse(response, redirects > 0)
+      yield* Effect.tryPromise({ try: async () => response.body?.cancel(), catch: (error) => error })
+      if (redirects >= MAX_REDIRECTS)
+        return yield* Effect.fail(new Error(`Too many redirects (more than ${MAX_REDIRECTS})`))
+      const next = new URL(location, target)
+      if (next.protocol !== "http:" && next.protocol !== "https:")
+        return yield* Effect.fail(new Error(`fetch cannot follow a redirect to ${next.protocol} URLs.`))
+      if (next.username || next.password)
+        return yield* Effect.fail(new Error("fetch cannot follow a redirect with credentials in the URL."))
+      next.hash = ""
+      yield* check(next.href)
+      request = redirected(request, response.status, target, next)
+      target = next.href
+    }
   })
 
 export const MAX_REDIRECTS = 20
@@ -104,28 +100,6 @@ const redirected = (request: Init, status: number, from: string, to: URL): Init 
     method: toGet ? "GET" : request.method,
     headers: Array.from(headers),
     body: toGet ? undefined : request.body,
-  }
-}
-
-const read = async (result: { response: Response; url: string; redirects: number }) => {
-  const response = result.response
-  const bytes = await response.bytes()
-  const headers = Object.fromEntries(response.headers)
-  const text = () => new TextDecoder().decode(bytes)
-  return {
-    url: result.url,
-    status: response.status,
-    statusText: response.statusText,
-    ok: response.ok,
-    redirected: result.redirects > 0,
-    headers: {
-      get: (name: string) => headers[name.toLowerCase()] ?? null,
-      has: (name: string) => name.toLowerCase() in headers,
-      entries: () => Object.entries(headers),
-    },
-    text: async () => text(),
-    json: async () => JSON.parse(text()) as unknown,
-    bytes: async () => bytes,
   }
 }
 

@@ -165,6 +165,7 @@ export const dict = {
   "ui.common.dismiss": "Bỏ qua",
   "ui.common.close": "Đóng",
   "ui.common.next": "Tiếp theo",
+  "ui.common.continue": "Tiếp tục",
   "ui.common.submit": "Gửi",
   "ui.common.showMore": "Hiển thị thêm",
   "ui.permission.deny": "Từ chối",

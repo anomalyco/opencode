@@ -32,8 +32,8 @@ recorded.effect.with(
         providerOptions: { ...controls, size: "256x256" },
       })
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toBe("image/webp")
-      const bytes = yield* response.image.bytes()
+      expect(response.images[0].mediaType).toBe("image/webp")
+      const bytes = yield* response.images[0].bytes()
       expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("RIFF")
       expect(new TextDecoder().decode(bytes.slice(8, 12))).toBe("WEBP")
       expect(response.usage?.type === "tokens" ? response.usage.output : undefined).toBeGreaterThan(0)
@@ -58,8 +58,8 @@ recorded.effect.with(
         n: 1,
         providerOptions: { ...controls, size: "256x256", outputFormat: "png" },
       })
-      expect(response.image.mediaType).toBe("image/png")
-      expect(Array.from((yield* response.image.bytes()).slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
+      expect(response.images[0].mediaType).toBe("image/png")
+      expect(Array.from((yield* response.images[0].bytes()).slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
     }),
   180_000,
 )

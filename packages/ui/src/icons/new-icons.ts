@@ -89,7 +89,6 @@ const replacements: Partial<Record<IconName, { name: NewIconName; rotate?: numbe
   "outline-browser-annotate": { name: "annotate" },
   "select-element": { name: "annotate" },
   download: { name: "download" },
-  "post-skill": { name: "skill" },
   "graduation-cap": { name: "skill" },
   eye: { name: "eye-open" },
   "outline-eye": { name: "eye-open" },

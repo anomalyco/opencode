@@ -16,6 +16,7 @@ import type { Schema } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useTheme } from "@opencode/ui/theme/context"
 import { toaster } from "@opencode/ui/toast"
+import { writeClipboard } from "@opencode/session-ui/copy"
 import { base64Encode } from "@opencode/util/encode"
 import { uuid } from "@opencode/util/uuid"
 import {
@@ -294,7 +295,11 @@ export function createHostApis() {
       },
     }),
     system: () => ({
-      copy: (text) => platform.writeClipboardText?.(text) ?? navigator.clipboard.writeText(text),
+      async copy(text) {
+        if (platform.writeClipboardText) return platform.writeClipboardText(text)
+
+        if (!(await writeClipboard(text))) throw new Error(language.t("common.requestFailed"))
+      },
       async save(file) {
         if (platform.saveFile) return platform.saveFile({ defaultPath: file.name }, file.content)
         const url = URL.createObjectURL(new Blob([file.content], { type: "application/octet-stream" }))
@@ -1112,6 +1117,18 @@ export function createPluginAttachment(apis: HostApis) {
     const key = `plugin:${plugin}\0${options.id ?? uuid()}`
     const result = { notification: false, sound: false }
     const session = options.session
+
+    if (session) {
+      await global.sessionPreferences.ready.promise
+
+      const root = global.serverCtx(ServerConnection.Key.make(session.server))?.data.session.root(session.id) ?? session.id
+
+      if (
+        global.sessionPreferences.muted(session.server, session.id) ||
+        global.sessionPreferences.muted(session.server, root)
+      )
+        return result
+    }
 
     await Promise.allSettled([
       allowed.sound &&

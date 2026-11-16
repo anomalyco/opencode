@@ -446,7 +446,7 @@ function UsageFrame(props: { children: JSX.Element; footer?: JSX.Element }) {
   const language = useLanguage()
 
   return (
-    <Dialog fit containerClass="w-[min(calc(100vw-32px),512px)]!">
+    <Dialog fit>
       <div data-component="usage-dialog" class="flex flex-col self-stretch">
         <DialogHeader>
           <DialogTitleGroup title={language.t("usage.title")} />
