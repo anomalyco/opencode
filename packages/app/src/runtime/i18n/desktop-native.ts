@@ -232,7 +232,7 @@ function locale(value: string) {
 const normalizeScript = (script?: string) => (script === "Aran" ? "Arab" : script)
 
 export const DESKTOP_NATIVE_ENGLISH = {
-  "desktop.microphoneUsage": "OpenCode uses your microphone for voice calls.",
+  "desktop.microphoneUsage": "OpenCode uses your microphone for voice calls and lets websites you allow in the browser pane use it.",
   "desktop.cameraUsage": "OpenCode lets websites you allow in the browser pane use your camera.",
   "desktop.documentsFolderUsage":
     "OpenCode uses files in your Documents folder for projects you open and commands you run there.",
