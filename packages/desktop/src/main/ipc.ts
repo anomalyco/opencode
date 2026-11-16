@@ -68,8 +68,10 @@ export const registerIpcHandlers = Effect.gen(function* () {
       win.webContents.send(DragCancelEvent)
     })
 
+    // A port carries no sender frame, so the app's own document is the only one that may receive it: the check on each
+    // call (`caller` in ipc-handlers/plugins.ts) then names the window this document belongs to.
     const post = () => {
-      if (win.isDestroyed() || win.webContents.isDestroyed()) return
+      if (win.isDestroyed() || win.webContents.isDestroyed() || !isRendererUrl(win.webContents.mainFrame.url)) return
       const channel = new MessageChannelMain()
       handoff.bind(win.webContents, channel.port1)
       win.webContents.postMessage(IpcTransportPort, null, [channel.port2])
