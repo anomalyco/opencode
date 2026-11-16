@@ -21,7 +21,7 @@ export function FindBar(props: {
     <div
       role="search"
       aria-label={ctx.t("find.open")}
-      class="flex shrink-0 items-center gap-2 border-b-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-01 px-3 py-1.5"
+      class="flex h-9 shrink-0 items-center gap-1 border-b-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-01 px-3"
     >
       <Icon name="magnifying-glass" size="small" class="shrink-0 text-v2-icon-icon-muted" />
       <input
@@ -30,11 +30,12 @@ export function FindBar(props: {
           props.input(el)
         }}
         dir="auto"
-        type="search"
+        type="text"
+        role="searchbox"
         maxLength={4096}
         spellcheck={false}
         autocomplete="off"
-        class="min-w-0 flex-1 bg-transparent text-13-regular text-v2-text-text-base outline-none"
+        class="ms-1 min-w-0 flex-1 bg-transparent text-13-regular text-v2-text-text-base outline-none"
         aria-label={ctx.t("find.open")}
         placeholder={ctx.t("find.open")}
         value={untrack(() => props.view.query)}
@@ -46,7 +47,7 @@ export function FindBar(props: {
           props.run({ type: event.key === "Escape" ? "close" : event.shiftKey ? "previous" : "next" })
         }}
       />
-      <span role="status" class="shrink-0 text-12-regular tabular-nums text-v2-text-text-muted">
+      <span role="status" class="shrink-0 px-1 text-12-regular tabular-nums text-v2-text-text-muted">
         <Show when={props.view.result}>
           {(result) => <>{ctx.plural("find.matches", result().total, { active: result().active })}</>}
         </Show>
