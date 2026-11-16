@@ -386,6 +386,9 @@ fn local_offset(seconds: i64) -> i32 {
     }
     // SAFETY: `tzset` takes no arguments; `Once` keeps it from racing itself.
     TZSET.call_once(|| unsafe { tzset() });
+    // `libc` deprecates musl's `time_t` ahead of a change of its type; on the 64-bit targets the client ships it is
+    // 64-bit already (musl 1.2).
+    #[allow(deprecated)]
     let time = seconds as libc::time_t;
     // SAFETY: `tm` is plain data, valid zeroed, and `localtime_r` writes only into it.
     let mut tm = unsafe { std::mem::zeroed::<libc::tm>() };
