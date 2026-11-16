@@ -407,6 +407,212 @@ Review files`,
       ),
     ),
   )
+
+  it.live("substitutes arguments into shell snippets safely and preserves $1 in snippet output", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      const prompts: string[] = []
+      yield* ConfigCommandPlugin.Plugin.effect(
+        host({
+          command: {
+            list: () => Effect.die(new Error("unused command.list")),
+            transform: command.transform,
+            reload: command.reload,
+          },
+          session: {
+            prompt: (input) =>
+              Effect.sync(() => {
+                prompts.push(input.text)
+                return SessionInbox.User.make({
+                  id: SessionMessage.ID.make("msg_shell_test"),
+                  sessionID: input.sessionID,
+                  time: { created: DateTime.makeUnsafe(0) },
+                  type: "user",
+                  payload: { text: input.text },
+                  delivery: input.delivery ?? "queue",
+                })
+              }),
+          },
+        }),
+      ).pipe(
+        Effect.provide(
+          Config.testLayer([
+            new Document({
+              type: "document",
+              info: decode({
+                commands: {
+                  log: {
+                    template: "Count=!`printf 'n=%s' $1` Quoted=!`printf \"%s\" \"$1\"` Out=!`printf '%s1/%sARGUMENTS' '$' '$'` Prose=$1",
+                  },
+                  plain: {
+                    template: "Header !`printf ok`",
+                  },
+                },
+              }),
+            }),
+          ]),
+        ),
+      )
+
+      // Interactive: expands $1 before running !`...` and keeps literal $1 / $ARGUMENTS in snippet stdout.
+      yield* command.execute({
+        name: "log",
+        invocation: {
+          sessionID: Session.ID.make("ses_interactive"),
+          prompt: { text: "5" },
+          delivery: "queue",
+        },
+      })
+      expect(prompts.at(-1)).toBe("Count=n=5 Quoted=5 Out=$1/$ARGUMENTS Prose=5")
+
+      // Unattended: shell-quotes $1 across unquoted and quoted contexts, keeps $1 in stdout, and appends note safely.
+      yield* command.execute({
+        name: "log",
+        invocation: {
+          sessionID: Session.ID.make("ses_scheduled"),
+          prompt: { text: `"5; printf PWNED $(printf PWNED) it's"` },
+          delivery: "queue",
+          unattended: true,
+          note: "check output !`printf INJECTED` $1",
+        },
+      })
+      expect(prompts.at(-1)).toBe(
+        "Count=n=5; printf PWNED $(printf PWNED) it's Quoted=5; printf PWNED $(printf PWNED) it's Out=$1/$ARGUMENTS Prose=5; printf PWNED $(printf PWNED) it's\n\ncheck output !`printf INJECTED` $1",
+      )
+
+      // Unattended without placeholders: never executes !`...` inside caller arguments or note.
+      yield* command.execute({
+        name: "plain",
+        invocation: {
+          sessionID: Session.ID.make("ses_scheduled"),
+          prompt: { text: "arg !`printf INJECTED_ARG`" },
+          delivery: "queue",
+          unattended: true,
+          note: "note !`printf INJECTED_NOTE`",
+        },
+      })
+      expect(prompts.at(-1)).toBe("Header ok\n\narg !`printf INJECTED_ARG`\n\nnote !`printf INJECTED_NOTE`")
+    }),
+  )
+
+  it.effect("honors inline and unattended flags for subagent-configured commands", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const agents = yield* Agent.Service
+      const locationInfo = yield* Location.Service
+      const command = yield* Command.Service
+      const rootInline = yield* sessions.create({
+        location: locationInfo,
+        title: "Inline target",
+        agent: Agent.ID.make("general"),
+      })
+      const scheduledParent = yield* sessions.create({
+        location: locationInfo,
+        title: "Scheduled parent",
+        permissions: [{ action: "shell", resource: "git *", effect: "allow" }],
+      })
+      const normalChild = yield* sessions.create({ parentID: scheduledParent.id, title: "Normal subagent" })
+      const prompts: Array<{ sessionID: Session.ID; text: string }> = []
+
+      yield* ConfigCommandPlugin.Plugin.effect(
+        host({
+          agent: {
+            list: () => Effect.die(new Error("unused agent.list")),
+            transform: agents.transform,
+            reload: agents.reload,
+            get: ({ agentID }) =>
+              Effect.succeed({
+                location: new Location.Info({
+                  directory: locationInfo.directory,
+                  workspaceID: locationInfo.workspaceID,
+                  project: locationInfo.project,
+                }),
+                data: { ...Agent.Info.default(agentID), mode: "subagent" },
+              }),
+          },
+          command: {
+            list: () => Effect.die(new Error("unused command.list")),
+            transform: command.transform,
+            reload: command.reload,
+          },
+          session: {
+            get: ({ sessionID }) => sessions.get(sessionID).pipe(Effect.orDie),
+            switchAgent: (input) => sessions.switchAgent(input).pipe(Effect.orDie),
+            switchModel: (input) => sessions.switchModel(input).pipe(Effect.orDie),
+            prompt: (input) =>
+              Effect.sync(() => {
+                prompts.push({ sessionID: input.sessionID, text: input.text })
+                return SessionInbox.User.make({
+                  id: SessionMessage.ID.make("msg_child"),
+                  sessionID: input.sessionID,
+                  time: { created: DateTime.makeUnsafe(0) },
+                  type: "user",
+                  payload: { text: input.text },
+                  delivery: input.delivery ?? "queue",
+                })
+              }),
+          },
+        }),
+      ).pipe(
+        Effect.provide(
+          Config.testLayer([
+            new Document({
+              type: "document",
+              info: decode({ commands: { brief: { template: "Brief $ARGUMENTS", agent: "build", subtask: true } } }),
+            }),
+          ]),
+        ),
+      )
+
+      // Inline flag runs directly in the target session (even without a parentID) and preserves its selected agent.
+      yield* command.execute({
+        name: "brief",
+        invocation: {
+          sessionID: rootInline.id,
+          prompt: { text: "today !`printf INJECTED`" },
+          delivery: "queue",
+          unattended: true,
+          inline: true,
+        },
+      })
+
+      expect(prompts).toEqual([{ sessionID: rootInline.id, text: "Brief today !`printf INJECTED`" }])
+      expect((yield* sessions.list({ parentID: rootInline.id })).data).toEqual([])
+      expect((yield* sessions.get(rootInline.id)).agent).toBe(Agent.ID.make("general"))
+
+      // Unattended session-targeted execution spawns its child with unattended metadata and inherited permissions.
+      yield* command.execute({
+        name: "brief",
+        invocation: {
+          sessionID: scheduledParent.id,
+          prompt: { text: "nightly" },
+          delivery: "steer",
+          unattended: true,
+        },
+      })
+      const unattendedChildren = (yield* sessions.list({ parentID: scheduledParent.id })).data.filter(
+        (child) => child.id !== normalChild.id,
+      )
+      expect(unattendedChildren).toHaveLength(1)
+      expect(unattendedChildren[0]?.permissions).toEqual([{ action: "shell", resource: "git *", effect: "allow" }])
+      expect(unattendedChildren[0]?.metadata).toMatchObject({
+        schedule: { ownerSessionID: scheduledParent.id, unattended: true },
+      })
+
+      // Non-schedule child session still spawns a grandchild subagent without unattended metadata.
+      yield* command.execute({
+        name: "brief",
+        invocation: {
+          sessionID: normalChild.id,
+          prompt: { text: "tomorrow" },
+          delivery: "queue",
+        },
+      })
+      const grandchildren = (yield* sessions.list({ parentID: normalChild.id })).data
+      expect(grandchildren).toHaveLength(1)
+      expect(grandchildren[0]?.metadata).toBeUndefined()
+    }),
+  )
 })
 
 const describeNative = Watcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip

@@ -66,6 +66,18 @@ export type Outcome =
       readonly invalid?: boolean
     }
 
+/** Validates Code Mode script syntax and forbidden tools synchronously. */
+export function validateCode(code: string, target = "schedule check"): Result.Result<void, string> {
+  const scanned = CodeMode.scanTools(code)
+  if (Result.isFailure(scanned)) return Result.fail(scanned.failure.message)
+  for (const path of scanned.success) {
+    if (FORBIDDEN_CODE_TOOLS.has(path)) {
+      return Result.fail(`Tool ${path} cannot be used inside a ${target}`)
+    }
+  }
+  return Result.succeed(undefined)
+}
+
 /** Validates condition syntax synchronously before asking for permissions or spawning anything. */
 export function validate(condition: ScheduleSchema.Condition): Result.Result<void, string> {
   switch (condition.type) {
@@ -86,16 +98,8 @@ export function validate(condition: ScheduleSchema.Condition): Result.Result<voi
           `Invalid regular expression ${JSON.stringify(condition.matches)}: ${cause instanceof Error ? cause.message : String(cause)}`,
       })
     }
-    case "code": {
-      const scanned = CodeMode.scanTools(condition.code)
-      if (Result.isFailure(scanned)) return Result.fail(scanned.failure.message)
-      for (const path of scanned.success) {
-        if (FORBIDDEN_CODE_TOOLS.has(path)) {
-          return Result.fail(`Tool ${path} cannot be used inside a schedule check`)
-        }
-      }
-      return Result.succeed(undefined)
-    }
+    case "code":
+      return validateCode(condition.code, "schedule check")
   }
 }
 
@@ -163,7 +167,11 @@ const wakeOutcome = (wake: boolean, state: Schema.Json, message: string | undefi
   ...(wake && message !== undefined ? { message } : {}),
 })
 
-const codeActions = Effect.fnUntraced(function* (paths: ReadonlyArray<string>) {
+const codeActions = Effect.fnUntraced(function* (
+  paths: ReadonlyArray<string>,
+  options?: { readonly allowEdit?: boolean; readonly target?: string },
+) {
+  const target = options?.target ?? "schedule check"
   const mcp = yield* McpTool.Service
   const tools = yield* Tool.Service
   if (paths.length > 0) yield* mcp.flush
@@ -171,31 +179,30 @@ const codeActions = Effect.fnUntraced(function* (paths: ReadonlyArray<string>) {
   const resolved: Array<(typeof registered)[number]> = []
   for (const path of paths) {
     if (FORBIDDEN_CODE_TOOLS.has(path)) {
-      return yield* Effect.fail(`Tool ${path} cannot be used inside a schedule check`)
+      return yield* Effect.fail(`Tool ${path} cannot be used inside a ${target}`)
     }
     const found = registered.find(
       (item) => item.options?.codemode !== false && CodeModeTool.qualifiedName(item) === path,
     )
     if (!found) return yield* Effect.fail(`Unknown Code Mode tool: ${path}`)
-    if (found.options?.permission === "edit") {
-      return yield* Effect.fail(`Tool ${path} cannot be used inside a schedule check`)
+    if (!options?.allowEdit && found.options?.permission === "edit") {
+      return yield* Effect.fail(`Tool ${path} cannot be used inside a ${target}`)
     }
     resolved.push(found)
   }
   return { tools, actions: Array.dedupe(resolved.map((tool) => tool.options?.permission ?? tool.id)) }
 })
 
-const authorizeCode = Effect.fnUntraced(function* (
+export const authorizeCodeProgram = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
-  name: string | undefined,
-  when: ScheduleSchema.When,
-  mode: ScheduleSchema.CheckMode,
-  condition: ScheduleSchema.CodeCondition,
+  code: string,
+  metadata: Record<string, unknown>,
+  options?: { readonly allowEdit?: boolean; readonly target?: string },
 ) {
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
-  const scanned = CodeMode.scanTools(condition.code)
+  const scanned = CodeMode.scanTools(code)
   if (Result.isFailure(scanned)) return yield* Effect.fail(scanned.failure.message)
   const paths = scanned.success
 
@@ -206,13 +213,13 @@ const authorizeCode = Effect.fnUntraced(function* (
     agent: agent.id,
   })
 
-  const actions = (yield* codeActions(paths)).actions
+  const actions = (yield* codeActions(paths, options)).actions
 
   if (actions.length === 0) {
     yield* permission.assert({
       action: "execute",
       resources: ["*"],
-      metadata: { schedule: name, mode, when, unattended: true, code: condition.code, tools: [] },
+      metadata: { ...metadata, code, tools: [] },
       sessionID: session.id,
       agent: agent.id,
     })
@@ -239,7 +246,7 @@ const authorizeCode = Effect.fnUntraced(function* (
         action,
         resources: ["*"],
         // No `save`: "always" would save a project-wide allow, while scheduled ticks run via Unattended.
-        metadata: { schedule: name, mode, when, unattended: true, code: condition.code, tools: [...paths] },
+        metadata: { ...metadata, code, tools: [...paths] },
         sessionID: session.id,
         agent: agent.id,
       }),
@@ -247,22 +254,38 @@ const authorizeCode = Effect.fnUntraced(function* (
   )
 })
 
-const runCode = Effect.fnUntraced(function* (
+const authorizeCode = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
+  name: string | undefined,
+  when: ScheduleSchema.When,
+  mode: ScheduleSchema.CheckMode,
   condition: ScheduleSchema.CodeCondition,
-  prevState: Schema.Json,
-  context: RunContext,
+) {
+  yield* authorizeCodeProgram(session, condition.code, {
+    schedule: name,
+    mode,
+    when,
+    unattended: true,
+  })
+})
+
+export const execCodeProgram = Effect.fnUntraced(function* (
+  session: SessionSchema.Info,
+  code: string,
+  bindings: Record<string, Schema.Json>,
+  messageID: SessionMessage.ID,
+  options?: { readonly allowEdit?: boolean; readonly target?: string },
 ) {
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
   if (!agent.info) return { ok: false as const, error: `Agent not found: ${agent.id}` }
 
-  const scanned = CodeMode.scanTools(condition.code)
+  const scanned = CodeMode.scanTools(code)
   if (Result.isFailure(scanned)) return { ok: false as const, error: scanned.failure.message }
   const paths = scanned.success
 
-  const resolved = yield* Effect.result(codeActions(paths))
+  const resolved = yield* Effect.result(codeActions(paths, options))
   if (Result.isFailure(resolved)) return { ok: false as const, error: resolved.failure }
 
   const actions = resolved.success.actions
@@ -286,16 +309,9 @@ const runCode = Effect.fnUntraced(function* (
 
   if (Result.isFailure(notDenied)) return { ok: false as const, error: notDenied.failure.message }
 
-  const bindings: Record<string, Schema.Json> = {
-    state: prevState,
-    now: context.now,
-    runs: context.checks,
-    input: { state: prevState, now: context.now, runs: context.checks },
-  }
-
   const result = yield* resolved.success.tools
     .check({
-      code: condition.code,
+      code,
       tools: paths,
       bindings,
       permissions: Permission.merge(agent.info.permissions, session.permissions ?? []),
@@ -303,7 +319,7 @@ const runCode = Effect.fnUntraced(function* (
       context: {
         sessionID: session.id,
         agent: agent.id,
-        messageID: context.messageID,
+        messageID,
         progress: () => Effect.void,
       },
     })
@@ -318,6 +334,23 @@ const runCode = Effect.fnUntraced(function* (
       result.error.message.includes("needs approval")
     return { ok: false as const, error: result.error.message, ...(invalid ? { invalid: true } : {}) }
   }
+  return { ok: true as const, value: result.value }
+})
+
+const runCode = Effect.fnUntraced(function* (
+  session: SessionSchema.Info,
+  condition: ScheduleSchema.CodeCondition,
+  prevState: Schema.Json,
+  context: RunContext,
+) {
+  const bindings: Record<string, Schema.Json> = {
+    state: prevState,
+    now: context.now,
+    runs: context.checks,
+    input: { state: prevState, now: context.now, runs: context.checks },
+  }
+  const result = yield* execCodeProgram(session, condition.code, bindings, context.messageID)
+  if (!result.ok) return result
   if (typeof result.value === "boolean") {
     return { ok: true as const, wake: result.value, state: prevState }
   }
@@ -386,6 +419,15 @@ const assertShellPermissions = Effect.fnUntraced(function* (
   }
 })
 
+export const authorizeShellCommand = Effect.fnUntraced(function* (
+  session: SessionSchema.Info,
+  command: string,
+  metadata: Record<string, unknown>,
+) {
+  const scanned = yield* scanShell(command)
+  yield* assertShellPermissions(session, scanned, metadata)
+})
+
 const authorizeShell = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
   name: string | undefined,
@@ -393,8 +435,7 @@ const authorizeShell = Effect.fnUntraced(function* (
   mode: ScheduleSchema.CheckMode,
   condition: ScheduleSchema.ShellCondition,
 ) {
-  const scanned = yield* scanShell(condition.run)
-  yield* assertShellPermissions(session, scanned, {
+  yield* authorizeShellCommand(session, condition.run, {
     schedule: name,
     mode,
     when,
@@ -403,14 +444,10 @@ const authorizeShell = Effect.fnUntraced(function* (
   })
 })
 
-const runShell = Effect.fnUntraced(function* (
-  session: SessionSchema.Info,
-  condition: ScheduleSchema.ShellCondition,
-  prevState: Schema.Json,
-) {
+export const execShellCommand = Effect.fnUntraced(function* (session: SessionSchema.Info, command: string) {
   const environment = yield* Environment.Service
-  const scannedExit = yield* Effect.result(scanShell(condition.run))
-  if (Result.isFailure(scannedExit)) return { ok: false as const, error: scannedExit.failure } satisfies Outcome
+  const scannedExit = yield* Effect.result(scanShell(command))
+  if (Result.isFailure(scannedExit)) return Result.fail(scannedExit.failure)
   const scanned = scannedExit.success
   const unattended: Permission.Ruleset = [
     ...scanned.external.map((resource) => ({ action: "external_directory", resource, effect: "allow" as const })),
@@ -420,11 +457,11 @@ const runShell = Effect.fnUntraced(function* (
     Effect.provideService(Permission.Unattended, unattended),
     Effect.result,
   )
-  if (Result.isFailure(authorized)) return { ok: false as const, error: authorized.failure.message }
+  if (Result.isFailure(authorized)) return Result.fail(authorized.failure.message)
 
   const executed = yield* Effect.scoped(
     Effect.gen(function* () {
-      const proc = ChildProcess.make(scanned.shell, ShellSelect.args(scanned.shell, condition.run), {
+      const proc = ChildProcess.make(scanned.shell, ShellSelect.args(scanned.shell, command), {
         cwd: scanned.cwd,
         ...(scanned.workspaceID === undefined ? { env: process.env } : {}),
         stdin: "ignore",
@@ -449,11 +486,18 @@ const runShell = Effect.fnUntraced(function* (
   ).pipe(Effect.result)
 
   if (Result.isFailure(executed)) {
-    return {
-      ok: false as const,
-      error: executed.failure instanceof Error ? executed.failure.message : String(executed.failure),
-    }
+    return Result.fail(executed.failure instanceof Error ? executed.failure.message : String(executed.failure))
   }
+  return Result.succeed(executed.success)
+})
+
+const runShell = Effect.fnUntraced(function* (
+  session: SessionSchema.Info,
+  condition: ScheduleSchema.ShellCondition,
+  prevState: Schema.Json,
+) {
+  const executed = yield* execShellCommand(session, condition.run)
+  if (Result.isFailure(executed)) return { ok: false as const, error: executed.failure } satisfies Outcome
 
   const output = executed.success
   const trimmed = output.stdout.trim()

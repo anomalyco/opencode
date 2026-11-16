@@ -50,9 +50,9 @@ it.live("manages schedules through the experimental API when enabled and honors 
       const created = await api.experimental.schedule.create({
         sessionID: session.id,
         name: "build",
-        when: { every: "1 hour" },
+        when: { type: "every", every: "1 hour" },
         ends: { times: 3 },
-        prompt: "check the build",
+        action: { type: "prompt", prompt: "check the build" },
       })
       expect(created).toMatchObject({
         sessionID: session.id,
@@ -72,24 +72,36 @@ it.live("manages schedules through the experimental API when enabled and honors 
       })
 
       await expect(
-        api.experimental.schedule.create({ sessionID: session.id, when: { every: "soon" }, prompt: "ping" }),
+        api.experimental.schedule.create({
+          sessionID: session.id,
+          when: { type: "every", every: "soon" },
+          action: { type: "prompt", prompt: "ping" },
+        }),
       ).rejects.toMatchObject({ _tag: "InvalidRequestError" })
-      // Two triggers would otherwise decode as the first one, silently turning a repeat into a one-shot.
-      const twoTriggers = await handlerRequest("/api/experimental/schedule", {
+      // Untagged or ambiguous triggers fail schema decoding with 400.
+      const invalidTrigger = await handlerRequest("/api/experimental/schedule", {
         sessionID: session.id,
         when: { in: "5 minutes", every: "1 hour" },
-        prompt: "ping",
+        action: { type: "prompt", prompt: "ping" },
       })
-      expect(twoTriggers.status).toBe(400)
+      expect(invalidTrigger.status).toBe(400)
       expect(await api.experimental.schedule.list({ sessionID: session.id })).toEqual([])
       await expect(
-        api.experimental.schedule.create({ sessionID: session.id, when: { in: "0 seconds" }, prompt: "ping" }),
+        api.experimental.schedule.create({
+          sessionID: session.id,
+          when: { type: "in", in: "0 seconds" },
+          action: { type: "prompt", prompt: "ping" },
+        }),
       ).rejects.toMatchObject({ _tag: "InvalidRequestError", message: "Duration must be positive: 0 seconds" })
 
       // Off where the Session lives: nothing can be created or read.
       const off = await api.session.create({ location: { directory: disabled } })
       await expect(
-        api.experimental.schedule.create({ sessionID: off.id, when: { in: "5 minutes" }, prompt: "ping" }),
+        api.experimental.schedule.create({
+          sessionID: off.id,
+          when: { type: "in", in: "5 minutes" },
+          action: { type: "prompt", prompt: "ping" },
+        }),
       ).rejects.toMatchObject({ _tag: "ForbiddenError" })
       await expect(api.experimental.schedule.list({ sessionID: off.id })).rejects.toMatchObject({
         _tag: "ForbiddenError",
@@ -98,8 +110,8 @@ it.live("manages schedules through the experimental API when enabled and honors 
       // Shell until check that already passes returns done immediately with its output.
       const matched = await api.experimental.schedule.create({
         sessionID: session.id,
-        until: { run: "printf ready" },
-        prompt: "ready now",
+        until: { type: "shell", run: "printf ready" },
+        action: { type: "prompt", prompt: "ready now" },
       })
       expect(matched).toMatchObject({
         status: "done",
@@ -119,16 +131,16 @@ it.live("manages schedules through the experimental API when enabled and honors 
       await expect(
         api.experimental.schedule.create({
           sessionID: askSession.id,
-          until: { run: "printf blocked" },
-          prompt: "never",
+          until: { type: "shell", run: "printf blocked" },
+          action: { type: "prompt", prompt: "never" },
         }),
       ).rejects.toMatchObject({ _tag: "ForbiddenError" })
 
-      // Code Mode until check works end-to-end with no allow field, and { run, code } together is 400.
+      // Code Mode until check works end-to-end with no allow field, and untagged { run, code } together is 400.
       const codeMatched = await api.experimental.schedule.create({
         sessionID: session.id,
-        until: { code: 'return { wake: true, message: "models=" + (await tools.opencode.models({})).total }' },
-        prompt: "models checked",
+        until: { type: "code", code: 'return { wake: true, message: "models=" + (await tools.opencode.models({})).total }' },
+        action: { type: "prompt", prompt: "models checked" },
       })
       expect(codeMatched).toMatchObject({
         status: "done",
@@ -139,7 +151,7 @@ it.live("manages schedules through the experimental API when enabled and honors 
       const mixed = await handlerRequest("/api/experimental/schedule", {
         sessionID: session.id,
         until: { run: "true", code: "return true" },
-        prompt: "ping",
+        action: { type: "prompt", prompt: "ping" },
       })
       expect(mixed.status).toBe(400)
     })
@@ -153,13 +165,16 @@ it.live("ticks due schedules in standalone ServerProcess.start without lifecycle
     const api = OpenCode.make({ baseUrl: server.base, headers: server.headers })
 
     yield* Effect.promise(async () => {
-      await fs.writeFile(path.join(dir, "opencode.json"), JSON.stringify({ experimental: { schedules: true }, permission: { shell: "allow" } }))
+      await fs.writeFile(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ experimental: { schedules: true }, permission: { shell: "allow" } }),
+      )
       const session = await api.session.create({ location: { directory: dir } })
       const created = await api.experimental.schedule.create({
         sessionID: session.id,
-        when: { in: "150 millis" },
-        if: { run: "false" },
-        prompt: "wake from serve",
+        when: { type: "in", in: "150 millis" },
+        if: { type: "shell", run: "false" },
+        action: { type: "prompt", prompt: "wake from serve" },
       })
       expect(created.status).toBe("active")
 
@@ -183,7 +198,10 @@ it.live("elects one scheduler leader when two server processes boot against a du
     const dbPath = path.join(dir, "shared.db")
     const marker = path.join(dir, "runs.txt")
     yield* Effect.promise(() =>
-      fs.writeFile(path.join(dir, "opencode.json"), JSON.stringify({ experimental: { schedules: true }, permission: { shell: "allow" } })),
+      fs.writeFile(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ experimental: { schedules: true }, permission: { shell: "allow" } }),
+      ),
     )
 
     // Seed an active schedule in a short-lived scope so it falls due while no server is running.
@@ -201,9 +219,9 @@ it.live("elects one scheduler leader when two server processes boot against a du
           const session = await seededApi.session.create({ location: { directory: dir } })
           const created = await seededApi.experimental.schedule.create({
             sessionID: session.id,
-            when: { in: "80 millis" },
-            if: { run: `printf 'x\\n' >> ${JSON.stringify(marker)} && false` },
-            prompt: "single leader check",
+            when: { type: "in", in: "80 millis" },
+            if: { type: "shell", run: `printf 'x\\n' >> ${JSON.stringify(marker)} && false` },
+            action: { type: "prompt", prompt: "single leader check" },
           })
           return created.id
         })
