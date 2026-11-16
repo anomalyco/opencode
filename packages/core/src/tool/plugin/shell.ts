@@ -26,6 +26,7 @@ import { toolFailure } from "../runtime.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
+const CODE_MODE_TIMEOUT_MS = 10 * 60 * 1_000
 // How long a call the user interrupted waits for its stopped command to exit before settling with the output so far.
 const INTERRUPT_WAIT = "500 millis"
 
@@ -52,20 +53,25 @@ const description = (shell?: string) =>
     "The current session ID is available in the OPENCODE_SESSION_ID environment variable.",
   ].join(" ")
 
+const timeoutInput = (foreground: number) =>
+  Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Optional timeout in milliseconds (default ${foreground}). When it expires, a foreground command moves to the background and a background command is stopped.`,
+  })
+
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
   workdir: Schema.optionalKey(Schema.String).annotate({
     description:
       "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.",
   }),
-  timeout: Schema.optionalKey(NonNegativeInt).annotate({
-    description: `Optional timeout in milliseconds (default ${DEFAULT_TIMEOUT_MS}). When it expires, a foreground command moves to the background and a background command is stopped.`,
-  }),
+  timeout: timeoutInput(DEFAULT_TIMEOUT_MS),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
   }),
 })
+
+const CodeModeInput = Schema.Struct({ ...Input.fields, timeout: timeoutInput(CODE_MODE_TIMEOUT_MS) })
 
 const StructuredOutput = Schema.Struct({
   output: Schema.String,
@@ -76,6 +82,8 @@ const StructuredOutput = Schema.Struct({
   shellID: Schema.optionalKey(Schema.String),
   pid: Schema.optionalKey(NonNegativeInt),
 })
+
+const CodeModeOutput = Schema.Struct({ ...StructuredOutput.fields, status: Schema.Literals(["completed", "running"]) })
 
 type Output = ReturnType<typeof ShellResult.output> & {
   status: "completed" | "running"
@@ -90,11 +98,12 @@ const resultMessages = (output: Output, timeout?: number) => {
   return [...(output.output ? [output.output] : []), ...(notice ? [notice] : [])]
 }
 
-const toolResult = (output: Output, timeout?: number) => {
+const toolResult = (output: Output, timeout: number, codeMode: boolean) => {
   return {
     output: {
       ...Struct.omit(output, ["exit", "status", "truncated", "timeout", "killed"]),
       exitCode: output.exit ?? null,
+      ...(codeMode ? { status: output.status } : {}),
     },
     content: resultMessages(output, timeout).map((text) => ({
       type: "text" as const,
@@ -287,7 +296,6 @@ export const Plugin = {
     // Internal plugins are not re-run on config changes, so reload the tool transform instead.
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
-    const fullCodeMode = () => flags.resolve(loaded.entries).full_codemode.enabled
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
@@ -351,17 +359,18 @@ export const Plugin = {
     })
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        const codeMode = flags.resolve(loaded.entries).full_codemode.enabled
         editor.add({
           name,
           // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool.
-          options: { codemode: fullCodeMode() },
+          options: { codemode: codeMode },
           description: description(),
-          input: Input,
-          output: StructuredOutput,
+          input: codeMode ? CodeModeInput : Input,
+          output: codeMode ? CodeModeOutput : StructuredOutput,
           execute: (input, context) => {
             // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
-            const foreground = input.timeout || DEFAULT_TIMEOUT_MS
+            const foreground = input.timeout || (codeMode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
             const timeout = input.background === true ? (input.timeout ?? 0) : foreground
             let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
@@ -484,12 +493,12 @@ export const Plugin = {
                 "gen_ai.tool.call.id": context.id,
                 ...(input.background === true ? { "opencode.shell.background": true } : {}),
               }),
-              Effect.map((output) => toolResult(output, finalTimeout)),
+              Effect.map((output) => toolResult(output, finalTimeout, codeMode)),
               Effect.mapError(toolFailure(`Unable to execute command: ${input.command}`)),
             )
           },
-        }),
-      )
+        })
+      })
       .pipe(Effect.orDie)
 
     const hook = (event: SessionHooks["context"]) =>
