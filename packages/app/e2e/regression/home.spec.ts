@@ -54,9 +54,7 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
   }
 })
 
-test("desktop Projects groups projects by server and keeps the remote history target after its last tab closes", async ({
-  page,
-}) => {
+async function openProjects(page: Page) {
   const remote = project({ id: "proj_remote_site", directory: "/work/website", name: "Website" })
 
   const earlier = session({
@@ -92,57 +90,79 @@ test("desktop Projects groups projects by server and keeps the remote history ta
 
   const remoteGroup = sidebar.getByRole("group", { name: "Build server", exact: true })
 
-  const localToggle = localGroup.getByRole("button", { name: "Local Server", exact: true })
+  return {
+    remote,
+    earlier,
+    sidebar,
+    localToggle: localGroup.getByRole("button", { name: "Local Server", exact: true }),
+    remoteToggle: remoteGroup.getByRole("button", { name: "Build server", exact: true }),
+    localProject: localGroup.getByText("Website", { exact: true }),
+    remoteProject: remoteGroup.getByText("Website", { exact: true }),
+  }
+}
 
-  const remoteToggle = remoteGroup.getByRole("button", { name: "Build server", exact: true })
-
-  const localProject = localGroup.getByText("Website", { exact: true })
-
-  const remoteProject = remoteGroup.getByText("Website", { exact: true })
-
-  await expect(localToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(remoteToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(localProject).toBeVisible()
-  await expect(remoteProject).toBeVisible()
-  await expect(sidebar.getByRole("button", { name: /Browse/ })).toHaveCount(0)
-
-  await remoteToggle.click()
-  await expect(remoteToggle).toHaveAttribute("aria-expanded", "false")
-  await expect(remoteProject).toBeHidden()
-  await expect(localToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(localProject).toBeVisible()
-  await remoteToggle.click()
-  await expect(remoteToggle).toHaveAttribute("aria-expanded", "true")
-
-  await remoteProject.click({ button: "right" })
+async function openRemoteHistory(page: Page, view: Awaited<ReturnType<typeof openProjects>>) {
+  await view.remoteProject.click({ button: "right" })
   await page.getByRole("menuitem", { name: "View session history…", exact: true }).click()
   const browser = page.getByRole("dialog", { name: "Browse projects", exact: true })
 
   const history = browser.getByRole("listbox", { name: "Search sessions in Website", exact: true }).getByRole("option")
 
-  await expect(history.getByText(earlier.title, { exact: true })).toBeVisible()
+  return { browser, history }
+}
+
+test("desktop Projects groups projects by server and collapses one server at a time", async ({ page }) => {
+  const view = await openProjects(page)
+  await expect(view.localToggle).toHaveAttribute("aria-expanded", "true")
+  await expect(view.remoteToggle).toHaveAttribute("aria-expanded", "true")
+  await expect(view.localProject).toBeVisible()
+  await expect(view.remoteProject).toBeVisible()
+  await expect(view.sidebar.getByRole("button", { name: /Browse/ })).toHaveCount(0)
+
+  await view.remoteToggle.click()
+  await expect(view.remoteToggle).toHaveAttribute("aria-expanded", "false")
+  await expect(view.remoteProject).toBeHidden()
+  await expect(view.localToggle).toHaveAttribute("aria-expanded", "true")
+  await expect(view.localProject).toBeVisible()
+  await view.remoteToggle.click()
+  await expect(view.remoteToggle).toHaveAttribute("aria-expanded", "true")
+})
+
+test("desktop Projects history opens the worktree session and reopens from its location menu", async ({ page }) => {
+  const view = await openProjects(page)
+  const { browser, history } = await openRemoteHistory(page, view)
+  await expect(history.getByText(view.earlier.title, { exact: true })).toBeVisible()
   await expect(history).toHaveCount(1)
   await history.click()
-  await expectSessionTitle(page, earlier.title)
-  const location = page.locator('[data-slot="session-location-trigger"]')
+  await expectSessionTitle(page, view.earlier.title)
 
-  await location.click()
+  await page.locator('[data-slot="session-location-trigger"]').click()
   await page.getByRole("menuitem", { name: /Website/ }).click()
-  await expect(browser.getByText(earlier.title, { exact: true })).toBeVisible()
+  await expect(browser.getByText(view.earlier.title, { exact: true })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(browser).toHaveCount(0)
-  await sidebar.getByRole("button", { name: "Close tab", exact: true }).click()
+})
+
+test("desktop Projects keeps the remote project as the next session's target after its last tab closes", async ({
+  page,
+}) => {
+  const view = await openProjects(page)
+  const { browser, history } = await openRemoteHistory(page, view)
+  await history.click()
+  await expectSessionTitle(page, view.earlier.title)
+  await expect(browser).toHaveCount(0)
+  await view.sidebar.getByRole("button", { name: "Close tab", exact: true }).click()
 
   const landing = page.getByRole("main")
 
   await expect(landing).toContainText("Website")
   await expect(landing).toContainText("Build server")
-  await expect(remoteProject).toBeVisible()
-  await sidebar.getByRole("button", { name: "Settings", exact: true }).click()
+  await expect(view.remoteProject).toBeVisible()
+  await view.sidebar.getByRole("button", { name: "Settings", exact: true }).click()
   await page.getByRole("button", { name: "Back to app", exact: true }).click()
   await landing.getByRole("button", { name: "New session", exact: true }).click()
   await expect(newSessionLocation(page)).toContainText("Website")
-  await expect(page.locator('[data-slot="new-session-location-path"]')).toHaveText(remote.worktree)
+  await expect(page.locator('[data-slot="new-session-location-path"]')).toHaveText(view.remote.worktree)
 })
 
 test("desktop Projects resumes the remembered tab when the window opens at Home", async ({ page }) => {
