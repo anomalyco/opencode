@@ -38,6 +38,7 @@ import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { PluginContext } from "@opencode/plugin/gui/host"
 import { usePluginHost, type Item } from "./host"
 import { createLinkCheck } from "./link-check"
+import { webHref } from "./web-href"
 
 /**
  * Renders one plugin contribution with its context and error isolation: a contribution that throws records the
@@ -197,13 +198,13 @@ export function createWebLinks(session: () => MountedSession) {
   const host = usePluginHost()
 
   makeEventListener(document, "click", (event) => {
-    const href = webLink(event)
+    const href = webLink(event, session)
 
     if (href && host.links.open({ href, session: session() })) event.preventDefault()
   })
 }
 
-function webLink(event: MouseEvent) {
+function webLink(event: MouseEvent, session: () => MountedSession) {
   if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
     return
   const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null
@@ -212,9 +213,7 @@ function webLink(event: MouseEvent) {
   if (!(anchor instanceof HTMLAnchorElement) || !anchor.closest("[data-pane-row]") || anchor.hasAttribute("download"))
     return
 
-  // Only a link written as an absolute web address: a fragment or relative link resolves against the app's own
-  // origin, which is http in development, and is no web page to open beside the session.
-  return /^https?:\/\//i.test(anchor.getAttribute("href")?.trim() ?? "") ? anchor.href : undefined
+  return webHref(anchor.getAttribute("href") ?? "", session().server.url)
 }
 
 /**
