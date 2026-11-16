@@ -1,4 +1,4 @@
-import electron, { type WebContents } from "electron"
+import type { WebContents } from "electron"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { CodedError } from "./errors"
 import type { DialogInfo } from "./dialog-machine"
@@ -14,11 +14,13 @@ import {
   transitionPrompts,
   transitionVisit,
   type LeaveAction,
+  type Asked,
   type PromptEvent,
   type VisitEvent,
   type Waiting,
   type WaitingRequest,
 } from "./prompt-machine"
+import type { MediaAsk } from "./media-gate"
 import { challengeAnswer, challengeKey } from "./site-auth"
 import {
   clipboardWrite,
@@ -31,9 +33,13 @@ import {
   type PermissionKind,
   type SitePermissions,
 } from "./site-permissions"
+import { deviceStep, requestAccess, type MediaDevice, type SystemMedia } from "./system-media"
 
 /** How long a request that arrives while an agent command runs in the tab waits for the user before the page is told no. */
 export const AGENT_PROMPT_WAIT_MS = 20_000
+
+/** How long a device request the pane let through stays allowed for the page's own request that follows it. */
+const RELEASE_MS = 30_000
 
 /** How long closing a tab waits for the page's beforeunload before it closes anyway. */
 const LEAVE_PROBE_MS = 3_000
@@ -82,11 +88,17 @@ export function createPagePrompts(input: {
   readonly redo: (action: Browser.Action) => Promise<void>
   /** Closes the tab after the user chose to leave it. */
   readonly close: () => void
-  /** Gives the page keyboard focus back when its tab is in front. */
+  /** Gives the page keyboard focus back when its tab is in front, once its view shows again. */
   readonly focusPage: () => void
+  /** The tab is the one in front and the app window has the keyboard: a dialog may take it (never from another app). */
+  readonly front: () => boolean
+  /** The page is owed the keyboard and gets it once its view shows again (see `focusPage`). */
+  readonly returning: () => boolean
   /** Keeps the tab's state as it was while a close loads a blank page to ask the page's beforeunload. */
   readonly quiet: (quiet: boolean) => void
   readonly report: (view: PromptView | null) => void
+  /** The system's camera and microphone setting, and its prompt (system-media.ts). */
+  readonly system: SystemMedia
 }) {
   const contents = input.contents
   let state = initialPrompts
@@ -99,9 +111,16 @@ export function createPagePrompts(input: {
   const deadlines = new Map<number, ReturnType<typeof setTimeout>>()
   // This visit's decisions, by origin and feature, until the tab leaves the origin or closes.
   const decisions = new Map<string, "allow" | "block">()
+  // Device requests the pane let through after the user's Allow, by origin and features, until their deadline.
+  const released = new Map<string, number>()
   // Agent commands running now, which a sign-in the user must answer stops with a clear error.
   const agentWaits = new Set<(error: Error) => void>()
   let reported = "null"
+  // The page held the keyboard when the prompts began to show, so it gets it back once they end (owed while one still
+  // shows). A prompt that shows while an answer is in flight, as a page's next dialog does, continues the same chain.
+  let pageHeld = false
+  let owed = false
+  let answering = 0
   let disposed = false
 
   // The decisions in the tab's scope (see siteAnswer): a kept "block" wins over this visit's answer, so blocking a site
@@ -151,6 +170,14 @@ export function createPagePrompts(input: {
     leaveActions.delete(id)
   }
 
+  // The keyboard goes back to the page only if the page had it; the window gives it back wherever else it was.
+  const refocus = () => {
+    if (!pageHeld) return
+
+    if (view()) return void (owed = true)
+    input.focusPage()
+  }
+
   const settle = (id: number) => {
     clearTimeout(deadlines.get(id))
     deadlines.delete(id)
@@ -161,29 +188,45 @@ export function createPagePrompts(input: {
   const publish = () => {
     if (disposed) return
     const next = view()
-    const key = JSON.stringify(next && { ...next, focus: false })
+    const key = JSON.stringify(next && { ...next, focus: false, page: false })
 
     if (key === reported) return
+
+    if (reported === "null" && next) pageHeld = next.page || (pageHeld && (answering > 0 || input.returning()))
     reported = key
     input.report(next)
+
+    if (next || !(owed || input.returning())) return
+    owed = false
+    input.focusPage()
   }
 
   const view = (): PromptView | null => {
     const dialog = input.dialog()
     const head = selectPrompt(state)
     const waiting = state.items.length + (dialog ? 1 : 0) - 1
-    // A prompt in a tab the agent drives never takes the user's focus.
-    const focus = !contents.isDestroyed() && contents.isFocused() && !input.agentDriven()
+    const page = !contents.isDestroyed() && contents.isFocused()
+    const agent = input.agentDriven()
+    // A dialog blocks the tab in front, so it takes the keyboard there, unless the agent drives the tab and the user is
+    // elsewhere; a bar takes it only from its page. Neither takes it from another app or another tab.
+    const modal = input.front() && (page || !agent)
+    const bar = page && !agent
 
     // "Leave site?" goes first: a close the page held keeps its tab only while the pane shows it.
-    if (head && (head.kind === "leave" || !dialog)) return { id: head.id, waiting, focus, ask: ask(head) }
+    if (head && (head.kind === "leave" || !dialog)) {
+      const focus = head.kind === "leave" || head.kind === "auth" ? modal : bar
+
+      return { id: head.id, asked: head.asked, waiting, focus, page, ask: ask(head) }
+    }
 
     if (!dialog) return null
 
     return {
       id: dialog.revision,
+      asked: 1,
       waiting,
-      focus,
+      focus: modal,
+      page,
       ask: {
         kind: "dialog",
         dialog: dialog.dialog.type === "confirm" || dialog.dialog.type === "prompt" ? dialog.dialog.type : "alert",
@@ -203,6 +246,7 @@ export function createPagePrompts(input: {
         permissions: item.permissions,
         remember: item.remember,
         agent: item.agent,
+        system: item.system,
       }
 
     if (item.kind === "auth") return { kind: "auth", host: item.host, realm: item.realm, failed: item.failed }
@@ -217,32 +261,112 @@ export function createPagePrompts(input: {
     return { kind: "leave" }
   }
 
-  // The first requested device in the given state of the system's privacy settings for this app.
-  const media = (kinds: readonly PermissionKind[], state: ReturnType<typeof deviceAccess>) =>
-    kinds.find((kind): kind is "camera" | "microphone" => (kind === "camera" || kind === "microphone") && deviceAccess(kind) === state)
+  // The system's access for the camera and microphone a request names (system-media.ts); other features need none.
+  const devices = (kinds: readonly PermissionKind[]) =>
+    kinds.filter((kind): kind is MediaDevice => kind === "camera" || kind === "microphone")
 
-  // A device the system refuses this app; asking the user about it is pointless.
-  const refused = (kinds: readonly PermissionKind[]) => media(kinds, "denied")
+  const systemAccess = (kinds: readonly PermissionKind[]) =>
+    requestAccess(devices(kinds).map((device) => input.system.access(device)))
 
-  // Grants what the user allowed the site. A device the system refuses says so instead, and one macOS has not asked
-  // about yet is asked about now, after the user's answer, never in its place.
-  const grant = (origin: string, kinds: readonly PermissionKind[], callback: (granted: boolean) => void) => {
-    const blocked = refused(kinds)
+  // A device the system refuses: the page is told no with the notice that names the system's setting.
+  const refuse = (kinds: readonly PermissionKind[], callback: (granted: boolean) => void) => {
+    const device = devices(kinds).find((kind) => input.system.access(kind) === "denied")
+    callback(false)
 
-    if (blocked) {
-      callback(false)
+    if (device) enqueue({ kind: "system", key: `system\n${device}`, device })
+  }
 
-      return void enqueue({ kind: "system", key: `system\n${blocked}`, device: blocked })
+  // After the user allowed a request in the bar: the system grants it, refuses it, or macOS asks now, once per device.
+  // A held call (`gated`, media-gate.ts) is let through, and the page's own request for it follows without a bar.
+  const allowed = (origin: string, kinds: readonly PermissionKind[], callback: (granted: boolean) => void, gated: boolean) => {
+    const step = deviceStep({ system: systemAccess(kinds), allowed: true })
+
+    if (step === "refuse") return refuse(kinds, callback)
+
+    if (step === "grant") {
+      if (gated) released.set(`${origin}\n${kinds.join(",")}`, Date.now() + RELEASE_MS)
+
+      return callback(true)
     }
 
-    const ask = media(kinds, "ask")
+    const device = devices(kinds).find((kind) => input.system.access(kind) === "ask")
 
-    if (!ask) return void callback(true)
-    void electron.systemPreferences.askForMediaAccess(ask).then(() => {
-      // The page may have gone or moved on while macOS asked.
-      if (disposed || contents.isDestroyed() || originOf(contents.mainFrame.origin) !== origin) return callback(false)
-      grant(origin, kinds, callback)
-    }, () => callback(false))
+    if (!device) return callback(false)
+    void input.system.ask(device, origin).then(
+      () => {
+        // The page may have gone or moved on while macOS asked.
+        if (disposed || contents.isDestroyed() || originOf(contents.mainFrame.origin) !== originOf(origin)) return callback(false)
+        allowed(origin, kinds, callback, gated)
+      },
+      () => callback(false),
+    )
+  }
+
+  // Shows the request in the bar; the callback gets the user's answer, a deadline's or a navigation's.
+  const prompt = (
+    origin: string,
+    kinds: readonly PermissionKind[],
+    agent: boolean,
+    callback: (granted: boolean) => void,
+    gated: boolean,
+  ) => {
+    const id = enqueue({
+      kind: "permission",
+      // The agent's request never joins the user's, whose answer may be kept.
+      key: `${origin}\n${kinds.join(",")}${agent ? "\nagent" : ""}`,
+      origin,
+      permissions: kinds,
+      remember: agent ? "none" : ({ kept: "kept", session: "session", visit: "none" } as const)[decisionLife(input.scope, origin)],
+      agent,
+      system: systemAccess(kinds) === "ask",
+    })
+
+    permissionCallbacks.set(id, [
+      ...(permissionCallbacks.get(id) ?? []),
+      (granted) => (granted ? allowed(origin, kinds, callback, gated) : callback(false)),
+    ])
+
+    // A script the agent runs waits for this; it gets "no" in time rather than at its own timeout.
+    if (agent && !deadlines.has(id))
+      deadlines.set(
+        id,
+        setTimeout(() => {
+          const callbacks = permissionCallbacks.get(id)
+          permissionCallbacks.delete(id)
+          settle(id)
+          callbacks?.forEach((answer) => answer(false))
+        }, AGENT_PROMPT_WAIT_MS),
+      )
+  }
+
+  // What a request gets: the site's answer for other features, and for a device also the system's access (`deviceStep`).
+  // A device request the pane let through (`released`) is the one the user just allowed.
+  const decide = (
+    request: { readonly origin: string; readonly top: string; readonly mainFrame: boolean },
+    kinds: readonly PermissionKind[],
+    callback: (granted: boolean) => void,
+    gated: boolean,
+  ) => {
+    const agent = input.agentDriven()
+    const answer = siteAnswer({ ...request, kinds, agentDriven: agent }, decided(request.origin))
+
+    if (answer === "block" || disposed) return callback(false)
+
+    if (!devices(kinds).length) return answer === "allow" ? callback(true) : prompt(request.origin, kinds, agent, callback, gated)
+    const key = `${request.origin}\n${kinds.join(",")}`
+    const release = !gated && (released.get(key) ?? 0) > Date.now()
+    released.delete(key)
+    const step = deviceStep({ system: systemAccess(kinds), decision: answer === "allow" ? "allow" : undefined, allowed: release })
+
+    if (step === "refuse") return refuse(kinds, callback)
+
+    if (step === "deny") return callback(false)
+
+    if (step === "grant") return callback(true)
+
+    if (step === "ask-system") return allowed(request.origin, kinds, callback, gated)
+
+    prompt(request.origin, kinds, agent, callback, gated)
   }
 
   const signInRequired = (host: string) =>
@@ -326,43 +450,8 @@ export function createPagePrompts(input: {
       const origin = requestOrigin(details, contents)
       const request = { origin, top: contents.mainFrame.origin, mainFrame: details.isMainFrame }
 
-      const agent = input.agentDriven()
-
-      if (permission === "clipboard-sanitized-write") return once(clipboardWrite(request, agent))
-      const kinds = permissionKinds(permission, details.mediaTypes)
-      const answer = siteAnswer({ ...request, kinds, agentDriven: agent }, decided(origin))
-
-      if (answer === "block" || disposed) return once(false)
-
-      // Asking the user for a device the system refuses this app would keep an answer that cannot work.
-      if (answer === "allow" || refused(kinds)) return grant(origin, kinds, once)
-
-      const id = enqueue({
-        kind: "permission",
-        // The agent's request never joins the user's, whose answer may be kept.
-        key: `${origin}\n${kinds.join(",")}${agent ? "\nagent" : ""}`,
-        origin,
-        permissions: kinds,
-        remember: agent ? "none" : ({ kept: "kept", session: "session", visit: "none" } as const)[decisionLife(input.scope, origin)],
-        agent,
-      })
-
-      permissionCallbacks.set(id, [
-        ...(permissionCallbacks.get(id) ?? []),
-        (granted) => (granted ? grant(origin, kinds, once) : once(false)),
-      ])
-
-      // A script the agent runs waits for this; it gets "no" in time rather than at its own timeout.
-      if (agent && !deadlines.has(id))
-        deadlines.set(
-          id,
-          setTimeout(() => {
-            const callbacks = permissionCallbacks.get(id)
-            permissionCallbacks.delete(id)
-            settle(id)
-            callbacks?.forEach((callback) => callback(false))
-          }, AGENT_PROMPT_WAIT_MS),
-        )
+      if (permission === "clipboard-sanitized-write") return once(clipboardWrite(request, input.agentDriven()))
+      decide(request, permissionKinds(permission, details.mediaTypes), once, false)
     },
     check(permission, requesting, details) {
       // Electron passes Chromium's origin of the asking frame as a URL with a trailing slash; the frame at the asking
@@ -378,14 +467,84 @@ export function createPagePrompts(input: {
 
       if (permission === "clipboard-sanitized-write") return clipboardWrite(request, agent)
       const kinds = permissionKinds(permission, details.mediaType ? [details.mediaType] : [])
+      const answer = siteAnswer({ ...request, kinds, agentDriven: agent }, decided(origin))
 
-      // A device the system refuses reads as denied, as getUserMedia then fails.
-      return siteAnswer({ ...request, kinds, agentDriven: agent }, decided(origin)) === "allow" && !refused(kinds)
+      if (answer !== "allow" || !devices(kinds).length) return answer === "allow"
+
+      // A device reads as allowed only once the system grants it, so nothing probes it before the user's Allow.
+      return deviceStep({ system: systemAccess(kinds), decision: "allow", allowed: false }) === "grant"
     },
+  }
+
+  const respond = async (id: number, answer: PromptAnswer) => {
+    if (answer.kind === "dialog") {
+      if (input.dialog()?.revision !== id) return
+      await input.answerDialog(id, answer)
+
+      return refocus()
+    }
+
+    const item = selectPrompted(state, id)
+
+    if (!item) return
+    const permission = item.kind === "permission" ? permissionCallbacks.get(id) : undefined
+    const sign = item.kind === "auth" ? authCallbacks.get(id) : undefined
+    const leave = leaveActions.get(id)
+    permissionCallbacks.delete(id)
+    authCallbacks.delete(id)
+    leaveActions.delete(id)
+    settle(id)
+
+    if (item.kind === "permission" || item.kind === "system") {
+      const allow = answer.kind === "permission" && answer.allow
+
+      // A kept decision lives in the store alone, so changing it in Settings applies to open tabs at once. An allow
+      // given while the agent drives the tab is for that request alone.
+      if (item.kind === "permission" && answer.kind === "permission" && !(item.agent && allow))
+        item.permissions.forEach((kind) =>
+          answer.remember && item.remember !== "none"
+            ? input.sites.keep(input.scope, { origin: item.origin, permission: kind, setting: allow ? "allow" : "block" })
+            : decisions.set(`${item.origin}\n${kind}`, allow ? "allow" : "block"),
+        )
+      permission?.forEach((callback) => callback(allow))
+
+      return refocus()
+    }
+
+    if (item.kind === "auth") {
+      if (answer.kind !== "auth") dispatchVisit({ type: "dismissed", origin: item.origin })
+      // The credentials go to Chromium alone; nothing here keeps them.
+      sign?.forEach((callback) => (answer.kind === "auth" ? callback(answer.username, answer.password) : callback()))
+
+      return refocus()
+    }
+
+    if (answer.kind === "leave" && answer.leave && leave) {
+      if (leave.type === "close") return input.close()
+      dispatchVisit({ type: "bypassed" })
+      await input.redo(leave).finally(() => dispatchVisit({ type: "bypass-ended" }))
+
+      return
+    }
+
+    refocus()
   }
 
   return {
     permissions,
+    /**
+     * Decides a page's getUserMedia before Blink opens any device (media-gate.ts): let through at once unless macOS has
+     * not asked yet, else after the user's Allow and the system's answer.
+     */
+    gate(ask: MediaAsk) {
+      if (systemAccess(ask.kinds) === "granted") return Promise.resolve(true)
+      const answer = Promise.withResolvers<boolean>()
+      decide({ origin: ask.origin, top: contents.mainFrame.origin, mainFrame: ask.mainFrame }, ask.kinds, onceCallback(answer.resolve), true)
+
+      return answer.promise
+    },
+    /** Something shows: the page's view stays hidden behind it, and gets the keyboard back only once it ends. */
+    showing: () => reported !== "null",
     /** Reports the prompt again, after the dialog gate opened or closed a dialog. */
     publish,
     /** Marks a navigation as the user's while it starts, so a page that holds it asks "Leave site?". */
@@ -422,65 +581,22 @@ export function createPagePrompts(input: {
      */
     agentWait(navigation: boolean) {
       const stopped = Promise.withResolvers<never>()
-      const waiting = state.items.find((item): item is Extract<Waiting, { kind: "auth" }> => item.kind === "auth")
+      const waiting = state.items.find((item): item is Extract<Asked, { kind: "auth" }> => item.kind === "auth")
 
       if (waiting && !navigation) stopped.reject(signInRequired(waiting.host))
       agentWaits.add(stopped.reject)
 
       return { promise: stopped.promise, stop: () => agentWaits.delete(stopped.reject) }
     },
+    /** The user's answer to what the tab shows; prompts that show while it runs continue the same focus chain. */
     async answer(id: number, answer: PromptAnswer) {
-      if (answer.kind === "dialog") {
-        if (input.dialog()?.revision !== id) return
-        await input.answerDialog(id, answer)
+      answering++
 
-        return input.focusPage()
+      try {
+        await respond(id, answer)
+      } finally {
+        answering--
       }
-
-      const item = selectPrompted(state, id)
-
-      if (!item) return
-      const permission = item.kind === "permission" ? permissionCallbacks.get(id) : undefined
-      const sign = item.kind === "auth" ? authCallbacks.get(id) : undefined
-      const leave = leaveActions.get(id)
-      permissionCallbacks.delete(id)
-      authCallbacks.delete(id)
-      leaveActions.delete(id)
-      settle(id)
-
-      if (item.kind === "permission" || item.kind === "system") {
-        const allow = answer.kind === "permission" && answer.allow
-
-        // A kept decision lives in the store alone, so changing it in Settings applies to open tabs at once. An allow
-        // given while the agent drives the tab is for that request alone.
-        if (item.kind === "permission" && answer.kind === "permission" && !(item.agent && allow))
-          item.permissions.forEach((kind) =>
-            answer.remember && item.remember !== "none"
-              ? input.sites.keep(input.scope, { origin: item.origin, permission: kind, setting: allow ? "allow" : "block" })
-              : decisions.set(`${item.origin}\n${kind}`, allow ? "allow" : "block"),
-          )
-        permission?.forEach((callback) => callback(allow))
-
-        return input.focusPage()
-      }
-
-      if (item.kind === "auth") {
-        if (answer.kind !== "auth") dispatchVisit({ type: "dismissed", origin: item.origin })
-        // The credentials go to Chromium alone; nothing here keeps them.
-        sign?.forEach((callback) => (answer.kind === "auth" ? callback(answer.username, answer.password) : callback()))
-
-        return input.focusPage()
-      }
-
-      if (answer.kind === "leave" && answer.leave && leave) {
-        if (leave.type === "close") return input.close()
-        dispatchVisit({ type: "bypassed" })
-        await input.redo(leave).finally(() => dispatchVisit({ type: "bypass-ended" }))
-
-        return
-      }
-
-      input.focusPage()
     },
     dispose() {
       if (disposed) return
@@ -608,21 +724,7 @@ export const RESTORE_PROMPT = `(() => {
   Object.defineProperty(window, "prompt", { value: prompt, writable: true, configurable: true, enumerable: true })
 })()`
 
-/**
- * The system's privacy setting for this app and a device: `granted`, `denied`, or `ask` when macOS has not asked yet.
- * Linux has no such setting, and Windows cannot ask from an app.
- */
-function deviceAccess(kind: "camera" | "microphone") {
-  if (process.platform !== "darwin" && process.platform !== "win32") return "granted" as const
-  const status = electron.systemPreferences.getMediaAccessStatus(kind)
-
-  if (status === "denied" || status === "restricted") return "denied" as const
-
-  // The app declares both in its Info.plist and entitlements, so macOS may ask for either.
-  return process.platform === "darwin" && status === "not-determined" ? ("ask" as const) : ("granted" as const)
-}
-
-/** The asking frame's own origin (equesterOrigin); a media request's security origin must agree with it. */
+/** The asking frame's own origin (`requesterOrigin`); a media request's security origin must agree with it. */
 function requestOrigin(details: Details, contents: WebContents) {
   const main = contents.mainFrame
 

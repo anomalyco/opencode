@@ -10,6 +10,7 @@ import { createCdp, abortError, waitFor } from "./cdp"
 import { CodedError } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
+import { guardMediaRequests } from "./media-gate"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
 import { agentKeyRefusal, hardwareInput, pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
@@ -73,6 +74,7 @@ import type { workspacePages } from "./workspace-pages"
 import { artifactLinks } from "./artifact-links"
 import { createPagePrompts, RESTORE_PROMPT, takeDialogs } from "./page-prompts"
 import type { SitePermissions } from "./site-permissions"
+import type { SystemMedia } from "./system-media"
 import { previewScheme } from "./scheme"
 import type { WorkspaceSource } from "./workspace-file"
 import type { artifactPages } from "./artifact-preview"
@@ -258,6 +260,10 @@ export function createBrowserPage(
     closeTab?: () => void
     /** Gives the page keyboard focus back after a prompt, when its tab is in front. */
     focusPage?: () => void
+    /** The tab is the one in front of its pane and the app window has the keyboard. */
+    front?: () => boolean
+    /** The system's camera and microphone setting, and its prompt (system-media.ts). */
+    system: SystemMedia
     /** Logs that an Electron internal is not what the page expects; the pane logs each message once. */
     warn?: (message: string) => void
   },
@@ -438,7 +444,7 @@ export function createBrowserPage(
   // Set the nested auto-attach policy before the new renderer can create its own children.
   const prepareFrame = async (sessionID: string) => {
     try {
-      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID)])
+      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID), media.attach(sessionID)])
       await cdp.send("Runtime.runIfWaitingForDebugger", {}, sessionID)
     } catch {
       // A detached target needs no resumption. A live one must not run unguarded or remain invisibly paused.
@@ -554,6 +560,9 @@ export function createBrowserPage(
     warn: (message) => options.warn?.(message),
   })
 
+  // Set while a prompt hides the page's view and the page should get the keyboard back once the view shows.
+  let refocus = false
+
   const prompts = createPagePrompts({
     contents,
     scope: options.serverPartition ? { kind: "server", partition: options.partition } : { kind: "profile" },
@@ -566,7 +575,16 @@ export function createBrowserPage(
     answerDialog: (revision, answer) => answerDialog(revision, answer.accept, answer.text, answer.stop),
     redo: (action) => execute(action, [], new AbortController().signal, "user").then(() => undefined, () => undefined),
     close: () => options.closeTab?.(),
-    focusPage: () => options.focusPage?.(),
+    // A page that held the keyboard before a prompt gets it back once its view shows again: a dialog's still hides the
+    // view until the page draws, and a hidden view cannot take focus.
+    focusPage: () => {
+      refocus = !view.getVisible()
+
+      if (!refocus) options.focusPage?.()
+    },
+    front: () => !!options.front?.(),
+    returning: () => refocus,
+    system: options.system,
     quiet: (value) => {
       quiet = value
 
@@ -576,6 +594,9 @@ export function createBrowserPage(
       if (!closed()) options.prompt?.(view)
     },
   })
+
+  // A page's getUserMedia waits for the pane before Blink opens a device, so macOS asks only after the user's Allow.
+  const media = guardMediaRequests(cdp, (ask) => prompts.gate(ask))
 
   // Chromium uses the document URL as the title of untitled files; don't persist its internal origin as a title.
   const pageTitle = (address = state().url) => {
@@ -888,7 +909,16 @@ export function createBrowserPage(
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
-    if (visible) return
+    if (visible) {
+      // Not while a prompt still shows: the view shows between two dialogs, and the next one takes the keyboard.
+      if (refocus && !prompts.showing()) {
+        refocus = false
+        options.focusPage?.()
+      }
+
+      return
+    }
+
     menu.close()
     void dispatchPicker({ type: "embed.hidden" })
 
@@ -955,6 +985,7 @@ export function createBrowserPage(
         ]),
     diagnostics.enable(),
     choosers.attach(),
+    media.attach(),
     cdp.send("Page.enable"),
     cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
@@ -1091,6 +1122,7 @@ export function createBrowserPage(
       dispatch({ type: "disposed" })
       menu.dispose()
       choosers.dispose()
+      media.dispose()
       options.artifacts?.dispose()
       options.workspace?.dispose()
       dispatchDialog({ type: "disposed" })

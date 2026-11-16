@@ -42,6 +42,7 @@ import { createBrowserRestoreStore } from "./restore"
 import { guardSession } from "./session-guard"
 import { extensionResource } from "./profile/extension-api/resource"
 import type { SitePermissions } from "./site-permissions"
+import type { SystemMedia } from "./system-media"
 import { workspaceFile, type WorkspaceSource } from "./workspace-file"
 import { workspacePages } from "./workspace-pages"
 import { artifactKind } from "@opencode/util/artifact"
@@ -94,6 +95,8 @@ export function createBrowserPane(input: {
   readonly profile: Profile
   /** The permission decisions the user kept for sites. */
   readonly sites: SitePermissions
+  /** The system's camera and microphone setting, and its prompt. */
+  readonly system: SystemMedia
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
@@ -668,6 +671,8 @@ export function createBrowserPane(input: {
       focusPage: () => {
         if (focused() && win.isFocused() && page.view.getVisible()) page.contents.focus()
       },
+      front: () => focused() && win.isFocused(),
+      system: input.system,
       warn: (message) => {
         if (warned.has(message)) return
         warned.add(message)

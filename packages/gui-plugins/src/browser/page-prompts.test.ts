@@ -6,6 +6,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import type { PromptView } from "./ipc"
 import { AGENT_PROMPT_WAIT_MS, createPagePrompts, takeDialogs } from "./page-prompts"
 import { createSitePermissions } from "./site-permissions"
+import type { DeviceAccess, MediaDevice } from "./system-media"
 
 beforeEach(() => jest.useFakeTimers())
 
@@ -130,6 +131,111 @@ describe("what the user allowed a site, in a tab the agent drives", () => {
   })
 })
 
+describe("a page's camera and microphone, before the system", () => {
+  const ask = { origin: "https://meet.example", mainFrame: true, kinds: ["microphone"] as const }
+  const details = { isMainFrame: true, requestingUrl: "https://meet.example/", mediaTypes: ["audio"] }
+
+  test("holds the page's call and asks the user first while macOS has not asked; Block never reaches the system", async () => {
+    const tab = page("https://meet.example", { system: { microphone: "ask" } })
+    const gate = tab.prompts.gate(ask)
+
+    expect(tab.shown()?.ask).toMatchObject({ kind: "permission", permissions: ["microphone"], system: true })
+    await tab.prompts.answer(tab.shown()?.id ?? 0, { kind: "permission", allow: false, remember: false })
+
+    expect(await gate).toBe(false)
+    expect(tab.asked()).toEqual([])
+  })
+
+  test("asks the system only after the user's Allow, then lets the page's own request through without a second bar", async () => {
+    const tab = page("https://meet.example", { system: { microphone: "ask" } })
+    const gate = tab.prompts.gate(ask)
+    expect(tab.asked()).toEqual([])
+
+    await tab.prompts.answer(tab.shown()?.id ?? 0, { kind: "permission", allow: true, remember: false })
+    expect(await gate).toBe(true)
+    expect(tab.asked()).toEqual(["ask microphone"])
+
+    const answers: boolean[] = []
+    tab.prompts.permissions.request("media", details, (granted) => answers.push(granted))
+    expect(answers).toEqual([true])
+    expect(tab.shown()).toBeNull()
+  })
+
+  test("asks the user even for a site allowed before, while macOS has not asked yet", () => {
+    const tab = page("https://meet.example", { system: { microphone: "ask" } })
+    tab.sites.keep({ kind: "profile" }, { origin: "https://meet.example", permission: "microphone", setting: "allow" })
+    void tab.prompts.gate(ask)
+
+    expect(tab.shown()?.ask).toMatchObject({ kind: "permission", system: true })
+    expect(tab.prompts.permissions.check("media", "https://meet.example/", { ...details, mediaType: "audio" })).toBe(false)
+    expect(tab.asked()).toEqual([])
+  })
+
+  test("refuses a device the system refuses with its notice, asking neither the system nor the user", async () => {
+    const tab = page("https://meet.example", { system: { camera: "denied" } })
+
+    expect(await tab.prompts.gate({ ...ask, kinds: ["camera"] })).toBe(false)
+    expect(tab.shown()?.ask).toEqual({ kind: "system", device: "camera", platform: expect.any(String) })
+    expect(tab.asked()).toEqual([])
+  })
+
+  test("lets the call through at once once the system decided, so the site's own request asks as before", async () => {
+    const tab = page("https://meet.example")
+
+    expect(await tab.prompts.gate(ask)).toBe(true)
+    expect(tab.shown()).toBeNull()
+    tab.prompts.permissions.request("media", details, () => {})
+    expect(tab.shown()?.ask).toMatchObject({ kind: "permission", system: false })
+  })
+})
+
+describe("a prompt the page asks for again", () => {
+  test("shows anew, so its input protection starts over", () => {
+    const tab = page("https://meet.example")
+    const details = { isMainFrame: true, requestingUrl: "https://meet.example/" }
+    tab.prompts.permissions.request("clipboard-read", details, () => {})
+    const first = tab.shown()
+    tab.prompts.permissions.request("clipboard-read", details, () => {})
+
+    expect(tab.shown()?.id).toBe(first?.id)
+    expect(first?.asked).toBe(1)
+    expect(tab.shown()?.asked).toBe(2)
+  })
+})
+
+describe("where a prompt puts the keyboard", () => {
+  test("a dialog takes it in the tab in front from anywhere in the window; a bar only from its page", () => {
+    const composer = page("https://intranet.example", { focused: false })
+    composer.challenge("https://intranet.example/api")
+    expect(composer.shown()).toMatchObject({ focus: true, page: false })
+
+    const behind = page("https://intranet.example", { focused: false, front: false })
+    behind.challenge("https://intranet.example/api")
+    expect(behind.shown()?.focus).toBe(false)
+
+    const agent = page("https://intranet.example", { focused: false, agent: true })
+    agent.challenge("https://intranet.example/api")
+    expect(agent.shown()?.focus).toBe(false)
+
+    const bar = page("https://intranet.example", { focused: false })
+    bar.prompts.permissions.request("notifications", { isMainFrame: true, requestingUrl: "https://intranet.example/" }, () => {})
+    expect(bar.shown()?.focus).toBe(false)
+  })
+
+  test("goes back to the page only if the page had it", async () => {
+    const held = page("https://intranet.example")
+    held.challenge("https://intranet.example/api")
+    held.state.focused = false
+    await held.prompts.answer(held.shown()?.id ?? 0, { kind: "dismiss" })
+    expect(held.refocused()).toBe(1)
+
+    const elsewhere = page("https://intranet.example", { focused: false })
+    elsewhere.challenge("https://intranet.example/api")
+    await elsewhere.prompts.answer(elsewhere.shown()?.id ?? 0, { kind: "dismiss" })
+    expect(elsewhere.refocused()).toBe(0)
+  })
+})
+
 describe("the takeover of a page's dialogs", () => {
   test("fails safe and says so once when Electron's internal dialog events are not what it expects", () => {
     // An Electron without the internal listener, which then calls it with no callback.
@@ -166,12 +272,30 @@ describe("the takeover of a page's dialogs", () => {
 })
 
 /** A tab on `origin`, with an in-memory store and the prompt views it reported. */
-function page(origin: string, options: { agent?: boolean } = {}) {
+function page(
+  origin: string,
+  options: {
+    agent?: boolean
+    /** The system's access per device; granted when not named. */
+    system?: Partial<Record<MediaDevice, DeviceAccess>>
+    /** The tab is in front of a focused window. */
+    front?: boolean
+    /** The page holds the keyboard. */
+    focused?: boolean
+  } = {},
+) {
+  const state = { focused: options.focused ?? true }
+
   const contents = Object.assign(new EventEmitter(), {
     mainFrame: { origin, url: `${origin}/`, framesInSubtree: [] },
     isDestroyed: () => false,
-    isFocused: () => true,
+    isFocused: () => state.focused,
   })
+
+  // Every call the pane makes to the system, in order: only reads of the setting may come before the user's Allow.
+  const system: string[] = []
+  const access = { ...options.system }
+  let refocused = 0
 
   const views: (PromptView | null)[] = []
   const sites = createSitePermissions(memoryStorage(), () => {})
@@ -189,15 +313,34 @@ function page(origin: string, options: { agent?: boolean } = {}) {
     answerDialog: async () => {},
     redo: async () => {},
     close: () => {},
-    focusPage: () => {},
+    focusPage: () => refocused++,
+    front: () => options.front ?? true,
+    returning: () => false,
     quiet: () => {},
     report: (view) => views.push(view),
+    system: {
+      access: (device) => {
+        system.push(`access ${device}`)
+
+        return access[device] ?? "granted"
+      },
+      ask: async (device) => {
+        system.push(`ask ${device}`)
+        access[device] = "granted"
+
+        return true
+      },
+    },
   })
 
   return {
     contents,
     prompts,
     sites,
+    state,
+    /** The system calls other than reads of its setting. */
+    asked: () => system.filter((call) => !call.startsWith("access")),
+    refocused: () => refocused,
     shown: () => views.at(-1) ?? null,
     navigate: (url: string) => contents.emit("did-start-navigation", { url, isMainFrame: true, isSameDocument: false }),
     /** A 401 from `url`; returns whether the pane took it and what it answered. */

@@ -29,6 +29,7 @@ const camera: WaitingRequest = {
   permissions: ["camera"],
   remember: "kept",
   agent: false,
+  system: false,
 }
 
 const signIn: WaitingRequest = {
@@ -42,13 +43,14 @@ const signIn: WaitingRequest = {
 }
 
 describe("the queue of what a tab waits for", () => {
-  test("joins a repeated identical request instead of stacking it", () => {
+  test("joins a repeated identical request instead of stacking it, and counts it, so the pane shows it anew", () => {
     const first = transitionPrompts(initialPrompts, { type: "requested", request: camera })
     const again = transitionPrompts(first.state, { type: "requested", request: camera })
 
     expect(again.id).toBe(first.id)
-    expect(again.state).toBe(first.state)
     expect(again.state.items).toHaveLength(1)
+    expect(first.state.items[0]?.asked).toBe(1)
+    expect(again.state.items[0]?.asked).toBe(2)
   })
 
   test("queues other requests and shows a blocking sign-in before older permission requests", () => {

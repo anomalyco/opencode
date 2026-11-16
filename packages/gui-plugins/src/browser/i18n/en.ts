@@ -260,11 +260,13 @@ export default {
   "prompt.permission.always": "Always allow",
   "prompt.permission.session": "Allow until you quit",
   "prompt.permission.agent": "The agent is working in this tab; your answer is for this request only.",
+  "prompt.permission.system": "If you allow this, macOS then asks whether OpenCode may use it.",
   "prompt.system.camera.win32":
     "Windows blocks the camera for apps. Turn on camera access in Settings > Privacy & security > Camera.",
   "prompt.system.microphone.win32":
     "Windows blocks the microphone for apps. Turn on microphone access in Settings > Privacy & security > Microphone.",
-  "prompt.system.camera.darwin": "macOS does not let OpenCode use the camera.",
+  "prompt.system.camera.darwin":
+    "macOS blocks the camera for OpenCode. Turn it on in System Settings > Privacy & Security > Camera.",
   "prompt.system.microphone.darwin":
     "macOS blocks the microphone for OpenCode. Turn it on in System Settings > Privacy & Security > Microphone.",
   "prompt.system.camera.other": "The system did not let OpenCode use the camera.",

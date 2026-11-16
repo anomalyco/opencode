@@ -68,8 +68,8 @@ export const SIGN_IN_TEXT_MAX = 1_024
 
 /**
  * What a tab waits on the user for, which only the window shows and only the user answers. `waiting` counts the
- * others behind it. `focus` is true when the page held keyboard focus as it was reported, so the pane may move focus
- * to it. Each kind:
+ * others behind it. `focus` is true when the prompt takes the keyboard as it shows: a dialog in the tab in front of a
+ * focused window, a bar only from its page. Each kind:
  * - `dialog`: the page's `alert`, `confirm` or `prompt`; `stop` offers to stop the page's dialogs.
  * - `leave`: the page asks to confirm before the user leaves it.
  * - `permission`: a site asks for features; `remember` offers to keep the decision in the profile (`kept`) or for a
@@ -80,8 +80,12 @@ export const SIGN_IN_TEXT_MAX = 1_024
  */
 export const PromptView = Schema.Struct({
   id: Schema.Int,
+  /** How many times the page asked for what shows: a repeat shows it anew, so its input protection starts over. */
+  asked: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   waiting: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   focus: Schema.Boolean,
+  /** The page held the keyboard as the prompt showed: it gets it back afterwards, so the window restores nothing. */
+  page: Schema.Boolean,
   ask: Schema.Union([
     Schema.Struct({
       kind: Schema.Literal("dialog"),
@@ -98,6 +102,8 @@ export const PromptView = Schema.Struct({
       permissions: Schema.Array(Schema.Literals(["camera", "microphone", "location", "notifications", "clipboard-read"])),
       remember: Schema.Literals(["kept", "session", "none"]),
       agent: Schema.Boolean,
+      /** macOS asks next, once the user allows the site: it has not asked about the device yet. */
+      system: Schema.Boolean,
     }),
     Schema.Struct({ kind: Schema.Literal("auth"), host: text(80), realm: detail(256), failed: Schema.Boolean }),
     Schema.Struct({

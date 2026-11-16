@@ -1,5 +1,42 @@
 import { expect, test } from "bun:test"
-import { ACTIVATION_DELAY_MS, actionGuard, activationAllowed } from "./activation-delay"
+import { ACTIVATION_DELAY_MS, actionGuard, activationAllowed, guardActivation } from "./activation-delay"
+
+test("a prompt that shows again, as for a repeated request, starts its delay over", () => {
+  const root = document.createElement("section")
+  const allow = document.createElement("button")
+  allow.dataset.activationGuard = ""
+  root.append(allow)
+  document.body.append(root)
+  const answered: number[] = []
+  allow.addEventListener("click", (event) => answered.push(event.timeStamp))
+  const guard = guardActivation(root)
+
+  // Times are event timestamps from the moment the prompt shows, as the browser stamps them.
+  const press = (at: number) => {
+    for (const type of ["pointerdown", "click"]) {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true })
+      Object.defineProperty(event, "timeStamp", { value: at })
+      Object.defineProperty(event, "isTrusted", { value: true })
+      allow.dispatchEvent(event)
+    }
+  }
+
+  guard.changed()
+  const shown = performance.now()
+  press(shown + ACTIVATION_DELAY_MS + 100)
+  expect(answered).toHaveLength(1)
+
+  // The page asks again: the same prompt shows anew, and a click 263 ms later does nothing.
+  guard.changed()
+  const again = performance.now()
+  press(again + 263)
+  expect(answered).toHaveLength(1)
+  press(again + ACTIVATION_DELAY_MS + 1)
+  expect(answered).toHaveLength(2)
+
+  guard.dispose()
+  root.remove()
+})
 
 test("a press that began before the prompt appeared, or elsewhere, never activates it", () => {
   expect(activationAllowed({ shownAt: 1_000, at: 5_000 })).toBe(false)

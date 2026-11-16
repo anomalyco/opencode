@@ -6,6 +6,7 @@ import { RefsStore } from "./refs"
 import { BrowserPane } from "./ipc"
 import { BrowserProfile } from "./profile/ipc"
 import { BrowserSites, createSitePermissions } from "./site-permissions"
+import { createSystemMedia } from "./system-media"
 import {
   createMainPaneState,
   isLoadingPaneAttempt,
@@ -89,6 +90,9 @@ const setup: Plugin.MainSetup = (ctx) => {
                   embeds: ctx.embeds,
                   profile: value,
                   sites,
+                  // Development builds log each system call for the camera and microphone, so a tester can see that
+                  // the system is asked only after a click on Allow.
+                  system: createSystemMedia(ctx.app.packaged ? undefined : (line) => ctx.log.write("info", line)),
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
