@@ -250,10 +250,13 @@ export interface Capabilities {
     /** Input formats accepted by custom (free-form) tools. */
     readonly freeform?: ReadonlyArray<"text" | "lark" | "regex">
     /**
-     * Tool changes the API accepts mid-conversation without changing the leading tool declaration, so the prompt
+     * Tool changes the model takes mid-conversation without changing the leading tool declaration, so the prompt
      * cache holds. `add`: declares a tool not declared before. `remove`: withdraws a declared tool. `replace`:
      * declares a tool under a name declared before (a redefinition, or re-adding a removed tool). Unset or empty:
-     * every change folds into the top-level tools.
+     * every change folds into the top-level tools. Anthropic Messages sends all three as native blocks. OpenAI
+     * Responses needs `add` for any of them: it declares every tool in `additional_tools` items with a short
+     * incremental-update hint before each later item, and announces a removal as developer text while the tool
+     * stays declared, so list `remove` only for models that follow that announcement.
      */
     readonly updates?: ReadonlyArray<"add" | "remove" | "replace">
   }

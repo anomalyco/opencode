@@ -14,8 +14,8 @@ import {
   type ReasoningPart,
   type TextPart,
   type ToolCallPart,
+  type ToolChanges,
   type ToolDefinition,
-  type ToolEntry,
   type ToolResultPart,
   type UserMessage,
 } from "../schema/index.js"
@@ -444,14 +444,8 @@ export interface ProviderAdapter {
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
-  /** Lowers the tools a `Message.tools(...)` marker adds; routes without it, and removals, must fold tool updates. */
-  readonly lowerAdditionalTools?: (
-    tools: ReadonlyArray<ToolEntry>,
-    custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
-  ) => Effect.Effect<
-    ReadonlyArray<Schema.Schema.Type<typeof Tool> | Schema.Schema.Type<typeof CustomTool> | HostedTool>,
-    AIError
-  >
+  /** Lowers a `Message.tools(...)` marker sent in place; routes without it must fold tool updates. */
+  readonly lowerToolChanges?: (changes: ToolChanges) => Effect.Effect<ReadonlyArray<OpenResponsesInputItem>, AIError>
 }
 
 const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
@@ -683,14 +677,9 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
       }
       const tools = toolsUpdate(message)
       if (tools) {
-        if (adapter.lowerAdditionalTools === undefined || tools.remove.length > 0)
+        if (adapter.lowerToolChanges === undefined)
           return yield* ProviderShared.invalidRequest(`${adapter.name} does not support mid-conversation tool updates`)
-        if (tools.add.length > 0)
-          input.push({
-            type: "additional_tools",
-            role: "developer",
-            tools: yield* adapter.lowerAdditionalTools(tools.add, custom),
-          })
+        input.push(...(yield* adapter.lowerToolChanges(tools)))
         if (message.content.length === 0) continue
       }
       input.push({

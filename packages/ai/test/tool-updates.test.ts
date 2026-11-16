@@ -64,7 +64,7 @@ const gemini = Gemini.route
   .model({ id: "gemini-3.5-flash", capabilities: updates(ALL) })
 
 const opus5 = anthropic("claude-opus-5", ALL)
-const astra = openai("gpt-6-astra", ["add", "replace"])
+const astra = openai("gpt-6-astra", ALL)
 
 const swap = Message.tools({ add: [write], remove: ["edit"] })
 const conversation = [Message.user("Fix it."), Message.assistant("Done."), swap, Message.user("Next.")]
@@ -545,6 +545,19 @@ describe("OpenAI Responses tool updates", () => {
     )
   const topLevel = (body: OpenAIResponses.OpenAIResponsesBody) =>
     body.tools?.map((entry) => ("name" in entry ? entry.name : entry.type))
+  // One line per input item: declared tools, developer text, or the item type.
+  const trace = (body: OpenAIResponses.OpenAIResponsesBody) =>
+    body.input.map((item) => {
+      if ("type" in item && item.type === "additional_tools")
+        return `tools: ${item.tools.map((entry) => ("name" in entry ? entry.name : entry.type)).join(", ")}`
+      if ("role" in item && item.role === "developer" && typeof item.content === "string") return item.content
+      return "role" in item ? item.role : item.type
+    })
+  const hint = (...unavailable: ReadonlyArray<string>) =>
+    [
+      "Tool update: the tools below are added to the ones you already have. Earlier tools stay available unless marked unavailable, and a tool declared again replaces its earlier definition.",
+      ...(unavailable.length === 0 ? [] : [`Still unavailable: ${unavailable.join(", ")}.`]),
+    ].join("\n")
 
   it.effect("declares every tool in a leading additional_tools item and leaves top-level tools out", () =>
     Effect.gen(function* () {
@@ -562,7 +575,7 @@ describe("OpenAI Responses tool updates", () => {
     }),
   )
 
-  it.effect("adds and redefines tools with later additional_tools items", () =>
+  it.effect("adds and redefines tools with later items, each after an incremental hint", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
@@ -583,28 +596,98 @@ describe("OpenAI Responses tool updates", () => {
         ["write: write tool"],
         ["edit: edit v2"],
       ])
-      expect(prepared.body.input.map((item) => ("type" in item ? item.type : undefined))).toEqual([
-        "additional_tools",
-        "message",
-        "additional_tools",
-        "message",
-        "additional_tools",
+      expect(trace(prepared.body)).toEqual([
+        "tools: read, edit",
+        "user",
+        hint(),
+        "tools: write",
+        "user",
+        hint(),
+        "tools: edit",
       ])
     }),
   )
 
-  it.effect("folds up to a removal into the leading item and keeps later additions in place", () =>
+  it.effect("sends the first item without a hint when no tools lead the request", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: astra,
+          messages: [
+            Message.user("Go."),
+            Message.tools({ add: [jira] }),
+            Message.user("More."),
+            Message.tools({ add: [write] }),
+          ],
+        }),
+      )
+
+      expect(trace(prepared.body)).toEqual(["user", "tools: jira", "user", hint(), "tools: write"])
+    }),
+  )
+
+  it.effect("announces removals, lists them in later hints until re-added, and keeps them declared", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: astra,
+          tools: [read, edit, write],
+          messages: [
+            Message.user("One."),
+            Message.tools({ remove: ["edit", "write"] }),
+            Message.user("Two."),
+            Message.tools({ add: [jira] }),
+            Message.user("Three."),
+            Message.tools({ add: [edit] }),
+          ],
+        }),
+      )
+
+      expect(trace(prepared.body)).toEqual([
+        "tools: read, edit, write",
+        "user",
+        "These tools are no longer available. Do not call them: edit, write.",
+        "user",
+        hint("edit", "write"),
+        "tools: jira",
+        "user",
+        hint("write"),
+        "tools: edit",
+      ])
+    }),
+  )
+
+  it.effect("sends a redefinition and a removal in one marker as an item and an announcement", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
           model: astra,
           tools: [read, edit],
+          messages: [Message.user("One."), Message.tools({ add: [defineTool("read", "read v2")], remove: ["edit"] })],
+        }),
+      )
+
+      expect(trace(prepared.body)).toEqual([
+        "tools: read, edit",
+        "user",
+        hint(),
+        "tools: read",
+        "These tools are no longer available. Do not call them: edit.",
+      ])
+    }),
+  )
+
+  it.effect("folds removals when the model doesn't list remove", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: openai("gpt-6-astra", ["add", "replace"]),
+          tools: [read, edit],
           messages: [...conversation, Message.tools({ add: [jira] })],
         }),
       )
 
-      expect(additional(prepared.body)).toEqual([["read: read tool", "write: write tool"], ["jira: jira tool"]])
-      expect(prepared.body.input.filter((item) => "role" in item && item.role === "developer")).toHaveLength(2)
+      expect(trace(prepared.body)).toEqual(["tools: read, write", "user", "assistant", "user", hint(), "tools: jira"])
     }),
   )
 
@@ -688,11 +771,7 @@ describe("OpenAI Responses tool updates", () => {
         }),
       )
 
-      expect(prepared.body.input.slice(2).map((item) => ("type" in item ? item.type : undefined))).toEqual([
-        "additional_tools",
-        "message",
-      ])
-      expect(prepared.body.input[3]).toEqual({ type: "message", role: "developer", content: "Use jira now." })
+      expect(trace(prepared.body)).toEqual(["tools: read", "user", hint(), "tools: jira", "Use jira now."])
     }),
   )
 
@@ -718,13 +797,13 @@ describe("OpenAI Responses tool updates", () => {
       )
       const plain = yield* compileRequest(ai.request({ model: openai("gpt-6-astra"), tools: [read, run], prompt: "x" }))
 
-      expect(prepared.body.input[2]).toEqual({
+      expect(prepared.body.input[3]).toEqual({
         type: "additional_tools",
         role: "developer",
         tools: [plain.body.tools?.[1]],
       })
       expect(plain.body.tools?.[1]?.type).toBe("custom")
-      expect(prepared.body.input[3]).toEqual({ type: "custom_tool_call", call_id: "call_1", name: "run", input: "ls" })
+      expect(prepared.body.input[4]).toEqual({ type: "custom_tool_call", call_id: "call_1", name: "run", input: "ls" })
     }),
   )
 
