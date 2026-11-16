@@ -876,6 +876,7 @@ impl Scripts {
             effects: RefCell::new(None),
             watches: RefCell::default(),
             continues: Vec::new(),
+            relay: RefCell::default(),
         };
         (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
     }
@@ -1330,6 +1331,7 @@ impl Scripts {
                             effects: RefCell::new(Some(effects)),
                             watches: RefCell::default(),
                             continues: Vec::new(),
+                            relay: RefCell::default(),
                         };
                         (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
                         drop(loads);

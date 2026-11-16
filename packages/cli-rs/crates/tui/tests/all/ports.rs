@@ -849,6 +849,25 @@ fn totals(carrier: Carrier<'_>) {
     h.wait_for("≈ $3.50 session total");
 }
 
+// Expected (win11-runs D1): the published session-usage and sidebar-tokens draw their sidebar blocks again once the JS
+// host was killed and a new one set them up again: session-usage's async setup, which registers its slot only after
+// its host calls answered, as much as sidebar-tokens' plain one.
+#[test]
+fn published_slots_draw_again_after_the_js_host_restarts() {
+    let carriers = [Carrier::Npm("opencode-session-usage"), Carrier::Npm("opencode-sidebar-tokens")];
+    let Some(h) = open_as(&carriers, 170, usage(Arc::new(Mutex::new(false)), false), false, None) else { return };
+    h.wait_for_all(&["≈ $2.50 session total", "Session tokens"]);
+    let scripts = h.tui.plugins.scripts.borrow().clone().unwrap();
+    let pid = scripts.pid();
+    scripts.kill();
+    h.wait("a new JS host", || {
+        h.app.advance(std::time::Duration::from_millis(1));
+        scripts.pid().is_some_and(|now| Some(now) != pid)
+    });
+    h.settle();
+    h.wait_for_all(&["≈ $2.50 session total", "Session tokens"]);
+}
+
 // Expected (FT-7): the published `opencode-sidebar-tokens`, unmodified on the JS host, shows the session's token totals
 // from `data.session.get(id).tokens` as TS's sidebar does, and follows a `session.usage.updated` at once.
 #[test]

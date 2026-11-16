@@ -76,6 +76,59 @@ pub(crate) struct Loaded {
     pub watches: RefCell<Vec<(String, HostRequest)>>,
     /// The registry's activations a reload handed their JS host's activation on from, whose dialog stays (FT-4).
     pub continues: Vec<u64>,
+    /// Where the replies to the handed-over activation's requests go, which the new guest keeps ([`Relay`]).
+    pub relay: RefCell<Option<Rc<Relay>>>,
+}
+
+/// Where the replies to the requests of one activation of the JS host go: the guest that runs it when the reply comes.
+/// A reload of the plugin's registrations replaces the guest while the activation goes on (an async setup's slot, a
+/// command registered later), and a reply to a request the old guest sent then reaches the new one (win11-runs D1:
+/// session-usage's setup fetch, asked for as the JS host started again, was lost, and its slot never came back). A
+/// reply for an activation that ended reaches nobody.
+pub(crate) struct Relay {
+    scripts: Weak<Scripts>,
+    host: Weak<dyn Host>,
+    id: String,
+    js: u64,
+}
+
+impl Relay {
+    fn new(scripts: &Weak<Scripts>, host: &Weak<dyn Host>, id: &str, js: u64) -> Rc<Self> {
+        Rc::new(Self { scripts: scripts.clone(), host: host.clone(), id: id.to_owned(), js })
+    }
+
+    /// The guest that runs the activation now.
+    fn guest(&self) -> Option<Rc<Guest>> {
+        let scripts = self.scripts.upgrade()?;
+        let guest = scripts.guests.borrow().get(&self.id)?.upgrade()?;
+        (guest.js.get() == self.js).then_some(guest)
+    }
+}
+
+impl Answers for Relay {
+    fn live(&self) -> bool {
+        self.guest().is_some_and(|guest| guest.live())
+    }
+
+    fn running(&self) -> bool {
+        self.guest().is_some_and(|guest| guest.running())
+    }
+
+    fn owner(&self) -> Weak<dyn Host> {
+        self.host.clone()
+    }
+
+    fn answer(self: Rc<Self>, request: Request) {
+        if let Some(guest) = self.guest() {
+            guest.answer(request);
+        }
+    }
+
+    fn cancel(self: Rc<Self>, request: opencode_plugin_abi::RequestId) {
+        if let Some(guest) = self.guest() {
+            guest.cancel(request);
+        }
+    }
 }
 
 /// The definition of the plugin `loaded` names, whose setup registers what it listed.
@@ -95,7 +148,12 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
             let mailbox = Mailbox::new(setup.id(), wake);
             mailbox.refuse_messages();
             let activation = Activation::new(setup.host(), mailbox);
+            let relay = loaded.relay.take().filter(|relay| relay.js == loaded.seq);
+            let relay = relay.unwrap_or_else(|| {
+                Relay::new(&Rc::downgrade(&scripts), &Rc::downgrade(setup.host()), &loaded.id, loaded.seq)
+            });
             let guest = Rc::new(Guest {
+                relay: RefCell::new(relay),
                 owners: Owners::new(setup.id(), Rc::downgrade(setup.host()), &activation),
                 scripts: Rc::downgrade(&scripts),
                 host: Rc::downgrade(setup.host()),
@@ -137,6 +195,8 @@ pub(crate) struct Guest {
     loaded: Rc<Loaded>,
     /// The load whose setup made the JS host's activation of the plugin, which a deactivation names.
     js: Cell<u64>,
+    /// Where the replies to this activation's requests go.
+    relay: RefCell<Rc<Relay>>,
     /// A reload of its registrations handed its activation of the JS host to the guest that replaces it, whose end
     /// deactivates it; this one's does not (carbon-2: a flag, not a zeroed `js`, as a second reload reads `js`).
     handed_over: Cell<bool>,
@@ -230,6 +290,8 @@ impl Guest {
         let Some(scripts) = self.scripts.upgrade() else { return };
         let seq = scripts.next();
         self.js.set(seq);
+        // A new activation: what the last one asked for answers nobody.
+        *self.relay.borrow_mut() = Relay::new(&self.scripts, &self.host, self.id(), seq);
         let load = Down::Load {
             seq,
             target: self.loaded.target.clone(),
@@ -295,6 +357,7 @@ impl Guest {
                 effects: RefCell::new(Some(Vec::new())),
                 watches: RefCell::new(watches),
                 continues: [self.loaded.continues.as_slice(), &[self.generation]].concat(),
+                relay: RefCell::new(Some(self.relay.borrow().clone())),
             };
             (load.state, load.registered) = (super::Loading::Loaded(Rc::new(loaded)), false);
         }
@@ -350,7 +413,9 @@ impl Guest {
             .collect();
         *self.keys.borrow_mut() = ctx.keys.clone();
         let (effects, _) = ctx.take();
-        let weak: Weak<dyn Answers> = Rc::downgrade(self) as Weak<dyn Answers>;
+        // Replies go to the activation, through whichever guest runs it when they come.
+        let relay: Rc<dyn Answers> = self.relay.borrow().clone();
+        let weak = Rc::downgrade(&relay);
         apply(&self.host, self.id().to_owned(), weak, Some(self.generation), effects);
         // What they asked for may move the focus or set a mode, which no host change announces: the reads it watches go
         // again once they applied (P2).
