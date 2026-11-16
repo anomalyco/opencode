@@ -215,9 +215,17 @@ fn composer_slot(tui: &Tui, parent: &View, id: &SessionID) -> opencode_plugin::S
     )
 }
 
-/// Awaits a store read; a failure shows as an error toast.
-pub(super) fn load(tui: &Tui, task: Task<()>) {
-    tui.request(task, |_, ()| {});
+/// Awaits the transcript's first read; a failure shows the error's message as a toast, where TS shows nothing
+/// (deviation `O89-transcript-read-toast`).
+fn load(tui: &Tui, task: Task<()>) {
+    tui.app.spawn(
+        task,
+        opencode_ui::bind!(tui, |tui, _, result| {
+            if let Err(error) = result {
+                tui.toasts.error(error.tui_message());
+            }
+        }),
+    );
 }
 
 /// Once the page lands, compiles the grammars its code fences name on workers while the UI builds the rows, so the
