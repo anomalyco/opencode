@@ -129,6 +129,35 @@ pub fn tool_succeeded(session_id: &str, id: &str, metadata: Value, text: &str) -
     )
 }
 
+/// The calls of a shell the model ran in the background.
+pub fn background_shell(session_id: &str, shell_id: &str) -> Vec<Value> {
+    let call = format!("call_{shell_id}");
+    vec![
+        tool_started(session_id, &call, "shell"),
+        tool_called(session_id, &call, json!({ "command": "build", "background": true })),
+        tool_succeeded(session_id, &call, json!({ "shellID": shell_id, "status": "running" }), "backgrounded"),
+    ]
+}
+
+/// A finished shell's notice. A background job's carries its job ID; a user's shell command's has none.
+pub fn shell_notice(session_id: &str, inbox_id: &str, shell_id: &str, job: bool) -> Value {
+    let mut metadata = json!({ "source": "shell", "shellID": shell_id });
+    if job {
+        metadata["jobID"] = json!(shell_id);
+    }
+    durable_event(
+        "session.inbox.enqueued",
+        json!({
+            "sessionID": session_id, "inboxID": inbox_id,
+            "item": {
+                "type": "synthetic",
+                "payload": { "text": format!("<shell id=\"{shell_id}\" state=\"completed\">"), "metadata": metadata },
+                "delivery": "steer",
+            },
+        }),
+    )
+}
+
 pub fn tool_failed(session_id: &str, id: &str, input: Value) -> Value {
     let mut data = json!({ "sessionID": session_id, "assistantMessageID": "msg_tools", "id": id, "executed": true });
     if let (Some(data), Value::Object(input)) = (data.as_object_mut(), input) {
