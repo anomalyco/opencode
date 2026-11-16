@@ -1,6 +1,6 @@
 export * as BrowserMachine from "./machine.js"
 
-import type { Permission } from "@opencode/schema/permission"
+import { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { Wildcard } from "@opencode/schema/wildcard"
@@ -585,6 +585,11 @@ export function selectBrowserRule(rules: readonly Permission.Rule[], operation: 
     (rule) =>
       Wildcard.match("browser", rule.action, ignoreCase) && Wildcard.match(operation, rule.resource, ignoreCase),
   )
+}
+
+/** Whether `rules` deny the whole browser, which is when core stops listing the browser tools. */
+export function deniesBrowser(rules: readonly Permission.Rule[]) {
+  return Permission.deniesAll("browser", rules, process.platform === "win32")
 }
 
 export function isConnectionDisposed(state: ConnectionState) {

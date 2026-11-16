@@ -126,6 +126,16 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
           ),
         ),
   )
+  // The grant comes last, so core would list the browser tools and skill to an agent whose own rules deny the whole
+  // browser, and only the hook above would refuse their calls. Restating the deny after the grant hides them from that
+  // agent's steps and Code Mode catalog, and core refuses its calls before any hook runs. An ask or a narrower deny
+  // keeps them listed, for the hook above to decide each call.
+  yield* ctx.permission.hook("experimental.rules", (event) =>
+    Effect.sync(() => {
+      if (!BrowserMachine.deniesBrowser(rulesFor({ permissions: event.session }, event.agent))) return
+      event.rules.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const })))
+    }),
+  )
   // Permission syncs run here. Registered first, so it closes last: after disposal has drained the revokes.
   const work = yield* Scope.make()
   yield* Effect.addFinalizer((exit) => Scope.close(work, exit))

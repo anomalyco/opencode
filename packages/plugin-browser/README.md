@@ -34,7 +34,9 @@ The built-in `browser` skill (`skill.ts`) teaches the workflow: explicit tab
 IDs, snapshots and refs, showing results to the user, recipes for debugging,
 performance and memory, and recovery after failures. It lists every operation
 from `Browser.Operations`. Like the tools, it is hidden until a desktop browser
-attaches to the session.
+attaches to the session, and stays hidden from an agent whose configured rules
+deny the whole browser (`browser: "deny"`). An `ask`, or a deny for some
+operations only, keeps them listed; each call then prompts or is refused.
 
 The plugin entrypoint only composes its two owners: `connection.ts` manages
 desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.
