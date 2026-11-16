@@ -131,6 +131,15 @@ export function MenuScroll(
               pointerId: event.pointerId,
               grabOffset: event.clientY - event.currentTarget.getBoundingClientRect().top,
               rtl: false,
+              // MenuScroll's own move handler computes from live geometry; the capture is the
+              // geometry at the grab, recorded like every drag the machine tracks.
+              capture: {
+                trackSize: viewport.clientHeight,
+                scrollSize: viewport.scrollHeight,
+                thumbSize: geometry.size,
+                clientSize: viewport.clientHeight,
+                adjustment: 0,
+              },
             })
 
             if (event.isTrusted && selectDraggingAxis(untrack(thumbState)) === "vertical")

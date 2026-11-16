@@ -3,6 +3,20 @@ export const SCROLL_IDLE_MS = 800
 export type ScrollAxis = "vertical" | "horizontal"
 
 /**
+ * The scroll geometry as it stood when a thumb drag started, captured before `onBeforeScroll` reconciles it.
+ * A drag is computed entirely in this geometry, so reconciliation or resizes during the drag cannot move the
+ * mapping under the pointer; only the final write is shifted by however much the adjustment has changed since.
+ */
+export type ScrollThumbCapture = {
+  readonly trackSize: number
+  readonly scrollSize: number
+  readonly thumbSize: number
+  readonly clientSize: number
+  /** The vertical scroll adjustment at the grab; always 0 for a horizontal drag. */
+  readonly adjustment: number
+}
+
+/**
  * `scrolling` shows the thumb until `SCROLL_IDLE_MS` after the last scroll. `dragging` holds the pointer on one thumb;
  * `scrolled` records a scroll during the drag, so its release keeps the thumb up for the idle delay. A thumb exists
  * only while its axis overflows, so losing that overflow ends a drag on it.
@@ -20,6 +34,7 @@ export type ScrollThumbState =
       readonly pointerId: number
       readonly grabOffset: number
       readonly rtl: boolean
+      readonly capture: ScrollThumbCapture
       readonly hovered: boolean
       readonly scrolled: boolean
       readonly verticalOverflow: boolean
@@ -38,6 +53,7 @@ export type ScrollThumbEvent =
       readonly pointerId: number
       readonly grabOffset: number
       readonly rtl: boolean
+      readonly capture: ScrollThumbCapture
     }
   | { readonly type: "drag.ended"; readonly pointerId: number }
   | { readonly type: "disposed" }
@@ -175,6 +191,7 @@ function transitionResting(
           pointerId: event.pointerId,
           grabOffset: event.grabOffset,
           rtl: event.rtl,
+          capture: event.capture,
           hovered: state.hovered,
           scrolled: state.status === "scrolling",
           verticalOverflow: state.verticalOverflow,
