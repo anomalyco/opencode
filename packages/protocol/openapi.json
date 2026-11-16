@@ -16567,7 +16567,7 @@
               "session": {
                 "$ref": "#/components/schemas/Session.ID"
               },
-              "new": {
+              "subagent": {
                 "not": {}
               }
             },
@@ -16577,14 +16577,14 @@
           {
             "type": "object",
             "properties": {
-              "new": {
+              "subagent": {
                 "$ref": "#/components/schemas/Agent.ID"
               },
               "session": {
                 "not": {}
               }
             },
-            "required": ["new"],
+            "required": ["subagent"],
             "additionalProperties": false
           }
         ]

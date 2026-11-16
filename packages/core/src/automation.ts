@@ -18,6 +18,7 @@ import {
   Outcome,
   type PromptAction,
   Request,
+  runSessionID,
   Status,
   Target,
   Trigger,
@@ -33,7 +34,7 @@ import { FileSystem } from "./filesystem.js"
 import { Flag } from "./flag.js"
 import { KVTable } from "./kv/sql.js"
 import { LocationServiceMap } from "./location-service-map.js"
-import type { Permission } from "./permission.js"
+import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
 import { Project } from "./project.js"
 import { Session } from "./session.js"
@@ -215,15 +216,29 @@ const layer = Layer.effect(
     const doorbell = yield* Latch.make()
 
     /**
-     * The agent a new Session starts with, if it can start one: not hidden and not subagent-only, the same rule as the
-     * default agent. Waits for plugins, which add agents, so a cold location doesn't read as a missing agent.
+     * The agent a run's child Session starts with, if `owner` could start it with the subagent tool: not hidden, not
+     * primary-only, and not denied by the `subagent` permission. Waits for plugins, which add agents, so a cold
+     * location doesn't read as a missing agent.
      */
-    const startable = (id: Agent.ID) =>
+    const subagent = (owner: SessionSchema.Info, id: Agent.ID) =>
       Effect.gen(function* () {
         yield* Plugin.awaitActivation
         const agents = yield* Agent.Service
         const agent = yield* agents.resolve(id)
-        return agent !== undefined && agent.mode !== "subagent" && !agent.hidden ? agent : undefined
+        if (agent === undefined || agent.mode === "primary" || agent.hidden) return undefined
+        const permission = yield* Permission.Service
+        const denied = yield* permission
+          .assertNotDenied({
+            action: "subagent",
+            resources: [agent.id],
+            sessionID: owner.id,
+            agent: (yield* agents.select(owner.agent)).id,
+          })
+          .pipe(
+            Effect.as(false),
+            Effect.catchTag("Permission.BlockedError", () => Effect.succeed(true)),
+          )
+        return denied ? undefined : agent
       })
 
     /** Runs `effect` in the Location of `directory`; fails with DirectoryNotFoundError when the folder is gone. */
@@ -324,7 +339,7 @@ const layer = Layer.effect(
             last_message_id: id,
             last_run_at: now,
             last_outcome: late ? "late" : "fired",
-            last_output: `${action.to.session === undefined ? "Started" : "Prompted"} ${sessionID}`,
+            last_output: `${action.to.session === undefined ? "Started subagent" : "Prompted"} ${sessionID}`,
             retry_at: null,
             ...(yield* advance(row)),
             time_updated: now,
@@ -351,16 +366,24 @@ const layer = Layer.effect(
         return yield* fire(target.id)
       }
 
-      const agent = yield* startable(action.to.new).pipe(inDirectory(row.directory))
-      if (agent === undefined) return yield* pauseWith(row, now, `Agent ${action.to.new} is no longer available`)
-      // The id is derived from the run too, so a retry adopts the Session it already started instead of leaking one.
-      const session = yield* sessions.create({
-        id: SessionSchema.ID.make(`ses_${row.id}_${run}`),
-        location: { directory: AbsolutePath.make(row.directory) },
+      // The child hangs off the creating Session, so a run needs that Session.
+      const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
+      if (!owner) return yield* pauseWith(row, now, "The session that created this automation no longer exists")
+      if (owner.projectID !== row.project_id)
+        return yield* pauseWith(row, now, "The session that created this automation moved to another project")
+      const agent = yield* subagent(owner, action.to.subagent).pipe(inDirectory(row.directory))
+      if (agent === undefined)
+        return yield* pauseWith(row, now, `Agent ${action.to.subagent} is no longer available as a subagent`)
+      // The id is derived from the run too, so a retry adopts the child it already started instead of leaking one.
+      // Like the subagent tool's children it inherits the parent's location and permissions, but it reports to no one.
+      const child = yield* sessions.create({
+        id: runSessionID(row.id, run),
+        parentID: owner.id,
         agent: agent.id,
+        model: agent.model ?? owner.model,
         title: row.name,
       })
-      yield* fire(session.id)
+      yield* fire(child.id)
     })
 
     const runCode = Effect.fnUntraced(function* (row: Row, action: CodeAction, due: number, now: number) {
@@ -682,10 +705,15 @@ const layer = Layer.effect(
         // Another project's Session is out of reach, as it is for the automation tools.
         if (to.session !== undefined && (yield* sessions.get(to.session)).projectID !== projectID)
           return yield* new InvalidError({ reason: `Session ${to.session} is in another project` })
-        if (to.new !== undefined) {
-          const agent = yield* startable(to.new).pipe(inDirectory(directory))
+        if (to.subagent !== undefined) {
+          // The child of each run hangs off the creating Session.
+          if (owner === undefined)
+            return yield* new InvalidError({ reason: "A prompt to a subagent needs a session to be its parent" })
+          const agent = yield* subagent(owner, to.subagent).pipe(inDirectory(directory))
           if (agent === undefined)
-            return yield* new InvalidError({ reason: `Unknown agent, or one that can't start a session: ${to.new}` })
+            return yield* new InvalidError({
+              reason: `Unknown agent, or one that can't run as a subagent: ${to.subagent}`,
+            })
         }
         return { type: "prompt" as const, prompt: action.prompt, to }
       }

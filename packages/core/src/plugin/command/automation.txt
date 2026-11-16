@@ -6,7 +6,7 @@ Use the automation tools in the `opencode` namespace. They see every automation 
 
 - To create one, call `automation_create` with a short `name`, a `trigger` and an `action`.
   - `trigger`: `{ type: "at", at: "in 20 minutes" }` or `{ type: "at", at: "2026-10-27T09:00" }` (runs once), `{ type: "every", every: "1 hour" }` or `{ type: "cron", cron: "0 9 * * 1-5" }`, each with an optional `tz`.
-  - `action`: `{ type: "prompt", prompt }` sends `prompt` to this session; add `to: { new: "<agent>" }` to start a new session each run, or `to: { session: "ses_..." }` for another one. Write `prompt` as the instruction the session will receive, with enough context to act on it without this conversation.
+  - `action`: `{ type: "prompt", prompt }` sends `prompt` to this session; add `to: { subagent: "<agent>" }` to start a new child of this session with that agent each run (it finishes without reporting back), or `to: { session: "ses_..." }` for another session. Write `prompt` as the instruction the session will receive, with enough context to act on it without this conversation.
   - Or `{ type: "code", code, args? }` runs a Code Mode JavaScript program with no model, calling `tools.<path>(...)` statically (no `fetch`; 30s / 20 calls / 32 KB caps). It receives `input = { state, now, runs, args }`, where `state` starts as `null`, and returns nothing or `{ state?, done? }`: `state` is kept for the next run and `done: true` stops the automation. Its logs become `lastOutput`.
   - To stop a repeating automation at a time, add `expires`: an instant, a wall-clock time, or `"in 8 hours"`.
 - To pause, resume or delete one, find its id with `automation_list`, then call `automation_pause`, `automation_resume` or `automation_delete`.

@@ -19,8 +19,8 @@ const annotations = (identifier: string, summary: string, description: string) =
   })
 
 export const CreatePayload = Schema.Struct({
-  // The Session creating it, if any: it supplies the directory, the default prompt target and, for a code action, the
-  // agent and permissions its tools run with.
+  // The Session creating it, if any: it supplies the directory, the default prompt target, the parent of a subagent
+  // target's children and, for a code action, the agent and permissions its tools run with.
   sessionID: Session.ID.pipe(optional),
   directory: Schema.String.annotate({
     description: "Where it runs when there is no Session. Defaults to the server user's home folder.",

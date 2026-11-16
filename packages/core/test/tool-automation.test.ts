@@ -253,7 +253,11 @@ describe("AutomationTools", () => {
         yield* bad({
           name: "x",
           trigger: { type: "every", every: "1 hour" },
-          action: { type: "prompt", prompt: "ping", to: { session: otherSessionID, new: Agent.defaultID } },
+          action: {
+            type: "prompt",
+            prompt: "ping",
+            to: { session: otherSessionID, subagent: Agent.ID.make("general") },
+          },
         }),
       ).toMatchObject({ metadata: { error: true } })
       expect(

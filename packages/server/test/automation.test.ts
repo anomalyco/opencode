@@ -88,15 +88,32 @@ it.live(
           _tag: "AutomationNotFoundError",
         })
 
-        // Without a Session, in a directory, with a new Session as the target.
+        // Without a Session, in a directory, prompting an existing Session.
         const standalone = await api.experimental.automation.create({
           name: "standalone",
           directory: enabled,
           trigger: hourly,
-          action: { type: "prompt", prompt: "hello", to: { new: "build" } },
+          action: { type: "prompt", prompt: "hello", to: { session: session.id } },
         })
-        expect(standalone).toMatchObject({ directory: enabled, action: { to: { new: "build" } } })
+        expect(standalone).toMatchObject({ directory: enabled, action: { to: { session: session.id } } })
         expect(standalone.sessionID).toBeUndefined()
+        // A subagent target needs a creating Session to be the parent of each run's child.
+        await expect(
+          api.experimental.automation.create({
+            name: "orphan",
+            directory: enabled,
+            trigger: hourly,
+            action: { type: "prompt", prompt: "hello", to: { subagent: "general" } },
+          }),
+        ).rejects.toMatchObject({ _tag: "InvalidRequestError" })
+        const triage = await api.experimental.automation.create({
+          sessionID: session.id,
+          name: "triage",
+          trigger: hourly,
+          action: { type: "prompt", prompt: "triage", to: { subagent: "general" } },
+        })
+        expect(triage).toMatchObject({ sessionID: session.id, action: { to: { subagent: "general" } } })
+        await api.experimental.automation.delete({ automationID: triage.id })
 
         await expect(
           api.experimental.automation.create({
@@ -123,7 +140,7 @@ it.live(
               sessionID: session.id,
               name: "x",
               trigger: hourly,
-              action: { type: "prompt", prompt: "x", to: { session: session.id, new: "build" } },
+              action: { type: "prompt", prompt: "x", to: { session: session.id, subagent: "general" } },
             })
           ).status,
         ).toBe(400)
@@ -222,11 +239,12 @@ it.live("elects one leader when two server processes boot against a due automati
         })
         const seededApi = client(handler)
         return yield* Effect.promise(async () => {
+          const parent = await seededApi.session.create({ location: { directory: dir } })
           const created = await seededApi.experimental.automation.create({
+            sessionID: parent.id,
             name: "single leader",
-            directory: dir,
             trigger: { type: "at", at: "in 80 millis" },
-            action: { type: "prompt", prompt: "single leader check", to: { new: "build" } },
+            action: { type: "prompt", prompt: "single leader check", to: { subagent: "general" } },
           })
           return created.id
         })

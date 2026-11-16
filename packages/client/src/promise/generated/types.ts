@@ -415,7 +415,7 @@ export type PermissionRule = { action: string; resource: string; effect: Permiss
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
 
-export type AutomationTarget = { session: SessionID; new?: never } | { new: AgentID; session?: never }
+export type AutomationTarget = { session: SessionID; subagent?: never } | { subagent: AgentID; session?: never }
 
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
@@ -4674,8 +4674,8 @@ export type ExperimentalAutomationCreateInput = {
         readonly type: "prompt"
         readonly prompt: string
         readonly to?:
-          | { readonly session: string; readonly new?: never }
-          | { readonly new: string; readonly session?: never }
+          | { readonly session: string; readonly subagent?: never }
+          | { readonly subagent: string; readonly session?: never }
       }
     | { readonly type: "code"; readonly code: string; readonly args?: JsonValue }
   readonly expires?: string | undefined

@@ -103,6 +103,7 @@ const folders = { missingNow: false }
 const slack = { replies: 0, reads: 0, posts: [] as string[], failing: false }
 let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
 let activationGate: Effect.Effect<void> = Effect.void
+let helperGone = false
 
 const configureAgent = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -116,6 +117,11 @@ const configureAgent = Layer.effectDiscard(
       editor.update(Agent.ID.make("helper"), (agent) => {
         agent.mode = "subagent"
       })
+      editor.update(Agent.ID.make("internal"), (agent) => {
+        agent.mode = "subagent"
+        agent.hidden = true
+      })
+      if (helperGone) editor.remove(Agent.ID.make("helper"))
     })
     yield* tools.transform((editor) => {
       editor.add({
@@ -284,6 +290,7 @@ const setup = (directory = enabledDirectory) =>
     slack.failing = false
     agentRules = [{ action: "*", resource: "*", effect: "allow" }]
     activationGate = Effect.void
+    helperGone = false
     return yield* Automation.Service
   })
 
@@ -450,15 +457,17 @@ describe("Automation", () => {
     }),
   )
 
-  it.effect("starts a new Session with the agent on each run", () =>
+  it.effect("starts a child of the creating Session with the agent on each run, without waking the parent", () =>
     Effect.gen(function* () {
       const automations = yield* setup()
+      const helper = Agent.ID.make("helper")
       const automation = yield* automations.create({
         sessionID,
         name: "triage",
         trigger: every("1 minute"),
-        action: { type: "prompt", prompt: "triage the inbox", to: { new: Agent.defaultID } },
+        action: { type: "prompt", prompt: "triage the inbox", to: { subagent: helper } },
       })
+      expect(automation.action).toEqual({ type: "prompt", prompt: "triage the inbox", to: { subagent: helper } })
       yield* TestClock.adjust("1 minute")
       yield* automations.tick
       yield* TestClock.adjust("1 minute")
@@ -466,42 +475,124 @@ describe("Automation", () => {
 
       const rows = yield* pending
       expect(rows.map((row) => row.id)).toEqual([messageID(automation, 1), messageID(automation, 2)])
-      const started = rows.map((row) => row.sessionID)
-      // One Session per run, with an id derived from the run so a retry adopts it rather than starting another.
-      expect(started).toEqual([Session.ID.make(`ses_${automation.id}_1`), Session.ID.make(`ses_${automation.id}_2`)])
+      const children = rows.map((row) => row.sessionID)
+      // One child per run, with an id derived from the run so a retry adopts it rather than starting another.
+      expect(children).toEqual([Session.ID.make(`ses_${automation.id}_1`), Session.ID.make(`ses_${automation.id}_2`)])
+      // Only the children are woken; the parent hears nothing.
+      expect(wakes).toEqual(children)
       const sessions = yield* Session.Service
-      const first = yield* sessions.get(started[0]!)
-      expect(first).toMatchObject({
-        agent: Agent.defaultID,
+      expect(yield* sessions.get(children[0]!)).toMatchObject({
+        parentID: sessionID,
+        agent: helper,
         title: "triage",
         location: { directory: enabledDirectory },
       })
       expect(yield* automations.get(automation.id)).toMatchObject({
         runCount: 2,
-        lastOutput: `Started ${started[1]}`,
+        lastOutput: `Started subagent ${children[1]}`,
       })
+    }),
+  )
+
+  it.effect("adopts the child a crashed run already started", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup()
+      const sessions = yield* Session.Service
+      const automation = yield* automations.create({
+        sessionID,
+        name: "triage",
+        trigger: { type: "at", at: "in 1 minute" },
+        action: { type: "prompt", prompt: "once", to: { subagent: Agent.ID.make("helper") } },
+      })
+      yield* TestClock.adjust("1 minute")
+      // The previous process started run 1's child, admitted its prompt, and died before advancing the row.
+      const child = Session.ID.make(`ses_${automation.id}_1`)
+      yield* sessions.create({ id: child, parentID: sessionID, title: "triage" })
+      yield* sessions.prompt({ sessionID: child, id: messageID(automation, 1), text: "once", resume: false })
+
+      yield* automations.tick
+      expect(yield* pending).toEqual([{ id: messageID(automation, 1), sessionID: child }])
+      expect((yield* sessions.list({ parentID: sessionID })).data.map((session) => session.id)).toEqual([child])
+      expect(yield* automations.get(automation.id)).toMatchObject({ status: "done", runCount: 1 })
+    }),
+  )
+
+  it.effect("allows any agent that can run as a subagent, and rejects hidden and primary-only agents", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup()
+      const create = (agent: string) =>
+        automations.create({
+          sessionID,
+          name: "x",
+          trigger: every("1 hour"),
+          action: { type: "prompt", prompt: "x", to: { subagent: Agent.ID.make(agent) } },
+        })
+      const automation = yield* create("helper")
+      expect(automation.status).toBe("active")
+      for (const agent of ["nobody", "internal", Agent.defaultID])
+        expect(yield* Effect.flip(create(agent))).toMatchObject({
+          reason: `Unknown agent, or one that can't run as a subagent: ${agent}`,
+        })
+
+      // An agent the creating Session's `subagent` permission denies is out too.
+      agentRules = [
+        { action: "*", resource: "*", effect: "allow" },
+        { action: "subagent", resource: "helper", effect: "deny" },
+      ]
+      const map = yield* LocationServiceMap.Service
+      const ref = Location.Ref.make({ directory: AbsolutePath.make(enabledDirectory) })
+      yield* map.invalidate(ref)
+      expect(yield* Effect.flip(create("helper"))).toMatchObject({
+        reason: "Unknown agent, or one that can't run as a subagent: helper",
+      })
+
+      // An agent that is gone by the time a run comes up pauses the automation.
+      agentRules = [{ action: "*", resource: "*", effect: "allow" }]
+      helperGone = true
+      yield* map.invalidate(ref)
+      yield* TestClock.adjust("1 hour")
+      yield* automations.tick
+      expect(yield* automations.get(automation.id)).toMatchObject({
+        status: "paused",
+        runCount: 0,
+        lastOutput: "Agent helper is no longer available as a subagent",
+      })
+      expect(yield* pending).toEqual([])
     }),
   )
 
   it.effect("runs without a Session in the given directory, and needs a target for a prompt", () =>
     Effect.gen(function* () {
       const automations = yield* setup()
+      const sessions = yield* Session.Service
+      // Created in the directory's own project, which a sessionless automation there resolves to.
+      const target = (yield* sessions.create({ location: { directory: AbsolutePath.make(enabledDirectory) } })).id
       const automation = yield* automations.create({
         name: "standalone",
         directory: enabledDirectory,
         trigger: { type: "at", at: "in 1 minute" },
-        action: { type: "prompt", prompt: "hello", to: { new: Agent.defaultID } },
+        action: { type: "prompt", prompt: "hello", to: { session: target } },
       })
       expect(automation).toMatchObject({ sessionID: undefined, directory: enabledDirectory })
       yield* TestClock.adjust("1 minute")
       yield* automations.tick
-      expect((yield* pending).map((row) => row.id)).toEqual([messageID(automation, 1)])
+      expect(yield* pending).toEqual([{ id: messageID(automation, 1), sessionID: target }])
 
       expect(
         yield* Effect.flip(
           automations.create({ name: "x", directory: enabledDirectory, trigger: every("1 hour"), action: prompt("x") }),
         ),
       ).toMatchObject({ reason: "A prompt action needs `to` when there is no session" })
+      expect(
+        yield* Effect.flip(
+          automations.create({
+            name: "x",
+            directory: enabledDirectory,
+            trigger: every("1 hour"),
+            action: { type: "prompt", prompt: "x", to: { subagent: Agent.ID.make("helper") } },
+          }),
+        ),
+      ).toMatchObject({ reason: "A prompt to a subagent needs a session to be its parent" })
       expect(
         yield* Effect.flip(
           automations.create({ name: "x", directory: enabledDirectory, trigger: every("1 hour"), action: code("") }),
@@ -513,30 +604,10 @@ describe("Automation", () => {
             name: "x",
             directory: "relative",
             trigger: every("1 hour"),
-            action: { type: "prompt", prompt: "x", to: { new: Agent.defaultID } },
+            action: { type: "prompt", prompt: "x", to: { session: target } },
           }),
         ),
       ).toMatchObject({ reason: "Directory must be an absolute path: relative" })
-      expect(
-        yield* Effect.flip(
-          automations.create({
-            name: "x",
-            directory: enabledDirectory,
-            trigger: every("1 hour"),
-            action: { type: "prompt", prompt: "x", to: { new: Agent.ID.make("nobody") } },
-          }),
-        ),
-      ).toMatchObject({ reason: "Unknown agent, or one that can't start a session: nobody" })
-      expect(
-        yield* Effect.flip(
-          automations.create({
-            name: "x",
-            directory: enabledDirectory,
-            trigger: every("1 hour"),
-            action: { type: "prompt", prompt: "x", to: { new: Agent.ID.make("helper") } },
-          }),
-        ),
-      ).toMatchObject({ reason: "Unknown agent, or one that can't start a session: helper" })
     }),
   )
 
@@ -693,11 +764,17 @@ describe("Automation", () => {
     Effect.gen(function* () {
       const automations = yield* setup()
       yield* insertSession(otherID, enabledDirectory)
-      const fresh = yield* automations.create({
-        sessionID,
-        name: "fresh",
+      const elsewhere = yield* automations.create({
+        sessionID: otherID,
+        name: "elsewhere",
         trigger: every("1 minute"),
-        action: { type: "prompt", prompt: "go", to: { new: Agent.defaultID } },
+        action: { type: "prompt", prompt: "go", to: { session: otherID } },
+      })
+      const child = yield* automations.create({
+        sessionID,
+        name: "child",
+        trigger: every("1 minute"),
+        action: { type: "prompt", prompt: "go", to: { subagent: Agent.ID.make("helper") } },
       })
       const targeted = yield* automations.create({
         sessionID: otherID,
@@ -713,11 +790,21 @@ describe("Automation", () => {
       })
       const { db } = yield* Database.Service
       yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
-      expect((yield* automations.list()).map((item) => item.id)).toEqual([fresh.id, targeted.id, coded.id])
+      expect((yield* automations.list()).map((item) => item.id)).toEqual([
+        elsewhere.id,
+        child.id,
+        targeted.id,
+        coded.id,
+      ])
 
       yield* TestClock.adjust("1 minute")
       yield* automations.tick
-      expect(yield* automations.get(fresh.id)).toMatchObject({ status: "active", runCount: 1 })
+      expect(yield* automations.get(elsewhere.id)).toMatchObject({ status: "active", runCount: 1 })
+      expect(yield* automations.get(child.id)).toMatchObject({
+        status: "paused",
+        runCount: 0,
+        lastOutput: "The session that created this automation no longer exists",
+      })
       expect(yield* automations.get(targeted.id)).toMatchObject({
         status: "paused",
         runCount: 0,

@@ -83,7 +83,7 @@ export const Plugin = {
         editor.add({
           name: "automation_create",
           description:
-            "Create an automation in this project: a trigger (at a time or after a delay, every interval, or on a cron) and an action, either a prompt sent to this session, another session or a new session, or a Code Mode program that runs with no model. Returns the automation with its next run.",
+            "Create an automation in this project: a trigger (at a time or after a delay, every interval, or on a cron) and an action, either a prompt sent to this session, another session or a new subagent child of this session, or a Code Mode program that runs with no model. Returns the automation with its next run.",
           input: Automation.Request,
           output: View,
           options: { namespace: "opencode", codemode: true },
@@ -156,7 +156,7 @@ export const Plugin = {
       if (!enabled()) return
       editor.add({
         name: "automation",
-        description: "create an automation, or list, pause and delete this project's automations",
+        description: "create an automation, or list, pause, resume and delete this project's automations",
         execute: (input) =>
           ctx.session
             .prompt({
@@ -189,7 +189,7 @@ function summary(view: View) {
         : `cron "${view.trigger.cron}"`
   const action =
     view.action.type === "prompt"
-      ? `prompt ${view.action.to.session ?? `new ${view.action.to.new}`}: ${JSON.stringify(clip(view.action.prompt))}`
+      ? `prompt ${view.action.to.session ?? `subagent ${view.action.to.subagent}`}: ${JSON.stringify(clip(view.action.prompt))}`
       : `code: ${JSON.stringify(
           clip(
             view.action.code

@@ -54,15 +54,21 @@ export const Trigger = Schema.Union([At, Every, Cron]).pipe(
 )
 export type Trigger = typeof Trigger.Type
 
-/** Declares a variant field absent, so `{ session, new }` fails instead of silently dropping one. */
+/** Declares a variant field absent, so `{ session, subagent }` fails instead of silently dropping one. */
 const absent = Schema.optionalKey(Schema.Never)
 
-/** Where a prompt action goes: an existing Session, or a new Session started with an agent on every run. */
+/** Where a prompt action goes: an existing Session, or a new child of the creating Session with an agent on every run. */
 export const Target = Schema.Union([
-  Schema.Struct({ session: SessionID, new: absent }),
-  Schema.Struct({ new: Agent.ID, session: absent }),
+  Schema.Struct({ session: SessionID, subagent: absent }),
+  Schema.Struct({ subagent: Agent.ID, session: absent }),
 ]).annotate({ identifier: "Automation.Target" })
 export type Target = typeof Target.Type
+
+/** The child Session a `{ subagent }` run starts, derived from the run so a retry adopts it instead of starting another. */
+export const runSessionID = (id: ID, run: number) => SessionID.make(`ses_${id}_${run}`)
+
+/** Whether a Session is a `{ subagent }` run's child, which finishes without reporting to or waking its parent. */
+export const isRunSession = (sessionID: SessionID) => sessionID.startsWith("ses_aut_")
 
 export const PromptAction = Schema.Struct({ type: Schema.tag("prompt"), prompt: Schema.String, to: Target }).annotate({
   identifier: "Automation.Action.Prompt",
@@ -124,7 +130,7 @@ export const PromptActionInput = Schema.Struct({
   }),
   to: Target.pipe(optional).annotate({
     description:
-      'Where the prompt goes: { session: "ses_..." } or { new: "<agent>" } to start a new Session each run. Defaults to the creating Session.',
+      'Where the prompt goes: { session: "ses_..." }, or { subagent: "<agent>" } to start a new child of the creating Session with that agent each run. Defaults to the creating Session.',
   }),
 }).annotate({ identifier: "Automation.PromptActionInput" })
 
