@@ -33,7 +33,13 @@ test("preview and reveal resolve existing regular files under the real workspace
     const url = pathToFileURL(file).href.replace("file://", "oc-preview://first")
     const request = (method: string) => resolvePreviewRequest(url, method, "oc-preview://first", grants, new AbortController().signal)
 
-    for (const method of ["GET", "HEAD"]) expect(await request(method)).toMatchObject({ size: 6 })
+    for (const method of ["GET", "HEAD"]) {
+      const opened = await request(method)
+      if (opened?.type !== "local") throw new Error("missing local control")
+      expect((await opened.file.stat()).size).toBe(opened.size)
+      expect(opened.size).toBe(6)
+      await opened.file.close()
+    }
 
     for (const method of ["POST", "PUT", "DELETE"]) expect(await request(method)).toBeUndefined()
     const pending = request("GET")
@@ -56,7 +62,9 @@ test("preview and reveal resolve existing regular files under the real workspace
     expect(await resolve("oc-preview://remote/server-only.html")).toMatchObject({ type: "remote", size: 17 })
     expect(await resolve("oc-preview://local/server-only.html")).toBeUndefined()
     const disk = pathToFileURL(file).href.replace("file://", "oc-preview://local")
-    expect(await resolve(disk)).toMatchObject({ type: "local", size: 6 })
+    const local = await resolve(disk)
+    expect(local).toMatchObject({ type: "local", size: 6 })
+    if (local?.type === "local") await local.file.close()
     expect(await resolve(disk.replace("//local", "//remote"))).toBeUndefined()
     remotePaths.length = 0
 

@@ -1,7 +1,7 @@
-import { realpath, stat } from "node:fs/promises"
+import { realpath } from "node:fs/promises"
 import { relative } from "node:path"
-import { workspaceTarget } from "@opencode/plugin-browser/workspace"
-import { fileURLToPath, pathToFileURL } from "node:url"
+import { openContained } from "@opencode/util/contained-file"
+import { fileURLToPath } from "node:url"
 import { fileURLWithin } from "./policy"
 import { previewResource } from "./preview"
 import { remotePath } from "./remote-address"
@@ -47,27 +47,31 @@ export async function resolvePreviewRequest(url: string, method: string, initiat
   const file = previewResource(url, host, initiator, roots)
 
   if (!file) return
-  const target = await workspaceFile(file, roots)
+  const target = await openWorkspaceFile(file, roots)
 
-  return target && grants.get(host) === grant && !signal.aborted ? { type: "local" as const, ...target } : undefined
+  if (!target) return
+
+  if (grants.get(host) === grant && !signal.aborted) return { type: "local" as const, ...target }
+  await target.file.close()
 }
 
 /** Resolve again at each authority boundary. A path checked when displayed may no longer name the same file. */
 export async function workspaceFile(file: string, roots: readonly string[]) {
-  if (!fileURLWithin(file, roots)) return
+  const target = await openWorkspaceFile(file, roots)
+
+  if (!target) return
+  await target.file.close()
+
+  return { path: target.path, size: target.size }
+}
+
+async function openWorkspaceFile(file: string, roots: readonly string[]) {
+  const root = roots.find(root => fileURLWithin(file, [root]))
+
+  if (!root) return
 
   try {
-    const target = await workspaceTarget(fileURLToPath(file), roots)
-
-    if (!target) return
-    const info = await stat(target)
-
-    // Hard links are regular workspace entries (also used by package managers); do not reject by link count.
-    if (!info.isFile()) return
-    const href = pathToFileURL(target).href
-    const physical = (await Promise.all(roots.map(root => realpath(root)))).find(root => href.startsWith(`${pathToFileURL(root).href.replace(/\/$/, "")}/`))
-
-    return physical ? { path: target, root: physical, relative: relative(physical, target), size: info.size } : undefined
+    return await openContained(await realpath(root), relative(root, fileURLToPath(file)))
   } catch {
     // Missing, unreadable, malformed or replaced between lookups: no file grant.
     return undefined
