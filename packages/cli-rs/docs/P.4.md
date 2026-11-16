@@ -579,8 +579,14 @@ The same targets as TS (`plugin/discovery.ts`, `plugin/context.tsx` reconcile):
 
 Targets merge by local path; a later entry replaces an earlier one in its place. A target has a native build when it
 is a shared library, or a directory with `plugin.so` (`plugin.dylib`, `plugin.dll`). Every other target is a TypeScript plugin and
-is listed as skipped (F16), unless the JS host runs (below). Server-side TUI plugins (`GET /api/plugin` with `features.tui`) are TypeScript packages
-and are not loaded. The `plugins` entries after a plugin's own entry (all of them, for a discovered plugin) decide
+is listed as skipped (F16), unless the JS host runs (below). With the JS host, an entry that names an npm package
+(`name`, `name@1.2.3`, a range, a tag, `@scope/name`, a git spec) is the package TS installed for that spec, found as
+TS's `Npm.resolve` finds it (`crates/plugin/src/loader/npm.rs`): `<cache>/npm/<key>/<newest generation>/node_modules/
+<name>`, the key being the spec's text (`name@latest` for a bare name). Nothing is installed: a spec the cache does not
+hold is skipped, and says to run `opencode-native plugin add <spec>`. The directory a spec resolved to stays while it
+is a target, and is not watched. The TUI parts of the active server plugins (`GET /api/plugin` with `features.tui`)
+are targets too, between the discovered directories and `cli.json`, by the package target (resolved in the cache) or
+the local path the server reports; one that does not resolve is left out, as in TS. The `plugins` entries after a plugin's own entry (all of them, for a discovered plugin) decide
 whether it starts enabled. A toggle in `/plugins` lasts until the TUI exits, also across hot reloads; it is not
 saved, as in TS.
 
