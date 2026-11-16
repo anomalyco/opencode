@@ -78,7 +78,13 @@ pub enum Down {
         /// (`ui.router.current()`), where a watch it makes then would answer only after the handler ran.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         route: Option<serde_json::Value>,
+        /// A reply whose result is the [`Down::Part`]s of its request before it, joined, and not the one it carries.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        parted: bool,
     },
+    /// A piece of the JSON of the result of a reply to `request` of activation `activation`, in base64, which is too
+    /// large for one frame (CT-5): its call follows the pieces, in order, and says it is [`Down::Call::parted`].
+    Part { activation: u64, request: opencode_plugin_abi::RequestId, data: String },
     /// A surface of plugin `id` mounted, with its first input. Answered with [`Up::Done`] once its view was sent.
     Mount {
         seq: u64,
@@ -150,6 +156,7 @@ impl Down {
             | Down::Refused { .. }
             | Down::Snapshot { .. }
             | Down::Answered { .. }
+            | Down::Part { .. }
             | Down::Cancelled { .. } => None,
         }
     }

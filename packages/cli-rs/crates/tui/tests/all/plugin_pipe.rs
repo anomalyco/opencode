@@ -2928,6 +2928,44 @@ fn hostile(runtime: impl FnOnce(&Path) -> Option<Config>) {
     assert_eq!(opencode_plugin::pipe::find_in("bun", &path, &project, Some(&project)), None);
 }
 
+// Expected (CT-5): a fetch whose reply is 1 MiB, four times a frame, gets it whole, as TS does: it goes in parts that
+// the JS host joins. It failed past 256 KiB (snippets' `/api/skill`, 450 KB, failed its setup).
+#[test]
+fn a_fetch_reply_of_a_mebibyte_arrives_whole() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("fetched");
+    let plugin = root.path().join("config/plugins/large");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.large\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"large.fetch\", title: \"large.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/large\" }})\n    const data = result?.Ok?.data ?? \"\"\n    appendFileSync({log:?}, `${{data.length}} ${{data.slice(0, 3)}} ${{data.slice(-3)}} ${{result?.Ok?.after}}\\n`)\n  }})\n}} }}\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    // Not one byte repeated: a part out of place or lost would show. Quotes and a multibyte character cross JSON's
+    // escapes and a part's boundary.
+    let data: String = (0..(1usize << 20) / 8).map(|index| format!("{:07}{}", index, ['"', 'é'][index % 2])).collect();
+    let length = data.chars().count();
+    let (first, last) = (data[..3].to_owned(), data.chars().rev().take(3).collect::<Vec<_>>());
+    let last: String = last.into_iter().rev().collect();
+    let server = support::Fake::new(move |seen| match seen.path.as_str() {
+        "/api/large" => (200, serde_json::json!({ "data": data, "after": true })),
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.large");
+    pipe.harness.tui.keymap.dispatch("large.fetch", None);
+    pipe.harness.wait("the fetch ended", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), format!("{length} {first} {last} true\n"));
+    assert_eq!(pipe.status("example.large"), Some(opencode_plugin::Status::Active));
+}
+
 // Expected (carbon-5): a fetch whose reply is more than the JS host takes ends with an error, where the plugin's await
 // never ended.
 #[test]
@@ -2941,7 +2979,8 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.huge\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"huge.fetch\", title: \"huge.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/huge\" }})\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
     );
     std::fs::write(plugin.join("tui.ts"), module).unwrap();
-    let big = "x".repeat(1_500_000);
+    // Past the 8 MiB the overflow holds: one within it goes in parts (CT-5).
+    let big = "x".repeat(9 << 20);
     let server = support::Fake::new(move |seen| match seen.path.as_str() {
         "/api/huge" => (200, serde_json::json!({ "data": big })),
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
