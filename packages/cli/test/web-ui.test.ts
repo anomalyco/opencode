@@ -60,10 +60,19 @@ describe("web UI", () => {
         Effect.gen(function* () {
           const response = yield* Effect.promise(() => fetch(new URL(pathname, origin)))
           expect(response.status).toBe(401)
-          expect(response.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
+          // A bare fetch carries `Accept: */*`, byte-identical to a browser's fetch on insecure origins, so it must
+          // not get a Basic challenge: the native prompt would stall the app's own sign-in screen.
+          expect(response.headers.get("www-authenticate")).toBeNull()
           yield* Effect.promise(() => response.arrayBuffer())
         }),
       )
+      const navigation = yield* Effect.promise(() =>
+        fetch(new URL("/api/info", origin), {
+          headers: { "upgrade-insecure-requests": "1", accept: "text/html" },
+        }),
+      )
+      expect(navigation.status).toBe(401)
+      expect(navigation.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
       const response = yield* Effect.promise(() =>
         fetch(new URL("/api/info", origin), { headers: { authorization: `Basic ${btoa("opencode:secret")}` } }),
       )
