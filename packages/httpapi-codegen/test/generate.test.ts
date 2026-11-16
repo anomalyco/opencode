@@ -1338,6 +1338,43 @@ describe("HttpApiCodegen.generate", () => {
     expect(emitted.module.isMissing(error)).toBeTrue()
   })
 
+  test.each([401, 500])("preserves transport failures reading declared %i error bodies", async (status) => {
+    for (const streaming of [false, true]) {
+      const output = emitPromise(
+        compileContract(
+          api(
+            HttpApiEndpoint.get("get", "/session", {
+              success: streaming ? HttpApiSchema.StreamSse({ data: Schema.String }) : Schema.String,
+              error: Missing.pipe(HttpApiSchema.status(status)),
+            }),
+          ),
+        ),
+      )
+      await using emitted = await emittedModule(output)
+      const cause = new TypeError("socket disconnected during error body")
+      const client = emitted.module.OpenCode.make({
+        baseUrl: "https://example.com",
+        fetch: async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(cause)
+              },
+            }),
+            { status, headers: { "content-type": "application/json" } },
+          ),
+      })
+      const request = streaming ? Array.fromAsync(client.session.get()) : client.session.get()
+      const error = await request.catch((error: unknown) => error)
+      expect(error).toMatchObject({
+        reason: "Transport",
+        message: "Transport: socket disconnected during error body",
+      })
+      if (!(error instanceof Error)) throw error
+      expect(error.cause).toBe(cause)
+    }
+  })
+
   test("iterates an emitted SSE stream lazily without reconnecting", async () => {
     const output = emitPromise(
       compileContract(

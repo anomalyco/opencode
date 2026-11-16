@@ -393,7 +393,7 @@ export function make(options: ClientOptions) {
   }
 
   const responseError = async (response: Response, descriptor: RequestDescriptor): Promise<never> => {
-    // A declared status only describes this client when its body is the tagged error that status declares. A proxy or an older server can answer the same status with HTML, plain text or nothing, and that stays an unexpected status.
+    // A declared status is decoded only when its body has a recognizable error tag or name. A proxy or an older server can answer the same status with HTML, plain text or nothing, and that stays an unexpected status.
     if (descriptor.declaredStatuses.includes(response.status)) {
       const body = await declaredBody(response)
       if (body !== undefined) throw declared(body)
@@ -2852,7 +2852,11 @@ async function declaredBody(response: Response): Promise<DeclaredErrorBody | und
   try {
     body = await json(response)
   } catch (error) {
-    if (error instanceof ClientError) return undefined
+    if (
+      error instanceof ClientError &&
+      (error.reason === "UnsupportedContentType" || error.reason === "MalformedResponse")
+    )
+      return undefined
     throw error
   }
   if (typeof body !== "object" || body === null) return undefined
