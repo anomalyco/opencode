@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "ቀጣይ",
   "releaseNotes.action.hideFuture": "እነዚህን ወደፊት አታሳይ",
   "releaseNotes.media.alt": "የልቀት ቅድመ እይታ",
+  "action.reload": "ለማዘመን ዳግም ጫን",
+  "action.reloading": "ዳግም በመጫን ላይ…",
+  "web.ready.title": "ዝማኔ ዝግጁ ነው",
+  "web.ready.message": "አዲስ የOpenCode ስሪት ዝግጁ ነው። በሁሉም ክፍት መስኮቶች ለመጠቀም ዳግም ይጫኑ።",
+  "web.reload": "ዳግም ጫን",
+  "web.reset.title": "ከአገልጋዩ ዳግም ጫን",
+  "web.reset.description": "የተቀመጠውን የመተግበሪያ ቅጂ አጽዳ እና የአገልጋዩን የአሁኑን ስሪት ጫን",
+  "web.reset.action": "ከአገልጋዩ ዳግም ጫን",
 }

@@ -2251,8 +2251,17 @@ test("providers: the account options rename and remove the active account", asyn
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await expect(trigger).toHaveText("Shared")
 
+  const confirm = page.getByRole("dialog", { name: "Remove Shared?", exact: true })
   await settings.getByRole("button", { name: "Shared options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(confirm).toBeHidden()
+  await expect(trigger).toHaveText("Shared")
+  expect(removed).toEqual([])
+
+  await settings.getByRole("button", { name: "Shared options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Remove", exact: true }).click()
   await expect.poll(() => removed).toEqual(["cred_work"])
 })
 
@@ -2269,6 +2278,10 @@ test("providers: a disconnect that finds no stored credentials keeps the provide
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
 
   await disconnect.click()
+  await page
+    .getByRole("dialog", { name: "Disconnect OpenRouter?", exact: true })
+    .getByRole("button", { name: "Disconnect", exact: true })
+    .click()
   await expect(page.getByText("No removable credentials found for OpenRouter", { exact: true })).toBeVisible()
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
   await expect(disconnect).toBeVisible()

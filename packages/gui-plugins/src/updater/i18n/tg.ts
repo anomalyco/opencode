@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Баъдӣ",
   "releaseNotes.action.hideFuture": "Инҳоро дар оянда нишон надиҳед",
   "releaseNotes.media.alt": "Намоиши пешнамоиш",
+  "action.reload": "Барои навсозӣ аз нав бор кунед",
+  "action.reloading": "Аз нав бор карда мешавад…",
+  "web.ready.title": "Навсозӣ омода аст",
+  "web.ready.message":
+    "Версияи нави OpenCode омода аст. Барои истифодаи он дар ҳамаи тирезаҳои кушода аз нав бор кунед.",
+  "web.reload": "Аз нав бор кардан",
+  "web.reset.title": "Аз нав бор кардан аз сервер",
+  "web.reset.description": "Нусхаи захирашудаи барномаро тоза кунед ва версияи ҷории серверро бор кунед",
+  "web.reset.action": "Аз нав бор кардан аз сервер",
 }

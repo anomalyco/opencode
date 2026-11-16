@@ -289,15 +289,15 @@ export function locationDialogView(state: LocationDialogState) {
     case "others":
       return {
         drilled: undefined,
-        titleKey: "session.new.location.otherProjects",
-        placeholderKey: "session.new.project.search",
+        titleKey: undefined,
+        placeholderKey: "session.new.project.other.search",
         ownsEscape: true,
         otherGroupHeader: false,
       } as const
     case "servers":
       return {
         drilled: undefined,
-        titleKey: "session.new.location.servers",
+        titleKey: undefined,
         placeholderKey: "session.new.location.servers.search",
         ownsEscape: true,
         otherGroupHeader: false,

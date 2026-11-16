@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Server əlavə et",
   "menu.delete": "Sil",
+  "error.unavailable": "SSH əlçatan deyil",
 }
