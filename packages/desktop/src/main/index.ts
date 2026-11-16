@@ -294,7 +294,13 @@ const main = Effect.gen(function* () {
     const win = getLastFocusedWindow()
     if (win) sendMenuCommand(win, id)
   }
-  const showUpdater = () => showUpdaterDialog(updater, true, () => trigger("update.open"))
+  const showUpdater = () =>
+    showUpdaterDialog(updater, true, () => {
+      if (BrowserWindow.getAllWindows().length > 0) return trigger("update.open")
+      // macOS keeps running with every window closed. A new window asks the updater as it starts, and opens the offer.
+      updater.major.ask()
+      restoreMainWindows()
+    })
   const menuDeps = {
     trigger,
     checkForUpdates: () => void showUpdater(),
