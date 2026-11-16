@@ -1,9 +1,15 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { undrawableMessage } from "./capture"
-import { browserFailure, CodedError, protocolError } from "./errors"
+import { browserFailure, CodedError, missingArtifact, protocolError } from "./errors"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+
+test("an unavailable artifact reports a preview failure, not a stale frame", () => {
+  const failure = browserFailure({ type: "snapshot", tabID }, missingArtifact())
+  expect(failure.code).toBe("preview_unavailable")
+  expect(failure.message).toContain("artifact is no longer available")
+})
 
 test("native preview failures never export the private loader address", () => {
   const failure = browserFailure({ type: "preview", path: "report.html" }, new Error("ERR_FAILED loading 'oc-preview://grant/C:/repo/report.html'"))

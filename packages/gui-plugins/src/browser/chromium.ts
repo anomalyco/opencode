@@ -9,7 +9,7 @@ import { CAPTURE_DEADLINE_MS, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
-import { CodedError } from "./errors"
+import { CodedError, missingArtifact } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
 import { guardMediaRequests } from "./media-gate"
@@ -1164,6 +1164,9 @@ export function createBrowserPage(
 
   async function perform(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user") {
     if (origin === "user") return attempt(command, signal, origin)
+
+    // An error document has no inspectable frame. Report the artifact failure before querying Chromium.
+    if (state().loadError === "browser.artifact.missing" && !leavable.includes(command.action.type)) throw missingArtifact()
     const refused = agentRefusal(command.action, mainDocument())
 
     if (refused) throw new Error(refused)

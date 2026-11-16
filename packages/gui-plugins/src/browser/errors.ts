@@ -12,6 +12,10 @@ export class CodedError extends Error {
   }
 }
 
+export function missingArtifact() {
+  return new CodedError(Browser.FailureCode.previewUnavailable, "This artifact is no longer available on this session’s server.")
+}
+
 export function protocolError(method: string, cause: unknown) {
   const detail = message(cause)
 

@@ -9,7 +9,7 @@ import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
-import { browserFailure, CodedError } from "./errors"
+import { browserFailure, CodedError, missingArtifact } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
 import { agentDriven, agentRefusal, childActivity, destinationOrigin, normalizeURL, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
@@ -914,7 +914,7 @@ export function createBrowserPane(input: {
         const available = await handles.get(binding)?.artifacts?.().exists(action.url)
         signal.throwIfAborted()
 
-        if (!available) throw new Error("browser.artifact.missing")
+        if (!available) throw origin === "agent" ? missingArtifact() : new Error("browser.artifact.missing")
       }
 
       const file = reusableFile(action.url, intent)
