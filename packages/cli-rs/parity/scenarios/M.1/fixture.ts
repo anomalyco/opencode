@@ -127,7 +127,16 @@ export function server(script: Script = {}): Options {
             delivery: "steer",
           },
         }),
-        then: (entry: Logged) => script.events?.((entry.body as { id: string }).id) ?? [],
+        // As the server does, and as M.2's fixture does, the stream announces the admission before the events that follow
+        // it: the answer and the stream race, and a client that reads the delivery first knows the prompt only from this
+        // event. Without it, mini printed the reply above the prompt when the stream won (flakes-10, `stdin`).
+        then: (entry: Logged) => {
+          const body = entry.body as { id: string; text: string }
+          const events = script.events?.(body.id) ?? []
+          if (!events.length) return []
+          const item = { type: "user", payload: { text: body.text }, delivery: "steer" }
+          return [event("session.inbox.enqueued", { inboxID: body.id, item }), ...events]
+        },
       },
       { method: "POST", path: "/api/session/ses_mini/agent", status: 204 },
       { method: "POST", path: "/api/session/ses_mini/model", status: 204 },
