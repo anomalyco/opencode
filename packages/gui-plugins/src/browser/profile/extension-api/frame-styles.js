@@ -15,8 +15,9 @@ if (process.type === "renderer" && process.contextIsolated && process.sandboxed 
   }
   ipcRenderer.on("browser-extension:forget-css", (_, id) => forget(id))
   addEventListener("pagehide", () => sheets.forEach((_, id) => forget(id)), { once: true })
-  ipcRenderer.on("browser-extension:css", async (_, channel, at) => {
+  ipcRenderer.on("browser-extension:css", async (_, channel, at, acknowledge) => {
     try {
+      if (acknowledge) ipcRenderer.send(`${channel}:received`)
       if (at !== "document_start" && document.readyState === "loading") {
         await new Promise(resolve => addEventListener("DOMContentLoaded", resolve, { once: true }))
       }

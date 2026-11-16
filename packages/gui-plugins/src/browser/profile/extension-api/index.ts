@@ -89,13 +89,15 @@ export async function createExtensionApis(input: {
      * The user chose an extension in `window`'s extensions menu, whose button is at `anchor`: its popup opens there,
      * or the extension hears the click. Returns false when it has no button.
      */
-    click(window: BrowserWindow, id: string, anchor: Rectangle) {
+    click(window: BrowserWindow, id: string, tabId: number, anchor: Rectangle) {
       const extension = input.session.extensions.getExtension(id)
 
       if (!extension) return false
       popups.anchor(window, anchor)
 
-      return actions.click(window, extension)
+      tabs.activated(tabId)
+
+      return actions.click(window, extension, tabId)
     },
     forget(id: string) {
       host.forget(id)

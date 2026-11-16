@@ -245,9 +245,9 @@ export function createActions(input: {
      * The user chose the extension in `window`'s menu: its popup opens over the window, or the extension hears the
      * click. Returns whether it had a button to click.
      */
-    click(window: BrowserWindow, extension: Extension) {
+    click(window: BrowserWindow, extension: Extension, tabId: number) {
       if (!defaults(extension)) return false
-      const tab = input.tabs.activeTab(window)
+      const tab = input.tabs.snapshot(tabId)
       const values = actionFor(stateOf(extension), tab?.id)
 
       if (values.enabled === false) return true
