@@ -2285,7 +2285,8 @@ fn the_js_host_exits_when_its_client_is_gone() {
     assert!(!alive(), "the JS host {pid} outlived its client");
 }
 
-// Expected (carbon-9, CM9): a plugin directory without a TUI module is listed as skipped, and nothing of it runs.
+// Expected (carbon-9, CM9): a plugin directory without a TUI module is listed as skipped, and nothing of it runs; its
+// reason says so, with what the resolution said (win11-runs D2).
 #[test]
 fn a_directory_without_a_tui_module_is_skipped() {
     let Some(config) = config() else { return };
@@ -2298,11 +2299,36 @@ fn a_directory_without_a_tui_module_is_skipped() {
     let target = dir.to_string_lossy().into_owned();
     let skipped = || {
         // Skipped for good, not while it starts.
-        let status = Status::Skipped(opencode_plugin::SKIPPED.to_owned());
         let entries = pipe.harness.tui.plugins.entries();
-        entries.into_iter().any(|entry| entry.target.as_deref() == Some(target.as_str()) && entry.status == status)
+        entries.into_iter().any(|entry| {
+            entry.target.as_deref() == Some(target.as_str())
+                && matches!(&entry.status, Status::Skipped(reason)
+                    if reason.starts_with(&format!("{}: ", opencode_plugin::NO_TUI_MODULE))
+                        && reason.contains("tui"))
+        })
     };
     quietly(&pipe, "the directory was skipped", skipped);
+}
+
+// Expected (win11-runs D2): a plugin directory the config names by its verbatim spelling (`\\?\C:\…`) loads as the same
+// directory spelled plainly does, though Bun resolves nothing under a verbatim directory.
+#[cfg(windows)]
+#[test]
+fn a_directory_named_by_its_verbatim_path_loads() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().canonicalize().unwrap().join("elsewhere").join("twin");
+    copy(&Path::new(EXAMPLES).join("twin"), &dir);
+    let verbatim = dir.to_string_lossy().into_owned();
+    assert!(verbatim.starts_with(r"\\?\"), "{verbatim}");
+    let mut deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
+    let info = serde_json::json!({ "plugins": [{ "package": verbatim, "options": {} }] });
+    deps.config = support::config(support::decode(&info.to_string()));
+    let harness = support::mount(80, 30, deps);
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active(twin::ID);
 }
 
 // Expected (carbon-8): a watch a handler made is gone with the JS host that ended: the setup again makes its own, and the

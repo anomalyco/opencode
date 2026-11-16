@@ -427,8 +427,8 @@ pub(crate) enum Step {
     Ready(Definition, ErrorFn, u64),
     /// Registered already, and unchanged.
     Same,
-    /// It has no TUI module.
-    Unsupported,
+    /// It has no TUI module, and what its resolution said.
+    Unsupported(String),
     Failed(String, u64),
 }
 
@@ -448,7 +448,7 @@ enum Loading {
     /// Load `seq` imported plugin `id`, whose setup waits for the loader to know it is enabled.
     Described(u64, String),
     Loaded(Rc<guest::Loaded>),
-    Unsupported,
+    Unsupported(String),
     Failed(String),
 }
 
@@ -813,7 +813,7 @@ impl Scripts {
                     Step::Ready(definition, error, digest)
                 }
                 Loading::Loaded(_) => Step::Same,
-                Loading::Unsupported => Step::Unsupported,
+                Loading::Unsupported(reason) => Step::Unsupported(reason.clone()),
                 Loading::Failed(error) => Step::Failed(error.clone(), digest),
             };
         }
@@ -1345,7 +1345,7 @@ impl Scripts {
                 }
                 _ => {}
             },
-            Up::Unsupported { seq } => self.answered_load(seq, Loading::Unsupported),
+            Up::Unsupported { seq, reason } => self.answered_load(seq, Loading::Unsupported(reason)),
             Up::Described { seq, id } => self.answered_load(seq, Loading::Described(seq, id)),
             Up::Entered { id } => *self.entered.borrow_mut() = id,
             Up::Done { seq, effects, error } => {

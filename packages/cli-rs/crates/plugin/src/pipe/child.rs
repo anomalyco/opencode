@@ -625,7 +625,7 @@ fn read(shared: &Shared, reader: channel::Reader) {
             && let Up::Done { seq, .. }
             | Up::Loaded { seq, .. }
             | Up::Described { seq, .. }
-            | Up::Unsupported { seq }
+            | Up::Unsupported { seq, .. }
             | Up::Pong { seq, .. } = &**up
         {
             lock(&shared.sent).events.retain(|(sent, ..)| sent != seq);
