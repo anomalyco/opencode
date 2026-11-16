@@ -210,7 +210,10 @@ export async function createBrowserProfile(input: {
       },
     )
 
-    if (loaded) errors.delete(record.id)
+    if (loaded) {
+      errors.delete(record.id)
+      apis.activate(loaded)
+    }
   }
 
   const unload = () =>
@@ -242,6 +245,8 @@ export async function createBrowserProfile(input: {
 
       return { type: "failed", reason: "manifest" }
     }
+
+    apis.activate(extension)
 
     stored.set([...stored.value.filter((item) => item.id !== record.id), record])
     changed.delete(record.id)
@@ -460,7 +465,14 @@ export async function createBrowserProfile(input: {
       return { cookies: cookies.length, persistent: saved }
     },
     async clear() {
-      await session.clearStorageData()
+      // Installed background workers are registrations in this partition too. Clear site workers, not the programs
+      // that back the user's installed extensions. All other origin storage, including cookies, is still cleared.
+      const excludeOrigins = session.extensions.getAllExtensions().map((extension) => extension.url)
+
+      if (excludeOrigins.length) {
+        await session.clearData({ excludeOrigins, originMatchingMode: "origin-in-all-contexts" })
+        await session.clearStorageData({ storages: ["cookies", "filesystem", "indexdb", "localstorage", "shadercache", "cachestorage"] })
+      } else await session.clearStorageData()
       await session.clearCache()
       // HTTP sign-ins (Basic, Digest, NTLM) live in Chromium's auth cache, which neither of those clears.
       await session.clearAuthCache()

@@ -4,10 +4,12 @@ import { app, webContents, webFrameMain, type Extension, type ServiceWorkerMain,
 import type { Log } from "@opencode/plugin/gui/main"
 import { allowed, apiReply, namespaceOf, type ApiModule, type Emit, type ExtensionContext, type Wire } from "./api"
 import type { Manifests } from "./manifest"
+import { sendBackgroundEvent, workerQueue } from "./worker-events"
+import { eventPage } from "./event-page"
 import preloadSource from "./preload.js?raw"
 
 /** A context that listens to an event: a page frame, or the extension's service worker, which is started to hear it. */
-type Subscriber = { readonly kind: "frame"; readonly process: number; readonly routing: number } | { readonly kind: "worker" }
+type Subscriber = { readonly kind: "frame"; readonly process: number; readonly routing: number } | { readonly kind: "worker" | "eventPage" }
 
 /**
  * The bridge between extension contexts and the API modules. It writes the profile's preload, which adds each
@@ -31,6 +33,14 @@ export async function createExtensionHost(input: {
   // Listeners by event, then by extension.
   const subscribers = new Map<string, Map<string, Subscriber[]>>()
   const workers = new Map<number, ServiceWorkerMain>()
+  const queues = new Map<string, ReturnType<typeof workerQueue>>()
+
+  const queueOf = (id: string) => {
+    const queue = queues.get(id) ?? workerQueue()
+    queues.set(id, queue)
+
+    return queue
+  }
 
   type Install = { reason: "install" } | { reason: "update"; previousVersion: string }
 
@@ -86,10 +96,11 @@ export async function createExtensionHost(input: {
       })
   }
 
-  const subscribe = (extension: Extension | undefined, name: string, subscriber: Subscriber) => {
+  const subscribe = (extension: Extension | undefined, name: string, subscriber: Subscriber, listen: boolean) => {
     if (!extension || !allowed(input.manifest(extension), namespaceOf(namespaces, name))) return
 
     if (name === "runtime.onInstalled") {
+      if (!listen) return
       const pending = installs.get(extension.id)
       installs.delete(extension.id)
 
@@ -99,13 +110,18 @@ export async function createExtensionHost(input: {
     const byExtension = subscribers.get(name) ?? new Map<string, Subscriber[]>()
     const list = byExtension.get(extension.id) ?? []
 
-    const same = list.some((item) =>
-      item.kind === "worker" || subscriber.kind === "worker"
+    const same = (item: Subscriber) =>
+      item.kind !== "frame" || subscriber.kind !== "frame"
         ? item.kind === subscriber.kind
-        : item.process === subscriber.process && item.routing === subscriber.routing,
-    )
+        : item.process === subscriber.process && item.routing === subscriber.routing
 
-    if (!same) byExtension.set(extension.id, [...list, subscriber])
+    if (!listen) {
+      byExtension.set(extension.id, list.filter((item) => !same(item)))
+
+      return
+    }
+
+    if (!list.some(same)) byExtension.set(extension.id, [...list, subscriber])
     subscribers.set(name, byExtension)
 
   }
@@ -130,15 +146,19 @@ export async function createExtensionHost(input: {
     contents.ipc.handle("browser-extension:call", (event, name: string, args: readonly Wire[]) =>
       apiReply(call(frameContext(event), name, args)),
     )
-    contents.ipc.handle("browser-extension:subscribe", (event, name: string) => {
+    contents.ipc.handle("browser-extension:subscribe", (event, name: string, listen = true) => {
       const context = frameContext(event)
 
-      if (context && (name !== "runtime.onInstalled" || (contents.getType() === "backgroundPage" && !context.frame.parent)))
-        return subscribe(context.extension, name, {
-          kind: "frame",
-          process: context.frame.processId,
-          routing: context.frame.routingId,
-        })
+      if (!context) return
+      const background = contents.getType() === "backgroundPage" && !context.frame.parent
+
+      if (name === "runtime.onInstalled" && !background) return
+
+      const subscriber: Subscriber = background
+        ? { kind: "eventPage" }
+        : { kind: "frame", process: context.frame.processId, routing: context.frame.routingId }
+
+      return subscribe(context.extension, name, subscriber, listen)
     })
   }
 
@@ -163,8 +183,8 @@ export async function createExtensionHost(input: {
     worker.ipc.handle("browser-extension:call", (_event, name: string, args: readonly Wire[]) =>
       apiReply(call({ extension }, name, args)),
     )
-    worker.ipc.handle("browser-extension:subscribe", (_event, name: string) =>
-      subscribe(extension, name, { kind: "worker" }),
+    worker.ipc.handle("browser-extension:subscribe", (_event, name: string, listen = true) =>
+      subscribe(extension, name, { kind: "worker" }, listen),
     )
   }
 
@@ -185,25 +205,15 @@ export async function createExtensionHost(input: {
       return true
     }
 
-    // Chrome starts a stopped worker for an event it listens to; so does this.
-    const scope = `chrome-extension://${extension}/`
+    const scope = input.session.extensions.getExtension(extension)?.url
 
-    const running = Object.entries(input.session.serviceWorkers.getAllRunning()).find(
-      ([, info]) => info.scope === scope,
-    )
-
-    const worker = running ? input.session.serviceWorkers.getWorkerFromVersionID(Number(running[0])) : undefined
-
-    if (worker) {
-      worker.send("browser-extension:event", name, args)
-
-      return true
-    }
-
-    void input.session.serviceWorkers.startWorkerForScope(scope).then(
-      (value) => value.send("browser-extension:event", name, args),
-      (cause: unknown) => input.log.write("warn", "extension worker did not start", { extension, cause: String(cause) }),
-    )
+    if (!scope) return false
+    const token = crypto.randomUUID()
+    void queueOf(extension).enqueue(async (fresh, signal) => {
+      if (!subscribers.get(name)?.get(extension)?.includes(subscriber)) return
+      await sendBackgroundEvent(input.session, scope, subscriber.kind, token, name, args, fresh, signal)
+    })
+      .catch((cause: unknown) => input.log.write("warn", "extension event was not delivered", { extension, event: name, cause: String(cause) }))
 
     return true
   }
@@ -223,6 +233,13 @@ export async function createExtensionHost(input: {
 
   return {
     emit,
+    // Let a newly loaded lazy MV2 page register its listeners, without making it persistent.
+    activate(extension: Extension) {
+      if (!input.manifest(extension).eventPage) return
+      void queueOf(extension.id).enqueue(async (fresh, signal) => {
+        await eventPage(input.session, extension.url, fresh, signal)
+      }).catch((cause: unknown) => input.log.write("warn", "extension event page did not start", { extension: extension.id, cause: String(cause) }))
+    },
     // Only an approved install arms this event, never a startup load. Registration and load completion can race.
     prepareInstall(id: string, previousVersion: string | undefined) {
       const pending = Promise.withResolvers<Install | undefined>()
@@ -237,11 +254,15 @@ export async function createExtensionHost(input: {
     },
     /** Forgets an extension's listeners, as when it is removed or turned off. */
     forget(extension: string) {
+      queues.get(extension)?.close()
+      queues.delete(extension)
       installs.delete(extension)
       subscribers.forEach((byExtension) => byExtension.delete(extension))
       input.modules.forEach((module) => module.forget?.(extension))
     },
     dispose() {
+      queues.forEach((queue) => queue.close())
+      queues.clear()
       app.off("web-contents-created", created)
       input.session.serviceWorkers.off("running-status-changed", started)
       preloads.forEach((id) => input.session.unregisterPreloadScript(id))

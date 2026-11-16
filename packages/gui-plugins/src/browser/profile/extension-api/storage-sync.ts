@@ -110,11 +110,15 @@ export function createStorageSync(input: { storage: Storage; emit: Emit }) {
       ),
     )
 
-    if (Object.keys(changes).length > 0) input.emit("storage.sync.onChanged", [changes], extension)
+    if (Object.keys(changes).length > 0) {
+      input.emit("storage.sync.onChanged", [changes], extension)
+      input.emit("storage.onChanged", [changes, "sync"], extension)
+    }
   }
 
   const module: ApiModule = {
     namespaces: [
+      { path: "storage", permissions: ["storage"], methods: [], events: ["onChanged"] },
       {
         path: "storage.sync",
         permissions: ["storage"],

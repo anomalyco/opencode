@@ -77,6 +77,7 @@ export async function createExtensionApis(input: {
     tabs,
     menu: menus.template,
     prepareInstall: host.prepareInstall,
+    activate: host.activate,
     resetMenus: menus.reset,
     /** The toolbar button state the extensions menu shows, for extensions that have a button. */
     action: actions.view,
