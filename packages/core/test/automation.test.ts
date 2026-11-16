@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Clock, DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Stream } from "effect"
-import { ChildProcessSpawner } from "effect/process"
 import { TestClock } from "effect/testing"
 import { eq } from "drizzle-orm"
 import { Agent } from "@opencode/core/agent"
@@ -10,8 +9,6 @@ import { Automation } from "@opencode/core/automation"
 import { AutomationTable } from "@opencode/core/automation/sql"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { Environment } from "@opencode/core/environment/index"
-import { FileAccess } from "@opencode/core/file-access"
 import { Flag } from "@opencode/core/flag"
 import { Image } from "@opencode/core/image"
 import { Instance } from "@opencode/core/instance/service"
@@ -31,14 +28,12 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
-import { ShellSelect } from "@opencode/core/shell/select"
 import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
-import { Snapshot } from "@opencode/core/snapshot"
 import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
@@ -108,16 +103,6 @@ const folders = { missingNow: false }
 const slack = { replies: 0, reads: 0, posts: [] as string[], failing: false }
 let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
 let activationGate: Effect.Effect<void> = Effect.void
-
-const testEnvironment = Layer.effect(
-  Environment.Service,
-  Effect.gen(function* () {
-    const files = Environment.makeFiles(Environment.makeMemoryDriver())
-    yield* files.mkdir(enabledDirectory).pipe(Effect.orDie)
-    yield* files.mkdir(toggleDirectory).pipe(Effect.orDie)
-    return Environment.Service.of({ files, spawner: ChildProcessSpawner.make(() => Effect.die("unused")) })
-  }),
-)
 
 const configureAgent = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -209,13 +194,11 @@ const locations = makeGlobalNode({
                     Config.node,
                     Flag.node,
                     Location.node,
-                    Environment.node,
                     PluginHooks.node,
                     Skill.node,
                     Tool.node,
                     Agent.node,
                     Permission.node,
-                    FileAccess.node,
                   ]),
                   {
                     replacements: [
@@ -231,7 +214,6 @@ const locations = makeGlobalNode({
                       SessionStore.node.replace(Layer.succeed(SessionStore.Service, store)),
                       PermissionSaved.node.replace(Layer.succeed(PermissionSaved.Service, saved)),
                       Location.node.replace(Layer.succeed(Location.Service, location(ref))),
-                      Environment.node.replace(testEnvironment),
                       Image.node.replace(imagePassthrough),
                     ],
                   },
@@ -239,18 +221,9 @@ const locations = makeGlobalNode({
               ),
             ),
             Layer.mock(McpTool.Service, { flush: Effect.void }),
-            Layer.succeed(
-              ShellSelect.Service,
-              ShellSelect.Service.of({
-                transform: () => Effect.die("unused"),
-                reload: () => Effect.void,
-                resolve: () => Effect.succeed("/bin/bash"),
-              }),
-            ),
-            Layer.mock(Snapshot.Service, { capture: () => Effect.undefined, restore: () => Effect.void }),
-            Layer.succeed(Plugin.Service, {
+            Layer.mock(Plugin.Service, {
               awaitActivation: Effect.suspend(() => activationGate),
-            } as unknown as Plugin.Interface),
+            }),
           ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>
         },
       )
@@ -758,7 +731,7 @@ describe("Automation", () => {
     }),
   )
 
-  it.effect("rejects creation when experimental.automations is off, and leaves rows alone", () =>
+  it.effect("rejects creation when experimental.automations is off", () =>
     Effect.gen(function* () {
       const automations = yield* setup(disabledDirectory)
       expect(
@@ -767,58 +740,28 @@ describe("Automation", () => {
         ),
       ).toMatchObject({ _tag: "Automation.DisabledError" })
 
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(AutomationTable)
-        .values({
-          id: Automation.ID.create(),
-          project_id: Project.ID.global,
-          session_id: sessionID,
-          directory: disabledDirectory,
-          name: "x",
-          action: { type: "prompt", prompt: "poll", to: { session: sessionID } },
-          trigger: { type: "at", at: "1970-01-01T00:01:00Z" },
-          tz: "UTC",
-          next_due_at: 0,
-          time_created: 0,
-          time_updated: 0,
-        })
-        .run()
-        .pipe(Effect.orDie)
-      yield* TestClock.adjust("1 minute")
-      yield* automations.tick
-      expect(yield* pendingIDs).toEqual([])
-      expect((yield* automations.list())[0]).toMatchObject({ runCount: 0, lastOutcome: "disabled" })
+      expect(yield* automations.list()).toEqual([])
     }),
   )
 
   it.effect("rechecks hourly while its location has the flag off, then catches up once it is on", () =>
     Effect.gen(function* () {
       const automations = yield* setup(toggleDirectory)
-      const { db } = yield* Database.Service
-      const id = Automation.ID.create()
-      yield* db
-        .insert(AutomationTable)
-        .values({
-          id,
-          project_id: Project.ID.global,
-          session_id: sessionID,
-          directory: toggleDirectory,
-          name: "poll",
-          action: { type: "prompt", prompt: "poll", to: { session: sessionID } },
-          trigger: every("1 minute"),
-          tz: "UTC",
-          next_due_at: 60_000,
-          time_created: 0,
-          time_updated: 0,
-        })
-        .run()
-        .pipe(Effect.orDie)
+      toggle.on = true
+      const { id } = yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("1 minute"),
+        action: prompt("poll"),
+      })
+      toggle.on = false
+      const before = toggle.reads
       yield* TestClock.adjust("1 minute")
       yield* automations.tick
       expect(yield* automations.get(id)).toMatchObject({ status: "active", runCount: 0, lastOutcome: "disabled" })
+      expect(yield* pendingIDs).toEqual([])
       const reads = toggle.reads
-      expect(reads).toBeGreaterThan(0)
+      expect(reads).toBeGreaterThan(before)
 
       // Within the hour the location is not booted to read the flag again.
       yield* TestClock.adjust("59 minutes")
@@ -1134,7 +1077,7 @@ describe("Automation", () => {
 
         slack.failing = true
         slack.replies = 5
-        for (const strike of [1, 2]) {
+        for (const _ of [1, 2]) {
           yield* TestClock.adjust("1 minute")
           yield* automations.tick
           expect(yield* automations.get(automation.id)).toMatchObject({
@@ -1144,7 +1087,6 @@ describe("Automation", () => {
             lastOutput: expect.stringContaining("Slack is down"),
             state: { replies: 2 },
           })
-          expect(strike).toBeLessThan(3)
         }
         yield* TestClock.adjust("1 minute")
         yield* automations.tick
@@ -1318,7 +1260,7 @@ describe("Automation", () => {
       }),
     )
 
-    it.effect("waits for plugins to activate before authorizing", () =>
+    it.effect("waits for plugins when authorizing, but counts activation against the run timeout", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
         const gate = yield* Latch.make()
@@ -1334,7 +1276,18 @@ describe("Automation", () => {
         yield* Effect.repeat(Effect.yieldNow, { times: 5 })
         expect(yield* automations.list()).toEqual([])
         yield* gate.open
-        expect((yield* Fiber.join(creating)).status).toBe("active")
+        const automation = yield* Fiber.join(creating)
+        expect(automation.status).toBe("active")
+
+        yield* gate.close
+        yield* TestClock.adjust("1 minute")
+        const running = yield* Effect.forkChild(automations.tick, { startImmediately: true })
+        yield* TestClock.adjust("30 seconds")
+        yield* Fiber.join(running)
+        expect(yield* automations.get(automation.id)).toMatchObject({
+          runCount: 0,
+          lastOutput: "Timed out after 30000ms",
+        })
       }),
     )
   })

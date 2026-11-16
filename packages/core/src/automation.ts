@@ -303,10 +303,7 @@ const layer = Layer.effect(
         )
 
     const existing = (sessionID: SessionSchema.ID) =>
-      sessions.get(sessionID).pipe(
-        Effect.map(Option.some),
-        Effect.catchTag("Session.NotFoundError", () => Effect.succeed(Option.none())),
-      )
+      sessions.get(sessionID).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.undefined))
 
     /** A finished run's next slot, after the time it finished so a slow run doesn't trigger a burst, or done. */
     const advance = Effect.fnUntraced(function* (row: Row, done = false) {
@@ -316,43 +313,50 @@ const layer = Layer.effect(
     })
 
     const runPrompt = Effect.fnUntraced(function* (row: Row, action: PromptAction, due: number, now: number) {
-      const late = now - due >= LATE_AFTER
       const run = row.run_count + 1
-      // The id is derived from `run_count`, so retrying after a crash reconciles with the earlier admission.
-      const id = SessionMessage.ID.make(`msg_${row.id}_${run}`)
-      const metadata = { automation: { id: row.id, name: row.name, run, dueAt: due, late } }
-
-      if (action.to.session !== undefined) {
-        const target = yield* existing(action.to.session)
-        if (Option.isNone(target))
-          return yield* pauseWith(row, now, `Target session ${action.to.session} no longer exists`)
-        if (target.value.projectID !== row.project_id)
-          return yield* pauseWith(row, now, `Target session ${action.to.session} moved to another project`)
-        if (row.last_message_id !== null && (yield* pending(row.last_message_id))) {
-          // The wake that followed admission may have been lost; waking again is harmless.
-          yield* execution.wake(target.value.id)
-          return yield* settle(
-            row,
-            { last_outcome: "skipped", retry_at: null, ...(yield* advance(row)), time_updated: now },
-            true,
-          )
-        }
-        yield* sessions.prompt({ sessionID: target.value.id, id, text: action.prompt, delivery: "steer", metadata })
+      const fire = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+        // Retrying the same run after a crash reconciles with the earlier admission.
+        const id = SessionMessage.ID.make(`msg_${row.id}_${run}`)
+        const late = now - due >= LATE_AFTER
+        yield* sessions.prompt({
+          sessionID,
+          id,
+          text: action.prompt,
+          delivery: "steer",
+          metadata: { automation: { id: row.id, name: row.name, run, dueAt: due, late } },
+        })
         // Record the run even if a pause landed during the prompt, or the next run would reuse this message id.
-        return yield* settle(
+        yield* settle(
           row,
           {
             run_count: run,
             last_message_id: id,
             last_run_at: now,
             last_outcome: late ? "late" : "fired",
-            last_output: `Prompted ${target.value.id}`,
+            last_output: `${action.to.session === undefined ? "Started" : "Prompted"} ${sessionID}`,
             retry_at: null,
             ...(yield* advance(row)),
             time_updated: now,
           },
           false,
         )
+      })
+
+      if (action.to.session !== undefined) {
+        const target = yield* existing(action.to.session)
+        if (!target) return yield* pauseWith(row, now, `Target session ${action.to.session} no longer exists`)
+        if (target.projectID !== row.project_id)
+          return yield* pauseWith(row, now, `Target session ${action.to.session} moved to another project`)
+        if (row.last_message_id !== null && (yield* pending(row.last_message_id))) {
+          // The wake that followed admission may have been lost; waking again is harmless.
+          yield* execution.wake(target.id)
+          return yield* settle(
+            row,
+            { last_outcome: "skipped", retry_at: null, ...(yield* advance(row)), time_updated: now },
+            true,
+          )
+        }
+        return yield* fire(target.id)
       }
 
       const agent = yield* startable(action.to.new).pipe(inDirectory(row.directory))
@@ -364,31 +368,17 @@ const layer = Layer.effect(
         agent: agent.id,
         title: row.name,
       })
-      yield* sessions.prompt({ sessionID: session.id, id, text: action.prompt, metadata })
-      yield* settle(
-        row,
-        {
-          run_count: run,
-          last_message_id: id,
-          last_run_at: now,
-          last_outcome: late ? "late" : "fired",
-          last_output: `Started ${session.id}`,
-          retry_at: null,
-          ...(yield* advance(row)),
-          time_updated: now,
-        },
-        false,
-      )
+      yield* fire(session.id)
     })
 
     const runCode = Effect.fnUntraced(function* (row: Row, action: CodeAction, due: number, now: number) {
       // The tools were authorized for the creating Session's agent and permissions, so a run needs that Session.
-      const owner = row.session_id === null ? Option.none() : yield* existing(row.session_id)
-      if (Option.isNone(owner))
+      const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
+      if (!owner)
         return yield* pauseWith(row, now, `The session that authorized this automation's tools no longer exists`)
-      const outcome = yield* AutomationCode.run(owner.value, action, {
+      const outcome = yield* AutomationCode.run(owner, action, {
         messageID: SessionMessage.ID.make(`msg_${row.id}_${row.run_count + 1}`),
-        state: row.state ?? null,
+        state: row.state,
         now,
         runs: row.run_count,
       }).pipe(inDirectory(row.directory))
@@ -706,8 +696,6 @@ const layer = Layer.effect(
       }
       // Tool permissions are asked in, and checked against, the creating Session.
       if (owner === undefined) return yield* new InvalidError({ reason: "A code action needs a session" })
-      const validated = AutomationCode.validate(action.code)
-      if (Result.isFailure(validated)) return yield* new InvalidError({ reason: validated.failure })
       const code = { type: "code" as const, code: action.code, args: action.args }
       yield* AutomationCode.authorize(owner, input.name, trigger, code).pipe(
         inDirectory(directory),

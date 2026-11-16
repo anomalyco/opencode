@@ -16,12 +16,13 @@ export const makeAutomation = Effect.gen(function* () {
   const sessions = yield* Session.Service
   const projects = yield* Project.Service
 
-  const allowed = (directory: string) =>
+  const enabled = (directory: string) =>
     automations.enabled(directory).pipe(
       // An automation whose folder is gone stays manageable, so it can be inspected and deleted.
       Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(true)),
-      Effect.flatMap((enabled) => (enabled ? Effect.void : Effect.fail(disabled()))),
     )
+  const allowed = (directory: string) =>
+    enabled(directory).pipe(Effect.flatMap((on) => (on ? Effect.void : Effect.fail(disabled()))))
 
   const find = (id: Automation.ID) =>
     Effect.gen(function* () {
@@ -70,18 +71,9 @@ export const makeAutomation = Effect.gen(function* () {
           (row) => directory === undefined || row.projectID === projectID || row.directory === directory,
         )
         // Each automation is shown only where the flag allows it, the same as `get`.
-        const visible = new Map<string, boolean>()
-        for (const row of matching) {
-          if (visible.has(row.directory)) continue
-          visible.set(
-            row.directory,
-            yield* allowed(row.directory).pipe(
-              Effect.as(true),
-              Effect.catchTag("ForbiddenError", () => Effect.succeed(false)),
-            ),
-          )
-        }
-        return { data: matching.filter((row) => visible.get(row.directory)) }
+        const directories = new Set(matching.map((row) => row.directory))
+        const visible = new Set(yield* Effect.filter(directories, enabled))
+        return { data: matching.filter((row) => visible.has(row.directory)) }
       }),
     get: (id: Automation.ID) => find(id).pipe(Effect.map((data) => ({ data }))),
     pause: (id: Automation.ID) =>

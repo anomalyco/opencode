@@ -26,15 +26,10 @@ it.live(
       const dir = (yield* tmpdirScoped("opencode-automation-api-")).path
       const global = path.join(dir, "global")
       const enabled = path.join(dir, "enabled")
-      const disabled = path.join(dir, "disabled")
       const ask = path.join(dir, "ask")
       yield* Effect.promise(async () => {
-        await Promise.all([global, enabled, disabled, ask].map((item) => fs.mkdir(item, { recursive: true })))
+        await Promise.all([global, enabled, ask].map((item) => fs.mkdir(item, { recursive: true })))
         await fs.writeFile(path.join(enabled, "opencode.json"), JSON.stringify({ experimental: { automations: true } }))
-        await fs.writeFile(
-          path.join(disabled, "opencode.json"),
-          JSON.stringify({ experimental: { automations: false } }),
-        )
         await fs.writeFile(
           path.join(ask, "opencode.json"),
           JSON.stringify({ experimental: { automations: true }, permission: { execute: "ask" } }),
@@ -102,7 +97,6 @@ it.live(
         })
         expect(standalone).toMatchObject({ directory: enabled, action: { to: { new: "build" } } })
         expect(standalone.sessionID).toBeUndefined()
-        await api.experimental.automation.delete({ automationID: standalone.id })
 
         await expect(
           api.experimental.automation.create({
@@ -135,17 +129,25 @@ it.live(
         ).toBe(400)
         expect(await api.experimental.automation.list({ sessionID: session.id })).toEqual([])
 
-        // Off where it would run: nothing can be created or read.
-        const off = await api.session.create({ location: { directory: disabled } })
+        // Turn off the directory that still owns the standalone automation. Even unfiltered lists must hide it.
+        await fs.writeFile(
+          path.join(enabled, "opencode.json"),
+          JSON.stringify({ experimental: { automations: false } }),
+        )
+        await api.location.reload()
+        expect(await api.experimental.automation.list({})).toEqual([])
+        await expect(api.experimental.automation.get({ automationID: standalone.id })).rejects.toMatchObject({
+          _tag: "ForbiddenError",
+        })
         await expect(
           api.experimental.automation.create({
-            sessionID: off.id,
+            sessionID: session.id,
             name: "x",
             trigger: hourly,
             action: { type: "prompt", prompt: "ping" },
           }),
         ).rejects.toMatchObject({ _tag: "ForbiddenError" })
-        await expect(api.experimental.automation.list({ sessionID: off.id })).rejects.toMatchObject({
+        await expect(api.experimental.automation.list({ sessionID: session.id })).rejects.toMatchObject({
           _tag: "ForbiddenError",
         })
 
