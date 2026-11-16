@@ -94,10 +94,12 @@ const findLineOccurrences = (content: string, search: string) => {
     if (matched !== keys.length) continue
     const first = lines[index - keys.length + 1]
     const last = lines[index]
-    if (!trailingNewline || last.newline)
-      result.push({ start: first.start, end: trailingNewline ? last.end : last.contentEnd })
-    // Match the same non-overlapping ranges as the original greedy scan.
-    matched = 0
+    if (!trailingNewline || last.newline) {
+      const candidate = { start: first.start, end: trailingNewline ? last.end : last.contentEnd }
+      const previous = result.at(-1)
+      if (!previous || previous.end <= candidate.start || previous.start >= candidate.end) result.push(candidate)
+    }
+    matched = prefix[matched - 1]
   }
   return result
 }
