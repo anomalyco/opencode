@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -336,22 +336,184 @@ describe("Form", () => {
     }),
   )
 
-  it.effect("keeps forms pending when reply event publication fails", () =>
+  for (const action of ["reply", "cancel"] as const) {
+    it.effect(`keeps forms pending when ${action} event publication fails`, () =>
+      Effect.gen(function* () {
+        const service = yield* Form.Service
+        const bus = yield* Bus.Service
+        yield* service.create(input)
+        const type = action === "reply" ? Form.Event.Replied.type : Form.Event.Cancelled.type
+        const unsubscribe = yield* bus.listen((event) =>
+          event.type === type ? Effect.die(new Error("settlement listener failed")) : Effect.void,
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const settle =
+          action === "reply"
+            ? service.reply({ id: formID, answer: { name: "Ava" } })
+            : service.cancel(formID, { message: "Dismissed" })
+
+        expect(Exit.isFailure(yield* Effect.exit(settle))).toBe(true)
+        expect(yield* service.state(formID)).toEqual({ status: "pending" })
+
+        yield* unsubscribe
+        yield* settle
+        expect(yield* service.state(formID)).toEqual(
+          action === "reply"
+            ? { status: "answered", answer: { name: "Ava" } }
+            : { status: "cancelled", message: "Dismissed" },
+        )
+      }),
+    )
+  }
+
+  for (const action of ["reply", "cancel"] as const) {
+    it.effect(`settles once when reply races ${action}`, () =>
+      Effect.gen(function* () {
+        const service = yield* Form.Service
+        const bus = yield* Bus.Service
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const events: string[] = []
+        yield* service.create(input)
+        const unsubscribe = yield* bus.listen((event) => {
+          if (event.type !== Form.Event.Replied.type && event.type !== Form.Event.Cancelled.type) return Effect.void
+          events.push(event.type)
+          return events.length === 1
+            ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.asVoid)
+            : Effect.void
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const winner = yield* service.reply({ id: formID, answer: { name: "Ava" } }).pipe(Effect.forkScoped)
+        const loser = yield* Effect.gen(function* () {
+          yield* Deferred.await(entered)
+          return yield* (
+            action === "reply" ? service.reply({ id: formID, answer: { name: "Bea" } }) : service.cancel(formID)
+          ).pipe(Effect.flip)
+        }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
+        yield* Fiber.join(winner)
+        expect(loser).toEqual(new Form.AlreadySettledError({ id: formID }))
+        expect(events).toEqual([Form.Event.Replied.type])
+        expect(yield* service.state(formID)).toEqual({ status: "answered", answer: { name: "Ava" } })
+        expect(yield* service.list()).toEqual([])
+      }),
+    )
+  }
+
+  it.effect("rejects an inline listener cancelling the form being replied to", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service
       const bus = yield* Bus.Service
       yield* service.create(input)
+      const events: string[] = []
       const unsubscribe = yield* bus.listen((event) =>
-        event.type === Form.Event.Replied.type ? Effect.die("reply listener failed") : Effect.void,
+        Effect.gen(function* () {
+          if (event.type !== Form.Event.Replied.type && event.type !== Form.Event.Cancelled.type) return
+          events.push(event.type)
+          if (event.type === Form.Event.Replied.type)
+            expect(yield* service.cancel(formID).pipe(Effect.flip, Effect.orDie)).toEqual(
+              new Form.AlreadySettledError({ id: formID }),
+            )
+        }),
       )
       yield* Effect.addFinalizer(() => unsubscribe)
 
-      expect(Exit.isFailure(yield* Effect.exit(service.reply({ id: formID, answer: { name: "Ava" } })))).toBe(true)
-      expect(yield* service.state(formID)).toEqual({ status: "pending" })
-
-      yield* unsubscribe
       yield* service.reply({ id: formID, answer: { name: "Ava" } })
+
+      expect(events).toEqual([Form.Event.Replied.type])
       expect(yield* service.state(formID)).toEqual({ status: "answered", answer: { name: "Ava" } })
     }),
   )
+
+  for (const action of ["close", "create"] as const) {
+    it.effect(`publishes once when ${action} cancellation fails`, () =>
+      Effect.gen(function* () {
+        const service = yield* Form.Service
+        const bus = yield* Bus.Service
+        if (action === "close") yield* service.create(input)
+        if (action === "create") yield* service.close
+        const events: string[] = []
+        const defect = new Error("close cancellation failed")
+        const unsubscribe = yield* bus.listen((event) => {
+          if (event.type !== Form.Event.Cancelled.type) return Effect.void
+          events.push(event.type)
+          return Effect.die(defect)
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
+
+        const result = yield* (action === "close" ? service.close : service.create(input)).pipe(Effect.exit)
+        expect(Exit.isFailure(result) && Cause.squash(result.cause)).toBe(defect)
+        expect(events).toEqual([Form.Event.Cancelled.type])
+        expect(yield* service.state(formID)).toEqual({ status: "pending" })
+        yield* unsubscribe
+        yield* service.close
+        expect(yield* service.state(formID)).toEqual({ status: "cancelled" })
+      }),
+    )
+  }
+
+  it.effect("cleans up a reply started after a failed close", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const bus = yield* Bus.Service
+      const created = yield* Deferred.make<void>()
+      const defect = new Error("reply failed after another close")
+      let cancellations = 0
+      const unsubscribe = yield* bus.listen((event) =>
+        Effect.gen(function* () {
+          if (event.type === Form.Event.Created.type) return yield* Deferred.succeed(created, undefined)
+          if (event.type === Form.Event.Cancelled.type && ++cancellations === 1)
+            return yield* Effect.die(new Error("first close failed"))
+          if (event.type !== Form.Event.Replied.type) return
+          yield* service.close
+          yield* Effect.die(defect)
+        }).pipe(Effect.asVoid),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const asker = yield* service.ask(input).pipe(Effect.forkScoped)
+      yield* Deferred.await(created)
+      yield* Effect.yieldNow
+      expect(Exit.isFailure(yield* service.close.pipe(Effect.exit))).toBe(true)
+      expect(yield* service.state(formID)).toEqual({ status: "pending" })
+      const result = yield* service.reply({ id: formID, answer: { name: "Ava" } }).pipe(Effect.exit)
+      expect(Exit.isFailure(result) && Cause.squash(result.cause)).toBe(defect)
+      expect(yield* service.state(formID)).toEqual({ status: "cancelled" })
+      expect(yield* Fiber.join(asker)).toEqual({ status: "cancelled" })
+      expect(cancellations).toBe(2)
+    }),
+  )
+
+  for (const fail of [false, true]) {
+    it.effect(`finishes an in-flight reply after close (publication fails: ${fail})`, () =>
+      Effect.gen(function* () {
+        const service = yield* Form.Service
+        const bus = yield* Bus.Service
+        const created = yield* Deferred.make<void>()
+        const defect = new Error("active form publication failed")
+        const events: string[] = []
+        const unsubscribe = yield* bus.listen((event) =>
+          Effect.gen(function* () {
+            if (event.type === Form.Event.Created.type) return yield* Deferred.succeed(created, undefined)
+            if (event.type !== Form.Event.Replied.type && event.type !== Form.Event.Cancelled.type) return
+            events.push(event.type)
+            if (event.type !== Form.Event.Replied.type) return
+            yield* service.close
+            if (fail) yield* Effect.die(defect)
+          }).pipe(Effect.asVoid),
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const asker = yield* service.ask(input).pipe(Effect.forkScoped)
+        yield* Deferred.await(created)
+        yield* Effect.yieldNow
+        const result = yield* service.reply({ id: formID, answer: { name: "Ava" } }).pipe(Effect.exit)
+        expect(Exit.isFailure(result) ? Cause.squash(result.cause) : undefined).toBe(fail ? defect : undefined)
+        const terminal: Form.TerminalState = fail
+          ? { status: "cancelled" }
+          : { status: "answered", answer: { name: "Ava" } }
+        expect(yield* service.state(formID)).toEqual(terminal)
+        expect(yield* Fiber.join(asker)).toEqual(terminal)
+        expect(events).toEqual(fail ? [Form.Event.Replied.type, Form.Event.Cancelled.type] : [Form.Event.Replied.type])
+        expect(yield* service.list()).toEqual([])
+      }),
+    )
+  }
 })
