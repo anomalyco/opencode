@@ -43,7 +43,7 @@ import { guardSession } from "./session-guard"
 import { workspaceFile, type WorkspaceSource } from "./workspace-file"
 import { workspacePages } from "./workspace-pages"
 import { artifactKind } from "@opencode/util/artifact"
-import { workspaceFileURL } from "./link"
+import { reusableFile, workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
 import { remotePreview } from "./remote-preview"
 import { artifactPages } from "./artifact-preview"
@@ -415,7 +415,7 @@ export function createBrowserPane(input: {
       if (reason) throw new Error(reason)
       // A navigation that the next one replaced, such as a second submit or a redirect, rejects with ERR_ABORTED while
       // the tab goes on loading. It is not a failed request; a page that fails to load reports its own error.
-      await execute(binding, { action: command, files: [] }, new AbortController().signal, "user").catch(
+      await execute(binding, { action: command, files: [] }, new AbortController().signal, "user", "present").catch(
         (error: Error) => {
           if (!("code" in error) || error.code !== "ERR_ABORTED") throw error
         },
@@ -742,7 +742,7 @@ export function createBrowserPane(input: {
     dispatchBinding(binding, { type: "tab.published", tabID, attempt, tab: page.state() })
   }
 
-  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
+  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new"): Promise<Browser.Result> {
     const action = command.action
 
     if (signal.aborted)
@@ -785,7 +785,7 @@ export function createBrowserPane(input: {
       const refused = origin === "agent" ? agentRefusal(action, { url: "about:blank", origin: "null" }) : undefined
 
       if (refused) throw new Error(refused)
-      const file = origin === "user" && action.url && /^(?:file|workspace):/.test(action.url) ? action.url : undefined
+      const file = reusableFile(action.url, intent)
 
       if (file) {
         const existing = inventory(binding).tabs.find((tab) => {
