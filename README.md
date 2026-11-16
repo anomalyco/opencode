@@ -29,6 +29,7 @@
   <a href="README.ru.md">Русский</a> |
   <a href="README.bs.md">Bosanski</a> |
   <a href="README.ar.md">العربية</a> |
+  <a href="README.fa.md">فارسی</a> |
   <a href="README.no.md">Norsk</a> |
   <a href="README.br.md">Português (Brasil)</a> |
   <a href="README.th.md">ไทย</a> |
@@ -66,12 +67,12 @@ nix run github:anomalyco/opencode  # Nix
 
 OpenCode is also available as a desktop application. Download it from [opencode.ai/download](https://opencode.ai/download).
 
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-win-x64.exe`     |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
+| Platform              | Download                         |
+| --------------------- | -------------------------------- |
+| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg` |
+| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`   |
+| Windows               | `opencode-desktop-win-x64.exe`   |
+| Linux                 | `.deb`, `.rpm`, or `.AppImage`   |
 
 ```bash
 # macOS (Homebrew)
