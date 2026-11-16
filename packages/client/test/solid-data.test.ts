@@ -52,6 +52,44 @@ test("uses the configured initial window and retains normal cursor page sizes", 
   }
 })
 
+test("calls the message sync callback only for a completed cache hit", async () => {
+  const started = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const hits: string[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => {
+      started.resolve()
+      await release.promise
+      return Response.json({ data: [], cursor: {} })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/project", event: { on: () => () => {}, listen: () => () => {} } }),
+    dispose,
+  }))
+  try {
+    const cold = setup.data.session.message.sync("ses_refresh", () => hits.push("cold"))
+    await started.promise
+    const joined = setup.data.session.message.sync("ses_refresh", () => hits.push("joined"))
+    expect(hits).toEqual([])
+    release.resolve()
+    await Promise.all([cold, joined])
+    expect(hits).toEqual([])
+
+    const cached = setup.data.session.message.sync("ses_refresh", () => hits.push("cached"))
+    expect(hits).toEqual(["cached"])
+    await cached
+
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh", () => hits.push("refetch"))
+    expect(hits).toEqual(["cached"])
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
 test("counts every subagent page in a root session's cost", async () => {
   const child = (index: number): SessionInfo => ({
     ...session(0),
