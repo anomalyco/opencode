@@ -91,11 +91,9 @@ const Background = Schema.Struct({
   service_worker: Schema.optional(Schema.String),
 })
 
-const reported = new WeakMap<Session, Set<string>>()
-
 /** Each retry rechecks Chromium's actual background. A failed start/message during registration is not a permanent
  * failure. Absence of a background is valid for a purely declarative extension. Never expose a package value to main. */
-export async function filterReady(session: Session, extension: Extension, signal: AbortSignal, generic: (id: string) => void) {
+export async function filterReady(session: Session, extension: Extension, signal: AbortSignal, fallback: { reported: Set<string>; log: (id: string) => void }) {
   const kind = filterKind(extension)
 
   if (!kind) return true
@@ -125,12 +123,10 @@ export async function filterReady(session: Session, extension: Extension, signal
       const result = await backgroundReady(page, signal)
 
       if (result !== "generic") return result
-      const ids = reported.get(session) ?? new Set<string>()
 
-      if (!ids.has(extension.id)) {
-        ids.add(extension.id)
-        reported.set(session, ids)
-        generic(extension.id)
+      if (!fallback.reported.has(extension.id)) {
+        fallback.reported.add(extension.id)
+        fallback.log(extension.id)
       }
 
       return true

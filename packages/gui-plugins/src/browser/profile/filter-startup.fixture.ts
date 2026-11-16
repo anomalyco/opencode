@@ -27,8 +27,8 @@ void app.whenReady().then(async () => {
   await page.loadURL(new URL("manifest.json", dnr.url).href)
   await page.executeJavaScript("chrome.declarativeNetRequest.updateEnabledRulesets({disableRulesetIds:['one']})")
   const reported: string[] = []
-  const generic = (id: string) => reported.push(id)
-  const result = { worker: await filterReady(profile, worker, signal, generic), emptyRules: await filterReady(profile, dnr, signal, generic) }
+  const fallback = { reported: new Set<string>(), log: (id: string) => reported.push(id) }
+  const result = { worker: await filterReady(profile, worker, signal, fallback), emptyRules: await filterReady(profile, dnr, signal, fallback) }
 
   const loaded = Promise.withResolvers<WebContents>()
   app.on("web-contents-created", (_, contents) => {
@@ -43,7 +43,7 @@ void app.whenReady().then(async () => {
   const start = () => {
     const first = Promise.withResolvers<boolean>()
     gate.start(requests.id, async life => {
-      const ready = await filterReady(profile, requests, life, generic)
+      const ready = await filterReady(profile, requests, life, fallback)
       first.resolve(ready)
 
       return ready
@@ -58,19 +58,22 @@ void app.whenReady().then(async () => {
 
   for (const setup of ["void 0", "globalThis.µBlock={readyToFilter:false}; globalThis.vAPI={net:{}}", "vAPI.net.suspendableListener=17"]) {
     await set(setup)
-    const fallback = start()
-    assert.equal(await fallback.first, true)
-    await fallback.opening
+    const attempt = start()
+    assert.equal(await attempt.first, true)
+    await attempt.opening
     assert.equal(Date.now(), 0)
   }
 
   assert.deepEqual(reported, [requests.id])
+  // Reloading the plugin creates fresh reporting state, even when Electron reuses the partition's session.
+  await filterReady(profile, requests, signal, { ...fallback, reported: new Set() })
+  assert.deepEqual(reported, [requests.id, requests.id])
 
   await set("vAPI.net.suspendableListener=undefined")
   const warming = start()
   assert.equal(await warming.first, false)
   await set("µBlock.readyToFilter=true")
-  assert.equal(await filterReady(profile, requests, signal, generic), false)
+  assert.equal(await filterReady(profile, requests, signal, fallback), false)
   await set("vAPI.net.suspendableListener=()=>{}; void 0")
   mock.timers.tick(50)
   await warming.opening

@@ -189,11 +189,14 @@ export async function createBrowserProfile(input: {
   const lifetime = AbortSignal.any([input.signal, closing.signal])
   const filters = createFilterGate(lifetime, id => input.log.write("warn", "extension readiness unconfirmed; continuing navigation", { id }))
 
+  const fallback = {
+    reported: new Set<string>(),
+    log: (id: string) => input.log.write("info", "filter engine shape not recognized; using registered request listeners", { id }),
+  }
+
   const monitor = (extension: Extension) => {
     if (filterKind(extension)) {
-      filters.start(extension.id, signal => filterReady(session, extension, signal, id => {
-        input.log.write("info", "filter engine shape not recognized; using registered request listeners", { id })
-      }))
+      filters.start(extension.id, signal => filterReady(session, extension, signal, fallback))
     }
   }
 
