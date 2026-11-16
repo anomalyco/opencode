@@ -9,8 +9,19 @@ orchestrator decisions O-21 and O-22 apply.
 
 1. **Only when nothing is running.** The client starts a service only when discovery (F.6, all
    registrations in O-21 order) finds no ready, compatible service.
-2. **Never replace, never stop a service it did not start.** No version requirement is ever passed
-   to `decide`, so `Replace` cannot happen. A registered service that does not answer three probes
+2. **Never replace, never stop a service it did not start**, with one exception (O-167): a service of
+   another version than the client's, registered in the client's own channel, is restarted when the
+   command asks as TS's does (`mismatch: "replace"`: the TUI and `mini`; `connect::Options::replace`).
+   `connect` then runs `ensure` with the client's version required, so `decide` returns `Replace`: the
+   service is stopped, handing its terminals over when it is ready, and the resolved TS binary starts
+   its replacement. The TUI prints `Restarting background server (version mismatch)...`, `mini` nothing,
+   as in TS. A failed stop is ignored and tried again, and a replacement that fails to start fails the
+   command with the start's error, as TS's `ensure` does. A service the call started is used whatever
+   its version. Two Rust-only limits keep it from restarting in a loop: the client first asks the
+   resolved binary's version (`--version`), and a binary of the running service's version is not used
+   to restart it (a development build, or `OPENCODE_TS_BIN` of another version); and a service that is
+   still starting is waited for first, then restarted. `--server` still only warns. Every other
+   command, and a service of another channel, keeps the rule. A registered service that does not answer three probes
    in a row is left running, and `ensure` fails with a message that names it. Two exceptions are
    evicted as TS evicts any unresponsive service: a registration whose pid is one of this `ensure`
    call's own contenders (this client started that process), and one whose pid no longer runs (a
@@ -47,8 +58,8 @@ orchestrator decisions O-21 and O-22 apply.
 
 ## Deviations
 
-- S03: a version-mismatched or unresponsive service is never replaced
-  (`parity/deviations/S03-never-replace.md`).
+- S03: an unresponsive service is never replaced, and a version-mismatched one only as the TUI and
+  `mini` ask, within the limits above (`parity/deviations/S03-never-replace.md`).
 - A missing TS binary fails at once with the spawn error and the `OPENCODE_TS_BIN` hint; TS reports
   "Failed to start server" after the first poll.
 

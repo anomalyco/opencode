@@ -43,7 +43,8 @@ pub async fn connect(context: &Context) -> error::Result<Connected> {
 }
 
 /// [`connect`] for a long-lived command (`mini`): a managed service's client follows the service when it
-/// restarts on a new port or password (`service.reconnect`).
+/// restarts on a new port or password (`service.reconnect`), and a service of another version is restarted first
+/// (`mismatch: "replace"`, as TS's `mini` asks, O-167), silently as in TS.
 pub async fn connect_following(context: &Context) -> error::Result<Connected> {
     connect_in(context, &Paths::from_env()?, &Env::from_env(), false, true, Arc::new(Reqwest::default())).await
 }
@@ -84,6 +85,7 @@ async fn connect_in(
             client_version: crate::help::VERSION.to_owned(),
             // Without it, `ServerConnection.resolve()` with no arguments: start the service quietly when none runs.
             standalone_fallback,
+            replace: follow,
             on_start: None,
         },
     )

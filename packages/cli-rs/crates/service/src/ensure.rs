@@ -1,9 +1,10 @@
 //! Ensure a background service runs (F.9).
 //!
 //! Ports `ensure` (`packages/client/src/effect/service.ts:45-127`) with the policy of
-//! `docs/F.9.md`: reuse a service that answers, whatever its version; wait for one that is
-//! starting; start TypeScript contenders only when none is registered or the registered process is
-//! gone; never stop a running service this call did not start.
+//! `docs/F.9.md`: reuse a service that answers, whatever its version unless a version is required;
+//! wait for one that is starting; start TypeScript contenders only when none is registered or the
+//! registered process is gone; never stop a running service this call did not start, except one of
+//! another version than [`Options::version`] requires (O-167), which it replaces as TS does.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -57,13 +58,25 @@ pub struct Options {
     pub command: Vec<OsString>,
     /// Added to the inherited environment (the service config's `env`).
     pub env: Vec<(String, String)>,
+    /// The version a service registered in `file` before this call must have (`EnsureOptions.version`, exact): one of
+    /// another version is stopped, handing its terminals over when it is ready, and replaced (O-167). A service this
+    /// call started is used whatever its version, so a TS binary of another version than required is not replaced in
+    /// a loop. `None` uses any version.
+    pub version: Option<String>,
     pub timing: Timing,
 }
 
 impl Options {
     pub fn new(file: PathBuf, state: PathBuf, ts: &TsCommand) -> Self {
-        Self { file, state, command: ts.service(), env: Vec::new(), timing: Timing::default() }
+        Self { file, state, command: ts.service(), env: Vec::new(), version: None, timing: Timing::default() }
     }
+}
+
+/// Why `ensure` starts a service (`EnsureReason`), with the version of the service it replaces.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Reason {
+    Missing,
+    VersionMismatch { previous: Option<String> },
 }
 
 /// The service to use, and where it is registered.
@@ -80,12 +93,12 @@ pub struct Error(pub String);
 /// Probes in a row without an answer before a registered service counts as unresponsive.
 const UNRESPONSIVE: u32 = 3;
 
-/// Returns a ready service, starting one when needed. `on_start` runs once, before the first
-/// contender starts.
+/// Returns a ready service, starting one when needed. `on_start` runs once, with the first reason: before a service of
+/// another version is stopped, or before the first contender starts.
 pub async fn ensure(
     transport: Arc<dyn Transport>,
     options: &Options,
-    on_start: &mut (dyn FnMut() + Send),
+    on_start: &mut (dyn FnMut(Reason) + Send),
 ) -> Result<Ensured, Error> {
     let mut run = Run {
         transport,
@@ -123,7 +136,7 @@ struct Run<'a> {
     timeouts: Option<(Registration, u32)>,
     announced: bool,
     spawned: bool,
-    on_start: &'a mut (dyn FnMut() + Send),
+    on_start: &'a mut (dyn FnMut(Reason) + Send),
 }
 
 impl Run<'_> {
@@ -138,20 +151,31 @@ impl Run<'_> {
             (Some(info), true) => self.unresponsive(info).await?,
             _ => self.timeouts = None,
         }
+        // Only a service registered in `file` before this call started one is held to the version (TS checks its own
+        // file alone); one registered elsewhere is the TS binary's of another channel.
+        let required = self.options.version.as_deref().filter(|_| !self.spawned);
+        let matches = |version: &str| Some(version) == required;
         let answered = match probe.service {
-            Some(service) => Some((service, file.clone())),
-            None if self.spawned => started_elsewhere(self.transport.as_ref(), self.options, &self.pool).await,
+            Some(service) => Some((service, file.clone(), required.is_some())),
+            None if self.spawned => started_elsewhere(self.transport.as_ref(), self.options, &self.pool)
+                .await
+                .map(|(service, file)| (service, file, false)),
             None => None,
         };
-        if let Some((service, file)) = answered {
+        if let Some((service, file, held)) = answered {
             self.pool.service_answered();
-            return match probe::decide(&service, None) {
+            let requirement: probe::Requirement<'_> = if held { Some(&matches) } else { None };
+            return match probe::decide(&service, requirement) {
                 Decision::Fail(reason) => Err(Error(reason)),
                 Decision::Reuse => {
                     handoff::complete(&file, &service.registration);
                     Ok(Some(Ensured { service, file }))
                 }
-                Decision::Wait | Decision::Replace { .. } => Ok(None),
+                Decision::Replace { handoff } => {
+                    self.replace(&service, handoff).await;
+                    Ok(None)
+                }
+                Decision::Wait => Ok(None),
             };
         }
         if let Some(failure) = self.pool.reap() {
@@ -197,10 +221,30 @@ impl Run<'_> {
         Ok(())
     }
 
+    // A service of another version than required (`decision._tag === "replace"`, `service.ts:98-104`): announced,
+    // stopped with its terminals handed over when it is ready, and evicted, so the next round starts the replacement.
+    // A failed stop is ignored, as TS ignores it; the next round finds the service again and tries again.
+    async fn replace(&mut self, service: &LocalService, handoff: bool) {
+        self.announce_reason(Reason::VersionMismatch { previous: service.version.clone() });
+        if !handoff {
+            log::warn!("Background service is not ready; replacement cannot preserve persistent terminals");
+        }
+        let pty = if handoff { stop::Pty::Handoff } else { stop::Pty::Clear };
+        if let Err(error) = stop::stop(self.transport.clone(), &self.options.file, pty, self.options.timing.stop).await
+        {
+            log::warn!("failed to stop the background service of another version: {error}");
+        }
+        self.pool.evict(service.registration.pid);
+    }
+
     fn announce(&mut self) {
+        self.announce_reason(Reason::Missing);
+    }
+
+    fn announce_reason(&mut self, reason: Reason) {
         if !self.announced {
             self.announced = true;
-            (self.on_start)();
+            (self.on_start)(reason);
         }
     }
 
