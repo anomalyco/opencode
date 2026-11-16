@@ -10,8 +10,8 @@ read once as the component is created; a local module compiles with Solid's comp
 `@opentui/solid`, `@opentui/core`), from the compatibility layer (`crates/plugin/src/pipe/compat`). Its JSX renders with
 Solid's universal renderer into plain nodes, which each view reads into a contract 2.0 tree for the host to draw. The
 four published packages P8 runs draw cell for cell as TS draws them at the checkpoints of `parity/scenarios/P.8`
-(settled pictures, not every state or the first frame after each event). The JS host is off unless
-`OPENCODE_PLUGIN_JS=1`. What differs:
+(settled pictures, not every state or the first frame after each event). The JS host is on unless
+`OPENCODE_PLUGIN_JS` is `0`, `false` or `off` (O-166). What differs:
 
 - **Every module compiles as an installed one**, with Bun's JSX transform: a local TSX plugin that relies on Solid's
   compiler for props that follow signals renders them once, as the same plugin installed from npm does in TS. A

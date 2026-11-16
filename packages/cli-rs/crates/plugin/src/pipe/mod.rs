@@ -16,9 +16,10 @@
 //!   handler ran fails, and the others are set up again, their surfaces keeping their last trees meanwhile. Three ends
 //!   in a minute fail every plugin on it.
 //!
-//! The JS host runs when `OPENCODE_PLUGIN_JS=1` and [`Config::from_env`] finds Bun, the local server's opencode
-//! binary first: the V2 compatibility layer (P8, `compat/`) runs today's V2 plugins on it unmodified where their
-//! features map.
+//! The JS host is on unless `OPENCODE_PLUGIN_JS` turns it off (`0`, `false`, `off`; O-166), and runs once a TypeScript
+//! plugin needs it and [`Config::find`] finds Bun, the local server's opencode binary first: the V2 compatibility layer
+//! (P8, `compat/`) runs today's V2 plugins on it unmodified where their features map. Nothing is looked for or started
+//! while no plugin needs it.
 
 pub mod child;
 mod guest;
@@ -82,6 +83,28 @@ pub struct Config {
     pub channel: String,
     /// The directory the client works in, a project's perhaps: told to the JS host as data, never where Bun starts.
     pub directory: PathBuf,
+    /// Where Bun is found once a plugin needs the JS host, when it was not found yet ([`Config::from_env`]): `bun`,
+    /// `opencode` and `bun_version` are then the ones it finds.
+    pub find: Option<Find>,
+}
+
+/// How [`Config::from_env`] finds Bun later, when a plugin first needs the JS host: the search runs a binary.
+#[derive(Clone)]
+pub struct Find(pub Rc<dyn Fn() -> Option<Config>>);
+
+impl std::fmt::Debug for Find {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Find(..)")
+    }
+}
+
+/// Whether `OPENCODE_PLUGIN_JS`, as `value`, turns the JS host off: `0`, `false` or `off` (in any case, O-166). Unset,
+/// empty or anything else leaves it on.
+pub fn turned_off(value: Option<&std::ffi::OsStr>) -> bool {
+    value.and_then(|value| value.to_str()).is_some_and(|value| {
+        let value = value.trim();
+        value == "0" || value.eq_ignore_ascii_case("false") || value.eq_ignore_ascii_case("off")
+    })
 }
 
 impl Config {
@@ -98,27 +121,41 @@ impl Config {
             version: "local".to_owned(),
             channel: "latest".to_owned(),
             directory: std::env::current_dir().unwrap_or_default(),
+            find: None,
         }
     }
 
-    /// The JS host, when `OPENCODE_PLUGIN_JS` is `1` (it is off by default: opt in) and Bun is found for the client's
-    /// `server`: see [`Config::from_vars`].
+    /// The JS host, unless `OPENCODE_PLUGIN_JS` turns it off ([`turned_off`]). Bun is not looked for yet: that runs a
+    /// binary, so it waits until a plugin needs the JS host ([`Scripts::runtime`]), and [`Config::find`] does it then
+    /// for the client's `server`. A client with no TypeScript plugin starts no process.
     pub fn from_env(server: &Server) -> Option<Self> {
-        Self::from_vars(|name| std::env::var_os(name), std::env::current_dir().unwrap_or_default(), server)
+        if turned_off(std::env::var_os("OPENCODE_PLUGIN_JS").as_deref()) {
+            return None;
+        }
+        let server = server.clone();
+        let find = Find(Rc::new(move || {
+            Self::find(|name| std::env::var_os(name), std::env::current_dir().unwrap_or_default(), &server)
+        }));
+        Some(Self { find: Some(find), ..Self::new(PathBuf::new()) })
     }
 
-    /// [`Config::from_env`] over the environment `var` reads, for a client in `directory`. The runtime is
-    /// `OPENCODE_BUN` (an absolute path only), else the opencode binary of a local server run as its own Bun
-    /// ([`Config::opencode`]; opencode ships with Bun), else `bun` on the path ([`find_in`]). The server's binary is the
-    /// executable its process runs, or, where the client cannot tell, the first `opencode` on the path that answers.
+    /// [`Config::find`], unless `OPENCODE_PLUGIN_JS` in `var` turns the JS host off.
     pub fn from_vars(
         var: impl Fn(&str) -> Option<std::ffi::OsString>,
         directory: PathBuf,
         server: &Server,
     ) -> Option<Self> {
-        if var("OPENCODE_PLUGIN_JS").as_deref() != Some(std::ffi::OsStr::new("1")) {
+        if turned_off(var("OPENCODE_PLUGIN_JS").as_deref()) {
             return None;
         }
+        Self::find(var, directory, server)
+    }
+
+    /// Bun for the JS host, over the environment `var` reads, for a client in `directory`. The runtime is
+    /// `OPENCODE_BUN` (an absolute path only), else the opencode binary of a local server run as its own Bun
+    /// ([`Config::opencode`]; opencode ships with Bun), else `bun` on the path ([`find_in`]). The server's binary is the
+    /// executable its process runs, or, where the client cannot tell, the first `opencode` on the path that answers.
+    pub fn find(var: impl Fn(&str) -> Option<std::ffi::OsString>, directory: PathBuf, server: &Server) -> Option<Self> {
         let home = var("HOME").map(PathBuf::from);
         let path = var("PATH").unwrap_or_default();
         let config = match var("OPENCODE_BUN") {
@@ -139,7 +176,7 @@ impl Config {
         };
         let Some(config) = config else {
             log::warn!(
-                "OPENCODE_PLUGIN_JS=1, but neither the server's opencode nor bun on the path runs the JS host: TypeScript plugins are skipped"
+                "neither the server's opencode nor bun on the path runs the JS host: TypeScript plugins are skipped"
             );
             return None;
         };
@@ -493,6 +530,9 @@ struct Walked(u64);
 pub struct Scripts {
     this: Weak<Scripts>,
     config: Config,
+    /// The Bun the JS host runs on, found once a plugin first needs it ([`Scripts::runtime`]), or `None` when there is
+    /// none.
+    runtime: std::cell::OnceCell<Option<Config>>,
     host: Weak<dyn Host>,
     id: u64,
     child: RefCell<Option<Child>>,
@@ -561,6 +601,7 @@ impl Scripts {
         let scripts = Rc::new_cyclic(|this| Self {
             this: this.clone(),
             config,
+            runtime: std::cell::OnceCell::new(),
             host: Rc::downgrade(host),
             id,
             child: RefCell::default(),
@@ -1090,6 +1131,33 @@ impl Scripts {
         true
     }
 
+    /// Whether there is a Bun to run the JS host on, looked for the first time it is asked (O-166): a client whose
+    /// plugins never need the JS host never looks, and starts no process.
+    pub fn runtime(&self) -> bool {
+        self.resolved().is_some()
+    }
+
+    /// Whether Bun was looked for yet.
+    #[doc(hidden)]
+    pub fn looked(&self) -> bool {
+        self.config.find.is_none() || self.runtime.get().is_some()
+    }
+
+    /// The configuration the JS host starts with: this one, with the Bun found for it.
+    fn resolved(&self) -> Option<&Config> {
+        let found = self.runtime.get_or_init(|| match &self.config.find {
+            None => Some(self.config.clone()),
+            Some(find) => (find.0)().map(|found| Config {
+                bun: found.bun,
+                opencode: found.opencode,
+                bun_version: found.bun_version,
+                find: None,
+                ..self.config.clone()
+            }),
+        });
+        found.as_ref()
+    }
+
     /// Starts the JS host when none runs, its stream after sequence `after`; whether one runs.
     fn started(&self, after: u64) -> bool {
         if self.child.borrow().is_some() {
@@ -1120,7 +1188,8 @@ impl Scripts {
                 true
             }
             Err(error) => {
-                let error = format!("cannot start the JS host ({}): {error}", self.config.bun.display());
+                let bun = self.resolved().map(|config| config.bun.display().to_string()).unwrap_or_default();
+                let error = format!("cannot start the JS host ({bun}): {error}");
                 log::error!("{error}");
                 *self.stopped.borrow_mut() = Some(error);
                 self.fail_loads();
@@ -1130,6 +1199,9 @@ impl Scripts {
     }
 
     fn spawn(&self, host: &Rc<dyn Host>) -> std::io::Result<Child> {
+        let Some(config) = self.resolved() else {
+            return Err(std::io::Error::new(std::io::ErrorKind::NotFound, crate::SKIPPED_NO_BUN));
+        };
         if self.script.borrow().is_none() {
             let dir = opencode_util::temp::tempdir()?;
             std::fs::write(dir.path().join("host.ts"), SOURCE)?;
@@ -1138,7 +1210,7 @@ impl Scripts {
             *self.script.borrow_mut() = Some(dir);
         }
         let dir = self.script.borrow().as_ref().map(|dir| dir.path().to_path_buf()).unwrap_or_default();
-        Child::spawn(command(&self.config, &dir), self.config.limits, {
+        Child::spawn(command(config, &dir), self.config.limits, {
             let proxy = host.app().proxy();
             let id = self.id;
             move || post(&proxy, id)
@@ -2046,7 +2118,8 @@ mod tests {
         assert_eq!(find(&[&project.join("bin")], Some(&project)), Some(project.join("bin").join(&file)));
     }
 
-    // Expected (carbon-1, carbon-6): the JS host is off unless `OPENCODE_PLUGIN_JS` is `1`; `OPENCODE_BUN` counts only as
+    // Expected (carbon-1, carbon-6, O-166): the JS host is on unless `OPENCODE_PLUGIN_JS` is `0`, `false` or `off` (any
+    // case); `OPENCODE_BUN` counts only as
     // an absolute path; Bun starts in the JS host's own directory, reads no `.env` and no project `bunfig.toml`, and gets
     // of the client's environment only what locates the user and the client.
     #[test]
@@ -2061,10 +2134,12 @@ mod tests {
         let from = |flag, bun| Config::from_vars(vars(flag, bun), PathBuf::from("/work"), &Server::Remote);
         // An absolute path on this platform: on Windows one without a drive is not.
         let absolute = if cfg!(windows) { r"C:\bun\bun.exe" } else { "/opt/bun/bin/bun" };
-        for off in [None, Some("0"), Some("true")] {
+        for off in [Some("0"), Some("false"), Some("OFF"), Some(" off ")] {
             assert!(from(off, absolute).is_none(), "{off:?}");
         }
-        assert_eq!(from(Some("1"), absolute).map(|config| config.bun), Some(PathBuf::from(absolute)));
+        for on in [None, Some("1"), Some("true"), Some(""), Some("yes")] {
+            assert_eq!(from(on, absolute).map(|config| config.bun), Some(PathBuf::from(absolute)), "{on:?}");
+        }
         assert!(from(Some("1"), "bin/bun").is_none());
         let config = Config { directory: PathBuf::from("/work"), ..Config::new(PathBuf::from("/opt/bun/bin/bun")) };
         let dir = Path::new("/private/js-host");
@@ -2096,6 +2171,33 @@ mod tests {
         let opencode = Config { opencode: true, ..config.clone() };
         assert_eq!(be_bun(&opencode), Some("1".into()));
         assert_eq!(super::command(&opencode, dir).get_current_dir(), Some(dir));
+    }
+
+    // Expected (O-166): a JS host on by default costs nothing until a plugin needs it: making its scripts looks for no
+    // Bun, the first [`Scripts::runtime`] looks once, and later ones take that answer. With none found, there is no
+    // runtime, and nothing starts.
+    #[test]
+    fn bun_is_looked_for_once_a_plugin_needs_the_js_host() {
+        let test_host = crate::loader::tests::host();
+        let host = crate::loader::tests::dynamic(&test_host);
+        for found in [true, false] {
+            let looks = Rc::new(Cell::new(0));
+            let find = Find(Rc::new({
+                let looks = looks.clone();
+                move || {
+                    looks.set(looks.get() + 1);
+                    found.then(|| Config { opencode: true, ..Config::new(PathBuf::from("/opt/opencode")) })
+                }
+            }));
+            let config = Config { find: Some(find), ..Config::new(PathBuf::new()) };
+            let scripts = Scripts::new(config, &host);
+            assert_eq!((looks.get(), scripts.looked(), scripts.pid()), (0, false, None));
+            assert_eq!(scripts.runtime(), found);
+            assert_eq!(scripts.runtime(), found);
+            assert_eq!((looks.get(), scripts.looked()), (1, true));
+            let bun = scripts.resolved().map(|config| (config.bun.clone(), config.opencode));
+            assert_eq!(bun, found.then(|| (PathBuf::from("/opt/opencode"), true)));
+        }
     }
 
     #[test]

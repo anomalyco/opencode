@@ -1,4 +1,4 @@
-# F16: TypeScript TUI plugins run on the JS host when Bun is found; native plugins load beside them
+# F16: TypeScript TUI plugins run by default on the JS host when Bun is found; native plugins load beside them
 
 **TypeScript.** The plugin host (`packages/tui/src/plugin/context.tsx:290-420`) loads every `cli.json`
 `plugins` entry that names no built-in, every directory under the `plugins` directories, and the server's
@@ -8,12 +8,19 @@ TUI plugins, then runs each one's `setup` beside the built-ins.
 built-ins (`-<id>`, `<id>`, `*`, `<prefix>.*`) exactly as TS does. The loader (`crates/plugin/src/loader`,
 `docs/P.4.md`) discovers the same targets as TS: the subdirectories of the `plugins` directories and the
 `cli.json` entries that name no built-in. A target with a native build (a shared library on the C ABI of
-`opencode-plugin-abi`) loads, with hot reload. A directory target without one is a TypeScript plugin: when Bun is
-found (`OPENCODE_BUN`, the local server's opencode binary run as its own Bun, or `bun` on the path) and `OPENCODE_PLUGIN_JS` is `1` (off by default), it runs on the JS host, a Bun process
-the client starts (`docs/P.4.md`, "TypeScript plugins on the JS host"), through the V2 compatibility layer (P8), which
-gives a V2 `{ id, setup }` module the context and the modules TS gives it. Without Bun, or without `OPENCODE_PLUGIN_JS=1`,
-the registry lists it with status `Skipped` and the reason "TypeScript TUI plugins run on the JS host, which is off: set
-OPENCODE_PLUGIN_JS=1 (with Bun installed) to turn it on"; its slot claims, commands and routes are absent.
+`opencode-plugin-abi`) loads, with hot reload. A directory target without one is a TypeScript plugin. By default it
+runs on the JS host (O-166, which reverses O-151's opt-in), a Bun process the client starts (`docs/P.4.md`, "TypeScript
+plugins on the JS host"), through the V2 compatibility layer (P8), which gives a V2 `{ id, setup }` module the context
+and the modules TS gives it. Bun is looked for only when the first TypeScript plugin needs it (`OPENCODE_BUN`, the
+local server's opencode binary run as its own Bun, or `bun` on the path), so a client with none runs no process for
+it. Otherwise the registry lists it with status `Skipped`, its slot claims, commands and routes absent:
+- `OPENCODE_PLUGIN_JS` set to `0`, `false` or `off` (any case) turns the JS host off: "TypeScript TUI plugins run on
+  the JS host, which OPENCODE_PLUGIN_JS turns off: unset it to turn the JS host back on";
+- with no Bun found: "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun
+  on the path runs it; install Bun or set OPENCODE_BUN".
+
+`scenarios/F16/ts-plugin-loads.pty.ts` drives the default: a plugin in the global `plugins` directory loads in both
+clients, with no variable set.
 
 Plugins named by npm package run on the JS host too, from the package cache TS installs into, and only from there:
 opencode-native installs and fetches nothing. TS's client prepares a `cli.json` entry with `Npm.add`
@@ -104,7 +111,7 @@ refolds them at once.
   be a tunnel to another machine. A path it reports then is held for approval like any path the user's configuration
   does not name.
 
-`F16-project-plugin-approval` covers the approval itself. With the JS host off, an npm entry and a server part are listed as a directory is,
+`F16-project-plugin-approval` covers the approval itself. With the JS host turned off, an npm entry and a server part are listed as a directory is,
 with the JS-host reason, each server part by its package target or path beside the server plugin's own row.
 `scenarios/P.8/cache-cli.app.ts` and `cache-server.app.ts` drive both on each side from one cache holding a pinned
 tarball: equal screens and requests. `crates/tui/tests/all/plugin_npm.rs` checks the keys of 34 spec forms against
@@ -117,7 +124,7 @@ plugin list, so the server plugins' TUI parts are in the same notice; one found 
 directory, a new server plugin) is told then, once. `/plugins` lists each as a TUI row `skipped`, named by the `name` of
 its directory's `package.json` where there is one, else by its target, with the reason as its error; the log has
 `plugin <target> skipped: <reason>` once for each. `scenarios/F16/ts-plugins-skipped.pty.ts` drives it: a server plugin
-whose TUI part TS loads and Rust, with the JS host off, lists as skipped, with the notice.
+whose TUI part TS loads and Rust, with `OPENCODE_PLUGIN_JS=0`, lists as skipped, with the notice.
 
 What runs on the JS host differs from TS as `F16-v2-compat-layer` says, and one found in a project's
 `.opencode/plugins` waits for the user's approval first (`F16-project-plugin-approval`). It is a second timing tier: a

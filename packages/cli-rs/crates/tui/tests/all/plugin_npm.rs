@@ -421,3 +421,55 @@ fn a_removal_added_to_cli_json_withdraws_the_vouch_of_a_running_part() {
     });
     assert_eq!(pipe.status("sidebar.tokens"), None, "the part still runs");
 }
+
+// Expected (O-166): with the JS host on by default, a client with no TypeScript plugin, no plugin named by npm package
+// and no server TUI part looks for no Bun and starts no process: the server's list (a server plugin with no TUI part)
+// and a reconcile change nothing. A plugin in the global `plugins` directory then makes it look, once, and load.
+#[test]
+fn a_client_with_nothing_to_run_starts_no_bun() {
+    let Some(real) = config() else { return };
+    let looks = std::rc::Rc::new(std::cell::Cell::new(0));
+    let find = opencode_plugin::pipe::Find(std::rc::Rc::new({
+        let looks = looks.clone();
+        move || {
+            looks.set(looks.get() + 1);
+            Some(real.clone())
+        }
+    }));
+    let lazy =
+        opencode_plugin::pipe::Config { find: Some(find), ..opencode_plugin::pipe::Config::new(Default::default()) };
+    let server = serde_json::json!([{
+        "id": "server-only", "source": { "type": "package", "target": "server-only@1.0.0" },
+        "features": { "server": true }, "state": { "status": "active" },
+    }]);
+    let fake = Fake::new(move |seen| match seen.path.as_str() {
+        "/api/plugin" => {
+            (200, serde_json::json!({ "location": support::location("/tmp/app"), "data": server.clone() }))
+        }
+        _ => support::base(seen, "/tmp/app"),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        route: Route::Home,
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        ..support::deps(Arc::new(fake))
+    };
+    let args = opencode_tui::Args { local: true, ..opencode_tui::Args::default() };
+    let harness = support::mount_on(opentui::testing::TestApp::new(120, 30), deps, args);
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config_dir = root.path().join("config");
+    let external = External { config_dir: config_dir.clone(), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(lazy));
+    let pipe = Pipe { harness, root };
+    pipe.settle();
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    pipe.settle();
+    let scripts = pipe.scripts();
+    assert_eq!((looks.get(), scripts.looked(), scripts.pid()), (0, false, None));
+    let dir = config_dir.join("plugins").join("probe");
+    crate::plugin_pipe::copy(&Path::new(crate::plugin_pipe::EXAMPLES).join("probe"), &dir);
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    pipe.active("example.probe");
+    assert_eq!(looks.get(), 1);
+    assert!(scripts.pid().is_some());
+}
