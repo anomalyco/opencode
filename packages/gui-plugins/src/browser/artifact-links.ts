@@ -29,6 +29,7 @@ export function artifactLinks(cdp: Cdp, current: () => string | undefined, offer
       .then(() =>
         cdp.send("Page.addScriptToEvaluateOnNewDocument", {
           worldName: world,
+          runImmediately: true,
           source: `
       if (location.protocol === 'oc-preview:' && location.host === ${JSON.stringify(host)}) {
         const external = value => { try { return /^https?:$/.test(new URL(value).protocol) } catch { return false } };

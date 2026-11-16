@@ -1007,7 +1007,7 @@ export default function SessionBrowserPane(props: {
             <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
               {plugin.t("failed.title")}
             </div>
-            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t(state()?.loadError === "browser.preview.unsupported" ? "preview.upgrade" : /ERR_(?:CERT_|SSL_)/.test(state()?.loadError ?? "") ? "failed.tls" : "failed.description")}</div>
+            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t(state()?.loadError === "browser.artifact.missing" ? "artifact.missing" : state()?.loadError === "browser.preview.unsupported" ? "preview.upgrade" : /ERR_(?:CERT_|SSL_)/.test(state()?.loadError ?? "") ? "failed.tls" : "failed.description")}</div>
           </div>
         </Show>
         <Show when={suspended()}>

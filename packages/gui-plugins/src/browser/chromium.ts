@@ -7,6 +7,7 @@ import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import { CAPTURE_DEADLINE_MS, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
+import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
 import { CodedError } from "./errors"
 import { createBrowserFiles } from "./files"
@@ -625,7 +626,7 @@ export function createBrowserPage(
     if (agentDriven(activity)) contents.setBackgroundThrottling(false)
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
-    dispatch({ type: "navigation.failed", code, description: options.remote?.needsUpdate?.() && preview(url)?.startsWith("workspace:") ? "browser.preview.unsupported" : description, url, preview: preview(url), isMainFrame }),
+    dispatch({ type: "navigation.failed", code, description: options.artifacts?.display(url) ? "browser.artifact.missing" : options.remote?.needsUpdate?.() && preview(url)?.startsWith("workspace:") ? "browser.preview.unsupported" : description, url, preview: preview(url), isMainFrame }),
   )
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame) return
@@ -931,7 +932,9 @@ export function createBrowserPage(
     if (options.artifacts?.display(destination)) {
       artifactHost = new URL(destination).host
       contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
-      await registerArtifactLinks(artifactHost)
+      // On first restore Chromium has no renderer yet. Its binding cannot answer until loadURL starts it.
+      // The script only offers links; the native navigation and network fences above apply before the load.
+      void registerArtifactLinks(artifactHost).catch(() => options.warn?.("Artifact link offers are unavailable"))
     }
 
     let committed = false
@@ -945,8 +948,7 @@ export function createBrowserPage(
 
     contents.once("did-navigate", commit)
 
-    return contents
-      .loadURL(destination)
+    return navigationDeadline(contents.loadURL(destination))
       .catch((error: Error) => {
         if (committedLoad(error, committed)) return
 
@@ -970,7 +972,7 @@ export function createBrowserPage(
     contents.reload()
   }
 
-  const ready = Promise.all([
+  const ready = navigationDeadline(Promise.all([
     files.ready,
     ...(options.initialize === false
       ? []
@@ -988,7 +990,7 @@ export function createBrowserPage(
     cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
     attachFrames(),
-  ]).then(() => undefined)
+  ])).then(() => undefined)
 
   return {
     view,
