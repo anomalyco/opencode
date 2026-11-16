@@ -43,9 +43,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `rpc.<id>.<name>`. An error the server gives an RPC reaches the plugin as the client's error, not as TS's
   `{ type, message, data }`, as the host's fetch answers an error as text. Every module the layer serves is also
   `opentui:runtime-module:<specifier>`, encoded or not, as OpenTUI's runtime registry names it (CT-3).
-- **`client` replies** of up to 8 MiB arrive whole, in parts of a frame each (CT-5); one past that, or past what the JS
-  host's queue has room for at the time, fails with "the reply is N bytes, more than the JS host takes", where TS has no
-  limit.
+- **`client` replies** whose JSON is up to just under 6 MiB (6,290,082 bytes at the default limits, as its parts in
+  base64 and their envelopes fill the JS host's 8 MiB overflow) arrive whole, in parts of a frame each, while nothing
+  waits before them; behind a backlog, less (CT-5). One past that fails with "the reply is N bytes, more than the JS
+  host takes", where TS has no limit.
 - **Elements** (CT-2) are event emitters, as OpenTUI's renderables are: `focus()` and `blur()` of an `<input>`, a
   `<textarea>` or a `<scrollbox>` are the host's focus of the node, any node emits `focused` and `blurred` as OpenTUI's
   do, and other events are heard and never come. A scroll box's `scrollTop`, `scrollHeight` and `viewport` are the
