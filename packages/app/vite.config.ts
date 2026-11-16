@@ -26,6 +26,6 @@ export default defineConfig({
       : {}),
     assetsDir: "_assets",
     target: "esnext",
-    sourcemap: false,
+    sourcemap: true,
   },
 })

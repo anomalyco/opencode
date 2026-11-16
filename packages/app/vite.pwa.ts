@@ -20,7 +20,7 @@ export function serviceWorker(directory: string) {
     injectRegister: false,
     manifest: false,
     workbox: {
-      // Source maps are not published with the build.
+      // Workbox runs after Sentry's upload and cleanup, so do not publish an unuploaded map.
       sourcemap: false,
       globDirectory: directory,
       clientsClaim: false,

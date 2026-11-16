@@ -1,7 +1,7 @@
 import { TextField } from "@opencode/ui/text-field"
 import { Logo } from "@opencode/ui/logo"
 import { Button } from "@opencode/ui/button"
-import { Component, createEffect, createSignal, on, onCleanup, Show, untrack } from "solid-js"
+import { Component, createEffect, createSignal, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { Predicate } from "effect"
 import { Updater } from "@opencode/plugin/gui/updater"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -374,6 +374,10 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       () => dispatch({ type: "error.presented" }),
     ),
   )
+
+  onMount(() => {
+    dispatch({ type: "error.ready" })
+  })
 
   onCleanup(() => {
     ipcs.dispose()

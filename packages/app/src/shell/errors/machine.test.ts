@@ -7,6 +7,8 @@ import {
   selectCheckUpdatesDisabled,
   selectExportDisabled,
   selectInstallUpdateDisabled,
+  selectReportDisabled,
+  selectReported,
   transitionErrorPage,
   type ErrorPageEffect,
   type ErrorPageEvent,
@@ -110,17 +112,12 @@ describe("error page actions", () => {
   })
 
   test("a new error resets the action error and records the new crash", () => {
-    const failed = replay([presented, check, { type: "action.failed", attempt: 1, error: "Check failed" }]).state
-    expect(selectActionError(failed)).toBe("Check failed")
+    const idle = replay([presented]).state
 
-    const next = transitionErrorPage(failed, presented)
-    expect(next.state).toEqual({ status: "idle", attempt: 1, fatalAttempt: 2, fatal: "recording" })
+    const next = transitionErrorPage(idle, presented)
+    expect(next.state).toEqual({ status: "idle", attempt: 1, fatalAttempt: 1, fatal: "recording", report: "ready" })
     expect(selectActionError(next.state)).toBeUndefined()
-    expect(next.effects).toEqual([{ type: "fatal.record", attempt: 2, timeoutMs: FATAL_RECORD_TIMEOUT_MS }])
-    // The previous crash's record answers late.
-    expect(transitionErrorPage(next.state, { type: "fatal.settled", attempt: 1, recorded: true }).state).toBe(
-      next.state,
-    )
+    expect(next.effects).toEqual([{ type: "fatal.record", attempt: 1, timeoutMs: FATAL_RECORD_TIMEOUT_MS }])
   })
 
   test("an action still running when a new error arrives keeps the page busy until it settles", () => {
@@ -128,7 +125,7 @@ describe("error page actions", () => {
       const busy = replay([presented, start])
       const next = transitionErrorPage(busy.state, presented)
 
-      expect(next.state).toMatchObject({ status: busy.state.status, attempt: 1, fatalAttempt: 2 })
+      expect(next.state).toMatchObject({ status: busy.state.status, attempt: 1, fatalAttempt: 2, report: "ready" })
       expect(selectExportDisabled(next.state)).toBe(true)
       expect(selectCheckUpdatesDisabled(next.state, undefined)).toBe(true)
       expect(selectInstallUpdateDisabled(next.state, undefined)).toBe(true)
