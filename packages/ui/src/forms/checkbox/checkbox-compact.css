@@ -72,7 +72,8 @@
       box-shadow 85ms ease-out;
   }
 
-  [data-slot="checkbox-v2"][data-surface="layer-1"] [data-slot="checkbox-v2-control"] {
+  /* No more specific than the checked and invalid fills below, so a ticked box on this surface shows its fill. */
+  [data-slot="checkbox-v2"]:where([data-surface="layer-1"]) [data-slot="checkbox-v2-control"] {
     background: var(--v2-background-bg-layer-01);
   }
 
