@@ -134,6 +134,27 @@ jobs:
           $old = '@ptrCast(try si.loadNtdllProc(@tagName(proc)))'
           if (!$source.Contains($old)) { throw 'Zig alignment workaround no longer matches; re-evaluate it' }
           [System.IO.File]::WriteAllText($file, $source.Replace($old, '@ptrCast(@alignCast(try si.loadNtdllProc(@tagName(proc))))'))
+      - name: Pin MSVC 14.51 for Zig's Clang 21
+        run: |
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+          $vs = & "$installer\vswhere.exe" -latest -products * -property installationPath
+          $tools = "$vs\VC\Tools\MSVC"
+          $arch = '${{ matrix.arch }}'
+          if (!(Test-Path "$tools\14.51.*\lib\$arch\vcruntime.lib")) {
+            $components = '--add Microsoft.VisualStudio.Component.VC.14.51.x86.x64'
+            if ($arch -eq 'arm64') { $components += ' --add Microsoft.VisualStudio.Component.VC.14.51.ARM64' }
+            $setup = Start-Process "$installer\setup.exe" -ArgumentList "modify --installPath `"$vs`" $components --quiet --norestart" -Wait -PassThru
+            if ($setup.ExitCode -notin 0, 3010) { throw "VS installer exited with $($setup.ExitCode)" }
+          }
+          $toolset = Get-ChildItem $tools -Directory -Filter '14.51.*' |
+            Where-Object { Test-Path "$($_.FullName)\lib\$arch\vcruntime.lib" } |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+          if (!$toolset) { throw "Missing MSVC 14.51 for $arch" }
+          # Zig reads this file for both host and target tools on the disposable runner.
+          Set-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" $toolset.Name -Encoding ascii
+          $libc = zig libc
+          $libc
+          if ($LASTEXITCODE -ne 0 -or $libc -inotcontains "sys_include_dir=$($toolset.FullName)\include") { throw 'Zig selected unexpected MSVC headers' }
       - name: Install Rust toolchain and target
         run: rustup toolchain install $env:RUSTUP_TOOLCHAIN --force-non-host --profile minimal --component rustfmt --component clippy --target $env:CARGO_BUILD_TARGET
       - name: Verify runner and compiler architecture
