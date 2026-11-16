@@ -1,6 +1,5 @@
 import { afterEach, expect, jest, test } from "bun:test"
-import { EventEmitter } from "node:events"
-import { createFilterGate, workerListening } from "./filter-startup"
+import { createFilterGate } from "./filter-startup"
 
 afterEach(() => { jest.useRealTimers() })
 
@@ -34,23 +33,13 @@ test("a late listener releases HTTP on retry; workspace and artifact previews ne
   expect(unconfirmed).toEqual([])
 })
 
-test("a running MV3 worker is not ready until its own webRequest listener answers", async () => {
-  const ipc = new EventEmitter()
-  let listening = false
-  const worker = { ipc, send: (_: string, reply: string) => ipc.emit(reply, {}, listening) }
-  const signal = new AbortController().signal
-  expect(await workerListening(worker, signal)).toBe(false)
-  listening = true
-  expect(await workerListening(worker, signal)).toBe(true)
-})
-
 test("a crashed background and a hung worker share one deadline, even when registered apart", async () => {
   const { gate, visit, unconfirmed } = setup()
   gate.start("background", async () => { throw new Error("render process gone") })
   const opening = visit()
   jest.advanceTimersByTime(3000)
   gate.start("worker", () => new Promise(() => {}))
-  jest.advanceTimersByTime(500)
+  jest.advanceTimersToNextTimer()
   await opening
   expect(unconfirmed).toEqual(["background", "worker"])
   expect(visit()).toBeUndefined()

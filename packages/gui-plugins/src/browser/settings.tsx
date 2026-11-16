@@ -322,7 +322,7 @@ function ExtensionRow(props: {
           fallback="extensions"
           name={props.extension.name}
           detail={props.extension.version}
-            message={message()}
+          message={message()}
         />
       }
     >

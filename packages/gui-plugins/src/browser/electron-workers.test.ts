@@ -6,12 +6,15 @@ import electron from "electron"
 
 // A tab pauses its page's children at start to guard them (`attachChildren` in child-targets.ts). Chromium pauses the
 // page's workers too, so this runs the policy in the pinned Electron: a worker the tab does not release never starts.
-test("a guarded tab's dedicated and nested workers start in the pinned Electron", async () => {
+test.each([
+  { fixture: "electron-workers", expected: { started: "nested,worker" } },
+  { fixture: "profile/filter-startup", expected: { worker: true, emptyRules: true } },
+])("the pinned Electron honors $fixture", async ({ fixture, expected }) => {
   const out = await mkdtemp(path.join(tmpdir(), "electron-workers-"))
 
   try {
     const built = await Bun.build({
-      entrypoints: [path.join(import.meta.dir, "electron-workers.fixture.ts")],
+      entrypoints: [path.join(import.meta.dir, `${fixture}.fixture.ts`)],
       outdir: out,
       target: "node",
       format: "cjs",
@@ -27,7 +30,7 @@ test("a guarded tab's dedicated and nested workers start in the pinned Electron"
         `--user-data-dir=${path.join(out, "profile")}`,
         // CI's Linux runners have no display, and node_modules' chrome-sandbox is not set up as root.
         ...(process.platform === "linux" ? ["--ozone-platform=headless", "--no-sandbox", "--disable-gpu"] : []),
-        path.join(out, "electron-workers.fixture.cjs"),
+        path.join(out, `${path.basename(fixture)}.fixture.cjs`),
       ],
       {
         env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, ELECTRON_ENABLE_LOGGING: undefined },
@@ -46,7 +49,7 @@ test("a guarded tab's dedicated and nested workers start in the pinned Electron"
 
     if (!line) throw new Error(`Electron printed no result (exit ${code}).\n${stderr}`)
 
-    expect(JSON.parse(line)).toEqual({ started: "nested,worker" })
+    expect(JSON.parse(line)).toEqual(expected)
   } finally {
     await rm(out, { recursive: true, force: true })
   }

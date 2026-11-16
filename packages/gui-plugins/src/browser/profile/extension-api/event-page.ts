@@ -60,7 +60,7 @@ export async function manifestQuery(session: Session, scope: string, query: "wak
     if (relay.getURL() !== url) throw new Error("Extension event page did not open.")
 
     const ready = await relay.executeJavaScript(query === "rulesets"
-      ? "chrome.declarativeNetRequest.getEnabledRulesets().then(ids => Array.isArray(ids) && (ids.length > 0 || !chrome.runtime.getManifest().declarative_net_request?.rule_resources?.some(r => r.enabled)))"
+      ? "chrome.declarativeNetRequest.getEnabledRulesets().then(ids => Array.isArray(ids))"
       : "new Promise(resolve => chrome.runtime.getBackgroundPage(page => resolve(!!page)))")
 
     signal.throwIfAborted()

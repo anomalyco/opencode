@@ -13,7 +13,7 @@ import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
 import { cookiesPersist } from "./probe"
 import { extensionDigest } from "./integrity"
-import { createFilterGate, filterReady, networkPermissions } from "./filter-startup"
+import { createFilterGate, filterReady, filterKind } from "./filter-startup"
 import { createPreviews } from "./previews"
 import {
   displayName,
@@ -190,7 +190,7 @@ export async function createBrowserProfile(input: {
   const filters = createFilterGate(lifetime, id => input.log.write("warn", "extension readiness unconfirmed; continuing navigation", { id }))
 
   const monitor = (extension: Extension) => {
-    if (networkPermissions((extension.manifest.permissions ?? []).filter(Schema.is(Schema.String)))) {
+    if (filterKind(extension)) {
       filters.start(extension.id, signal => filterReady(session, extension, signal))
     }
   }
