@@ -37,7 +37,9 @@ crate-type = ["cdylib"]
 opencode-plugin-abi = { git = "https://github.com/anomalyco/opencode", rev = "<commit of your opencode-native build>" }
 ```
 
-The crate is not on crates.io. Cargo finds it inside the repository by its name. A path to a checkout also works:
+The crate is not on crates.io. Cargo finds it inside the repository by its name. The commit of a build is the
+`commit=` of the `cli starting` line its start writes to the log (`opencode-native debug paths` prints the `log`
+directory). A build of your own checkout logs `commit=unknown`: use the path to that checkout instead,
 `opencode-plugin-abi = { path = "<checkout>/packages/cli-rs/crates/plugin-abi" }`. Edition 2024 needs Rust 1.85
 or newer. Keep the default `panic = "unwind"`: the SDK catches a plugin's panics only when they unwind. It catches
 them on the calls the host makes and on the threads `Setup::spawner` starts, whose panic fails the plugin and is
