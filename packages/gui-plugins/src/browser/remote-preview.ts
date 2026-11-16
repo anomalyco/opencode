@@ -15,8 +15,9 @@ export function remotePreview(
     prefix: workspacePrefix(session),
     stat: (path, signal) => stat(path, AbortSignal.any([lifetime, signal, AbortSignal.timeout(15_000)])).catch(() => null),
     async read(path, range, signal) {
-      const encoded = path.split("/").map(encodeURIComponent).join("/")
-      const url = new URL(`api/fs/read/${encoded}`, `${server.url.replace(/\/+$/, "")}/`)
+      const url = new URL("api/experimental/preview/read", `${server.url.replace(/\/+$/, "")}/`)
+      url.searchParams.set("path", path)
+      url.searchParams.set("sessionID", session)
       url.searchParams.set("location[directory]", location.directory)
 
       if (location.workspace) url.searchParams.set("location[workspace]", location.workspace)
@@ -30,7 +31,12 @@ export function remotePreview(
       const timer = setTimeout(() => timeout.abort(), 15_000)
 
       try {
-        return await fetch(url, { headers, redirect: "error", signal: AbortSignal.any([signal, lifetime, timeout.signal]) })
+        const response = await fetch(url, { headers, redirect: "error", signal: AbortSignal.any([signal, lifetime, timeout.signal]) })
+
+        if (response.headers.get("x-opencode-preview") === "1") return response
+        await response.body?.cancel()
+
+        return Response.error()
       } finally {
         clearTimeout(timer)
       }

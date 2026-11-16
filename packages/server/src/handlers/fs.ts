@@ -169,7 +169,7 @@ function stripWeak(etag: string) {
   return etag.trim().replace(/^w\//i, "")
 }
 
-function parseRange(header: string, size: number) {
+export function parseRange(header: string, size: number) {
   const match = /^bytes=\s*(\d*)\s*-\s*(\d*)\s*$/i.exec(header.trim())
   if (match === null || (match[1] === "" && match[2] === "")) return undefined
   if (match[1] === "") {

@@ -1,4 +1,4 @@
-import { net, type Session } from "electron"
+import type { Session } from "electron"
 import { previewScheme } from "../scheme"
 import type { PreviewSource } from "../workspace-file"
 import { servePreview } from "./serve"
@@ -13,7 +13,7 @@ export function createPreviews(session: Session, signal: AbortSignal) {
   }
 
   // File loaders reject for disappearing or unreadable files. Refuse the request without throwing into Electron.
-  session.protocol.handle(previewScheme, (request) => servePreview(request, grants, (url, init) => net.fetch(url, init)).catch(() => Response.error()))
+  session.protocol.handle(previewScheme, (request) => servePreview(request, grants).catch(() => Response.error()))
   let active = true
 
   const dispose = () => {

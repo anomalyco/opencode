@@ -81,6 +81,7 @@ export const promiseOmitEndpoints = new Set([
   "generate.textLegacy",
 ])
 export const effectOmitEndpoints = new Set([
+  "preview.read",
   "fs.read",
   "fs.write",
   "media.get",

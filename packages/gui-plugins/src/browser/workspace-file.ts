@@ -1,4 +1,5 @@
-import { stat } from "node:fs/promises"
+import { realpath, stat } from "node:fs/promises"
+import { relative } from "node:path"
 import { workspaceTarget } from "@opencode/plugin-browser/workspace"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { fileURLWithin } from "./policy"
@@ -61,7 +62,11 @@ export async function workspaceFile(file: string, roots: readonly string[]) {
     const info = await stat(target)
 
     // Hard links are regular workspace entries (also used by package managers); do not reject by link count.
-    return info.isFile() ? { path: target, href: pathToFileURL(target).href, size: info.size } : undefined
+    if (!info.isFile()) return
+    const href = pathToFileURL(target).href
+    const physical = (await Promise.all(roots.map(root => realpath(root)))).find(root => href.startsWith(`${pathToFileURL(root).href.replace(/\/$/, "")}/`))
+
+    return physical ? { path: target, root: physical, relative: relative(physical, target), size: info.size } : undefined
   } catch {
     // Missing, unreadable, malformed or replaced between lookups: no file grant.
     return undefined

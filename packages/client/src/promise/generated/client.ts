@@ -243,6 +243,8 @@ import type {
   ExperimentalPersistentPtyConnectTokenOutput,
   ExperimentalMediaGetInput,
   ExperimentalMediaGetOutput,
+  ExperimentalPreviewReadInput,
+  ExperimentalPreviewReadOutput,
   ExperimentalScheduleCreateInput,
   ExperimentalScheduleCreateOutput,
   ExperimentalScheduleListInput,
@@ -1497,6 +1499,21 @@ export function make(options: ClientOptions) {
             {
               method: "GET",
               path: `/api/experimental/media/${encodeURIComponent(input.hash)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+      },
+      preview: {
+        read: (input: ExperimentalPreviewReadInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalPreviewReadOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/preview/read`,
+              query: { location: input["location"], sessionID: input["sessionID"], path: input["path"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
               empty: false,

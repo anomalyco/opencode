@@ -15,7 +15,6 @@ function fixture(read: Remote["read"]) {
       servePreview(
         new Request("oc-preview://test/notes.txt", { method, headers: range ? { range } : undefined }),
         grants,
-        () => Promise.reject(new Error("unexpected local read")),
       ),
   }
 }

@@ -22,10 +22,10 @@ test("the authenticated read under a server base path names exactly the file val
       expect(url.searchParams.get("location[directory]")).toBe("/work")
       expect(req.headers.get("authorization")).toBe("fixture")
       expect(req.headers.get("accept-encoding")).toBe("identity")
-      expect(url.pathname.startsWith("/sub/api/fs/read/")).toBe(true)
-      reads.push(decodeURIComponent(url.pathname.slice("/sub/api/fs/read/".length)))
+      expect(url.pathname).toBe("/sub/api/experimental/preview/read")
+      reads.push(url.searchParams.get("path") ?? "")
 
-      return new Response("x")
+      return new Response("x", { headers: { "x-opencode-preview": "1" } })
     },
   })
 

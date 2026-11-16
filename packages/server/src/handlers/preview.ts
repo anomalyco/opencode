@@ -1,0 +1,63 @@
+import { Session } from "@opencode/core/session"
+import { openContained } from "@opencode/util/contained-file"
+import { realpath } from "node:fs/promises"
+import { Effect, Stream } from "effect"
+import { type HttpServerRequest, HttpServerResponse } from "effect/http"
+import { ContentHeaders } from "../content-headers"
+import { parseRange } from "./fs"
+import { missingSession } from "./session-error"
+
+export const makePreviewRead = Effect.gen(function* () {
+  const sessions = yield* Session.Service
+  return Effect.fn("Preview.read")(function* (
+    query: { sessionID: Session.ID; path: string; location?: { directory?: string; workspace?: string } },
+    req: HttpServerRequest.HttpServerRequest,
+  ) {
+    const session = yield* sessions.get(query.sessionID).pipe(Effect.mapError(missingSession))
+    const headers = {
+      "x-opencode-preview": "1",
+      "cache-control": "no-store, no-transform",
+      "accept-ranges": "bytes",
+      ...ContentHeaders.download({ path: query.path, mime: "application/octet-stream" }),
+    }
+    if (
+      new URL(req.url, "http://localhost").searchParams.get("location[directory]") !== session.location.directory ||
+      (new URL(req.url, "http://localhost").searchParams.get("location[workspace]") ?? undefined) !==
+        session.location.workspaceID
+    )
+      return HttpServerResponse.empty({ status: 404, headers })
+    const opened = yield* Effect.acquireRelease(
+      Effect.promise(() =>
+        realpath(session.location.directory)
+          .then((root) => openContained(root, query.path))
+          .catch(() => undefined),
+      ),
+      (opened) =>
+        Effect.promise(async () => {
+          await opened?.file.close()
+        }),
+    )
+    if (!opened) return HttpServerResponse.empty({ status: 404, headers })
+    const range = req.headers.range ? parseRange(req.headers.range, opened.size) : undefined
+    if (range === "unsatisfiable")
+      return HttpServerResponse.empty({
+        status: 416,
+        headers: { ...headers, "content-range": `bytes */${opened.size}` },
+      })
+    const length = range ? range.end - range.start + 1 : opened.size
+    const options = {
+      status: range ? 206 : 200,
+      headers: range ? { ...headers, "content-range": `bytes ${range.start}-${range.end}/${opened.size}` } : headers,
+      contentLength: length,
+    }
+    if (req.method === "HEAD" || !length)
+      return HttpServerResponse.empty({ ...options, headers: { ...options.headers, "content-length": String(length) } })
+    return HttpServerResponse.stream(
+      Stream.fromAsyncIterable(
+        opened.file.createReadStream({ ...range, autoClose: false }),
+        () => new Error("Preview read failed"),
+      ),
+      options,
+    )
+  })
+})

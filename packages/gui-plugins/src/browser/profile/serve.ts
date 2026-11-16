@@ -1,11 +1,12 @@
 import { resolvePreviewRequest, type PreviewSource } from "../workspace-file"
 import { FSUtil } from "@opencode/util/fs-util"
+import { openContained } from "@opencode/util/contained-file"
+import { Readable } from "node:stream"
 import { previewRange } from "./range"
 
 export async function servePreview(
   request: Request,
   grants: ReadonlyMap<string, PreviewSource>,
-  readLocal: (href: string, options: RequestInit) => Promise<Response>,
 ) {
   const host = new URL(request.url).host
   // Electron adds the Chromium initiator (not a renderer-supplied HTTP header) to protocol Requests.
@@ -49,10 +50,9 @@ export async function servePreview(
       ? undefined
       : target.type === "remote"
         ? await target.read(target.path, slice.range, request.signal)
-        : await readLocal(target.href, {
-            headers: slice.range ? { range: slice.range } : undefined,
-            signal: request.signal,
-          })
+        : await readLocal(target, slice, request.signal)
+
+  if (response?.type === "error") return response
 
   // Trust no upstream headers. A changed size, ignored range, auth challenge or redirect is not this file.
   if (
@@ -88,4 +88,25 @@ export async function servePreview(
   }
 
   return new Response(request.method === "HEAD" ? null : response?.body, { status: slice.status, headers })
+}
+
+async function readLocal(target: { root: string; relative: string; size: number }, slice: ReturnType<typeof previewRange>, signal: AbortSignal) {
+  const opened = await openContained(target.root, target.relative)
+
+  if (!opened) return Response.error()
+
+  if (target.size !== opened.size || signal.aborted || !slice.length) {
+    await opened.file.close()
+
+    return !signal.aborted && target.size === opened.size ? new Response(null) : Response.error()
+  }
+  const start = slice.range ? Number(slice.range.slice(6).split("-")[0]) : 0
+  const stream = opened.file.createReadStream({ start, end: start + slice.length - 1, signal })
+
+  // SAFETY: toWeb adapts this byte-only file stream to a WHATWG stream. Node and DOM disagree on the BYOB overload.
+  const body = Readable.toWeb(stream, { strategy: { highWaterMark: 64 * 1024, size: (chunk: Uint8Array) => chunk.byteLength } })
+  if (body instanceof ReadableStream) return new Response(body)
+  await body.cancel()
+
+  return Response.error()
 }
