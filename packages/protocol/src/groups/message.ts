@@ -66,8 +66,9 @@ export const PublicSessionMessage = Schema.Union([
 ]).annotate({ identifier: "Session.Message.Info" })
 
 /**
- * Experimental: {@link PublicSessionMessage} as sent to clients that opt in with `X-OpenCode-Capabilities:
- * experimental-media-uri` while `experimental.media_blob` is on. User files stored in `blob` stay `media:` refs.
+ * {@link PublicSessionMessage} as message reads return it. Experimental: clients that opt in with
+ * `X-OpenCode-Capabilities: experimental-media-uri` while `experimental.media_blob` is on get user files stored in
+ * `blob` as `media:` refs.
  */
 export const PublicMediaSessionMessage = Schema.Union([
   SessionMessage.AgentSelected,
@@ -88,14 +89,9 @@ const MessagesCursor = Schema.Struct({
   next: Schema.String.pipe(Schema.optional),
 })
 
-/** Experimental: the `session.messages` response for clients that opt into `experimental-media-uri`. */
-export const SessionMediaMessagesResponse = Schema.Struct({
-  data: Schema.Array(PublicMediaSessionMessage),
-  cursor: MessagesCursor,
-})
-
-/** Experimental: the `session.message` response for clients that opt into `experimental-media-uri`. */
-export const SessionMediaMessageResponse = Schema.Struct({ data: PublicMediaSessionMessage })
+/** Describes the experimental `media:` refs that opted-in message and inbox reads return. */
+export const MediaRefsDescription =
+  "Experimental: with the `X-OpenCode-Capabilities: experimental-media-uri` request header, while `experimental.media_blob` is on, stored user files come back as `media:` refs (`Prompt.MediaFileAttachment`) instead of inline data. This may change without compatibility guarantees."
 
 export const MessageGroup = HttpApiGroup.make("server.message")
   .add(
@@ -103,7 +99,7 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       params: { sessionID: Session.ID },
       query: SessionMessagesQuery,
       success: Schema.Struct({
-        data: Schema.Array(PublicSessionMessage),
+        data: Schema.Array(PublicMediaSessionMessage),
         cursor: MessagesCursor,
       }).annotate({ identifier: "SessionMessagesResponse" }),
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
@@ -111,8 +107,7 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       OpenApi.annotations({
         identifier: "session.message.list",
         summary: "Get session messages",
-        description:
-          "Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page.",
+        description: `Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page. ${MediaRefsDescription}`,
       }),
     ),
   )

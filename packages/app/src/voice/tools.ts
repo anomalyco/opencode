@@ -1,4 +1,4 @@
-import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionInfo, SessionMessageMediaInfo } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { decodeArguments, type ToolCall } from "./protocol"
@@ -49,9 +49,9 @@ export class VoiceTools {
   }
 
   async history(sessionID: string, signal: AbortSignal) {
-    const messages: SessionMessageInfo[] = []
+    const messages: SessionMessageMediaInfo[] = []
 
-    const page = async (cursor?: string): Promise<SessionMessageInfo[]> => {
+    const page = async (cursor?: string): Promise<SessionMessageMediaInfo[]> => {
       const result = await this.ctx.sdk.api.message.list(
         { sessionID, order: cursor ? undefined : "desc", limit: 100, cursor },
         { signal },

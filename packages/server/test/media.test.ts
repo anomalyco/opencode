@@ -4,8 +4,9 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
 import { OpenCode, type SessionMessageInfo } from "@opencode/client"
+import { ClientApi } from "@opencode/protocol/client"
 import { Session } from "@opencode/schema/session"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ContentHeaders } from "../src/content-headers"
@@ -104,8 +105,7 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         // Without the capability, reads stay byte-for-byte what was imported.
         expect((await plain.message.list({ sessionID, order: "asc" })).data).toEqual([user, assistant])
 
-        const refs: unknown = (await opted.message.list({ sessionID, order: "asc" })).data
-        expect(refs).toEqual([
+        expect((await opted.message.list({ sessionID, order: "asc" })).data).toEqual([
           {
             ...user,
             files: [
@@ -157,8 +157,9 @@ it.live("serves stored media as refs only to clients that opt in while experimen
             ],
           },
         ])
-        const single: unknown = await opted.session.message.get({ sessionID, messageID: "msg_media_user" })
-        expect(single).toMatchObject({ files: [{ uri: media(png) }, { uri: media(text) }, {}, {}] })
+        expect(await opted.session.message.get({ sessionID, messageID: "msg_media_user" })).toMatchObject({
+          files: [{ uri: media(png) }, { uri: media(text) }, {}, {}],
+        })
         expect(await plain.session.message.get({ sessionID, messageID: "msg_media_user" })).toEqual(user)
         expect((await opted.experimental.session.export({ sessionID })).messages).toEqual([user, assistant])
 
@@ -200,8 +201,7 @@ it.live("serves stored media as refs only to clients that opt in while experimen
           delivery: "queue",
           resume: false,
         })
-        const pending: unknown = await opted.session.inbox.list({ sessionID })
-        expect(pending).toMatchObject([
+        expect(await opted.session.inbox.list({ sessionID })).toMatchObject([
           {
             id: queued.id,
             payload: {
@@ -212,6 +212,26 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         expect(await plain.session.inbox.list({ sessionID })).toMatchObject([
           { id: queued.id, payload: { files: [{ data: png, mime: "image/png", name: "again.png" }] } },
         ])
+
+        // Opted-in reads match the response schemas the API declares, which the OpenAPI document is generated from.
+        for (const [endpoint, url] of [
+          [ClientApi.groups["server.message"].endpoints["session.messages"], `/api/session/${sessionID}/message`],
+          [
+            ClientApi.groups["server.session"].endpoints["session.message"],
+            `/api/session/${sessionID}/message/msg_media_user`,
+          ],
+          [ClientApi.groups["server.session"].endpoints["session.inbox.list"], `/api/session/${sessionID}/inbox`],
+        ] as const) {
+          const response = await handler(
+            new Request(`http://opencode.local${url}`, {
+              headers: { "X-OpenCode-Capabilities": "experimental-media-uri" },
+            }),
+          )
+          const body = await response.json()
+          expect(JSON.stringify(body)).toContain('"uri":"media:')
+          // The endpoint types its response schemas as `Top`; JSON response codecs need no services.
+          for (const schema of endpoint.success) Schema.decodeUnknownSync(schema as Schema.Decoder<unknown>)(body)
+        }
         await opted.session.inbox.cancel({ sessionID, inboxID: queued.id })
 
         // A ref whose blob is gone reaches opted-in clients as the same placeholder inline readers get.

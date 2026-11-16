@@ -10,7 +10,7 @@ import {
   type MessageListOutput,
   type OpenCodeClient,
   type PermissionRequest,
-  type SessionInboxInfo,
+  type SessionInboxMediaInfo,
   type ToolContent,
 } from "@opencode/client/promise"
 import { createSessionTransport } from "../../src/mini/stream-v2.transport"
@@ -234,7 +234,7 @@ describe("V2 mini transport", () => {
   test.each(["steer", "queue"] as const)("cancels the first local %s after attaching while busy", async (delivery) => {
     const events = feed()
     events.push(connected())
-    const inbox: SessionInboxInfo[] = []
+    const inbox: SessionInboxMediaInfo[] = []
     const idle = defer()
     const admitted = defer()
     const client = sdk({
@@ -330,7 +330,7 @@ describe("V2 mini transport", () => {
       payload: { text: "look [Image 1]", files },
       delivery: "steer",
       time: { created: 1 },
-    } satisfies SessionInboxInfo
+    } satisfies SessionInboxMediaInfo
     const prompt = spyOn(client.session, "prompt").mockImplementation(() => {
       requested.resolve()
       return ack.promise.then(() => pending) as never

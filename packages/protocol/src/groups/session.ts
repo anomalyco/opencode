@@ -38,7 +38,7 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Form } from "@opencode/schema/form"
-import { PublicSessionMessage } from "./message.js"
+import { MediaRefsDescription, PublicMediaSessionMessage, PublicSessionMessage } from "./message.js"
 
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
@@ -64,21 +64,13 @@ const PublicMove = Schema.Struct({
   payload: PublicMovePayload,
 }).annotate({ identifier: "Session.Inbox.Move" })
 
+// Experimental: clients that opt into `experimental-media-uri` get user files stored in `blob` as `media:` refs.
 const PublicInboxInfo = Schema.Union([
-  SessionInbox.User,
+  SessionInbox.MediaUser,
   SessionInbox.Synthetic,
   SessionInbox.Compaction,
   PublicMove,
-]).annotate({ identifier: "Session.Inbox.Info" })
-
-/** Experimental: the `session.inbox.list` response for clients that opt into `experimental-media-uri`. */
-export const SessionMediaInboxResponse = Schema.Struct({
-  data: Schema.Array(
-    Schema.Union([SessionInbox.MediaUser, SessionInbox.Synthetic, SessionInbox.Compaction, PublicMove]).annotate({
-      identifier: "Session.Inbox.MediaInfo",
-    }),
-  ),
-})
+]).annotate({ identifier: "Session.Inbox.MediaInfo" })
 
 // Transcripts exported before v2.1 carry older names for native data. The wire stays plain JSON so any export file
 // is accepted; decoding upgrades those names and then validates the current message shape.
@@ -550,8 +542,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "session.inbox.list",
           summary: "List session inbox",
-          description:
-            "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+          description: `List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items. ${MediaRefsDescription}`,
         }),
       ),
     )
@@ -711,13 +702,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.get("session.message", "/api/session/:sessionID/message/:messageID", {
         params: { sessionID: Session.ID, messageID: SessionMessage.ID },
-        success: Schema.Struct({ data: PublicSessionMessage }),
+        success: Schema.Struct({ data: PublicMediaSessionMessage }),
         error: [SessionNotFoundError, MessageNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.message.get",
           summary: "Get session message",
-          description: "Retrieve one projected message owned by the Session.",
+          description: `Retrieve one projected message owned by the Session. ${MediaRefsDescription}`,
         }),
       ),
     )

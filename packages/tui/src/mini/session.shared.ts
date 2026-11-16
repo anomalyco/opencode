@@ -1,4 +1,4 @@
-import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageMediaInfo, SessionMessageMediaUser } from "@opencode/client/promise"
 import { projectedPromptInput } from "../prompt/codec"
 import { requestOptions } from "./catalog.shared"
 import { promptCopy, promptSame } from "./prompt.shared"
@@ -6,7 +6,7 @@ import type { RunInput, RunPrompt } from "./types"
 
 const LIMIT = 200
 
-export type SessionMessages = SessionMessageInfo[]
+export type SessionMessages = SessionMessageMediaInfo[]
 
 type Turn = {
   prompt: RunPrompt
@@ -22,7 +22,9 @@ export type RunSession = {
   variant?: string
 }
 
-export function messagePrompt(message: Pick<SessionMessageUser, "text" | "files" | "agents" | "skills">): RunPrompt {
+export function messagePrompt(
+  message: Pick<SessionMessageMediaUser, "text" | "files" | "agents" | "skills">,
+): RunPrompt {
   const input = projectedPromptInput(message)
   return {
     text: input.text,

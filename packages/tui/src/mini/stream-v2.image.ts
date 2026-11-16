@@ -1,13 +1,14 @@
-import type { SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageAssistantTool, SessionMessageMediaUser } from "@opencode/client/promise"
 import { deduplicateVisibleImages } from "../prompt/attachment"
 import { toolDisplayContent } from "../util/tool-display"
 import type { StreamCommit } from "./types"
 
 export type ImageCommit = StreamCommit & { image: string; messageID: string; partID: string }
 
-export function userImageCommits(messageID: string, files: SessionMessageUser["files"]): ImageCommit[] {
+export function userImageCommits(messageID: string, files: SessionMessageMediaUser["files"]): ImageCommit[] {
+  // Mini reads without `experimental-media-uri`, so stored files arrive inline rather than as `media:` refs.
   return deduplicateVisibleImages(files ?? [])
-    .filter((file) => file.mime.startsWith("image/"))
+    .flatMap((file) => ("data" in file && file.mime.startsWith("image/") ? [file] : []))
     .map((file, index) => ({
       kind: "user",
       source: "system",

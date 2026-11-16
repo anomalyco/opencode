@@ -1,4 +1,4 @@
-import type { ModelRef, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { ModelRef, SessionInboxMediaInfo, SessionMessageInfo } from "@opencode/client/promise"
 import type { SessionMessageHandoff } from "@/session/handoff"
 
 // Projects a submitted prompt, and the agent and model switches it makes, until the server's echoes replace them.
@@ -67,7 +67,7 @@ function handoffNotices(
 
 export function visibleTimelineMessages(
   messages: SessionMessageInfo[],
-  pending: SessionInboxInfo[],
+  pending: SessionInboxMediaInfo[],
   revertMessageID?: string,
 ) {
   const queued = new Set(

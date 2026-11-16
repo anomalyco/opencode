@@ -1,10 +1,10 @@
-import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionInfo, SessionMessageMediaInfo } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { Platform } from "@/runtime/platform/platform"
 
 export type SessionExportData = {
   info: SessionInfo
-  messages: SessionMessageInfo[]
+  messages: SessionMessageMediaInfo[]
 }
 
 /** Bounds each request rather than the whole export, so a long history with large media still exports. */

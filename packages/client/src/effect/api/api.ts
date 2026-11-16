@@ -300,7 +300,7 @@ export type SessionDiffOutput = ReadonlyArray<FileDiff.Info>
 export type SessionDiffOperation<E = never> = (input: SessionDiffInput) => Effect.Effect<SessionDiffOutput, E>
 
 export type SessionInboxListInput = { readonly sessionID: Session.ID }
-export type SessionInboxListOutput = ReadonlyArray<SessionInbox.Info>
+export type SessionInboxListOutput = ReadonlyArray<SessionInbox.MediaInfo>
 export type SessionInboxListOperation<E = never> = (
   input: SessionInboxListInput,
 ) => Effect.Effect<SessionInboxListOutput, E>
@@ -349,7 +349,7 @@ export type SessionBackgroundOperation<E = never> = (
 ) => Effect.Effect<SessionBackgroundOutput, E>
 
 export type SessionMessageGetInput = { readonly sessionID: Session.ID; readonly messageID: SessionMessage.ID }
-export type SessionMessageGetOutput = SessionMessage.Info
+export type SessionMessageGetOutput = SessionMessage.MediaInfo
 export type SessionMessageGetOperation<E = never> = (
   input: SessionMessageGetInput,
 ) => Effect.Effect<SessionMessageGetOutput, E>
@@ -1476,7 +1476,7 @@ export type MessageListInput = {
     | undefined
 }
 export type MessageListOutput = {
-  readonly data: ReadonlyArray<SessionMessage.Info>
+  readonly data: ReadonlyArray<SessionMessage.MediaInfo>
   readonly cursor: { readonly previous?: string | undefined; readonly next?: string | undefined }
 }
 export type MessageListOperation<E = never> = (input: MessageListInput) => Effect.Effect<MessageListOutput, E>

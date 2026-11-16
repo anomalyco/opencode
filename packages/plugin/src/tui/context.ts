@@ -18,7 +18,7 @@ import type {
   ReferenceInfo,
   SessionInfo,
   SessionMessageInfo,
-  SessionInboxInfo,
+  SessionInboxMediaInfo,
   ShellInfo,
   SkillInfo,
   VcsInfo,
@@ -74,7 +74,7 @@ export interface Data {
     cost(sessionID: string): number
     status(sessionID: string): "idle" | "running"
     readonly pending: {
-      list(sessionID: string): SessionInboxInfo[]
+      list(sessionID: string): SessionInboxMediaInfo[]
       sync(sessionID: string): Promise<void>
       invalidate(sessionID: string): void
     }

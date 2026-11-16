@@ -67,10 +67,14 @@ export interface MediaFileAttachment extends Schema.Schema.Type<typeof MediaFile
 export const MediaFileAttachment = Schema.Struct({
   ...fileAttachmentFields,
   uri: MediaRef,
-  bytes: Schema.Int.pipe(optional),
-  width: Schema.Int.pipe(optional),
-  height: Schema.Int.pipe(optional),
-}).annotate({ identifier: "Prompt.MediaFileAttachment" })
+  bytes: Schema.Int.pipe(optional).annotate({ description: "Size of the stored bytes." }),
+  width: Schema.Int.pipe(optional).annotate({ description: "Pixel width, for images." }),
+  height: Schema.Int.pipe(optional).annotate({ description: "Pixel height, for images." }),
+}).annotate({
+  identifier: "Prompt.MediaFileAttachment",
+  description:
+    "Experimental: may change without compatibility guarantees. A file whose bytes stay on the server, returned only to clients that opt in with `X-OpenCode-Capabilities: experimental-media-uri`. Fetch the bytes with `GET /api/experimental/media/{hash}`.",
+})
 
 export const Attachment = Schema.Union([FileAttachment, MediaFileAttachment]).annotate({
   identifier: "Prompt.Attachment",

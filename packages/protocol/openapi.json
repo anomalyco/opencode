@@ -3305,7 +3305,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/Session.Inbox.Info"
+                        "$ref": "#/components/schemas/Session.Inbox.MediaInfo"
                       }
                     }
                   },
@@ -3346,7 +3346,7 @@
             }
           }
         },
-        "description": "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+        "description": "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items. Experimental: with the `X-OpenCode-Capabilities: experimental-media-uri` request header, while `experimental.media_blob` is on, stored user files come back as `media:` refs (`Prompt.MediaFileAttachment`) instead of inline data. This may change without compatibility guarantees.",
         "summary": "List session inbox"
       }
     },
@@ -4127,7 +4127,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Session.Message.Info"
+                      "$ref": "#/components/schemas/Session.Message.MediaInfo"
                     }
                   },
                   "required": ["data"],
@@ -4174,7 +4174,7 @@
             }
           }
         },
-        "description": "Retrieve one projected message owned by the Session.",
+        "description": "Retrieve one projected message owned by the Session. Experimental: with the `X-OpenCode-Capabilities: experimental-media-uri` request header, while `experimental.media_blob` is on, stored user files come back as `media:` refs (`Prompt.MediaFileAttachment`) instead of inline data. This may change without compatibility guarantees.",
         "summary": "Get session message"
       }
     },
@@ -4903,7 +4903,7 @@
             }
           }
         },
-        "description": "Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page.",
+        "description": "Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page. Experimental: with the `X-OpenCode-Capabilities: experimental-media-uri` request header, while `experimental.media_blob` is on, stored user files come back as `media:` refs (`Prompt.MediaFileAttachment`) instead of inline data. This may change without compatibility guarantees.",
         "summary": "Get session messages"
       }
     },
@@ -21673,6 +21673,16 @@
         "required": ["name"],
         "additionalProperties": false
       },
+      "Prompt.Attachment": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Prompt.FileAttachment"
+          },
+          {
+            "$ref": "#/components/schemas/Prompt.MediaFileAttachment"
+          }
+        ]
+      },
       "Prompt.Base64": {
         "type": "string",
         "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
@@ -21730,6 +21740,50 @@
             "additionalProperties": false
           }
         ]
+      },
+      "Prompt.MediaFileAttachment": {
+        "type": "object",
+        "properties": {
+          "mime": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Prompt.FileSource"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "mention": {
+            "$ref": "#/components/schemas/Prompt.Mention"
+          },
+          "uri": {
+            "$ref": "#/components/schemas/Prompt.MediaRef"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "width": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "height": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["mime", "source", "uri"],
+        "additionalProperties": false,
+        "description": "Experimental: may change without compatibility guarantees. A file whose bytes stay on the server, returned only to clients that opt in with `X-OpenCode-Capabilities: experimental-media-uri`. Fetch the bytes with `GET /api/experimental/media/{hash}`."
+      },
+      "Prompt.MediaRef": {
+        "type": "string"
       },
       "Prompt.Mention": {
         "type": "object",
@@ -23098,22 +23152,6 @@
         "type": "string",
         "enum": ["steer", "queue"]
       },
-      "Session.Inbox.Info": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Session.Inbox.User"
-          },
-          {
-            "$ref": "#/components/schemas/Session.Inbox.Synthetic"
-          },
-          {
-            "$ref": "#/components/schemas/Session.Inbox.Compaction"
-          },
-          {
-            "$ref": "#/components/schemas/Session.Inbox.Move"
-          }
-        ]
-      },
       "Session.Inbox.Item": {
         "anyOf": [
           {
@@ -23185,6 +23223,86 @@
             "additionalProperties": false
           }
         ]
+      },
+      "Session.Inbox.MediaInfo": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Session.Inbox.MediaUser"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Inbox.Synthetic"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Inbox.Compaction"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Inbox.Move"
+          }
+        ]
+      },
+      "Session.Inbox.MediaUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["user"]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.MediaUserPayload"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/Session.Inbox.Delivery"
+          }
+        },
+        "required": ["id", "sessionID", "time", "type", "payload", "delivery"],
+        "additionalProperties": false
+      },
+      "Session.Inbox.MediaUserPayload": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.Attachment"
+            }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.AgentAttachment"
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.SkillAttachment"
+            }
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["text"],
+        "additionalProperties": false
       },
       "Session.Inbox.Move": {
         "type": "object",
@@ -23995,6 +24113,91 @@
         "required": ["id", "time", "type", "location"],
         "additionalProperties": false
       },
+      "Session.Message.MediaInfo": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Session.Message.AgentSelected"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.ModelSelected"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.LocationSwitched"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.MediaUser"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Synthetic"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.System"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Skill"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Assistant"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Compaction"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Idle"
+          }
+        ]
+      },
+      "Session.Message.MediaUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "text": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.Attachment"
+            }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.AgentAttachment"
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.SkillAttachment"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": ["user"]
+          }
+        },
+        "required": ["id", "time", "text", "type"],
+        "additionalProperties": false
+      },
       "Session.Message.ModelSelected": {
         "type": "object",
         "properties": {
@@ -24490,7 +24693,7 @@
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Session.Message.Info"
+              "$ref": "#/components/schemas/Session.Message.MediaInfo"
             }
           },
           "cursor": {
