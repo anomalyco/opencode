@@ -516,6 +516,50 @@ fn a_link_out_of_the_plugin_directory_is_refused() {
     assert!(error.contains("a link out of the plugin directory"), "{error}");
 }
 
+// Expected (call cost): the tables a render's input and `Changed` come in are reused from call to call, so each call
+// sees its own values and nothing of the one before, also through a table the plugin kept, and the plugin cannot
+// write into them.
+#[test]
+fn a_reused_input_table_shows_each_call_its_own_values() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        local kept
+        return plugin.define(function(setup)
+            setup:slot({ path = "home.footer" }, function(_read, input, changed)
+                local before = if kept then tostring(kept.session_id) else "none"
+                kept = input
+                local writes = pcall(function() input.extra = 1 end) or pcall(function() changed.all = true end)
+                local sessions = if changed.sessions then table.concat(changed.sessions, ",") else "nil"
+                local messages = if changed.messages then changed.messages[1][2] else "nil"
+                local text = `{tostring(input.session_id)} {tostring(input.prompt and input.prompt.shell)} {sessions} `
+                    .. `{messages} {tostring(changed["local"])} {tostring(changed.all)} {before} {tostring(writes)}`
+                return plugin.show(plugin.text(text))
+            end)
+        end)
+    "#;
+    let mut registered = abi::Registered::new("test.luau", None);
+    let compiled = Rc::new(vm::Compiled::new(&sources(init), "init.luau").unwrap());
+    let _plugin = bind::setup(&compiled, &mut registered.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
+    let (_, _, render) = registered.renders().next().unwrap();
+    let shown = |input: &abi::SlotInput, changed: &abi::Changed| match render(&Nop, input, changed) {
+        abi::Render::Show(abi::Node::Text { spans, .. }) => spans[0].text.clone(),
+        other => panic!("{other:?}"),
+    };
+    let full = abi::SlotInput {
+        session_id: Some("ses_1".into()),
+        prompt: Some(abi::PromptInput { shell: true, show_details: false }),
+        ..abi::SlotInput::default()
+    };
+    let mut changed = abi::Changed::everything();
+    changed.sessions = vec!["ses_1".into(), "ses_2".into()];
+    changed.messages = vec![("ses_1".into(), "msg_1".into())];
+    assert_eq!(shown(&full, &changed), "ses_1 true ses_1,ses_2 msg_1 nil true none false");
+    let local = abi::Changed { local: true, ..abi::Changed::default() };
+    assert_eq!(shown(&abi::SlotInput::default(), &local), "nil nil nil nil true nil nil false");
+    changed.sessions = vec!["ses_3".into()];
+    assert_eq!(shown(&full, &changed), "ses_1 true ses_3 msg_1 nil true ses_1 false");
+}
+
 /// A host that reads nothing and does nothing, for the call measures.
 struct Nop;
 
@@ -596,12 +640,50 @@ fn measure_one_call_on_each_carrier() {
         drop(std::hint::black_box(serde_json::from_slice::<abi::Render>(&answer).unwrap()));
     });
     println!("c-abi: render {carried:?}");
+    // The Luau render as the host makes it, timed by the budget's monitor, which reads the thread's CPU time too.
+    let monitor = crate::contain::Monitor::new(crate::contain::Limits::default());
+    let slot = monitor.slot(&crate::contain::Artifact::builtin("example.luau-hello"));
+    let (_, _, render) = luau.renders().next().unwrap();
+    let monitored = each(rounds, || {
+        drop(std::hint::black_box(monitor.call(slot, "render-slot", || render(&Nop, &input, &changed))))
+    });
+    println!("luau: render under the monitor {monitored:?}");
     // What arming the Luau budget reads each call: the thread's CPU time, a system call on Linux.
     let cpu = each(rounds, || {
         std::hint::black_box(crate::contain::thread_cpu());
     });
     println!("thread_cpu: {cpu:?}");
+    parts_of_a_render();
     heavy_calls();
+}
+
+/// What a small render's time goes to: a call that returns `KEEP` (the call, its input and its `Changed`), one that
+/// returns a node it built once (and its decode), and the quick start's (which builds the node each time).
+fn parts_of_a_render() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        local node = plugin.show(plugin.text({ plugin.span("hello", { fg = "text.muted" }) }, { on_click = plugin.click("hello.greet") }))
+        return plugin.define(function(setup)
+            setup:slot({ path = "home.footer" }, function() return plugin.KEEP end)
+            setup:slot({ path = "home.footer" }, function() return node end)
+            setup:slot({ path = "home.footer" }, function()
+                return plugin.show(plugin.text({ plugin.span("hello", { fg = "text.muted" }) }, { on_click = plugin.click("hello.greet") }))
+            end)
+            setup:slot({ path = "home.footer" }, function()
+                plugin.show(plugin.text({ plugin.span("hello", { fg = "text.muted" }) }, { on_click = plugin.click("hello.greet") }))
+                return plugin.KEEP
+            end)
+        end)
+    "#;
+    let mut registered = abi::Registered::new("test.luau", None);
+    let compiled = Rc::new(vm::Compiled::new(&sources(init), "init.luau").unwrap());
+    let _plugin = bind::setup(&compiled, &mut registered.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
+    let (input, changed) = (abi::SlotInput::default(), abi::Changed::everything());
+    let names = ["keep", "kept node", "built node", "built, keep"];
+    for ((_, _, render), name) in registered.renders().zip(names) {
+        let took = each(100_000, || drop(std::hint::black_box(render(&Nop, &input, &changed))));
+        println!("render parts, {name}: {took:?}");
+    }
 }
 
 /// The heavy claims' Luau: the first reads a large `Changed` and keeps its node, the second draws 200 rows.
@@ -643,10 +725,12 @@ fn heavy(setup: &mut abi::Setup) -> Result<(), String> {
 /// output-heavy call (a render that returns 200 rows of two spans), on each carrier.
 fn heavy_calls() {
     let ids: Vec<String> = (0..200).map(|i| format!("ses_{i:04}")).collect();
-    let mut changed = abi::Changed::default();
-    changed.sessions = ids.clone();
-    changed.lists = ids.clone();
-    changed.messages = ids.iter().map(|id| (id.clone(), format!("msg_{id}"))).collect();
+    let changed = abi::Changed {
+        sessions: ids.clone(),
+        lists: ids.clone(),
+        messages: ids.iter().map(|id| (id.clone(), format!("msg_{id}"))).collect(),
+        ..abi::Changed::default()
+    };
     let input = abi::SlotInput {
         session_id: Some("ses_0001".into()),
         prompt: Some(abi::PromptInput { shell: false, show_details: true }),
@@ -663,7 +747,15 @@ fn heavy_calls() {
     for (name, registered) in [("linked", &linked), ("luau", &luau)] {
         let mut renders = registered.renders().map(|(_, _, render)| render);
         let (reads, draws) = (renders.next().unwrap(), renders.next().unwrap());
-        let read = each(rounds, || drop(std::hint::black_box(reads(&Nop, &input, &changed))));
+        // Two `Changed` in turn, so no call is handed what the one before was.
+        let mut other = changed.clone();
+        other.sessions.reverse();
+        let mut turn = false;
+        let mut next = || {
+            turn = !turn;
+            if turn { &changed } else { &other }
+        };
+        let read = each(rounds, || drop(std::hint::black_box(reads(&Nop, &input, next()))));
         let drawn = each(rounds / 10, || drop(std::hint::black_box(draws(&Nop, &plain, &little))));
         println!("{name}: input-heavy {read:?}, output-heavy {drawn:?}");
     }
