@@ -11,6 +11,8 @@ import {
   isCurrentPage,
   resolveControlFrame,
   selectBinding,
+  selectInventory,
+  selectOwnedBinding,
   transitionBinding,
   transitionPane,
   type BindingEvent,
@@ -94,6 +96,18 @@ test("a refused restore keeps its saved address, reports the reason once and con
   expect(entry(result.state).tabs.get(tabA)).toMatchObject({ status: "unloaded", tab: {url, loadError:"browser.restore.outside"} })
   expect(entry(result.state).nextAttempt).toBe(entry(start).nextAttempt)
   expect(transitionPane(result.state, event)).toEqual({state:result.state, effects:[]})
+})
+
+test("agent activity neither selects the person's tab nor gives another window a binding", () => {
+  const start = attached({ tabs: [tab(tabA, dashboard, "A"), tab(tabB, dashboard, "B")], focusedTabID: tabA })
+  const next = transitionPane(start, on({ type: "tab.active", tabID: tabB }))
+  const own = selectOwnedBinding(next.state, 1, "b1")
+
+  if (!own) throw new Error("missing fixture binding")
+  expect(selectOwnedBinding(next.state, 2, "b1")).toBeUndefined()
+  expect(selectInventory(own).focusedTabID).toBe(tabA)
+  expect(selectInventory(own, "agent").focusedTabID).toBe(tabB)
+  expect(next.effects.some(effect => effect.type === "emit" && effect.event.type === "focus")).toBe(false)
 })
 
 test("reconnect tears down the previous native pages before restoring the same window and session", () => {

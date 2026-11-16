@@ -24,6 +24,7 @@ type Inventory = {
   readonly tabs: ReadonlyMap<Browser.TabID, TabSlot>
   /** Null or a key of `tabs`. */
   readonly focusedTabID: Browser.TabID | null
+  readonly agentTabID?: Browser.TabID
   /** The attempt the next page of this binding gets. */
   readonly nextAttempt: number
 }
@@ -109,6 +110,7 @@ export type BindingEvent =
       readonly tab?: Browser.Tab
     }
   | { readonly type: "tab.focused"; readonly tabID: Browser.TabID; readonly fromStrip?: boolean }
+  | { readonly type: "tab.active"; readonly tabID: Browser.TabID }
   | { readonly type: "tab.restricted"; readonly tabID: Browser.TabID; readonly url: string }
   | { readonly type: "tab.closed"; readonly tabID: Browser.TabID }
 
@@ -341,6 +343,12 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     }
   }
 
+  if (event.type === "tab.active") {
+    if (!state.tabs.has(event.tabID) || state.agentTabID === event.tabID) return { state, effects: [] }
+
+    return publish({ ...state, agentTabID: event.tabID })
+  }
+
   if (event.type === "tab.focused") {
     if (!state.tabs.has(event.tabID)) return { state, effects: [] }
     const next = publish({ ...state, focusedTabID: event.tabID })
@@ -393,7 +401,7 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     tabs.delete(event.tabID)
     const focusedTabID = state.focusedTabID === event.tabID ? (tabs.keys().next().value ?? null) : state.focusedTabID
 
-    return withoutTab({ ...state, tabs, focusedTabID }, event.tabID, closed, undefined)
+    return withoutTab({ ...state, tabs, focusedTabID, agentTabID: event.tabID === state.agentTabID ? undefined : state.agentTabID }, event.tabID, closed, undefined)
   }
 
   if (event.type === "tab.restricted") {
@@ -463,7 +471,7 @@ function publish(state: AttachedBinding, error?: string): AttachedTransition {
       ? { type: "state" as const, state: inventory }
       : { type: "state" as const, state: inventory, error }
 
-  const published = JSON.stringify(event)
+  const published = JSON.stringify([event, state.agentTabID])
 
   const save: PaneEffect = {
     type: "save-restore",
@@ -543,8 +551,8 @@ export function selectFileRoots(state: PaneState, binding: string): readonly str
   return entry?.status === "attached" ? entry.fileRoots : []
 }
 
-export function selectInventory(entry: ActiveBinding): Browser.State {
-  return { tabs: Array.from(entry.tabs.values(), (slot) => slot.tab), focusedTabID: entry.focusedTabID }
+export function selectInventory(entry: ActiveBinding, audience: "window" | "agent" = "window"): Browser.State {
+  return { tabs: Array.from(entry.tabs.values(), (slot) => slot.tab), focusedTabID: audience === "agent" ? entry.agentTabID ?? entry.focusedTabID : entry.focusedTabID }
 }
 
 export function selectTabSlot(state: PaneState, binding: string, tabID: Browser.TabID) {

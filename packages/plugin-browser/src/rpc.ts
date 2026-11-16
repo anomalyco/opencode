@@ -240,7 +240,7 @@ function strict<const Fields extends Schema.Struct.Fields>(name: string, fields:
 export const Operations = [
   operation(
     "tabs.list",
-    "List this session's browser tabs and the focused tab. Use returned IDs for all page operations.",
+    "List this session's browser tabs and the agent's active tab (otherwise the person's selected tab). Use returned IDs for all page operations.",
     {},
     State,
   ),
@@ -252,7 +252,7 @@ export const Operations = [
       focus: optional(
         Schema.Boolean.annotate({
           description:
-            "Default true: open the Review pane and select the new tab so the user sees it. Pass false only when the user asked for the tab to stay in the background.",
+            "True: ask to show this tab if the pane is closed and the person's settings allow it. Omit to make it active for the agent without revealing it. False keeps it in the background until the person selects it. Never switches the person's open tab.",
         }),
       ),
     },
@@ -260,7 +260,7 @@ export const Operations = [
   ),
   operation(
     "tabs.focus",
-    "Select a browser tab in the Review pane. Other tools still require an explicit tabID.",
+    "Make a tab active for the agent, without switching the person's selection or opening the pane. Other tools still require an explicit tabID.",
     tab,
     Tab,
   ),

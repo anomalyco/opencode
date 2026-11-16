@@ -77,6 +77,7 @@ type Handle = {
   pages: Map<number, BrowserPage>
   /** Survives unloading the page, but not closing its tab or releasing the binding. */
   activity: Map<Browser.TabID, TabActivity>
+  background: Set<Browser.TabID>
   pluginTabs: ReturnType<typeof pluginTabs>
   /** Agent requests in flight by request ID. */
   requests: Map<string, AbortController>
@@ -106,7 +107,7 @@ export function createBrowserPane(input: {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
   // Rebind may restore the same tabs. Close rights stay in memory and never move to another window or session.
-  const owners = new WeakMap<BrowserWindow, Map<string, ReturnType<typeof pluginTabs>>>()
+  const owners = new WeakMap<BrowserWindow, Map<string, Pick<Handle, "pluginTabs" | "background">>>()
   // Release each tab's registration with the profile's extensions.
   const grants = new WeakMap<BrowserPage, () => void>()
   const searches = new WeakMap<BrowserPage, ReturnType<typeof createPageFind>>()
@@ -160,8 +161,8 @@ export function createBrowserPane(input: {
       win.webContents.once("destroyed", closed)
       win.webContents.on("did-start-navigation", navigate)
 
-      const scopes = owners.get(win) ?? new Map<string, ReturnType<typeof pluginTabs>>()
-      const rights = scopes.get(storageKey) ?? pluginTabs()
+      const scopes = owners.get(win) ?? new Map<string, Pick<Handle, "pluginTabs" | "background">>()
+      const rights = scopes.get(storageKey) ?? { pluginTabs: pluginTabs(), background: new Set<Browser.TabID>() }
       scopes.set(storageKey, rights)
       owners.set(win, scopes)
 
@@ -182,7 +183,7 @@ export function createBrowserPane(input: {
         },
         pages: new Map(),
         activity: new Map(),
-        pluginTabs: rights,
+        ...rights,
         requests: new Map(),
       }
 
@@ -534,6 +535,7 @@ export function createBrowserPane(input: {
   function dispatchBinding(binding: string, event: BindingEvent) {
     if (event.type === "tab.closed") {
       handles.get(binding)?.activity.delete(event.tabID)
+      handles.get(binding)?.background.delete(event.tabID)
       handles.get(binding)?.pluginTabs.forget(event.tabID)
     }
 
@@ -574,7 +576,7 @@ export function createBrowserPane(input: {
     if (effect.type === "report") {
       emit(effect.binding, effect.event)
 
-      return handle.sendState?.(effect.event.state)
+      return handle.sendState?.(inventory(effect.binding, "agent"))
     }
 
     if (effect.type === "abort-requests")
@@ -626,10 +628,10 @@ export function createBrowserPane(input: {
     }
   }
 
-  function inventory(binding: string): Browser.State {
+  function inventory(binding: string, audience: "window" | "agent" = "window"): Browser.State {
     const entry = selectBinding(machine.state, binding)
 
-    return entry ? selectInventory(entry) : { tabs: [], focusedTabID: null }
+    return entry ? selectInventory(entry, audience) : { tabs: [], focusedTabID: null }
   }
 
   function remoteSource(binding: string) {
@@ -798,6 +800,12 @@ export function createBrowserPane(input: {
       popup: (popupOptions, background, activity) => {
         const popup = create(binding, { initialize: false, popupOptions, activity })
 
+        if (agentDriven(activity, Date.now())) {
+          announce(binding, popup.state().id, false, !background)
+
+          return popup.contents
+        }
+
         if (!background) dispatchBinding(binding, { type: "tab.focused", tabID: popup.state().id })
 
         return popup.contents
@@ -819,8 +827,8 @@ export function createBrowserPane(input: {
 
     handle.pages.set(attempt, page)
     // Renderer-initiated main-frame navigation (including a clicked link) never goes through execute.
-    page.contents.on("will-navigate", () => handle.pluginTabs.forget(id))
-    page.contents.on("did-navigate-in-page", (_event, _url, mainFrame) => { if (mainFrame) handle.pluginTabs.forget(id) })
+    page.contents.on("will-navigate", () => { if (current()) handle.pluginTabs.forget(id) })
+    page.contents.on("did-navigate-in-page", (_event, _url, mainFrame) => { if (mainFrame && current()) handle.pluginTabs.forget(id) })
     searches.set(page, createPageFind(page.contents, (view) => {
       if (current()) emit(binding, { type: "find", tabID: id, view })
     }, () => {
@@ -898,6 +906,14 @@ export function createBrowserPane(input: {
   }
 
   /** Reports the page's state after a command, which may have changed it without a page event yet. */
+  function announce(binding: string, tabID: Browser.TabID, reveal: boolean, active: boolean) {
+    if (active) dispatchBinding(binding, { type: "tab.active", tabID })
+    const handle = handles.get(binding)
+
+    if (handle && !handle.win.isDestroyed() && handle.win.isVisible() && !handle.win.isMinimized())
+      emit(binding, { type: "activity", tabID, reveal: reveal && !handle.background.has(tabID) })
+  }
+
   function refresh(binding: string, tabID: Browser.TabID, page: BrowserPage) {
     const attempt = selectPageAttempt(machine.state, binding, tabID)
 
@@ -909,12 +925,9 @@ export function createBrowserPane(input: {
     const action = command.action
     const driven = { agentRuns: 0, agentEndedAt: Date.now(), agent: command.agent }
 
-    const present = (tabID: Browser.TabID) => {
+    const present = (tabID: Browser.TabID, reveal = false, active = true) => {
       if (origin === "user") return dispatchBinding(binding, { type: "tab.focused", tabID })
-      const win = handles.get(binding)?.win
-
-      // The shell document can be hidden while its native child view has the keyboard.
-      if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && win.isFocused()) emit(binding, { type: "activity", tabID })
+      announce(binding, tabID, reveal, active)
     }
 
     // A user preview may already have consumed files that the agent may not read. Revoke its origins and
@@ -941,7 +954,7 @@ export function createBrowserPane(input: {
         "Browser request was cancelled. Do not repeat a mutating action until you have inspected its outcome.",
       )
 
-    if (action.type === "tabs.list") return { value: inventory(binding), files: [] }
+    if (action.type === "tabs.list") return { value: inventory(binding, origin === "agent" ? "agent" : "window"), files: [] }
 
     if (action.type === "preview") {
       if (artifactKind(action.path) === "html") {
@@ -965,14 +978,16 @@ export function createBrowserPane(input: {
         if (!existing) opening.defer(() => { if (page(binding, tabID) === tab) dispatchBinding(binding, { type: "tab.closed", tabID }) })
         await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
         refresh(binding, tabID, tab)
-        present(tabID)
+        present(tabID, true)
         opening.move()
 
         return { value: { path: action.path, tabID, url: tab.state().url }, files: [] }
       }
 
       // The window owns file tabs; an off-screen session processes this request when its file panel mounts.
-      emit(binding, { type: "preview", path: action.path })
+      const win = handles.get(binding)?.win
+
+      if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) emit(binding, { type: "preview", path: action.path })
 
       return { value: { path: action.path }, files: [] }
     }
@@ -1010,6 +1025,8 @@ export function createBrowserPane(input: {
 
       const opened = create(binding, { activity: origin === "agent" ? driven : inherited })
       const tabID = opened.state().id
+
+      if (origin === "agent" && action.focus === false) handles.get(binding)?.background.add(tabID)
       created?.(tabID)
       using opening = new DisposableStack()
       opening.defer(() => { if (page(binding, tabID) === opened) dispatchBinding(binding, { type: "tab.closed", tabID }) })
@@ -1026,7 +1043,7 @@ export function createBrowserPane(input: {
           await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
         refresh(binding, tabID, opened)
 
-        if (origin === "agent" && action.focus !== false) present(tabID)
+        if (origin === "agent") present(tabID, action.focus === true, action.focus !== false)
         opening.move()
 
         return { value: opened.state(), files: [] }
@@ -1051,7 +1068,10 @@ export function createBrowserPane(input: {
       recordTabFocus(activity, origin)
       activities?.set(action.tabID, activity)
 
-      if (origin === "user") dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID, fromStrip: true })
+      if (origin === "user") {
+        handles.get(binding)?.background.delete(action.tabID)
+        dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID, fromStrip: true })
+      }
 
       if (origin === "agent") present(action.tabID)
 
@@ -1064,7 +1084,7 @@ export function createBrowserPane(input: {
 
       if (closing) await disposals.get(closing)
 
-      return { value: inventory(binding), files: [] }
+      return { value: inventory(binding, origin === "agent" ? "agent" : "window"), files: [] }
     }
 
     if (action.type === "navigate" || action.type === "back" || action.type === "forward" || action.type === "reload")
@@ -1075,7 +1095,7 @@ export function createBrowserPane(input: {
     const result = await target.execute(command, signal, origin)
     refresh(binding, action.tabID, target)
 
-    if (origin === "agent" && action.type === "navigate") present(action.tabID)
+    if (origin === "agent" && action.type === "navigate") present(action.tabID, false, false)
 
     return result
   }

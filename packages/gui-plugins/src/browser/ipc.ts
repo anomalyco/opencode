@@ -147,7 +147,7 @@ export const PaneEvent = Schema.Union([
   // What the tab waits on the user for; null once nothing waits.
   Schema.Struct({ type: Schema.Literal("prompt"), tabID: Browser.TabID, prompt: Schema.NullOr(PromptView) }),
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
-  Schema.Struct({ type: Schema.Literal("activity"), tabID: Browser.TabID }),
+  Schema.Struct({ type: Schema.Literal("activity"), tabID: Browser.TabID, reveal: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
   Schema.Struct({
     type: Schema.Literal("state"),
