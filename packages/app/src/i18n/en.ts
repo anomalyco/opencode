@@ -492,7 +492,6 @@ export const dict = {
   "dialog.update.major.action.quit": "Upgrade on quit",
   "dialog.update.major.action.restart": "Restart to upgrade",
   "dialog.update.major.action.restartNow": "Restart now",
-  "titlebar.major.scheduled": "Upgrading on quit",
 
   "context.breakdown.title": "Context Breakdown",
   "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',

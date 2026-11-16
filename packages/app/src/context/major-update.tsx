@@ -14,8 +14,8 @@ export const LATER_DURATION = 7 * 24 * 60 * 60 * 1000
 export const LAUNCH_WINDOW = 30 * 1000
 
 // Later hides the OpenCode 2.0 offer for a week, like Dismiss in the TUI. Closing the dialog any other way doesn't.
+// Once the user chose to upgrade on quit there is nothing left to offer, so the titlebar shows nothing.
 export function majorUpdateVisible(status: MajorUpdateState["status"], laterUntil: number | undefined, now: number) {
-  if (status === "scheduled") return true
   if (status !== "ready") return false
   return laterUntil === undefined || now >= laterUntil
 }
@@ -40,7 +40,6 @@ export const { use: useMajorUpdate, provider: MajorUpdateProvider } = createSimp
     const status = () => platform.updater?.major?.state().status ?? "unavailable"
     const offered = () => status() === "ready" || status() === "scheduled"
     const visible = createMemo(() => ready() && majorUpdateVisible(status(), store.laterUntil, state.now))
-    const chip = createMemo(() => (status() === "scheduled" ? language.t("titlebar.major.scheduled") : undefined))
 
     // Starts while OpenCode 2 downloads, so the image is ready long before anything opens the dialog.
     const image = createMemo<Promise<HTMLImageElement> | undefined>((previous) => {
@@ -90,6 +89,6 @@ export const { use: useMajorUpdate, provider: MajorUpdateProvider } = createSimp
         : [],
     )
 
-    return { status, offered, visible, chip, open }
+    return { status, offered, visible, open }
   },
 })

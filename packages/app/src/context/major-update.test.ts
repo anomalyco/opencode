@@ -18,7 +18,7 @@ describe("major update offer", () => {
     expect(majorUpdateVisible("ready", laterUntil, laterUntil)).toBe(true)
   })
 
-  test("Later never hides an upgrade the user already chose", () => {
-    expect(majorUpdateVisible("scheduled", now + LATER_DURATION, now)).toBe(true)
+  test("shows nothing once the user chose to upgrade on quit", () => {
+    expect(majorUpdateVisible("scheduled", undefined, now)).toBe(false)
   })
 })

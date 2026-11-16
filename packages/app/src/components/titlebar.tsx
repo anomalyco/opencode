@@ -133,7 +133,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
         installing: false,
         label: language.t("titlebar.update"),
         ariaLabel: language.t("toast.update.title"),
-        chip: major.chip(),
         onInstall: () => void major.open(),
       }
     return {
@@ -605,8 +604,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 }
 
 type TitlebarUpdatePillState = {
-  // Says what is pending once the user has chosen, in place of the icon.
-  chip?: string
   visible: boolean
   installing: boolean
   label: string
@@ -623,18 +620,7 @@ function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
   return (
     <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
       <Show when={props.state.update.visible}>
-        <Show when={props.state.update.chip} fallback={<TitlebarUpdateIconButton state={props.state.update} />}>
-          {(chip) => (
-            <button
-              type="button"
-              data-component="major-update-chip"
-              class="mr-3 h-5 shrink-0 rounded-full bg-v2-icon-icon-accent/20 px-2 text-[11px] text-v2-text-text-accent [font-weight:530] focus-visible:outline-none"
-              onClick={props.state.update.onInstall}
-            >
-              {chip()}
-            </button>
-          )}
-        </Show>
+        <TitlebarUpdateIconButton state={props.state.update} />
       </Show>
       <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
     </div>
