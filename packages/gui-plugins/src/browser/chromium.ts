@@ -25,6 +25,7 @@ import {
   frameStillCurrent,
   isDocumentClosed,
   isNavigationPending,
+  retryOnly,
   transitionDocument,
   type DocumentEvent,
 } from "./page-machine"
@@ -158,7 +159,7 @@ const inspectOff = { mode: "none", highlightConfig: inspectHighlight }
 const zoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
-export type PageDetail = { icon?: string; zoom: number }
+export type PageDetail = { icon?: string; zoom: number; retryOnly?: boolean }
 
 /** The zoom a key press asks for: the system browser's zoom keys, with the platform's modifier already checked. */
 function zoomKey(input: Electron.Input) {
@@ -415,7 +416,9 @@ export function createBrowserPage(
     const icon = documentIcon(documentState)
 
     if (icon) next.icon = icon
-    const key = `${next.zoom}:${next.icon ?? ""}`
+
+    if (retryOnly(documentState)) next.retryOnly = true
+    const key = `${next.zoom}:${next.icon ?? ""}:${!!next.retryOnly}`
 
     if (key === reported) return
     reported = key
@@ -1090,9 +1093,10 @@ export function createBrowserPage(
       if (!closed()) zoom(direction)
     },
     async site() {
+      if (closed() || retryOnly(documentState)) return { cookies: 0 }
       const url = contents.getURL()
 
-      if (closed() || !destinationOrigin(url)) return { cookies: 0 }
+      if (!destinationOrigin(url)) return { cookies: 0 }
 
       return { cookies: (await contents.session.cookies.get({ url })).length }
     },
@@ -1101,10 +1105,11 @@ export function createBrowserPage(
      * the page reloaded without them, so a count read next includes what the reload set again.
      */
     async clearSite() {
+      if (closed() || retryOnly(documentState)) return
       const url = contents.getURL()
       const origin = destinationOrigin(url)
 
-      if (closed() || !origin) return
+      if (!origin) return
       const cookies = await contents.session.cookies.get({ url })
       await Promise.all(cookies.map((cookie) => contents.session.cookies.remove(cookieURL(cookie), cookie.name)))
       await contents.session.clearStorageData({

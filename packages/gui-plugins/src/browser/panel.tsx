@@ -329,7 +329,7 @@ export default function SessionBrowserPane(props: {
   // The address field always shows the whole URL; at rest it draws the host emphasized.
   const webParts = createMemo(() => hostDisplay(addressBar().field))
   const parts = () => webParts() ?? addressParts(addressBar().field)
-  const site = () => !!addressBar().field && !addressBar().editing
+  const site = () => !!addressBar().field && !addressBar().editing && !page()?.retryOnly
   const recent = () => props.model.visits().slice(0, RECENT)
 
   // A loopback address opens on the machine that runs the server; the system browser here reaches it only when the

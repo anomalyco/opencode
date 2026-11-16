@@ -68,7 +68,7 @@ type ModelState = {
 }
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
-type PageDetail = { icon?: string; zoom: number }
+type PageDetail = { icon?: string; zoom: number; retryOnly?: boolean }
 
 /** A mounted pane; the newest one answers the reload and inspect commands. */
 type PaneHandle = {
@@ -421,7 +421,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const page = (sessionKey: string, event: PageEvent) => {
     setState("pages", sessionKey, (pages) => ({
       ...pages,
-      [event.tabID]: event.icon ? { icon: event.icon, zoom: event.zoom } : { zoom: event.zoom },
+      [event.tabID]: { icon: event.icon, zoom: event.zoom, retryOnly: event.retryOnly },
     }))
     const url = sessionTab(machine(), sessionKey, event.tabID)?.url
     const visits = url && event.icon ? withIcon(history.value.visits, url, event.icon) : undefined
