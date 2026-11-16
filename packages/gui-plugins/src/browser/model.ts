@@ -641,17 +641,23 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
 
+      // Its action brings the sign-in from the user's own browser, in Settings.
+      if (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")
+        return { token: notice.token, text: ctx.t(notice.reason === "browser.passkey" ? "refused.passkey" : "refused.passkey.agent"), label: ctx.t("refused.passkey.import") }
+
       return { token: notice.token, text: describe(notice.reason) }
     },
     async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean) {
-      const token = state.chrome[session.key]?.[tabID]?.notice?.token
+      const notice = state.chrome[session.key]?.[tabID]?.notice
 
-      if (!token) return
+      if (!notice) return
       setState("chrome", session.key, tabID, "notice", undefined)
       const target = registration(session)
 
+      if (!dismiss && (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")) ctx.layout.settings("browser")
+
       if (!target) throw new Error("browser.pane.unavailable")
-      await target.notice(tabID, token, dismiss)
+      await target.notice(tabID, notice.token, dismiss)
     },
     /** What the tab waits on the user for. */
     prompt: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.prompt,

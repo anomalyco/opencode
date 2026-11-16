@@ -14,6 +14,7 @@ import { CodedError, missingArtifact } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
 import { guardMediaRequests } from "./media-gate"
+import { agentPasskeyRefusal, guardWebAuthn } from "./webauthn-gate"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
 import { agentKeyRefusal, hardwareInput, pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
@@ -469,7 +470,7 @@ export function createBrowserPage(
   // Set the nested auto-attach policy before the new renderer can create its own children.
   const prepareFrame = async (sessionID: string) => {
     try {
-      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID), media.attach(sessionID)])
+      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID), media.attach(sessionID), passkeys.attach(sessionID)])
       await cdp.send("Runtime.runIfWaitingForDebugger", {}, sessionID)
     } catch {
       // A detached target needs no resumption. A live one must not run unguarded or remain invisibly paused.
@@ -622,6 +623,23 @@ export function createBrowserPage(
 
   // A page's getUserMedia waits for the pane before Blink opens a device, so macOS asks only after the user's Allow.
   const media = guardMediaRequests(cdp, (ask) => prompts.gate(ask))
+  // A site's passkey or security-key request fails at once where nothing could answer it, with one notice per page.
+  let passkeyNoticed = false
+  const native = process.platform === "win32"
+
+  const passkeys = guardWebAuthn(cdp, {
+    native,
+    // An agent run could otherwise put the system's sign-in dialog in front of the user for a site they did not open.
+    allow: () => !agentDriven(activity),
+    refused: () => {
+      if (activity.agentRuns > 0) prompts.interruptAgent(new Error(agentPasskeyRefusal(contents.getURL())))
+
+      if (passkeyNoticed) return
+      passkeyNoticed = true
+      notices.show({ reason: native && agentDriven(activity) ? "browser.passkey.agent" : "browser.passkey" })
+    },
+  })
+
   constructing.defer(() => prompts.dispose())
   constructing.defer(() => dialogs.dispose())
 
@@ -653,6 +671,7 @@ export function createBrowserPage(
 
     if (options.artifacts?.display(url)) artifactHost = new URL(url).host
     notices.clear()
+    passkeyNoticed = false
     popupReport = undefined
 
     if (agentDriven(activity)) contents.setBackgroundThrottling(false)
@@ -1038,6 +1057,7 @@ export function createBrowserPage(
     diagnostics.enable(),
     choosers.attach(),
     media.attach(),
+    passkeys.attach(),
     cdp.send("Page.enable"),
     cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
@@ -1183,6 +1203,7 @@ export function createBrowserPage(
       menu.dispose()
       choosers.dispose()
       media.dispose()
+      passkeys.dispose()
       options.artifacts?.dispose()
       options.workspace?.dispose()
       dispatchDialog({ type: "disposed" })

@@ -588,6 +588,10 @@ export function createPagePrompts(input: {
 
       return { promise: stopped.promise, stop: () => agentWaits.delete(stopped.reject) }
     },
+    /** Stops the agent commands running now with `error`, for what the page did that only the user can resolve. */
+    interruptAgent(error: Error) {
+      agentWaits.forEach((stop) => stop(error))
+    },
     /** The user's answer to what the tab shows; prompts that show while it runs continue the same focus chain. */
     async answer(id: number, answer: PromptAnswer) {
       answering++
