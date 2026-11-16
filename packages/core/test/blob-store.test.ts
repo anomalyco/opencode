@@ -113,18 +113,17 @@ it.effect("keeps an unreferenced blob readable until it expires, and release nev
     yield* ref(video)
     yield* ref(image)
 
-    expect(yield* SessionBlob.stat(db, video)).toEqual({ mime: "video/mp4", bytes: 5, onDisk: true })
-    expect((yield* SessionBlob.read(db, video))?.data).toBeUndefined()
+    expect(yield* SessionBlob.read(db, video)).toEqual({ mime: "video/mp4", bytes: 5, data: undefined })
     expect((yield* SessionBlob.read(db, image))?.data?.toString()).toBe("png")
 
     // Releasing the refs before the expiry keeps both.
     yield* SessionBlob.releaseMessage(db, "ses_1" as never, "msg_1" as never)
     expect(yield* hashes).toEqual([image, video].sort())
-    expect(yield* SessionBlob.stat(db, image)).toBeDefined()
+    expect(yield* SessionBlob.read(db, image)).toBeDefined()
 
     // After it, the blobs read as missing, and release would drop the inline one but leave the file blob to the sweep.
     yield* TestClock.adjust(2 * HOUR)
-    expect(yield* SessionBlob.stat(db, video)).toBeUndefined()
+    expect(yield* SessionBlob.read(db, video)).toBeUndefined()
     yield* ref(video, "msg_2")
     yield* ref(image, "msg_2")
     yield* SessionBlob.releaseMessage(db, "ses_1" as never, "msg_2" as never)
@@ -153,7 +152,7 @@ it.effect("saving a hash again keeps the later expiry", () =>
   }),
 )
 
-it.effect("history names a file blob instead of inlining its bytes", () =>
+it.effect("history never loads a file blob's bytes", () =>
   Effect.gen(function* () {
     const { db } = yield* setup
     const hash = yield* fileBlob("gen_history", new TextEncoder().encode("a long video"), null)
@@ -176,7 +175,7 @@ it.effect("history names a file blob instead of inlining its bytes", () =>
         {
           mime: "text/plain",
           name: "clip.mp4",
-          data: Buffer.from(`[media stored on the server: media:${hash}, clip.mp4 (video/mp4)]`).toString("base64"),
+          data: Buffer.from("[media unavailable: clip.mp4 (video/mp4)]").toString("base64"),
         },
       ],
     })

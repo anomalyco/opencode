@@ -11,7 +11,7 @@ import {
 } from "@opencode/schema/generate"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { Clock, Context, Deferred, Duration, Effect, Exit, FiberMap, Layer, Option, Schedule, Schema } from "effect"
 import { BlobStore } from "./blob-store.js"
 import { Database } from "./database/database.js"
@@ -234,7 +234,7 @@ const layer = Layer.effect(
         reason: "unknown",
         error: "The server stopped while submitting the job; it may or may not have started",
       })
-      .where(and(eq(GenerationTable.status, "submitting"), isNull(GenerationTable.provider_job_id)))
+      .where(eq(GenerationTable.status, "submitting"))
       .run()
       .pipe(Effect.orDie)
     const running = (yield* db

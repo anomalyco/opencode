@@ -166,7 +166,7 @@ const readBlobAttachment = Effect.fn("SessionPrompt.readBlobAttachment")(functio
   const { db } = yield* Database.Service
   const blob = yield* SessionBlob.read(db, SessionStored.refHash(uri))
   if (!blob) return yield* new AttachmentError({ uri, message: `Attachment is no longer stored: ${uri}` })
-  // A blob stored as a file, such as a generated video, is too large to inline into a prompt.
+  // History doesn't load file-backed blobs, such as generated videos, so they can't be attached yet.
   if (blob.data === undefined)
     return yield* new AttachmentError({
       uri,

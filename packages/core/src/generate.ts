@@ -113,7 +113,6 @@ export interface Interface {
   }
 }
 
-
 export class Service extends Context.Service<Service, Interface>()("@opencode/Generate") {}
 
 // Image and decision clients are built here, on the shared request executor, so only Generate depends on them.

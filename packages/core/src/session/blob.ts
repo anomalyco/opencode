@@ -19,8 +19,8 @@ type DatabaseService = Database.Interface["db"]
 type MessageRow = typeof SessionMessageTable.$inferSelect
 type InboxRow = typeof SessionInboxTable.$inferSelect
 type Part = Extract<MessageRow["data"], { readonly content: unknown }>["content"][number]
-/** Base64 bytes by blob hash, or `null` for a blob whose bytes live in a file. */
-type Blobs = ReadonlyMap<string, string | null>
+/** Base64 bytes by blob hash. */
+type Blobs = ReadonlyMap<string, string>
 
 const isFileRef = Schema.is(SessionStored.FileRef)
 const isToolFileRef = Schema.is(SessionStored.ToolFileRef)
@@ -58,21 +58,11 @@ const unavailableToolItem = (item: Tool.Content & { readonly type: "file" }): To
   text: unavailable(item.mime, item.name),
 })
 
-/** A ref whose bytes live in a file reads as this text: inlining a video would put all of it in every history read. */
-const onServer = (ref: SessionStored.Ref, mime: string, name?: string) =>
-  `[media stored on the server: ${ref}, ${name === undefined ? mime : `${name} (${mime})`}]`
-
 function inlineFile(file: SessionStored.File, blobs: Blobs): SessionStored.File {
   if (!isFileRef(file)) return file
   const data = blobs.get(SessionStored.refHash(file.uri))
   if (data === undefined) return unavailableFile(file)
   const { uri: _, ...rest } = file
-  if (data === null)
-    return {
-      ...rest,
-      data: Buffer.from(onServer(file.uri, file.mime, file.name)).toString("base64"),
-      mime: "text/plain",
-    }
   return { ...rest, data }
 }
 
@@ -80,7 +70,6 @@ function inlineToolItem(item: Tool.Content, blobs: Blobs): Tool.Content {
   if (!isToolFileRef(item)) return item
   const data = blobs.get(SessionStored.refHash(item.uri))
   if (data === undefined) return unavailableToolItem(item)
-  if (data === null) return { type: "text", text: onServer(item.uri, item.mime, item.name) }
   return { ...item, uri: `data:${item.mime};base64,${data}` }
 }
 
@@ -115,19 +104,16 @@ function rewriteInbox(row: InboxRow, file: (file: SessionStored.File) => Session
 }
 
 const load = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
-  const blobs = new Map<string, string | null>()
+  const blobs = new Map<string, string>()
   for (const batch of DatabaseBatch.batches([...hashes], 1)) {
+    // Bytes kept in a file aren't loaded here; their refs read as unavailable.
     const found = yield* db
-      .select({ hash: BlobTable.hash, bytes: BlobTable.bytes, data: BlobTable.data })
+      .select({ hash: BlobTable.hash, data: BlobTable.data })
       .from(BlobTable)
-      .where(inArray(BlobTable.hash, batch))
+      .where(and(inArray(BlobTable.hash, batch), sql`NOT ${onDiskWhere}`))
       .all()
       .pipe(Effect.orDie)
-    for (const blob of found)
-      blobs.set(
-        blob.hash,
-        onDisk({ bytes: blob.bytes, stored: blob.data.byteLength }) ? null : view(blob.data).toString("base64"),
-      )
+    for (const blob of found) blobs.set(blob.hash, view(blob.data).toString("base64"))
   }
   return blobs
 })
@@ -247,17 +233,6 @@ const live = (db: DatabaseService, now: number) =>
     gt(sql`coalesce(${BlobTable.expires_at}, 0)`, now),
   )
 
-/** A readable blob's type and size, without loading its bytes, so the media route can answer 304 first. */
-export const stat = Effect.fnUntraced(function* (db: DatabaseService, hash: string) {
-  const blob = yield* db
-    .select({ mime: BlobTable.mime, bytes: BlobTable.bytes, stored })
-    .from(BlobTable)
-    .where(and(eq(BlobTable.hash, hash), live(db, yield* Clock.currentTimeMillis)))
-    .get()
-    .pipe(Effect.orDie)
-  return blob && { mime: blob.mime, bytes: blob.bytes, onDisk: onDisk(blob) }
-})
-
 /** Whether a row for `hash` exists, readable or not. */
 export const has = (db: DatabaseService, hash: string) =>
   db
@@ -270,7 +245,7 @@ export const has = (db: DatabaseService, hash: string) =>
       Effect.map((row) => row !== undefined),
     )
 
-/** A readable blob's type and bytes; `data` is undefined when they live in a file. */
+/** A readable blob's type, size and bytes; `data` is undefined when the bytes live in a file. */
 export const read = Effect.fnUntraced(function* (db: DatabaseService, hash: string) {
   const blob = yield* db
     .select({ mime: BlobTable.mime, bytes: BlobTable.bytes, data: BlobTable.data })
@@ -281,6 +256,7 @@ export const read = Effect.fnUntraced(function* (db: DatabaseService, hash: stri
   if (!blob) return undefined
   return {
     mime: blob.mime,
+    bytes: blob.bytes,
     data: onDisk({ bytes: blob.bytes, stored: blob.data.byteLength }) ? undefined : view(blob.data),
   }
 })

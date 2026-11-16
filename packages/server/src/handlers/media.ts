@@ -3,7 +3,7 @@ import { Database } from "@opencode/core/database/database"
 import { SessionBlob } from "@opencode/core/session/blob"
 import { FileNotFoundError } from "@opencode/protocol/errors"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ContentHeaders } from "../content-headers"
 import { ByteRange } from "../range"
@@ -22,10 +22,11 @@ export const makeMediaGet = Effect.gen(function* () {
         path: `/api/experimental/media/${hash}`,
         message: `Media blob not found: ${hash}`,
       })
-      const blob = yield* SessionBlob.stat(db, hash)
+      const blob = yield* SessionBlob.read(db, hash)
       if (!blob) return yield* missing
-      const file = blob.onDisk ? yield* store.open(hash, blob.bytes) : undefined
-      if (blob.onDisk && file === undefined) return yield* missing
+      // Inline bytes, or the path of the file that holds them.
+      const source = blob.data ?? (yield* store.open(hash, blob.bytes))
+      if (source === undefined) return yield* missing
       // Stays the quoted hash: shipped iOS builds probe with `If-None-Match: "<hash>"`.
       const etag = `"${hash}"`
       const headers = {
@@ -65,13 +66,11 @@ export const makeMediaGet = Effect.gen(function* () {
           ...(range === undefined ? {} : { "content-range": `bytes ${range.start}-${range.end}/${blob.bytes}` }),
         },
       }
-      if (file !== undefined)
-        return HttpServerResponse.stream(
-          length === 0 ? Stream.empty : fs.stream(file, { offset, bytesToRead: length }),
-          { ...options, contentLength: length },
-        )
-      const inline = yield* SessionBlob.read(db, hash)
-      if (inline?.data === undefined) return yield* missing
-      return HttpServerResponse.uint8Array(inline.data.subarray(offset, offset + length), options)
+      if (typeof source !== "string")
+        return HttpServerResponse.uint8Array(source.subarray(offset, offset + length), options)
+      return HttpServerResponse.stream(fs.stream(source, { offset, bytesToRead: length }), {
+        ...options,
+        contentLength: length,
+      })
     })
 })
