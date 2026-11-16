@@ -13,6 +13,9 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
+import { useProjectNavigation } from "@/shell/project-navigation"
+import { useProjectBrowser } from "@/home/projects/browse"
+import { useProjectStart } from "@/home/projects/start"
 import { WindowsAppMenu } from "./windows-menu"
 import { createTitlebarHistory } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
@@ -35,7 +38,7 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { ActivityRing } from "@opencode/ui/activity-ring"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
-import { useSettingsDialog } from "@/settings/command"
+import { useSettingsCommand, useSettingsDialog } from "@/settings/command"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 import { createRouteTabSync } from "./route-sync"
 import {
@@ -69,6 +72,36 @@ const macTrafficLightsTopClearance = 28
 // iOS blurs page content just below the status bar in Home Screen web apps, so with a top safe area the phone
 // titlebar row stays 16px clear of it, as ChatGPT's phone header does. Without one, 8px matches the content gap below.
 const mobileTopClearance = "max(8px, min(16px, env(safe-area-inset-top, 0px) * 1000))"
+
+function SidebarAction(props: {
+  action: string
+  icon: string
+  label: string
+  keybind: string[]
+  pressed?: boolean
+  current?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      data-titlebar-tab-action
+      data-action={props.action}
+      data-state={props.pressed || props.current ? "pressed" : undefined}
+      class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
+      aria-label={props.label}
+      aria-pressed={props.pressed}
+      aria-current={props.current ? "page" : undefined}
+      onClick={props.onClick}
+    >
+      <Icon name={props.icon} class="shrink-0" />
+      <span class="min-w-0 truncate">{props.label}</span>
+      <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
+        <Keybind keys={props.keybind} variant="neutral" dir="ltr" />
+      </div>
+    </button>
+  )
+}
 
 export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const platform = usePlatform()
@@ -143,7 +176,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
   const titlebarItems = useTitlebarItems()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
-  const homeInSidebarHeader = () => !windows() && !macTrafficLights()
+  const actionInSidebarHeader = () => !windows() && !macTrafficLights()
 
   command.register(() => [
     {
@@ -202,13 +235,20 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             const layout = useLayout()
             const global = useGlobal()
 
+            const projectNavigation = useProjectNavigation()
+
+            const browseProjects = useProjectBrowser()
+
+            const projectStart = useProjectStart()
+
             const tabs = useTabs()
             const tabsStore = tabs.store
 
             createEffect(() => {
               if (
                 settings.appearance.tabLayout() === "vertical" &&
-                (settings.general.sidebarOrganize() === "projects" || settings.general.sidebarOrganize() === "customize") &&
+                (settings.general.sidebarOrganize() === "projects" ||
+                  settings.general.sidebarOrganize() === "customize") &&
                 !mobile()
               )
                 return
@@ -232,6 +272,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             /** Opens draft `draftID` for the current context. Returns false when there is nothing to open it in. */
             const openDraft = (draftID: string) => {
               const route = layout.route()
+
+              if (projectNavigation() && (route.type === "home" || route.type === "settings"))
+                return projectStart.start(draftID)
 
               switch (route.type) {
                 case "session": {
@@ -363,22 +406,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   </Tooltip>
                 }
               >
-                <button
-                  type="button"
-                  data-titlebar-tab-action
-                  data-action="vertical-tabs-home"
-                  data-state={layout.route().type === "home" ? "pressed" : undefined}
-                  class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
+                <SidebarAction
+                  action="vertical-tabs-home"
+                  icon="grid-plus"
+                  label={language.t("home.title")}
+                  keybind={command.keybindParts("home.toggle")}
+                  pressed={layout.route().type === "home"}
                   onClick={toggleHome}
-                  aria-label={language.t("home.title")}
-                  aria-pressed={layout.route().type === "home"}
-                >
-                  <Icon name="grid-plus" class="shrink-0" />
-                  <span class="min-w-0 truncate">{language.t("home.title")}</span>
-                  <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
-                    <Keybind keys={command.keybindParts("home.toggle")} variant="neutral" dir="ltr" />
-                  </div>
-                </button>
+                />
               </Show>
             )
 
@@ -408,30 +443,51 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   </Tooltip>
                 }
               >
-                <button
-                  type="button"
-                  data-titlebar-tab-action
-                  data-action="vertical-tabs-search"
-                  class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
+                <SidebarAction
+                  action="vertical-tabs-search"
+                  icon="magnifying-glass"
+                  label={language.t("command.session.search")}
+                  keybind={command.keybindParts("sessions.search")}
                   onClick={() => command.trigger("sessions.search")}
-                >
-                  <Icon name="magnifying-glass" class="shrink-0" />
-                  <span class="min-w-0 truncate">{language.t("command.session.search")}</span>
-                  <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
-                    <Keybind keys={command.keybindParts("sessions.search")} variant="neutral" dir="ltr" />
-                  </div>
-                </button>
+                />
+              </Show>
+            )
+
+            const newSessionButton = () => (
+              <RecentlyClosedTabsMenu vertical onNewTab={openNewTab} keybind={command.keybindParts("tab.new")} />
+            )
+
+            const settingsButton = () => {
+              const show = useSettingsCommand()
+
+              return (
+                <SidebarAction
+                  action="vertical-tabs-settings"
+                  icon="settings-gear"
+                  label={language.t("sidebar.settings")}
+                  keybind={command.keybindParts("settings.open")}
+                  current={layout.route().type === "settings"}
+                  onClick={show}
+                />
+              )
+            }
+
+            const firstSidebarAction = () => (
+              <Show when={projectNavigation()} fallback={homeButton(true)}>
+                {newSessionButton()}
               </Show>
             )
 
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
-                title: language.t("home.title"),
+                title: language.t(projectNavigation() ? "project.browse.title" : "home.title"),
                 category: language.t("command.category.view"),
                 keybind: windows() ? "alt+home" : "mod+b",
                 hidden: true,
                 onSelect: () => {
+                  if (projectNavigation()) return browseProjects()
+
                   if (layout.route().type !== "home") layout.home.searchFocus.request()
                   toggleHome()
                 },
@@ -764,15 +820,13 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                             ref={(element) => (element.className = "flex size-full min-h-0 flex-col")}
                           >
                             <Show when={!windows()}>
-                              {/* Shares the session header's 48px center line. Without traffic lights, Home fills the
-                                  start so the row doesn't leave an empty band. */}
                               <div
                                 data-slot="sidebar-header"
-                                data-home={homeInSidebarHeader() ? "" : undefined}
+                                data-has-action={actionInSidebarHeader() ? "" : undefined}
                                 class="flex w-full shrink-0 gap-2"
                                 classList={{
-                                  "items-start pt-2.5 pb-[3px]": homeInSidebarHeader(),
-                                  "mb-0.5 h-12 items-center": !homeInSidebarHeader(),
+                                  "items-start pt-2.5 pb-[3px]": actionInSidebarHeader(),
+                                  "mb-0.5 h-12 items-center": !actionInSidebarHeader(),
                                 }}
                                 style={{
                                   "min-height": macVerticalTabs()
@@ -791,20 +845,18 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                     aria-hidden="true"
                                   />
                                 </Show>
-                                <Show when={homeInSidebarHeader()} fallback={<div class="flex-1" />}>
-                                  <div class="min-w-0 flex-1">{homeButton(true)}</div>
+                                <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
+                                  <div class="min-w-0 flex-1">{firstSidebarAction()}</div>
                                 </Show>
                                 <SidebarToggle handoff="out" />
                               </div>
                             </Show>
                             <div class="flex w-full shrink-0 flex-col gap-[3px]">
-                              <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
+                              <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
                               {searchButton(true)}
-                              <RecentlyClosedTabsMenu
-                                vertical
-                                onNewTab={openNewTab}
-                                keybind={command.keybindParts("tab.new")}
-                              />
+                              <Show when={projectNavigation()} fallback={newSessionButton()}>
+                                {settingsButton()}
+                              </Show>
                             </div>
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />
                             <div class="flex min-h-0 flex-1 flex-col gap-1">

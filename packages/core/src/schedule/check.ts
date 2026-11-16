@@ -29,6 +29,8 @@ const CODE_LIMITS: CodeMode.ExecutionLimits = {
 }
 
 const FORBIDDEN_CODE_TOOLS = new Set([
+  // Shell conditions approve the parsed commands; a code condition would approve any command it runs.
+  "shell",
   "opencode.schedule_create",
   "opencode.schedule_pause",
   "opencode.schedule_resume",

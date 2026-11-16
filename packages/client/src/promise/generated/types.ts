@@ -31,6 +31,8 @@ export type ProviderTransport = "http" | "websocket"
 
 export type ProviderEncoding = "zstd" | "gzip" | "none"
 
+export type ProviderTls = { cert: string; key: string; passphrase?: string }
+
 export type AgentColor = string
 
 export type PermissionEffect = "allow" | "deny" | "ask"
@@ -1065,6 +1067,7 @@ export type ProviderSettings = {
   cache?: ProviderCache
   transport?: ProviderTransport
   encoding?: ProviderEncoding
+  tls?: ProviderTls
 } & { [x: string]: any }
 
 export type ModelSettings = { compaction?: ProviderCompaction; cache?: ProviderCache; encoding?: ProviderEncoding } & {
@@ -1079,6 +1082,7 @@ export type ConfigProviderSettings = {
   cache?: ProviderCache
   transport?: ProviderTransport
   encoding?: ProviderEncoding
+  tls?: ProviderTls
 } & { [x: string]: JsonValue | null }
 
 export type ConfigModelSettings = {
@@ -2509,7 +2513,12 @@ export type ConfigEntry =
                 }
           }
         }
-        compaction?: { auto?: boolean; keep?: { tokens?: number }; buffer?: ConfigCompactionPercent | number }
+        compaction?: {
+          auto?: boolean
+          background?: boolean
+          keep?: { tokens?: number }
+          buffer?: ConfigCompactionPercent | number
+        }
         skills?: Array<string>
         commands?: {
           [x: string]: {
@@ -2586,13 +2595,12 @@ export type ConfigEntry =
           all_flags?: boolean
           todo?: boolean
           advisor?: boolean
-          background_compaction?: boolean
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
-          shell_timeout_background?: boolean
           console_watches?: boolean
           mcp_events?: boolean
+          full_codemode?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number

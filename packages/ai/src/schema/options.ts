@@ -72,6 +72,15 @@ export interface HttpOptions {
   readonly body?: Record<string, unknown>
   /** Compression for JSON request bodies. Only set it for endpoints known to decode it. */
   readonly encoding?: RequestEncoding
+  /** Client certificate presented to HTTPS endpoints that request one (mutual TLS). */
+  readonly tls?: ClientTls
+}
+
+/** PEM client certificate and private key, with the passphrase of an encrypted key. */
+export interface ClientTls {
+  readonly cert: string
+  readonly key: string
+  readonly passphrase?: string
 }
 
 /** Per-phase time limits in milliseconds. */
@@ -127,6 +136,7 @@ export const mergeTransport = (...items: ReadonlyArray<TransportOptions | undefi
       query: mergeStringRecords(...http.map((item) => item?.query)),
       body: mergeJsonRecords(...http.map((item) => item?.body)),
       encoding: last(http.map((item) => item?.encoding)),
+      tls: last(http.map((item) => item?.tls)),
     }),
   }
 }

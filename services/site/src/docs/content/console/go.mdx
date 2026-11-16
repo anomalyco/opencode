@@ -55,6 +55,7 @@ The current list of models includes:
 - **Beam Free** (limited time, limited regions)
 - **Iceman Contributor Free** (limited time)
 - **LongCat 2.5 Free** (limited time)
+- **Hy4 flash Free** (limited time)
 - **MiMo-V2.6-Flash**
 - **MiMo-V2.6-Pro**
 - **MiMo-V2.5**
@@ -63,6 +64,7 @@ The current list of models includes:
 - **MiniMax M3**
 - **Muse Spark 1.3 Contributor** ([limited regions](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([limited regions](https://ai.developer.meta.com/legal/geographic-use-policy))
+- **Qwen4 Max**
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
 - **Qwen3.7 Plus**
@@ -146,17 +148,20 @@ investigated. The linked reports track fixes and workarounds.
 
 ## Usage limits
 
-Usage limits are defined as monthly dollar amounts. The table below shows the
-monthly limit for each plan and the token costs for each model. Token pricing is
-the same for Go, Go Plus, and Go Teams.
+The paid models you use on Go share one allowance. On Go Teams, each member has their own allowance across models.
 
-Each model has the following usage limits: 5-hour — 20% of the monthly limit;
-weekly — 50%; and monthly — 100%.
+- The **5-hour limit** is 20% of your monthly allowance. The window starts when you first use your allowance and lasts five hours.
+- The **weekly limit** is 50% of your monthly allowance. It resets on Monday at 00:00 UTC.
+- Your **monthly allowance** resets when a new paid period starts.
 
-Each model's monthly limit below determines how its usage counts toward those allowances. Each response reports how
-much the request counted, as [`opencode.allowance`](/console/api/inference#cost).
+Switching models draws from the same allowance. If you reach a limit, you can use a free model or turn on
+[Extra Usage](#usage-beyond-limits) to use your Console credits until you have allowance available again.
 
-Token prices are per 1M tokens.
+The **Monthly limit** column shows how much usage your plan covers if you use only that model over the month.
+For example, $1.50 of usage on a model with a $15 limit uses 10% of your monthly allowance. So does $6 on a model
+with a $60 limit. Go responses report how much each request counted in [`opencode.allowance`](/console/api/inference#cost).
+
+Token prices are per 1M tokens and are the same for Go, Go Plus, and Go Teams.
 
 <PlanTabs id="go-pricing" label="Go plan" syncKey="go-plan">
   <div slot="go">
@@ -174,6 +179,7 @@ Token prices are per 1M tokens.
     | Beam Free                        | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | Iceman Contributor Free          | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | LongCat 2.5 Free                 | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
+    | Hy4 flash Free                   | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | MiMo-V2.6-Flash                  | $0.14           | $0.28             | $0.0028         | -            | **$60**                                        |
     | MiMo-V2.6-Pro                    | $0.435          | $0.87             | $0.003625       | -            | **$15**                                        |
     | MiMo-V2.5                        | $0.14           | $0.28             | $0.0028         | -            | **$60**                                        |
@@ -183,6 +189,7 @@ Token prices are per 1M tokens.
     | MiniMax M3 (> 512K tokens)       | $0.60           | $2.40             | $0.12           | -            | **$60**                                        |
     | Muse Spark 1.3 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$60**                                        |
     | Muse Spark 1.2 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$60**                                        |
+    | Qwen4 Max                        | $1.50           | $4.50             | $0.075          | $1.875       | **$15**                                        |
     | Qwen3.8 Max                      | $2.00           | $6.00             | $0.25           | $2.50        | **$15**                                        |
     | Qwen3.8 Flash                    | $0.15           | $0.47             | $0.016          | $0.20        | **$30**                                        |
     | Qwen3.7 Plus (≤ 256K tokens)     | $0.40           | $1.60             | $0.04           | $0.50        | **$60**                                        |
@@ -220,6 +227,7 @@ Token prices are per 1M tokens.
     | Beam Free                        | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | Iceman Contributor Free          | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | LongCat 2.5 Free                 | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
+    | Hy4 flash Free                   | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | MiMo-V2.6-Flash                  | $0.14           | $0.28             | $0.0028         | -            | **$120**                                       |
     | MiMo-V2.6-Pro                    | $0.435          | $0.87             | $0.003625       | -            | **$60**                                        |
     | MiMo-V2.5                        | $0.14           | $0.28             | $0.0028         | -            | **$120**                                       |
@@ -229,6 +237,7 @@ Token prices are per 1M tokens.
     | MiniMax M3 (> 512K tokens)       | $0.60           | $2.40             | $0.12           | -            | **$180**                                       |
     | Muse Spark 1.3 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$120**                                       |
     | Muse Spark 1.2 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$120**                                       |
+    | Qwen4 Max                        | $1.50           | $4.50             | $0.075          | $1.875       | **$60**                                        |
     | Qwen3.8 Max                      | $2.00           | $6.00             | $0.25           | $2.50        | **$60**                                        |
     | Qwen3.8 Flash                    | $0.15           | $0.47             | $0.016          | $0.20        | **$90**                                        |
     | Qwen3.7 Plus (≤ 256K tokens)     | $0.40           | $1.60             | $0.04           | $0.50        | **$180**                                       |
@@ -266,6 +275,7 @@ Token prices are per 1M tokens.
     | Beam Free                        | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | Iceman Contributor Free          | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | LongCat 2.5 Free                 | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
+    | Hy4 flash Free                   | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | MiMo-V2.6-Flash                  | $0.14           | $0.28             | $0.0028         | -            | **$65**                                        |
     | MiMo-V2.6-Pro                    | $0.435          | $0.87             | $0.003625       | -            | **$20**                                        |
     | MiMo-V2.5                        | $0.14           | $0.28             | $0.0028         | -            | **$65**                                        |
@@ -275,6 +285,7 @@ Token prices are per 1M tokens.
     | MiniMax M3 (> 512K tokens)       | $0.60           | $2.40             | $0.12           | -            | **$65**                                        |
     | Muse Spark 1.3 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$65**                                        |
     | Muse Spark 1.2 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$65**                                        |
+    | Qwen4 Max                        | $1.50           | $4.50             | $0.075          | $1.875       | **$20**                                        |
     | Qwen3.8 Max                      | $2.00           | $6.00             | $0.25           | $2.50        | **$20**                                        |
     | Qwen3.8 Flash                    | $0.15           | $0.47             | $0.016          | $0.20        | **$35**                                        |
     | Qwen3.7 Plus (≤ 256K tokens)     | $0.40           | $1.60             | $0.04           | $0.50        | **$65**                                        |
@@ -305,6 +316,8 @@ Token prices are per 1M tokens.
 
 **LongCat 2.5 Free:** Free for a limited time.
 
+**Hy4 flash Free:** Free for a limited time.
+
 **Gemini 4 Argon:** The 50% discount applies through November 30, 2026.
 
 **DeepSeek V4.1 Flash / V4 Pro:** Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday; all other hours, including weekends, are Off-Peak. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
@@ -330,6 +343,7 @@ Plus and Go Teams estimates scale with each model's higher usage limit.
     | Beam Free                  | Unlimited            | Unlimited         | Unlimited          |
     | Iceman Contributor Free    | Unlimited            | Unlimited         | Unlimited          |
     | LongCat 2.5 Free           | Unlimited            | Unlimited         | Unlimited          |
+    | Hy4 flash Free             | Unlimited            | Unlimited         | Unlimited          |
     | MiMo-V2.6-Flash            | 30,100               | 75,200            | 150,400            |
     | MiMo-V2.6-Pro              | 3,250                | 8,150             | 16,300             |
     | MiMo-V2.5                  | 30,100               | 75,200            | 150,400            |
@@ -338,6 +352,7 @@ Plus and Go Teams estimates scale with each model's higher usage limit.
     | MiniMax M3                 | 3,200                | 8,000             | 16,000             |
     | Muse Spark 1.3 Contributor | 45,300               | 113,300           | 226,600            |
     | Muse Spark 1.2 Contributor | 45,300               | 113,300           | 226,600            |
+    | Qwen4 Max                  | 460                  | 1,160             | 2,310              |
     | Qwen3.8 Max                | 160                  | 400               | 810                |
     | Qwen3.8 Flash              | 5,400                | 13,500            | 27,000             |
     | Qwen3.7 Plus               | 4,300                | 10,800            | 21,600             |
@@ -368,6 +383,7 @@ Plus and Go Teams estimates scale with each model's higher usage limit.
     | Beam Free                  | Unlimited            | Unlimited         | Unlimited          |
     | Iceman Contributor Free    | Unlimited            | Unlimited         | Unlimited          |
     | LongCat 2.5 Free           | Unlimited            | Unlimited         | Unlimited          |
+    | Hy4 flash Free             | Unlimited            | Unlimited         | Unlimited          |
     | MiMo-V2.6-Flash            | 60,200               | 150,400           | 300,800            |
     | MiMo-V2.6-Pro              | 13,000               | 32,600            | 65,200             |
     | MiMo-V2.5                  | 60,200               | 150,400           | 300,800            |
@@ -376,6 +392,7 @@ Plus and Go Teams estimates scale with each model's higher usage limit.
     | MiniMax M3                 | 9,600                | 24,000            | 48,000             |
     | Muse Spark 1.3 Contributor | 90,600               | 226,600           | 453,200            |
     | Muse Spark 1.2 Contributor | 90,600               | 226,600           | 453,200            |
+    | Qwen4 Max                  | 1,840                | 4,640             | 9,240              |
     | Qwen3.8 Max                | 640                  | 1,600             | 3,240              |
     | Qwen3.8 Flash              | 16,200               | 40,500            | 81,000             |
     | Qwen3.7 Plus               | 12,900               | 32,400            | 64,800             |
@@ -406,6 +423,7 @@ Plus and Go Teams estimates scale with each model's higher usage limit.
     | Beam Free                  | Unlimited            | Unlimited         | Unlimited          |
     | Iceman Contributor Free    | Unlimited            | Unlimited         | Unlimited          |
     | LongCat 2.5 Free           | Unlimited            | Unlimited         | Unlimited          |
+    | Hy4 flash Free             | Unlimited            | Unlimited         | Unlimited          |
     | MiMo-V2.6-Flash            | 32,608               | 81,470            | 162,930            |
     | MiMo-V2.6-Pro              | 4,333                | 10,870            | 21,730             |
     | MiMo-V2.5                  | 32,608               | 81,470            | 162,930            |
@@ -414,6 +432,7 @@ Plus and Go Teams estimates scale with each model's higher usage limit.
     | MiniMax M3                 | 3,467                | 8,670             | 17,330             |
     | Muse Spark 1.3 Contributor | 49,075               | 122,740           | 245,480            |
     | Muse Spark 1.2 Contributor | 49,075               | 122,740           | 245,480            |
+    | Qwen4 Max                  | 613                  | 1,550             | 3,080              |
     | Qwen3.8 Max                | 213                  | 530               | 1,080              |
     | Qwen3.8 Flash              | 6,300                | 15,750            | 31,500             |
     | Qwen3.7 Plus               | 4,658                | 11,700            | 23,400             |
@@ -454,6 +473,7 @@ The estimates use the following token counts per request; actual usage varies.
 - MiMo-V2.6-Pro — 790 input, 86,000 cached, 305 output tokens per request
 - MiMo-V2.5 — 830 input, 71,500 cached, 295 output tokens per request
 - MiMo-V2.5-Pro — 790 input, 86,000 cached, 305 output tokens per request
+- Qwen4 Max — 420 input, 66,000 cached, 200 output tokens per request
 - Qwen3.8 Max — 420 input, 66,000 cached, 200 output tokens per request
 - Qwen3.8 Flash — 600 input, 58,000 cached, 200 output tokens per request
 - Qwen3.7 Plus — 500 input, 57,000 cached, 190 output tokens per request
@@ -519,6 +539,7 @@ text model also works through the other APIs, which Console translates. See
 | MiniMax M3                 | minimax-m3                 | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
 | Muse Spark 1.3 Contributor | muse-spark-1.3-contributor | `https://opencode.ai/inference/go/openai/v1/responses`                 | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor | muse-spark-1.2-contributor | `https://opencode.ai/inference/go/openai/v1/responses`                 | `@ai-sdk/openai`            |
+| Qwen4 Max                  | qwen4-max                  | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
 | Qwen3.8 Max                | qwen3.8-max                | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash              | qwen3.8-flash              | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus               | qwen3.7-plus               | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
@@ -529,6 +550,7 @@ text model also works through the other APIs, which Console translates. See
 | Beam Free                  | beam-free                  | `https://opencode.ai/inference/go/openai/v1/chat/completions`          | `@ai-sdk/openai-compatible` |
 | Iceman Contributor Free    | iceman-contributor-free    | `https://opencode.ai/inference/go/openai/v1/chat/completions`          | `@ai-sdk/openai-compatible` |
 | LongCat 2.5 Free           | longcat-2.5-free           | `https://opencode.ai/inference/go/openai/v1/chat/completions`          | `@ai-sdk/openai-compatible` |
+| Hy4 flash Free             | hy4-flash-free             | `https://opencode.ai/inference/go/openai/v1/chat/completions`          | `@ai-sdk/openai-compatible` |
 
 </div>
 
@@ -570,6 +592,7 @@ curl https://opencode.ai/inference/go/v1/models
 | MiMo-V2.6-Flash            | Not used       | 0 days         |
 | MiMo-V2.5-Pro              | Not used       | 0 days         |
 | MiMo-V2.5                  | Not used       | 0 days         |
+| Qwen4 Max                  | Not used       | 0 days         |
 | Qwen3.8 Max                | Not used       | 0 days         |
 | Qwen3.8 Flash              | Not used       | 0 days         |
 | Qwen3.7 Plus               | Not used       | 0 days         |
@@ -586,6 +609,7 @@ curl https://opencode.ai/inference/go/v1/models
 | Beam Free                  | Not used       | 30 days        |
 | Iceman Contributor Free    | Yes            | Not ZDR        |
 | LongCat 2.5 Free           | Not used       | 0 days         |
+| Hy4 flash Free             | Not used       | 0 days         |
 
 - **Grok 4.7:** ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API. [Learn more](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days. [Learn more](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

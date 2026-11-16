@@ -22,6 +22,9 @@ export interface SessionPrompt {
 /** Request overrides. Typed keys are generation settings; any other key is a provider option. */
 export type SessionRequestOptions = Types.DeepMutable<GenerationOptionsFields> & Record<string, unknown>
 
+/** A request message. `metadata` is the stored Session message's metadata, for reading only; it is not sent to the model. */
+export type SessionRequestMessage = Message & { readonly metadata?: Record<string, unknown> }
+
 export interface SessionRequest {
   readonly sessionID: Session.ID
   readonly model: Model.Ref
@@ -30,7 +33,7 @@ export interface SessionRequest {
    * not updated when a hook edits `text`. Experimental.
    */
   system: Array<SystemPart>
-  messages: Array<Message>
+  messages: Array<SessionRequestMessage>
   options: SessionRequestOptions
 }
 

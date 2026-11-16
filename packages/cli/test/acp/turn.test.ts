@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 import { ACPElicitation } from "../../src/acp/elicitation"
 import {
+  backgroundShell,
   childCreated,
   delivered,
   durableEvent,
   ephemeralEvent,
   permissionAsked,
+  shellNotice,
   startSession,
   succeeded,
   textDelta,
@@ -190,6 +192,40 @@ describe("acp turn events over the wire", () => {
       { messageId: "msg_chat", content: { text: "chat reply" } },
       { messageId: "msg_reaction_2", content: { text: "second reaction" } },
       { messageId: "msg_reaction_3", content: { text: "followup reaction" } },
+    ])
+  })
+
+  test("streams resumed turns after background shells finish", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id, text }) =>
+        turn(
+          sessionID,
+          id,
+          ...backgroundShell(sessionID, `sh_${text}`),
+          // The second shell finishes as its turn ends: the notice is queued in it but wakes the session afterwards.
+          ...(text === "second" ? [shellNotice(sessionID, "msg_notice_second", "sh_second")] : []),
+        ),
+    })
+    const sessionID = acp.sessionId
+
+    expect((await acp.prompt(sessionID, "first")).stopReason).toBe("end_turn")
+    acp.server.send(
+      shellNotice(sessionID, "msg_notice_first", "sh_first"),
+      ...turn(sessionID, "msg_notice_first", textDelta(sessionID, "msg_reaction_1", "first reaction")),
+    )
+    await acp.waitForUpdate(({ update }) => JSON.stringify(update).includes("first reaction"))
+
+    expect((await acp.prompt(sessionID, "second")).stopReason).toBe("end_turn")
+    acp.server.send(...turn(sessionID, "msg_notice_second", textDelta(sessionID, "msg_reaction_2", "second reaction")))
+    await acp.waitForUpdate(({ update }) => JSON.stringify(update).includes("second reaction"))
+
+    expect(
+      turnUpdates(acp.updates)
+        .map(({ update }) => update)
+        .filter((update) => update.sessionUpdate === "agent_message_chunk"),
+    ).toMatchObject([
+      { messageId: "msg_reaction_1", content: { text: "first reaction" } },
+      { messageId: "msg_reaction_2", content: { text: "second reaction" } },
     ])
   })
 

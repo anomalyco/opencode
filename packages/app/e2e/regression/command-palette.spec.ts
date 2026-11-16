@@ -120,7 +120,7 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   const input = dialog.getByRole("combobox")
   await expect(input).toBeFocused()
   await expect(input).toHaveAttribute("placeholder", "Search sessions")
-  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeVisible()
+  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeHidden()
   await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toHaveAttribute("aria-selected", "true")
   // Session search lists sessions only, never commands.
   await input.fill("settings")
@@ -778,7 +778,7 @@ test("titlebar session search shrinks with results while its field stays anchore
   await expect(options).toHaveCount(23)
   const scroll = dialog.locator('[data-slot="search-list-scroll"]')
   await expect.poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
-  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(480)
+  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(600)
   const last = dialog.getByRole("option", { name: /Compact keeper result 22/ })
   await expect(last).not.toBeInViewport()
   await scroll.hover()

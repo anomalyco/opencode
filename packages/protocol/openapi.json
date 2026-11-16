@@ -1075,7 +1075,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<subagent>` report to the parent's inbox and wakes the parent unless it has a staged revert."
                   },
                   "title": {
                     "anyOf": [
@@ -16540,6 +16541,9 @@
               "auto": {
                 "type": "boolean"
               },
+              "background": {
+                "type": "boolean"
+              },
               "keep": {
                 "type": "object",
                 "properties": {
@@ -16661,9 +16665,6 @@
               "advisor": {
                 "type": "boolean"
               },
-              "background_compaction": {
-                "type": "boolean"
-              },
               "media_blob": {
                 "type": "boolean"
               },
@@ -16673,13 +16674,13 @@
               "artifacts": {
                 "type": "boolean"
               },
-              "shell_timeout_background": {
-                "type": "boolean"
-              },
               "console_watches": {
                 "type": "boolean"
               },
               "mcp_events": {
+                "type": "boolean"
+              },
+              "full_codemode": {
                 "type": "boolean"
               },
               "part_rows": {
@@ -17167,6 +17168,9 @@
           },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
+          },
+          "tls": {
+            "$ref": "#/components/schemas/Provider.Tls"
           }
         },
         "allOf": [
@@ -22019,6 +22023,9 @@
           },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
+          },
+          "tls": {
+            "$ref": "#/components/schemas/Provider.Tls"
           }
         },
         "allOf": [
@@ -22027,6 +22034,24 @@
             "additionalProperties": {}
           }
         ]
+      },
+      "Provider.Tls": {
+        "type": "object",
+        "properties": {
+          "cert": {
+            "type": "string",
+            "description": "PEM client certificate, usually `{file:/path/to/client.pem}`"
+          },
+          "key": {
+            "type": "string",
+            "description": "PEM private key, usually `{file:/path/to/client.key}`"
+          },
+          "passphrase": {
+            "type": "string"
+          }
+        },
+        "required": ["cert", "key"],
+        "additionalProperties": false
       },
       "Provider.Transport": {
         "type": "string",

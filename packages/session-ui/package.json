@@ -1,6 +1,6 @@
 {
   "name": "@opencode/session-ui",
-  "version": "2.2.7",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "license": "MIT",
