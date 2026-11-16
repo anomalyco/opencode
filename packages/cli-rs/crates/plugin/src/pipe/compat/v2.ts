@@ -316,16 +316,24 @@ export function context(base: Base, carrier: Carrier) {
     answering = undefined
     resolve?.(undefined)
   }
-  // The dialog this one replaces answers nothing, as TS resolves it with undefined.
-  const ask = (dialog: Json) =>
+  // The dialog this one replaces answers nothing, as TS resolves it with undefined. A dialog given as a function is
+  // built a microtask later, so a `dialog.set` the plugin calls right after sizes it, as TS's sizes the dialog shown.
+  const ask = (dialog: Json | (() => Json)) =>
     new Promise<string | undefined>((resolve) => {
       settle()
       unshow()
       answering = resolve
       asked++
       const dismissed = { type: "command", name: DISMISS, input: String(asked) }
-      const asking = { ...dialog, action: { type: "command", name: ANSWER } }
-      void carrier.effect({ type: "dialog", dialog: { type: "dismissable", dialog: asking, dismissed } })
+      const mine = asked
+      const send = () => {
+        // Another dialog came first: this one never shows.
+        if (asked !== mine) return
+        const asking = { ...(typeof dialog === "function" ? dialog() : dialog), action: { type: "command", name: ANSWER } }
+        void carrier.effect({ type: "dialog", dialog: { type: "dismissable", dialog: asking, dismissed } })
+      }
+      if (typeof dialog === "function") queueMicrotask(send)
+      else send()
     })
 
   // `ui.dialog.show`: the plugin's own JSX in the host's live panel dialog (`Dialog::Panel`), the contract's dialog that
@@ -915,6 +923,8 @@ export function context(base: Base, carrier: Carrier) {
           // The host tells a plugin's search each query (P6c's `query`): it lists the rows the search returns, in place
           // under the select's key.
           const key = `search.${asked + 1}`
+          // A new dialog is medium until the plugin's `dialog.set` says otherwise, as TS's.
+          presentation = { size: "medium", centered: false }
           const dialog = () => ({
             type: "select",
             title: options.title,
@@ -922,6 +932,7 @@ export function context(base: Base, carrier: Carrier) {
             options: rows(),
             ...current(),
             ...(search ? { key, query: { type: "command", name: QUERY } } : {}),
+            ...(["large", "xlarge"].includes(presentation.size) ? { size: presentation.size } : {}),
           })
           const run = search
             ? (query: string) => {
@@ -931,7 +942,7 @@ export function context(base: Base, carrier: Carrier) {
               }
             : undefined
           searching = run
-          const answer = await ask(dialog())
+          const answer = await ask(dialog)
           // A select that replaced this one searches on.
           if (searching === run) searching = undefined
           // A keyed select stays open as a row is picked.
