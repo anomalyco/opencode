@@ -71,10 +71,58 @@ story("reviews the actual application target only after a trusted click", async 
 story("moves the native page when a fixed-size pane changes position", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   const x = Number(await native.getAttribute("data-x"))
+  const calls = Number(await native.getAttribute("data-layout-calls"))
   await page.locator("#browser-panel").evaluate((pane) => {
+    pane.style.translate = "-12px"
+    pane.style.translate = "-24px"
     pane.style.translate = "-39px"
   })
   await expect(native).toHaveAttribute("data-x", String(x - 39))
+  await expect(native).toHaveAttribute("data-layout-calls", String(calls + 1))
+})
+
+story("reconnects the observation spine after its panel reattaches", async ({ page }) => {
+  const native = page.getByTestId("native-Alpha")
+  const x = Number(await native.getAttribute("data-x"))
+  const detached = await page.locator("#browser-panel").evaluateHandle((box) => {
+    const marker = document.createComment("panel slot")
+    box.replaceWith(marker)
+    const fragment = document.createDocumentFragment()
+    fragment.append(box)
+    return { marker, fragment }
+  })
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await detached.evaluate(({ marker, fragment }) => { marker.replaceWith(fragment) })
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await page.locator("#browser-panel").evaluate((box) => { box.parentElement!.style.translate = "-31px" })
+  await expect(native).toHaveAttribute("data-x", String(x - 31))
+})
+
+story("a spinner inside a persistent floating surface does not measure the pane each frame", async ({ page }) => {
+  const native = page.getByTestId("native-Alpha")
+  const reads = await page.locator("#browser-panel").evaluate(async (panel) => {
+    const box = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!
+    const rect = box.getBoundingClientRect.bind(box)
+    const count = { reads: 0 }
+    box.getBoundingClientRect = () => { count.reads++; return rect() }
+    const surface = document.createElement("div")
+    surface.dataset.floatingOverlay = ""
+    const spinner = document.createElement("span")
+    const style = document.createElement("style")
+    style.textContent = "@keyframes fixture-spin { to { transform: rotate(1turn) } }"
+    spinner.style.cssText = "display:block; animation:fixture-spin 100ms linear infinite"
+    surface.append(style, spinner)
+    document.body.append(surface)
+    const cycle = () => new Promise<void>(resolve => spinner.addEventListener("animationiteration", () => resolve(), { once: true }))
+    await cycle()
+    const initial = count.reads
+    await cycle()
+    const total = count.reads - initial
+    surface.remove()
+    return total
+  })
+  expect(reads).toBe(0)
+  await expect(native).toHaveAttribute("data-visible", "true")
 })
 
 story("hides a native page when another takes the pane, the pane hides, or it unmounts", async ({ page }) => {

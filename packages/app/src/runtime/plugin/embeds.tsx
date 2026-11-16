@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from "solid-js"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { embedBounds, overlaps } from "./embed-geometry"
-import { observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
+import { frameLoop, observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
 import type { EmbedProps, Embeds } from "@opencode/plugin/gui"
 import type { Bridge } from "@opencode/plugin/gui/host"
 import {
@@ -18,6 +18,7 @@ import {
   type EmbedStillEffect,
   type EmbedStillEvent,
   type EmbedStillState,
+  type KeptStill,
 } from "./embed-flight-machine"
 import {
   INITIAL_SNAPSHOT_STATE,
@@ -32,7 +33,9 @@ import {
 } from "./embed-snapshot-machine"
 
 const geometry =
-  /^(inset|left|right|top|bottom|translate|transform|scale|rotate|margin|padding|flex|grid|gap|row-gap|column-gap)|(^|-)(width|height)$/
+  /^(inset|left|right|top|bottom|translate|transform|scale|rotate|margin|padding|flex|grid|gap|row-?gap|column-?gap)|(?:width|height)$/i
+
+const overlay = '[data-floating-overlay], [data-popper-positioner]:not(:has([role="tooltip"])), [aria-modal="true"], dialog[open], :popover-open'
 
 type Input = {
   readonly bridge: Bridge | undefined
@@ -95,9 +98,10 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   const documentVisible = createMemo(() => embedState().documentVisible)
   // Decoded flight stills, kept decoded so a flight's first frame paints them without a blank decode.
   const decodedStills = new Map<string, HTMLImageElement>()
+  const [coverStill, setCoverStill] = createSignal<KeptStill>()
 
   let element: HTMLDivElement | undefined
-  let frame: number | undefined
+  let frame: (() => void) | undefined
   let layout: string | undefined
   const motions = new Set<Animation>()
   // The embed the last layout went to; it hides when another one takes the box.
@@ -108,17 +112,26 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   const canvas = document.createElement("canvas")
   canvas.width = canvas.height = 1
   const paint = canvas.getContext("2d", { willReadFrequently: true })
+  const colors = new Map<string, readonly [number, number, number, number]>()
 
   // Let the browser resolve colors, including custom themes using color formats
   // that Electron's color parser cannot read.
   const resolve = (color: string) => {
     if (!paint) return undefined
+    const kept = colors.get(color)
+
+    if (kept) return kept
     paint.clearRect(0, 0, 1, 1)
     paint.fillStyle = color
     paint.fillRect(0, 0, 1, 1)
     const data = paint.getImageData(0, 0, 1, 1).data
 
-    return [data[0], data[1], data[2], data[3]] as const
+    const value = [data[0], data[1], data[2], data[3]] as const
+
+    if (colors.size >= 4) colors.clear()
+    colors.set(color, value)
+
+    return value
   }
 
   const revoke = (url: string) => {
@@ -229,6 +242,10 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   }
 
   const hide = () => {
+    setCoverStill(undefined)
+    frame?.()
+    frame = undefined
+    layout = undefined
     if (placed) props.bridge.embed(placed)
     placed = undefined
 
@@ -238,12 +255,11 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   // The native embed always paints above the DOM, so hide it while a floating
   // menu, select, or popover overlaps it. Tooltips are excluded.
   const covered = (rect: DOMRect) => {
-    const floating = document.querySelectorAll(
-      '[data-popper-positioner]:not(:has([role="tooltip"])), .toast-v2:not([data-visible="false"])',
-    )
+    const floating = document.querySelectorAll(overlay)
 
     // An index loop: this runs every frame of a transition or a drag.
     for (let index = 0; index < floating.length; index++) {
+      if (floating[index].contains(element ?? null)) continue
       const r = floating[index].getBoundingClientRect()
 
       if (overlaps(rect, r)) return true
@@ -275,7 +291,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     if (!element) return
     const id = props.id
 
-    if (!id) return hide()
+    if (!id) return
     const rect = element.getBoundingClientRect()
     const zoom = props.input.zoom()
     const bounds = embedBounds(rect, zoom)
@@ -290,12 +306,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
     // A dialog's scrim covers the box like floating content does, so it dims a still of the page
     // instead of a blank box, and the page does not blink out and back as the dialog opens and closes.
-    const cover = !!props.frozen || props.input.dialog() || covered(rect)
-
-    // Keep the embed on screen as a still under the floating content. The native view
-    // stays visible until the still is on screen, so the box never flashes blank.
-    syncSnapshot(id, shown, cover)
-    const visible = shown && !selectSnapshotHidesNative(current().snapshot, id, cover)
+    const cover = !!props.frozen || (props.input.dialog() && !element.closest('[role="dialog"], [role="alertdialog"], dialog[open]')) || covered(rect)
 
     // The cutout exposes the app backdrop outside the rounded card, not the embed inside it.
     const color =
@@ -305,6 +316,18 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const ring = props.radius ? cardRing(element) : undefined
     const viewport = { width: Math.round(window.innerWidth * zoom), height: Math.round(window.innerHeight * zoom) }
 
+    return { id, shown, cover, bounds, color, ring, viewport, rect, zoom }
+  }
+
+  const place = (boxLayout: NonNullable<ReturnType<typeof measure>>) => {
+    const { id, shown, cover, bounds, color, ring, viewport, rect, zoom } = boxLayout
+    syncSnapshot(id, shown, cover)
+    const still = current().still
+    const kept = still.status !== "disposed" && still.kept
+    const warm = shown && cover && kept && kept.id === id && kept.page === props.page && kept.width === bounds.width / zoom && kept.height === bounds.height / zoom ? kept : undefined
+    setCoverStill(warm)
+    const visible = shown && !warm && !selectSnapshotHidesNative(current().snapshot, id, cover)
+
     const next = `${id}:${visible}:${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
 
     if (next === layout) return
@@ -313,10 +336,9 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const background = resolve(color)
     const border = ring && resolve(ring.color)
 
-    if (placed !== id) hide()
     placed = id
 
-    // The still lines up with the view's device-pixel-rounded bounds, so swapping one for the other moves nothing.
+    // Electron takes integer DIPs. A DIP-rounded edge need not be an integer physical pixel on a scaled display.
     if (visible)
       dispatchStill({
         type: "placement.changed",
@@ -347,19 +369,21 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     )
   }
 
+  let measured: ReturnType<typeof measure>
   const tick = () => {
     frame = undefined
-    measure()
+    if (measured) place(measured)
 
     motions.forEach((motion) => {
       if (motion.playState !== "running") motions.delete(motion)
     })
 
     if (motions.size) schedule()
+    return false
   }
 
   const schedule = () => {
-    if (frame === undefined) frame = requestAnimationFrame(tick)
+    frame ??= frameLoop.addMeasured(() => { measured = measure() }, tick)
   }
 
   // A navigation or reload makes the kept still another page's, as does another embed taking the box.
@@ -394,6 +418,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
         // The native views are not clipped by the retained panel's DOM. Hide before the next
         // animation frame so closing the panel cannot leave the embed above the app.
         if (!props.visible || !documentVisible() || moving || !props.id) return hide()
+        if (placed && placed !== props.id) hide()
         schedule()
       },
     ),
@@ -405,9 +430,21 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     // can move a fixed-size pane. Only the portals outside the app root need subtree observation (menus and toasts).
     const sizes = new ResizeObserver(schedule)
     const nodes = new Set<Element>()
+    const neighbors = new Set<Element>()
 
     const changes = new MutationObserver((records) => {
+      if (!box.isConnected) {
+        if (!nodes.size) return
+        sizes.disconnect()
+        changes.disconnect()
+        changes.observe(document, { childList: true, subtree: true })
+        hide()
+        nodes.clear()
+
+        return
+      }
       if (
+        !nodes.size ||
         records.some(
           (record) => record.type === "childList" && record.target instanceof Element && nodes.has(record.target),
         )
@@ -418,6 +455,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
     const observe = () => {
       nodes.clear()
+      neighbors.clear()
       sizes.disconnect()
       changes.disconnect()
 
@@ -428,6 +466,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
         for (const sibling of node.parentElement?.children ?? []) {
           if (sibling === node) continue
+          neighbors.add(sibling)
           sizes.observe(sibling)
           const portal = sibling.parentElement === document.body
           changes.observe(sibling, { attributes: true, childList: portal, subtree: portal })
@@ -436,29 +475,62 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     }
 
     observe()
-    createEventListener(document, ["transitionstart", "animationstart"], (event) => {
-      const target = event.target
-
-      if (
-        !(target instanceof Element) ||
-        (!nodes.has(target) &&
-          !nodes.has(target.parentElement!) &&
-          !target.closest("[data-popper-positioner], .toast-v2"))
-      )
-        return
-
+    const track = (target: Element) => {
       for (const motion of target.getAnimations()) {
         if (
           motion.effect instanceof KeyframeEffect &&
+          motion.effect.target === target &&
+          Number.isFinite(motion.effect.getComputedTiming().endTime) &&
           motion.effect.getKeyframes().some((key) => Object.keys(key).some((property) => geometry.test(property)))
         )
           motions.add(motion)
       }
+    }
+
+    // Web Animations do not send CSS animation events. A tight intersection root wakes on the first displaced
+    // edge, then the animation itself drives the frames; no permanent frame job or patched Element.animate.
+    let position: IntersectionObserver | undefined
+    const anchor = (rect: DOMRectReadOnly) => {
+      position?.disconnect()
+      const inset = [rect.top, window.innerWidth - rect.right, window.innerHeight - rect.bottom, rect.left]
+      position = new IntersectionObserver(([entry]) => {
+        if (!entry || !box.isConnected) return
+        const next = entry.boundingClientRect
+
+        if (next.x === rect.x && next.y === rect.y && next.width === rect.width && next.height === rect.height) return
+        nodes.forEach(track)
+        schedule()
+        anchor(next)
+      }, { rootMargin: inset.map((n) => `${-Math.floor(n)}px`).join(" "), threshold: 1 })
+      position.observe(box)
+    }
+    anchor(box.getBoundingClientRect())
+    onCleanup(() => position?.disconnect())
+    createEventListener(document, ["transitionrun", "transitionstart", "animationstart"], (event) => {
+      const target = event.target
+
+      if (!(target instanceof Element) || (!nodes.has(target) && !neighbors.has(target) && !target.matches(overlay))) return
+      track(target)
 
       schedule()
     })
-    createEventListener(document, "scroll", schedule, { capture: true, passive: true })
+    createEventListener(document, "scroll", (event) => {
+      if (event.target === document || (event.target instanceof Element && nodes.has(event.target))) schedule()
+    }, { capture: true, passive: true })
+    const scale = () => window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+    let density = scale()
+    const changed = () => {
+      density.removeEventListener("change", changed)
+      density = scale()
+      density.addEventListener("change", changed)
+      schedule()
+    }
+    density.addEventListener("change", changed)
+    onCleanup(() => density.removeEventListener("change", changed))
     createEventListener(window, "resize", schedule)
+    createEventListener(document, "toggle", (event) => {
+      if (event.target instanceof Element && event.target.matches("[popover], dialog")) schedule()
+    }, true)
     createEventListener(window.matchMedia("(prefers-color-scheme: dark)"), "change", schedule)
     onCleanup(() => {
       motions.clear()
@@ -483,7 +555,6 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     ),
   )
   onCleanup(() => {
-    if (frame !== undefined) cancelAnimationFrame(frame)
     hide()
     // Stops every timer and gives up every still, including ones still decoding.
     dispatchSnapshot(DISPOSED_EVENT)
@@ -494,7 +565,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
   const snapshotUrl = createMemo(() => selectSnapshotUrl(embedState().snapshot, props.id, props.visible))
 
-  const flightStill = createMemo(() => selectFlightStill(embedState().flight, embedState().still, props.id, props.page))
+  const flightStill = createMemo(() => selectFlightStill(embedState().flight, embedState().still, props.id, props.page) ?? (snapshotUrl() ? undefined : coverStill()))
 
   return (
     <div ref={element} class={props.class}>

@@ -88,6 +88,7 @@ type PaneFixtureState = {
   loadErrors: Record<string, string | undefined>
   error: string | undefined
   layouts: Record<string, BridgeLayout | undefined>
+  layoutCalls: number
   covered: boolean
   /** A panel is in flight, as the host's panel motion reports it. */
   moving: boolean
@@ -195,6 +196,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       loadErrors: scenario === "Failed" ? { Alpha: "ERR_CONNECTION_REFUSED" } : {},
       error: scenario === "Suspended" ? "browser.pane.suspended" : undefined,
       layouts: {},
+      layoutCalls: 0,
       covered: false,
       moving: false,
       width: 640,
@@ -245,7 +247,10 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
         return () => windowFocus.delete(listener)
       },
-      embed: (id, layout) => setStore("layouts", id, layout),
+      embed: (id, layout) => batch(() => {
+        setStore("layoutCalls", count => count + 1)
+        setStore("layouts", id, layout)
+      }),
       capture: async () => {
         const count = store.captures + 1
         setStore("captures", count)
@@ -914,6 +919,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
               <div
                 data-testid={`native-${tab.title}`}
                 data-x={store.layouts[`embed-${tab.title}`]?.bounds?.x}
+                data-layout-calls={store.layoutCalls}
                 data-visible={!!store.layouts[`embed-${tab.title}`]?.visible}
                 style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
               >
