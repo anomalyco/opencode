@@ -231,6 +231,8 @@ export default {
   "prompt.permission.block": "Block",
   "prompt.permission.once": "Allow this time",
   "prompt.permission.always": "Always allow",
+  "prompt.permission.session": "Allow until you quit",
+  "prompt.permission.agent": "The agent is working in this tab; your answer is for this request only.",
   "prompt.system.camera.win32":
     "Windows blocks the camera for apps. Turn on camera access in Settings > Privacy & security > Camera.",
   "prompt.system.microphone.win32":
@@ -241,7 +243,7 @@ export default {
   "prompt.system.camera.other": "The system did not let OpenCode use the camera.",
   "prompt.system.microphone.other": "The system did not let OpenCode use the microphone.",
   "settings.sites.title": "Site permissions",
-  "settings.sites.note": "Sites ask again for anything not listed here. Signing out everywhere keeps these.",
+  "settings.sites.note": "These apply in tabs you browse. Sites ask again for anything not listed here, in tabs the agent works in, and in remote servers' tabs. Signing out everywhere keeps these.",
   "settings.sites.none": "No saved site permissions",
   "settings.sites.allow": "Allowed",
   "settings.sites.block": "Blocked",

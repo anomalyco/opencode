@@ -412,7 +412,14 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
           when={permission()}
           fallback={<Show when={system()}>{(ask) => <>{ctx.t(`prompt.system.${ask().device}.${ask().platform}`)}</>}</Show>}
         >
-          {(ask) => <>{permissionText(ctx, ask())}</>}
+          {(ask) => (
+            <>
+              {permissionText(ctx, ask())}
+              <Show when={ask().agent}>
+                <span class="ms-1 font-[530]">{ctx.t("prompt.permission.agent")}</span>
+              </Show>
+            </>
+          )}
         </Show>
         <Show when={props.view.waiting > 0}>
           <span class="ms-2 text-v2-text-text-muted">{ctx.plural("prompt.waiting", props.view.waiting)}</span>
@@ -426,20 +433,20 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
                 ref={first}
                 size="small"
                 variant="ghost"
-                onClick={() => props.answer({ kind: "permission", allow: false, remember: ask().remember })}
+                onClick={() => props.answer({ kind: "permission", allow: false, remember: ask().remember !== "none" })}
               >
-                {ctx.t(ask().remember ? "prompt.permission.never" : "prompt.permission.block")}
+                {ctx.t(ask().remember === "kept" ? "prompt.permission.never" : "prompt.permission.block")}
               </Button>
               <Button
                 size="small"
-                variant={ask().remember ? "neutral" : "contrast"}
+                variant={ask().remember !== "none" ? "neutral" : "contrast"}
                 onClick={() => props.answer({ kind: "permission", allow: true, remember: false })}
               >
                 {ctx.t("prompt.permission.once")}
               </Button>
-              <Show when={ask().remember}>
+              <Show when={ask().remember !== "none"}>
                 <Button size="small" variant="contrast" onClick={() => props.answer({ kind: "permission", allow: true, remember: true })}>
-                  {ctx.t("prompt.permission.always")}
+                  {ctx.t(ask().remember === "kept" ? "prompt.permission.always" : "prompt.permission.session")}
                 </Button>
               </Show>
             </>

@@ -76,11 +76,55 @@ describe("a tab's permission requests", () => {
     expect(answers).toEqual([true])
     expect(tab.prompts.permissions.check("notifications", "https://maps.example/", details)).toBe(true)
 
-    tab.sites.keep({ origin: "https://maps.example", permission: "notifications", setting: "block" })
+    tab.sites.keep({ kind: "profile" }, { origin: "https://maps.example", permission: "notifications", setting: "block" })
     tab.prompts.permissions.request("notifications", details, (granted) => answers.push(granted))
 
     expect(answers).toEqual([true, false])
     expect(tab.prompts.permissions.check("notifications", "https://maps.example/", details)).toBe(false)
+    expect(tab.shown()).toBeNull()
+  })
+})
+
+describe("what the user allowed a site, in a tab the agent drives", () => {
+  const details = { isMainFrame: true, requestingUrl: "https://meet.example/" }
+
+  test("is asked again, says the agent works there, and offers nothing to keep", async () => {
+    const tab = page("https://meet.example", { agent: true })
+    tab.sites.keep({ kind: "profile" }, { origin: "https://meet.example", permission: "notifications", setting: "allow" })
+    const answers: boolean[] = []
+    tab.prompts.permissions.request("notifications", details, (granted) => answers.push(granted))
+
+    expect(answers).toEqual([])
+    expect(tab.shown()?.ask).toMatchObject({ kind: "permission", remember: "none", agent: true })
+    expect(tab.prompts.permissions.check("notifications", "https://meet.example/", details)).toBe(false)
+
+    // Allow this time is for that request alone, whatever the answer claims to keep.
+    await tab.prompts.answer(tab.shown()?.id ?? 0, { kind: "permission", allow: true, remember: true })
+    expect(answers).toEqual([true])
+    tab.prompts.permissions.request("geolocation", details, (granted) => answers.push(granted))
+    tab.prompts.permissions.request("notifications", details, (granted) => answers.push(granted))
+    expect(answers).toEqual([true])
+    expect(tab.shown()?.waiting).toBe(1)
+    expect(tab.sites.list()).toEqual([{ origin: "https://meet.example", permission: "notifications", setting: "allow" }])
+  })
+
+  test("still blocks silently what the user blocked", () => {
+    const tab = page("https://meet.example", { agent: true })
+    tab.sites.keep({ kind: "profile" }, { origin: "https://meet.example", permission: "notifications", setting: "block" })
+    const answers: boolean[] = []
+    tab.prompts.permissions.request("notifications", details, (granted) => answers.push(granted))
+
+    expect(answers).toEqual([false])
+    expect(tab.shown()).toBeNull()
+  })
+
+  test("is granted without asking in a tab the user drives", () => {
+    const tab = page("https://meet.example")
+    tab.sites.keep({ kind: "profile" }, { origin: "https://meet.example", permission: "notifications", setting: "allow" })
+    const answers: boolean[] = []
+    tab.prompts.permissions.request("notifications", details, (granted) => answers.push(granted))
+
+    expect(answers).toEqual([true])
     expect(tab.shown()).toBeNull()
   })
 })
@@ -130,9 +174,9 @@ function page(origin: string, options: { agent?: boolean } = {}) {
   const prompts = createPagePrompts({
     // SAFETY: the prompts read only the members above of a page's contents, and its events.
     contents: contents as unknown as WebContents,
-    remote: false,
+    scope: { kind: "profile" },
     sites,
-    agentCaused: () => !!options.agent,
+    agentDriven: () => !!options.agent,
     top: () => contents.mainFrame.url,
     dialog: () => null,
     dialogFrame: () => undefined,

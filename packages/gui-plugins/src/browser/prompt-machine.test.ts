@@ -28,7 +28,8 @@ const camera: WaitingRequest = {
   key: "https://a.example\ncamera",
   origin: "https://a.example",
   permissions: ["camera"],
-  remember: true,
+  remember: "kept",
+  agent: false,
 }
 
 const signIn: WaitingRequest = {

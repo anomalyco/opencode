@@ -14,8 +14,10 @@ export type Waiting =
       readonly key: string
       readonly origin: string
       readonly permissions: readonly PermissionKind[]
-      /** The decision may be kept for later visits; false for local previews and a remote server's own machine. */
-      readonly remember: boolean
+      /** How long the user may keep the decision: in the profile, for a remote server's run, or not at all. */
+      readonly remember: "kept" | "session" | "none"
+      /** The agent drives the tab: the answer is for this request only. */
+      readonly agent: boolean
     }
   | {
       readonly kind: "auth"

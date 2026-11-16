@@ -764,7 +764,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
                       kind: "permission",
                       site: { kind: "web", host: "alpha.example", embedded: false },
                       permissions: ["camera", "microphone"],
-                      remember: true,
+                      remember: "kept",
+                      agent: false,
                     },
                   },
                 })

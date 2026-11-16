@@ -6,15 +6,19 @@ import {
   originOf,
   permissionKinds,
   requesterOrigin,
-  keptApplies,
+  decisionKey,
+  decisionLife,
   siteAnswer,
   trustworthy,
+  type DecisionScope,
   type PermissionKind,
 } from "./site-permissions"
 
-const top = { origin: "https://meet.example", top: "https://meet.example", mainFrame: true }
+const top = { origin: "https://meet.example", top: "https://meet.example", mainFrame: true, agentDriven: false }
 
-const undecided = () => undefined
+const undecided = { kept: () => undefined, visit: () => undefined }
+
+const allowed = { kept: () => "allow" as const, visit: () => undefined }
 
 describe("what a page's permission request gets before anyone is asked", () => {
   test("asks for the features it lists, and denies every other one without asking", () => {
@@ -27,7 +31,7 @@ describe("what a page's permission request gets before anyone is asked", () => {
   })
 
   test("follows the decision for each feature: all allowed allows, any blocked blocks", () => {
-    const decided = (settings: Partial<Record<PermissionKind, "allow" | "block">>) => (kind: PermissionKind) => settings[kind]
+    const decided = (settings: Partial<Record<PermissionKind, "allow" | "block">>) => ({ kept: (kind: PermissionKind) => settings[kind], visit: () => undefined })
 
     expect(siteAnswer({ ...top, kinds: ["camera", "microphone"] }, decided({ camera: "allow", microphone: "allow" }))).toBe("allow")
     expect(siteAnswer({ ...top, kinds: ["camera", "microphone"] }, decided({ camera: "allow" }))).toBe("ask")
@@ -35,11 +39,10 @@ describe("what a page's permission request gets before anyone is asked", () => {
   })
 
   test("denies an embedded page of another origin even when the top site is allowed", () => {
-    const allowed = () => "allow" as const
 
-    expect(siteAnswer({ origin: "https://ads.example", top: "https://meet.example", mainFrame: false, kinds: ["camera"] }, allowed)).toBe("block")
-    expect(siteAnswer({ origin: "https://meet.example", top: "https://meet.example", mainFrame: false, kinds: ["camera"] }, allowed)).toBe("allow")
-    expect(siteAnswer({ origin: "null", top: "https://meet.example", mainFrame: false, kinds: ["camera"] }, allowed)).toBe("block")
+    expect(siteAnswer({ origin: "https://ads.example", top: "https://meet.example", mainFrame: false, agentDriven: false, kinds: ["camera"] }, allowed)).toBe("block")
+    expect(siteAnswer({ origin: "https://meet.example", top: "https://meet.example", mainFrame: false, agentDriven: false, kinds: ["camera"] }, allowed)).toBe("allow")
+    expect(siteAnswer({ origin: "null", top: "https://meet.example", mainFrame: false, agentDriven: false, kinds: ["camera"] }, allowed)).toBe("block")
   })
 
   test("needs a secure context, as Chromium counts one", () => {
@@ -48,7 +51,7 @@ describe("what a page's permission request gets before anyone is asked", () => {
 
     for (const origin of ["http://a.example", "http://192.168.1.4", "ftp://a.example", "null"]) {
       expect(trustworthy(origin)).toBe(false)
-      expect(siteAnswer({ origin, top: origin, mainFrame: true, kinds: ["notifications"] }, () => "allow")).toBe("block")
+      expect(siteAnswer({ origin, top: origin, mainFrame: true, agentDriven: false, kinds: ["notifications"] }, allowed)).toBe("block")
     }
   })
 
@@ -83,10 +86,9 @@ describe("what a page's permission request gets before anyone is asked", () => {
   })
 
   test("denies a page whose own origin is opaque, as a CSP sandbox makes it, even when its address names an allowed site", () => {
-    const allowed = () => "allow" as const
 
-    expect(siteAnswer({ origin: "null", top: "null", mainFrame: true, kinds: ["notifications"] }, allowed)).toBe("block")
-    expect(siteAnswer({ origin: "https://bank.example", top: "null", mainFrame: true, kinds: ["notifications"] }, allowed)).toBe("block")
+    expect(siteAnswer({ origin: "null", top: "null", mainFrame: true, agentDriven: false, kinds: ["notifications"] }, allowed)).toBe("block")
+    expect(siteAnswer({ origin: "https://bank.example", top: "null", mainFrame: true, agentDriven: false, kinds: ["notifications"] }, allowed)).toBe("block")
     expect(clipboardWrite({ origin: "https://bank.example", top: "null", mainFrame: true }, false)).toBe(false)
   })
 
@@ -95,16 +97,61 @@ describe("what a page's permission request gets before anyone is asked", () => {
     expect(originOf("oc-preview://3f1c/C:/repo/page.html")).toBe("oc-preview://3f1c")
     expect(originOf("data:text/html,x")).toBe("null")
   })
+})
 
-  test("keeps a remote server's own machine apart from this desktop's, for reading and writing", () => {
-    // Its localhost is another computer, over any scheme.
-    for (const origin of ["http://localhost:3000", "https://localhost:3000", "https://127.0.0.1:8443", "https://app.localhost"])
-      expect(keptApplies(origin, true)).toBe(false)
-    // Through its network only TLS proves the same site; plain HTTP to a public name is not a secure context anyway.
-    expect(keptApplies("https://meet.example", true)).toBe(true)
-    expect(keptApplies("http://meet.example", true)).toBe(false)
-    expect(keptApplies("http://localhost:3000", false)).toBe(true)
-    expect(keptApplies("oc-preview://3f1c", false)).toBe(false)
+describe("whose decisions apply to a request", () => {
+  const meet = { origin: "https://meet.example", top: "https://meet.example", mainFrame: true, kinds: ["microphone"] as const }
+  const profile = { kind: "profile" } as const
+  const server = { kind: "server", partition: "opencode-remote-a" } as const
+  const other = { kind: "server", partition: "opencode-remote-b" } as const
+
+  // A store keyed only by decisionKey, as createSitePermissions keys a server's decisions.
+  const store = (decisions: [DecisionScope, string, PermissionKind, "allow" | "block"][]) => {
+    const kept = new Map(decisions.map(([scope, origin, kind, setting]) => [decisionKey(scope, origin, kind), setting]))
+
+    return (scope: DecisionScope, visit: Partial<Record<PermissionKind, "allow" | "block">> = {}) => ({
+      kept: (kind: PermissionKind) => kept.get(decisionKey(scope, meet.origin, kind)),
+      visit: (kind: PermissionKind) => visit[kind],
+    })
+  }
+
+  test("an allow the user gave applies only in a tab the user drives", () => {
+    const decided = store([[profile, meet.origin, "microphone", "allow"]])
+
+    expect(siteAnswer({ ...meet, agentDriven: false }, decided(profile))).toBe("allow")
+    expect(siteAnswer({ ...meet, agentDriven: true }, decided(profile))).toBe("ask")
+    // This visit's allow too: the agent's script asks again.
+    expect(siteAnswer({ ...meet, agentDriven: true }, store([])(profile, { microphone: "allow" }))).toBe("ask")
+  })
+
+  test("a block, kept or for the visit, blocks whoever drives the tab", () => {
+    for (const agentDriven of [false, true]) {
+      expect(siteAnswer({ ...meet, agentDriven }, store([[profile, meet.origin, "microphone", "block"]])(profile, { microphone: "allow" }))).toBe("block")
+      expect(siteAnswer({ ...meet, agentDriven }, store([[profile, meet.origin, "microphone", "allow"]])(profile, { microphone: "block" }))).toBe("block")
+    }
+  })
+
+  test("a decision stays in the partition it was made in, both ways and between servers", () => {
+    const decided = store([
+      [profile, meet.origin, "microphone", "allow"],
+      [server, meet.origin, "camera", "allow"],
+    ])
+
+    expect(siteAnswer({ ...meet, agentDriven: false }, decided(server))).toBe("ask")
+    expect(siteAnswer({ ...meet, kinds: ["camera"], agentDriven: false }, decided(profile))).toBe("ask")
+    expect(siteAnswer({ ...meet, kinds: ["camera"], agentDriven: false }, decided(server))).toBe("allow")
+    expect(siteAnswer({ ...meet, kinds: ["camera"], agentDriven: false }, decided(other))).toBe("ask")
+  })
+
+  test("a decision outlives its visit in the profile, for a server's run, and never for a preview", () => {
+    expect(decisionLife(profile, "https://meet.example")).toBe("kept")
+    expect(decisionLife(profile, "http://localhost:3000")).toBe("kept")
+    // A server's localhost is another computer: its decisions are its own, never this desktop's.
+    expect(decisionLife(server, "http://localhost:3000")).toBe("session")
+    expect(decisionLife(server, "https://meet.example")).toBe("session")
+    expect(decisionLife(profile, "oc-preview://3f1c")).toBe("visit")
+    expect(decisionKey(server, "https://meet.example", "camera")).not.toBe(decisionKey(profile, "https://meet.example", "camera"))
+    expect(decisionKey(server, "https://meet.example", "camera")).not.toBe(decisionKey(other, "https://meet.example", "camera"))
   })
 })
 
@@ -122,16 +169,25 @@ describe("the decisions the user kept", () => {
       }),
     } as unknown as Storage
     const sites = createSitePermissions(storage, () => changes++)
+    const profile = { kind: "profile" } as const
+    const server = { kind: "server", partition: "opencode-remote-a" } as const
 
-    sites.keep({ origin: "https://meet.example", permission: "camera", setting: "allow" })
-    sites.keep({ origin: "https://meet.example", permission: "camera", setting: "block" })
-    sites.keep({ origin: "oc-preview://3f1c", permission: "camera", setting: "allow" })
+    sites.keep(profile, { origin: "https://meet.example", permission: "camera", setting: "allow" })
+    sites.keep(profile, { origin: "https://meet.example", permission: "camera", setting: "block" })
+    sites.keep(profile, { origin: "oc-preview://3f1c", permission: "camera", setting: "allow" })
     sites.set({ origin: "https://other.example", permission: "camera", setting: "allow" })
     expect(sites.list()).toEqual([{ origin: "https://meet.example", permission: "camera", setting: "block" }])
-    expect(sites.get("https://meet.example", "camera")).toBe("block")
+    expect(sites.get(profile, "https://meet.example", "camera")).toBe("block")
+
+    // A server's decision is kept in memory for it alone, and Settings never lists it.
+    sites.keep(server, { origin: "https://meet.example", permission: "microphone", setting: "allow" })
+    expect(sites.get(server, "https://meet.example", "microphone")).toBe("allow")
+    expect(sites.get(profile, "https://meet.example", "microphone")).toBeUndefined()
+    expect(sites.get(server, "https://meet.example", "camera")).toBeUndefined()
+    expect(sites.list()).toHaveLength(1)
 
     sites.set({ origin: "https://meet.example", permission: "camera", setting: "allow" })
-    expect(sites.get("https://meet.example", "camera")).toBe("allow")
+    expect(sites.get(profile, "https://meet.example", "camera")).toBe("allow")
     sites.remove({ origin: "https://meet.example", permission: "camera" })
     expect(sites.list()).toEqual([])
     expect(changes).toBe(4)

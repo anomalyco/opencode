@@ -45,7 +45,6 @@ import {
 } from "./dialog-machine"
 import type { BrowserNetwork } from "./network"
 import {
-  agentCaused,
   agentFrame,
   agentFrames,
   agentRefusal,
@@ -222,9 +221,14 @@ export function createBrowserPage(
     /** The page left the screen: another tab or a preview took its place, or the pane closed. */
     hidden?: () => void
     fail: () => void
-    /** Adopts a page the document opened; a background one leaves the current tab selected. */
-    popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean) => WebContents
+    /**
+     * Adopts a page the document opened; a background one leaves the current tab selected. `agentDriven` is the
+     * opener's, which the pop-up inherits.
+     */
+    popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean, agentDriven: boolean) => WebContents
     initialize?: boolean
+    /** The agent drove the tab that opened this one, or opened it in a command (see `agentDrivenTab`). */
+    agentDriven?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
@@ -390,6 +394,10 @@ export function createBrowserPage(
     }, sessionID)
 
   const activity: Activity = { agentRuns: 0 }
+  // SEAM(agentDriven): whether the agent drives this tab, from its first command in the tab (or in the tab that opened
+  // it, or the command that opened it) until the tab closes; never a timing window. policy.ts's shared agentDriven
+  // replaces this. Site permissions, clipboard writes and prompt focus read it (createPagePrompts).
+  const agentDrivenTab = () => !!options.agentDriven || activity.agentRuns > 0 || activity.agentEndedAt !== undefined
   // Set by the agent's first command; until then the tab renders as any other.
   let agentDriven = false
   let dialogGate = createDialogGateState()
@@ -504,16 +512,9 @@ export function createBrowserPage(
 
   const prompts = createPagePrompts({
     contents,
-    remote: !!options.remote,
+    scope: options.remote ? { kind: "server", partition: options.partition } : { kind: "profile" },
     sites: options.sites,
-    // The same rule that decides whose a download is.
-    agentCaused: () =>
-      agentCaused({
-        now: Date.now(),
-        agentRunning: activity.agentRuns > 0,
-        agentEndedAt: activity.agentEndedAt,
-        userInputAt: activity.userInputAt,
-      }),
+    agentDriven: agentDrivenTab,
     top: () => state().url,
     dialog: () => selectUserDialog(dialogGate),
     dialogFrame: () => dialogs.frame(),
@@ -627,7 +628,7 @@ export function createBrowserPage(
           partition: options.partition,
         },
       },
-      createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab"),
+      createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab", agentDrivenTab()),
     }
   })
 

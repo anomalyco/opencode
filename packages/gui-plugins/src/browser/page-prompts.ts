@@ -23,10 +23,11 @@ import { challengeAnswer, challengeKey } from "./site-auth"
 import {
   clipboardWrite,
   originOf,
-  keptApplies,
+  decisionLife,
   permissionKinds,
   requesterOrigin,
   siteAnswer,
+  type DecisionScope,
   type PermissionKind,
   type SitePermissions,
 } from "./site-permissions"
@@ -66,11 +67,11 @@ export type PagePermissions = {
  */
 export function createPagePrompts(input: {
   readonly contents: WebContents
-  /** The page browses in a remote server's partition. */
-  readonly remote: boolean
+  /** Where the tab's decisions are made and apply: the local profile or one remote server's partition. */
+  readonly scope: DecisionScope
   readonly sites: SitePermissions
-  /** The agent caused what happens in the tab now (`agentCaused` in policy.ts). */
-  readonly agentCaused: () => boolean
+  /** The agent drives the tab: it ran a command in it, or opened it (see `agentDrivenTab` in chromium.ts). */
+  readonly agentDriven: () => boolean
   /** The tab's top-level address as the pane shows it, so a preview reads as its file. */
   readonly top: () => string
   readonly dialog: () => OpenDialog | null
@@ -103,13 +104,12 @@ export function createPagePrompts(input: {
   let reported = "null"
   let disposed = false
 
-  // A kept "block" wins over this visit's answer, so blocking a site in Settings applies to its open tabs at once. A
-  // remote server's own machine never reads this desktop's kept decisions, nor writes them (see keptApplies).
-  const decided = (origin: string) => (kind: PermissionKind) => {
-    const kept = keptApplies(origin, input.remote) ? input.sites.get(origin, kind) : undefined
-
-    return kept === "block" ? kept : (decisions.get(`${origin}\n${kind}`) ?? kept)
-  }
+  // The decisions in the tab's scope (see siteAnswer): a kept "block" wins over this visit's answer, so blocking a site
+  // in Settings applies to its open tabs at once.
+  const decided = (origin: string) => ({
+    kept: (kind: PermissionKind) => input.sites.get(input.scope, origin, kind),
+    visit: (kind: PermissionKind) => decisions.get(`${origin}\n${kind}`),
+  })
 
   const dispatch = (event: PromptEvent) => {
     const next = transitionPrompts(state, event)
@@ -172,8 +172,8 @@ export function createPagePrompts(input: {
     const dialog = input.dialog()
     const head = selectPrompt(state)
     const waiting = state.items.length + (dialog ? 1 : 0) - 1
-    // What the agent caused never takes the user's focus.
-    const focus = !contents.isDestroyed() && contents.isFocused() && !input.agentCaused()
+    // A prompt in a tab the agent drives never takes the user's focus.
+    const focus = !contents.isDestroyed() && contents.isFocused() && !input.agentDriven()
 
     // "Leave site?" goes first: a close the page held keeps its tab only while the pane shows it.
     if (head && (head.kind === "leave" || !dialog)) return { id: head.id, waiting, focus, ask: ask(head) }
@@ -202,6 +202,7 @@ export function createPagePrompts(input: {
         site: promptSite(item.origin, item.origin),
         permissions: item.permissions,
         remember: item.remember,
+        agent: item.agent,
       }
 
     if (item.kind === "auth") return { kind: "auth", host: item.host, realm: item.realm, failed: item.failed }
@@ -321,9 +322,11 @@ export function createPagePrompts(input: {
       const origin = requestOrigin(details, contents)
       const request = { origin, top: contents.mainFrame.origin, mainFrame: details.isMainFrame }
 
-      if (permission === "clipboard-sanitized-write") return once(clipboardWrite(request, input.agentCaused()))
+      const agent = input.agentDriven()
+
+      if (permission === "clipboard-sanitized-write") return once(clipboardWrite(request, agent))
       const kinds = permissionKinds(permission, details.mediaTypes)
-      const answer = siteAnswer({ ...request, kinds }, decided(origin))
+      const answer = siteAnswer({ ...request, kinds, agentDriven: agent }, decided(origin))
 
       if (answer === "block" || disposed) return once(false)
 
@@ -332,10 +335,12 @@ export function createPagePrompts(input: {
 
       const id = enqueue({
         kind: "permission",
-        key: `${origin}\n${kinds.join(",")}`,
+        // The agent's request never joins the user's, whose answer may be kept.
+        key: `${origin}\n${kinds.join(",")}${agent ? "\nagent" : ""}`,
         origin,
         permissions: kinds,
-        remember: keptApplies(origin, input.remote),
+        remember: agent ? "none" : ({ kept: "kept", session: "session", visit: "none" } as const)[decisionLife(input.scope, origin)],
+        agent,
       })
 
       permissionCallbacks.set(id, [
@@ -343,8 +348,8 @@ export function createPagePrompts(input: {
         (granted) => (granted ? grant(origin, kinds, once) : once(false)),
       ])
 
-      // A script the agent caused waits for this; it gets "no" in time rather than at its own timeout.
-      if (input.agentCaused() && !deadlines.has(id))
+      // A script the agent runs waits for this; it gets "no" in time rather than at its own timeout.
+      if (agent && !deadlines.has(id))
         deadlines.set(
           id,
           setTimeout(() => {
@@ -364,11 +369,13 @@ export function createPagePrompts(input: {
           : "null"
       const request = { origin, top: contents.mainFrame.origin, mainFrame: details.isMainFrame }
 
-      if (permission === "clipboard-sanitized-write") return clipboardWrite(request, input.agentCaused())
+      const agent = input.agentDriven()
+
+      if (permission === "clipboard-sanitized-write") return clipboardWrite(request, agent)
       const kinds = permissionKinds(permission, details.mediaType ? [details.mediaType] : [])
 
       // A device the system refuses reads as denied, as getUserMedia then fails.
-      return siteAnswer({ ...request, kinds }, decided(origin)) === "allow" && !refused(kinds)
+      return siteAnswer({ ...request, kinds, agentDriven: agent }, decided(origin)) === "allow" && !refused(kinds)
     },
   }
 
@@ -437,11 +444,12 @@ export function createPagePrompts(input: {
       if (item.kind === "permission" || item.kind === "system") {
         const allow = answer.kind === "permission" && answer.allow
 
-        if (item.kind === "permission" && answer.kind === "permission")
-          // A kept decision lives in the store alone, so changing it in Settings applies to open tabs at once.
+        // A kept decision lives in the store alone, so changing it in Settings applies to open tabs at once. An allow
+        // given while the agent drives the tab is for that request alone.
+        if (item.kind === "permission" && answer.kind === "permission" && !(item.agent && allow))
           item.permissions.forEach((kind) =>
-            answer.remember && item.remember
-              ? input.sites.keep({ origin: item.origin, permission: kind, setting: allow ? "allow" : "block" })
+            answer.remember && item.remember !== "none"
+              ? input.sites.keep(input.scope, { origin: item.origin, permission: kind, setting: allow ? "allow" : "block" })
               : decisions.set(`${item.origin}\n${kind}`, allow ? "allow" : "block"),
           )
         permission?.forEach((callback) => callback(allow))

@@ -71,7 +71,9 @@ export const SIGN_IN_TEXT_MAX = 1_024
  * to it. Each kind:
  * - `dialog`: the page's `alert`, `confirm` or `prompt`; `stop` offers to stop the page's dialogs.
  * - `leave`: the page asks to confirm before the user leaves it.
- * - `permission`: a site asks for features; `remember` offers to keep the decision.
+ * - `permission`: a site asks for features; `remember` offers to keep the decision in the profile (`kept`) or for a
+ *   remote server until the app quits (`session`); `agent` says the agent drives the tab, so the answer is for this
+ *   request only.
  * - `auth`: a site asks for a user name and password; `failed` when it refused the last ones.
  * - `system`: the system's privacy settings blocked a device the user allowed.
  */
@@ -93,7 +95,8 @@ export const PromptView = Schema.Struct({
       kind: Schema.Literal("permission"),
       site: PromptSite,
       permissions: Schema.Array(Schema.Literals(["camera", "microphone", "location", "notifications", "clipboard-read"])),
-      remember: Schema.Boolean,
+      remember: Schema.Literals(["kept", "session", "none"]),
+      agent: Schema.Boolean,
     }),
     Schema.Struct({ kind: Schema.Literal("auth"), host: text(80), realm: detail(256), failed: Schema.Boolean }),
     Schema.Struct({
