@@ -4,6 +4,14 @@ export type Undrawable = "minimized" | "hidden" | "stalled"
 /** How long a viewport or element capture may wait for the tab's frame before it gives up. */
 export const CAPTURE_DEADLINE_MS = 2_500
 
+/** CDP produced a PNG. Read its IHDR dimensions before deciding whether decoding and resizing are necessary. */
+export function pngFits(png: Buffer, maxWidth: number, maxBytes: number) {
+  if (png.length < 24 || png.length > maxBytes) return false
+  const width = png.readUInt32BE(16)
+
+  return width > 0 && width <= maxWidth && png.readUInt32BE(20) > 0
+}
+
 /**
  * macOS stops drawing a minimized window and every window of a hidden app, and a copy of the tab's frame then never
  * answers. Windows keeps drawing a minimized window, and Linux is left to the capture deadline.

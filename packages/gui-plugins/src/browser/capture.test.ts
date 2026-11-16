@@ -1,7 +1,19 @@
 import { expect, test } from "bun:test"
-import { undrawable, undrawableMessage } from "./capture"
+import { pngFits, undrawable, undrawableMessage } from "./capture"
 
 const shown = { minimized: false, visible: true, appHidden: false }
+
+test("reuse the redraw's PNG only when its actual dimensions and transfer size fit", () => {
+  const png = Buffer.alloc(32)
+  png.writeUInt32BE(800, 16)
+  png.writeUInt32BE(600, 20)
+  expect(pngFits(png, 800, 32)).toBe(true)
+  expect(pngFits(png, 799, 32)).toBe(false)
+  expect(pngFits(png, 800, 31)).toBe(false)
+  expect(pngFits(png.subarray(0, 23), 800, 32)).toBe(false)
+  png.writeUInt32BE(0, 20)
+  expect(pngFits(png, 800, 32)).toBe(false)
+})
 
 test.each([
   { platform: "darwin", window: shown, expected: undefined },

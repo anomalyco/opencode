@@ -5,7 +5,7 @@ import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
-import { CAPTURE_DEADLINE_MS, undrawable, undrawableMessage } from "./capture"
+import { CAPTURE_DEADLINE_MS, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
@@ -1874,8 +1874,29 @@ export function createBrowserPage(
 
     // A temporary compositor consumer keeps a hidden surface producing frames. Ignore subscription frames: the
     // first can be cached. Page.captureScreenshot requests a renderer redraw and copies the resulting surface.
-    if (!captures) contents.beginFrameSubscription(true, () => {})
-    captures++
+    let subscribed = false
+
+    const subscribe = () => {
+      if (stop.aborted || contents.isDestroyed()) return
+
+      if (!captures) contents.beginFrameSubscription(true, () => {})
+      captures++
+      subscribed = true
+    }
+
+    // A presented surface already has a consumer. Only add one if presentation stalls (e.g. the window
+    // becomes occluded during the call). A known hidden view needs the consumer from the start.
+    let fallback: ReturnType<typeof setTimeout> | undefined
+
+    if (view.getVisible() && win.isVisible() && !win.isMinimized()) {
+      fallback = setTimeout(() => {
+        try {
+          subscribe()
+        } catch (error) {
+          interrupted.reject(error)
+        }
+      }, 100)
+    } else subscribe()
     stop.addEventListener("abort", cancel, { once: true })
 
     try {
@@ -1894,13 +1915,15 @@ export function createBrowserPage(
       return await Promise.race([capture(), interrupted.promise])
     } finally {
       stop.removeEventListener("abort", cancel)
-      captures--
+      clearTimeout(fallback)
 
-      if (!captures && !contents.isDestroyed()) contents.endFrameSubscription()
+      if (subscribed && --captures === 0 && !contents.isDestroyed()) contents.endFrameSubscription()
     }
   }
 
   async function screenshot(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {
+    if (!action.fullPage && !action.ref) return captureViewport(action, signal)
+
     const element = action.ref ? await rect(target(action.ref), true) : undefined
     const metrics = await cdp.send("Page.getLayoutMetrics")
     abortError(signal)
@@ -1937,10 +1960,32 @@ export function createBrowserPage(
       throw new Error(
         "Element has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
       )
-    const ratio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-    const shot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false, optimizeForSpeed: true })
+
+    return captureViewport(action, signal, clip)
+  }
+
+  async function captureViewport(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal, clip?: Electron.Rectangle) {
+    const displayScale = electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
+    const ratio = contents.getZoomFactor() * displayScale
+    const maxWidth = action.maxWidth ?? 2000
+    const format = action.format === "png" ? "png" : "jpeg"
+    // Request the final encoding when the viewport fits. Use a lossless intermediate for cropping or resizing.
+    const encoding = !clip && view.getBounds().width * displayScale <= maxWidth ? format : "png"
+
+    const shot = await cdp.send("Page.captureScreenshot", {
+      format: encoding,
+      quality: encoding === "jpeg" ? action.quality ?? 80 : undefined,
+      fromSurface: true,
+      captureBeyondViewport: false,
+      optimizeForSpeed: true,
+    })
+
     abortError(signal)
-    const viewportImage = electron.nativeImage.createFromBuffer(Buffer.from(shot.data, "base64"))
+    const bytes = Buffer.from(shot.data, "base64")
+
+    if (!clip && format === "png" && pngFits(bytes, maxWidth, Browser.MAX_FILE_BYTES)) return { format, data: bytes }
+
+    const viewportImage = electron.nativeImage.createFromBuffer(bytes)
 
     const image = clip
       ? viewportImage.crop({
@@ -1953,7 +1998,9 @@ export function createBrowserPage(
 
     if (image.isEmpty()) throw new Error(undrawableMessage("stalled"))
 
-    const maxWidth = action.maxWidth ?? 2000
+    if (!clip && encoding === format && image.getSize().width <= maxWidth && bytes.length <= Browser.MAX_FILE_BYTES)
+      return { format, data: bytes }
+
     const scaled = image.getSize().width > maxWidth ? image.resize({ width: maxWidth, quality: "good" }) : image
 
     // A rendered frame encodes only as PNG or JPEG, so WebP comes back as JPEG.
