@@ -1642,7 +1642,7 @@ describe("Automation", () => {
       }),
     )
 
-    it.effect("rejects dynamic tool access, unknown tools, recursive automation tools and denied permissions", () =>
+    it.effect("rejects dynamic tool access, unknown tools, shell, recursive automation tools and denied permissions", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
         const bad = (text: string) =>
@@ -1652,6 +1652,9 @@ describe("Automation", () => {
         expect(yield* bad("return await tools.slack[name]({})")).toMatchObject({ _tag: "Automation.InvalidError" })
         expect(yield* bad("return await tools.slack.missing({})")).toMatchObject({
           reason: "Unknown Code Mode tool: slack.missing",
+        })
+        expect(yield* bad('await tools.shell({ command: "pwd" })')).toMatchObject({
+          reason: "Tool shell cannot be used inside an automation",
         })
         expect(yield* bad("return await tools.opencode.automation_create({})")).toMatchObject({
           reason: "Tool opencode.automation_create cannot be used inside an automation",

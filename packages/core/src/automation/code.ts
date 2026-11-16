@@ -30,7 +30,7 @@ export function handoffOutput(delivery: string, logs?: string) {
   return text.slice(0, read) + "…"
 }
 
-/** Tools that would let an automation rewrite automations, or move and rename the Session that authorized it. */
+/** Tools that must not receive an unattended grant from an automation. */
 const FORBIDDEN_TOOLS = new Set([
   // Approving the shell tool unattended would approve every command, not a particular command.
   "shell",
