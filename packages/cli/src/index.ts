@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { writeSync } from "node:fs"
 import { isatty } from "node:tty"
 import { ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
@@ -20,6 +19,7 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ShutdownDeadline } from "./shutdown-deadline"
+import { UI } from "./run/ui"
 
 // Bun needs a valid cwd to open terminal stdin; headless commands may not need one.
 if (isatty(0)) {
@@ -27,7 +27,7 @@ if (isatty(0)) {
     process.cwd()
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error
-    writeSync(2, "Error: The current directory no longer exists. Change directories and run opencode again.\n")
+    UI.error("The current directory no longer exists. Change directories and run opencode again.")
     process.exit(1)
   }
 }
