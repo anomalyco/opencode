@@ -86,6 +86,7 @@ const MEMBERS = [
  * extension through `onClicked` when it has none.
  */
 export function createActions(input: {
+  grant: (extension: Extension, tabId: number) => void
   tabs: ExtensionTabs
   emit: Emit
   changed: () => void
@@ -250,6 +251,8 @@ export function createActions(input: {
       const values = actionFor(stateOf(extension), tab?.id)
 
       if (values.enabled === false) return true
+
+      if (tab) input.grant(extension, tab.id)
       const url = extensionPage(extension.id, values.popup)
 
       if (url) {

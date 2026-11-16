@@ -299,6 +299,8 @@ export function createBrowserPage(
     webPreferences: {
       partition: options.partition,
       nodeIntegration: false,
+      // Deliver the profile's CSS receiver to child frames. It runs in the isolated sandbox, not the web world.
+      nodeIntegrationInSubFrames: options.local === true,
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
@@ -767,6 +769,7 @@ export function createBrowserPage(
       overrideBrowserWindowOptions: {
         webPreferences: {
           nodeIntegration: false,
+          nodeIntegrationInSubFrames: options.local === true,
           contextIsolation: true,
           sandbox: true,
           webSecurity: true,

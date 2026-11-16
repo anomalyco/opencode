@@ -11,6 +11,7 @@ import { createNotifications } from "./notifications"
 import { createPermissions } from "./permissions"
 import { createPopups } from "./popup"
 import { createStorageSync } from "./storage-sync"
+import { createStyles } from "./styles"
 import { createStubs } from "./stubs"
 import { createExtensionTabs } from "./tabs"
 import { createWebNavigation } from "./web-navigation"
@@ -38,10 +39,12 @@ export async function createExtensionApis(input: {
   const extensions = () => input.session.extensions.getAllExtensions()
   const manifest = createManifests()
   const tabs = createExtensionTabs({ emit, extensions, manifest })
-  const menus = createContextMenus({ tabs, emit, extensions, manifest, storage: input.storage })
+  const styles = createStyles(tabs, manifest)
+  const menus = createContextMenus({ tabs, emit, extensions, manifest, storage: input.storage, grant: styles.grant })
   const popups = createPopups({ partition: input.partition, tabs })
 
   const actions = createActions({
+    grant: styles.grant,
     tabs,
     emit,
     changed: input.changed,
@@ -60,6 +63,7 @@ export async function createExtensionApis(input: {
     modules: [
       { namespaces: [{ path: "runtime", methods: [], events: ["onInstalled"] }], methods: {} },
       tabs.module,
+      styles.module,
       actions.module,
       createWebNavigation({ tabs, emit }),
       menus.module,
