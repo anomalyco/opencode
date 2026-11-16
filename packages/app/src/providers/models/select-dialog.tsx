@@ -979,7 +979,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   }
 
   return (
-    <Dialog class="command-palette model-dialog" size="large">
+    <Dialog class="command-palette model-dialog" size="large" fit>
       <div class="sr-only">
         <DialogTitle>{language.t("dialog.model.select.title")}</DialogTitle>
       </div>

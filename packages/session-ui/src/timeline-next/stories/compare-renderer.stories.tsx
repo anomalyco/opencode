@@ -1,10 +1,11 @@
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { BackgroundMoveHint } from "../../../../app/src/session/timeline/message-timeline"
 import { createStore, reconcile } from "solid-js/store"
 import type { SessionDocument } from "../../document"
 import { CurrentSessionProviders } from "../../storybook/current-session-story"
-import type { TimelineDetail } from "../../timeline/detail"
+import { timelinePresets, type TimelineDetail } from "../../timeline/detail"
+import { terminalRunningDocument } from "../../storybook/current-session-fixtures"
 import { SessionTimeline } from "../../timeline/session-timeline"
 import { StatusLane } from "../status-line"
 import { NextSessionTimeline } from "./session-timeline"
@@ -42,8 +43,29 @@ const padding = "px-4 md:px-6"
 type ScrollTo = { type: "timeline-compare:scroll-to"; anchor: string; offset: number }
 
 export const Renderer = {
-  render: () => {
+  args: { preview: "waiting" },
+  argTypes: { preview: { options: ["waiting", "current", "new"] } },
+  render: (args: { preview: string }) => {
     const [state, setState] = createStore<{ render?: Render }>({})
+
+    // An embedded comparison supplies the actual snapshot. In isolation the inspector can send a working turn.
+    const snapshot = createMemo<Render | undefined>(
+      () =>
+        state.render ??
+        (args.preview === "waiting"
+          ? undefined
+          : {
+              type: "timeline-compare:render",
+              document: terminalRunningDocument,
+              detail: timelinePresets[2].value,
+              activity: args.preview === "new",
+              lane: args.preview === "new" ? "activity" : "legacy",
+              turnDiffs: false,
+              width: 720,
+              status: "Working",
+            }),
+    )
+
     const [hint, setHint] = createSignal(false)
 
     // The offer shows once the call has blocked the turn for the build's delay, counted from when the playhead got here.
@@ -112,7 +134,7 @@ export const Renderer = {
         data-scrollable
         onScroll={report}
       >
-        <Show when={state.render}>
+        <Show when={snapshot()}>
           {(render) => (
             <div class="mx-auto py-6" style={{ "max-width": `${render().width}px` }}>
               <CurrentSessionProviders document={render().document}>

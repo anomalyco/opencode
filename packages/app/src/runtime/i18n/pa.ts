@@ -153,10 +153,9 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "70+ ہور پرووائیڈر ویکھو",
   "dialog.provider.viewAll": "ہور پرووائیڈر وکھاؤ",
   "provider.connect.title": "\u2068{{provider}}\u2069 نال جڑو",
-  "provider.connect.title.anthropicProMax": "Anthropic دے نال لاگ ان کرو",
   "provider.connect.method.apiKey": "API کلید",
   "provider.connect.status.inProgress": "اختیار دیندے پئے آں…",
-  "provider.connect.status.waiting": "اختیار ملن دی اڈیک اے…",
+  "provider.connect.status.waiting": "اختیار ملن دی اڈیک اے",
   "provider.connect.status.failed": "اختیار نئیں مل سکیا: \u2068{{error}}\u2069",
   "provider.connect.apiKey.description":
     "اپنے اکاؤنٹ نوں جوڑن لئی اپنی \u2068{{provider}}\u2069 API کلید درج کرو تے OpenCode وچ \u2068{{provider}}\u2069 ماڈل ورتو۔",

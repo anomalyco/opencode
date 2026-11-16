@@ -161,12 +161,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "ดูผู้ให้บริการเพิ่มเติมกว่า 70 ราย",
 
   "dialog.provider.viewAll": "แสดงผู้ให้บริการเพิ่มเติม",
-
   "provider.connect.title": "เชื่อมต่อ {{provider}}",
-  "provider.connect.title.anthropicProMax": "เข้าสู่ระบบ Anthropic",
+
   "provider.connect.method.apiKey": "คีย์ API",
   "provider.connect.status.inProgress": "กำลังอนุญาต…",
-  "provider.connect.status.waiting": "รอการอนุญาต…",
+  "provider.connect.status.waiting": "รอการอนุญาต",
   "provider.connect.status.failed": "การอนุญาตล้มเหลว: {{error}}",
   "provider.connect.apiKey.description":
     "ป้อนคีย์ API ของ {{provider}} เพื่อเชื่อมต่อบัญชีและใช้โมเดล {{provider}} ใน OpenCode",

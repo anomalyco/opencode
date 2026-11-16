@@ -2,7 +2,7 @@
 # plan-release.sh: decides version, channel and npm dist-tag from the event, ref and dispatch inputs
 # (INPUT_BUMP, INPUT_VERSION) only, and writes them to $GITHUB_OUTPUT. Nothing here reads repository files.
 #
-#   push or dispatch on dev           -> dev      0.0.0-dev-<run>     npm tag dev, desktop
+#   schedule or dispatch on dev       -> dev      0.0.0-dev-<run>     npm tag dev, desktop
 #   dispatch on dev with bump/version -> latest   x.y.z               npm tag latest, releasers only, notes required
 #   push or dispatch on beta          -> beta     0.0.0-beta-<run>    desktop only
 #   pull_request                      -> pr       0.0.0-pr-<run>      everything, dry run
@@ -13,7 +13,7 @@
 versioned=false
 if [ -n "${INPUT_BUMP:-}" ] || [ -n "${INPUT_VERSION:-}" ]; then versioned=true; fi
 case "$GITHUB_EVENT_NAME:$GITHUB_REF:$versioned" in
-  push:refs/heads/dev:false | workflow_dispatch:refs/heads/dev:false) channel="dev" ;;
+  schedule:refs/heads/dev:false | workflow_dispatch:refs/heads/dev:false) channel="dev" ;;
   workflow_dispatch:refs/heads/dev:true) channel="latest" ;;
   push:refs/heads/beta:false | workflow_dispatch:refs/heads/beta:false) channel="beta" ;;
   pull_request:*:false) channel="pr" ;;

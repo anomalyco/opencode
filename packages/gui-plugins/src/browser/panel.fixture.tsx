@@ -53,7 +53,7 @@ import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
 import { BrowserPane, type PaneEvent } from "./ipc"
 import { pageShortcut } from "./keys"
-import { refusal } from "./policy"
+import { normalizeURL, refusal } from "./policy"
 import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
@@ -110,6 +110,23 @@ type PaneFixtureState = {
   selection: string
 }
 
+export type BrowserScenario = "Page" | "Empty" | "Recent" | "Loading" | "Failed" | "Suspended"
+
+type ElementRect = Pick<DOMRect, "x" | "y" | "width" | "height">
+
+type StoryHost = Pick<PaneHost, "useLanguage"> & {
+  scenario: BrowserScenario
+  Page: Component<{ url: string; zoom: number; picking: boolean; pick: (rect: ElementRect) => void }>
+  Frame: ParentComponent<{
+    loading: boolean
+    finish: () => void
+    suspended: boolean
+    reconnect: () => void
+    external: string | undefined
+    comments: readonly ComposerNote[]
+  }>
+}
+
 // A 16px blue square, as main reports a page icon.
 const icon =
   "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiByeD0iMyIgZmlsbD0iIzNiODJmNiIvPjwvc3ZnPg=="
@@ -137,21 +154,40 @@ export function mountBrowserPane(input: PaneHost) {
   host.style.cssText = "position:fixed;inset:0;z-index:1000;background:#181818;color:#eee;padding:24px"
   document.body.appendChild(host)
 
-  function Fixture() {
+  const Fixture = browserPaneFixture(input)
+
+  return render(
+    () => (
+      <input.LanguageProvider locale="en">
+        <input.UiI18nBridge>
+          <Fixture />
+        </input.UiI18nBridge>
+      </input.LanguageProvider>
+    ),
+    host,
+  )
+}
+
+// Both hosts exercise the real model and pane. The lab draws an in-memory document where the component tests
+// measure native embed layouts and captures.
+export function browserPaneFixture(input: PaneHost | StoryHost) {
+  return function Fixture() {
     const language = input.useLanguage()
     const messages = new Map(Object.entries(browserEn))
+
+    const scenario = "scenario" in input ? input.scenario : undefined
 
     const [store, setStore] = createStore<PaneFixtureState>({
       session: "Alpha",
       mounted: true,
       visible: true,
-      url: undefined,
-      loading: false,
+      url: scenario === "Empty" || scenario === "Recent" ? "about:blank" : undefined,
+      loading: scenario === "Loading",
       generation: 0,
       delayNavigation: false,
       pendingURL: undefined,
-      loadErrors: {},
-      error: undefined,
+      loadErrors: scenario === "Failed" ? { Alpha: "ERR_CONNECTION_REFUSED" } : {},
+      error: scenario === "Suspended" ? "browser.pane.suspended" : undefined,
       layouts: {},
       covered: false,
       moving: false,
@@ -164,7 +200,7 @@ export function mountBrowserPane(input: PaneHost) {
       highlights: [],
       comments: [],
       zoom: 1,
-      history: { visits: [] },
+      history: { visits: scenario === "Recent" ? structuredClone(visits) : [] },
       external: [],
       cookies: 3,
       failSite: false,
@@ -223,12 +259,30 @@ export function mountBrowserPane(input: PaneHost) {
     }
 
     // SAFETY: the host embeds call only `embed`, `capture` and `on` on their bridge (`runtime/plugin/embeds.tsx`).
-    const embeds = input.createEmbeds({
-      bridge: bridge as Bridge,
-      zoom: () => (store.selection === "zoomed" ? 1.25 : 1),
-      dialog: () => store.dialog,
-      moving: () => store.moving || input.panelMotion.panelsMoving(),
-    })
+    const embeds: Embeds =
+      "createEmbeds" in input
+        ? input.createEmbeds({
+            bridge: bridge as Bridge,
+            zoom: () => (store.selection === "zoomed" ? 1.25 : 1),
+            dialog: () => store.dialog,
+            moving: () => store.moving || input.panelMotion.panelsMoving(),
+          })
+        : {
+            capture: async () => undefined,
+            View: (props) => (
+              <div class={props.class}>
+                <Show when={props.id && props.visible && !store.loading && !model.suspended({ key: store.session })}>
+                  <input.Page
+                    url={store.url ?? current().url}
+                    zoom={store.zoom}
+                    picking={!!store.picker[store.session]}
+                    pick={pick}
+                  />
+                </Show>
+                {props.children}
+              </div>
+            ),
+          }
 
     const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
       (messages.get(key) ?? language.t(key)).replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
@@ -297,6 +351,9 @@ export function mountBrowserPane(input: PaneHost) {
       composer: { attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]) },
     } as unknown as SessionScreen
 
+    const back: string[] = []
+    const forward: string[] = []
+
     const report = (key = store.session) => {
       const tab = tabs.find((item) => item.title === key)
 
@@ -308,6 +365,8 @@ export function mountBrowserPane(input: PaneHost) {
             {
               ...tab,
               url: store.url ?? tab.url,
+              canGoBack: back.length > 0,
+              canGoForward: forward.length > 0,
               loading: store.loading,
               generation: store.generation,
               loadError: store.loadErrors[key],
@@ -325,6 +384,14 @@ export function mountBrowserPane(input: PaneHost) {
         bindings.set(value.session, value.binding)
         queueMicrotask(() => {
           report(value.session)
+
+          // A suspended attachment reports its retained inventory once. The next interaction can reconnect it.
+          if (store.error === "browser.pane.suspended") {
+            setStore("error", undefined)
+
+            return
+          }
+
           const tab = tabs.find((item) => item.title === value.session)
 
           if (tab) emit(value.session, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
@@ -342,14 +409,31 @@ export function mountBrowserPane(input: PaneHost) {
         if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
 
         if (command.type === "navigate") {
+          const url = normalizeURL(command.url)
+
           if (store.delayNavigation) {
-            setStore("pendingURL", command.url)
+            setStore("pendingURL", url)
 
             return
           }
 
-          setStore({ url: command.url, loading: false, generation: store.generation + 1 })
+          back.push(store.url ?? current().url)
+          forward.length = 0
+          setStore({ url, loading: false, generation: store.generation + 1 })
         }
+
+        if (command.type === "back" || command.type === "forward") {
+          const stack = command.type === "back" ? back : forward
+          const url = stack.pop()
+
+          if (url) {
+            const other = command.type === "back" ? forward : back
+            other.push(store.url ?? current().url)
+            setStore({ url, loading: false, generation: store.generation + 1 })
+          }
+        }
+
+        if (command.type === "reload") setStore({ loading: false, generation: store.generation + 1 })
 
         if (command.type === "stop") setStore("loading", false)
         report()
@@ -437,7 +521,7 @@ export function mountBrowserPane(input: PaneHost) {
     const plugin = fake as unknown as Context & SetupContext<typeof definition>
     const model = createModel(plugin)
 
-    const pick = () => {
+    const pick = (rect?: ElementRect) => {
       const selector = () => {
         if (store.selection === "fallback") return ""
 
@@ -458,10 +542,33 @@ export function mountBrowserPane(input: PaneHost) {
           label: "button.primary",
           role: "button",
           name: "Save changes",
-          rect: { x: 48, y: store.selection === "low" ? 180 : 40, width: 160, height: 36 },
+          rect: rect ?? { x: 48, y: store.selection === "low" ? 180 : 40, width: 160, height: 36 },
         },
       })
     }
+
+    if ("Frame" in input)
+      return (
+        <PluginContext.Provider value={plugin}>
+          <PanelContext.Provider value={panel}>
+            <input.Frame
+              loading={store.loading}
+              finish={() => {
+                setStore("loading", false)
+                report()
+              }}
+              suspended={model.suspended({ key: store.session })}
+              reconnect={() => model.command({ key: store.session }, { type: "reload", tabID: current().id })}
+              comments={store.comments}
+              external={store.external.at(-1)}
+            >
+              <Show when={session()}>
+                {(view) => <SessionBrowserPane tab={current} session={view()} screen={screen} model={model} />}
+              </Show>
+            </input.Frame>
+          </PanelContext.Provider>
+        </PluginContext.Provider>
+      )
 
     return (
       <PluginContext.Provider value={plugin}>
@@ -546,7 +653,7 @@ export function mountBrowserPane(input: PaneHost) {
               )}
             </For>
             <button onClick={() => setStore("dialog", (open) => !open)}>Toggle dialog</button>
-            <button onClick={pick}>Pick element</button>
+            <button onClick={() => pick()}>Pick element</button>
             <button onClick={() => setStore("dropInspect", true)}>Drop picker requests</button>
             <select
               aria-label="Picked element scenario"
@@ -632,17 +739,6 @@ export function mountBrowserPane(input: PaneHost) {
       </PluginContext.Provider>
     )
   }
-
-  return render(
-    () => (
-      <input.LanguageProvider locale="en">
-        <input.UiI18nBridge>
-          <Fixture />
-        </input.UiI18nBridge>
-      </input.LanguageProvider>
-    ),
-    host,
-  )
 }
 
 type StripTabs = {

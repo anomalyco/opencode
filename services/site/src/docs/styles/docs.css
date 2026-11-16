@@ -769,7 +769,7 @@
    have it on the screen's bottom edge instead (below). */
 [data-site] [data-component="docs-version-notice"][data-placement="header"] {
   /* The link's grey: 6.6:1 on the light theme's bar, 6.1:1 on the dark theme's. */
-  --notice-muted: hsl(0, 0%, 64%);
+  --notice-muted: var(--fixed-dark-muted);
   --notice-text: light-dark(var(--text-inverted), var(--text-strong));
   position: fixed;
   z-index: 7;
@@ -793,7 +793,7 @@
   translate: 0 -50%;
   margin: 0;
   white-space: nowrap;
-  background: light-dark(var(--bg-strong), hsl(0, 0%, 13%));
+  background: light-dark(var(--bg-strong), var(--bg-weaker));
   box-shadow: inset 0 0 0 1px light-dark(transparent, var(--border-strong));
   border-color: transparent;
   color: var(--notice-text);
@@ -925,9 +925,11 @@
    one dark area; the top still takes the top bar's page colour. The page ends above the bar, so the
    footer stays reachable. Open menus and sheets sit over it. */
 @media (max-width: 60rem) {
+  /* The bar's colours, written out because the tokens live inside this element. grey-ok: outside the tokens' scope */
   html:has([data-component="docs-version-notice"][data-placement="header"]) {
-    background: light-dark(hsl(0, 0%, 8%), hsl(0, 0%, 13%));
+    background: light-dark(#161616, #242424);
   }
+  /* grey-ok-end */
 
   [data-site]:has([data-component="docs-version-notice"][data-placement="header"]) {
     padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px));

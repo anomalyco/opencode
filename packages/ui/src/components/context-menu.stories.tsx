@@ -1,5 +1,6 @@
-// @ts-nocheck
-import * as mod from "./context-menu"
+import { createSignal, onMount, type ParentProps } from "solid-js"
+import { Icon } from "@opencode/ui/icon"
+import { ContextMenu } from "./context-menu"
 
 const docs = `### Overview
 Context menu for right-click interactions with composable items and submenus.
@@ -7,7 +8,7 @@ Context menu for right-click interactions with composable items and submenus.
 Use \`ItemLabel\` and \`ItemDescription\` for rich items.
 
 ### API
-- Root accepts Kobalte ContextMenu props (\`open\`, \`defaultOpen\`, \`onOpenChange\`).
+- The trigger opens the menu at the pointer; the root reports changes through \`onOpenChange\`.
 - Compose \`Trigger\`, \`Content\`, \`Item\`, \`Separator\`, and optional \`Sub\` sections.
 
 ### Variants and states
@@ -27,7 +28,7 @@ Use \`ItemLabel\` and \`ItemDescription\` for rich items.
 export default {
   title: "UI/ContextMenu",
   id: "components-context-menu",
-  component: mod.ContextMenu,
+  component: ContextMenu,
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -38,10 +39,26 @@ export default {
   },
 }
 
-export const Basic = {
-  render: () => (
-    <mod.ContextMenu defaultOpen>
-      <mod.ContextMenu.Trigger>
+function MenuArea(props: ParentProps<{ initiallyOpen?: boolean }>) {
+  let trigger!: HTMLDivElement
+
+  // Kobalte takes the anchor from a contextmenu event; its context menu has no defaultOpen prop.
+  onMount(() => {
+    if (!props.initiallyOpen) return
+    const box = trigger.getBoundingClientRect()
+    trigger.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: box.left + box.width / 2,
+        clientY: box.top + box.height / 2,
+      }),
+    )
+  })
+
+  return (
+    <ContextMenu modal={!props.initiallyOpen}>
+      <ContextMenu.Trigger ref={trigger}>
         <div
           style={{
             padding: "20px",
@@ -52,62 +69,82 @@ export const Basic = {
         >
           Right click (or open) here
         </div>
-      </mod.ContextMenu.Trigger>
-      <mod.ContextMenu.Portal>
-        <mod.ContextMenu.Content>
-          <mod.ContextMenu.Group>
-            <mod.ContextMenu.GroupLabel>Actions</mod.ContextMenu.GroupLabel>
-            <mod.ContextMenu.Item>
-              <mod.ContextMenu.ItemLabel>Copy</mod.ContextMenu.ItemLabel>
-            </mod.ContextMenu.Item>
-            <mod.ContextMenu.Item>
-              <mod.ContextMenu.ItemLabel>Paste</mod.ContextMenu.ItemLabel>
-            </mod.ContextMenu.Item>
-          </mod.ContextMenu.Group>
-          <mod.ContextMenu.Separator />
-          <mod.ContextMenu.Sub>
-            <mod.ContextMenu.SubTrigger>More</mod.ContextMenu.SubTrigger>
-            <mod.ContextMenu.SubContent>
-              <mod.ContextMenu.Item>
-                <mod.ContextMenu.ItemLabel>Duplicate</mod.ContextMenu.ItemLabel>
-              </mod.ContextMenu.Item>
-              <mod.ContextMenu.Item>
-                <mod.ContextMenu.ItemLabel>Move</mod.ContextMenu.ItemLabel>
-              </mod.ContextMenu.Item>
-            </mod.ContextMenu.SubContent>
-          </mod.ContextMenu.Sub>
-        </mod.ContextMenu.Content>
-      </mod.ContextMenu.Portal>
-    </mod.ContextMenu>
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content>{props.children}</ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu>
+  )
+}
+
+export const Basic = {
+  render: () => (
+    <MenuArea>
+      <ContextMenu.Group>
+        <ContextMenu.GroupLabel>Actions</ContextMenu.GroupLabel>
+        <ContextMenu.Item>
+          <ContextMenu.ItemLabel>Copy</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Item>
+          <ContextMenu.ItemLabel>Paste</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+      </ContextMenu.Group>
+      <ContextMenu.Separator />
+      <ContextMenu.Sub>
+        <ContextMenu.SubTrigger>More</ContextMenu.SubTrigger>
+        <ContextMenu.SubContent>
+          <ContextMenu.Item>
+            <ContextMenu.ItemLabel>Duplicate</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item>
+            <ContextMenu.ItemLabel>Move</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+        </ContextMenu.SubContent>
+      </ContextMenu.Sub>
+    </MenuArea>
   ),
 }
 
-export const CheckboxRadio = {
-  render: () => (
-    <mod.ContextMenu defaultOpen>
-      <mod.ContextMenu.Trigger>
-        <div
-          style={{
-            padding: "20px",
-            border: "1px dashed var(--border-weak)",
-            "border-radius": "8px",
-            color: "var(--text-weak)",
-          }}
-        >
-          Right click (or open) here
-        </div>
-      </mod.ContextMenu.Trigger>
-      <mod.ContextMenu.Portal>
-        <mod.ContextMenu.Content>
-          <mod.ContextMenu.CheckboxItem checked>Show line numbers</mod.ContextMenu.CheckboxItem>
-          <mod.ContextMenu.CheckboxItem>Wrap lines</mod.ContextMenu.CheckboxItem>
-          <mod.ContextMenu.Separator />
-          <mod.ContextMenu.RadioGroup value="compact">
-            <mod.ContextMenu.RadioItem value="compact">Compact</mod.ContextMenu.RadioItem>
-            <mod.ContextMenu.RadioItem value="comfortable">Comfortable</mod.ContextMenu.RadioItem>
-          </mod.ContextMenu.RadioGroup>
-        </mod.ContextMenu.Content>
-      </mod.ContextMenu.Portal>
-    </mod.ContextMenu>
-  ),
+function CheckedIndicator() {
+  return (
+    <ContextMenu.ItemIndicator>
+      <Icon name="check-small" />
+    </ContextMenu.ItemIndicator>
+  )
 }
+
+function OptionsMenu(props: { initiallyOpen?: boolean }) {
+  const [numbers, setNumbers] = createSignal(true)
+
+  const [wrap, setWrap] = createSignal(false)
+
+  const [density, setDensity] = createSignal("compact")
+
+  return (
+    <MenuArea initiallyOpen={props.initiallyOpen}>
+      <ContextMenu.CheckboxItem checked={numbers()} onChange={setNumbers}>
+        Show line numbers
+        <CheckedIndicator />
+      </ContextMenu.CheckboxItem>
+      <ContextMenu.CheckboxItem checked={wrap()} onChange={setWrap} disabled={props.initiallyOpen}>
+        Wrap lines
+        <CheckedIndicator />
+      </ContextMenu.CheckboxItem>
+      <ContextMenu.Separator />
+      <ContextMenu.RadioGroup value={density()} onChange={setDensity}>
+        <ContextMenu.RadioItem value="compact">
+          Compact
+          <CheckedIndicator />
+        </ContextMenu.RadioItem>
+        <ContextMenu.RadioItem value="comfortable">
+          Comfortable
+          <CheckedIndicator />
+        </ContextMenu.RadioItem>
+      </ContextMenu.RadioGroup>
+    </MenuArea>
+  )
+}
+
+export const CheckboxRadio = { render: () => <OptionsMenu /> }
+
+export const OpenWithDisabledItem = { render: () => <OptionsMenu initiallyOpen /> }

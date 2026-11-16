@@ -236,8 +236,10 @@ Read package.json and README.md in parallel, then return their relevant setup de
 
 The runtime has no direct filesystem access, imports, or timers. It provides
 `fetch` for HTTP requests; everything else goes through tools in its catalog.
-Denying `execute` with resource `*` removes Code Mode and every tool reached only
-through it, including MCP tools from servers that do not set `codemode: false`.
+Denying `execute` with resource `*` removes Code Mode. The tools it would reach,
+including MCP tools from servers that do not set `codemode: false`, are then
+listed as direct tools, each with its full definition in every request. Deny
+those tools too if the agent should not have them.
 Nested built-in and MCP tools still enforce their own permissions, and plugin
 tools enforce the permissions they assert.
 

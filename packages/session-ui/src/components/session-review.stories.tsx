@@ -6,15 +6,19 @@ import { File } from "./file"
 import { Button } from "@opencode/ui/button"
 import { SessionReview, type SessionReviewComment, type SessionReviewFocus } from "./session-review"
 
-function ReviewStory(props: { split?: boolean }) {
+type ReviewArgs = { split: boolean; empty: boolean; disableLineNumbers: boolean; overflow: "wrap" | "scroll" }
+
+function ReviewStory(props: ReviewArgs) {
   return (
     <CurrentSessionProviders document={editThenTestDocument}>
       <div class="mx-auto h-screen min-h-[620px] w-full max-w-[1100px] overflow-hidden bg-background-base">
         <SessionReview
           title="Changes in this Session"
-          diffs={reviewDiffs}
+          diffs={props.empty ? [] : reviewDiffs}
           open={reviewDiffs.map((diff) => diff.file)}
           split={props.split}
+          overflow={props.overflow}
+          disableLineNumbers={props.disableLineNumbers}
         />
       </div>
     </CurrentSessionProviders>
@@ -37,16 +41,19 @@ export default {
 }
 
 export const Unified = {
-  render: () => <ReviewStory />,
+  args: { split: false, empty: false, disableLineNumbers: false, overflow: "wrap" },
+  argTypes: { overflow: { options: ["wrap", "scroll"] } },
+  render: (args: ReviewArgs) => <ReviewStory {...args} />,
 }
 
 export const Split = {
-  render: () => <ReviewStory split />,
+  ...Unified,
+  args: { ...Unified.args, split: true },
 }
 
 export const UnifiedDark = {
+  ...Unified,
   globals: { theme: "dark" },
-  render: () => <ReviewStory />,
 }
 
 const commentFile = "src/review.ts"
@@ -211,11 +218,14 @@ export const LargeFile = {
     const padding = `// ${"unchanged ".repeat(70)}\n`.repeat(800)
     const before = { name: "large.ts", contents: `export const value = 'before'\n${padding}` }
     const after = { name: "large.ts", contents: `export const value = 'after'\n${padding}` }
-    const input = args.source === "metadata" ? { fileDiff: parseDiffFromFile(before, after) } : { before, after }
 
     return (
       <div class="h-screen overflow-auto bg-background-base">
-        <File mode="diff" {...input} diffStyle={args.split ? "split" : "unified"} />
+        <File
+          mode="diff"
+          {...(args.source === "metadata" ? { fileDiff: parseDiffFromFile(before, after) } : { before, after })}
+          diffStyle={args.split ? "split" : "unified"}
+        />
       </div>
     )
   },
