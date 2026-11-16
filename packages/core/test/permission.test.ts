@@ -881,3 +881,90 @@ describe("shell scanner permission impact", () => {
     )
   }
 })
+
+describe("Permission experimental.rules", () => {
+  const rulesFor = Effect.gen(function* () {
+    const store = yield* SessionStore.Service
+    const agents = yield* Agent.Service
+    const session = yield* store.get(Session.ID.make("ses_test"))
+    if (!session) return yield* Effect.die(new Error("no session"))
+    return yield* Permission.rules(yield* PluginHooks.Service, { session, agent: yield* agents.select(session.agent) })
+  })
+
+  it.effect("appends each hook's denies in order, and nothing a hook writes elsewhere", () =>
+    Effect.gen(function* () {
+      const configured: Permission.Ruleset = [
+        { action: "shell", resource: "*", effect: "deny" },
+        { action: "read", resource: "*.env", effect: "ask" },
+      ]
+      yield* setup(configured)
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "experimental.rules", (event) =>
+        Effect.sync(() => {
+          // Every way a hook could try to allow: push to the rules, edit them in place, swap the arrays, allow in deny.
+          ;(event.rules as Permission.Rule[]).push({ action: "*", resource: "*", effect: "allow" })
+          ;(event.rules as Permission.Rule[]).forEach((rule) => Object.assign(rule, { effect: "allow" }))
+          ;(event.session as Permission.Rule[]).push({ action: "*", resource: "*", effect: "allow" })
+          Object.assign(event, { rules: [], session: [] })
+          event.deny.push({ action: "edit", resource: "*" })
+          event.deny.push(Object.assign({ action: "webfetch", resource: "*" }, { effect: "allow" }))
+        }),
+      )
+      yield* hooks.register("permission", "experimental.rules", (event) =>
+        Effect.sync(() => event.deny.push({ action: "shell", resource: "git *" })),
+      )
+      expect(yield* rulesFor).toEqual([
+        ...configured,
+        { action: "edit", resource: "*", effect: "deny" },
+        { action: "webfetch", resource: "*", effect: "deny" },
+        { action: "shell", resource: "git *", effect: "deny" },
+      ])
+      const agents = yield* Agent.Service
+      expect((yield* agents.get(Agent.ID.make("test")))?.permissions).toEqual(configured)
+
+      const service = yield* Permission.Service
+      expect(yield* service.ask(assertion({ action: "shell", resources: ["ls"] }))).toMatchObject({ effect: "deny" })
+      expect(yield* service.ask(assertion({ action: "edit", resources: ["a.ts"] }))).toMatchObject({ effect: "deny" })
+      expect(
+        yield* service.ask(assertion({ id: Permission.ID.create("per_env"), action: "read", resources: [".env"] })),
+      ).toMatchObject({ effect: "ask" })
+    }),
+  )
+
+  it.effect("a hook's deny refuses the request before any evaluate hook runs", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      const evaluated: string[] = []
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          evaluated.push(event.action)
+          event.effect = "allow"
+        }),
+      )
+      yield* hooks.register("permission", "experimental.rules", (event) =>
+        Effect.sync(() => event.deny.push({ action: "shell", resource: "*" })),
+      )
+      const service = yield* Permission.Service
+      const error = yield* service.assert(assertion({ action: "shell", resources: ["ls"] })).pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Permission.BlockedError)
+      expect(yield* service.ask(assertion({ action: "read" }))).toMatchObject({ effect: "allow" })
+      expect(evaluated).toEqual(["read"])
+    }),
+  )
+
+  it.effect("a deny that is not two strings fails the check closed and names the hook", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "experimental.rules", (event) =>
+        Effect.sync(() => event.deny.push({ action: 1, resource: "*" } as unknown as (typeof event.deny)[number])),
+      )
+      const service = yield* Permission.Service
+      const exit = yield* service.ask(assertion()).pipe(Effect.exit)
+      expect(exit._tag).toBe("Failure")
+      if (exit._tag === "Failure")
+        expect(Cause.pretty(exit.cause)).toContain('A permission "experimental.rules" hook added an invalid deny')
+    }),
+  )
+})

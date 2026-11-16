@@ -107,22 +107,34 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
   return rulesets.flat()
 }
 
+const Denies = Schema.Array(Schema.Struct({ action: Schema.String, resource: Schema.String }))
+
 /**
- * The rules for `agent` in `session`: the agent's, then the Session's, then any that `experimental.rules` hooks append.
- * Requests are evaluated against them and steps list tools, skills and MCP servers by them, so what an agent is
- * offered and what it may call come from one ruleset.
+ * The rules for `agent` in `session`: the agent's, then the Session's, then a deny for each entry `experimental.rules`
+ * hooks add. Requests are evaluated against them and steps list tools, skills and MCP servers by them, so what an
+ * agent is offered and what it may call come from one ruleset. Hooks see copies and can only add denies, so a
+ * configured deny stays final and no hook can allow, remove or reorder a rule.
  */
 export const rules = Effect.fn("Permission.rules")(function* (
   hooks: PluginHooks.Interface,
   input: { readonly session: SessionSchema.Info; readonly agent: Agent.Selection },
 ) {
+  const base = [...(input.agent.info?.permissions ?? missingAgentPermissions), ...(input.session.permissions ?? [])]
   const event = yield* hooks.trigger("permission", "experimental.rules", {
     sessionID: input.session.id,
     agent: input.agent.id,
-    session: input.session.permissions ?? [],
-    rules: [...(input.agent.info?.permissions ?? missingAgentPermissions), ...(input.session.permissions ?? [])],
+    rules: base.map((rule) => ({ ...rule })),
+    session: (input.session.permissions ?? []).map((rule) => ({ ...rule })),
+    deny: [],
   })
-  return event.rules
+  // A hook that cannot say what it denies must not leave the request decided without it.
+  const denies = yield* Schema.decodeUnknownEffect(Denies)(event.deny).pipe(
+    Effect.mapError(
+      (error) => new Error(`A permission "experimental.rules" hook added an invalid deny: ${error.message}`),
+    ),
+    Effect.orDie,
+  )
+  return [...base, ...denies.map((rule) => ({ action: rule.action, resource: rule.resource, effect: "deny" as const }))]
 })
 
 export interface Interface {
