@@ -120,7 +120,8 @@ pub fn resolve(input: &ThemeInput) -> RunTheme {
     if name == "system" && colors.is_none() {
         return map(&fallback(mode), &indexed, false);
     }
-    let mut catalog = Catalog::default();
+    // TS mini parses themes without the new-designs experiment the TUI follows.
+    let mut catalog = Catalog::mini();
     if name == "system" {
         catalog.set_system(colors.as_ref().map(|colors| generate_system(colors, mode)));
     } else if let Ok(custom) = discover(&input.directories) {
@@ -494,6 +495,29 @@ mod tests {
         assert!(matches!(theme.markdown.text.intent(), Intent::Indexed(_)));
         assert_eq!(theme.footer.text.intent(), Intent::Rgb);
         assert_eq!(theme.background.intent(), Intent::Default);
+    }
+
+    /// A terminal that reports its palette but not its default colors (no OSC 10 or 11 reply) still gets the system
+    /// theme from slots 0 and 7, and its accents from the slots as `migrateV1` lays them out: the agent rail in slot 5
+    /// (secondary), warnings in slot 3.
+    #[test]
+    fn system_theme_derives_from_the_palette_without_default_colors() {
+        let slots = ["#1a1b26", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#ad8ee6", "#449dab", "#a9b1d6"];
+        let colors = slots.iter().map(|slot| Some(opencode_ui::theme::from_hex(slot))).collect();
+        let palette = TerminalPalette { colors, ..TerminalPalette::default() };
+        let input = |palette: TerminalPalette| ThemeInput {
+            name: Some("system".into()),
+            palette: Some(palette),
+            ..ThemeInput::default()
+        };
+        let bare = resolve(&input(palette.clone()));
+        let rgb = |color: Color| (color.r, color.g, color.b);
+        assert_eq!(bare.footer.categorical.first().copied().map(rgb), Some((0xad, 0x8e, 0xe6)));
+        assert_eq!(rgb(bare.footer.warning), (0xe0, 0xaf, 0x68));
+        assert_eq!(bare.background.intent(), Intent::Default);
+        // The same slots as default colors give the same footer.
+        let reported = TerminalPalette { foreground: palette.colors[7], background: palette.colors[0], ..palette };
+        assert_eq!(resolve(&input(reported)).footer, bare.footer);
     }
 
     #[test]
