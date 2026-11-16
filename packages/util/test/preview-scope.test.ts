@@ -1,5 +1,36 @@
 import { expect, test } from "bun:test"
-import { previewAllowed } from "../src/preview-scope.js"
+import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { previewAllowed, previewRoot, openPreviewFile } from "../src/preview-scope.js"
+
+test("an existing grant cannot follow a replaced root; a fresh grant may use a recreated workspace", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "pin-root-"))
+  const workspace = join(temp, "workspace")
+  const other = join(temp, "other")
+  try {
+    await Promise.all([mkdir(workspace), mkdir(other)])
+    await writeFile(join(other, "index.html"), "outside")
+    const pin = (await previewRoot(workspace)).id
+    const read = (id: string) => openPreviewFile(workspace, "index.html", "index.html", true, id)
+    await rename(workspace, join(temp, "original"))
+    await symlink(other, workspace, process.platform === "win32" ? "junction" : "dir")
+    expect(await read(pin)).toBe("denied")
+    await rm(workspace)
+    await mkdir(workspace)
+    await writeFile(join(workspace, "index.html"), "recreated")
+    expect(await read(pin)).toBe("denied")
+    const opened = await read((await previewRoot(workspace)).id)
+    if (!opened || opened === "denied") throw new Error("missing fresh grant control")
+    try {
+      expect(await opened.file.readFile("utf8")).toBe("recreated")
+    } finally {
+      await opened.file.close()
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true })
+  }
+})
 
 test.each([
   ["/home/u/repo", "/home/u", "/"],

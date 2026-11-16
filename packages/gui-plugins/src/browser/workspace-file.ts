@@ -14,19 +14,21 @@ export type WorkspaceSource =
       type: "remote"
       root: string
       prefix: string
+      pin(document: string, signal: AbortSignal): Promise<string | undefined>
       needsUpdate?(): boolean
-      stat(path: string, signal: AbortSignal, document?: string, entry?: boolean): Promise<number | null | "denied">
+      stat(path: string, signal: AbortSignal, document?: string, entry?: boolean, identity?:string): Promise<number | null | "denied">
       read(
         path: string,
         range: string | undefined,
         signal: AbortSignal,
         document: string,
         entry: boolean,
+        identity: string,
       ): Promise<Response>
     }
 
 export type PreviewSource =
-  | (WorkspaceSource & { document: string; takeEntry(): boolean; denied(): void })
+  | (WorkspaceSource & { document: string; identity: string; takeEntry(): boolean; denied(): void })
   | { type: "artifact"; id: string; read(route: string, method: string, signal: AbortSignal): Promise<Response> }
 
 /** The grant must still belong to this binding after asynchronous path resolution. */
@@ -49,6 +51,8 @@ export async function resolvePreviewRequest(
     return item && { type: "artifact" as const, route: item.route, read: grant.read }
   }
 
+  if (!grant.identity) return
+
   if (grant.type === "remote") {
     const origin = `oc-preview://${host}`
 
@@ -68,7 +72,7 @@ export async function resolvePreviewRequest(
       return
     }
 
-    const size = await grant.stat(path, signal, grant.document, entry)
+    const size = await grant.stat(path, signal, grant.document, entry, grant.identity)
 
     if (size === "denied") {
       grant.denied()
@@ -83,7 +87,7 @@ export async function resolvePreviewRequest(
       path,
       size,
       read: async (path: string, range: string | undefined, signal: AbortSignal) => {
-        const response = await grant.read(path, range, signal, grant.document, entry)
+        const response = await grant.read(path, range, signal, grant.document, entry, grant.identity)
 
         if (response.headers.get("x-opencode-preview-denied") === "1" && grants.get(host) === grant) grant.denied()
 
@@ -106,7 +110,7 @@ export async function resolvePreviewRequest(
   if (!root) return
   const path = relative(root, fileURLToPath(file)).replaceAll("\\", "/")
   const entry = path === grant.document && initiator === undefined && grant.takeEntry()
-  const target = await openPreviewFile(root, grant.document, path, entry).catch(() => undefined)
+  const target = await openPreviewFile(root, grant.document, path, entry, grant.identity).catch(() => undefined)
 
   if (target === "denied") {
     grant.denied()

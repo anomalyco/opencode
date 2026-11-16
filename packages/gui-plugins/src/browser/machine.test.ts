@@ -7,6 +7,7 @@ import {
   serverSupported,
   sessionError,
   sessionPending,
+  sessionRegistration,
   sessionSuspended,
   transition,
   type Attachment,
@@ -94,6 +95,14 @@ const ready = (state = replay(attach()).state) => replay([paneState(state, inven
 const types = (effects: readonly MachineEffect[]) => effects.map((effect) => effect.type)
 
 describe("browser pane machine", () => {
+  test("a visible restored tab requests its load on acceptance, not before the new registration exists", () => {
+    const start = ready()
+    const closed = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.registration.closed")).state
+    const retry = transition(closed, { type: "retry.due", sessionKey: key, attempt: attempt(closed) }).state
+    expect(sessionRegistration(retry, key)).toBeUndefined()
+    const accepted = transition(retry, { type: "register.accepted", sessionKey: key, attempt: attempt(retry) }).state
+    expect(sessionRegistration(accepted, key)).toBe(attempt(retry))
+  })
   test("a cold registration that cannot reach the server keeps main's saved inventory until retry", () => {
     const start = replay(attach()).state
     const saved = inventory(tab(tabA, "workspace://ses_a/report.html"))

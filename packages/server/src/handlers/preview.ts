@@ -1,5 +1,5 @@
 import { Session } from "@opencode/core/session"
-import { openPreviewFile } from "@opencode/util/preview-scope"
+import { openPreviewFile, previewRoot } from "@opencode/util/preview-scope"
 import { Effect, Stream } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ContentHeaders } from "../content-headers"
@@ -9,12 +9,12 @@ import { missingSession } from "./session-error"
 export const makePreviewRead = Effect.gen(function* () {
   const sessions = yield* Session.Service
   return Effect.fn("Preview.read")(function* (
-    query: { sessionID: Session.ID; path: string; document: string; entry?: "1"; location?: { directory?: string; workspace?: string } },
+    query: { sessionID: Session.ID; path: string; document: string; root: string; entry?: "1"; location?: { directory?: string; workspace?: string } },
     req: HttpServerRequest.HttpServerRequest,
   ) {
     const session = yield* sessions.get(query.sessionID).pipe(Effect.mapError(missingSession))
     const headers = {
-      "x-opencode-preview": "2",
+      "x-opencode-preview": "3",
       "cache-control": "no-store, no-transform",
       "accept-ranges": "bytes",
       ...ContentHeaders.download({ path: query.path, mime: "application/octet-stream" }),
@@ -25,9 +25,14 @@ export const makePreviewRead = Effect.gen(function* () {
         session.location.workspaceID
     )
       return HttpServerResponse.empty({ status: 404, headers })
+    if (query.root === "bind" && req.method === "HEAD") {
+      const root = yield* Effect.promise(() => previewRoot(session.location.directory).catch(() => undefined))
+      return root ? HttpServerResponse.empty({headers:{...headers,"x-opencode-preview-root":root.id}}) : HttpServerResponse.empty({status:404,headers})
+    }
+    if (!/^[a-f0-9]{64}$/.test(query.root)) return HttpServerResponse.empty({status:404,headers})
     const opened = yield* Effect.acquireRelease(
       Effect.promise(() =>
-        openPreviewFile(session.location.directory, query.document, query.path, query.entry === "1")
+        openPreviewFile(session.location.directory, query.document, query.path, query.entry === "1", query.root)
           .catch(() => undefined),
       ),
       (opened) =>

@@ -1,5 +1,6 @@
 import { homedir } from "node:os"
-import { realpath } from "node:fs/promises"
+import { lstat, realpath } from "node:fs/promises"
+import { createHash } from "node:crypto"
 import { relative } from "node:path"
 import { openContained } from "./contained-file.js"
 
@@ -35,13 +36,40 @@ export function previewAllowed(root: string, document: string, path: string, ent
   )
 }
 
-/** The same decision both before opening and on the kernel's name for the handle: an innocuous alias is not authority. */
-export async function openPreviewFile(workspace: string, document: string, path: string, entry: boolean) {
+/** The remote wire representation is opaque; never send the physical server path or a lossy numeric inode. */
+export async function previewRoot(workspace: string) {
+  const path = await realpath(workspace)
+  const info = await lstat(path, { bigint: true })
+  if (!info.isDirectory() || info.ino === 0n) throw new Error("Cannot identify the preview root")
+  return {
+    path,
+    id: createHash("sha256")
+      .update(JSON.stringify([path, String(info.dev), String(info.ino), String(info.birthtimeNs)]))
+      .digest("hex"),
+  }
+}
+
+/** The grant's root must still name the original directory before and after authorizing the open file. */
+export async function openPreviewFile(
+  workspace: string,
+  document: string,
+  path: string,
+  entry: boolean,
+  identity: string,
+) {
   if (!previewAllowed(workspace, document, path, entry, homedir())) return "denied"
-  const root = await realpath(workspace)
-  const opened = await openContained(root, path)
+  const root = await previewRoot(workspace)
+  if (root.id !== identity) return "denied"
+  const opened = await openContained(root.path, path)
   if (!opened) return
-  if (previewAllowed(root, document, relative(root, opened.path), entry, homedir())) return opened
+  if (
+    previewAllowed(root.path, document, relative(root.path, opened.path), entry, homedir()) &&
+    (await previewRoot(workspace).then(
+      (current) => current.id === identity,
+      () => false,
+    ))
+  )
+    return opened
   await opened.file.close()
   return "denied"
 }

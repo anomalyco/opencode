@@ -308,4 +308,5 @@ export default {
   "review.partial": "Limited support",
   "review.noSites": "No website access requested",
   "review.otherSites": "See site patterns in Details",
+  "artifact.missing": "This artifact is not available on this session’s server.",
 }

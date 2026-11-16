@@ -2,12 +2,20 @@ import { expect, test } from "bun:test"
 import { previewAddress, previewFile, previewResource, reloadAddress } from "./preview"
 import { refusal } from "./policy"
 import { navigationNotice } from "./refusal-notice"
+import { reusableFile } from "./link"
 
 const roots = ["/work/repo #1"]
 
 const file = "file:///work/repo%20%231/index.html?q=1#anchor"
 
 const view = "oc-preview://first/work/repo%20%231/index.html?q=1#anchor"
+
+test("new-tab intent never matches the plain-open file key", () => {
+  const url = "workspace://ses_x/site.html?view=2#top"
+  expect(reusableFile(url, "new")).toBeUndefined()
+  expect(reusableFile(url, "present")).toBe("workspace://ses_x/site.html")
+  expect(reusableFile("https://example.test/", "present")).toBeUndefined()
+})
 
 test("a remote policy opens only its own session's workspace and explains a refusal as a workspace restriction", () => {
   const remote = "workspace://ses_x/"

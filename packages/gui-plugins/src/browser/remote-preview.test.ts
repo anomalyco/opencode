@@ -43,11 +43,15 @@ test("the authenticated read under a server base path names exactly the file val
       expect(req.headers.get("authorization")).toBe("fixture")
       expect(req.headers.get("accept-encoding")).toBe("identity")
       expect(url.pathname).toBe("/sub/api/experimental/preview/read")
+      const pin = "a".repeat(64)
+
+      if (url.searchParams.get("root") === "bind") return new Response(null, {headers:{"x-opencode-preview":"3","x-opencode-preview-root":pin}})
+      expect(url.searchParams.get("root")).toBe(pin)
 
       if (req.method === "HEAD") checked.push(url.searchParams.get("path") ?? "")
       else reads.push(url.searchParams.get("path") ?? "")
 
-      return new Response("x", { headers: { "x-opencode-preview": "2", "content-length": "1" } })
+      return new Response("x", { headers: { "x-opencode-preview": "3", "content-length": "1" } })
     },
   })
 
@@ -60,7 +64,10 @@ test("the authenticated read under a server base path names exactly the file val
     controller.signal,
   )
 
-  const grants = new Map<string, PreviewSource>([["grant", {...source, document:"index.html", takeEntry:()=>false, denied:()=>{}}]])
+  const identity = await source.pin("index.html", controller.signal)
+
+  if (!identity) throw new Error("expected root identity")
+  const grants = new Map<string, PreviewSource>([["grant", {...source, identity, document:"index.html", takeEntry:()=>false, denied:()=>{}}]])
   const names = ["dir/50% off.html", "#?.txt", "a%2fb", "%252e%252e/[slug]", "日本語.txt"]
 
   try {

@@ -4598,6 +4598,7 @@ export type ExperimentalPreviewReadInput = {
   readonly sessionID: string
   readonly path: string
   readonly document: string
+  readonly root: string
   readonly entry?: "1" | undefined
 }
 

@@ -262,24 +262,26 @@ export function evictHop(chain: Chain, id: string): Chain | undefined {
 
 /** The hop as the browser tools report it. */
 export function networkRequest(hop: Hop): Browser.NetworkRequest {
-  const base = {
+  const base: Omit<Browser.NetworkRequest, "state"> = {
     id: hop.id,
     url: hop.url,
     method: hop.method,
     resourceType: hop.resourceType,
     timestampMs: hop.timestampMs,
-    statusCode: hop.statusCode,
   }
+
+  // A network failure need not have an HTTP response. An absent field is JSON; an own undefined value is not.
+  const request = hop.statusCode === undefined ? base : { ...base, statusCode: hop.statusCode }
 
   switch (hop.phase.status) {
     case "connecting":
     case "pending":
-      return { ...base, state: "pending" }
+      return { ...request, state: "pending" }
     case "redirected":
     case "completed":
-      return { ...base, state: "completed", durationMs: hop.phase.durationMs }
+      return { ...request, state: "completed", durationMs: hop.phase.durationMs }
     case "failed":
-      return { ...base, state: "failed", durationMs: hop.phase.durationMs, failure: hop.phase.failure }
+      return { ...request, state: "failed", durationMs: hop.phase.durationMs, failure: hop.phase.failure }
   }
 }
 
