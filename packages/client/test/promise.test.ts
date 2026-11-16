@@ -149,8 +149,6 @@ test("nests a method under client.experimental exactly when its route is experim
     "generate.decisions",
     "generate.image",
     "generate.text",
-    "generate.video.get",
-    "generate.video.start",
     "integration.wellknown.add",
     "mcp.add",
     "mcp.client.token",

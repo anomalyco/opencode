@@ -2764,13 +2764,6 @@ export function make(options: ClientOptions) {
       text: client.experimental.generate.text,
       /** @deprecated Use `client.experimental.generate.image`. Removed in the next minor. */
       image: client.experimental.generate.image,
-      /** @deprecated Use `client.experimental.generate.video`. Removed in the next minor. */
-      video: {
-        /** @deprecated Use `client.experimental.generate.video.start`. Removed in the next minor. */
-        start: client.experimental.generate.video.start,
-        /** @deprecated Use `client.experimental.generate.video.get`. Removed in the next minor. */
-        get: client.experimental.generate.video.get,
-      },
       /** @deprecated Use `client.experimental.generate.decisions`. Removed in the next minor. */
       decisions: client.experimental.generate.decisions,
     },

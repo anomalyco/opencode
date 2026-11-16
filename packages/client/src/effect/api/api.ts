@@ -2943,24 +2943,6 @@ export type GenerateImageOutput = ExperimentalGenerateImageOutput
 /** @deprecated Use `ExperimentalGenerateImageOperation`. Removed in the next minor. */
 export type GenerateImageOperation<E = never> = ExperimentalGenerateImageOperation<E>
 
-/** @deprecated Use `ExperimentalGenerateVideoStartInput`. Removed in the next minor. */
-export type GenerateVideoStartInput = ExperimentalGenerateVideoStartInput
-
-/** @deprecated Use `ExperimentalGenerateVideoStartOutput`. Removed in the next minor. */
-export type GenerateVideoStartOutput = ExperimentalGenerateVideoStartOutput
-
-/** @deprecated Use `ExperimentalGenerateVideoStartOperation`. Removed in the next minor. */
-export type GenerateVideoStartOperation<E = never> = ExperimentalGenerateVideoStartOperation<E>
-
-/** @deprecated Use `ExperimentalGenerateVideoGetInput`. Removed in the next minor. */
-export type GenerateVideoGetInput = ExperimentalGenerateVideoGetInput
-
-/** @deprecated Use `ExperimentalGenerateVideoGetOutput`. Removed in the next minor. */
-export type GenerateVideoGetOutput = ExperimentalGenerateVideoGetOutput
-
-/** @deprecated Use `ExperimentalGenerateVideoGetOperation`. Removed in the next minor. */
-export type GenerateVideoGetOperation<E = never> = ExperimentalGenerateVideoGetOperation<E>
-
 /** @deprecated Use `ExperimentalGenerateDecisionsInput`. Removed in the next minor. */
 export type GenerateDecisionsInput = ExperimentalGenerateDecisionsInput
 
@@ -3140,15 +3122,6 @@ export interface AppApi<E = never> {
 
     /** @deprecated Use `client.experimental.generate.image`. Removed in the next minor. */
     readonly image: ExperimentalGenerateImageOperation<E>
-
-    /** @deprecated Use `client.experimental.generate.video`. Removed in the next minor. */
-    readonly video: {
-      /** @deprecated Use `client.experimental.generate.video.start`. Removed in the next minor. */
-      readonly start: ExperimentalGenerateVideoStartOperation<E>
-
-      /** @deprecated Use `client.experimental.generate.video.get`. Removed in the next minor. */
-      readonly get: ExperimentalGenerateVideoGetOperation<E>
-    }
 
     /** @deprecated Use `client.experimental.generate.decisions`. Removed in the next minor. */
     readonly decisions: ExperimentalGenerateDecisionsOperation<E>
