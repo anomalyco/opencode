@@ -17,6 +17,8 @@ export async function createAppFixture(
     fetch?: FetchHandler
     // A renderer whose owner already set up its terminal, such as the simulation renderer.
     setup?: TestRendererSetup
+    // Where plugins named by npm package come from; by default none resolves.
+    packages?: TuiInput["packages"]
   } = {},
 ) {
   const { run } = await import("../../src/app")
@@ -56,7 +58,7 @@ export async function createAppFixture(
           return next
         },
       },
-      packages: { prepare: async () => ({ directory: "" }) },
+      packages: input.packages ?? { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
       args: input.args ?? {},
       log: () => {},

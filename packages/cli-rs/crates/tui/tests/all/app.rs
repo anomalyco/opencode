@@ -15,6 +15,7 @@ use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_api::pty;
 use opencode_local::cli_config;
+use opencode_local::paths::Paths;
 use opencode_parity::Fixture;
 use opencode_parity::app::{self, Recording, Sent, Step};
 use opencode_plugin::abi::{self, Node, Placement, Render, Span};
@@ -74,6 +75,7 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
         false => recording.config.to_string(),
     };
     let config = cli_config::decode_text(&config_text).unwrap_or_default();
+    let cache = (!recording.cache.is_empty()).then(|| cache(&recording.cache));
     let args = &recording.args;
     // TS opens `sessionID` unless it forks it (`app.tsx:680-686`).
     let session = args.session_id.clone().map(SessionID);
@@ -93,6 +95,10 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             continue_: args.continue_,
             events: true,
             abi_builtins: abi,
+            // The TS fixture's roots are a temporary directory's; its cache is the scenario's npm cache.
+            roots: cache.as_ref().and_then(|cache| {
+                support::roots(Paths { cache: cache.path().to_owned(), ..support::paths(cache.path()) }, "test")
+            }),
             ..support::deps(Arc::new(memory.clone()))
         },
         Args {
@@ -513,6 +519,23 @@ fn npm_config(config: &serde_json::Value) -> String {
         *target = into.to_string_lossy().into_owned();
     }
     config.to_string()
+}
+
+/// js-npm: an npm cache in a temporary directory holding each package of `packages` (spec to tarball name) as TS's
+/// `Npm.add` leaves it, as the TS recorder lays it out (`npmCache` in parity/app/scenarios.test.tsx).
+fn cache(packages: &BTreeMap<String, String>) -> opencode_util::temp::TempDir {
+    let cache = opencode_util::temp::tempdir().expect("npm cache");
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis();
+    for (spec, name) in packages {
+        let generation =
+            cache.path().join("npm").join(opencode_plugin::loader::npm::cache_key(spec)).join(now.to_string());
+        let version = spec.rsplit_once('@').map_or(spec.as_str(), |(_, version)| version);
+        std::fs::create_dir_all(&generation).expect("the generation");
+        let manifest = serde_json::json!({ "dependencies": { name: version } });
+        std::fs::write(generation.join("package.json"), manifest.to_string()).expect("the generation's package.json");
+        crate::ports::unpack(name, &generation.join("node_modules").join(name));
+    }
+    cache
 }
 
 /// The scenario routes first, then each recorded read by its exact query, then by path alone.
