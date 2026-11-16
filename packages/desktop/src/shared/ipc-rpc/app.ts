@@ -69,6 +69,35 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
 
 export const AppRelaunch = Rpc.make("AppRelaunch")
 
+const BrowseStatus = Schema.Struct({
+  installed: Schema.Boolean,
+  configured: Schema.Boolean,
+  extension: Schema.Literals([
+    "connected",
+    "paired-offline",
+    "unpaired",
+    "refused",
+    "not-seen",
+    "incompatible",
+    "unknown",
+  ]),
+  job: Schema.Union([
+    Schema.Struct({ status: Schema.Literals(["idle", "installing"]) }),
+    Schema.Struct({
+      status: Schema.Literal("failed"),
+      failure: Schema.Struct({
+        reason: Schema.Literals(["start", "download", "timeout", "installer"]),
+        detail: Schema.optionalKey(Schema.String),
+      }),
+    }),
+  ]),
+})
+
+export const AppBrowseStatus = Rpc.make("AppBrowseStatus", { success: BrowseStatus })
+
+// Starts the installer and returns at once; `AppBrowseStatus` reports its progress.
+export const AppBrowseInstall = Rpc.make("AppBrowseInstall")
+
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
@@ -86,4 +115,6 @@ export const AppRpcs = RpcGroup.make(
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,
+  AppBrowseStatus,
+  AppBrowseInstall,
 )

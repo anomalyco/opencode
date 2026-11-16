@@ -1,3 +1,5 @@
+import type { BrowseStatus } from "@opencode/app/desktop"
+
 // The sidecar password never crosses into the renderer; the main process adds it to sidecar requests.
 export type ServerReadyData = {
   url: string
@@ -35,6 +37,10 @@ export type SaveFilePickerOptions = {
   title?: string
   defaultPath?: string
 }
+
+export type { BrowseExtensionState, BrowseInstallFailure, BrowseStatus } from "@opencode/app/desktop"
+
+export type BrowseInstallJob = BrowseStatus["job"]
 
 export type ClipboardImage = {
   buffer: ArrayBuffer
