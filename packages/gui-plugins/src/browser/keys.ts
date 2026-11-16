@@ -1,6 +1,12 @@
 /** A key press in the page, with Electron's `Input` field names. */
 export type PageKey = Pick<Electron.Input, "key" | "code" | "control" | "meta" | "shift" | "alt">
 
+/** Blink's input handler marks CDP events kFromDebugger. Electron 44 exposes the raw flags as _modifiers.
+ * Missing provenance on a future Electron version must never forward a shortcut into the app. */
+export function hardwareInput(input: object) {
+  return "_modifiers" in input && typeof input._modifiers === "number" && (input._modifiers & (1 << 23)) === 0
+}
+
 /** Reject clipboard and native menu accelerators before a CDP key event reaches Blink's editor. */
 export function agentKeyRefusal(key: string, modifiers: number, virtualCode?: number) {
   const shortcuts = (modifiers & 6) !== 0

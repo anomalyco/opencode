@@ -10,7 +10,7 @@ import { CodedError } from "./errors"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
-import { agentKeyRefusal, pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
+import { agentKeyRefusal, hardwareInput, pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
 import {
   createDocumentState,
   documentGeneration,
@@ -99,7 +99,6 @@ const pointerOperations: readonly Browser.Method[] = [
   "fill_form",
   "select",
   "check",
-  "press",
   "scroll",
   "files.drop",
 ]
@@ -273,13 +272,15 @@ export function createBrowserPage(
   const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
   contents.on("before-mouse-event", (_event, mouse) => {
-    // The agent's own input arrives while its command runs.
-    if (mouse.type === "mouseDown" && activity.agentRuns === 0) activity.userInputAt = Date.now()
+    if (mouse.type === "mouseDown" && hardwareInput(mouse)) activity.userInputAt = Date.now()
   })
   contents.on("before-input-event", (event, input) => {
-    if (input.type !== "keyDown") return
+    const hardware = hardwareInput(input)
+    contents.setIgnoreMenuShortcuts(!hardware)
 
-    if (activity.agentRuns === 0) activity.userInputAt = Date.now()
+    if (!hardware || input.type !== "keyDown") return
+
+    activity.userInputAt = Date.now()
 
     if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
@@ -300,8 +301,6 @@ export function createBrowserPage(
     if (shortcut) {
       event.preventDefault()
 
-      // An automated key press targets the page, not the user's search field in the app window.
-      if (shortcut.key === "f" && activity.agentRuns > 0) return
       options.shortcut?.(shortcut)
 
       return
