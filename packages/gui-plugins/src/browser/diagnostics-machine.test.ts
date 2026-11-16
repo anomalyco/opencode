@@ -84,6 +84,7 @@ const hops = (chain: Chain | undefined) => chain?.hops.map(networkRequest) ?? []
 test("a redirect keeps extension provenance even when the next URL is an ordinary site", () => {
   const first = sent("one", "https://site.test/start", 1)
   if (first.type !== "request") throw new Error("Expected request")
+
   const next = sent("two", "https://site.test/end", 2, { response: response(302), hasExtraInfo: false })
   expect(replay([first, next])?.hops.map((hop) => hop.extension)).toEqual([false, false])
   const extension = { ...first, event: { ...first.event, initiator: { type: "script" as const, url: "chrome-extension://example/index.js" } } }

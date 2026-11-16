@@ -3,8 +3,8 @@ export type PageKey = Pick<Electron.Input, "key" | "code" | "control" | "meta" |
 
 /** Blink's input handler marks CDP events kFromDebugger. Electron 44 exposes the raw flags as _modifiers.
  * Missing provenance on a future Electron version must never forward a shortcut into the app. */
-export function hardwareInput(input: object) {
-  return "_modifiers" in input && typeof input._modifiers === "number" && (input._modifiers & (1 << 23)) === 0
+export function hardwareInput(input: { readonly type: string; readonly _modifiers?: number }) {
+  return input._modifiers !== undefined && Number.isInteger(input._modifiers) && (input._modifiers & (1 << 23)) === 0
 }
 
 /** Reject clipboard and native menu accelerators before a CDP key event reaches Blink's editor. */

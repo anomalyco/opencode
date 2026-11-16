@@ -120,6 +120,7 @@ const setup = (config: object) =>
       session,
       commands,
       attach,
+      navigate: (url: string) => rpc.state({ sessionID: session.id, connectionID: attachments.keys().next().value!, state: { tabs: [{ ...tab, url, generation: tab.generation + 1 }], focusedTabID: tab.id } }),
       // The desktop closes the session's first attachment.
       detach: Fiber.interrupt(attachment),
       run,
@@ -500,6 +501,27 @@ it.live("always for one browser operation stops its prompts, while other operati
     const other = yield* answer(browser, "tabs.open", {}, "reject")
     expect(other.request.resources).toEqual(["tabs.open"])
     expect(browser.commands.count).toBe(2)
+  }),
+)
+
+it.live("browser approvals retain legacy operation policy and bind always to the site and complete script", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("evaluate", "ask")] })
+    const input = { tabID: tab.id, script: "document.title" }
+    const first = yield* answer(browser, "evaluate", input, "always")
+    expect(first.request.resources).toEqual(["evaluate"])
+    expect(first.request.metadata?.input).toEqual({ site: "https://example.com", script: input.script })
+    expect(first.request.save?.[0]).toMatch(/^evaluate https:\/\/example\.com [a-f0-9]{64}$/)
+    // The stand-in desktop answers with a tab list rather than an evaluation result; reaching it is the assertion.
+    yield* browser.run("evaluate", input).pipe(Effect.flip, Effect.timeout("5 seconds"))
+    expect(browser.commands.count).toBe(2)
+    const next = yield* answer(browser, "evaluate", { ...input, script: "location.href" }, "reject")
+    expect(next.request.save).not.toEqual(first.request.save)
+    expect(browser.commands.count).toBe(2)
+    yield* browser.navigate("https://elsewhere.test/")
+    const other = yield* answer(browser, "evaluate", input, "reject")
+    expect(other.request.metadata?.input).toEqual({ site: "https://elsewhere.test", script: input.script })
+    expect(other.request.save).not.toEqual(first.request.save)
   }),
 )
 

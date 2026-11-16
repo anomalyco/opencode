@@ -1,6 +1,7 @@
 export * as BrowserConnection from "./connection.js"
 
 import { hostname } from "node:os"
+import { createHash } from "node:crypto"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
 import { Location } from "@opencode/schema/location"
@@ -18,6 +19,15 @@ type Attachment = {
 }
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
+
+type Approval = { connectionID: string; site?: string; tabID?: string }
+
+/** Never persist grants for opaque documents or file paths. Host, scheme and port are all significant. */
+function site(url: string | undefined) {
+  if (!url || !URL.canParse(url)) return
+  const parsed = new URL(url)
+  return /^https?:$/.test(parsed.protocol) ? parsed.origin : undefined
+}
 
 /** The server process that wrote a session's grant, stored as `grant:<sessionID>` until its revoke succeeds. */
 const GrantOwner = Schema.Struct({ host: Schema.String, pid: Schema.Number, location: Location.Ref })
@@ -96,7 +106,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
               return
             }
             if (
-              !event.experimental?.approved &&
+              !event.experimental?.approvedSave &&
               event.resources.some((operation) => BrowserMachine.selectBrowserRule(rules, operation)?.effect === "ask")
             )
               event.effect = "ask"
@@ -343,7 +353,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     action: Browser.Action,
     tab: Browser.Tab | undefined,
     files: readonly Browser.File[],
-    inspection: Pick<Browser.Command, "inspect" | "target">,
+    inspection: Pick<Browser.Command, "inspect" | "target" | "expectedSite">,
   ) {
     const requestID = crypto.randomUUID()
     const target = { sessionID, connectionID, requestID }
@@ -396,17 +406,32 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
      * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
      * this plugin's (configured denies and asks win over the grant) and others such as `tool.use` policies.
      */
-    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, operation: Browser.Method, paths?: readonly string[]) {
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, paths?: readonly string[]) {
+      const connection = BrowserMachine.selectConnection(machine.state, tool.sessionID)
+      if (!connection.ok) return yield* connection.error
+      const tab = "tabID" in action ? connection.tabs.find((tab) => tab.id === action.tabID) : undefined
+      const origin = site(tab?.url)
+      const destination = action.type === "tabs.open" ? action.url ?? "about:blank" : action.type === "navigate" ? action.url : undefined
+      const script = action.type === "evaluate" ? action.script : undefined
+      const scope = action.type === "tabs.open" ? site(destination) : origin
+      const detail = script ?? destination
+      const save = action.type === "tabs.list" ? [action.type] : scope && !paths && !/[*?]/.test(scope)
+        ? [`${action.type} ${scope}${detail ? ` ${createHash("sha256").update(detail).digest("hex")}` : ""}`] : []
       yield* ctx.permission.assert({
         sessionID: tool.sessionID,
         agent: tool.agent,
         action: "browser",
-        resources: [operation],
-        // "Always" approves this operation only, in core's saved approvals, never in the session rules the grant uses.
-        save: paths ? [] : [operation],
-        ...(paths && { metadata: { input: { paths } } }),
+        // Keep exact operation resources for existing permission rules and tool.use policies.
+        resources: [action.type],
+        save,
+        metadata: { input: {
+          ...(action.type === "tabs.list" && { scope: "Tab inventories for attached sessions in this project" }),
+          ...(tab && { site: origin ?? tab.url }), ...(destination && { destination }), ...(paths && { paths }),
+          ...(script && { script: script.length > 320 ? `${script.slice(0, 320)}…` : script }),
+        } },
         source: { type: "tool", messageID: tool.messageID, id: tool.id },
       })
+      return { connectionID: connection.connectionID, site: origin, tabID: tab?.id } satisfies Approval
     }),
     /** Whether a desktop is attached to the session or attaching to it. */
     attached: (sessionID: Session.ID) => Effect.sync(() => BrowserMachine.hasAttachment(machine.state, sessionID)),
@@ -419,9 +444,11 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         const connection = BrowserMachine.selectConnection(machine.state, sessionID)
         return connection.ok ? Effect.void : Effect.fail(connection.error)
       }),
-    target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
+    target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action, approved?: Approval) {
       const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
       if (!selected.ok) return yield* selected.error
+      if (approved && (approved.connectionID !== selected.connectionID || approved.tabID !== selected.tab?.id || approved.site !== site(selected.tab?.url)))
+        return yield* new Tool.Error({ message: "Browser target changed while approval was pending. Request the action again for the current site." })
       // Requests go to the attachment selected here. One that closes first, even while file IO waits, runs nothing.
       return {
         tab: selected.tab,
@@ -440,7 +467,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             ),
           ),
         request: (files: readonly Browser.File[], target?: Browser.Target) =>
-          request(sessionID, selected.connectionID, action, selected.tab, files, { target }),
+          request(sessionID, selected.connectionID, action, selected.tab, files, { target, expectedSite: approved?.site }),
       }
     }),
   }

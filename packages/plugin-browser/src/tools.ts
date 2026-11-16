@@ -16,10 +16,10 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   connection: BrowserConnection.Connection,
 ) {
   // Load and text waits run on the desktop; the rest poll from here with actions every desktop already supports.
-  const wait = Effect.fn("BrowserTools.wait")(function* (tabID: Browser.TabID, plan: WaitPlan, tool: Tool.Context) {
+  const wait = Effect.fn("BrowserTools.wait")(function* (tabID: Browser.TabID, plan: WaitPlan, tool: Tool.Context, approved: Effect.Success<ReturnType<typeof connection.authorize>>) {
     const started = yield* Clock.currentTimeMillis
     const current = connection
-      .target(tool.sessionID, { type: "tabs.focus", tabID })
+      .target(tool.sessionID, { type: "tabs.focus", tabID }, approved)
       .pipe(
         Effect.flatMap((target) =>
           target.tab
@@ -51,7 +51,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     }
 
     if (plan.kind === "desktop") {
-      const target = yield* connection.target(tool.sessionID, plan.action)
+      const target = yield* connection.target(tool.sessionID, plan.action, approved)
       return yield* target.request([]).pipe(
         Effect.flatMap((response) => Effect.fromResult(decodeResult({ name: "wait", output: Browser.Tab }, response))),
         Effect.flatMap((tab) => finish(tab, true)),
@@ -82,7 +82,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
           }
     // No count yet: the page is navigating, or it did not answer in time.
     const unanswered = Effect.map(current, (tab): Seen => ({ tab, count: undefined, visible: undefined }))
-    const observe = connection.target(tool.sessionID, probe).pipe(
+    const observe = connection.target(tool.sessionID, probe, approved).pipe(
       Effect.flatMap((target) => target.request([])),
       Effect.flatMap((response) => Effect.fromResult(decodeResult({ name: "wait", output: Visibility }, response))),
       Effect.map((seen): Seen => ({ tab: seen.tab, count: seen.value.count, visible: seen.value.visible })),
@@ -138,12 +138,6 @@ export const register = Effect.fn("BrowserTools.register")(function* (
 
   // Authorization comes before anything that reads the session's tabs or the server's files: a caller that a policy
   // blocks, or whose prompt is still open, learns nothing from them. Only the call's own input is checked first.
-  const admit = Effect.fn("BrowserTools.admit")(function* (tool: Tool.Context, operation: Browser.Method, paths?: readonly string[]) {
-    // A session without a desktop has no grant, so it hears that it is disconnected rather than core's denial.
-    yield* connection.connected(tool.sessionID)
-    yield* connection.authorize(tool, operation, paths)
-  })
-
   const execute = Effect.fn("BrowserTools.execute")(function* (
     operation: Browser.Operation,
     input: Browser.Input,
@@ -153,8 +147,8 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     yield* connection.refuse(tool, input.type)
     if (input.type === "wait") {
       const plan = yield* parse(() => waitPlan(input))
-      yield* admit(tool, "wait")
-      return yield* wait(input.tabID, plan, tool)
+      const approved = yield* connection.authorize(tool, input)
+      return yield* wait(input.tabID, plan, tool, approved)
     }
     const action = yield* parse(() => normalizeAction(input))
     if (action.type === "preview" && !(yield* connection.attached(tool.sessionID))) {
@@ -167,7 +161,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       })
     }
     const paths = "paths" in action ? action.paths.map((path) => BrowserFiles.uploadPath(ctx.location.directory, path)) : undefined
-    yield* admit(tool, action.type, paths ?? (action.type === "preview" ? [action.path] : undefined))
+    const approved = yield* connection.authorize(tool, action, paths ?? (action.type === "preview" ? [action.path] : undefined))
     if (action.type === "preview" && ctx.location.workspaceID) return yield* new Tool.Error({ message: "Browser preview requires a server-local workspace." })
     const checked = action.type === "preview" ? { ...action, path: yield* previewable(action.path) } : action
     if (checked.type === "preview") {
@@ -177,7 +171,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       if (physical[0] !== path) yield* BrowserFiles.authorize(ctx, tool, "read", physical)
       checked.path = relative(ctx.location.directory, physical[0]!).split(sep).join("/")
     }
-    const target = yield* connection.target(tool.sessionID, checked)
+    const target = yield* connection.target(tool.sessionID, checked, approved)
     const uploads = paths ? yield* Effect.gen(function* () {
       yield* BrowserFiles.authorize(ctx, tool, "read", paths)
       const physical = yield* BrowserFiles.physical(paths)

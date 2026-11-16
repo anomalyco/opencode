@@ -357,8 +357,10 @@ export function createBrowserPage(
   const documents = new Map<string, string>()
   const sourceURLs = () => [...new Set([state().url, ...documents.values()])].sort()
   const files = createBrowserFiles(sourceURLs)
+
   const diagnostics = createDiagnostics(cdp, displayURL, (id, sessionID) =>
     Array.from(contexts.values()).some((context) => context.id === id && context.sessionID === sessionID))
+
   const profiling = createProfiling(contents, cdp, files, sourceURLs, options.shared)
   const refs = new Map<string, Element>()
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
@@ -942,6 +944,9 @@ export function createBrowserPage(
   }
 
   async function attempt(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
+    if (command.expectedSite && destinationOrigin(contents.mainFrame.url) !== command.expectedSite)
+      throw new Error("The tab is no longer at the approved site; request the action again.")
+
     if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
       await dispatchPicker({ type: "pointer.command" })
 
@@ -1098,15 +1103,16 @@ export function createBrowserPage(
         })
 
         await cdp.send("Input.setInterceptDrags", { enabled: true })
+
         try {
-        await input("Input.dispatchMouseEvent", { type: "mouseMoved", ...from })
-        await input("Input.dispatchMouseEvent", {
-          type: "mousePressed",
-          ...from,
-          button: "left",
-          buttons: 1,
-          clickCount: 1,
-        })
+          await input("Input.dispatchMouseEvent", { type: "mouseMoved", ...from })
+          await input("Input.dispatchMouseEvent", {
+            type: "mousePressed",
+            ...from,
+            button: "left",
+            buttons: 1,
+            clickCount: 1,
+          })
 
           for (let i = 1; i <= 10; i++) {
             abortError(signal)
@@ -1752,6 +1758,7 @@ export function createBrowserPage(
 
         if (!frame.parent && frame.frameTreeNodeId !== contents.mainFrame.frameTreeNodeId) throw new Error(changed)
       }
+
       abortError(signal)
 
       return cdp.send(method, params)
