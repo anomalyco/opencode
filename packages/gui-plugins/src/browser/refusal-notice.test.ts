@@ -74,10 +74,10 @@ test("conversation links use only the conversation subset of the page policy", (
 })
 
 test("only a short, wholly visible ASCII target can launch an app", () => {
-  for (const padding of ["\u3000", "\u2028", "\u00a0", " ", "\u200b", "\u{e0041}", "אבג", "W".repeat(128)]) {
+  for (const padding of ["\u3000", "\u2028", "\u00a0", " ", "\u200b", "\u{e0041}", "אבג", "W".repeat(200)]) {
     expect(externalTarget(`obsidian://new?name=Notes${padding}&content=fixture`)).toBe("copy")
   }
 
-  expect(externalTarget(`obsidian:${"W".repeat(119)}`)).toBe("open")
-  expect(externalTarget(`obsidian:${"W".repeat(120)}`)).toBe("copy")
+  expect(externalTarget(`obsidian:${"W".repeat(191)}`)).toBe("open")
+  expect(externalTarget(`obsidian:${"W".repeat(192)}`)).toBe("copy")
 })

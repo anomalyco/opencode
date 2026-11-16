@@ -660,7 +660,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       return { token: notice.token, origin, text: describe(notice.reason) }
     },
-    async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean) {
+    async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean, copy?: boolean) {
       const token = state.chrome[session.key]?.[tabID]?.notice?.token
 
       if (!token) return
@@ -668,7 +668,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const target = registration(session)
 
       if (!target) throw new Error("browser.pane.unavailable")
-      await target.notice(tabID, token, dismiss)
+      await target.notice(tabID, token, dismiss, copy)
     },
     /** What the tab waits on the user for. */
     prompt: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.prompt,

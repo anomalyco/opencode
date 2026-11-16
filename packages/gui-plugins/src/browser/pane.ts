@@ -377,10 +377,10 @@ export function createBrowserPane(input: {
       owned(window, binding)
       load(binding, tabID)
     },
-    notice(window: number, binding: string, tabID: Browser.TabID, token: string, dismiss: boolean) {
+    notice(window: number, binding: string, tabID: Browser.TabID, token: string, dismiss: boolean, copy?: boolean) {
       owned(window, binding)
 
-      return page(binding, tabID)?.answerNotice(token, dismiss)
+      return page(binding, tabID)?.answerNotice(token, dismiss, copy)
     },
     async reviewLink(window: number, binding: string, url: string) {
       owned(window, binding)

@@ -22,10 +22,11 @@ export function externalTarget(value: string, source: "conversation" | "page" = 
 
   if (parsed.username || parsed.password) return
 
-  // The 320px side pane shares this row with two buttons. Keep even a wide-glyph target readable in place.
+  // A 320px pane gives the URL its own 296px row: at least 40 default mono glyphs per line, for five lines.
+  // The bar also checks the actual font and available width before presenting Open.
   const permitted = apps.includes(scheme) || (source === "page" && pageOnly.includes(scheme))
 
-  return permitted && /^[\x21-\x7e]{1,128}$/.test(value) ? "open" : "copy"
+  return permitted && /^[\x21-\x7e]{1,200}$/.test(value) ? "open" : "copy"
 }
 
 /** Chromium consumes the activation on the first popup. Match its one-shot CDP event to the native request. */

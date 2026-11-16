@@ -32,7 +32,7 @@ export function noticeActions(
   return {
     clear,
     show,
-    async answer(token: string, dismiss: boolean) {
+    async answer(token: string, dismiss: boolean, copy = false) {
       if (!pending || pending.token !== token) return
       const { notice, expires } = pending
       clear()
@@ -44,7 +44,7 @@ export function noticeActions(
       if (notice.reason !== "external") return
       const safe = externalTarget(notice.target, notice.source)
 
-      if (safe && notice.action === "copy") return actions.copy(notice.target)
+      if (safe && (copy || notice.action === "copy")) return actions.copy(notice.target)
 
       if (safe === "open" && notice.action === "open") await actions.app(notice.target)
     },

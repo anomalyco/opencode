@@ -74,6 +74,16 @@ story("reviews the actual application target only after a trusted click", async 
   const open = pane.getByRole("button", { name: "Open", exact: true })
   await open.click()
   await expect(pane.getByText(url)).toBeVisible()
+  const longest = `obsidian:${"W".repeat(191)}`
+  await pane.evaluate(node => { node.style.width = "320px" })
+  await link.evaluate((node, value) => { node.dataset.appLink = value }, longest)
+  await link.press("Enter")
+  await expect(pane.getByText(longest)).toBeVisible()
+  await expect(open).toBeVisible()
+  // A font or width that doesn't fit five lines downgrades the same notice without changing its target.
+  await pane.evaluate(node => { node.style.width = "240px" })
+  await expect(pane.getByRole("button", { name: "Copy link", exact: true })).toBeVisible()
+  await expect(open).toHaveCount(0)
 })
 
 story("moves the native page when a fixed-size pane changes position", async ({ page }) => {

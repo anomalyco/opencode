@@ -8,11 +8,12 @@ test("Open belongs to one presentation and expires even if the timer has not run
   jest.useFakeTimers()
   const tokens: string[] = []
   const launches: string[] = []
+  const copies: string[] = []
 
   const actions = noticeActions((_, token) => tokens.push(token), {
     tab: async () => {},
     app: async (url) => { launches.push(url) },
-    copy() {},
+    copy(url) { copies.push(url) },
   })
 
   const notice = navigationNotice("obsidian:fixture", {}, "conversation")
@@ -29,5 +30,10 @@ test("Open belongs to one presentation and expires even if the timer has not run
   expect(tokens).toHaveLength(4)
   actions.show({ reason: "external", target: "zed:fixture", action: "open", source: "conversation" })
   await actions.answer(tokens[4], false)
+  expect(launches).toEqual(["obsidian:fixture"])
+  actions.show(notice)
+  await actions.answer(tokens[5], false, true)
+  await actions.answer(tokens[5], false)
+  expect(copies).toEqual(["obsidian:fixture"])
   expect(launches).toEqual(["obsidian:fixture"])
 })

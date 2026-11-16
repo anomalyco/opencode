@@ -953,7 +953,7 @@ export default function SessionBrowserPane(props: {
           <>
             <Show when={props.model.notice(props.session, id)}>
               {(notice) => (
-                <RefusalBar notice={notice()} answer={(dismiss) => props.model.answerNotice(props.session, id, dismiss)} />
+                <RefusalBar notice={notice()} answer={(dismiss, copy) => props.model.answerNotice(props.session, id, dismiss, copy)} />
               )}
             </Show>
             <Show when={!suspended() && !promptKey(true) && props.model.search(props.session, id)}>

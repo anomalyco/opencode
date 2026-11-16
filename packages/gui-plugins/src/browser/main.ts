@@ -137,7 +137,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     load: async (input, caller) => (await pane()).load(caller.window, input.binding, input.tabID),
     command: async (input, caller) => (await pane()).command(caller.window, input.binding, input.command),
     find: async (input, caller) => (await pane()).find(caller.window, input.binding, input.tabID, input.action),
-    notice: async (input, caller) => (await pane()).notice(caller.window, input.binding, input.tabID, input.token, input.dismiss),
+    notice: async (input, caller) => (await pane()).notice(caller.window, input.binding, input.tabID, input.token, input.dismiss, input.copy),
     reviewLink: async (input, caller) => (await pane()).reviewLink(caller.window, input.binding, input.url),
     answer: async (input, caller) =>
       (await pane()).answer(caller.window, input.binding, input.tabID, input.id, input.answer),

@@ -226,7 +226,7 @@ export const BrowserPane = Ipc.define({
     load: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     command: { input: Schema.Struct({ binding, command: Browser.Action }) },
     find: { input: Schema.Struct({ binding, tabID: Browser.TabID, action: FindAction }) },
-    notice: { input: Schema.Struct({ binding, tabID: Browser.TabID, token: text(128), dismiss: Schema.Boolean }) },
+    notice: { input: Schema.Struct({ binding, tabID: Browser.TabID, token: text(128), dismiss: Schema.Boolean, copy: Schema.optional(Schema.Boolean) }) },
     reviewLink: { input: Schema.Struct({ binding, url: text(2048) }), output: Browser.TabID },
     // The user answers what the tab waits for; an answer to a prompt that already ended does nothing.
     answer: { input: Schema.Struct({ binding, tabID: Browser.TabID, id: Schema.Int, answer: PromptAnswer }) },
