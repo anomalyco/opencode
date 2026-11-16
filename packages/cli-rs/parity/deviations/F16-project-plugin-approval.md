@@ -34,10 +34,11 @@ A decision names the artifact: the plugin directory, the real path of the librar
 are loaded. It is kept in `plugin-approvals.json` in the client's state directory, so it lasts across clients, and a
 changed library is pending again, which stops the running build. A build that names a dependency the project would
 supply is refused. The global `plugins` directory and the entries of `cli.json` need no approval, also an entry that
-names a project's plugin another way (the library itself, or a link). A server plugin's TUI part goes by where its
-files are (js-npm): one inside the project, as a local path in the project's `opencode.json` is, is held for the
-same approval, keyed by the same artifact; a package from the user's npm cache needs none, even when the project's
-configuration names it (`F16-typescript-plugins-skipped`).
+names a project's plugin another way (the library itself, or a link). A server plugin's TUI part loads without approval
+only when the user's own configuration (`cli.json`, the global opencode config) names its spec or path, or its path is
+under a global plugin directory (O-162). Any other is held: a local path for the same approval as a project's plugin
+directory, keyed by the same artifact, and a package for one keyed by its files and its install's lockfile
+(`F16-typescript-plugins-skipped`).
 
 The shared fixture shows it: `parity/machines/plugins.json`, machine `project`, whose two `xfail` rows are this
 deviation. TS shows the plugin at once (`A/yes/on/-`); Rust lists it pending as the client starts

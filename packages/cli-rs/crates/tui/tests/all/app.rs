@@ -133,6 +133,12 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             ..opencode_plugin::pipe::Config::new(bun)
         };
         let root = opencode_util::temp::tempdir().expect("plugin root");
+        // The user's global opencode config names the scenario's cached packages, as a TS server plugin's TUI part
+        // loads without approval only then in Rust (O-162); TS asks for none.
+        let user: Vec<&String> = recording.cache.keys().collect();
+        std::fs::create_dir_all(root.path().join("config")).expect("config directory");
+        let global = serde_json::json!({ "plugins": user }).to_string();
+        std::fs::write(root.path().join("config").join("opencode.json"), global).expect("the global opencode config");
         let external = opencode_tui::plugins::host::External {
             config_dir: root.path().join("config"),
             cwd: root.path().to_path_buf(),
