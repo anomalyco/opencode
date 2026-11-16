@@ -389,8 +389,11 @@ export async function createBrowserProfile(input: {
     async clear() {
       await session.clearStorageData()
       await session.clearCache()
-      // Remote servers' pages sign out too, whether or not they shared the profile's sign-ins.
-      await Promise.all([...links.keys()].map((other) => other.clearStorageData()))
+      // HTTP sign-ins (Basic, Digest, NTLM) live in Chromium's auth cache, which neither of those clears.
+      await session.clearAuthCache()
+      // Remote servers' pages sign out too, whether or not they shared the profile's sign-ins. Their proxy's own
+      // sign-in is answered again on demand (network.ts).
+      await Promise.all([...links.keys()].map((other) => Promise.all([other.clearStorageData(), other.clearAuthCache()])))
     },
     async browserExtensions(source: string, profile: string) {
       const folder = await chromiumProfileDirectory(source, profile)

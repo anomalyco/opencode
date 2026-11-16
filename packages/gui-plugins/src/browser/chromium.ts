@@ -853,6 +853,8 @@ export function createBrowserPage(
         origin,
         storages: ["localstorage", "indexdb", "serviceworkers", "cachestorage", "filesystem", "shadercache"],
       })
+      // The site's HTTP sign-in too. Chromium clears its auth cache only whole, so other sites ask again as well.
+      await contents.session.clearAuthCache()
 
       if (closed()) return
       contents.reload()

@@ -188,7 +188,10 @@ export const BrowserProfile = Ipc.define({
     summary: { output: Schema.Struct({ cookies: Count, persistent: Schema.Boolean }) },
     /** Turns sharing the profile's sign-ins with remote servers' pages on or off; see the state's `remoteSignIns`. */
     shareSignIns: { input: Schema.Struct({ enabled: Schema.Boolean }) },
-    /** Signs out everywhere: deletes every cookie, cache and site's stored data. Extensions stay. */
+    /**
+     * Signs out everywhere: deletes every cookie, cache, site's stored data and HTTP sign-in. Extensions and the site
+     * permissions the user kept stay.
+     */
     clear: {},
     /** The extensions a Chromium profile has installed. */
     browserExtensions: {

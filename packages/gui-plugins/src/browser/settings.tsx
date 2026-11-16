@@ -204,7 +204,8 @@ export default function BrowserSettings() {
           <ui.Button
             size="small"
             variant="danger"
-            disabled={blocked() || !jobs.summary()?.cookies}
+            // HTTP sign-ins have no count to show, so signing out stays possible with no cookies.
+            disabled={blocked()}
             busy={jobs.running()?.type === "clear"}
             onClick={() => jobs.start({ type: "clear" })}
           >
