@@ -217,28 +217,32 @@ export function createPagePrompts(input: {
     return { kind: "leave" }
   }
 
-  // The first requested device the system's privacy settings refuse this app; asking the user about it is pointless.
-  const refused = (kinds: readonly PermissionKind[]) =>
-    kinds.find((kind): kind is "camera" | "microphone" => (kind === "camera" || kind === "microphone") && !device(kind))
+  // The first requested device in the given state of the system's privacy settings for this app.
+  const media = (kinds: readonly PermissionKind[], state: ReturnType<typeof deviceAccess>) =>
+    kinds.find((kind): kind is "camera" | "microphone" => (kind === "camera" || kind === "microphone") && deviceAccess(kind) === state)
 
-  // Grants what the user allowed; a device the system refuses says so instead.
+  // A device the system refuses this app; asking the user about it is pointless.
+  const refused = (kinds: readonly PermissionKind[]) => media(kinds, "denied")
+
+  // Grants what the user allowed the site. A device the system refuses says so instead, and one macOS has not asked
+  // about yet is asked about now, after the user's answer, never in its place.
   const grant = (origin: string, kinds: readonly PermissionKind[], callback: (granted: boolean) => void) => {
     const blocked = refused(kinds)
 
-    if (!blocked) return void callback(true)
+    if (blocked) {
+      callback(false)
 
-    if (process.platform === "darwin" && blocked === "microphone" && electron.systemPreferences.getMediaAccessStatus("microphone") === "not-determined")
-      return void electron.systemPreferences.askForMediaAccess("microphone").then((granted) => {
-        // The page may have gone or moved on while macOS asked.
-        if (disposed || contents.isDestroyed() || originOf(contents.mainFrame.origin) !== origin) return callback(false)
+      return void enqueue({ kind: "system", key: `system\n${blocked}`, device: blocked })
+    }
 
-        if (granted && !refused(kinds)) return callback(true)
-        callback(false)
+    const ask = media(kinds, "ask")
 
-        if (!granted) enqueue({ kind: "system", key: "system\nmicrophone", device: "microphone" })
-      }, () => callback(false))
-    callback(false)
-    enqueue({ kind: "system", key: `system\n${blocked}`, device: blocked })
+    if (!ask) return void callback(true)
+    void electron.systemPreferences.askForMediaAccess(ask).then(() => {
+      // The page may have gone or moved on while macOS asked.
+      if (disposed || contents.isDestroyed() || originOf(contents.mainFrame.origin) !== origin) return callback(false)
+      grant(origin, kinds, callback)
+    }, () => callback(false))
   }
 
   const signInRequired = (host: string) =>
@@ -599,14 +603,20 @@ export const RESTORE_PROMPT = `(() => {
   Object.defineProperty(window, "prompt", { value: prompt, writable: true, configurable: true, enumerable: true })
 })()`
 
-function device(kind: "camera" | "microphone") {
-  if (process.platform !== "darwin" && process.platform !== "win32") return true
+/**
+ * The system's privacy setting for this app and a device: `granted`, `denied`, or `ask` when macOS has not asked yet.
+ * Linux has no such setting, and Windows cannot ask from an app.
+ */
+function deviceAccess(kind: "camera" | "microphone") {
+  if (process.platform !== "darwin" && process.platform !== "win32") return "granted" as const
   const status = electron.systemPreferences.getMediaAccessStatus(kind)
 
-  // macOS asks once for the microphone; this app declares no camera use, so macOS would end it for asking.
-  if (process.platform === "darwin" && status === "not-determined") return false
+  if (status === "denied" || status === "restricted") return "denied" as const
 
-  return status !== "denied" && status !== "restricted"
+  if (process.platform !== "darwin" || status !== "not-determined") return "granted" as const
+
+  // This app declares no camera use (NSCameraUsageDescription), so macOS would end it for asking.
+  return kind === "camera" ? ("denied" as const) : ("ask" as const)
 }
 
 /** The asking frame's own origin (equesterOrigin); a media request's security origin must agree with it. */
