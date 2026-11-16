@@ -374,6 +374,10 @@ export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
 export type ConfigCompactionPercent = string
 
+export type ConfigSandboxMode = "read-only" | "workspace-write"
+
+export type ConfigSandboxNetwork = "deny" | "allow"
+
 export type ConfigWorktree = { directory: string }
 
 export type ConfigModelReasoning =
@@ -2534,6 +2538,13 @@ export type ConfigEntry =
         }
         websearch?: false | { provider: "random" | WebSearchID }
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
+        sandbox?: {
+          enabled?: boolean
+          mode?: ConfigSandboxMode
+          network?: ConfigSandboxNetwork
+          writable_roots?: Array<string>
+          readable_roots?: Array<string>
+        }
         worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: "auto" | (string & {}); duration?: string }
         providers?: {

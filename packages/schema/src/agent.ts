@@ -45,6 +45,8 @@ export const Info = Schema.Struct({
           hidden: false,
           permissions: [
             { action: "*", resource: "*", effect: "allow" },
+            // A saved `shell` allow must not also authorize leaving the OS sandbox.
+            { action: "shell_unsandboxed", resource: "*", effect: "ask" },
             { action: "read", resource: "*.env", effect: "ask" },
             { action: "read", resource: "*.env.*", effect: "ask" },
             { action: "read", resource: "*.env.example", effect: "allow" },

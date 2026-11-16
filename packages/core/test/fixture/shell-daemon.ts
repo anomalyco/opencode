@@ -3,6 +3,7 @@ import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
+import type { Entry } from "@opencode/schema/config"
 import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
 import { PersistentPty } from "@opencode/core/persistent-pty"
@@ -40,7 +41,7 @@ export const daemonShells = Effect.fn(function* () {
     }),
   ).pipe(Layer.provide(hostEnvironmentLayer))
   // `server` shares one server's daemon commands between Locations; without it the Location gets a server of its own.
-  const shellLayer = (directory: string, server?: Shell.DaemonInterface) =>
+  const shellLayer = (directory: string, server?: Shell.DaemonInterface, entries: Entry[] = []) =>
     AppNodeBuilder.build(LayerNode.group([Shell.node, LocationLifecycle.node, Bus.node]), [
       ...(server ? [Shell.daemonNode.replace(Layer.succeed(Shell.Daemon, server))] : []),
       Location.node.replace(
@@ -50,7 +51,7 @@ export const daemonShells = Effect.fn(function* () {
         ),
       ),
       Global.node.replace(global),
-      Config.node.replace(Config.testLayer()),
+      Config.node.replace(Config.testLayer(entries)),
       Environment.node.replace(environment),
       PersistentPty.node.replace(Layer.succeed(PersistentPty.Service, pty)),
     ])
@@ -85,12 +86,13 @@ export const daemonShells = Effect.fn(function* () {
   const withShell = <A, E>(
     directory: string,
     body: (shell: Shell.Interface) => Effect.Effect<A, E, LocationLifecycle.Service | Bus.Service>,
+    entries?: Entry[],
   ) =>
     Effect.scoped(
       Effect.gen(function* () {
         const shell = yield* Shell.Service
         return yield* body(shell)
-      }).pipe(Effect.provide(shellLayer(directory))),
+      }).pipe(Effect.provide(shellLayer(directory, undefined, entries))),
     )
   const directory = (yield* tmpdirScoped()).path
   return {

@@ -231,7 +231,11 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 })
 
 const isWindows = process.platform === "win32"
-
+// Executes a real bubblewrap, like packages/core/test/sandbox.test.ts. Skipped where bwrap is missing or unusable.
+const bwrapBinary = process.platform === "linux" ? Bun.which("bwrap") : null
+const bwrapUsable =
+  bwrapBinary !== null &&
+  Bun.spawnSync([bwrapBinary, "--unshare-all", "--ro-bind", "/", "/", "--", "/bin/sh", "-c", "true"]).exitCode === 0
 // The process daemon keeps a finished command's zombie until the command is forgotten.
 const running = (pid: number) => {
   try {
@@ -1225,6 +1229,76 @@ describe("ShellTool", () => {
           Effect.promise(() =>
             Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
           ),
+      ),
+    { timeout: 15_000 },
+  )
+
+  it.live(
+    "requires the separate shell_unsandboxed permission for an explicit unsandboxed request",
+    () =>
+      withTempDir((tmp) =>
+        Effect.gen(function* () {
+          reset()
+          const command = isWindows ? "Write-Output unsandboxed" : "printf unsandboxed"
+          const approved = yield* withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command, sandbox: false })),
+          )
+          expect(approved).toMatchObject({ status: "completed" })
+          // The escape is its own approval, asked before the ordinary command permission.
+          expect(assertions.map((item) => item.action)).toEqual(["shell_unsandboxed", "shell"])
+          expect(assertions[0]).toMatchObject({ resources: [command], save: [command] })
+
+          reset()
+          yield* withSession(tmp.path, (registry) => executeTool(registry, call({ command })))
+          expect(assertions.map((item) => item.action)).toEqual(["shell"])
+
+          reset()
+          denyAction = "shell_unsandboxed"
+          const denied = yield* withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command, sandbox: false })),
+          )
+          expect(denied).toMatchObject({ status: "error" })
+          // A denied escape never reaches the shell permission or a process.
+          expect(assertions.map((item) => item.action)).toEqual(["shell_unsandboxed"])
+        }),
+      ),
+    { timeout: 15_000 },
+  )
+  ;(bwrapUsable ? it.live : it.live.skip)(
+    "sandbox: false reaches Shell.create as unsandboxed and actually disables the OS-level sandbox, not just the permission gate",
+    () =>
+      withTempDir((tmp) =>
+        Effect.gen(function* () {
+          const workspace = path.join(tmp.path, "workspace")
+          const outside = path.join(tmp.path, "outside")
+          yield* Effect.promise(() => Promise.all([fs.mkdir(workspace), fs.mkdir(outside)]))
+          // Enabled through the real, on-disk config pipeline (ConfigDiscovery + Config.layer), not a test stub, so
+          // this proves the whole path from config through Shell.create to the real bwrap wrapping.
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(workspace, "opencode.json"),
+              JSON.stringify({ sandbox: { enabled: true, mode: "workspace-write", network: "deny" } }),
+            ),
+          )
+          const marker = path.join(outside, "marker")
+          const command = `printf escaped > '${marker}'`
+
+          reset()
+          const confined = yield* withSession(workspace, (registry) => executeTool(registry, call({ command })))
+          expect(assertions.map((item) => item.action)).toEqual(["shell"])
+          // The sandbox is enabled, so a write outside the workspace fails and never reaches the host.
+          expect(confined.metadata?.exit).not.toBe(0)
+          expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+
+          reset()
+          const unsandboxed = yield* withSession(workspace, (registry) =>
+            executeTool(registry, call({ command, sandbox: false })),
+          )
+          expect(assertions.map((item) => item.action)).toEqual(["shell_unsandboxed", "shell"])
+          // The same command, the same enabled sandbox config, but sandbox: false really ran it unconfined.
+          expect(unsandboxed).toMatchObject({ status: "completed", metadata: { exit: 0 } })
+          expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("escaped")
+        }),
       ),
     { timeout: 15_000 },
   )

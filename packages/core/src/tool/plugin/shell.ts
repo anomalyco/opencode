@@ -22,6 +22,8 @@ import { ShellResult } from "../../shell/result.js"
 import { toolFailure } from "../runtime.js"
 
 export const name = "shell"
+// Separate from `shell` so approving commands never approves leaving the OS sandbox.
+export const UNSANDBOXED_PERMISSION = "shell_unsandboxed"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 // How long a call the user interrupted waits for its stopped command to exit before settling with the output so far.
 const INTERRUPT_WAIT = "500 millis"
@@ -57,6 +59,10 @@ export const Input = Schema.Struct({
   }),
   timeout: Schema.optionalKey(NonNegativeInt).annotate({
     description: `Optional timeout in milliseconds (default ${DEFAULT_TIMEOUT_MS}). When it expires, a foreground command moves to the background and a background command is stopped.`,
+  }),
+  sandbox: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Set to false to run the command outside the OS sandbox. Requires separate user permission, so use it only when the sandbox blocked a command that must run, never by default. Omit it to stay sandboxed.",
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
@@ -281,7 +287,11 @@ export const Plugin = {
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
 
-    const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
+    const prepare = Effect.fn("ShellTool.prepare")(function* (
+      invocation: ShellCreateBefore,
+      context: Tool.Context,
+      unsandboxed: boolean,
+    ) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
@@ -293,6 +303,13 @@ export const Plugin = {
         }),
       )
       yield* access.authorizeExternal([target, ...directories], context)
+      if (unsandboxed)
+        yield* permission.assert({
+          action: UNSANDBOXED_PERMISSION,
+          resources: [invocation.command],
+          save: [invocation.command],
+          ...Permission.invocation(context),
+        })
       if (parsed.commands.length > 0)
         yield* permission.assert({
           action: name,
@@ -377,6 +394,7 @@ export const Plugin = {
                       shell: yield* compatibleShell,
                       metadata: { sessionID: context.sessionID },
                       waited: input.background !== true,
+                      unsandboxed: input.sandbox === false,
                       toolCall: {
                         sessionID: context.sessionID,
                         assistantMessageID: context.messageID,
@@ -392,7 +410,7 @@ export const Plugin = {
                         // Asking for permission can take a while; a stop then ends the call before any command starts.
                         finalTimeout = yield* restore(
                           Effect.raceFirst(
-                            prepare(invocation, context),
+                            prepare(invocation, context, input.sandbox === false),
                             Deferred.await(stopped).pipe(
                               Effect.andThen(
                                 Effect.fail(
