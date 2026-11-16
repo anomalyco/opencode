@@ -228,6 +228,8 @@ export function createBrowserPage(
     /** This binding's isolated origin for workspace previews. */
     previewHost?: string
     remote?: Extract<PreviewSource, { type: "remote" }>
+    /** The server runs on this machine, so its loopback addresses are this machine's and the system browser reaches them. */
+    local: boolean
     signal: AbortSignal
     /** Extensions whose `chrome-extension://` pages may open, such as their popups and options. */
     extensions?: () => ReadonlyArray<string>
@@ -712,8 +714,9 @@ export function createBrowserPage(
     policy: {
       get fileRoots() { return policy.fileRoots },
       get extensions() { return policy.extensions },
+      remote: policy.remote,
       previewHost: options.previewHost,
-      local: !!options.previewHost,
+      local: options.local,
     },
     cdp,
     sessions: () => sessions.values(),

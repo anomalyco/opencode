@@ -86,3 +86,32 @@ test.each([
     ).toEqual(["!back", "forward", "reload", ...items, "Extension"])
   },
 )
+
+// A remote server's preview: its files show as `workspace:` display addresses; nothing names the server or its URL.
+const remote = { previewHost: "binding", remote: "workspace://ses_1/", local: false }
+const remotePage = "oc-preview://binding/site/page.html"
+
+test.each([
+  ["oc-preview://binding/site/img.png", remotePage, "workspace://ses_1/site/img.png"],
+  ["oc-preview://binding/site/a%20b.html", remotePage, "workspace://ses_1/site/a%20b.html"],
+  ["oc-preview://binding/../secret", remotePage, undefined],
+  ["oc-preview://binding/site%2f..%2fsecret", remotePage, undefined],
+  ["oc-preview://foreign/site/img.png", remotePage, undefined],
+  ["oc-preview://binding/site/img.png", "https://example.test/", undefined],
+] as const)("remote context target %s in %s", (raw, frame, address) => {
+  expect(menuAddress(raw, frame, remote)).toBe(address)
+})
+
+test("a loopback link opens in the system browser only when the server runs on this machine", () => {
+  const labels = (local: boolean) =>
+    pageMenu(
+      { ...basic, dictionarySuggestions: [], linkURL: "http://localhost:3000/" },
+      { ...options, policy: { ...policy, local } },
+    )
+      .filter((item) => item.type !== "separator")
+      .map((item) => item.label)
+
+  expect(labels(true)).toContain("external")
+  expect(labels(false)).not.toContain("external")
+  expect(labels(false)).toContain("copyLink")
+})

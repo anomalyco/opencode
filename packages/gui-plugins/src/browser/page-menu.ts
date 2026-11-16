@@ -3,15 +3,19 @@ import { externalAction } from "./address"
 import { destinationOrigin, extensionURL, type Policy } from "./policy"
 import { previewFile } from "./preview"
 
+/** `local`: the server runs on this machine, so its loopback addresses are this machine's too. */
 export type MenuPolicy = Policy & { previewHost?: string; local: boolean }
 
-/** Raw native file: links never acquire a preview grant. Only a document of this binding can offer its own files. */
+/**
+ * Raw native file: links never acquire a preview grant. Only a document of this binding can offer its own files, as
+ * their display address: `file:` for this machine's workspace, `workspace:` for a remote server's.
+ */
 export function menuAddress(raw: string, frame: string, policy: MenuPolicy) {
   if (destinationOrigin(raw) || extensionURL(raw, policy.extensions ?? [])) return raw
 
   if (!policy.previewHost || !frame.startsWith(`oc-preview://${policy.previewHost}/`)) return
 
-  return previewFile(raw, policy.previewHost, policy.fileRoots ?? [])
+  return previewFile(raw, policy.previewHost, policy.fileRoots ?? [], policy.remote)
 }
 
 type Params = Pick<

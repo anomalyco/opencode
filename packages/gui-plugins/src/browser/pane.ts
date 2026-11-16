@@ -607,6 +607,7 @@ export function createBrowserPane(input: {
       fileRoots: () => selectFileRoots(machine.state, binding),
       previewHost: handle.previewHost,
       remote: remoteSource(binding),
+      local: handle.shared,
       signal: handle.abort.signal,
       extensions: () => extensions(binding),
       shared,
