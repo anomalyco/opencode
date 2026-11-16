@@ -2966,6 +2966,55 @@ fn a_fetch_reply_of_a_mebibyte_arrives_whole() {
     assert_eq!(pipe.status("example.large"), Some(opencode_plugin::Status::Active));
 }
 
+// Expected (big-boi's catalog review, CT-5): the JS host keeps a reply's parts only while a fetch waits for them: a
+// reply in parts that the repeat fault sends twice settles once, and the second set's parts, which no call takes, are
+// not kept. They stayed for good.
+#[test]
+fn a_repeated_reply_in_parts_leaves_nothing_kept() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("fetched");
+    let plugin = root.path().join("config/plugins/twice");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.twice\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"twice.fetch\", title: \"twice.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/large\" }})\n    await new Promise((resolve) => setTimeout(resolve, 300))\n    appendFileSync({log:?}, `${{result?.Ok?.data?.length}} ${{carrier.pendingFetches()}}\\n`)\n  }})\n}} }}\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let open = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (gate, seen) = (open.clone(), Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    let asked = seen.clone();
+    let server = support::Fake::new(move |request| match request.path.as_str() {
+        "/api/large" => {
+            asked.store(true, std::sync::atomic::Ordering::SeqCst);
+            let begun = Instant::now();
+            while !gate.load(std::sync::atomic::Ordering::SeqCst) && begun.elapsed() < Duration::from_secs(20) {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            (200, serde_json::json!({ "data": "x".repeat(1 << 20) }))
+        }
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.twice");
+    pipe.harness.tui.keymap.dispatch("twice.fetch", None);
+    pipe.harness.wait("the server has the request", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        seen.load(std::sync::atomic::Ordering::SeqCst)
+    });
+    // The next call the host sends is the reply's.
+    pipe.scripts().fault(pipe::Fault::Repeat);
+    open.store(true, std::sync::atomic::Ordering::SeqCst);
+    pipe.harness.wait("the fetch ended", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), format!("{} 0\n", 1 << 20));
+}
+
 // Expected (carbon-5): a fetch whose reply is more than the JS host takes ends with an error, where the plugin's await
 // never ended.
 #[test]

@@ -607,7 +607,8 @@ function context(plugin: Plugin) {
     },
     // What waits on the host: the answers of calls and batches, which carry a fetch's ID, and the fetches' replies. None
     // once each settled (bigboi's ownership pass).
-    pendingFetches: () => plugin.answers.size + plugin.replies.size,
+    // With the parts kept of replies too large for one frame (CT-5).
+    pendingFetches: () => plugin.answers.size + plugin.replies.size + plugin.parts.size,
   }
   const base = {
     id: plugin.id,
@@ -976,13 +977,16 @@ async function handle(message: Json) {
       if (message.route !== undefined) plugin.snapshots.set("route", message.route)
       // A reply too large for one frame: its result is the JSON of the parts that came before it (CT-5).
       if (message.parted) {
-        const parts = plugin.parts.get(message.call.id) ?? []
+        const parts = plugin.parts.get(message.call.id)
         plugin.parts.delete(message.call.id)
-        message.call.result = JSON.parse(Buffer.concat(parts).toString())
+        // None kept: no fetch waits for the reply, which then reaches nothing.
+        message.call.result = parts ? JSON.parse(Buffer.concat(parts).toString()) : { Err: "the reply's parts are gone" }
       }
       return call(message.seq, plugin, message.call)
     case "part": {
-      if (!plugin) return
+      // Kept only for a request a fetch waits on, whose size the host admitted: a part of one settled or cancelled (a
+      // repeat the fault model sends) is dropped, where it would wait for no call.
+      if (!plugin || !plugin.replies.has(message.request)) return
       const parts = plugin.parts.get(message.request) ?? []
       parts.push(Buffer.from(message.data, "base64"))
       plugin.parts.set(message.request, parts)
@@ -1069,6 +1073,7 @@ async function handle(message: Json) {
       if (!plugin) return
       const reply = plugin.replies.get(message.request)
       plugin.replies.delete(message.request)
+      plugin.parts.delete(message.request)
       // The fetch waits for it by now: the `answered` that gave it its ID ran first, and `drain` awaits each message,
       // so the fetch's `then` ran before this one.
       if (reply) within(plugin, () => reply.reject(cancelled()))

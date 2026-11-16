@@ -513,6 +513,33 @@ fn settles(message: &Down) -> bool {
     )
 }
 
+/// The call of reply `message` that follows its parts and says they are its result ([`Scripts::split`]).
+fn parted(message: &Down) -> Option<Down> {
+    let Down::Call { seq, id, activation, call: Request::Reply { id: request, .. }, route, parted: false } = message
+    else {
+        return None;
+    };
+    let call = Request::Reply { id: *request, result: Ok(serde_json::Value::Null) };
+    Some(Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone(), parted: true })
+}
+
+/// The bytes of `value`'s JSON, counted without keeping them.
+fn json_len(value: &impl serde::Serialize) -> usize {
+    struct Count(usize);
+    impl std::io::Write for Count {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0 += bytes.len();
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut count = Count(0);
+    serde_json::to_writer(&mut count, value).map_or(usize::MAX, |()| count.0)
+}
+
 /// Whether a result of a call's effects is a scalar: a request's ID, an answer of a verb, nothing. A read's value is
 /// not, and is what a reduced answer drops ([`Scripts::settle`]).
 fn scalar(result: &serde_json::Value) -> bool {
@@ -964,7 +991,7 @@ impl Scripts {
         // reply the overflow has room for, CT-5), or is reduced or refused now, in its place, so nothing past a cap is
         // sent and the overflow never holds a frame the queue would refuse, which a drain would settle behind what came
         // after it (bigboi's pipe pass).
-        let size = serde_json::to_vec(message).map_or(usize::MAX, |bytes| bytes.len());
+        let size = json_len(message);
         if !self.fits(size) {
             if let Some(parts) = self.admit(message) {
                 return parts.iter().for_each(|part| self.write(part));
@@ -1096,31 +1123,52 @@ impl Scripts {
         overflow.0.push_back((kept, bytes));
     }
 
-    /// `message` as the frames it goes in, when it is a reply too large for one ([`Scripts::split`]) whose parts the
-    /// overflow has room for now, within its bound ([`child::Limits::inbox`]): a reply up to 8 MiB by default, where
-    /// one past a frame's 256 KiB failed (CT-5: snippets' `/api/skill`, 450 KB). One past that room is refused as before.
+    /// `message` as the frames it goes in, when it is a reply too large for one ([`Scripts::split`]) whose parts and
+    /// call the overflow has room for now, within its bound ([`child::Limits::inbox`]). What goes is measured before
+    /// anything is built: the result's JSON is counted, and its parts are its base64, which escapes nothing, each in an
+    /// envelope of one size (big-boi's catalog review). By default a reply whose JSON is just under 6 MiB goes while the
+    /// overflow is empty (8 MiB of parts), less behind a backlog, where one past a frame's 256 KiB failed (CT-5:
+    /// snippets' `/api/skill`, 450 KB). One past that room is refused as before.
     fn admit(&self, message: &Down) -> Option<Vec<Down>> {
-        let parts = self.split(message)?;
-        let bytes: usize =
-            parts.iter().map(|part| serde_json::to_vec(part).map_or(usize::MAX, |bytes| bytes.len())).sum();
+        let Down::Call { activation, call: Request::Reply { id: request, result }, parted: false, .. } = message else {
+            return None;
+        };
+        let chunk = self.chunk();
+        if chunk == 0 {
+            return None;
+        }
+        let json = json_len(result);
+        let envelope = json_len(&Down::Part { activation: *activation, request: *request, data: String::new() });
+        let base64 = |bytes: usize| bytes.div_ceil(3) * 4;
+        let (full, rest) = (json / chunk, json % chunk);
+        let last = if rest == 0 { 0 } else { envelope + base64(rest) };
+        let bytes = full
+            .saturating_mul(envelope + base64(chunk))
+            .saturating_add(last)
+            .saturating_add(json_len(&parted(message)?));
         let room = self.config.limits.inbox.saturating_sub(self.overflow.borrow().1);
-        (bytes <= room).then_some(parts)
+        (bytes <= room).then(|| self.split(message)).flatten()
+    }
+
+    /// The bytes of a reply's JSON a part carries at most: what a frame of the queue takes, past its header, its
+    /// envelope and the largest request ID, before base64.
+    fn chunk(&self) -> usize {
+        let envelope = wire::encode(wire::CONTROL, &[]).len() + 96;
+        wire::CONTROL_CAP.min(self.config.limits.queued).saturating_sub(envelope) / 4 * 3
     }
 
     /// A reply as the parts of its result's JSON, each in a frame of its own, and its call after them, which says they
     /// are its result. None for any other message, and for a queue too small for a part.
     fn split(&self, message: &Down) -> Option<Vec<Down>> {
-        let Down::Call { seq, id, activation, call: Request::Reply { id: request, result }, route, parted: false } =
-            message
-        else {
+        let Down::Call { activation, call: Request::Reply { id: request, result }, parted: false, .. } = message else {
             return None;
         };
-        // What a part's frame holds past its data: its header, its envelope and the largest request ID.
-        let envelope = wire::encode(wire::CONTROL, &[]).len() + 96;
-        let chunk = wire::CONTROL_CAP.min(self.config.limits.queued).saturating_sub(envelope) / 4 * 3;
+        let chunk = self.chunk();
         if chunk == 0 {
             return None;
         }
+        #[cfg(test)]
+        tests::SPLITS.set(tests::SPLITS.get() + 1);
         let json = serde_json::to_vec(result).ok()?;
         let part = |bytes: &[u8]| Down::Part {
             activation: *activation,
@@ -1128,9 +1176,7 @@ impl Scripts {
             data: opencode_plugin_abi::base64::encode(bytes),
         };
         let mut parts: Vec<Down> = json.chunks(chunk).map(part).collect();
-        let call = Request::Reply { id: *request, result: Ok(serde_json::Value::Null) };
-        let route = route.clone();
-        parts.push(Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route, parted: true });
+        parts.push(parted(message)?);
         Some(parts)
     }
 
@@ -1142,7 +1188,7 @@ impl Scripts {
 
     /// The size of `message` when it does not go as one frame ([`Scripts::sendable`]).
     fn unsendable(&self, message: &Down) -> Option<usize> {
-        let size = serde_json::to_vec(message).map_or(usize::MAX, |bytes| bytes.len());
+        let size = json_len(message);
         (!self.fits(size)).then_some(size)
     }
 
@@ -1915,6 +1961,53 @@ mod tests {
         assert_eq!(scripts.admit(&reply(300 << 10)), None, "past what the overflow has room for now");
         assert_eq!(scripts.admit(&reply(16)).map(|parts| parts.len()), Some(2), "a part and its call");
         assert_eq!(scripts.admit(&Down::Ping { seq: 2 }), None, "only a reply goes in parts");
+    }
+
+    // Expected (big-boi's catalog review, CT-5): admission measures exactly what goes, before it builds it. With the
+    // default limits and the overflow empty, the largest reply whose built parts and call fit the overflow's 8 MiB
+    // goes and one a byte larger does not; that largest is just under 6 MiB of JSON, the size F16 states (base64 and
+    // the envelopes take the rest); behind a backlog it does not go.
+    #[test]
+    fn a_reply_at_the_edge_of_the_overflow_goes_and_one_byte_more_does_not() {
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(Config::new("bun".into()), &host);
+        // A reply whose result's JSON, `{"Ok":"r…r"}`, is `json` bytes.
+        let reply = |json: usize| Down::Call {
+            seq: 1,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Reply {
+                id: opencode_plugin_abi::RequestId(3),
+                result: Ok(serde_json::json!("r".repeat(json - 9))),
+            },
+            route: None,
+            parted: false,
+        };
+        let built = |json: usize| -> usize {
+            scripts.split(&reply(json)).unwrap().iter().map(|part| serde_json::to_vec(part).unwrap().len()).sum()
+        };
+        let room = scripts.config.limits.inbox;
+        assert_eq!(json_len(&Ok::<_, String>(serde_json::json!("r".repeat(91)))), 100);
+        let (mut fits, mut over) = (1 << 20, 8 << 20);
+        while over - fits > 1 {
+            let mid = (fits + over) / 2;
+            if built(mid) <= room { fits = mid } else { over = mid }
+        }
+        assert!(scripts.admit(&reply(fits)).is_some(), "the largest that fits, {fits} bytes, was refused");
+        assert_eq!(scripts.admit(&reply(fits + 1)), None, "a byte past the edge went");
+        assert!((6_000_000..6 << 20).contains(&fits), "the edge is {fits} bytes, not just under 6 MiB");
+        scripts.overflowed(Down::Ping { seq: 9 }, 1 << 20);
+        // Refused before anything is built: a reply far past the room splits nothing, as one at the edge behind the
+        // backlog does not.
+        let before = SPLITS.get();
+        assert_eq!(scripts.admit(&reply(fits)), None, "behind a backlog");
+        assert_eq!(scripts.admit(&reply(64 << 20)), None);
+        assert_eq!(SPLITS.get(), before, "a refused reply was built");
+    }
+
+    thread_local! {
+        /// The replies [`Scripts::split`] built, on this thread.
+        pub(super) static SPLITS: Cell<usize> = const { Cell::new(0) };
     }
 
     // Expected (bigboi's freeze and ownership passes): what settles the JS host's work waits past a full overflow, in a
