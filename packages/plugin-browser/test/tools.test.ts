@@ -28,6 +28,8 @@ test("model-written aliases decode to canonical desktop actions; conflicting cho
   expect(parse({ type: "network.get", tabID, requestID: "r1", includeResponseBody: true })).toEqual({ type: "network.get", tabID, id: "r1", includeResponseBody: true })
   expect(() => parse({ type: "fill", tabID, ref, text: "keep", value: "replace" })).toThrow("Conflicting")
   expect(() => parse({ type: "find", tabID })).toThrow("Missing text")
+  expect(() => parse({ type: "evaluate", tabID, expression: "1", code: "2" })).toThrow("Conflicting")
+  expect(parse({ type: "evaluate", tabID, expression: "1", script: "1" })).toEqual({ type: "evaluate", tabID, script: "1" })
 })
 
 test("built-in browser skill uses a virtual skill:// URI", () => {

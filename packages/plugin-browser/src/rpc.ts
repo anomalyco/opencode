@@ -74,9 +74,9 @@ export const Ref = Schema.String.check(Schema.isPattern(/^@?e[1-9][0-9]*$/u))
   .pipe(Schema.brand("Browser.Ref"))
   .annotate({ identifier: "Browser.Ref" })
 export type Ref = typeof Ref.Type
-export const FileID = Schema.String.check(Schema.isPattern(/^file_[a-f0-9-]{36}$/u))
+const fileID = Schema.String.check(Schema.isPattern(/^file_[a-f0-9-]{36}$/u))
   .pipe(Schema.brand("Browser.FileID"))
-  .annotate({ identifier: "Browser.FileID" })
+export const FileID = fileID.annotate({ identifier: "Browser.FileID" })
 export type FileID = typeof FileID.Type
 const tab = {
   tabID: TabID.annotate({
@@ -101,7 +101,7 @@ const evaluateRef = optional(
 )
 const artifact = {
   ...tab,
-  fileID: FileID.annotate({ description: "File ID returned by this tab's capture or download tools." }),
+  fileID: fileID.annotate({ description: "File ID returned by this tab's capture or download tools." }),
 }
 
 export interface Tab extends Schema.Schema.Type<typeof Tab> {}
@@ -509,7 +509,7 @@ export const Operations = [
     "Copy one completed download or capture from this tab to the server. Returns a server-local file path. Maximum 5 MiB per transfer.",
     artifact,
     saved,
-    { ...tab, fileID: optional(FileID), id: optional(FileID.annotate({ description: "Alias for fileID." })) },
+    { ...tab, fileID: optional(artifact.fileID), id: optional(FileID.annotate({ description: "Alias for fileID." })) },
   ),
   operation(
     "console",

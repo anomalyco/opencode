@@ -503,6 +503,8 @@ const selectorVisibility = (selector: string) =>
 
 function evaluateAction(input: Extract<Browser.Input, { readonly type: "evaluate" }>): Extract<Browser.Action, { type: "evaluate" }> {
   const script = input.script ?? input.expression ?? input.code
+  if ([input.expression, input.code].some(value => value !== undefined && value !== script))
+    throw new Tool.Error({ message: "Conflicting script, expression or code. Pass one script to evaluate." })
   if (script === undefined)
     throw new Tool.Error({
       message:
