@@ -3,6 +3,7 @@ import { Result } from "effect"
 import type { Diagnostic } from "./codemode.js"
 import { parseProgram } from "./runtime/execute.js"
 import { formatLocation } from "./runtime/model.js"
+import { moduleName } from "./runtime/modules.js"
 
 /**
  * Extracts every `tools.<path>` referenced by a Code Mode program, in first-seen order. Fails on syntax errors,
@@ -42,6 +43,12 @@ export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Di
       return undefined
     }
 
+    // `import`/`require` of "tools" would reach tools the scan never sees.
+    const loaded = loadedModule(node)
+    if (loaded !== undefined && (loaded === null || moduleName(loaded) === "tools")) {
+      return fail(node, "Automation code must call tools directly as tools.<name>(...), not import or require them.")
+    }
+
     const pushedScope = enterNodeScope(node)
     if (pushedScope) scopes.push(pushedScope)
     ancestors.push(node)
@@ -56,6 +63,18 @@ export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Di
   const diagnostic = visit(parsed.program)
   if (diagnostic) return Result.fail(diagnostic)
   return Result.succeed(Array.from(found))
+}
+
+/** The module an `import` or `require(...)` loads, `null` when it is computed, or `undefined` for other nodes. */
+function loadedModule(node: AnyNode): string | null | undefined {
+  const specifier =
+    node.type === "ImportDeclaration" || node.type === "ImportExpression"
+      ? node.source
+      : node.type === "CallExpression" && node.callee.type === "Identifier" && node.callee.name === "require"
+        ? node.arguments[0]
+        : undefined
+  if (specifier === undefined) return undefined
+  return specifier.type === "Literal" && typeof specifier.value === "string" ? specifier.value : null
 }
 
 function isReferencePosition(node: AnyNode, parent: AnyNode | undefined): boolean {

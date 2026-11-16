@@ -77,6 +77,10 @@ it.live(
         expect(created.expires).toBeDefined()
         expect(await api.experimental.automation.list({ sessionID: session.id })).toMatchObject([{ id: created.id }])
         expect(await api.experimental.automation.list({ directory: enabled })).toMatchObject([{ id: created.id }])
+        expect(await api.experimental.automation.list({})).toMatchObject([{ id: created.id }])
+        await expect(api.experimental.automation.list({ directory: "relative" })).rejects.toMatchObject({
+          _tag: "InvalidRequestError",
+        })
         expect(await api.experimental.automation.get({ automationID: created.id })).toMatchObject({ id: created.id })
         expect(await api.experimental.automation.pause({ automationID: created.id })).toMatchObject({
           status: "paused",

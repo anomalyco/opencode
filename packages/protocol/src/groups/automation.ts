@@ -1,4 +1,5 @@
 import { Automation } from "@opencode/schema/automation"
+import { optional } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
@@ -18,13 +19,12 @@ const annotations = (identifier: string, summary: string, description: string) =
   })
 
 export const CreatePayload = Schema.Struct({
-  sessionID: Session.ID.pipe(Schema.optional).annotate({
-    description:
-      "The Session creating it, if any. It supplies the directory, the default prompt target and, for a code action, the agent and permissions its tools run with.",
-  }),
-  directory: Schema.String.pipe(Schema.optional).annotate({
+  // The Session creating it, if any: it supplies the directory, the default prompt target and, for a code action, the
+  // agent and permissions its tools run with.
+  sessionID: Session.ID.pipe(optional),
+  directory: Schema.String.annotate({
     description: "Where it runs when there is no Session. Defaults to the server user's home folder.",
-  }),
+  }).pipe(optional),
   ...Automation.Request.fields,
 }).annotate({ identifier: "Automation.CreatePayload" })
 export type CreatePayload = typeof CreatePayload.Type
@@ -53,7 +53,7 @@ export const AutomationEndpoints = [
   HttpApiEndpoint.get("automation.list", "/api/experimental/automation", {
     query: ListQuery,
     success: Schema.Struct({ data: Schema.Array(Automation.Info) }),
-    error: [SessionNotFoundError, ForbiddenError],
+    error: [SessionNotFoundError, ForbiddenError, InvalidRequestError],
   }).annotateMerge(annotations("list", "List automations", "List automations, oldest first.")),
   HttpApiEndpoint.get("automation.get", "/api/experimental/automation/:automationID", {
     params,

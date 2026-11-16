@@ -339,7 +339,7 @@ export type AutomationActionCode = { type: "code"; code: string; args?: JsonValu
 
 export type AutomationStatus = "active" | "paused" | "done"
 
-export type AutomationOutcome = "fired" | "late" | "skipped" | "disabled" | "failed"
+export type AutomationOutcome = "fired" | "late" | "skipped" | "disabled" | "failed" | "expired"
 
 export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
 
@@ -4662,8 +4662,8 @@ export type ExperimentalBlobGetInput = { readonly id: string }
 export type ExperimentalBlobGetOutput = globalThis.Uint8Array
 
 export type ExperimentalAutomationCreateInput = {
-  readonly sessionID?: string | null | undefined
-  readonly directory?: string | null | undefined
+  readonly sessionID?: string | undefined
+  readonly directory?: string | undefined
   readonly name: string
   readonly trigger:
     | { readonly type: "at"; readonly at: string; readonly tz?: string }

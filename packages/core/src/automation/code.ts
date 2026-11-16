@@ -11,6 +11,7 @@ import type { SessionMessage } from "../session/message.js"
 import type { SessionSchema } from "../session/schema.js"
 import { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
+import { Wildcard } from "../util/wildcard.js"
 
 export const TIMEOUT_MS = 30_000
 const MAX_OUTPUT_BYTES = 32 * 1024
@@ -76,8 +77,8 @@ export function validate(code: string): Result.Result<void, string> {
 }
 
 /**
- * Runs in the creating Session's Location while the user is present: asks once for `execute` and each tool's
- * permission, without saving, so every run can be allowed unattended.
+ * Runs in the creating Session's Location while the user is present: asks once for each tool's permission (and for
+ * `execute` unless a tool asked), without saving, so every run can be allowed unattended.
  */
 export const authorize = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
@@ -93,24 +94,30 @@ export const authorize = Effect.fnUntraced(function* (
   if (Result.isFailure(scanned)) return yield* Effect.fail(scanned.failure.message)
   const paths = scanned.success
   const actions = (yield* resolveTools(paths)).actions
+  const rules = Permission.merge(agent.info?.permissions ?? [], session.permissions ?? [])
+  // A rule scoped to some resources (`vault:*: ask`) must prompt too, not only the catch-all `*`.
+  const resources = (item: string) =>
+    Array.dedupe(["*", ...narrower(rules, item).flatMap((rule) => (rule.effect === "ask" ? [rule.resource] : []))])
+  const request = (item: string) => ({
+    action: item,
+    resources: resources(item),
+    sessionID: session.id,
+    agent: agent.id,
+  })
 
   // Fail fast on any explicit deny before asking the user to approve earlier tools.
+  yield* Effect.forEach(["execute", ...actions], (item) => permission.assertNotDenied(request(item)), {
+    discard: true,
+  })
+  // A tool's approval also covers running the program; with no tool to ask about, `execute` itself must be approved.
+  const toolAsks = yield* Effect.forEach(actions, (item) => permission.allows(request(item)))
   yield* Effect.forEach(
-    ["execute", ...actions],
-    (item) => permission.assertNotDenied({ action: item, resources: ["*"], sessionID: session.id, agent: agent.id }),
-    { discard: true },
-  )
-  // Approving the tools covers running the program; a program with no tools asks for `execute` alone.
-  yield* Effect.forEach(
-    actions.length === 0 ? ["execute"] : actions,
+    toolAsks.some((allowed) => !allowed) ? actions : ["execute", ...actions],
     (item) =>
       permission.assert({
-        action: item,
-        resources: ["*"],
+        ...request(item),
         // No `save`: "always" would save a project-wide allow, while runs are allowed through Unattended.
         metadata: { automation: name, trigger, unattended: true, code: action.code, tools: [...paths] },
-        sessionID: session.id,
-        agent: agent.id,
       }),
     { discard: true },
   )
@@ -137,6 +144,11 @@ export const run = Effect.fnUntraced(function* (
     ),
   )
 })
+
+/** Rules for `action` that name specific resources rather than `*`, in order. */
+function narrower(rules: Permission.Ruleset, action: string) {
+  return rules.filter((rule) => rule.resource !== "*" && Wildcard.match(action, rule.action))
+}
 
 const resolveTools = Effect.fnUntraced(function* (paths: ReadonlyArray<string>) {
   const mcp = yield* McpTool.Service
@@ -173,7 +185,13 @@ const runCode = Effect.fnUntraced(function* (
   if (Result.isFailure(resolved)) return { ok: false as const, error: resolved.failure, invalid: true }
 
   const actions = ["execute", ...resolved.success.actions]
-  const unattended: Permission.Ruleset = actions.map((item) => ({ action: item, resource: "*", effect: "allow" }))
+  const rules = Permission.merge(agent.info.permissions, session.permissions ?? [])
+  // Unattended rules come after the configured ones and the last match wins, so restate every narrower rule after the
+  // grant: the approval stands in for the catch-all `*` only, and a scoped `ask` still needs a person.
+  const unattended: Permission.Ruleset = actions.flatMap((item) => [
+    { action: item, resource: "*", effect: "allow" as const },
+    ...narrower(rules, item),
+  ])
 
   // A deny added to config after creation still wins.
   const notDenied = yield* Effect.forEach(

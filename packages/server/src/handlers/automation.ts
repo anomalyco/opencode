@@ -6,6 +6,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { AutomationNotFoundError, ForbiddenError, InvalidRequestError } from "@opencode/protocol/errors"
 import type { CreatePayload, ListQuery } from "@opencode/protocol/groups/automation"
 import { Effect } from "effect"
+import path from "node:path"
 import { HttpApiSchema } from "effect/http-api"
 import { missingSession } from "./session-error"
 
@@ -50,11 +51,37 @@ export const makeAutomation = Effect.gen(function* () {
           query.sessionID === undefined
             ? undefined
             : yield* sessions.get(query.sessionID).pipe(Effect.mapError(missingSession))
-        const directory = session?.location.directory ?? query.directory
+        if (session !== undefined) yield* allowed(session.location.directory)
+        const directory = query.directory
+        if (directory !== undefined && !path.isAbsolute(directory))
+          return yield* new InvalidRequestError({
+            message: `Directory must be an absolute path: ${directory}`,
+            kind: "automation",
+          })
         if (directory !== undefined) yield* allowed(directory)
+        // Reading ownership must not record a Project for a folder that was only asked about.
         const projectID =
-          query.directory === undefined ? undefined : (yield* projects.resolve(AbsolutePath.make(query.directory))).id
-        return { data: yield* automations.list({ sessionID: query.sessionID, projectID }) }
+          directory === undefined
+            ? undefined
+            : (yield* projects.resolve(AbsolutePath.make(directory), { persist: false })).id
+        const rows = yield* automations.list({ sessionID: query.sessionID })
+        // A deleted folder may no longer resolve to its Project, so also match automations that ran there.
+        const matching = rows.filter(
+          (row) => directory === undefined || row.projectID === projectID || row.directory === directory,
+        )
+        // Each automation is shown only where the flag allows it, the same as `get`.
+        const visible = new Map<string, boolean>()
+        for (const row of matching) {
+          if (visible.has(row.directory)) continue
+          visible.set(
+            row.directory,
+            yield* allowed(row.directory).pipe(
+              Effect.as(true),
+              Effect.catchTag("ForbiddenError", () => Effect.succeed(false)),
+            ),
+          )
+        }
+        return { data: matching.filter((row) => visible.get(row.directory)) }
       }),
     get: (id: Automation.ID) => find(id).pipe(Effect.map((data) => ({ data }))),
     pause: (id: Automation.ID) =>

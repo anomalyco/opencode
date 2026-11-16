@@ -3,7 +3,7 @@ export * as Automation from "./automation.js"
 import { randomUUID } from "node:crypto"
 import os from "node:os"
 import path from "node:path"
-import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
+import { and, asc, eq, gt, isNull, lte, min, ne, or, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -25,6 +25,7 @@ import {
 import type { ProjectID } from "@opencode/schema/project-id"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Agent } from "./agent.js"
+import type { Agent as AgentSchema } from "@opencode/schema/agent"
 import { AutomationCode } from "./automation/code.js"
 import { AutomationTable } from "./automation/sql.js"
 import { Config } from "./config.js"
@@ -34,6 +35,7 @@ import { Flag } from "./flag.js"
 import { KVTable } from "./kv/sql.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import type { Permission } from "./permission.js"
+import { Plugin } from "./plugin.js"
 import { Project } from "./project.js"
 import { Session } from "./session.js"
 import { SessionExecution } from "./session/execution.js"
@@ -131,8 +133,9 @@ const millis = (value: string) =>
 const OFFSET = /\d(?:z|[+-]\d{2}:?\d{2})$/i
 
 /** Parses "in 10 minutes", an instant with an offset, or a wall-clock time in `zone`. */
-const parseTime = (input: string, zone: DateTime.TimeZone, now: number) => {
-  const relative = RELATIVE.exec(input.trim())
+const parseTime = (raw: string, zone: DateTime.TimeZone, now: number) => {
+  const input = raw.trim()
+  const relative = RELATIVE.exec(input)
   if (relative) {
     return Option.flatMap(durationMillis(relative[1]), (delay) =>
       delay > 0 ? Option.some(now + delay) : Option.none(),
@@ -177,6 +180,8 @@ const following = (row: Pick<Row, "trigger" | "tz" | "next_due_at">, now: number
 const finished = (row: Pick<Row, "expires_at">, next: number | undefined) =>
   next === undefined || (row.expires_at !== null && next > row.expires_at)
 
+const expired = (row: Pick<Row, "expires_at">, now: number) => row.expires_at !== null && now > row.expires_at
+
 const optionalTime = (value: number | null) => (value === null ? undefined : DateTime.makeUnsafe(value))
 
 const toInfo = (row: Row): Info => ({
@@ -210,6 +215,18 @@ const layer = Layer.effect(
     const execution = yield* SessionExecution.Service
     const doorbell = yield* Latch.make()
 
+    /**
+     * The agent a new Session starts with, if it can start one: not hidden and not subagent-only, the same rule as the
+     * default agent. Waits for plugins, which add agents, so a cold location doesn't read as a missing agent.
+     */
+    const startable = (id: AgentSchema.ID) =>
+      Effect.gen(function* () {
+        yield* Plugin.awaitActivation
+        const agents = yield* Agent.Service
+        const agent = yield* agents.resolve(id)
+        return agent !== undefined && agent.mode !== "subagent" && !agent.hidden ? agent : undefined
+      })
+
     /** Runs `effect` in the Location of `directory`; fails with DirectoryNotFoundError when the folder is gone. */
     const inDirectory =
       (directory: string) =>
@@ -239,7 +256,7 @@ const layer = Layer.effect(
           Effect.flatMap((row) => (row ? Effect.succeed(row) : Effect.fail(new NotFoundError({ automationID: id })))),
         )
 
-    /** Writes only while the row is still active, so a pause that lands mid-run wins. */
+    /** Writes only while the row is still active, so a pause that lands meanwhile wins. */
     const update = (row: Row, values: Partial<Row>) =>
       db
         .update(AutomationTable)
@@ -248,12 +265,31 @@ const layer = Layer.effect(
         .run()
         .pipe(Effect.orDie)
 
-    /** Writes whatever the status, e.g. to record a run even if a pause landed during it. */
-    const record = (row: Row, values: Partial<Row>) =>
-      db.update(AutomationTable).set(values).where(eq(AutomationTable.id, row.id)).run().pipe(Effect.orDie)
+    /**
+     * Writes a run's result only if no other process has recorded a run since `row` was read, so a leader handoff
+     * mid-run cannot clobber state or the run count. `active` also requires it not paused; otherwise a pause that
+     * landed during the run keeps its status while the run is still counted.
+     */
+    const settle = (row: Row, values: Partial<Row>, active: boolean) =>
+      db
+        .update(AutomationTable)
+        .set(values)
+        .where(
+          and(
+            eq(AutomationTable.id, row.id),
+            eq(AutomationTable.run_count, row.run_count),
+            active ? eq(AutomationTable.status, "active") : ne(AutomationTable.status, "done"),
+          ),
+        )
+        .run()
+        .pipe(Effect.orDie)
 
     const pauseWith = (row: Row, now: number, reason: string) =>
-      record(row, { status: "paused", last_outcome: "failed", last_output: reason, retry_at: null, time_updated: now })
+      settle(
+        row,
+        { status: "paused", last_outcome: "failed", last_output: reason, retry_at: null, time_updated: now },
+        false,
+      )
 
     const pending = (id: SessionMessage.ID) =>
       db
@@ -272,12 +308,12 @@ const layer = Layer.effect(
         Effect.catchTag("Session.NotFoundError", () => Effect.succeed(Option.none())),
       )
 
-    /** What a finished run writes: the next slot, or done once there is none or `done` was asked for. */
-    const advance = (row: Row, now: number, done = false) => {
-      const next = following(row, now)
+    /** A finished run's next slot, after the time it finished so a slow run doesn't trigger a burst, or done. */
+    const advance = Effect.fnUntraced(function* (row: Row, done = false) {
+      const next = following(row, yield* Clock.currentTimeMillis)
       const ended = done || finished(row, next)
       return { ...(ended ? { status: "done" as const } : {}), next_due_at: ended ? null : next }
-    }
+    })
 
     const runPrompt = Effect.fnUntraced(function* (row: Row, action: PromptAction, due: number, now: number) {
       const late = now - due >= LATE_AFTER
@@ -290,48 +326,59 @@ const layer = Layer.effect(
         const target = yield* existing(action.to.session)
         if (Option.isNone(target))
           return yield* pauseWith(row, now, `Target session ${action.to.session} no longer exists`)
+        if (target.value.projectID !== row.project_id)
+          return yield* pauseWith(row, now, `Target session ${action.to.session} moved to another project`)
         if (row.last_message_id !== null && (yield* pending(row.last_message_id))) {
           // The wake that followed admission may have been lost; waking again is harmless.
           yield* execution.wake(target.value.id)
-          return yield* update(row, {
-            last_outcome: "skipped",
-            retry_at: null,
-            ...advance(row, now),
-            time_updated: now,
-          })
+          return yield* settle(
+            row,
+            { last_outcome: "skipped", retry_at: null, ...(yield* advance(row)), time_updated: now },
+            true,
+          )
         }
         yield* sessions.prompt({ sessionID: target.value.id, id, text: action.prompt, delivery: "steer", metadata })
         // Record the run even if a pause landed during the prompt, or the next run would reuse this message id.
-        return yield* record(row, {
-          run_count: run,
-          last_message_id: id,
-          last_run_at: now,
-          last_outcome: late ? "late" : "fired",
-          last_output: `Prompted ${target.value.id}`,
-          retry_at: null,
-          ...advance(row, now),
-          time_updated: now,
-        })
+        return yield* settle(
+          row,
+          {
+            run_count: run,
+            last_message_id: id,
+            last_run_at: now,
+            last_outcome: late ? "late" : "fired",
+            last_output: `Prompted ${target.value.id}`,
+            retry_at: null,
+            ...(yield* advance(row)),
+            time_updated: now,
+          },
+          false,
+        )
       }
 
-      const agent = yield* Agent.Service.use((agents) => agents.resolve(action.to.new)).pipe(inDirectory(row.directory))
-      if (agent === undefined) return yield* pauseWith(row, now, `Agent ${action.to.new} no longer exists`)
+      const agent = yield* startable(action.to.new).pipe(inDirectory(row.directory))
+      if (agent === undefined) return yield* pauseWith(row, now, `Agent ${action.to.new} is no longer available`)
+      // The id is derived from the run too, so a retry adopts the Session it already started instead of leaking one.
       const session = yield* sessions.create({
+        id: SessionSchema.ID.make(`ses_${row.id}_${run}`),
         location: { directory: AbsolutePath.make(row.directory) },
         agent: agent.id,
         title: row.name,
       })
       yield* sessions.prompt({ sessionID: session.id, id, text: action.prompt, metadata })
-      yield* record(row, {
-        run_count: run,
-        last_message_id: id,
-        last_run_at: now,
-        last_outcome: late ? "late" : "fired",
-        last_output: `Started ${session.id}`,
-        retry_at: null,
-        ...advance(row, now),
-        time_updated: now,
-      })
+      yield* settle(
+        row,
+        {
+          run_count: run,
+          last_message_id: id,
+          last_run_at: now,
+          last_outcome: late ? "late" : "fired",
+          last_output: `Started ${session.id}`,
+          retry_at: null,
+          ...(yield* advance(row)),
+          time_updated: now,
+        },
+        false,
+      )
     })
 
     const runCode = Effect.fnUntraced(function* (row: Row, action: CodeAction, due: number, now: number) {
@@ -345,52 +392,73 @@ const layer = Layer.effect(
         now,
         runs: row.run_count,
       }).pipe(inDirectory(row.directory))
+      const ended = yield* Clock.currentTimeMillis
 
       if (!outcome.ok) {
         // State is kept: only a successful run replaces it.
         const strikes = row.failures + 1
         const output = outcome.output === undefined ? outcome.error : `${outcome.output}\n${outcome.error}`
         if (!outcome.invalid && strikes < MAX_CODE_FAILURES) {
-          return yield* update(row, {
-            failures: strikes,
-            last_outcome: "failed",
-            last_output: output,
-            retry_at: now + CODE_FAILED_RETRY,
-            time_updated: now,
-          })
+          return yield* settle(
+            row,
+            {
+              failures: strikes,
+              last_outcome: "failed",
+              last_output: output,
+              retry_at: ended + CODE_FAILED_RETRY,
+              time_updated: ended,
+            },
+            true,
+          )
         }
-        return yield* record(row, {
-          status: "paused",
-          failures: strikes,
-          last_run_at: now,
-          last_outcome: "failed",
-          last_output: outcome.invalid ? `Paused: ${output}` : `Paused after ${strikes} failed runs: ${output}`,
-          retry_at: null,
-          time_updated: now,
-        })
+        return yield* settle(
+          row,
+          {
+            status: "paused",
+            failures: strikes,
+            last_run_at: now,
+            last_outcome: "failed",
+            last_output: outcome.invalid ? `Paused: ${output}` : `Paused after ${strikes} failed runs: ${output}`,
+            retry_at: null,
+            time_updated: ended,
+          },
+          false,
+        )
       }
 
-      yield* record(row, {
-        run_count: row.run_count + 1,
-        failures: 0,
-        ...(outcome.state === undefined ? {} : { state: outcome.state }),
-        last_run_at: now,
-        last_outcome: now - due >= LATE_AFTER ? "late" : "fired",
-        last_output: outcome.output ?? null,
-        retry_at: null,
-        ...advance(row, now, outcome.done),
-        time_updated: now,
-      })
+      yield* settle(
+        row,
+        {
+          run_count: row.run_count + 1,
+          failures: 0,
+          ...(outcome.state === undefined ? {} : { state: outcome.state }),
+          last_run_at: now,
+          last_outcome: now - due >= LATE_AFTER ? "late" : "fired",
+          last_output: outcome.output ?? null,
+          retry_at: null,
+          ...(yield* advance(row, outcome.done)),
+          time_updated: ended,
+        },
+        false,
+      )
     })
 
     const step = Effect.fnUntraced(function* (row: Row, now: number) {
       const due = row.next_due_at
       if (due === null) return
       if (!(yield* claimLeader(yield* Clock.currentTimeMillis))) return
+      // A slot that only comes up late, after the automation expired (downtime, a retry), never runs.
+      if (expired(row, now) && now - due >= LATE_AFTER) {
+        return yield* settle(
+          row,
+          { status: "done", next_due_at: null, last_outcome: "expired", retry_at: null, time_updated: now },
+          true,
+        )
+      }
       if (!(yield* settings(row.directory)).enabled) {
         // Reading the flag boots the location, so check again in an hour rather than every tick. The row keeps its
         // due time, so once the flag is back on it catches up like any missed slot.
-        yield* update(row, { last_outcome: "disabled", retry_at: now + DISABLED_RETRY, time_updated: now })
+        yield* settle(row, { last_outcome: "disabled", retry_at: now + DISABLED_RETRY, time_updated: now }, true)
         return
       }
       switch (row.action.type) {
@@ -428,12 +496,16 @@ const layer = Layer.effect(
               const error = Cause.squash(cause)
               return Effect.logWarning("automation failed to run", { automationID: row.id, cause }).pipe(
                 Effect.andThen(
-                  update(row, {
-                    last_outcome: "failed",
-                    last_output: error instanceof Error ? error.message : String(error),
-                    retry_at: now + FAILED_RETRY,
-                    time_updated: now,
-                  }),
+                  settle(
+                    row,
+                    {
+                      last_outcome: "failed",
+                      last_output: error instanceof Error ? error.message : String(error),
+                      retry_at: now + FAILED_RETRY,
+                      time_updated: now,
+                    },
+                    true,
+                  ),
                 ),
               )
             }),
@@ -626,8 +698,9 @@ const layer = Layer.effect(
         if (to.session !== undefined && (yield* sessions.get(to.session)).projectID !== projectID)
           return yield* new InvalidError({ reason: `Session ${to.session} is in another project` })
         if (to.new !== undefined) {
-          const agent = yield* Agent.Service.use((agents) => agents.resolve(to.new)).pipe(inDirectory(directory))
-          if (agent === undefined) return yield* new InvalidError({ reason: `Unknown agent: ${to.new}` })
+          const agent = yield* startable(to.new).pipe(inDirectory(directory))
+          if (agent === undefined)
+            return yield* new InvalidError({ reason: `Unknown agent, or one that can't start a session: ${to.new}` })
         }
         return { type: "prompt" as const, prompt: action.prompt, to }
       }
@@ -720,10 +793,11 @@ const layer = Layer.effect(
         const row = yield* find(id)
         if (row.status !== "paused") return toInfo(row)
         const now = yield* Clock.currentTimeMillis
-        // An `at` that fell due while paused runs once, late; a repeating automation resumes at its next slot.
+        // An `at` that fell due while paused runs once, late, unless it has expired; a repeating automation resumes at
+        // its next slot.
         const next =
           row.next_due_at === null || row.next_due_at > now ? row.next_due_at : (following(row, now) ?? row.next_due_at)
-        const done = next === null || finished(row, next)
+        const done = next === null || finished(row, next) || expired(row, now)
         yield* db
           .update(AutomationTable)
           .set({

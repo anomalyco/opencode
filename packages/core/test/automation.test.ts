@@ -124,11 +124,14 @@ const configureAgent = Layer.effectDiscard(
     const agents = yield* Agent.Service
     const tools = yield* Tool.Service
     const permission = yield* Permission.Service
-    yield* agents.transform((editor) =>
+    yield* agents.transform((editor) => {
       editor.update(Agent.defaultID, (agent) => {
         agent.permissions = [...agentRules]
-      }),
-    )
+      })
+      editor.update(Agent.ID.make("helper"), (agent) => {
+        agent.mode = "subagent"
+      })
+    })
     yield* tools.transform((editor) => {
       editor.add({
         name: "read_thread",
@@ -156,11 +159,16 @@ const configureAgent = Layer.effectDiscard(
       editor.add({
         name: "post",
         description: "Post a message",
-        input: Schema.Struct({ text: Schema.String }),
+        input: Schema.Struct({ text: Schema.String, channel: Schema.optional(Schema.String) }),
         options: { namespace: "slack" },
         execute: (input, context) =>
           permission
-            .assert({ action: "slack_post", resources: ["*"], sessionID: context.sessionID, agent: context.agent })
+            .assert({
+              action: "slack_post",
+              resources: [input.channel ?? "general"],
+              sessionID: context.sessionID,
+              agent: context.agent,
+            })
             .pipe(
               Effect.orDie,
               Effect.map(() => {
@@ -427,7 +435,7 @@ describe("Automation", () => {
       const automation = yield* automations.create({
         sessionID,
         name: "nudge",
-        trigger: { type: "at", at: "in 1 minute" },
+        trigger: every("1 minute"),
         action: { type: "prompt", prompt: "nudge", to: { session: otherID } },
       })
       yield* TestClock.adjust("1 minute")
@@ -457,6 +465,15 @@ describe("Automation", () => {
           }),
         ),
       ).toMatchObject({ reason: `Session ${otherID} is in another project` })
+
+      // A target that moves away after creation pauses the automation rather than prompting outside the project.
+      yield* TestClock.adjust("1 minute")
+      yield* automations.tick
+      expect(yield* automations.get(automation.id)).toMatchObject({
+        status: "paused",
+        runCount: 1,
+        lastOutput: `Target session ${otherID} moved to another project`,
+      })
     }),
   )
 
@@ -477,7 +494,8 @@ describe("Automation", () => {
       const rows = yield* pending
       expect(rows.map((row) => row.id)).toEqual([messageID(automation, 1), messageID(automation, 2)])
       const started = rows.map((row) => row.sessionID)
-      expect(new Set([sessionID, ...started]).size).toBe(3)
+      // One Session per run, with an id derived from the run so a retry adopts it rather than starting another.
+      expect(started).toEqual([Session.ID.make(`ses_${automation.id}_1`), Session.ID.make(`ses_${automation.id}_2`)])
       const sessions = yield* Session.Service
       const first = yield* sessions.get(started[0]!)
       expect(first).toMatchObject({
@@ -535,7 +553,17 @@ describe("Automation", () => {
             action: { type: "prompt", prompt: "x", to: { new: Agent.ID.make("nobody") } },
           }),
         ),
-      ).toMatchObject({ reason: "Unknown agent: nobody" })
+      ).toMatchObject({ reason: "Unknown agent, or one that can't start a session: nobody" })
+      expect(
+        yield* Effect.flip(
+          automations.create({
+            name: "x",
+            directory: enabledDirectory,
+            trigger: every("1 hour"),
+            action: { type: "prompt", prompt: "x", to: { new: Agent.ID.make("helper") } },
+          }),
+        ),
+      ).toMatchObject({ reason: "Unknown agent, or one that can't start a session: helper" })
     }),
   )
 
@@ -568,6 +596,57 @@ describe("Automation", () => {
           }),
         ),
       ).toMatchObject({ reason: "The automation expires before it first runs" })
+    }),
+  )
+
+  it.effect("never runs a slot that only comes up after expires, after downtime or on resume", () =>
+    Effect.gen(function* () {
+      yield* setTime("2026-10-26T12:00:00Z")
+      const automations = yield* setup()
+      const poll = yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("10 minutes"),
+        expires: "2026-10-26T12:25:00Z",
+        action: prompt("poll"),
+      })
+      const once = yield* automations.create({
+        sessionID,
+        name: "once",
+        trigger: { type: "at", at: "in 10 minutes" },
+        expires: "in 20 minutes",
+        action: prompt("once"),
+      })
+      yield* automations.pause(once.id)
+      yield* TestClock.adjust("30 minutes")
+      yield* automations.tick
+      expect(yield* automations.get(poll.id)).toMatchObject({ status: "done", runCount: 0, lastOutcome: "expired" })
+      expect(yield* automations.resume(once.id)).toMatchObject({ status: "done", runCount: 0 })
+      yield* automations.tick
+      expect(yield* pendingIDs).toEqual([])
+    }),
+  )
+
+  it.effect("drops a run's result when another process recorded a run meanwhile", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup()
+      const automation = yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("1 minute"),
+        action: prompt("poll"),
+      })
+      yield* TestClock.adjust("1 minute")
+      // Another leader records this run while ours is still admitting it.
+      const { db } = yield* Database.Service
+      duringWake = db
+        .update(AutomationTable)
+        .set({ run_count: 1, last_output: "other" })
+        .where(eq(AutomationTable.id, automation.id))
+        .run()
+        .pipe(Effect.orDie, Effect.asVoid)
+      yield* automations.tick
+      expect(yield* automations.get(automation.id)).toMatchObject({ runCount: 1, lastOutput: "other" })
     }),
   )
 
@@ -939,6 +1018,31 @@ describe("Automation", () => {
   )
 
   describe("code actions", () => {
+    /** Approves every permission ask "once", as a person at the creating Session would, and records them. */
+    const answerAsks = Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const instances = yield* Instance.Service
+      const session = yield* Session.Service.use((sessions) => sessions.get(sessionID))
+      const asks = yield* Queue.unbounded<Permission.Request>()
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Permission.Event.Asked.type
+          ? Queue.offer(asks, event.data as Permission.Request).pipe(Effect.asVoid)
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const asked: Permission.Request[] = []
+      const answerLoop = yield* Queue.take(asks).pipe(
+        Effect.tap((request) => Effect.sync(() => asked.push(request))),
+        Effect.flatMap((request) =>
+          Permission.Service.use((permission) => permission.reply({ requestID: request.id, reply: "once" })).pipe(
+            instances.provide(session),
+          ),
+        ),
+        Effect.forever,
+        Effect.forkChild,
+      )
+      return { asked, answerLoop }
+    })
     const watchThread = `
       const thread = await tools.slack.read_thread({})
       console.log("replies: " + thread.replies)
@@ -1078,28 +1182,7 @@ describe("Automation", () => {
       Effect.gen(function* () {
         const automations = yield* setup()
         agentRules = [{ action: "*", resource: "*", effect: "ask" }]
-        const bus = yield* Bus.Service
-        const instances = yield* Instance.Service
-        const session = yield* Session.Service.use((sessions) => sessions.get(sessionID))
-        const asks = yield* Queue.unbounded<Permission.Request>()
-        const unsubscribe = yield* bus.listen((event) =>
-          event.type === Permission.Event.Asked.type
-            ? Queue.offer(asks, event.data as Permission.Request).pipe(Effect.asVoid)
-            : Effect.void,
-        )
-        yield* Effect.addFinalizer(() => unsubscribe)
-        const asked: Permission.Request[] = []
-        const answerLoop = yield* Queue.take(asks).pipe(
-          Effect.tap((request) => Effect.sync(() => asked.push(request))),
-          Effect.flatMap((request) =>
-            Permission.Service.use((permission) => permission.reply({ requestID: request.id, reply: "once" })).pipe(
-              instances.provide(session),
-            ),
-          ),
-          Effect.forever,
-          Effect.forkChild,
-        )
-
+        const { asked, answerLoop } = yield* answerAsks
         const automation = yield* automations.create({
           sessionID,
           name: "thread",
@@ -1128,6 +1211,82 @@ describe("Automation", () => {
         expect(asked).toHaveLength(2)
         expect(slack.posts).toEqual(["#ops: 2"])
         expect(yield* automations.get(automation.id)).toMatchObject({ runCount: 2, lastOutcome: "fired" })
+      }),
+    )
+
+    it.effect("asks for resource-scoped ask rules at creation, and still needs a person for them at run time", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        agentRules = [
+          { action: "*", resource: "*", effect: "allow" },
+          { action: "slack_post", resource: "vault:*", effect: "ask" },
+          { action: "slack_post", resource: "vault:public", effect: "allow" },
+        ]
+        const { asked, answerLoop } = yield* answerAsks
+        const automation = yield* automations.create({
+          sessionID,
+          name: "post",
+          trigger: every("1 minute"),
+          action: code(`for (const channel of args) await tools.slack.post({ text: "hi", channel })`, [
+            "general",
+            "vault:public",
+          ]),
+        })
+        yield* Fiber.interrupt(answerLoop)
+        expect(asked.map((request) => [request.action, request.resources])).toEqual([["slack_post", ["*", "vault:*"]]])
+
+        // The approval covers everything the catch-all allows, and narrower allows still apply.
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(slack.posts).toEqual(["hi", "hi"])
+
+        // A scoped ask is not settled by the unattended grant, so that call fails and the run is recorded as failed.
+        const secret = yield* automations
+          .create({
+            sessionID,
+            name: "secret",
+            trigger: every("1 minute"),
+            action: code(`await tools.slack.post({ text: "leak", channel: "vault:keys" })`),
+          })
+          .pipe(Effect.provideService(Permission.Unattended, [{ action: "*", resource: "*", effect: "allow" }]))
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(slack.posts).not.toContain("leak")
+        expect(yield* automations.get(secret.id)).toMatchObject({ runCount: 0, lastOutcome: "failed" })
+        expect((yield* automations.get(automation.id)).runCount).toBe(2)
+      }),
+    )
+
+    it.effect("asks for execute when its tools are already allowed", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        agentRules = [
+          { action: "*", resource: "*", effect: "allow" },
+          { action: "execute", resource: "*", effect: "ask" },
+        ]
+        const { asked, answerLoop } = yield* answerAsks
+        yield* automations.create({
+          sessionID,
+          name: "read",
+          trigger: every("1 minute"),
+          action: code(`await tools.slack.read_thread({})`),
+        })
+        yield* Fiber.interrupt(answerLoop)
+        expect(asked.map((request) => request.action)).toEqual(["execute"])
+
+        // Nobody present to approve: refused rather than created.
+        expect(
+          yield* Effect.flip(
+            automations
+              .create({
+                sessionID,
+                name: "read",
+                trigger: every("1 minute"),
+                action: code(`await tools.slack.read_thread({})`),
+              })
+              .pipe(Effect.provideService(Permission.Unattended, [])),
+          ),
+        ).toMatchObject({ _tag: "Permission.BlockedError" })
       }),
     )
 
