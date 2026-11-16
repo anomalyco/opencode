@@ -25,6 +25,7 @@ import {
 } from "@opencode/plugin/gui"
 import { addressParts, connection, externalAction, externalPage } from "./address"
 import { hostDisplay } from "./host-display"
+import { ACTIVATION_DELAY_MS } from "./activation-delay"
 import { FileSource } from "../file/contract"
 import { remotePath, workspacePrefix } from "./remote-address"
 import {
@@ -253,6 +254,14 @@ export default function SessionBrowserPane(props: {
   }
 
   const drawn = () => shown() && prompt()?.ask.kind !== "dialog"
+  const revealGuard = () => props.model.revealGuard(props.session, props.tab().id)
+
+  // Start the guard when this panel would actually show the native view, not while its chunk is still loading.
+  createKeyed(() => drawn() && revealGuard(), token => {
+    const key = props.session.key
+    const timer = setTimeout(() => props.model.revealElapsed(key, token), ACTIVATION_DELAY_MS)
+    onCleanup(() => clearTimeout(timer))
+  })
 
   // Focus moves to a prompt only when the user was in the pane or its page, never from the composer.
   const promptFocus = () => !!prompt()?.focus || !!root?.contains(document.activeElement)
@@ -988,7 +997,7 @@ export default function SessionBrowserPane(props: {
         id={embed()}
         // A page blocked in a JavaScript dialog draws no frame, so Chromium cannot capture a still of it: its dialog
         // sits over the dimmed, empty page area at once. "Leave site?" and a sign-in leave the page drawing.
-        visible={drawn()}
+        visible={drawn() && revealGuard() === undefined}
         frozen={overlayed().frozen || !!promptKey(true)}
         // A navigation, in-page or not, or a reload starting is another page.
         page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}

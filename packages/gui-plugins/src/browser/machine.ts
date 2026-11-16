@@ -73,6 +73,7 @@ export type Attachment = {
   readonly addressFocus: AddressFocus
   readonly side: "unobserved" | "open" | "closed" | "dismissed"
   readonly unseen: readonly Browser.TabID[]
+  readonly reveal?: { readonly tabID: Browser.TabID; readonly token: number }
 }
 
 /**
@@ -92,6 +93,7 @@ export type Event =
   | { readonly type: "side.changed"; readonly sessionKey: string; readonly open: boolean; readonly running: boolean }
   | { readonly type: "execution.ended"; readonly sessionKey: string }
   | { readonly type: "activity.seen"; readonly sessionKey: string; readonly tabID: Browser.TabID }
+  | { readonly type: "reveal.elapsed"; readonly sessionKey: string; readonly token: number }
   | {
       readonly type: "pane.activity"
       readonly sessionKey: string
@@ -326,6 +328,12 @@ export function unseenActivity(state: State, sessionKey: string, tabID: string) 
   return attachmentOf(state, sessionKey)?.unseen.some(id => id === tabID) ?? false
 }
 
+export function revealGuard(state: State, sessionKey: string, tabID: string) {
+  const reveal = attachmentOf(state, sessionKey)?.reveal
+
+  return reveal?.tabID === tabID ? reveal.token : undefined
+}
+
 export function sessionSuspended(state: State, sessionKey: string) {
   return attachmentOf(state, sessionKey)?.phase.status === "suspended"
 }
@@ -460,11 +468,13 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       const dismissed = event.running && (attachment.side === "open" || attachment.side === "dismissed")
       const side = event.open ? "open" : dismissed ? "dismissed" : "closed"
 
-      return side === attachment.side ? { state, effects: [] } : put(state, key, { ...attachment, side })
+      return side === attachment.side ? { state, effects: [] } : put(state, key, { ...attachment, side, reveal: event.open ? attachment.reveal : undefined })
     }
 
     case "execution.ended":
       return attachment.side === "dismissed" ? put(state, key, { ...attachment, side: "closed" }) : { state, effects: [] }
+    case "reveal.elapsed":
+      return attachment.reveal?.token === event.token ? put(state, key, { ...attachment, reveal: undefined }) : { state, effects: [] }
     case "activity.seen":
       return attachment.unseen.includes(event.tabID)
         ? put(state, key, { ...attachment, unseen: attachment.unseen.filter(id => id !== event.tabID) })
@@ -476,7 +486,13 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       if (attachment.side === "dismissed" || !attachment.browser?.tabs.some(tab => tab.id === event.tabID))
         return { state, effects: [] }
 
-      if (!event.opened) return { state, effects: [{ type: "focus-strip-tab", sessionKey: key, tabID: event.tabID }] }
+      if (!event.opened) {
+        const token = state.issued + 1
+
+        return put(state, key, { ...attachment, reveal: { token, tabID: event.tabID } }, [
+          { type: "focus-strip-tab", sessionKey: key, tabID: event.tabID },
+        ], token)
+      }
 
       if (event.visible || attachment.unseen.includes(event.tabID)) return { state, effects: [] }
 

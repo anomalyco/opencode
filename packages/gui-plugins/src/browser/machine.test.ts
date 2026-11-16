@@ -8,6 +8,7 @@ import {
   sessionError,
   sessionPending,
   sessionRegistration,
+  revealGuard,
   sessionSuspended,
   transition,
   type Attachment,
@@ -123,6 +124,20 @@ describe("browser pane machine", () => {
     const mark = replay([side(true), { ...activity(hidden), opened: true }], hidden).state
     expect(attachment(mark)?.unseen).toEqual([tabA])
     expect(attachment(transition(mark, { type: "activity.seen", sessionKey: key, tabID: tabA }).state)?.unseen).toEqual([])
+  })
+
+  test("only the newly revealed page is held back, and an old timer cannot expose it", () => {
+    const start = ready()
+    const reveal = transition(start, activity(start)).state
+    const token = revealGuard(reveal, key, tabA)
+
+    if (!token) throw new Error("expected reveal guard")
+    expect(revealGuard(reveal, key, tabB)).toBeUndefined()
+    const again = transition(reveal, activity(reveal)).state
+    const stale = transition(again, { type: "reveal.elapsed", sessionKey: key, token }).state
+    expect(stale).toBe(again)
+    const elapsed = transition(reveal, { type: "reveal.elapsed", sessionKey: key, token }).state
+    expect(revealGuard(elapsed, key, tabA)).toBeUndefined()
   })
 
   test("a visible restored tab requests its load on acceptance, not before the new registration exists", () => {

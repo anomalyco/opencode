@@ -41,6 +41,7 @@ import {
   sessionTab,
   sessionTabs,
   unseenActivity,
+  revealGuard,
   transition,
   type Event,
   type Ipc,
@@ -681,6 +682,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     asking: (session: Session, tabID: string) =>
       !!state.chrome[session.key]?.[tabID]?.prompt && sessionBrowser(machine(), session.key)?.focusedTabID !== tabID,
     unseen: (session: Session, tabID: string) => unseenActivity(machine(), session.key, tabID),
+    revealGuard: (session: Session, tabID: string) => revealGuard(machine(), session.key, tabID),
+    revealElapsed: (sessionKey: string, token: number) => dispatch({ type: "reveal.elapsed", sessionKey, token }),
     answer(session: Session, tabID: Browser.TabID, id: number, answer: PromptAnswer) {
       return registration(session)?.answer(tabID, id, answer) ?? Promise.reject(new Error("browser.pane.unavailable"))
     },
