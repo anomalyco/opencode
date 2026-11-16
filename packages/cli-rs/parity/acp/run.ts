@@ -116,7 +116,16 @@ function messages(text: string) {
     .split("\n")
     .filter((line) => line.trim())
     .map((line) =>
-      normalize(line.replaceAll(/(?:\/[\w.-]+)*\/opencode-cli-acp-[A-Za-z0-9]+/g, "<root>"), { root: "<root>" }),
+      // A background shell's ID, process and output directory are the server's own for each run.
+      [
+        [/\bsh_[A-Za-z0-9]{6,}\b/g, "<sh>"] as const,
+        [/PID: \d+/g, "PID: <pid>"] as const,
+        [/"pid":\d+/g, '"pid":"<pid>"'] as const,
+        [/\/shell\/[0-9a-f]{40}\//g, "/shell/<hash>/"] as const,
+      ].reduce(
+        (current, [pattern, replacement]) => current.replaceAll(pattern, replacement),
+        normalize(line.replaceAll(/(?:\/[\w.-]+)*\/opencode-cli-acp-[A-Za-z0-9]+/g, "<root>"), { root: "<root>" }),
+      ),
     )
 }
 
