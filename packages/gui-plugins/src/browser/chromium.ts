@@ -309,6 +309,8 @@ export function createBrowserPage(
   constructing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })
   constructing.defer(() => options.workspace?.dispose())
   constructing.defer(() => options.artifacts?.dispose())
+
+  if (agentDriven(options.activity)) contents.setBackgroundThrottling(false)
   const preview = (url: string) => options.artifacts?.display(url) ?? options.workspace?.display(url)
   // Keep the fence across transient blank/error documents. Page JS cannot clear it by navigating itself.
   let artifactHost: string | undefined
