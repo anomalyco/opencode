@@ -66,6 +66,35 @@ function rank(role: string) {
   if (landmarks.test(role)) return 4
 }
 
+function itemLabel(children: readonly string[], index: ReadonlyMap<string, Protocol.Accessibility.AXNode>) {
+  const pending = children.slice().reverse()
+  const seen = new Set<string>()
+
+  while (pending.length) {
+    const id = pending.pop()
+
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const node = index.get(id)
+
+    if (!node) continue
+    const role = String(node.role?.value ?? "")
+
+    if (controls.test(role) || collections.test(role) || role === "row" || role === "listitem" || node.properties?.some(p => p.name === "editable")) continue
+    const name = String(node.name?.value ?? "").replace(/\s+/g," ").trim()
+
+    if (!node.ignored && name) return name
+
+    for (let i=(node.childIds?.length ?? 0)-1; i>=0; i--) {
+      const child = node.childIds?.[i]
+
+      if (child) pending.push(child)
+    }
+  }
+
+  return ""
+}
+
 /** One frame per walk. Never inspect editable descendants, even to count omitted nodes or search text. */
 export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibility.AXNode[], options: Options) {
   const index = new Map<string, Protocol.Accessibility.AXNode>()
@@ -142,7 +171,7 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
 
     const itemName =
       options.interactive && (role === "row" || role === "listitem") && !name
-        ? String(index.get(children[0])?.name?.value ?? "").replace(/\s+/g, " ")
+        ? itemLabel(children, index)
         : name
 
     const item =
@@ -154,14 +183,16 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
       isItem && collection
         ? { area: collection, keep: false, meaningful: false, shown: 0, parent: branch.entry }
         : branch.entry
+
     if (entry && entry !== branch.entry) items.push(entry)
+
     const important = !!node.properties?.some(
       (p) =>
         ["focused", "selected", "checked", "invalid"].includes(p.name) &&
         ![false, "false", undefined].includes(p.value.value),
     )
+
     if (visible && entry && (interactive || name.trim() || important)) {
-      entry.meaningful = true
       if (important) for (let group: Item | undefined = entry; group; group = group.parent) group.keep = true
     }
 
@@ -195,6 +226,8 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
         (known && `@${known}`.includes(query))
       ) {
         const pad = options.interactive ? "" : "  ".repeat(Math.min(12, branch.level))
+
+        if (entry && (interactive || name.trim() || important)) entry.meaningful = true
         buckets[role === "RootWebArea" ? 0 : (priority ?? 5)].push({
           label: pad + label,
           value:
@@ -267,11 +300,13 @@ async function printSnapshot(buckets: Line[][], items: Item[], options: Options)
     const order = new Map(original.map((line, i) => [line, i + visited]))
     // Select within each landmark's budget by usefulness, then restore tree order for reading.
     const groups = Array.from({ length: 4 }, (): Line[] => [])
+
     for (const line of original)
       groups[
         line.important || line.entry?.keep ? 0 : line.interactive ? 1 : line.area?.id === line.id && line.id ? 2 : 3
       ].push(line)
     const bucket = groups.flat()
+
     for (let i = 0; i < bucket.length; i += 32) {
       const batch = bucket.slice(i, i + 32)
 
@@ -281,6 +316,7 @@ async function printSnapshot(buckets: Line[][], items: Item[], options: Options)
               batch.map(async (line) => {
                 if (!line.id || line.deep) return ""
                 const value = line.value && (await options.readableValue?.(line.id)) ? ` value=${line.value}` : ""
+
                 return value + ((await options.box?.(line.id)) ?? "")
               }),
             )
@@ -323,6 +359,7 @@ async function printSnapshot(buckets: Line[][], items: Item[], options: Options)
   if (!omitted) return { content: content(), truncated: false, refs }
 
   for (const row of output) for (let group = row.line.entry; group; group = group.parent) group.shown++
+
   for (const group of items) if (group.meaningful && !group.shown) group.area.skipped++
 
   const footer = () => {
@@ -345,6 +382,7 @@ async function printSnapshot(buckets: Line[][], items: Item[], options: Options)
     const last = output.pop()
 
     if (!last) break
+
     for (let group = last.line.entry; group; group = group.parent)
       if (--group.shown === 0 && group.meaningful) group.area.skipped++
     omit(last.line)

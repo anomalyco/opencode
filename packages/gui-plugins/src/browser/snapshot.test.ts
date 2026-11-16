@@ -112,12 +112,13 @@ test("summarizes collections, preserves late selections, and expands a scoped co
 
 test("alerts and nested dialogs outrank navigation; invalid fields and safe values survive a tight budget", async () => {
   const field = node(4, "textbox", "Email")
-  field.properties = ["invalid", "readonly", "required"].map((key) => ({
-    name: key as "invalid" | "readonly" | "required",
+  field.properties = (["invalid", "readonly", "required"] as const).map((key) => ({
+    name: key,
     value: { type: "boolean", value: true },
   }))
   field.value = { type: "string", value: "bad@" }
   const other = { ...node(6, "textbox", "Password"), value: { type: "string" as const, value: "secret" } }
+
   const tree = [
     node(1, "generic", "", 2, 5),
     node(2, "navigation", "Routes", 3),
@@ -126,6 +127,7 @@ test("alerts and nested dialogs outrank navigation; invalid fields and safe valu
     node(5, "alert", "Errors"),
     other,
   ]
+
   const content = (await accessibilitySnapshot(tree, { ...options(), readableValue: async (id) => id === 4 })).content
   expect(content.indexOf("[dialog]")).toBeLessThan(content.indexOf("[navigation]"))
   expect(content.indexOf("[alert]")).toBeLessThan(content.indexOf("[navigation]"))
@@ -145,9 +147,25 @@ test("headings inside collapsed card wrappers distinguish identical controls", a
     node(8, "heading", "Beta"),
     node(9, "button", "Edit"),
   ]
+
   const result = await accessibilitySnapshot(tree, { ...options(), interactive: true })
   expect(result.content).toContain('[button] "Edit" in heading "Alpha"')
   expect(result.content).toContain('[button] "Edit" in heading "Beta"')
+})
+
+test("an invalid input in the last table row survives truncation", async () => {
+  const rows = Array.from({length:40}, (_, i) => node(i+2,"row","",i+42))
+  const fields = rows.map((_, i) => node(i+42,"textbox",`Field ${i}`))
+  fields[39].properties = [{name:"invalid",value:{type:"token",value:"true"}}]
+  const root = node(1,"table","Form",...rows.map(row=>Number(row.nodeId)))
+  const result = await accessibilitySnapshot([root,...rows,...fields],{...options(),interactive:true,maxLines:3})
+  expect(result.content).toContain('[textbox] "Field 39" invalid=true')
+  expect(result.content).not.toContain('"Field 38"')
+})
+
+test("an unnamed list item uses its text inside a wrapper as context", async () => {
+  const result = await accessibilitySnapshot([node(1,"listitem","",2,4),node(2,"generic","",3),node(3,"StaticText","Project Fox"),node(4,"button","Edit")],{...options(),interactive:true})
+  expect(result.content).toContain('[button] "Edit" in listitem "Project Fox"')
 })
 
 test("prefers a nonignored root and can find a known ref after its role changes", async () => {
