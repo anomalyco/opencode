@@ -293,7 +293,7 @@ it.live("HTML preview passes the checked relative path and requires a usable tab
   }),
 )
 
-it.live("preview fails for a missing file, and without a desktop names the file to tell the user", () =>
+it.live("preview fails for a missing file, and returns attachment status without a desktop", () =>
   Effect.gen(function* () {
     const browser = yield* setup((action) => success(action.type === "preview" ? { path: action.path } : tab))
     yield* Effect.promise(() => Bun.write(join(browser.directory, "chart.svg"), "<svg/>"))
@@ -307,10 +307,6 @@ it.live("preview fails for a missing file, and without a desktop names the file 
 
     const detached = yield* setup(() => success(tab), { attach: false })
     yield* Effect.promise(() => Bun.write(join(detached.directory, "chart.svg"), "<svg/>"))
-    expect(
-      yield* detached.run(`return await tools.browser.preview({ path: "chart.svg" }).catch((error) => error.message)`),
-    ).toContain(
-      `[browser.disconnected] ${join(detached.directory, "chart.svg")} was not shown: no OpenCode desktop app is connected to this session`,
-    )
+    expect(JSON.parse(yield* detached.run(`return await tools.browser.preview({ path: "chart.svg" })`))).toMatchObject({ connected: false })
   }),
 )

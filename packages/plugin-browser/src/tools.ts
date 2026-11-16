@@ -4,7 +4,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect"
 import { Base64 } from "effect/encoding"
-import { relative, resolve, sep } from "node:path"
+import { relative, sep } from "node:path"
 import { Script } from "node:vm"
 import type { BrowserConnection } from "./connection.js"
 import { BrowserFiles } from "./files.js"
@@ -16,7 +16,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   connection: BrowserConnection.Connection,
 ) {
   // Load and text waits run on the desktop; the rest poll from here with actions every desktop already supports.
-  const wait = Effect.fn("BrowserTools.wait")(function* (tabID: Browser.TabID, plan: WaitPlan, tool: Tool.Context, approved: Effect.Success<ReturnType<typeof connection.authorize>>) {
+  const wait = Effect.fn("BrowserTools.wait")(function* (tabID: Browser.TabID, plan: WaitPlan, tool: Tool.Context, approved: Extract<Effect.Success<ReturnType<typeof connection.authorize>>, { connectionID: string }>) {
     const started = yield* Clock.currentTimeMillis
     const current = connection
       .target(tool.sessionID, { type: "tabs.focus", tabID }, approved)
@@ -143,23 +143,11 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   ) {
     // Before anything else, so a call the configuration denies reveals nothing but the denial.
     yield* connection.refuse(tool, input.type)
-    if (input.type === "wait") {
-      const plan = yield* parse(() => waitPlan(input))
-      const approved = yield* connection.authorize(tool, input)
-      return yield* wait(input.tabID, plan, tool, approved)
-    }
-    const action = yield* parse(() => normalizeAction(input))
-    if (action.type === "preview" && !(yield* connection.attached(tool.sessionID))) {
-      // Said without looking at the path, which no permission check has allowed yet.
-      const shown = BrowserFiles.address(action.path)
-        ? action.path
-        : resolve(ctx.location.directory, action.path.trim())
-      return yield* new Tool.Error({
-        message: `[browser.disconnected] ${shown} was not shown: no OpenCode desktop app is connected to this session, so nothing can open in its Review pane. Tell the user the file is at ${shown}; do not call browser.preview again until they open this session in the desktop app.`,
-      })
-    }
+    const action = input.type === "wait" ? { ...input, plan: yield* parse(() => waitPlan(input)) } : yield* parse(() => normalizeAction(input))
     const paths = "paths" in action ? action.paths.map((path) => BrowserFiles.uploadPath(ctx.location.directory, path)) : undefined
     const approved = yield* connection.authorize(tool, action, paths ?? (action.type === "preview" ? [action.path] : undefined))
+    if (approved.connected === false) return { output: approved, content: [{ type: "text" as const, text: approved.message }] }
+    if (action.type === "wait") return yield* wait(action.tabID, action.plan, tool, approved)
     if (action.type === "preview" && ctx.location.workspaceID) return yield* new Tool.Error({ message: "Browser preview requires a server-local workspace." })
     const checked = action.type === "preview" ? { ...action, path: yield* previewable(action.path, tool) } : action
     const target = yield* connection.target(tool.sessionID, checked, approved)
@@ -194,7 +182,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
           name: operation.name.slice(separator + 1),
           description: operation.description,
           input: operation.input,
-          output: operation.output,
+          output: Schema.Union([operation.output, Schema.Struct({ connected: Schema.Literal(false), message: Schema.String })]),
           options: {
             namespace: separator < 0 ? "browser" : `browser.${operation.name.slice(0, separator)}`,
             permission: "browser",
@@ -279,7 +267,7 @@ function modelResult(output: Schema.Schema.Type<Browser.Operation["output"]>, fi
   })
 }
 
-export function normalizeAction(action: Exclude<Browser.Input, { readonly type: "wait" }>): Browser.Action {
+export function normalizeAction(action: Exclude<Browser.Input, { readonly type: "wait" }>): Exclude<Browser.Action, { type: "wait" }> {
   if (action.type === "preview" && (!action.path.trim() || (BrowserFiles.address(action.path) && !/^file:/i.test(action.path.trim()))))
     throw new Tool.Error({ metadata: { code: "invalid_path" }, message: "browser.preview needs a workspace file path, not a web or internal address." })
   if (action.type === "evaluate") return evaluateAction(action)
@@ -306,14 +294,9 @@ export function normalizeAction(action: Exclude<Browser.Input, { readonly type: 
       message: `${JSON.stringify(value)} is not a browser URL. Use an http:// or https:// address, or about:blank, without a user name or password. The connected server must be able to reach it; localhost is that server.`,
     })
   // Percent-encoding can grow the URL past the bound the desktop decodes from `command`.
-  return Schema.decodeUnknownOption(Browser.Action)({ ...action, url: url.href }).pipe(
-    Option.getOrThrowWith(
-      () =>
-        new Tool.Error({
-          message: "The URL is longer than 2048 characters once encoded. Open a shorter address.",
-        }),
-    ),
-  )
+  const normalized = { ...action, url: url.href }
+  if (!Schema.is(Browser.Action)(normalized)) throw new Tool.Error({ message: "The URL is longer than 2048 characters once encoded. Open a shorter address." })
+  return normalized
 }
 
 type WaitInput = Extract<Browser.Input, { readonly type: "wait" }>
@@ -491,7 +474,7 @@ const refVisibility =
 const selectorVisibility = (selector: string) =>
   `(() => { const found = [...document.querySelectorAll(${JSON.stringify(selector)})]; return { count: found.length, visible: found.filter((element) => element.checkVisibility()).length } })()`
 
-function evaluateAction(input: Extract<Browser.Input, { readonly type: "evaluate" }>): Browser.Action {
+function evaluateAction(input: Extract<Browser.Input, { readonly type: "evaluate" }>): Extract<Browser.Action, { type: "evaluate" }> {
   const script = input.script ?? input.expression ?? input.code
   if (script === undefined)
     throw new Tool.Error({

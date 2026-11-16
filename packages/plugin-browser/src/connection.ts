@@ -414,7 +414,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
      */
     authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, paths?: readonly string[]) {
       const connection = BrowserMachine.selectConnection(machine.state, tool.sessionID)
-      if (!connection.ok) return yield* connection.error
+      if (!connection.ok) return { connected: false as const, message: connection.error.message }
       const tab = "tabID" in action ? connection.tabs.find((tab) => tab.id === action.tabID) : undefined
       const origin = site(tab?.url)
       const destination = action.type === "tabs.open" ? action.url ?? "about:blank" : action.type === "navigate" ? action.url : undefined

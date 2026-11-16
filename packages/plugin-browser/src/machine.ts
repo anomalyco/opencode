@@ -649,7 +649,7 @@ export function selectConnection(
       ok: false,
       error: new Tool.Error({
         message:
-          "[browser.disconnected] No OpenCode desktop app is connected to this session, so no browser action ran. The browser runs inside the desktop app and works only while the user has this session open there. Tell the user, and continue without the browser until they open it; calling again before then fails the same way.",
+          "No browser is attached to this session. It attaches when the session is open in the OpenCode desktop app. No action ran. Continue without the browser; retry only after it attaches.",
       }),
     }
 
@@ -658,7 +658,7 @@ export function selectConnection(
       ok: false,
       error: new Tool.Error({
         message:
-          "[browser.disconnected] The desktop browser is still connecting to this session; no action ran. Call browser.tabs.list({}) once it finishes connecting.",
+          "The desktop browser is still connecting to this session. No action ran. Retry only after it attaches.",
       }),
     }
 
