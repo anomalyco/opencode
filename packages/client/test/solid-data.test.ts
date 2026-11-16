@@ -87,7 +87,7 @@ test("counts every subagent page in a root session's cost", async () => {
   }))
 
   try {
-    await setup.data.session.sync("ses_root", { children: true })
+    await Promise.all([setup.data.session.sync("ses_root", { children: true }), setup.data.session.sync("ses_root")])
     expect(setup.data.session.family("ses_root")).toHaveLength(251)
     expect(setup.data.session.cost("ses_root")).toBe(250.5)
     expect(requests.toSorted()).toEqual([
@@ -669,8 +669,8 @@ test("revalidates after an event overtakes an active session read", async () => 
 })
 
 test("preserves a live session rename across concurrent session and family reads", async () => {
-  const family = Promise.withResolvers<void>()
-  const renamed = Promise.withResolvers<void>()
+  const root = Promise.withResolvers<void>()
+  const requested = Promise.withResolvers<void>()
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   let requests = 0
   const stale = { ...session(0), title: undefined }
@@ -680,7 +680,8 @@ test("preserves a live session rename across concurrent session and family reads
       const request = input instanceof Request ? input : new Request(input, init)
       if (!request.url.endsWith(`/api/session/${stale.id}`)) return Response.json({ data: [], cursor: {} })
       requests++
-      await (requests === 1 ? family.promise : renamed.promise)
+      requested.resolve()
+      await root.promise
       return Response.json({ data: stale })
     },
   })
@@ -701,7 +702,7 @@ test("preserves a live session rename across concurrent session and family reads
 
   try {
     const initial = setup.data.session.sync(stale.id, { children: true })
-    await wait(() => requests === 1)
+    await requested.promise
     const event: OpenCodeEvent = {
       id: "evt_renamed",
       created: 1,
@@ -710,17 +711,15 @@ test("preserves a live session rename across concurrent session and family reads
       data: { sessionID: stale.id, title: "Generated title" },
     }
     listeners.forEach((listener) => listener({ name: event.type, details: event }))
-    await wait(() => requests === 2)
-    renamed.resolve()
-    await wait(() => setup.data.session.get(stale.id) !== undefined)
-    family.resolve()
+    const plain = setup.data.session.sync(stale.id)
+    root.resolve()
     await initial
-    await Bun.sleep(0)
+    await Promise.all([initial, plain])
 
     expect(setup.data.session.get(stale.id)?.title).toBe("Generated title")
+    expect(requests).toBe(1)
   } finally {
-    family.resolve()
-    renamed.resolve()
+    root.resolve()
     setup.dispose()
   }
 })
