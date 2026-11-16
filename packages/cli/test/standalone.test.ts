@@ -37,6 +37,41 @@ test("standalone server exits when its owner is killed", async () => {
   }
 })
 
+test("standalone server reconnects after its child exits without leaking the replacement", async () => {
+  await using root = await tmpdir("opencode-cli-standalone-recovery-")
+  const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "fixture/standalone-recovery-owner.ts")], {
+    cwd: path.join(import.meta.dir, ".."),
+    env: isolatedEnv(root.path),
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const line = await Promise.race([
+    readLine(owner.stdout, "STANDALONE_RECOVERED "),
+    Bun.sleep(20_000).then(() => undefined),
+  ])
+  const [, previous, replacement, status] = line?.split(" ") ?? []
+  const oldPID = Number(previous)
+  const pid = Number(replacement)
+
+  try {
+    expect(oldPID).toBeGreaterThan(0)
+    expect(pid).toBeGreaterThan(0)
+    expect(pid).not.toBe(oldPID)
+    expect(status).toBe("200")
+    expect(running(oldPID)).toBe(false)
+    expect(running(pid)).toBe(true)
+
+    owner.kill("SIGKILL")
+    await owner.exited
+    expect(await waitForExit(pid)).toBe(true)
+  } finally {
+    owner.kill("SIGKILL")
+    await owner.exited
+    if (running(pid)) process.kill(pid, "SIGKILL")
+  }
+})
+
 async function readLine(stream: ReadableStream<Uint8Array>, prefix: string) {
   const reader = stream.getReader()
   const decoder = new TextDecoder()

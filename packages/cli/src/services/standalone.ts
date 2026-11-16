@@ -1,6 +1,6 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Deferred, Effect, Schema, Stream } from "effect"
+import { Deferred, Effect, Exit, Schema, Scope, Semaphore, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { randomBytes } from "node:crypto"
 import { selfCommand } from "../util/process"
@@ -61,5 +61,27 @@ const makeEndpoint = Effect.fn("cli.standalone.endpoint")(
 export function start(options: Options = {}) {
   return makeEndpoint(options)
 }
+
+export const recoverable = Effect.fn("cli.standalone.recoverable")(function* (options: Options = {}) {
+  const owner = yield* Effect.scope
+  const lock = yield* Semaphore.make(1)
+  let scope = yield* Scope.fork(owner)
+  const launch = (child: Scope.Closeable) =>
+    start(options).pipe(
+      Scope.provide(child),
+      Effect.onError((cause) => Scope.close(child, Exit.failCause(cause))),
+    )
+  const endpoint = yield* launch(scope)
+  const reconnect = () =>
+    lock.withPermits(1)(
+      Effect.gen(function* () {
+        // A replacement must not overlap the old server: both use the same local data.
+        yield* Scope.close(scope, Exit.void)
+        scope = yield* Scope.fork(owner)
+        return yield* launch(scope)
+      }),
+    )
+  return { endpoint, reconnect, restart: () => reconnect().pipe(Effect.asVoid) }
+})
 
 export * as Standalone from "./standalone"
