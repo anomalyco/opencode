@@ -77,6 +77,9 @@ enum Carrier {
     InProcess,
     CAbi,
     Pipe,
+    /// A Luau plugin (spike `luau-spike`), in process on the linked path.
+    #[cfg(feature = "luau")]
+    Luau,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -212,6 +215,13 @@ fn request_ownership_through_the_c_abi() {
 #[test]
 fn request_ownership_over_the_pipe() {
     table(Carrier::Pipe);
+}
+
+// Expected (luau-spike 1.2): a Luau plugin is on the linked path, so every row holds for it as in process.
+#[cfg(feature = "luau")]
+#[test]
+fn request_ownership_in_luau() {
+    table(Carrier::Luau);
 }
 
 /// The program that witnesses its launch in `mark`, and its arguments: a tiny program of this crate's, on every
@@ -547,6 +557,9 @@ type Probed = (Vec<Result<abi::RequestId, String>>, Vec<(abi::RequestId, String)
 enum Probe {
     Native(Harness),
     Pipe(Pipe, PathBuf),
+    /// The Luau probe, which records what it saw in its storage.
+    #[cfg(feature = "luau")]
+    Luau(Harness),
 }
 
 impl Probe {
@@ -562,6 +575,18 @@ impl Probe {
             let pipe = Pipe { harness, root: opencode_util::temp::tempdir().unwrap() };
             pipe.active("example.probe");
             return Probe::Pipe(pipe, log);
+        }
+        #[cfg(feature = "luau")]
+        if carrier == Carrier::Luau {
+            let harness = support::mount(80, 24, Deps { route: Route::Home, ..deps });
+            let init = luau_script(row, mark);
+            let sources = opencode_plugin::luau::Sources::from_files([
+                ("plugin.toml", "id = \"test.probe\""),
+                ("init.luau", &init),
+            ]);
+            let definition = opencode_plugin::luau::define(&sources, None).unwrap().0;
+            opencode_tui::plugins::host::add(&harness.tui, definition);
+            return Probe::Luau(harness);
         }
         ROW.set(Some(row));
         MARK.replace(mark.to_path_buf());
@@ -584,6 +609,8 @@ impl Probe {
         match self {
             Probe::Native(harness) => harness,
             Probe::Pipe(pipe, _) => &pipe.harness,
+            #[cfg(feature = "luau")]
+            Probe::Luau(harness) => harness,
         }
     }
 
@@ -591,6 +618,8 @@ impl Probe {
         match self {
             Probe::Native(_) => "test.probe",
             Probe::Pipe(..) => "example.probe",
+            #[cfg(feature = "luau")]
+            Probe::Luau(_) => "test.probe",
         }
     }
 
@@ -610,6 +639,8 @@ impl Probe {
                 .filter_map(|line| line.strip_prefix("other "))
                 .map(|mounted| mounted == "true")
                 .collect(),
+            #[cfg(feature = "luau")]
+            Probe::Luau(harness) => luau_seen(harness, "other").iter().filter_map(serde_json::Value::as_bool).collect(),
         }
     }
 
@@ -620,6 +651,11 @@ impl Probe {
             }
             Probe::Pipe(_, log) => {
                 lines(log).into_iter().filter(|line| line.starts_with("asked")).map(|_| None).collect()
+            }
+            // 0 names no request: an effect, or a request the host did not take.
+            #[cfg(feature = "luau")]
+            Probe::Luau(harness) => {
+                luau_seen(harness, "asked").iter().map(|id| id.as_u64().filter(|id| *id != 0)).collect()
             }
         }
     }
@@ -632,6 +668,11 @@ impl Probe {
             Probe::Pipe(_, log) => lines(log)
                 .into_iter()
                 .filter_map(|line| line.strip_prefix("settled ").map(|settled| (None, settled.to_owned())))
+                .collect(),
+            #[cfg(feature = "luau")]
+            Probe::Luau(harness) => luau_seen(harness, "replies")
+                .iter()
+                .map(|reply| (reply["id"].as_u64(), reply["text"].as_str().unwrap_or_default().to_owned()))
                 .collect(),
         }
     }
@@ -832,6 +873,116 @@ export default {{ id: "example.probe", setup(api) {{
     carrier.effect({{ type: "overlay", surface: "other", anchor: {{ point: {{ x: 0, y: 0 }} }}, width: 20, height: 1 }}),
   )
 }} }}
+"#
+    )
+}
+
+/// What the Luau probe recorded under `field` of its storage.
+#[cfg(feature = "luau")]
+fn luau_seen(harness: &Harness, field: &str) -> Vec<serde_json::Value> {
+    let stored = opencode_plugin::Host::storage_read(&*harness.tui, "plugin.test.probe.seen");
+    let seen: serde_json::Value = stored.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default();
+    seen[field].as_array().cloned().unwrap_or_default()
+}
+
+/// A JSON value as a Luau literal.
+#[cfg(feature = "luau")]
+fn luau_literal(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "nil".to_owned(),
+        serde_json::Value::Bool(value) => value.to_string(),
+        serde_json::Value::Number(value) => value.to_string(),
+        serde_json::Value::String(value) => format!("{value:?}"),
+        serde_json::Value::Array(items) => {
+            format!("{{ {} }}", items.iter().map(luau_literal).collect::<Vec<_>>().join(", "))
+        }
+        serde_json::Value::Object(fields) => format!(
+            "{{ {} }}",
+            fields
+                .iter()
+                .map(|(key, value)| format!("[{key:?}] = {}", luau_literal(value)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+/// The probe in Luau: the same calls as the Rust one, which record in its storage what the calls got and what the
+/// replies said; its program is the Rust one's.
+#[cfg(feature = "luau")]
+fn luau_script(row: Row, mark: &Path) -> String {
+    let (command, args) = witness(mark);
+    let (kind, origin, close) = (format!("{:?}", row.kind), format!("{:?}", row.origin), format!("{:?}", row.close));
+    let page = luau_literal(&serde_json::to_value(page()).unwrap());
+    let args = luau_literal(&serde_json::json!(args));
+    format!(
+        r#"local plugin = require("@opencode/plugin")
+local KIND, ORIGIN, CLOSE = {kind:?}, {origin:?}, {close:?}
+local COMMAND, ARGS = {command:?}, {args}
+local PAGE = {page}
+local OTHER = {{ surface = "other", anchor = {{ point = {{ x = 0, y = 0 }} }}, width = 20, height = 1 }}
+local function record(host, field, value)
+    local seen = host:storageGet("seen") or {{}}
+    seen[field] = seen[field] or {{}}
+    table.insert(seen[field], value)
+    host:storageSet("seen", seen)
+end
+local function describe(value, error)
+    if error then return "Err(" .. error .. ")" end
+    local parts = {{}}
+    if type(value) == "table" then
+        for key, item in value do table.insert(parts, tostring(key) .. "=" .. tostring(item)) end
+    end
+    table.sort(parts)
+    return "Ok(" .. table.concat(parts, ",") .. ")"
+end
+local asked = false
+local function ask(host, origin)
+    if origin ~= ORIGIN or asked then return end
+    asked = true
+    if CLOSE == "BeforeDispatch" then host:navigate({{ type = "home" }}) end
+    local id
+    if KIND == "Fetch" then id = host:fetch({{ method = "GET", path = "/api/hold" }})
+    elseif KIND == "Foreground" then id = host:foreground({{ command = COMMAND, args = ARGS }})
+    elseif KIND == "Overlay" then host:overlay(OTHER)
+    elseif KIND == "Mode" then host:setMode("probe")
+    elseif KIND == "Focus" then host:focus("n")
+    elseif KIND == "Blur" then host:blur()
+    elseif KIND == "Scroll" then host:scroll({{ type = "node", surface = "probe", id = "s" }}, {{ type = "offset", offset = 3 }})
+    else host:scroll({{ type = "transcript" }}, {{ type = "by", rows = 3 }}) end
+    record(host, "asked", id or 0)
+    if CLOSE == "InFlight" then host:navigate({{ type = "home" }})
+    elseif CLOSE == "Other" then host:closeOverlay("other") end
+end
+return plugin.define(function(setup)
+    setup:storageKey("seen")
+    setup.host:storageSet("seen", {{ asked = {{}}, replies = {{}}, other = {{}} }})
+    ask(setup.host, "Setup")
+    setup:command({{ name = "probe.global" }}, function(host) ask(host, "Global") end)
+    setup:command({{ name = "probe.route", scope = {{ route = "probe" }} }}, function(host) ask(host, "Route") end)
+    setup:command({{ name = "probe.overlay" }}, function(host) host:overlay(OTHER) end)
+    setup:onReply(function(host, id, value, error) record(host, "replies", {{ id = id, text = describe(value, error) }}) end)
+    local layer = {{ scope = "global", keys = {{ {{ key = "x", name = "probe" }} }} }}
+    setup:surface({{ name = "probe", place = {{ type = "route", name = "probe" }}, mounts = true, layers = {{ layer }} }},
+        function() return PAGE end,
+        function(host, event)
+            if event.type == "mount" then
+                ask(host, if event.mounted then "MountBegin" else "MountEnd")
+                return "pass"
+            end
+            if event.type == "key" and event.bind == "probe" then
+                ask(host, "Input")
+                return "consume"
+            end
+            return "pass"
+        end)
+    setup:surface({{ name = "other", place = {{ type = "overlay", name = "other" }}, mounts = true }},
+        function() return {{ type = "text", spans = {{ {{ text = "other overlay" }} }} }} end,
+        function(host, event)
+            if event.type == "mount" then record(host, "other", event.mounted) end
+            return "pass"
+        end)
+end)
 "#
     )
 }
