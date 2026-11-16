@@ -139,6 +139,9 @@ export function answerQuery(
   access: { readonly permissions: readonly string[]; readonly hosts: readonly string[] },
 ) {
   return tabs.flatMap((tab) => {
+    // A private preview can be listed as a tab, but is never an address/title match. In particular, callers
+    // enumerating <all_urls> to initialize their web tabs must not receive a preview with no `url` at all.
+    if (privateFile(tab.url) && (query.url != null || query.title != null)) return []
     const revealed = reveals(access, tab.url)
     const filter = revealed ? query : { ...query, url: undefined, title: undefined }
 
