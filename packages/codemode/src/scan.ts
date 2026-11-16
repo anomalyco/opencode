@@ -110,7 +110,7 @@ function readStaticToolCall(
     return {
       ok: false,
       node: parent.property,
-      reason: "Schedule checks must reference tools statically (e.g. tools.slack.read_thread), not with dynamic bracket expressions.",
+      reason: "Automation code must reference tools statically (e.g. tools.slack.read_thread), not with dynamic bracket expressions.",
     }
   }
 
@@ -119,7 +119,7 @@ function readStaticToolCall(
     return {
       ok: false,
       node: current,
-      reason: "Schedule checks must call tools directly as tools.<name>(...), not alias or pass the tools object.",
+      reason: "Automation code must call tools directly as tools.<name>(...), not alias or pass the tools object.",
     }
   }
   return { ok: true, path: segments.join(".") }

@@ -1,0 +1,173 @@
+export * as Automation from "./automation.js"
+
+import { Duration, Option, Schema } from "effect"
+import { Agent } from "./agent.js"
+import { ascending } from "./identifier.js"
+import { ProjectID } from "./project-id.js"
+import { DateTimeUtcFromMillis, NonNegativeInt, optional, statics } from "./schema.js"
+import { SessionID } from "./session-id.js"
+
+export const ID = Schema.String.check(Schema.isStartingWith("aut_")).pipe(
+  Schema.brand("Automation.ID"),
+  Schema.annotate({ identifier: "Automation.ID" }),
+  statics((schema) => ({
+    create: () => schema.make("aut_" + ascending()),
+  })),
+)
+export type ID = typeof ID.Type
+
+const decodeDuration = Schema.decodeUnknownOption(Schema.DurationFromString)
+
+/** Milliseconds in a duration string, or `None` when it is not one. */
+export const durationMillis = (value: string) => decodeDuration(value).pipe(Option.map(Duration.toMillis))
+
+/** A duration such as "90 seconds", "5 minutes" or "2 hours". The service validates it, since clients cannot run a custom check. */
+export const DurationString = Schema.String.annotate({
+  identifier: "Automation.Duration",
+  description: 'A duration such as "90 seconds", "5 minutes" or "2 hours".',
+})
+
+const zone = {
+  tz: Schema.String.pipe(optional).annotate({
+    description: "IANA time zone. Defaults to the configured timezone, then the server's local zone.",
+  }),
+}
+
+/** Runs once: at an instant with an offset, a wall-clock time in `tz` such as "2026-10-27T09:00", or "in 10 minutes". */
+export const At = Schema.Struct({
+  type: Schema.tag("at"),
+  at: Schema.String.annotate({
+    description: 'An instant with an offset, a wall-clock time in tz such as "2026-10-27T09:00", or "in 10 minutes".',
+  }),
+  ...zone,
+}).annotate({ identifier: "Automation.Trigger.At" })
+export const Every = Schema.Struct({ type: Schema.tag("every"), every: DurationString, ...zone }).annotate({
+  identifier: "Automation.Trigger.Every",
+})
+export const Cron = Schema.Struct({ type: Schema.tag("cron"), cron: Schema.String, ...zone }).annotate({
+  identifier: "Automation.Trigger.Cron",
+})
+
+export const Trigger = Schema.Union([At, Every, Cron]).pipe(
+  Schema.toTaggedUnion("type"),
+  Schema.annotate({ identifier: "Automation.Trigger" }),
+)
+export type Trigger = typeof Trigger.Type
+
+/** Declares a variant field absent, so `{ session, new }` fails instead of silently dropping one. */
+const absent = Schema.optionalKey(Schema.Never)
+
+/** Where a prompt action goes: an existing Session, or a new Session started with an agent on every run. */
+export const Target = Schema.Union([
+  Schema.Struct({ session: SessionID, new: absent }),
+  Schema.Struct({ new: Agent.ID, session: absent }),
+]).annotate({ identifier: "Automation.Target" })
+export type Target = typeof Target.Type
+
+export const PromptAction = Schema.Struct({ type: Schema.tag("prompt"), prompt: Schema.String, to: Target }).annotate({
+  identifier: "Automation.Action.Prompt",
+})
+export type PromptAction = typeof PromptAction.Type
+
+/**
+ * Runs `code` in a confined Code Mode runtime with no model call and no `fetch`. Tools called statically as
+ * `tools.<path>(...)` are extracted from the AST and authorized at creation. The program receives
+ * `input = { state, now, runs, args }` (also bound as globals) and returns nothing or `{ state?, done? }`.
+ */
+export const CodeAction = Schema.Struct({
+  type: Schema.tag("code"),
+  code: Schema.String,
+  args: Schema.Json.pipe(optional),
+}).annotate({ identifier: "Automation.Action.Code" })
+export type CodeAction = typeof CodeAction.Type
+
+export const Action = Schema.Union([PromptAction, CodeAction]).pipe(
+  Schema.toTaggedUnion("type"),
+  Schema.annotate({ identifier: "Automation.Action" }),
+)
+export type Action = typeof Action.Type
+
+export const Status = Schema.Literals(["active", "paused", "done"]).annotate({ identifier: "Automation.Status" })
+export type Status = typeof Status.Type
+
+export const Outcome = Schema.Literals(["fired", "late", "skipped", "disabled", "failed"]).annotate({
+  identifier: "Automation.Outcome",
+})
+export type Outcome = typeof Outcome.Type
+
+export const Info = Schema.Struct({
+  id: ID,
+  name: Schema.String,
+  projectID: ProjectID,
+  /** The Session that created it, if any. Deleting that Session does not delete the automation. */
+  sessionID: SessionID.pipe(optional),
+  directory: Schema.String,
+  trigger: Trigger,
+  tz: Schema.String,
+  action: Action,
+  expires: DateTimeUtcFromMillis.pipe(optional),
+  status: Status,
+  nextDueAt: DateTimeUtcFromMillis.pipe(optional),
+  runCount: NonNegativeInt,
+  lastRunAt: DateTimeUtcFromMillis.pipe(optional),
+  lastOutcome: Outcome.pipe(optional),
+  lastOutput: Schema.String.pipe(optional),
+  state: Schema.Json.pipe(optional),
+  time: Schema.Struct({ created: DateTimeUtcFromMillis, updated: DateTimeUtcFromMillis }),
+}).annotate({ identifier: "Automation.Info" })
+export type Info = typeof Info.Type
+
+export const PromptActionInput = Schema.Struct({
+  type: Schema.tag("prompt"),
+  prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
+    description: "The message the target Session receives, with enough context to act on it without this conversation.",
+  }),
+  to: Target.pipe(optional).annotate({
+    description:
+      'Where the prompt goes: { session: "ses_..." } or { new: "<agent>" } to start a new Session each run. Defaults to the creating Session.',
+  }),
+}).annotate({ identifier: "Automation.PromptActionInput" })
+
+export const CodeActionInput = Schema.Struct({
+  type: Schema.tag("code"),
+  code: Schema.String.check(Schema.isMinLength(1)).annotate({
+    description: [
+      "Code Mode JavaScript run on each trigger with no model (no fetch; 30s, 20 tool calls, 32 KB output cap).",
+      'Call tools statically as tools.<ns>.<tool>(...) or tools["ns-name"].tool(...); each is authorized once at creation to run unattended.',
+      "Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs.",
+      "Return nothing, or { state?, done? }: state is kept for the next run, done: true stops the automation. Logs become lastOutput, e.g.:",
+      'const t = await tools.slack.read_thread({ id: args.id }); if (state !== null && t.count > state.count) await tools.slack.post({ text: "New reply" }); return { state: { count: t.count } }',
+    ].join(" "),
+  }),
+  args: Schema.Json.pipe(optional).annotate({ description: "JSON passed to every run as input.args." }),
+}).annotate({ identifier: "Automation.CodeActionInput" })
+
+export const ActionInput = Schema.Union([PromptActionInput, CodeActionInput]).pipe(
+  Schema.toTaggedUnion("type"),
+  Schema.annotate({ identifier: "Automation.ActionInput" }),
+)
+export type ActionInput = typeof ActionInput.Type
+
+/** An automation as callers describe it: a name, when it runs, what it does, and when it stops. */
+export const Request = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(1)).annotate({ description: "A short label shown in lists." }),
+  trigger: Trigger.annotate({
+    description:
+      'When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz.',
+  }),
+  action: ActionInput.annotate({
+    description:
+      'What it does: { type: "prompt", prompt, to? } sends a prompt; { type: "code", code, args? } runs Code Mode with no model.',
+  }),
+  expires: Schema.String.pipe(optional).annotate({
+    description: 'When it stops for good: an instant, a wall-clock time in tz, or "in 8 hours".',
+  }),
+}).annotate({ identifier: "Automation.Request" })
+export type Request = typeof Request.Type
+
+export const CreateInput = Schema.Struct({
+  ...Request.fields,
+  sessionID: SessionID.pipe(optional),
+  directory: Schema.String.pipe(optional),
+}).annotate({ identifier: "Automation.CreateInput" })
+export type CreateInput = typeof CreateInput.Type

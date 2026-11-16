@@ -24,7 +24,7 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Flag") {}
 
 /**
- * `OPENCODE_FLAGS`, a comma-separated list such as `schedules,-media_blob`; a leading `-` turns a flag off, and
+ * `OPENCODE_FLAGS`, a comma-separated list such as `automations,-media_blob`; a leading `-` turns a flag off, and
  * `all` enables all flags except opt-in-only flags and any disabled in the same list, as in `all,-media_blob`.
  */
 export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/Overrides", {
@@ -60,10 +60,13 @@ export function resolve(input: {
     input.entries.findLast(
       (entry): entry is Document => entry.type === "document" && entry.info.experimental?.all_flags !== undefined,
     )?.info.experimental?.all_flags === true
+  const names = Object.keys(ConfigFlag.aliases) as Array<keyof typeof ConfigFlag.aliases>
   return Record.map(ConfigFlag.registry, (_, key): State => {
     const optInOnly = ConfigFlag.optInOnly.has(key)
-    const override = env.get(key) ?? (all && !optInOnly ? true : undefined)
-    const configured = experimental?.[key] ?? (allFlags && !optInOnly ? true : undefined)
+    const old = names.find((name) => ConfigFlag.aliases[name] === key)
+    const override = env.get(key) ?? (old === undefined ? undefined : env.get(old)) ?? (all && !optInOnly ? true : undefined)
+    const configured =
+      experimental?.[key] ?? (old === undefined ? undefined : experimental?.[old]) ?? (allFlags && !optInOnly ? true : undefined)
     const [enabled, source]: [boolean, State["source"]] =
       override !== undefined
         ? [override, "env"]
