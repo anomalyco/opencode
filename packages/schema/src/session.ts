@@ -62,6 +62,27 @@ export const Info = Schema.Struct({
   revert: Revert.pipe(optional),
 }).annotate({ identifier: "Session.Info" })
 
+export interface ListInfo extends Schema.Schema.Type<typeof ListInfo> {}
+export const ListInfo = Schema.Struct({
+  ...Info.fields,
+  experimental: Schema.Struct({
+    time: Schema.Struct({
+      lastUserMessage: optional(
+        Schema.NullOr(DateTimeUtcFromMillis).annotate({
+          description:
+            "In session lists, the creation time in milliseconds of the last stored user message in timeline order, or null if none.",
+        }),
+      ),
+      lastAssistantMessage: optional(
+        Schema.NullOr(DateTimeUtcFromMillis).annotate({
+          description:
+            "In session lists, the creation time in milliseconds of the last stored assistant message in timeline order, including tool-only steps, or null if none.",
+        }),
+      ),
+    }),
+  }).pipe(optional),
+}).annotate({ identifier: "Session.ListInfo" })
+
 export const ListAnchor = Schema.Struct({
   id: ID,
   time: Schema.Finite,

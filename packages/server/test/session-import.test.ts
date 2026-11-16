@@ -6,6 +6,20 @@ import { ServerFetch } from "../src/fetch"
 
 const SessionResponse = Schema.Struct({ data: Schema.toEncoded(Session.Info) })
 const SessionsResponse = Schema.Struct({ data: Schema.Array(Schema.toEncoded(Session.Info)) })
+const SessionsWithMessageTimes = Schema.Struct({
+  data: Schema.Array(
+    Schema.Struct({
+      id: Session.ID,
+      experimental: Schema.Struct({
+        time: Schema.Struct({
+          lastUserMessage: Schema.NullOr(Schema.Number),
+          lastAssistantMessage: Schema.NullOr(Schema.Number),
+        }),
+      }),
+    }),
+  ),
+  cursor: Schema.Struct({ next: Schema.optional(Schema.String) }),
+})
 
 const setup = Effect.gen(function* () {
   const handler = yield* ServerFetch.make({
@@ -27,6 +41,89 @@ const setup = Effect.gen(function* () {
       return json
     })
 })
+
+it.live("includes the latest user and assistant message times in the session list", () =>
+  Effect.gen(function* () {
+    const request = yield* setup
+    const created = yield* request("/api/session", { title: "Empty" })
+    expect(created).not.toHaveProperty("data.experimental")
+    const empty = Schema.decodeUnknownSync(SessionResponse)(created)
+    expect(yield* request(`/api/session/${empty.data.id}`)).not.toHaveProperty("data.experimental")
+    const id = Session.ID.create()
+    yield* request("/api/experimental/session/import", {
+      info: { ...empty.data, id, title: "With messages" },
+      messages: [
+        { id: "msg_user_fixture", type: "user", text: "Hello", time: { created: 6_000 } },
+        {
+          id: "msg_assistant_fixture",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "fixture", id: "fixture" },
+          content: [{ type: "text", text: "Reply" }],
+          time: { created: 7_000, completed: 7_001 },
+        },
+        { id: "msg_user_later", type: "user", text: "Next", time: { created: 3_000 } },
+        {
+          id: "msg_assistant_tool",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "fixture", id: "fixture" },
+          content: [
+            {
+              type: "tool",
+              id: "call_fixture",
+              name: "read",
+              state: { status: "completed", input: {}, content: [{ type: "text", text: "Done" }] },
+              time: { created: 4_000, completed: 4_001 },
+            },
+          ],
+          time: { created: 4_000, completed: 4_001 },
+        },
+        { id: "msg_system_fixture", type: "system", text: "Internal", time: { created: 5_000 } },
+      ],
+    })
+    const raw = yield* request("/api/session")
+    expect(Schema.decodeUnknownSync(SessionsResponse)(raw).data).toHaveLength(2)
+    const page = Schema.decodeUnknownSync(SessionsWithMessageTimes)(raw)
+    expect(page.data.find((item) => item.id === id)?.experimental.time).toEqual({
+      lastUserMessage: 3_000,
+      lastAssistantMessage: 4_000,
+    })
+    expect(page.data.find((item) => item.id === empty.data.id)?.experimental.time).toEqual({
+      lastUserMessage: null,
+      lastAssistantMessage: null,
+    })
+  }).pipe(Effect.scoped),
+)
+
+it.live("returns message times across session pages", () =>
+  Effect.gen(function* () {
+    const request = yield* setup
+    const template = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", { title: "Template" }))
+    yield* request("/api/session", { title: "Empty" })
+    const id = Session.ID.create()
+    yield* request("/api/experimental/session/import", {
+      info: { ...template.data, id, title: "With user message" },
+      messages: [{ id: "msg_page_fixture", type: "user", text: "Hello", time: { created: 1_234 } }],
+    })
+    const first = Schema.decodeUnknownSync(SessionsWithMessageTimes)(yield* request("/api/session?limit=2&order=asc"))
+    expect(first.data).toHaveLength(2)
+    if (!first.cursor.next) throw new Error("Expected a next cursor")
+    const second = Schema.decodeUnknownSync(SessionsWithMessageTimes)(
+      yield* request(`/api/session?limit=2&cursor=${encodeURIComponent(first.cursor.next)}`),
+    )
+    const rows = [...first.data, ...second.data]
+    expect(rows).toHaveLength(3)
+    expect(rows.find((item) => item.id === id)?.experimental.time).toEqual({
+      lastUserMessage: 1_234,
+      lastAssistantMessage: null,
+    })
+    expect(rows.find((item) => item.id === template.data.id)?.experimental.time).toEqual({
+      lastUserMessage: null,
+      lastAssistantMessage: null,
+    })
+  }).pipe(Effect.scoped),
+)
 
 it.live("preserves imported parentID through HTTP import, read, and parent filter", () =>
   Effect.gen(function* () {

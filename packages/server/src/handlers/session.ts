@@ -68,7 +68,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.list",
         Effect.fn(function* (ctx) {
           return yield* session
-            .list(ctx.query)
+            .list(ctx.query, { messageTimes: true })
             .pipe(
               Effect.catchTag(
                 "Session.InvalidListCursorError",

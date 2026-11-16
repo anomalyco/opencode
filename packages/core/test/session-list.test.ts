@@ -49,6 +49,13 @@ describe("Session.list", () => {
       expect([...first.data, ...second.data].map((item) => item.id)).toEqual(expected)
       expect(back.data.map((item) => item.id)).toEqual(expected.slice(0, 2))
       expect(end).toEqual({ data: [], cursor: { previous: undefined, next: undefined } })
+
+      const withTimes = yield* session.list({ ...filter, limit: 2 }, { messageTimes: true })
+      const nextWithTimes = yield* session.list({ cursor: withTimes.cursor.next, limit: 2 }, { messageTimes: true })
+      const backWithTimes = yield* session.list({ cursor: nextWithTimes.cursor.previous, limit: 2 }, { messageTimes: true })
+      expect([...withTimes.data, ...nextWithTimes.data].map((item) => item.id)).toEqual(expected)
+      expect(backWithTimes.data.map((item) => item.id)).toEqual(expected.slice(0, 2))
+      expect(withTimes.data[0]?.experimental?.time).toEqual({ lastUserMessage: null, lastAssistantMessage: null })
     }),
   )
 
