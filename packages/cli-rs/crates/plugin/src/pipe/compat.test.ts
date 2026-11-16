@@ -329,6 +329,39 @@ test("theme.surface answers the page theme", () => {
   expect(fake.toasts()).toEqual(["t.surface: theme.surface is not supported by opencode-native yet"])
 })
 
+// Big-boi's catalog review (CT-1): commands without an `id` in two live layers, a global and a base one, with the same
+// keys and title but other slash names and callbacks, stay two commands, each listed with its slash name and running its
+// own callback; it was one command, the second callback's. Each keeps its name as its layer mounts again.
+test("anonymous commands of two layers stay apart and keep their names", () => {
+  const fake = host()
+  const ctx = plugin("t.layers", fake)
+  const ran: string[] = []
+  const mount = (round: number) => {
+    let dispose = () => {}
+    solid.createRoot((end: () => void) => {
+      dispose = end
+      ctx.keymap.layer(() => ({
+        mode: "global",
+        commands: [{ bind: "ctrl+o", title: "open", slash: { name: "open-file" }, run: () => ran.push(`file ${round}`) }],
+      }))
+      ctx.keymap.layer(() => ({
+        commands: [{ bind: "ctrl+o", title: "open", slash: { name: "open-dir" }, run: () => ran.push(`dir ${round}`) }],
+      }))
+    })
+    return dispose
+  }
+  const inline = () => [...fake.commands.keys()].filter((name) => name.startsWith("t.layers.inline-"))
+  const end = mount(1)
+  const first = inline()
+  expect(first.length).toBe(2)
+  expect(first.map((name) => fake.meta.get(name).slash).sort()).toEqual(["open-dir", "open-file"])
+  for (const name of first) fake.commands.get(name)!()
+  expect(ran.sort()).toEqual(["dir 1", "file 1"])
+  end()
+  mount(2)
+  expect(inline()).toEqual(first)
+})
+
 // Bigboi P8-7: a dialog the host closes without an answer settles at once with nothing, also with no dialog after it;
 // `clear()` closes an asked dialog on the host too; a new `show` starts from the default size and place.
 test("each dialog settles once, and clear closes it", async () => {

@@ -740,14 +740,19 @@ export function context(base: Base, carrier: Carrier) {
     }
     return names
   }
-  // A command without an `id` is named by its keys, its title and its place among the layer's commands of the same
-  // keys and title, so a component that mounts again names it as it did. A new name each mount is a new manifest, which
-  // reloads the plugin and mounts the component again, without end (CT-1: tokscope's page).
-  const named = (list: Json[]) => {
+  // A command without an `id` is named by what the host lists of it (its layer's mode, its keys, its title, its slash
+  // name and the rest of what goes to the host) and its place among the layer's commands of the same, so a component
+  // that mounts again names it as it did. A new name each mount is a new manifest, which reloads the plugin and mounts
+  // the component again, without end (CT-1: tokscope's page). Commands that differ in any of it stay apart, also in two
+  // layers (big-boi's catalog review: a global and a base layer with the same keys and title were one command); two
+  // the same in every listed part are one, the newest live one running, as the topmost of two such layers runs in TS.
+  const named = (list: Json[], scope: string | undefined) => {
     const seen = new Map<string, number>()
     return list.map((command: Json): [string, Json] => {
       if (command.id) return [command.id, command]
-      const shape = JSON.stringify([command.bind ?? null, command.title ?? null])
+      const listed = [command.scope ?? scope, command.bind, command.title, command.slash?.name, command.slash?.aliases]
+      listed.push(command.group, command.description, !!command.palette, !!command.hold, !!(command.slash?.arguments || command.arguments))
+      const shape = JSON.stringify(listed.map((part) => part ?? null))
       const nth = (seen.get(shape) ?? 0) + 1
       seen.set(shape, nth)
       return [`${id}.inline-${Bun.hash(`${shape}${nth}`).toString(36)}`, command]
@@ -851,8 +856,9 @@ export function context(base: Base, carrier: Carrier) {
         let names: string[] = []
         const apply = (layer: Json) => {
           const enabled = typeof layer?.enabled === "function" ? layer.enabled() : layer?.enabled !== false
-          registration.commands = new Map(named(enabled ? (layer?.commands ?? []) : []))
-          const next = commands(registration, layer?.mode === "global" ? undefined : "base")
+          const scope = layer?.mode === "global" ? undefined : "base"
+          registration.commands = new Map(named(enabled ? (layer?.commands ?? []) : [], scope))
+          const next = commands(registration, scope)
           names.forEach((name) => carrier.uncommand(name))
           names = next
           carrier.changed()
