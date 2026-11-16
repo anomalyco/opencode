@@ -475,11 +475,17 @@ function unmet(action: WaitAction) {
 // A glob such as **/dashboard matches the whole address; plain text matches anywhere in it.
 export function matchesURL(url: string, pattern: string) {
   if (!pattern.includes("*")) return url.includes(pattern)
-  const source = pattern
-    .split(/\*+/)
-    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-    .join(".*")
-  return new RegExp(`^${source}$`).test(url)
+  const parts = pattern.split(/\*+/)
+  const first = parts.shift() ?? ""
+  const last = parts.pop() ?? ""
+  if (!url.startsWith(first) || !url.endsWith(last)) return false
+  let offset = first.length
+  for (const part of parts) {
+    const found = url.indexOf(part, offset)
+    if (found < 0) return false
+    offset = found + part.length
+  }
+  return offset + last.length <= url.length
 }
 
 /** What one element probe saw; no count while the page navigated or did not answer. */

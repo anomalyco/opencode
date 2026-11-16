@@ -272,6 +272,8 @@ describe("wait reads the condition from the keys models write", () => {
     expect(BrowserTools.matchesURL("https://app.test/dashboard/settings", "**/dashboard")).toBe(false)
     expect(BrowserTools.matchesURL("https://app.test/a.b", "*/a.b")).toBe(true)
     expect(BrowserTools.matchesURL("https://app.test/axb", "*/a.b")).toBe(false)
+    expect(BrowserTools.matchesURL("abc", "ab*bc")).toBe(false)
+    expect(BrowserTools.matchesURL("https://app.test/some/path", "https://*/*/path")).toBe(true)
   })
 })
 
