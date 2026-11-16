@@ -18,8 +18,8 @@ import { challengeAnswer } from "./site-auth"
 import {
   clipboardWrite,
   originOf,
+  keptApplies,
   permissionKinds,
-  rememberable,
   siteAnswer,
   type PermissionKind,
   type SitePermissions,
@@ -105,8 +105,9 @@ export function createPagePrompts(input: {
   let reported = "null"
   let disposed = false
 
+  // A remote server's own machine never reads this desktop's kept decisions, nor writes them (see keptApplies).
   const decided = (origin: string) => (kind: PermissionKind) =>
-    visit.get(`${origin}\n${kind}`) ?? input.sites.get(origin, kind)
+    visit.get(`${origin}\n${kind}`) ?? (keptApplies(origin, input.remote) ? input.sites.get(origin, kind) : undefined)
 
   const dispatch = (event: PromptEvent) => {
     const next = transitionPrompts(state, event)
@@ -334,7 +335,7 @@ export function createPagePrompts(input: {
         key: `${origin}\n${kinds.join(",")}`,
         origin,
         permissions: kinds,
-        remember: rememberable(origin, input.remote),
+        remember: keptApplies(origin, input.remote),
       })
 
       permissionCallbacks.set(id, [...(permissionCallbacks.get(id) ?? []), (granted) => (granted ? grant(kinds, once) : once(false))])

@@ -3,7 +3,7 @@ import {
   clipboardWrite,
   originOf,
   permissionKinds,
-  rememberable,
+  keptApplies,
   siteAnswer,
   trustworthy,
   type PermissionKind,
@@ -61,10 +61,15 @@ describe("what a page's permission request gets before anyone is asked", () => {
     expect(originOf("data:text/html,x")).toBe("null")
   })
 
-  test("keeps no decision for a local preview, nor for a remote server's own machine", () => {
-    expect(rememberable("oc-preview://3f1c", false)).toBe(false)
-    expect(rememberable("http://localhost:3000", true)).toBe(false)
-    expect(rememberable("http://localhost:3000", false)).toBe(true)
-    expect(rememberable("https://meet.example", true)).toBe(true)
+  test("keeps a remote server's own machine apart from this desktop's, for reading and writing", () => {
+    // Its localhost is another computer, over any scheme.
+    for (const origin of ["http://localhost:3000", "https://localhost:3000", "https://127.0.0.1:8443", "https://app.localhost"])
+      expect(keptApplies(origin, true)).toBe(false)
+    // Through its network only TLS proves the same site; plain HTTP to a public name is not a secure context anyway.
+    expect(keptApplies("https://meet.example", true)).toBe(true)
+    expect(keptApplies("http://meet.example", true)).toBe(false)
+    expect(keptApplies("http://localhost:3000", false)).toBe(true)
+    expect(keptApplies("oc-preview://3f1c", false)).toBe(false)
   })
+
 })

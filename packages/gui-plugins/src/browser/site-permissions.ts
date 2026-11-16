@@ -65,12 +65,7 @@ export function trustworthy(origin: string) {
 
   if (url.protocol !== "http:") return false
 
-  return (
-    url.hostname === "localhost" ||
-    url.hostname.endsWith(".localhost") ||
-    url.hostname === "[::1]" ||
-    /^127(?:\.\d{1,3}){3}$/.test(url.hostname)
-  )
+  return loopback(url.hostname)
 }
 
 /**
@@ -124,15 +119,29 @@ export function clipboardWrite(request: Omit<SiteRequest, "kinds">, agentRunning
 }
 
 /**
- * Whether the user may keep a decision for the origin: never for a local preview, and not for a remote server's own
- * machine (`localhost` there is another computer than this desktop's).
+ * Whether a decision kept on this desktop reads and writes for `origin`. Never for a local preview, whose origin is
+ * new for each attachment. In a remote server's partition only for an HTTPS origin off that machine: TLS proves it is
+ * the same site whichever network carries it, while that server's own names (`localhost` and the rest of loopback)
+ * are another computer, and plain HTTP proves nothing. Anything else is decided for the visit only.
  */
-export function rememberable(origin: string, remote: boolean) {
-  if (previewOrigin(origin)) return false
+export function keptApplies(origin: string, remote: boolean) {
+  if (previewOrigin(origin) || !URL.canParse(origin)) return false
 
-  return !(remote && trustworthy(origin) && new URL(origin).protocol === "http:")
+  if (!remote) return true
+  const url = new URL(origin)
+
+  return url.protocol === "https:" && !loopback(url.hostname)
 }
 
+/** This machine's own names, which reach another computer through a remote server's network. */
+function loopback(hostname: string) {
+  return (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "[::1]" ||
+    /^127(?:\.\d{1,3}){3}$/.test(hostname)
+  )
+}
 /** The kept decisions, in main. Each change is written at once and reported to `changed`. */
 export function createSitePermissions(storage: Storage, changed: () => void) {
   const stored = storage.store("site-permissions", { schema: SiteDecisions, initial: [] })
