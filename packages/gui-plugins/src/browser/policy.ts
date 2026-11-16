@@ -103,6 +103,25 @@ export function pagePermission(permission: string, origin: string, declared: (id
 /** How long after an agent command a download that no user input started still counts as the command's. */
 export const DOWNLOAD_GRACE_MS = 30_000
 
+export type TabActivity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number }
+
+/** True from a tab's first agent command (including one inherited from its opener) until the tab closes.
+ * Omit `now` for site permissions. For downloads and external links, pass the event time to use the
+ * shorter running/recent-command window, which ends on subsequent user input in this tab. */
+export function agentDriven(activity: Readonly<TabActivity>, now?: number): boolean {
+  if (activity.agentRuns > 0) return true
+
+  if (activity.agentEndedAt === undefined) return false
+
+  return now === undefined || (now - activity.agentEndedAt <= DOWNLOAD_GRACE_MS &&
+    (activity.userInputAt === undefined || activity.userInputAt < activity.agentEndedAt))
+}
+
+/** A child inherits provenance, not its opener's in-flight run counter. */
+export function childActivity(activity: Readonly<TabActivity>): TabActivity {
+  return activity.agentRuns ? { agentRuns: 0, agentEndedAt: Date.now() } : { ...activity }
+}
+
 /**
  * Whose a download in a tab is. Only one the agent's command caused is the agent's: it began while an agent command ran
  * in the tab, or within `DOWNLOAD_GRACE_MS` after one ended with no click or key press from the user since, and
@@ -125,11 +144,7 @@ export function downloadOwner(download: {
 /** The same running-command and user-input boundary for downloads and opening external apps. */
 export function activityOwner(download: { readonly now: number; readonly agentRunning: boolean; readonly agentEndedAt?: number; readonly userInputAt?: number }): "agent" | "user" {
 
-  if (download.agentRunning) return "agent"
-
-  if (download.agentEndedAt === undefined || download.now - download.agentEndedAt > DOWNLOAD_GRACE_MS) return "user"
-
-  return download.userInputAt !== undefined && download.userInputAt >= download.agentEndedAt ? "user" : "agent"
+  return agentDriven({ agentRuns: Number(download.agentRunning), agentEndedAt: download.agentEndedAt, userInputAt: download.userInputAt }, download.now) ? "agent" : "user"
 }
 
 /** Actions that only take a tab away from its document, which the agent may run on an extension page to leave it. */
@@ -168,6 +183,13 @@ type FrameTree = {
   readonly childFrames?: ReadonlyArray<FrameTree>
 }
 
+/** Documents which may receive agent input. Opaque web documents still need an allowed ancestry. */
+export function inputDocument(url: string, origin: string) {
+  if (Browser.extensionOrigin(origin) || Browser.extensionOrigin(url)) return false
+
+  return /^(?:https?:\/\/|oc-preview:\/\/|file:\/\/|about:(?:blank|srcdoc)(?:[?#]|$)|data:|blob:(?:https?:\/\/|null\/|oc-preview:\/\/))/.test(url)
+}
+
 type FrameTrees = {
   /** The main frame's tree. */
   readonly root: FrameTree
@@ -200,7 +222,7 @@ type AgentFrameInfo = { id: string; parentID?: string; url: string; name: string
  * or one of its ancestors shows an extension's document, or because it hangs under no frame the trees name.
  */
 function frameIndex(trees: FrameTrees) {
-  const frames = new Map<string, { info: AgentFrameInfo; extension: boolean }>()
+  const frames = new Map<string, { info: AgentFrameInfo; extension: boolean; usable: boolean }>()
 
   const walk = (tree: FrameTree, parentID?: string) => {
     const parent = tree.frame.parentId || parentID
@@ -211,11 +233,10 @@ function frameIndex(trees: FrameTrees) {
         info: parent
           ? { id, parentID: parent, url: tree.frame.url, name: tree.frame.name ?? "" }
           : { id, url: tree.frame.url, name: tree.frame.name ?? "" },
-        // The main frame's own document is the page's, which `agentRefusal` judges.
+        usable: inputDocument(tree.frame.url, tree.frame.securityOrigin ?? ""),
         extension:
           trees.extensions.has(id) ||
-          (!!parent &&
-            (Browser.extensionOrigin(tree.frame.url) || Browser.extensionOrigin(tree.frame.securityOrigin ?? ""))),
+          Browser.extensionOrigin(tree.frame.url) || Browser.extensionOrigin(tree.frame.securityOrigin ?? ""),
       })
     tree.childFrames?.forEach((child) => walk(child, id))
   }
@@ -230,7 +251,7 @@ function frameIndex(trees: FrameTrees) {
 
       if (trees.extensions.has(id) || entry?.extension) return "extension"
 
-      if (!entry) return "unavailable"
+      if (!entry?.usable) return "unavailable"
 
       if (entry.info.parentID === undefined) return "frame"
       id = entry.info.parentID

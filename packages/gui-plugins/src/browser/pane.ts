@@ -11,7 +11,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure, CodedError } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { agentRefusal, destinationOrigin, refusal } from "./policy"
+import { agentRefusal, childActivity, destinationOrigin, refusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { FindAction, PaneEvent } from "./ipc"
@@ -68,6 +68,8 @@ type Handle = {
   sendState?: (state: Browser.State) => void
   /** Pages by attempt. */
   pages: Map<number, BrowserPage>
+  /** Survives unloading the page, but not closing its tab or releasing the binding. */
+  activity: Map<Browser.TabID, TabActivity>
   /** Agent requests in flight by request ID. */
   requests: Map<string, AbortController>
 }
@@ -157,6 +159,7 @@ export function createBrowserPane(input: {
           win.webContents.off("did-start-navigation", navigate)
         },
         pages: new Map(),
+        activity: new Map(),
         requests: new Map(),
       }
 
@@ -443,6 +446,7 @@ export function createBrowserPane(input: {
   }
 
   function dispatchBinding(binding: string, event: BindingEvent) {
+    if (event.type === "tab.closed") handles.get(binding)?.activity.delete(event.tabID)
     dispatch({ type: "binding", binding, event })
 
     // Extensions hear which tab is active in a window.
@@ -577,6 +581,7 @@ export function createBrowserPane(input: {
       readonly restore?: Browser.Tab
       readonly initialize?: boolean
       readonly popupOptions?: Electron.BrowserWindowConstructorOptions
+      readonly activity?: TabActivity
     } = {},
   ) {
     const entry = selectBinding(machine.state, binding)
@@ -585,6 +590,9 @@ export function createBrowserPane(input: {
     if (entry?.status !== "attached" || !handle?.network)
       throw new Error("Browser network is not ready; no tab was opened.")
     const id = options.restore?.id ?? Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+    const running = !options.restore && Array.from(handle.activity.values()).find((tab) => tab.agentRuns > 0)
+    const activity = handle.activity.get(id) ?? (running ? childActivity(running) : options.activity) ?? { agentRuns: 0 }
+    handle.activity.set(id, activity)
     const attempt = entry.nextAttempt
     const win = handle.win
     // Every callback is fenced to this page: a later page of the same tab has another attempt.
@@ -603,6 +611,7 @@ export function createBrowserPane(input: {
 
     const page = createBrowserPage(win, {
       id,
+      activity,
       partition: handle.partition,
       network: handle.network,
       initialize: options.initialize,
@@ -652,8 +661,8 @@ export function createBrowserPane(input: {
       hidden: () => {
         if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
       },
-      popup: (popupOptions, background) => {
-        const popup = create(binding, { initialize: false, popupOptions })
+      popup: (popupOptions, background, activity) => {
+        const popup = create(binding, { initialize: false, popupOptions, activity })
 
         if (!background) dispatchBinding(binding, { type: "tab.focused", tabID: popup.state().id })
 
@@ -712,6 +721,7 @@ export function createBrowserPane(input: {
           { action: { type: "tabs.open", url: guarded(url), focus: active }, files: [] },
           new AbortController().signal,
           "user",
+          page.childActivity(),
         )
 
         const created = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.Struct({ id: Browser.TabID }))(opened.value))
@@ -742,7 +752,7 @@ export function createBrowserPane(input: {
     dispatchBinding(binding, { type: "tab.published", tabID, attempt, tab: page.state() })
   }
 
-  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
+  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", inherited?: TabActivity): Promise<Browser.Result> {
     const action = command.action
 
     if (signal.aborted)
@@ -801,7 +811,7 @@ export function createBrowserPane(input: {
         }
       }
 
-      const opened = create(binding)
+      const opened = create(binding, { activity: origin === "agent" ? { agentRuns: 0, agentEndedAt: Date.now() } : inherited })
       const tabID = opened.state().id
 
       if (file) openingFiles.set(opened, file)
@@ -830,6 +840,13 @@ export function createBrowserPane(input: {
       )
 
     if (action.type === "tabs.focus") {
+      const activities = handles.get(binding)?.activity
+      const activity = activities?.get(action.tabID) ?? { agentRuns: 0 }
+
+      if (origin === "agent") activity.agentEndedAt = Date.now()
+
+      if (origin === "user") activity.userInputAt = Date.now()
+      activities?.set(action.tabID, activity)
       dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID })
 
       return { value: slot.tab, files: [] }

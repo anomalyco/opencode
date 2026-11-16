@@ -198,6 +198,7 @@ const layer = Layer.effect(
         effect,
         experimental: {
           approved: input.resources.every((resource) => evaluate(input.action, resource, saved).effect === "allow"),
+          approvedSave: !!input.save?.length && input.save.every((key) => saved.some((rule) => rule.action === input.action && rule.resource === key)),
         },
       })
       const unattended = yield* Unattended

@@ -3,6 +3,7 @@ import type { Protocol } from "devtools-protocol"
 import type { Cdp } from "./cdp"
 import {
   evictHop,
+  extensionSource,
   MAX_RETAINED_REQUESTS,
   MAX_STASHED_CHAINS,
   networkRequest,
@@ -16,7 +17,7 @@ import {
 
 const levels = ["debug", "info", "warning", "error"] as const
 
-export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string) {
+export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string, pageContext: (id: number, sessionID?: string) => boolean) {
   const messages: Browser.ConsoleEntry[] = []
   // Every hop by its public id, oldest first.
   const requests = new Map<string, Hop>()
@@ -99,7 +100,8 @@ export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string)
     }
   }
 
-  cdp.on("Runtime.consoleAPICalled", (event) => {
+  cdp.on("Runtime.consoleAPICalled", (event, sessionID) => {
+    if (!pageContext(event.executionContextId, sessionID) || extensionSource(undefined, event.stackTrace)) return
     const source = event.stackTrace?.callFrames[0]
     add(
       event.type === "error" || event.type === "assert"
@@ -128,6 +130,8 @@ export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string)
   // are Log entries, not Runtime console calls.
   cdp.on("Log.entryAdded", (event) => {
     const entry = event.entry
+
+    if (extensionSource(entry.url, entry.stackTrace)) return
     add(
       entry.level === "verbose" ? "debug" : entry.level,
       entry.text,
@@ -137,8 +141,10 @@ export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string)
         : undefined,
     )
   })
-  cdp.on("Runtime.exceptionThrown", (event) => {
+  cdp.on("Runtime.exceptionThrown", (event, sessionID) => {
     const error = event.exceptionDetails
+
+    if ((error.executionContextId !== undefined && !pageContext(error.executionContextId, sessionID)) || extensionSource(error.url, error.stackTrace)) return
     add(
       "error",
       error.exception?.description ?? error.text,
@@ -208,7 +214,7 @@ export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string)
   const retained = (id: string, message: string) => {
     const hop = requests.get(id)
 
-    if (!hop) throw new Error(message)
+    if (!hop || hop.extension) throw new Error(message)
 
     return hop
   }
@@ -241,6 +247,7 @@ export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string)
       const matching = Array.from(requests.values())
         .filter(
           (hop) =>
+            !hop.extension &&
             (!input.urlContains || hop.url.includes(input.urlContains)) &&
             (!input.resourceType || input.resourceType === hop.resourceType),
         )

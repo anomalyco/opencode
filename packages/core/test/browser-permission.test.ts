@@ -23,6 +23,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { BrowserConnection } from "../../plugin-browser/src/connection"
+import { BrowserFiles } from "../../plugin-browser/src/files"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -120,6 +121,7 @@ const setup = (config: object) =>
       session,
       commands,
       attach,
+      navigate: (url: string) => rpc.state({ sessionID: session.id, connectionID: attachments.keys().next().value!, state: { tabs: [{ ...tab, url, generation: tab.generation + 1 }], focusedTabID: tab.id } }),
       // The desktop closes the session's first attachment.
       detach: Fiber.interrupt(attachment),
       run,
@@ -265,11 +267,18 @@ it.live("deleting an attached session forgets the record of who granted it the b
     const storage = PluginHost.storage(yield* KV.Service, "opencode.browser")
     const sessions = yield* Session.Service
     expect(yield* storage.get(`grant:${browser.session.id}`)).toBeDefined()
+    const file = { id: Browser.FileID.make(`file_${crypto.randomUUID()}`), name: "report.txt", mime: "text/plain", data: new TextEncoder().encode("report") }
+    const [saved] = yield* BrowserFiles.save([file], BrowserFiles.exportPaths([file], BrowserFiles.exportRoot(browser.session.id)))
+    expect(yield* Effect.promise(() => Bun.file(saved!.path).exists())).toBe(true)
     yield* sessions.remove(browser.session.id)
     yield* storage.get(`grant:${browser.session.id}`).pipe(
       Effect.flatMap((owner) => (owner === undefined ? Effect.void : Effect.fail("record still there"))),
       Effect.retry(Schedule.spaced("10 millis")),
       Effect.timeout("5 seconds"),
+    )
+    yield* Effect.promise(() => Bun.file(saved!.path).exists()).pipe(
+      Effect.flatMap((exists) => exists ? Effect.fail("session export still there") : Effect.void),
+      Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("5 seconds"),
     )
   }),
 )
@@ -298,6 +307,22 @@ it.live("a deny on wait refuses it before it probes the page", () =>
 )
 
 const missingTab = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+
+it.live("browser file reads require the file's own permission before reading or sending it", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("blocked.txt", "deny", "read"), rule("*", "deny", "external_directory")] })
+    // A non-existent file distinguishes a permission refusal from an attempted open, without transferring any data.
+    for (const operation of ["files.upload", "files.drop"]) {
+      for (const [path, action] of [["blocked.txt", "read"], ["../outside.txt", "external_directory"]]) {
+        const error = yield* refusal(browser, operation, { tabID: tab.id, ref: "e1", paths: [path] })
+        expect(error).toContain(`Permission denied: ${action}`)
+      }
+    }
+    yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "blocked.txt"), "fixture"))
+    expect(yield* refusal(browser, "preview", { path: "blocked.txt" })).toContain("Permission denied: read")
+    expect(browser.commands.count).toBe(0)
+  }),
+)
 
 // What `operation` fails with in `sessionID`.
 const refusal = (
@@ -484,6 +509,27 @@ it.live("always for one browser operation stops its prompts, while other operati
     const other = yield* answer(browser, "tabs.open", {}, "reject")
     expect(other.request.resources).toEqual(["tabs.open"])
     expect(browser.commands.count).toBe(2)
+  }),
+)
+
+it.live("browser approvals retain legacy operation policy and bind always to the site and complete script", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("evaluate", "ask")] })
+    const input = { tabID: tab.id, script: "document.title" }
+    const first = yield* answer(browser, "evaluate", input, "always")
+    expect(first.request.resources).toEqual(["evaluate"])
+    expect(first.request.metadata?.input).toEqual({ site: "https://example.com", script: input.script })
+    expect(first.request.save?.[0]).toMatch(/^evaluate https:\/\/example\.com [a-f0-9]{64}$/)
+    // The stand-in desktop answers with a tab list rather than an evaluation result; reaching it is the assertion.
+    yield* browser.run("evaluate", input).pipe(Effect.flip, Effect.timeout("5 seconds"))
+    expect(browser.commands.count).toBe(2)
+    const next = yield* answer(browser, "evaluate", { ...input, script: "location.href" }, "reject")
+    expect(next.request.save).not.toEqual(first.request.save)
+    expect(browser.commands.count).toBe(2)
+    yield* browser.navigate("https://elsewhere.test/")
+    const other = yield* answer(browser, "evaluate", input, "reject")
+    expect(other.request.metadata?.input).toEqual({ site: "https://elsewhere.test", script: input.script })
+    expect(other.request.save).not.toEqual(first.request.save)
   }),
 )
 

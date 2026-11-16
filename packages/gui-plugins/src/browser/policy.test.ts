@@ -2,8 +2,11 @@ import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import {
   agentFrame,
+  agentDriven,
+  childActivity,
   agentFrames,
   agentRefusal,
+  inputDocument,
   allowedDestination,
   committedLoad,
   destinationOrigin,
@@ -16,6 +19,14 @@ import {
   pagePermission,
   refusal,
 } from "./policy"
+
+test("input requires a page document at each step of the route", () => {
+  for (const [url, origin, permitted] of [
+    ["https://example.com/", "https://example.com", true], ["about:blank", "null", true],
+    ["about:srcdoc", "chrome-extension://pw", false], ["blob:chrome-extension://pw/id", "null", false],
+    ["devtools://devtools/bundled/", "devtools://devtools", false], ["", "", false],
+  ] as const) expect(inputDocument(url, origin)).toBe(permitted)
+})
 
 test("allows cross-origin HTTP navigation but rejects unsafe destinations and embedded credentials", () => {
   expect(destinationOrigin("https://other.example/path")).toBe("https://other.example")
@@ -334,6 +345,17 @@ test("only a download the agent's command caused is the agent's", () => {
     "user",
   )
   expect(download({ agentRunning: true, chain: ["blob:chrome-extension://pw/0b6f7c2e"] })).toBe("user")
+})
+
+test("sticky agent provenance is inherited without inheriting a running command", () => {
+  expect(agentDriven(childActivity({ agentRuns: 0 }))).toBe(false)
+  const child = childActivity({ agentRuns: 1, userInputAt: 10 })
+  expect(agentDriven(child)).toBe(true)
+  expect(child.agentRuns).toBe(0)
+  expect(child.agentEndedAt).toBeDefined()
+  const later = { agentRuns: 0, agentEndedAt: 20, userInputAt: 40 }
+  expect(childActivity(later)).toEqual(later)
+  expect(agentDriven(later)).toBe(true)
 })
 
 test("the user still opens extension pages the agent may not", () => {

@@ -24,6 +24,8 @@ export interface PermissionEvaluation {
      * sets is never overridden.
      */
     readonly approved: boolean
+    /** True when every proposed save key was previously saved verbatim for this action. Does not change rule evaluation. */
+    readonly approvedSave?: boolean
   }
 }
 

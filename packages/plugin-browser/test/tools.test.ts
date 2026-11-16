@@ -125,9 +125,8 @@ test("saved capture names never escape their directory or name a Windows device"
     mime: "text/plain",
     data: new TextEncoder().encode(name),
   })
-  const saved = await Effect.runPromise(
-    BrowserFiles.save([file(".."), file("."), file("CON.txt"), file("lpt1"), file("report.html")]),
-  )
+  const files = [file(".."), file("."), file("CON.txt"), file("lpt1"), file("report.html")]
+  const saved = await Effect.runPromise(BrowserFiles.save(files, BrowserFiles.exportPaths(files, tmpdir())))
   try {
     expect(saved.map((entry) => basename(entry.path))).toEqual([
       "capture",
@@ -140,6 +139,20 @@ test("saved capture names never escape their directory or name a Windows device"
     expect(await Bun.file(saved[0]!.path).text()).toBe("..")
   } finally {
     await rm(dirname(dirname(saved[0]!.path)), { recursive: true, force: true })
+  }
+})
+
+test("uploads read the authorized regular file and preserve its display name", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "browser-upload-"))
+  try {
+    const path = join(dir, "sample.txt")
+    await Bun.write(path, "sample")
+    const paths = await Effect.runPromise(BrowserFiles.physical([path]))
+    const [file] = await Effect.runPromise(BrowserFiles.read(paths, [path]))
+    expect(file?.name).toBe("sample.txt")
+    expect(new TextDecoder().decode(file?.data)).toBe("sample")
+  } finally {
+    await rm(dir, { recursive: true, force: true })
   }
 })
 
@@ -259,6 +272,8 @@ describe("wait reads the condition from the keys models write", () => {
     expect(BrowserTools.matchesURL("https://app.test/dashboard/settings", "**/dashboard")).toBe(false)
     expect(BrowserTools.matchesURL("https://app.test/a.b", "*/a.b")).toBe(true)
     expect(BrowserTools.matchesURL("https://app.test/axb", "*/a.b")).toBe(false)
+    expect(BrowserTools.matchesURL("abc", "ab*bc")).toBe(false)
+    expect(BrowserTools.matchesURL("https://app.test/some/path", "https://*/*/path")).toBe(true)
   })
 })
 

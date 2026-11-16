@@ -1,5 +1,19 @@
 import { expect, test } from "bun:test"
-import { pageLetter, pageReload, pageShortcut, type PageKey } from "./keys"
+import { agentKeyRefusal, hardwareInput, pageLetter, pageReload, pageShortcut, type PageKey } from "./keys"
+
+test("only hardware input can run shell shortcuts, even while a CDP command is pending", () => {
+  expect(hardwareInput({ type: "keyDown", _modifiers: 2 })).toBe(true)
+  expect(hardwareInput({ type: "keyDown", _modifiers: (1 << 23) | 2 })).toBe(false)
+  expect(hardwareInput({ type: "keyDown" })).toBe(false)
+})
+
+test("agent key dispatch leaves the system clipboard and native menus to the user", () => {
+  for (const [key, flags] of [["V", 2], ["v", 4], ["c", 10], ["C", 4], ["X", 2], ["x", 4], ["Insert", 8], ["Insert", 2], ["Delete", 8], ["F10", 8], ["ContextMenu", 0]] as const)
+    expect(agentKeyRefusal(key, flags)).toContain("fill")
+
+  for (const [key, flags] of [["A", 2], ["A", 4], ["v", 0], ["Delete", 0], ["Enter", 0]] as const)
+    expect(agentKeyRefusal(key, flags)).toBeUndefined()
+})
 
 /** A key press with `mod` as the platform's modifier: Command on macOS, Control elsewhere. */
 const press = (modifiers: string, key: string, mac: boolean, code = ""): PageKey => {
