@@ -19,6 +19,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
 import { createExtensionLoad, ExtensionLoadFailed } from "@/settings/extension-load"
 import type { SettingsView } from "@/settings/surface"
+import { SettingsBrowse } from "./browse"
 import { ConsoleName, ConsoleReplaced, createConsoleSources } from "./console-link"
 import "@/settings/settings.css"
 import "@/shell/search-list.css"
@@ -93,6 +94,15 @@ export const SettingsExtensions: Component<{
   })
   const skills = createMemo(() => (data.location.skill.list() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
 
+  // browse installs into this computer's agent config, so it is offered only for the desktop's own server.
+  const browse = () => (ServerConnection.builtin(serverSdk.server) ? platform.browse : undefined)
+
+  const syncMcps = () => {
+    void data.location.mcp.server.sync(data.location.default()).catch(() => undefined)
+
+    if (props.directory) void data.location.mcp.server.sync(location()).catch(() => undefined)
+  }
+
   return (
     <>
       <div class="settings-tab-header">
@@ -121,6 +131,7 @@ export const SettingsExtensions: Component<{
           </Tabs.List>
 
           <Tabs.Content value="mcps">
+            <Show when={browse()}>{(bridge) => <SettingsBrowse bridge={bridge()} onInstalled={syncMcps} />}</Show>
             <div class="settings-section">
               <div class="flex items-center justify-between">
                 <span class="settings-extension-heading text-13-medium">

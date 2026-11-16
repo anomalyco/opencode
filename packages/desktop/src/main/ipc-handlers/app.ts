@@ -2,6 +2,7 @@ import { BrowserWindow } from "electron"
 import { parseDesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
+import { Browse } from "../browse"
 import { checkAppExists, resolveAppPath } from "../files/apps"
 import { setForceFocus } from "../native/debug"
 import { DesktopLogging, scoped } from "../native/logging"
@@ -21,6 +22,7 @@ export const appHandlers = AppRpcs.toLayer(
     const lifecycle = yield* ApplicationLifecycle.Service
     const background = yield* BackgroundService.Service
     const logging = yield* DesktopLogging.Service
+    const browse = yield* Browse.Service
 
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
@@ -65,6 +67,8 @@ export const appHandlers = AppRpcs.toLayer(
           setNativeTranslations(bundle)
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
+      AppBrowseStatus: () => browse.status,
+      AppBrowseInstall: () => browse.install,
     })
   }),
 )

@@ -5,6 +5,7 @@ import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
 import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
+import { Browse } from "./browse"
 import { Plugins } from "./plugin"
 import { DesktopFiles, openExternalURL } from "./files"
 import { appHandlers } from "./ipc-handlers/app"
@@ -24,7 +25,7 @@ import { setStorageSnapshotObserver } from "./storage/snapshot"
 import { getLastFocusedWindow } from "./windows"
 import { isRendererUrl } from "./windows/scheme"
 
-const services = Layer.mergeAll(DesktopFiles.layer, Plugins.layer)
+const services = Layer.mergeAll(DesktopFiles.layer, Plugins.layer, Browse.layer)
 
 const handlers = Layer.mergeAll(
   appHandlers,

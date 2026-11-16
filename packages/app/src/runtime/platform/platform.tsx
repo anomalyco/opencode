@@ -137,6 +137,39 @@ type PlatformBase = {
 
   /** GUI plugin bridge to the main-process plugin host (desktop only). */
   plugins?: Bridge
+
+  /** Detect and install browse on the desktop's own machine (desktop only). */
+  browse?: BrowseBridge
+}
+
+export type BrowseExtensionState =
+  | "connected"
+  | "paired-offline"
+  | "unpaired"
+  | "refused"
+  | "not-seen"
+  | "incompatible"
+  | "unknown"
+
+export type BrowseStatus = {
+  installed: boolean
+  /** OpenCode's global config has the browse MCP server. */
+  configured: boolean
+  /** "unknown" while browse's relay isn't running; an agent starts it on first use. */
+  extension: BrowseExtensionState
+  job: { status: "idle" } | { status: "installing" } | { status: "failed"; failure: BrowseInstallFailure }
+}
+
+/** `start`: the desktop didn't take the request. `installer`: browse's installer failed; `detail` is its own words. */
+export type BrowseInstallFailure = {
+  reason: "start" | "download" | "timeout" | "installer"
+  detail?: string
+}
+
+export type BrowseBridge = {
+  status(): Promise<BrowseStatus>
+  /** Starts the installer, which adds browse to OpenCode, opens the Chrome Web Store and pairs the browser. */
+  install(): Promise<void>
 }
 
 export type Platform = PlatformBase &

@@ -3,6 +3,7 @@ import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import type { StorageSnapshot } from "../shared/ipc-transport"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {
+  BrowseStatus,
   ClipboardImage,
   DirectoryPickerOptions,
   FatalRendererError,
@@ -23,6 +24,8 @@ export type ElectronAPI = {
   finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
   checkAppExists(appName: string): Promise<boolean>
   resolveAppPath(appName: string): Promise<string | null>
+  browseStatus(): Promise<BrowseStatus>
+  installBrowse(): Promise<void>
   /** The namespaces the preload read before the page ran; `createDesktopStorage` serves each first read from it. */
   getStorageSnapshot(): Promise<StorageSnapshot>
   storeItems(name: string): Promise<{ items: Record<string, string>; revision: number }>

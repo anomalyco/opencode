@@ -2295,6 +2295,45 @@
   gap: 16px;
 }
 
+/* browse sits above the MCP list, offered until it is set up. */
+.settings-browse {
+  margin-bottom: 32px;
+}
+
+/* When the actions don't fit beside the text, they wrap under it instead of squeezing it. */
+.settings-browse-row {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.settings-browse-row .settings-extension-lead {
+  flex: 1 1 240px;
+}
+
+.settings-browse-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-browse-detail {
+  color: var(--v2-text-text-muted);
+  line-height: var(--line-height-compact);
+  overflow-wrap: break-word;
+}
+
+.settings-browse-detail[data-error] {
+  color: var(--v2-state-fg-danger);
+}
+
+.settings-browse-trailing {
+  margin-inline-start: auto;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
 /* The name keeps its own width so the source sits right after it, not against the actions. */
 .settings-mcp-row .settings-extension-name {
   flex: 0 1 auto;
