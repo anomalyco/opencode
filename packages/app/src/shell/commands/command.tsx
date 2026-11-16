@@ -368,6 +368,15 @@ export function formatKeybind(config: string, t?: (key: KeyLabel) => string): st
   return IS_MAC ? parts.join("") : parts.join("+")
 }
 
+/**
+ * Whether a key's target is inside a modal dialog, which owns the keyboard there: no command keybind runs, as none runs
+ * while one of the app's own dialogs is open (`dialog.active`). A dialog modal for less than the window, such as a
+ * page's prompt in the browser pane, owns only the keys pressed inside it.
+ */
+export function insideModalDialog(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest('[aria-modal="true"]')
+}
+
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
 
@@ -514,7 +523,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (suspended() || dialog.active) return
+      if (suspended() || dialog.active || insideModalDialog(event.target)) return
 
       const sig = signatureFromEvent(event)
       const isPalette = palette().has(sig)

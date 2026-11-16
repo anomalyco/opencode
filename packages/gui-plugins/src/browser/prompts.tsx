@@ -8,6 +8,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { createSignal, createUniqueId, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import { guardActivation } from "./activation-delay"
+import { promptKeyOwner } from "./prompt-keys"
 import type definition from "./index"
 import { PROMPT_TEXT_MAX, SIGN_IN_TEXT_MAX, type PromptAnswer, type PromptSite, type PromptView } from "./ipc"
 
@@ -72,6 +73,10 @@ export function PromptDialog(props: {
     if (!box) return
     guard = guardActivation(box)
     onCleanup(guard.dispose)
+    // A listener on the dialog itself, not Solid's on the document, so the dialog's keys stop here.
+    const root = box
+    root.addEventListener("keydown", keyDown)
+    onCleanup(() => root.removeEventListener("keydown", keyDown))
     onCleanup(() => {
       const active = document.activeElement
 
@@ -85,8 +90,16 @@ export function PromptDialog(props: {
     target.focus({ preventScroll: true })
   })
 
-  // Tab and Shift+Tab cycle inside the dialog; the page behind it is a still.
+  // The dialog's keys are its own (prompt-keys.ts): the command layer runs no shortcut from inside an aria-modal dialog,
+  // no other handler of the window sees them, and what the window would do behind it, as its own reload or zoom, is
+  // cancelled. Tab and Shift+Tab cycle inside the dialog; the page behind it is a still.
   const keyDown = (event: KeyboardEvent) => {
+    const owner = promptKeyOwner(event, { inside: true, mac })
+
+    if (owner !== "window") event.stopPropagation()
+
+    if (owner === "swallowed") return event.preventDefault()
+
     if (cancelKey(event)) {
       event.preventDefault()
       event.stopPropagation()
@@ -130,6 +143,8 @@ export function PromptDialog(props: {
       data-component="dialog-v2"
       data-fit
       data-browser-prompt={props.view.ask.kind}
+      // Typing here never moves to the chat composer, and Escape here is the dialog's.
+      data-prevent-autofocus
       // The app's dialog, scoped to the page's box instead of the window; the scrim dims the page's still.
       style={{
         position: "absolute",
@@ -148,7 +163,6 @@ export function PromptDialog(props: {
         aria-describedby={described() ? description : undefined}
         tabIndex={-1}
         style={{ width: "min(100%, 480px)", "max-height": "100%", outline: "none" }}
-        onKeyDown={keyDown}
       >
         <Switch>
           <Match when={pageDialog()}>
@@ -432,6 +446,8 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
     <section
       ref={bar}
       data-component="browser-prompt"
+      // Not modal: the app's shortcuts work here; only Escape, which dismisses the bar, is the bar's alone.
+      data-prevent-autofocus
       role={permission() ? "alertdialog" : "status"}
       aria-label={permission() ? ctx.t("prompt.permission.label") : undefined}
       aria-describedby={text}
@@ -516,6 +532,8 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
 type Plugin = ReturnType<typeof usePlugin<typeof definition>>
 
 const cancelKey = (event: KeyboardEvent) => !event.isComposing && event.key === "Escape"
+
+const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
 
 function siteSays(ctx: Plugin, site: PromptSite) {
   if (site.kind === "web") return ctx.t(site.embedded ? "prompt.site.embedded" : "prompt.site.web", { host: site.host })
