@@ -13,6 +13,6 @@ Use the automation tools in the `opencode` namespace. They see every automation 
     Example: `await tools.opencode.automation_create({ name: "Third check", trigger: { type: "every", every: "1 minute" }, action: { type: "code", code: 'if (runs < 2) return; return { done: true, send: { prompt: "Three checks elapsed. Review the build." } }' } })`.
   - To stop a repeating automation at a time, add `expires`: an instant, a wall-clock time, or `"in 8 hours"`.
 - To pause, resume or delete one, find its id with `automation_list`, then call `automation_pause`, `automation_resume` or `automation_delete`.
-- If the request is empty, call `automation_list` and show the automations: name, trigger, status and next run.
+- If the request is empty, call `automation_list` and show the automations: name, trigger, status and next scheduled time (timers only).
 
-Reply in one line: what changed and when it next runs.
+Reply in one line: what changed and which time or event triggers it.

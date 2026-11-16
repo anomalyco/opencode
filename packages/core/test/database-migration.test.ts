@@ -25,6 +25,7 @@ import dropSessionPendingMigration from "@opencode/core/database/migration/20261
 import scheduleMigration from "@opencode/core/database/migration/20261026223005_schedule"
 import scheduleChecksMigration from "@opencode/core/database/migration/20261029165540_schedule_checks"
 import automationMigration from "@opencode/core/database/migration/20261116043204_automation"
+import automationEventPosition from "@opencode/core/database/migration/20261116181958_automation_event_position"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -477,11 +478,11 @@ describe("DatabaseMigration", () => {
         yield* insert("sch_counted", '{"type":"every","every":"1 minute"}', { remaining: 2 })
         yield* insert("sch_done", '{"type":"every","every":"1 minute"}', { status: "done" })
 
-        yield* DatabaseMigration.applyOnly(db, [automationMigration])
+        yield* DatabaseMigration.applyOnly(db, [automationMigration, automationEventPosition])
 
         expect(
           yield* db.all(
-            sql`SELECT id, project_id, session_id, directory, name, "trigger", action, status, next_due_at, run_count, last_message_id FROM automation ORDER BY id`,
+            sql`SELECT id, project_id, session_id, directory, name, "trigger", action, status, next_due_at, run_count, last_message_id, event_position FROM automation ORDER BY id`,
           ),
         ).toEqual([
           {
@@ -496,6 +497,7 @@ describe("DatabaseMigration", () => {
             next_due_at: 60000,
             run_count: 2,
             last_message_id: "msg_sch_cron_2",
+            event_position: null,
           },
           {
             id: "aut_in",
@@ -509,6 +511,7 @@ describe("DatabaseMigration", () => {
             next_due_at: 60000,
             run_count: 2,
             last_message_id: "msg_sch_in_2",
+            event_position: null,
           },
         ])
         expect(yield* db.all(sql`SELECT name FROM sqlite_master WHERE name LIKE 'schedule%'`)).toEqual([])

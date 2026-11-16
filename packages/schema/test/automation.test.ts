@@ -1,7 +1,16 @@
 import { expect, test } from "bun:test"
-import { Result } from "effect"
+import { Result, Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { Automation } from "../src/automation.js"
+
+test("event triggers round-trip producer arguments and omit absent ones", () => {
+  const event = { type: "event", server: "ci", event: "build.changed" } as const
+  const encode = Schema.encodeSync(Automation.Trigger)
+  const decode = Schema.decodeUnknownSync(Automation.Trigger)
+  expect(encode({ ...event, args: undefined })).toStrictEqual(event)
+  const filtered = { ...event, args: { build: 7 } }
+  expect(encode(decode(filtered))).toStrictEqual(filtered)
+})
 
 test("code results independently keep JSON state, stop, or hand off one prompt", () => {
   for (const value of [

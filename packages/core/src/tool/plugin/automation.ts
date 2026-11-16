@@ -84,7 +84,7 @@ export const Plugin = {
         editor.add({
           name: "automation_create",
           description:
-            "Schedule a prompt or a Code Mode check in this project. A prompt can target this session, another session or a new subagent child. A code string runs without a model. Return at most one send per run: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet. Returns the automation with its next run.",
+            "Run a prompt or Code Mode action on a timer or a connected MCP server's push event. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
           input: Automation.Request,
           output: View,
           options: { namespace: "opencode", codemode: true },
@@ -126,7 +126,7 @@ export const Plugin = {
         editor.add({
           name: "automation_resume",
           description:
-            "Resume a paused automation. An `at` automation that fell due while paused runs once now; a repeating one resumes at its next slot.",
+            "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor.",
           input: IDInput,
           output: View,
           options: { namespace: "opencode", codemode: true },

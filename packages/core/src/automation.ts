@@ -26,13 +26,11 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import {
   Action,
   ActionInput,
-  type CodeAction,
   CreateInput,
   durationMillis,
   ID,
   Info,
   Outcome,
-  type PromptAction,
   Request,
   runSessionID,
   Status,
@@ -107,9 +105,7 @@ export interface Interface {
   /** Runs every automation that is due now, at most once each. */
   readonly tick: Effect.Effect<void>
   /**
-   * Runs `tick` whenever an automation falls due, until interrupted. Elects at most one active leader per SQLite
-   * database via a lease row, so auxiliary processes (`opencode acp`, `--standalone`) sharing a data directory
-   * never double-run alongside a managed service.
+   * Owns timer ticks and MCP subscriptions until interrupted. A SQLite lease elects one scheduler per database.
    */
   readonly run: Effect.Effect<never>
 }
@@ -356,8 +352,8 @@ const layer = Layer.effect(
     const existing = (sessionID: SessionSchema.ID) =>
       sessions.get(sessionID).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.undefined))
 
-    /** A finished run's next slot, after the time it finished so a slow run doesn't trigger a burst, or done. */
-    const advance = Effect.fnUntraced(function* (row: Row, done = false, event?: AutomationEvent.Message) {
+    /** Advance a successful run's cursor or timer. A slow timer skips slots it missed while running. */
+    const advance = (row: Row, ended: number, done = false, event?: AutomationEvent.Message) => {
       if (event && row.event_position)
         return {
           ...(done ? { status: "done" as const } : {}),
@@ -367,10 +363,9 @@ const layer = Layer.effect(
             id: event.eventId,
           },
         }
-      const next = following(row, yield* Clock.currentTimeMillis)
-      const ended = done || finished(row, next)
-      return { ...(ended ? { status: "done" as const } : {}), next_due_at: ended ? null : next }
-    })
+      const next = following(row, ended)
+      return done || finished(row, next) ? { status: "done" as const, next_due_at: null } : { next_due_at: next }
+    }
 
     const promptTarget = Effect.fnUntraced(function* (row: Row, to: Target) {
       if (to.session !== undefined) {
@@ -407,63 +402,6 @@ const layer = Layer.effect(
       return child.id
     })
 
-    /** Admission is shared; each action settles its own run once, only after the prompt is durable. */
-    const admit = (row: Row, sessionID: SessionSchema.ID, text: string, due: number, now: number) => {
-      const run = row.run_count + 1
-      return sessions.prompt({
-        sessionID,
-        // Keep existing plain prompt IDs. For code, the unsuffixed ID already identifies tool invocations in the
-        // creator; its returned prompt is a different inbox record, potentially in a different Session.
-        id: SessionMessage.ID.make(`msg_${row.id}_${run}${row.action.type === "code" ? "_send" : ""}`),
-        text,
-        delivery: "steer",
-        metadata: { automation: { id: row.id, name: row.name, run, dueAt: due, late: now - due >= LATE_AFTER } },
-      })
-    }
-
-    const runPrompt = Effect.fnUntraced(
-      function* (row: Row, action: PromptAction, due: number, now: number, event?: AutomationEvent.Message) {
-        const target = yield* promptTarget(row, action.to)
-        if (
-          !event &&
-          action.to.session !== undefined &&
-          row.last_message_id !== null &&
-          (yield* pending(row.last_message_id))
-        ) {
-          // The wake that followed admission may have been lost; waking again is harmless.
-          yield* execution.wake(target)
-          return yield* settle(row, {
-            last_outcome: "skipped",
-            retry_at: null,
-            ...(yield* advance(row)),
-            time_updated: now,
-          })
-        }
-        const text = event ? AutomationEvent.prompt(action.prompt, event) : action.prompt
-        if (event && Buffer.byteLength(text) > 32_768)
-          return yield* new InvalidError({
-            reason: "Event prompt exceeds 32 KiB",
-          })
-        const item = yield* admit(row, target, text, due, now)
-        yield* settle(
-          row,
-          {
-            run_count: row.run_count + 1,
-            last_message_id: item.id,
-            last_run_at: now,
-            last_outcome: now - due >= LATE_AFTER ? "late" : "fired",
-            last_output: deliverySummary(item.sessionID, action.to.subagent),
-            retry_at: null,
-            ...(yield* advance(row, false, event)),
-            time_updated: now,
-          },
-          { evenIfPaused: true },
-        )
-      },
-      (effect, row, _action, _due, now, _event?: AutomationEvent.Message) =>
-        effect.pipe(Effect.catchTag("Automation.InvalidError", (error) => pauseWith(row, now, error.reason))),
-    )
-
     const codeFailed = Effect.fnUntraced(function* (
       row: Row,
       now: number,
@@ -497,73 +435,118 @@ const layer = Layer.effect(
       )
     })
 
-    const runCode = Effect.fnUntraced(function* (
-      row: Row,
-      action: CodeAction,
-      due: number,
-      now: number,
-      event?: AutomationEvent.Message,
-    ) {
-      // The tools were authorized for the creating Session's agent and permissions, so a run needs that Session.
-      const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
-      if (!owner)
-        return yield* pauseWith(row, now, `The session that authorized this automation's tools no longer exists`)
-      if (owner.projectID !== row.project_id)
-        return yield* pauseWith(
-          row,
-          now,
-          "The session that authorized this automation's tools moved to another project",
-        )
-      const run = row.run_count + 1
-      const outcome = yield* AutomationCode.run(owner, action, {
-        messageID: SessionMessage.ID.make(`msg_${row.id}_${run}`),
-        state: row.state,
-        now,
-        runs: row.run_count,
-        ...(event && { event: AutomationEvent.input(event) }),
-      }).pipe(inDirectory(row.directory))
-      if (!outcome.ok) return yield* codeFailed(row, now, outcome)
-
-      // Unlike an unchanging prompt action, this decision (possibly the terminal one) must not be coalesced.
-      const send = outcome.send
-      const sent =
-        send &&
-        (yield* promptTarget(row, send.to ?? { session: owner.id }).pipe(
-          Effect.flatMap((target) => admit(row, target, send.prompt, due, now)),
-          Effect.result,
-        ))
-      if (sent && Result.isFailure(sent))
-        return yield* codeFailed(row, now, {
-          ok: false,
-          output: outcome.output,
-          error: sent.failure.message,
-          invalid: sent.failure instanceof InvalidError || sent.failure instanceof FileSystem.DirectoryNotFoundError,
+    const runAction = Effect.fnUntraced(
+      function* (row: Row, now: number, event?: AutomationEvent.Message) {
+        const action = row.action
+        const run = row.run_count + 1
+        const dueAt = row.next_due_at ?? now
+        const late = now - dueAt >= LATE_AFTER
+        const id = `msg_${row.id}_${run}`
+        const admit = (sessionID: SessionSchema.ID, text: string) =>
+          sessions.prompt({
+            sessionID,
+            // A code action's unsuffixed ID identifies its tool calls, not its returned prompt.
+            id: SessionMessage.ID.make(action.type === "code" ? `${id}_send` : id),
+            text,
+            delivery: "steer",
+            metadata: { automation: { id: row.id, name: row.name, run, dueAt, late } },
+          })
+        // Commit the action result and advance the cursor or timer together, only after any handoff is durable.
+        const complete = Effect.fnUntraced(function* (
+          values: Pick<Row, "last_output"> & Partial<Pick<Row, "state" | "failures" | "last_message_id">>,
+          done = false,
+        ) {
+          const ended = yield* Clock.currentTimeMillis
+          yield* settle(
+            row,
+            {
+              ...values,
+              run_count: run,
+              last_run_at: now,
+              last_outcome: late ? "late" : "fired",
+              retry_at: null,
+              ...advance(row, ended, done, event),
+              time_updated: action.type === "code" ? ended : now,
+            },
+            { evenIfPaused: true },
+          )
         })
 
-      yield* settle(
-        row,
-        {
-          run_count: run,
-          ...(sent && { last_message_id: sent.success.id }),
-          failures: 0,
-          ...(outcome.state === undefined ? {} : { state: outcome.state }),
-          last_run_at: now,
-          last_outcome: now - due >= LATE_AFTER ? "late" : "fired",
-          last_output: sent
-            ? AutomationCode.handoffOutput(deliverySummary(sent.success.sessionID, send?.to?.subagent), outcome.output)
-            : (outcome.output ?? null),
-          retry_at: null,
-          ...(yield* advance(row, outcome.done, event)),
-          time_updated: yield* Clock.currentTimeMillis,
-        },
-        { evenIfPaused: true },
-      )
-    })
+        if (action.type === "prompt") {
+          const target = yield* promptTarget(row, action.to)
+          // Only an unchanging timer prompt can be coalesced. Re-wake it in case the first wake was lost.
+          if (!event && action.to.session && row.last_message_id && (yield* pending(row.last_message_id))) {
+            yield* execution.wake(target)
+            return yield* settle(row, {
+              last_outcome: "skipped",
+              retry_at: null,
+              ...advance(row, yield* Clock.currentTimeMillis),
+              time_updated: now,
+            })
+          }
+          const text = event ? AutomationEvent.prompt(action.prompt, event) : action.prompt
+          if (event && Buffer.byteLength(text) > 32_768)
+            return yield* new InvalidError({ reason: "Event prompt exceeds 32 KiB" })
+          const item = yield* admit(target, text)
+          return yield* complete({
+            last_message_id: item.id,
+            last_output: deliverySummary(item.sessionID, action.to.subagent),
+          })
+        }
 
-    const runAction = (row: Row, due: number, now: number, event?: AutomationEvent.Message) =>
-      row.action.type === "prompt"
-        ? runPrompt(row, row.action, due, now, event)
-        : runCode(row, row.action, due, now, event)
+        // The tools were authorized for the creating Session's agent and permissions, so a run needs that Session.
+        const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
+        if (!owner)
+          return yield* pauseWith(row, now, `The session that authorized this automation's tools no longer exists`)
+        if (owner.projectID !== row.project_id)
+          return yield* pauseWith(
+            row,
+            now,
+            "The session that authorized this automation's tools moved to another project",
+          )
+        const outcome = yield* AutomationCode.run(owner, action, {
+          messageID: SessionMessage.ID.make(id),
+          state: row.state,
+          now,
+          runs: row.run_count,
+          ...(event && { event: AutomationEvent.input(event) }),
+        }).pipe(inDirectory(row.directory))
+        if (!outcome.ok) return yield* codeFailed(row, now, outcome)
+
+        const values = {
+          ...(outcome.state !== undefined && { state: outcome.state }),
+          failures: 0,
+          last_output: outcome.output ?? null,
+        }
+        const send = outcome.send
+        if (!send) return yield* complete(values, outcome.done)
+        const sent = yield* promptTarget(row, send.to ?? { session: owner.id }).pipe(
+          Effect.flatMap((target) => admit(target, send.prompt)),
+          Effect.result,
+        )
+        if (Result.isFailure(sent))
+          return yield* codeFailed(row, now, {
+            ok: false,
+            output: outcome.output,
+            error: sent.failure.message,
+            invalid: sent.failure instanceof InvalidError || sent.failure instanceof FileSystem.DirectoryNotFoundError,
+          })
+
+        yield* complete(
+          {
+            ...values,
+            last_message_id: sent.success.id,
+            last_output: AutomationCode.handoffOutput(
+              deliverySummary(sent.success.sessionID, send.to?.subagent),
+              outcome.output,
+            ),
+          },
+          outcome.done,
+        )
+      },
+      (effect, row, now, _event?: AutomationEvent.Message) =>
+        effect.pipe(Effect.catchTag("Automation.InvalidError", (error) => pauseWith(row, now, error.reason))),
+    )
 
     /** Runs one due automation, after the checks both kinds of action share: leadership, expiry and the flag. */
     const runDue = Effect.fnUntraced(function* (row: Row, now: number) {
@@ -587,7 +570,7 @@ const layer = Layer.effect(
         yield* settle(row, { last_outcome: "disabled", retry_at: now + DISABLED_RETRY, time_updated: now })
         return
       }
-      return yield* runAction(row, due, now)
+      return yield* runAction(row, now)
     })
 
     const tickAt = Effect.fnUntraced(function* (now: number) {
@@ -658,23 +641,23 @@ const layer = Layer.effect(
         Effect.flatMap((rows) => Effect.forEach(rows, (row) => execution.wake(row.sessionID), { discard: true })),
       )
 
-    const hasActiveRows = db
-      .select({ id: AutomationTable.id })
-      .from(AutomationTable)
-      .where(eq(AutomationTable.status, "active"))
-      .limit(1)
-      .get()
-      .pipe(
-        Effect.orDie,
-        Effect.map((row) => row !== undefined),
-      )
+    const hasActiveRows = (timersOnly = false) =>
+      db
+        .select({ id: AutomationTable.id })
+        .from(AutomationTable)
+        .where(
+          and(eq(AutomationTable.status, "active"), timersOnly ? isNotNull(AutomationTable.next_due_at) : undefined),
+        )
+        .limit(1)
+        .get()
+        .pipe(
+          Effect.orDie,
+          Effect.map((row) => row !== undefined),
+        )
 
     const ownerID = randomUUID()
-    // Whether this process held the lease on its last pass. Taking the lease is when `rewake` runs.
-    let leading = false
-    // The first pass claims the lease even with nothing active: an automation that has since finished may have left a
-    // prompt pending.
-    let bootChecked = false
+    // Claim once on startup even with nothing active: a finished automation may have left a prompt pending.
+    let leadership: "unchecked" | "leader" | "follower" = "unchecked"
 
     const claimLeader = Effect.fnUntraced(function* (now: number) {
       const value = { owner: ownerID, until: now + LEADER_TTL }
@@ -692,17 +675,15 @@ const layer = Layer.effect(
       return claimed !== undefined
     })
 
-    const releaseLeader = Effect.sync(() => {
-      leading = false
-    }).pipe(
-      Effect.andThen(
-        db
-          .delete(KVTable)
-          .where(and(eq(KVTable.key, LEADER_KEY), sql`json_extract(${KVTable.value}, '$.owner') = ${ownerID}`))
-          .run()
-          .pipe(Effect.ignore),
-      ),
-    )
+    const releaseLeader = Effect.gen(function* () {
+      yield* FiberMap.clear(watches)
+      leadership = "follower"
+      yield* db
+        .delete(KVTable)
+        .where(and(eq(KVTable.key, LEADER_KEY), sql`json_extract(${KVTable.value}, '$.owner') = ${ownerID}`))
+        .run()
+        .pipe(Effect.ignore)
+    })
 
     const heartbeat = Clock.currentTimeMillis.pipe(
       Effect.flatMap(claimLeader),
@@ -755,13 +736,11 @@ const layer = Layer.effect(
         time_updated: now,
       })
 
-    const watch = Effect.fnUntraced(function* (initial: Row) {
-      const id = initial.id
-      const trigger = initial.trigger
-      if (trigger.type !== "event") return
+    const watch = Effect.fnUntraced(function* (id: ID, expires: number | null) {
       const open = Effect.gen(function* () {
         const row = yield* find(id)
-        if (row.status !== "active") return
+        const trigger = row.trigger
+        if (row.status !== "active" || trigger.type !== "event") return
         const now = yield* Clock.currentTimeMillis
         if (row.expires_at !== null && now >= row.expires_at) return yield* expireWatch(row, now)
         yield* checkWatch(row, trigger.server)
@@ -799,7 +778,7 @@ const layer = Layer.effect(
                 return true
               }
               if (current.event_position?.id === message.eventId) return true
-              yield* runAction(current, at, at, message)
+              yield* runAction(current, at, message)
               return (yield* find(id)).status === "active"
             }),
           ),
@@ -822,7 +801,6 @@ const layer = Layer.effect(
           schedule: Schedule.exponential("1 second"),
         }),
       )
-      const expires = initial.expires_at
       const run =
         expires === null
           ? open
@@ -855,7 +833,7 @@ const layer = Layer.effect(
     // The lease/doorbell loop also sees changes from other processes. It never polls a producer for events.
     const reconcileWatches = Effect.gen(function* () {
       const active = yield* db
-        .select()
+        .select({ id: AutomationTable.id, expires: AutomationTable.expires_at })
         .from(AutomationTable)
         .where(and(eq(AutomationTable.status, "active"), isNull(AutomationTable.next_due_at)))
         .all()
@@ -863,9 +841,8 @@ const layer = Layer.effect(
       const ids = new Set(active.map((row) => row.id))
       for (const [id] of Array.from(watches)) if (!ids.has(id)) yield* FiberMap.remove(watches, id)
       for (const row of active)
-        yield* FiberMap.run(watches, row.id, watch(row), {
-          onlyIfMissing: true,
-        })
+        yield* FiberMap.run(watches, row.id, watch(row.id, row.expires), { onlyIfMissing: true })
+      return active.length
     })
 
     /** Sleeps until the doorbell rings (an automation was created or resumed) or MAX_SLEEP passes. */
@@ -873,42 +850,27 @@ const layer = Layer.effect(
 
     const loop = Effect.gen(function* () {
       yield* doorbell.close
-      const active = yield* hasActiveRows
-      if (!active && bootChecked) {
-        yield* FiberMap.clear(watches)
-        if (leading) yield* releaseLeader
-        yield* idle
-        return
+      const active = yield* hasActiveRows()
+      if (!active && leadership !== "unchecked") {
+        if (leadership === "leader") yield* releaseLeader
+        return yield* idle
       }
       const now = yield* Clock.currentTimeMillis
-      const isLeader = yield* claimLeader(now)
-      if (!isLeader) {
+      if (!(yield* claimLeader(now))) {
         yield* FiberMap.clear(watches)
-        leading = false
-        bootChecked = true
-        yield* idle
-        return
+        leadership = "follower"
+        return yield* idle
       }
-      if (!leading) {
-        leading = true
-        bootChecked = true
+      if (leadership !== "leader") {
+        leadership = "leader"
         yield* rewake.pipe(Effect.catchCause((cause) => Effect.logError("automation rewake failed", { cause })))
       }
       if (!active) {
         yield* releaseLeader
-        yield* idle
-        return
+        return yield* idle
       }
-      yield* reconcileWatches
-      // No timer tick (or next-slot query) for an event-only database. Keep the shared database lease alive.
-      const timer = yield* db
-        .select({ id: AutomationTable.id })
-        .from(AutomationTable)
-        .where(and(eq(AutomationTable.status, "active"), isNotNull(AutomationTable.next_due_at)))
-        .limit(1)
-        .get()
-        .pipe(Effect.orDie)
-      if (!timer) return yield* idle
+      // No timer tick or next-slot query for event-only databases; timer-only databases need no extra probe.
+      if ((yield* reconcileWatches) > 0 && !(yield* hasActiveRows(true))) return yield* idle
       yield* Effect.scoped(
         Effect.forkScoped(heartbeat).pipe(
           Effect.andThen(
@@ -916,16 +878,15 @@ const layer = Layer.effect(
           ),
         ),
       )
-      if (!(yield* hasActiveRows)) {
+      if (!(yield* hasActiveRows())) {
         yield* releaseLeader
-        yield* idle
-        return
+        return yield* idle
       }
       const wait = yield* nextWake(now)
       if (wait > 0) yield* doorbell.await.pipe(Effect.timeoutOption(wait))
     })
 
-    const run = Effect.forever(loop).pipe(Effect.ensuring(FiberMap.clear(watches).pipe(Effect.andThen(releaseLeader))))
+    const run = Effect.forever(loop).pipe(Effect.ensuring(releaseLeader))
 
     const resolveZone = (tz: string | undefined) => {
       if (tz === undefined) return Effect.succeed(DateTime.zoneMakeLocal())

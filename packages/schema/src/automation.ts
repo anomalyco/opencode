@@ -41,12 +41,15 @@ export const At = Schema.Struct({
   }),
   ...zone,
 }).annotate({ identifier: "Automation.Trigger.At" })
+export interface At extends Schema.Schema.Type<typeof At> {}
 export const Every = Schema.Struct({ type: Schema.tag("every"), every: DurationString, ...zone }).annotate({
   identifier: "Automation.Trigger.Every",
 })
+export interface Every extends Schema.Schema.Type<typeof Every> {}
 export const Cron = Schema.Struct({ type: Schema.tag("cron"), cron: Schema.String, ...zone }).annotate({
   identifier: "Automation.Trigger.Cron",
 })
+export interface Cron extends Schema.Schema.Type<typeof Cron> {}
 
 export const Event = Schema.Struct({
   type: Schema.tag("event"),
@@ -81,7 +84,7 @@ export const isRunSession = (sessionID: SessionID) => sessionID.startsWith("ses_
 export const PromptAction = Schema.Struct({ type: Schema.tag("prompt"), prompt: Schema.String, to: Target }).annotate({
   identifier: "Automation.Action.Prompt",
 })
-export type PromptAction = typeof PromptAction.Type
+export interface PromptAction extends Schema.Schema.Type<typeof PromptAction> {}
 
 /** Code can hand off one prompt, but cannot choose a Session by id. Reject unknown keys rather than dropping a target. */
 export const CodeResult = Schema.Struct({
@@ -106,7 +109,7 @@ export const CodeAction = Schema.Struct({
   code: Schema.String,
   args: Schema.Json.pipe(optional),
 }).annotate({ identifier: "Automation.Action.Code" })
-export type CodeAction = typeof CodeAction.Type
+export interface CodeAction extends Schema.Schema.Type<typeof CodeAction> {}
 
 export const Action = Schema.Union([PromptAction, CodeAction]).pipe(
   Schema.toTaggedUnion("type"),
@@ -142,7 +145,7 @@ export const Info = Schema.Struct({
   state: Schema.Json.pipe(optional),
   time: Schema.Struct({ created: DateTimeUtcFromMillis, updated: DateTimeUtcFromMillis }),
 }).annotate({ identifier: "Automation.Info" })
-export type Info = typeof Info.Type
+export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const PromptActionInput = Schema.Struct({
   type: Schema.tag("prompt"),
@@ -154,6 +157,7 @@ export const PromptActionInput = Schema.Struct({
       'Where the prompt goes: { session: "ses_..." }, or { subagent: "<agent>" } to start a new child of the creating Session with that agent each run. Defaults to the creating Session.',
   }),
 }).annotate({ identifier: "Automation.PromptActionInput" })
+export interface PromptActionInput extends Schema.Schema.Type<typeof PromptActionInput> {}
 
 export const CodeActionInput = Schema.Struct({
   type: Schema.tag("code"),
@@ -170,6 +174,7 @@ export const CodeActionInput = Schema.Struct({
   }),
   args: Schema.Json.pipe(optional).annotate({ description: "JSON passed to every run as input.args." }),
 }).annotate({ identifier: "Automation.CodeActionInput" })
+export interface CodeActionInput extends Schema.Schema.Type<typeof CodeActionInput> {}
 
 export const ActionInput = Schema.Union([PromptActionInput, CodeActionInput]).pipe(
   Schema.toTaggedUnion("type"),
@@ -192,11 +197,11 @@ export const Request = Schema.Struct({
     description: 'When it stops for good: an instant, a wall-clock time in tz, or "in 8 hours".',
   }),
 }).annotate({ identifier: "Automation.Request" })
-export type Request = typeof Request.Type
+export interface Request extends Schema.Schema.Type<typeof Request> {}
 
 export const CreateInput = Schema.Struct({
   ...Request.fields,
   sessionID: SessionID.pipe(optional),
   directory: Schema.String.pipe(optional),
 }).annotate({ identifier: "Automation.CreateInput" })
-export type CreateInput = typeof CreateInput.Type
+export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}

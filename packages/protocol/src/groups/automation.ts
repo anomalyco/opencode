@@ -73,7 +73,7 @@ export const AutomationEndpoints = [
     annotations(
       "resume",
       "Resume automation",
-      "Resume a paused automation. An `at` automation that fell due while paused runs once; a repeating one resumes at its next slot.",
+      "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor.",
     ),
   ),
   HttpApiEndpoint.delete("automation.delete", "/api/experimental/automation/:automationID", {

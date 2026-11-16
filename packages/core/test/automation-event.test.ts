@@ -206,16 +206,17 @@ for (const terminal of ["success", "failure"]) {
       expect(yield* cancelled).toEqual(stream.id)
       yield* event(stream.id, "late", "failure")
       const final = yield* automations.get(info.id)
+      const target = terminal === "success" ? sessionID : Session.ID.make(`ses_${info.id}_2`)
       expect(final).toMatchObject({
         runCount: 2,
         state: terminal,
         status: "done",
         nextDueAt: undefined,
         lastOutcome: "fired",
+        lastOutput: terminal === "success" ? `Prompted ${target}` : `Started subagent ${target}`,
       })
       const { db } = yield* Database.Service
       const inbox = yield* db.select().from(SessionInboxTable).all()
-      const target = terminal === "success" ? sessionID : Session.ID.make(`ses_${info.id}_2`)
       expect(inbox).toMatchObject([
         {
           session_id: target,
@@ -232,6 +233,29 @@ for (const terminal of ["success", "failure"]) {
     }),
   )
 }
+
+it.effect("a timer added to a running watch fires without reopening its stream", () =>
+  Effect.gen(function* () {
+    const f = yield* setup()
+    const watch = yield* f.create()
+    yield* f.start
+    const stream = yield* f.opened
+    yield* f.event(stream.id, "p1", "pending")
+    yield* f.settled(watch.id, (row) => row.runCount === 1)
+
+    const timer = yield* f.create({
+      trigger: { type: "at", at: "in 1 second" },
+      action: { type: "prompt", prompt: "Reminder" },
+    })
+    yield* advance(() => wakes.length > 0)
+    expect(yield* f.automations.get(timer.id)).toMatchObject({ status: "done", runCount: 1 })
+    yield* f.event(stream.id, "t2", "success")
+    expect(yield* f.cancelled).toBe(stream.id)
+    expect(yield* f.automations.get(watch.id)).toMatchObject({ status: "done", state: "success", runCount: 2 })
+    expect(f.state.streams).toHaveLength(1)
+    expect(wakes).toEqual([sessionID, sessionID])
+  }),
+)
 
 it.effect("a broken stream opens on the replacement connection, replaying from the last committed event", () =>
   Effect.gen(function* () {
@@ -307,6 +331,7 @@ it.effect("does not checkpoint a rejected handoff or commit its terminal state",
     expect(yield* f.automations.get(a.id)).toMatchObject({
       status: "paused",
       lastOutcome: "failed",
+      lastOutput: "Cannot start subagent helper: Permission denied: subagent",
       state: { first: "p1" },
       runCount: 1,
     })
