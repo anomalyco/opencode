@@ -302,10 +302,12 @@ export const node = makeGlobalNode({ service: Service, layer, deps: [Database.no
 
 // SQLite's LIKE folds case for ASCII only, and none of our drivers (bun, node, Durable Objects) ships ICU or lets us
 // register a lowercase function everywhere. GLOB is case-sensitive but supports character classes, so each cased
-// letter becomes a class of its single-character case forms ("т" -> "[тТ]"). GLOB metacharacters are wrapped in a
-// class so they match literally.
+// letter becomes a class of its single-character case forms ("т" -> "[тТ]"). The LIKE wildcards % and _ keep their
+// meaning, and GLOB metacharacters are wrapped in a class so they stay literal as they were under LIKE.
 function titlePattern(search: string) {
   const chars = Array.from(search, (char) => {
+    if (char === "%") return "*"
+    if (char === "_") return "?"
     const cases = new Set(
       [char, char.toLowerCase(), char.toUpperCase()].filter((form) => Array.from(form).length === 1),
     )

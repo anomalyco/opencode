@@ -166,7 +166,7 @@ describe("SessionStore", () => {
     }),
   )
 
-  it.effect("searches titles case-insensitively beyond ASCII and treats wildcard characters literally", () =>
+  it.effect("searches titles case-insensitively beyond ASCII and keeps LIKE wildcard semantics", () =>
     Effect.gen(function* () {
       yield* seedSessions([
         { id: "ses_cyrillic", updated: 10, title: "Тестова сесия" },
@@ -182,8 +182,10 @@ describe("SessionStore", () => {
       expect(yield* search("ТЕСТОВА СЕСИЯ")).toEqual(["ses_cyrillic"])
       expect(yield* search("opencode")).toEqual(["ses_ascii"])
       expect(yield* search("OPENCODE")).toEqual(["ses_ascii"])
-      expect(yield* search("%")).toEqual(["ses_percent"])
-      expect(yield* search("_")).toEqual(["ses_underscore"])
+      expect(yield* search("тест%сия")).toEqual(["ses_cyrillic"])
+      expect(yield* search("OP_NCODE")).toEqual(["ses_ascii"])
+      expect(yield* search("100%")).toEqual(["ses_percent"])
+      expect(yield* search("file_name")).toEqual(["ses_underscore"])
       expect(yield* search("[DRAFT]")).toEqual(["ses_underscore"])
       expect(yield* search("*")).toEqual([])
       expect(yield* search("?")).toEqual([])
