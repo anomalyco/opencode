@@ -9,7 +9,7 @@ import { HttpTransport } from "../route/transport/index.js"
 import type { LLMRequest, ToolDefinition, ToolEntry } from "../schema/index.js"
 import { requestTTL } from "../cache-policy.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
-import { toolsUpdate } from "../tool-updates.js"
+import { toolsUpdate, type ToolUpdateEncoding } from "../tool-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { JsonObject, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -176,12 +176,18 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   return match !== null && Number(match[1]) >= 6
 }
 
-// Without starting tools there is no cached tool list to preserve. `additional_tools` can't remove a tool, so a
-// request whose markers remove any folds as a whole.
-const supportsToolUpdates = (request: LLMRequest) =>
-  request.model.capabilities?.tools?.updates === true &&
-  request.tools.length > 0 &&
-  request.messages.every((message) => (toolsUpdate(message)?.remove.length ?? 0) === 0)
+// `additional_tools` adds tools, and redefines one by name only when that one was declared through `additional_tools`
+// too. It can't remove a tool. So a model that adds tools in place gets every tool the request declares in a leading
+// `additional_tools` item instead of top-level `tools`, and removals fold. Hosted tools stay in `tools`, since the
+// model doesn't use one declared in `additional_tools`, and changing one folds.
+const toolUpdates = {
+  kinds: ["add", "replace"],
+  declarable: (tool) => !isHostedTool(tool),
+} satisfies ToolUpdateEncoding
+
+const isHostedTool = (tool: ToolEntry) => tool.type === "tool" && tool.native !== undefined
+
+const declaresTools = (request: LLMRequest) => request.model.capabilities?.tools?.updates?.includes("add") === true
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
   const native = tool.native?.openai
@@ -226,10 +232,20 @@ const lowerToolEntry = Effect.fnUntraced(function* (
   }
 })
 
-const lowerTools = (request: LLMRequest) => {
+// The leading declaration: top-level `tools`, or a leading `additional_tools` item on models that add tools in place.
+const lowerToolLayout = Effect.fnUntraced(function* (request: LLMRequest) {
   const custom = OpenAIFreeform.tools(request)
-  return Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, custom))
-}
+  const lower = (tools: ReadonlyArray<ToolEntry>) => Effect.forEach(tools, (tool) => lowerToolEntry(tool, custom))
+  const declared = declaresTools(request) ? request.tools.filter((tool) => !isHostedTool(tool)) : []
+  const top = declared.length === 0 ? request.tools : request.tools.filter(isHostedTool)
+  return {
+    head:
+      declared.length === 0
+        ? []
+        : [{ type: "additional_tools" as const, role: "developer" as const, tools: yield* lower(declared) }],
+    tools: top.length === 0 ? undefined : yield* lower(top),
+  }
+})
 
 const lowerToolChoice = (
   toolChoice: NonNullable<LLMRequest["toolChoice"]>,
@@ -255,8 +271,13 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   const updates = resolveEffortUpdates(request, options.reasoningEffort)
   const generation = OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort })
   const custom = OpenAIFreeform.tools(request)
+  const conversation = yield* OpenResponses.lowerConversation(updates.request, adapter)
+  const layout = yield* lowerToolLayout(request)
+  const declared =
+    request.tools.length > 0 || request.messages.some((message) => (toolsUpdate(message)?.add.length ?? 0) > 0)
   return {
-    ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
+    ...conversation,
+    input: [...layout.head, ...conversation.input],
     ...generation,
     ...Cache.openAIRequestTTL(requestTTL(request)),
     ...(generation.reasoning || reasoning.reasoningMode || reasoning.reasoningContext
@@ -269,12 +290,11 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
         }
       : {}),
     context_management: management?.map((edit) => ({ type: edit.type, compact_threshold: edit.compactThreshold })),
-    tools: request.tools.length === 0 ? undefined : yield* lowerTools(request),
-    tool_choice:
-      request.tools.length === 0
-        ? undefined
-        : (OpenResponses.allowedToolChoice(options, custom) ??
-          (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools, custom) : undefined)),
+    tools: layout.tools,
+    tool_choice: !declared
+      ? undefined
+      : (OpenResponses.allowedToolChoice(options, custom) ??
+        (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools, custom) : undefined)),
   }
 })
 
@@ -344,7 +364,7 @@ export const protocol = Protocol.make({
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
   }),
   supportsEffortUpdates,
-  supportsToolUpdates,
+  toolUpdates,
 })
 
 const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL })
@@ -361,7 +381,7 @@ export const transport = channelTransport({
 
 export const route = Route.make({
   compact: {
-    endpoint: ResponsesCompaction.make(adapter, lowerTools),
+    endpoint: ResponsesCompaction.make(adapter, lowerToolLayout),
     trigger: ResponsesCheckpoint.make(checkpointBody),
   },
   id: ADAPTER,

@@ -29,7 +29,7 @@ import {
 import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared, withUntypedFrames } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
-import { foldTools, toolsUpdate } from "../tool-updates.js"
+import { foldTools, toolsUpdate, type ToolUpdateEncoding } from "../tool-updates.js"
 import * as Cache from "./utils/cache.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -826,17 +826,21 @@ const lowerToolsUpdate = Effect.fnUntraced(function* (
   }
 })
 
-// Removing a namespace removes every flattened tool inside it. Names that match no current tool are dropped.
+// The flattened tools a marker takes away, including those a redefined namespace leaves out.
 const toolRemovals = (request: LLMRequest) => {
   const removals = new Map<ToolChanges, ReadonlyArray<string>>()
   request.messages.reduce((tools, message) => {
     const update = toolsUpdate(message)
     if (update === undefined) return tools
+    const next = foldTools(tools, update.add, update.remove)
+    const kept = new Set(ProviderShared.flattenTools(next).map((tool) => tool.name))
     removals.set(
       update,
-      ProviderShared.flattenTools(tools.filter((tool) => update.remove.includes(tool.name))).map((tool) => tool.name),
+      ProviderShared.flattenTools(tools)
+        .map((tool) => tool.name)
+        .filter((name) => !kept.has(name)),
     )
-    return foldTools(tools, update.add, update.remove)
+    return next
   }, request.tools)
   return removals
 }
@@ -992,23 +996,20 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   return version.major > 5 || (version.major === 5 && version.minor >= 1)
 }
 
-// Without starting tools the inline list would miss the cache once anyway, and the API rejects a tool list
-// that only exists through mid-conversation additions.
-const supportsToolUpdates = (request: LLMRequest) =>
-  request.model.capabilities?.tools?.updates === true &&
-  supportsNativeSystemUpdates(request) &&
-  request.tools.length > 0 &&
-  markersFollowUserTurns(request.messages)
-
-// A held marker is released just before the next assistant message, where Anthropic only accepts a native system
-// message after a user message or tool result. Markers that would land elsewhere fold instead.
-const markersFollowUserTurns = (messages: LLMRequest["messages"]) =>
-  messages.every((message, index) => {
-    if (toolsUpdate(message) === undefined) return true
-    const end = messages.findIndex((next, at) => at > index && next.role === "assistant")
-    const role = messages.slice(0, end === -1 ? undefined : end).findLast((next) => next.role !== "system")?.role
+// `tool_addition` adds a tool, or redefines one with the same name; `tool_removal` removes one. A held marker is
+// released just before the next assistant message, where Anthropic only accepts a native system message after a
+// user message or tool result; a marker that would land elsewhere folds.
+const toolUpdates = {
+  kinds: ["add", "remove", "replace"],
+  placeable: (request, index) => {
+    if (!supportsNativeSystemUpdates(request)) return false
+    const end = request.messages.findIndex((next, at) => at > index && next.role === "assistant")
+    const role = request.messages
+      .slice(0, end === -1 ? undefined : end)
+      .findLast((next) => next.role !== "system")?.role
     return role === "user" || role === "tool"
-  })
+  },
+} satisfies ToolUpdateEncoding
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
   if (isThinkingOff(thinking)) return thinking
@@ -1043,8 +1044,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
   const flattened = ProviderShared.flattenToolRequest(updates.request)
   const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
-  // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
-  const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
+  // Anthropic rejects tool_choice when no tool is declared; "none" is only meaningful with tools present.
+  const declared =
+    tools !== undefined || request.messages.some((message) => (toolsUpdate(message)?.add.length ?? 0) > 0)
+  const toolChoice = !declared || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
   const systemParts = request.system.filter((part) => part.text.length > 0)
   const system =
     systemParts.length === 0
@@ -1608,7 +1611,7 @@ export const protocol = Protocol.make({
     step,
   },
   supportsEffortUpdates,
-  supportsToolUpdates,
+  toolUpdates,
 })
 
 export const transport = <

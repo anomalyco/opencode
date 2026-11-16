@@ -54,7 +54,10 @@ interface TextRequestFields<Model extends LanguageModel>
     GenerationOptionsFields {
   readonly id?: string
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
-  /** Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. */
+  /**
+   * Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. The same as a
+   * `Message.tools({ add: tools })` leading the history.
+   */
   readonly tools?: ReadonlyArray<Tool | ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
   readonly cache?: CachePolicy

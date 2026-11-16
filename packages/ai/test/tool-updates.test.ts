@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { ai, LLMEvent, Message, tool, ToolCallPart, ToolDefinition } from "../src/effect.js"
+import {
+  ai,
+  LLMEvent,
+  Message,
+  tool,
+  ToolCallPart,
+  ToolDefinition,
+  ToolNamespace,
+  type LLMRequest,
+} from "../src/effect.js"
 import { AI } from "../src/index.js"
 import { Gemini } from "../src/protocols/gemini.js"
 import { TestLLM } from "../src/testing.js"
@@ -10,8 +19,8 @@ import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { gatewayProtocol } from "../src/protocols/utils/gateway-protocol.js"
-import { GoogleVertexMessages } from "../src/providers.js"
-import { applyToolUpdates, foldToolUpdates } from "../src/tool-updates.js"
+import { GoogleVertexMessages, OpenAI } from "../src/providers.js"
+import { planToolUpdates, type ToolUpdate } from "../src/tool-updates.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 
@@ -30,28 +39,41 @@ const lookup = tool({
   execute: ({ query }) => Effect.succeed(`found ${query}`),
 })
 
-const enabled = { tools: { updates: true } }
+const ALL: ReadonlyArray<ToolUpdate> = ["add", "remove", "replace"]
+const updates = (list: ReadonlyArray<ToolUpdate>) => ({ tools: { updates: list } })
 
-const anthropic = (id: string, capabilities?: { readonly tools?: { readonly updates?: boolean } }) =>
+const anthropic = (id: string, list?: ReadonlyArray<ToolUpdate>) =>
   AnthropicMessages.route
     .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-    .model({ id, capabilities })
+    .model({ id, capabilities: list === undefined ? undefined : updates(list) })
 
-const openai = (id: string, capabilities?: { readonly tools?: { readonly updates?: boolean } }) =>
+const openai = (id: string, list?: ReadonlyArray<ToolUpdate>) =>
   OpenAIResponses.route
     .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-    .model({ id, capabilities })
+    .model({ id, capabilities: list === undefined ? undefined : updates(list) })
 
 const chat = OpenAIChat.route
   .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-  .model({ id: "gpt-4.1-mini" })
+  .model({ id: "gpt-4.1-mini", capabilities: updates(ALL) })
 
-const opus5 = anthropic("claude-opus-5", enabled)
-const astra = openai("gpt-6-astra", enabled)
+const gemini = Gemini.route
+  .with({
+    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+    auth: Auth.header("x-goog-api-key", "test"),
+  })
+  .model({ id: "gemini-3.5-flash", capabilities: updates(ALL) })
+
+const opus5 = anthropic("claude-opus-5", ALL)
+const astra = openai("gpt-6-astra", ["add", "replace"])
 
 const swap = Message.tools({ add: [write], remove: ["edit"] })
 const conversation = [Message.user("Fix it."), Message.assistant("Done."), swap, Message.user("Next.")]
 const folded = [Message.user("Fix it."), Message.assistant("Done."), Message.user("Next.")]
+
+const names = (request: LLMRequest) => request.tools.map((entry) => entry.name)
+const markers = (request: LLMRequest) =>
+  request.messages.flatMap((message) => (message.role === "system" && message.tools ? [message.tools] : []))
+const changes = (add: ReadonlyArray<ToolDefinition>, remove: ReadonlyArray<string> = []) => ({ add, remove })
 
 describe("Message.tools", () => {
   test("builds an empty system message whose tools field round-trips through the schema", () => {
@@ -75,70 +97,148 @@ describe("Message.tools", () => {
   })
 })
 
-describe("foldToolUpdates", () => {
-  test("adds, redefines by name, and removes in history order, then drops the markers", () => {
-    const request = ai.request({
-      model: chat,
-      tools: [read, edit],
-      messages: [
-        Message.user("One."),
-        Message.tools({ add: [write, defineTool("edit", "edit v2")] }),
-        Message.user("Two."),
-        Message.tools({ remove: ["read"] }),
-        Message.user("Three."),
-        Message.tools({ add: [defineTool("read", "read v2")] }),
-      ],
-    })
+describe("planToolUpdates", () => {
+  test("folds every marker in history order on a route without in-place changes", () => {
+    const result = planToolUpdates(
+      ai.request({
+        model: chat,
+        tools: [read, edit, lookup],
+        messages: [
+          Message.user("One."),
+          Message.tools({ add: [write, defineTool("edit", "edit v2")] }),
+          Message.user("Two."),
+          Message.tools({ remove: [lookup, "read"] }),
+          { role: "system", content: "Tools changed.", tools: { add: [defineTool("read", "read v2")] } },
+        ],
+      }),
+    )
 
-    const result = foldToolUpdates(request)
     expect(result.tools).toEqual([defineTool("edit", "edit v2"), write, defineTool("read", "read v2")])
-    expect(result.messages).toEqual([Message.user("One."), Message.user("Two."), Message.user("Three.")])
+    expect(result.messages).toEqual([Message.user("One."), Message.user("Two."), Message.system("Tools changed.")])
   })
 
-  test("removes by tool object or name and keeps a marker's own text", () => {
-    const request = ai.request({
-      model: chat,
-      tools: [read, edit, lookup],
-      messages: [
-        Message.user("One."),
-        Message.tools({ remove: [lookup, edit] }),
-        { role: "system", content: "Tools changed.", tools: { add: [write], remove: ["read"] } },
-      ],
-    })
-
-    const result = foldToolUpdates(request)
-    expect(result.tools).toEqual([write])
-    expect(result.messages).toEqual([Message.user("One."), Message.system("Tools changed.")])
-  })
-
-  test("keeps the request identity without markers and for routes that lower them", () => {
+  test("keeps the request identity without markers", () => {
     const plain = ai.request({ model: opus5, tools: [read], prompt: "hi" })
-    expect(applyToolUpdates(plain)).toBe(plain)
-
-    const supported = ai.request({ model: opus5, tools: [read, edit], messages: conversation })
-    expect(applyToolUpdates(supported)).toBe(supported)
+    expect(planToolUpdates(plain)).toBe(plain)
   })
 
-  it.effect("compiles markers into the top-level tools for protocols without native tool updates", () =>
-    Effect.gen(function* () {
-      const model = OpenAIChat.route
-        .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-        .model({ id: "gpt-4.1-mini", capabilities: enabled })
-      const withMarkers = yield* compileRequest(ai.request({ model, tools: [read, edit], messages: conversation }))
-      const withoutMarkers = yield* compileRequest(ai.request({ model, tools: [read, write], messages: folded }))
+  const plan = (list: ReadonlyArray<ToolUpdate> | undefined, messages: ReadonlyArray<Message | Message.Input>) =>
+    planToolUpdates(ai.request({ model: anthropic("claude-opus-5", list), tools: [read, edit], messages }))
+  const history = [
+    Message.user("One."),
+    Message.tools({ add: [jira] }),
+    Message.user("Two."),
+    Message.tools({ remove: ["edit"] }),
+    Message.user("Three."),
+    Message.tools({ add: [write] }),
+    Message.user("Four."),
+    Message.tools({ add: [defineTool("read", "read v2")] }),
+  ]
 
-      expect(withMarkers.body).toEqual(withoutMarkers.body)
+  test.each([
+    ["unset", undefined, ["read", "jira", "write"], []],
+    ["empty", [], ["read", "jira", "write"], []],
+    ["add", ["add"], ["read", "jira", "write"], []],
+    ["add + remove", ["add", "remove"], ["read", "jira", "write"], []],
+    [
+      "add + replace",
+      ["add", "replace"],
+      ["read", "jira"],
+      [changes([write]), changes([defineTool("read", "read v2")])],
+    ],
+    ["remove + replace", ["remove", "replace"], ["read", "jira", "write"], [changes([defineTool("read", "read v2")])]],
+    [
+      "all",
+      ALL,
+      ["read", "edit"],
+      [changes([jira]), changes([], ["edit"]), changes([write]), changes([defineTool("read", "read v2")])],
+    ],
+  ] as const)("with updates %s, folds up to the last marker the model can't take in place", (_, list, tools, kept) => {
+    const result = plan(list, history)
+    expect(names(result)).toEqual([...tools])
+    expect(markers(result)).toEqual([...kept])
+  })
+
+  test("keeps additions after the last removal in place when only additions are supported", () => {
+    const result = plan(["add"], history.slice(0, 6))
+    expect(names(result)).toEqual(["read", "jira"])
+    expect(markers(result)).toEqual([changes([write])])
+  })
+
+  test("counts adding a tool removed earlier as a replacement", () => {
+    const result = plan(
+      ["add", "remove"],
+      [Message.user("One."), Message.tools({ remove: ["edit"] }), Message.user("Two."), Message.tools({ add: [edit] })],
+    )
+    expect(names(result)).toEqual(["read", "edit"])
+    expect(markers(result)).toEqual([])
+  })
+
+  test("treats removing and adding the same name in one marker as a replacement", () => {
+    const v2 = defineTool("edit", "edit v2")
+    const messages = [Message.user("One."), Message.tools({ add: [v2], remove: ["edit"] })]
+    expect(markers(plan(["replace"], messages))).toEqual([changes([v2])])
+    expect(markers(plan(["remove"], messages))).toEqual([])
+  })
+
+  test("drops removals of unknown names and markers that change nothing", () => {
+    const result = plan(ALL, [
+      Message.user("One."),
+      Message.tools({ remove: ["ghost", "edit"] }),
+      Message.tools({ remove: ["ghost"] }),
+      Message.tools({}),
+    ])
+    expect(names(result)).toEqual(["read", "edit"])
+    expect(result.messages).toEqual([Message.user("One."), Message.make(Message.tools({ remove: ["edit"] }))])
+  })
+
+  test("folds markers before the conversation starts into the leading declaration", () => {
+    const result = plan(ALL, [Message.tools({ add: [jira], remove: ["read"] }), Message.user("One.")])
+    expect(names(result)).toEqual(["edit", "jira"])
+    expect(result.messages).toEqual([Message.user("One.")])
+  })
+
+  test("counts redefining a namespace without some of its tools as a removal", () => {
+    const namespace = (...tools: ReadonlyArray<ToolDefinition>) => ToolNamespace.make({ name: "jira", tools })
+    const request = (list: ReadonlyArray<ToolUpdate>) =>
+      planToolUpdates(
+        ai.request({
+          model: anthropic("claude-opus-5", list),
+          tools: [namespace(read, edit)],
+          messages: [Message.user("One."), Message.tools({ add: [namespace(read)] })],
+        }),
+      )
+    expect(markers(request(["add", "replace"]))).toEqual([])
+    expect(markers(request(ALL))).toHaveLength(1)
+  })
+})
+
+describe("leading declaration", () => {
+  const routes = [
+    ["OpenAI Chat", chat],
+    ["Gemini", gemini],
+    ["Anthropic without updates", anthropic("claude-opus-5")],
+    ["Anthropic", opus5],
+    ["OpenAI Responses without updates", openai("gpt-6-astra")],
+    ["OpenAI Responses", astra],
+  ] as const
+
+  it.effect("top-level tools compile the same as a Message.tools marker that leads the history", () =>
+    Effect.gen(function* () {
+      for (const [, model] of routes) {
+        const direct = yield* compileRequest(
+          ai.request({ model, tools: [read, edit], messages: conversation, cache: "none" }),
+        )
+        const leading = yield* compileRequest(
+          ai.request({ model, messages: [Message.tools({ add: [read, edit] }), ...conversation], cache: "none" }),
+        )
+        expect(leading.body).toEqual(direct.body)
+      }
     }),
   )
 
-  it.effect("never sends a marker as an empty system message", () =>
+  it.effect("folding every marker matches listing the final tools up front, with no empty system message", () =>
     Effect.gen(function* () {
-      const gemini = Gemini.route
-        .with({
-          endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
-          auth: Auth.header("x-goog-api-key", "test"),
-        })
-        .model({ id: "gemini-3.5-flash", capabilities: enabled })
       for (const model of [chat, gemini, anthropic("claude-opus-5"), openai("gpt-6-astra")]) {
         const withMarkers = yield* compileRequest(
           ai.request({ model, tools: [read, edit], messages: conversation, cache: "none" }),
@@ -150,10 +250,8 @@ describe("foldToolUpdates", () => {
       }
     }),
   )
-})
 
-describe("tool objects", () => {
-  it.effect("send the same definition from top-level tools and Message.tools", () =>
+  it.effect("tool objects send the same definition from top-level tools and Message.tools", () =>
     Effect.gen(function* () {
       const added = yield* compileRequest(
         ai.request({ model: chat, tools: [read], messages: [Message.user("Go."), Message.tools({ add: [lookup] })] }),
@@ -205,15 +303,15 @@ describe("ai.loop", () => {
 })
 
 describe("protocol wrappers", () => {
-  test("forward native tool update support", () => {
+  test("forward the tool update encoding", () => {
     const wrapped = gatewayProtocol(AnthropicMessages.protocol, {
       id: "gateway-anthropic",
       prepare: (request) => Effect.succeed({ request, body: {} }),
     })
-    expect(wrapped.supportsToolUpdates).toBe(AnthropicMessages.protocol.supportsToolUpdates)
+    expect(wrapped.toolUpdates).toBe(AnthropicMessages.protocol.toolUpdates)
 
     const vertex = GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })
-    expect(vertex.model("claude-opus-5").route.supportsToolUpdates).toBe(AnthropicMessages.protocol.supportsToolUpdates)
+    expect(vertex.model("claude-opus-5").route.toolUpdates).toBe(AnthropicMessages.protocol.toolUpdates)
   })
 })
 
@@ -262,43 +360,113 @@ describe("Anthropic Messages tool updates", () => {
         { role: "user", content: [{ type: "text", text: "Fix it." }] },
         { role: "assistant", content: [{ type: "text", text: "Done." }] },
         { role: "user", content: [{ type: "text", text: "Next." }] },
-        {
-          role: "system",
-          content: [definition(write), removal("edit")],
-        },
+        { role: "system", content: [definition(write), removal("edit")] },
       ])
       const addition = prepared.body.messages[3]?.content[0]
       expect(addition?.type === "tool_addition" && addition.tool.definition).toEqual(plain.body.tools?.[1])
     }),
   )
 
-  it.effect("folds markers that no user message or tool result would precede", () =>
+  it.effect("redefines a tool with a same-name addition and re-adds a removed one", () =>
+    Effect.gen(function* () {
+      const v2 = defineTool("edit", "edit v2")
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: opus5,
+          tools: [read, edit],
+          messages: [
+            Message.user("One."),
+            Message.tools({ add: [v2] }),
+            Message.user("Two."),
+            Message.tools({ remove: ["read"] }),
+            Message.user("Three."),
+            Message.tools({ add: [read] }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.tools?.map((entry) => entry.name)).toEqual(["read", "edit"])
+      expect(prepared.body.messages.filter((message) => message.role === "system")).toEqual([
+        { role: "system", content: [definition(v2)] },
+        { role: "system", content: [removal("read")] },
+        { role: "system", content: [definition(read)] },
+      ])
+    }),
+  )
+
+  it.effect("removes the tools a redefined namespace leaves out", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: opus5,
+          tools: [ToolNamespace.make({ name: "jira", tools: [read, edit] })],
+          messages: [
+            Message.user("One."),
+            Message.tools({ add: [ToolNamespace.make({ name: "jira", tools: [read] })] }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "system",
+        content: [definition(defineTool("jira_read", "read tool")), removal("jira_edit")],
+      })
+    }),
+  )
+
+  it.effect("adds tools in place with no top-level tools and keeps tool_choice", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: opus5,
+          messages: [Message.user("Go."), Message.tools({ add: [jira] })],
+          toolChoice: { type: "tool", name: "jira" },
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.tools).toBeUndefined()
+      expect(prepared.body.tool_choice).toEqual({ type: "tool", name: "jira" })
+      expect(prepared.body.messages.at(-1)).toEqual({ role: "system", content: [definition(jira)] })
+    }),
+  )
+
+  it.effect("folds markers that no user message or tool result would precede, keeping later ones in place", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
           model: opus5,
           tools: [read, edit],
-          messages: [Message.user("Fix it."), Message.assistant("Done."), swap],
+          messages: [
+            Message.user("Fix it."),
+            Message.assistant("Done."),
+            swap,
+            Message.assistant("More."),
+            Message.user("Next."),
+            Message.tools({ add: [jira] }),
+          ],
           cache: "none",
         }),
       )
 
-      expect(prepared.body.messages.some((message) => message.role === "system")).toBe(false)
       expect(prepared.body.tools?.map((entry) => entry.name)).toEqual(["read", "write"])
+      expect(prepared.body.messages.at(-1)).toEqual({ role: "system", content: [definition(jira)] })
+      expect(prepared.body.messages.filter((message) => message.role === "system")).toHaveLength(1)
     }),
   )
 
-  it.effect("drops removals that match no current tool", () =>
+  it.effect("sends several removals as blocks in one message and nothing for unknown names", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
           model: opus5,
-          tools: [read],
-          messages: [Message.user("Go."), Message.tools({ remove: ["read", "ghost"] })],
+          tools: [read, edit, write],
+          messages: [Message.user("Go."), Message.tools({ remove: ["read", "ghost", "write"] })],
           cache: "none",
         }),
       )
-
       const unknown = yield* compileRequest(
         ai.request({
           model: opus5,
@@ -308,36 +476,8 @@ describe("Anthropic Messages tool updates", () => {
         }),
       )
 
-      expect(prepared.body.messages.at(-1)).toEqual({ role: "system", content: [removal("read")] })
+      expect(prepared.body.messages.at(-1)).toEqual({ role: "system", content: [removal("read"), removal("write")] })
       expect(unknown.body.messages).toEqual([{ role: "user", content: [{ type: "text", text: "Go." }] }])
-    }),
-  )
-
-  it.effect("drops a marker that changes nothing", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        ai.request({ model: opus5, tools: [read], messages: [Message.user("Go."), Message.tools({})], cache: "none" }),
-      )
-
-      expect(prepared.body.messages).toEqual([{ role: "user", content: [{ type: "text", text: "Go." }] }])
-    }),
-  )
-
-  it.effect("sends several removals as blocks in one message", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        ai.request({
-          model: opus5,
-          tools: [read, edit, write],
-          messages: [Message.user("Go."), Message.tools({ remove: ["read", "edit", "write"] })],
-          cache: "none",
-        }),
-      )
-
-      expect(prepared.body.messages.at(-1)).toEqual({
-        role: "system",
-        content: [removal("read"), removal("edit"), removal("write")],
-      })
     }),
   )
 
@@ -382,31 +522,47 @@ describe("Anthropic Messages tool updates", () => {
     }),
   )
 
-  it.effect("folds markers when the flag is off, the model lacks system updates, or no tools start the request", () =>
+  it.effect("folds markers when the model lacks updates or system updates", () =>
     Effect.gen(function* () {
-      for (const [model, tools] of [
-        [anthropic("claude-opus-5"), [read, edit]],
-        [anthropic("claude-opus-4-5", enabled), [read, edit]],
-        [opus5, []],
-      ] as const) {
-        const prepared = yield* compileRequest(ai.request({ model, tools, messages: conversation, cache: "none" }))
+      for (const model of [anthropic("claude-opus-5"), anthropic("claude-opus-4-5", ALL)]) {
+        const prepared = yield* compileRequest(
+          ai.request({ model, tools: [read, edit], messages: conversation, cache: "none" }),
+        )
 
         expect(prepared.body.messages.some((message) => message.role === "system")).toBe(false)
-        expect(prepared.body.tools?.map((entry) => entry.name)).toEqual(
-          tools.length === 0 ? ["write"] : ["read", "write"],
-        )
+        expect(prepared.body.tools?.map((entry) => entry.name)).toEqual(["read", "write"])
       }
     }),
   )
 })
 
 describe("OpenAI Responses tool updates", () => {
-  const updates = (body: OpenAIResponses.OpenAIResponsesBody) =>
-    body.input.filter(
-      (item) => "type" in item && (item.type === "additional_tools" || ("role" in item && item.role === "developer")),
+  const additional = (body: OpenAIResponses.OpenAIResponsesBody) =>
+    body.input.flatMap((item) =>
+      "type" in item && item.type === "additional_tools"
+        ? [item.tools.map((entry) => ("description" in entry ? `${entry.name}: ${entry.description}` : entry.type))]
+        : [],
     )
+  const topLevel = (body: OpenAIResponses.OpenAIResponsesBody) =>
+    body.tools?.map((entry) => ("name" in entry ? entry.name : entry.type))
 
-  it.effect("lowers additions to additional_tools items in place", () =>
+  it.effect("declares every tool in a leading additional_tools item and leaves top-level tools out", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(ai.request({ model: astra, tools: [read, edit], prompt: "Go." }))
+      const plain = yield* compileRequest(
+        ai.request({ model: openai("gpt-6-astra"), tools: [read, edit], prompt: "Go." }),
+      )
+
+      expect(prepared.body.tools).toBeUndefined()
+      expect(prepared.body.input).toEqual([
+        { type: "additional_tools", role: "developer", tools: plain.body.tools },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Go." }] },
+      ])
+      expect(additional(plain.body)).toEqual([])
+    }),
+  )
+
+  it.effect("adds and redefines tools with later additional_tools items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
@@ -414,40 +570,93 @@ describe("OpenAI Responses tool updates", () => {
           tools: [read, edit],
           messages: [
             Message.user("Fix it."),
-            Message.assistant("Done."),
             Message.tools({ add: [write] }),
             Message.user("Next."),
+            Message.tools({ add: [defineTool("edit", "edit v2")] }),
           ],
         }),
       )
-      const plain = yield* compileRequest(ai.request({ model: astra, tools: [read, write], prompt: "x" }))
 
-      expect(prepared.body.tools?.map((entry) => ("name" in entry ? entry.name : entry.type))).toEqual(["read", "edit"])
-      expect(prepared.body.input).toEqual([
-        { type: "message", role: "user", content: [{ type: "input_text", text: "Fix it." }] },
-        { type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Done." }] },
-        { type: "additional_tools", role: "developer", tools: [plain.body.tools?.[1]] },
-        { type: "message", role: "user", content: [{ type: "input_text", text: "Next." }] },
+      expect(prepared.body.tools).toBeUndefined()
+      expect(additional(prepared.body)).toEqual([
+        ["read: read tool", "edit: edit tool"],
+        ["write: write tool"],
+        ["edit: edit v2"],
+      ])
+      expect(prepared.body.input.map((item) => ("type" in item ? item.type : undefined))).toEqual([
+        "additional_tools",
+        "message",
+        "additional_tools",
+        "message",
+        "additional_tools",
       ])
     }),
   )
 
-  it.effect("folds every marker when any marker removes a tool", () =>
+  it.effect("folds up to a removal into the leading item and keeps later additions in place", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
           model: astra,
           tools: [read, edit],
-          messages: [Message.user("Go."), Message.tools({ add: [jira] }), ...conversation],
+          messages: [...conversation, Message.tools({ add: [jira] })],
         }),
       )
 
-      expect(updates(prepared.body)).toEqual([])
-      expect(prepared.body.tools?.map((entry) => ("name" in entry ? entry.name : entry.type))).toEqual([
-        "read",
-        "jira",
-        "write",
-      ])
+      expect(additional(prepared.body)).toEqual([["read: read tool", "write: write tool"], ["jira: jira tool"]])
+      expect(prepared.body.input.filter((item) => "role" in item && item.role === "developer")).toHaveLength(2)
+    }),
+  )
+
+  it.effect("folds redefinitions when the model only lists add", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: openai("gpt-6-astra", ["add"]),
+          tools: [read, edit],
+          messages: [Message.user("Go."), Message.tools({ add: [defineTool("edit", "edit v2"), jira] })],
+        }),
+      )
+
+      expect(additional(prepared.body)).toEqual([["read: read tool", "edit: edit v2", "jira: jira tool"]])
+    }),
+  )
+
+  it.effect("keeps hosted tools top-level and folds changes to them", () =>
+    Effect.gen(function* () {
+      const image = OpenAI.imageGeneration()
+      const prepared = yield* compileRequest(ai.request({ model: astra, tools: [read, image], prompt: "Go." }))
+      const added = yield* compileRequest(
+        ai.request({
+          model: astra,
+          tools: [read],
+          messages: [Message.user("Go."), Message.tools({ add: [image] })],
+        }),
+      )
+
+      expect(topLevel(prepared.body)).toEqual(["image_generation"])
+      expect(additional(prepared.body)).toEqual([["read: read tool"]])
+      expect(topLevel(added.body)).toEqual(["image_generation"])
+      expect(additional(added.body)).toEqual([["read: read tool"]])
+    }),
+  )
+
+  it.effect("keeps tool_choice for tools declared only in additional_tools", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({ model: astra, tools: [read], toolChoice: { type: "tool", name: "read" }, prompt: "Go." }),
+      )
+      const added = yield* compileRequest(
+        ai.request({
+          model: astra,
+          messages: [Message.user("Go."), Message.tools({ add: [jira] })],
+          toolChoice: "required",
+        }),
+      )
+
+      expect(prepared.body.tool_choice).toEqual({ type: "function", name: "read" })
+      expect(added.body.tool_choice).toBe("required")
+      expect(additional(added.body)).toEqual([["jira: jira tool"]])
     }),
   )
 
@@ -461,11 +670,11 @@ describe("OpenAI Responses tool updates", () => {
         }),
       )
 
-      expect(prepared.body.input.slice(1).map((item) => ("type" in item ? item.type : undefined))).toEqual([
+      expect(prepared.body.input.slice(2).map((item) => ("type" in item ? item.type : undefined))).toEqual([
         "additional_tools",
         "message",
       ])
-      expect(prepared.body.input[2]).toEqual({ type: "message", role: "developer", content: "Use jira now." })
+      expect(prepared.body.input[3]).toEqual({ type: "message", role: "developer", content: "Use jira now." })
     }),
   )
 
@@ -489,51 +698,26 @@ describe("OpenAI Responses tool updates", () => {
           ],
         }),
       )
-      const plain = yield* compileRequest(ai.request({ model: astra, tools: [read, run], prompt: "x" }))
+      const plain = yield* compileRequest(ai.request({ model: openai("gpt-6-astra"), tools: [read, run], prompt: "x" }))
 
-      expect(prepared.body.input[1]).toEqual({
+      expect(prepared.body.input[2]).toEqual({
         type: "additional_tools",
         role: "developer",
         tools: [plain.body.tools?.[1]],
       })
       expect(plain.body.tools?.[1]?.type).toBe("custom")
-      expect(prepared.body.input[2]).toEqual({ type: "custom_tool_call", call_id: "call_1", name: "run", input: "ls" })
+      expect(prepared.body.input[3]).toEqual({ type: "custom_tool_call", call_id: "call_1", name: "run", input: "ls" })
     }),
   )
 
-  it.effect("redefines a starting tool natively, keeping the top-level tools", () =>
+  it.effect("keeps top-level tools and folds markers without updates", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.request({
-          model: astra,
-          tools: [read, edit],
-          messages: [Message.user("Go."), Message.tools({ add: [defineTool("edit", "edit v2")] })],
-        }),
+        ai.request({ model: openai("gpt-6-astra"), tools: [read, edit], messages: conversation }),
       )
 
-      expect(updates(prepared.body).map((item) => ("tools" in item ? item.tools : undefined))).toEqual([
-        [expect.objectContaining({ name: "edit", description: "edit v2" })],
-      ])
-      expect(prepared.body.tools?.map((entry) => ("description" in entry ? entry.description : entry.type))).toEqual([
-        "read tool",
-        "edit tool",
-      ])
-    }),
-  )
-
-  it.effect("folds markers when the flag is off or no tools start the request", () =>
-    Effect.gen(function* () {
-      for (const [model, tools] of [
-        [openai("gpt-6-astra"), [read, edit]],
-        [astra, []],
-      ] as const) {
-        const prepared = yield* compileRequest(ai.request({ model, tools, messages: conversation }))
-
-        expect(updates(prepared.body)).toEqual([])
-        expect(prepared.body.tools?.map((entry) => ("name" in entry ? entry.name : entry.type))).toEqual(
-          tools.length === 0 ? ["write"] : ["read", "write"],
-        )
-      }
+      expect(additional(prepared.body)).toEqual([])
+      expect(topLevel(prepared.body)).toEqual(["read", "write"])
     }),
   )
 
@@ -544,16 +728,27 @@ describe("OpenAI Responses tool updates", () => {
       Effect.sync(() => {
         expect(new URL(request.url).pathname).toEndWith("/responses/compact")
         const body = JSON.parse(text)
-        expect(body.tools.map((entry: { name: string }) => entry.name)).toEqual(["read", "write"])
-        expect(body.input.map((item: { type: string }) => item.type)).toEqual(["message", "message", "message"])
+        expect(body.tools).toBeUndefined()
+        expect(body.input.map((item: { type: string }) => item.type)).toEqual([
+          "additional_tools",
+          "message",
+          "message",
+          "message",
+          "additional_tools",
+        ])
         return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
       }),
     ),
-  ).effect("folds markers into the compaction endpoint tools", () =>
+  ).effect("lays out tools on the compaction endpoint like a normal request", () =>
     Effect.gen(function* () {
-      const result = yield* ai.compact(ai.request({ model: astra, tools: [read, edit], messages: conversation }), {
-        mechanism: "endpoint",
-      })
+      const result = yield* ai.compact(
+        ai.request({
+          model: astra,
+          tools: [read, edit],
+          messages: [...conversation, Message.tools({ add: [jira] })],
+        }),
+        { mechanism: "endpoint" },
+      )
       expect(result.replacement.map((message) => message.content[0]?.type)).toEqual(["compaction"])
     }),
   )

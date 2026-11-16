@@ -55,7 +55,7 @@ const route = Route.make({
     },
     stream: AnthropicMessages.protocol.stream,
     supportsEffortUpdates: AnthropicMessages.protocol.supportsEffortUpdates,
-    supportsToolUpdates: AnthropicMessages.protocol.supportsToolUpdates,
+    toolUpdates: AnthropicMessages.protocol.toolUpdates,
   }),
   endpoint: Endpoint.path(({ request }) => `/${request.model.id}:streamRawPredict`),
   auth: Auth.none,

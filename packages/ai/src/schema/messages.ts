@@ -378,8 +378,9 @@ export const Message = withStatics(messageSchema, {
   effort: (input: { readonly effort?: ReasoningEffort; readonly previous?: ReasoningEffort }) =>
     make({ role: "system", content: [{ type: "effort", effort: input.effort, previous: input.previous }] }),
   /**
-   * Change the available tools at this point without touching the request's top-level `tools`. Returns message input
-   * that keeps the tool objects, so `ai.loop` can run an executable tool added here.
+   * Change the available tools at this point. A route sends the change in place when the model's `tools.updates`
+   * allows it, and otherwise folds it into the top-level `tools`. Returns message input that keeps the tool objects,
+   * so `ai.loop` can run an executable tool added here.
    */
   tools: (input: ToolChangesInput) => ({ role: "system" as const, content: [], tools: input }),
   tool: (result: ToolResultPart | Parameters<typeof ToolResultPart.make>[0]) =>
