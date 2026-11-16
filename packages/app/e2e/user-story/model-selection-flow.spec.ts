@@ -93,7 +93,7 @@ test("creates a session in a new project and selects its model", async ({ page }
   await expect(directoryItem).toBeVisible()
   await directoryItem.click()
   await expect(directoryItem).toHaveAttribute("aria-selected", "true")
-  const selectFolder = picker.getByRole("button", { name: "Open NewProject", exact: true })
+  const selectFolder = picker.getByRole("button", { name: "Select folder", exact: true })
   await expect(selectFolder).toBeEnabled()
   await selectFolder.click()
   await expect(picker).toBeHidden()

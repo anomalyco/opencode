@@ -170,15 +170,6 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     return [...crumbs.slice(0, lead), { label: "…", path: crumbs[crumbs.length - 3].path }, ...crumbs.slice(-2)]
   })
 
-  const actionLabel = createMemo(() => {
-    const value = treeView().result
-
-    if (policy.action !== "directory" || !value) return action[policy.action]
-    const name = pickerBreadcrumbs(value, home()).at(-1)?.label
-
-    return name ? language.t("dialog.directory.action.open", { name }) : action[policy.action]
-  })
-
   function navigation(path: string) {
     return { path, home: home(), fallback: start() || home(), located: Boolean(location()) }
   }
@@ -774,8 +765,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         <Button variant="neutral" onClick={() => dialog.close()}>
           {language.t("common.cancel")}
         </Button>
-        <Button variant="contrast" class="directory-picker-open" disabled={!treeView().result} onClick={resolve}>
-          <span class="truncate">{actionLabel()}</span>
+        <Button variant="contrast" disabled={!treeView().result} onClick={resolve}>
+          {action[policy.action]}
         </Button>
       </DialogFooter>
     </Dialog>

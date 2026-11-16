@@ -211,8 +211,3 @@
   line-height: var(--line-height-compact);
   pointer-events: none;
 }
-
-.directory-picker-open {
-  min-width: 0;
-  max-width: 320px;
-}

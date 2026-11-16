@@ -416,7 +416,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Select file",
   "dialog.directory.action.selectFolder": "Select folder",
-  "dialog.directory.action.open": "Open {{name}}",
   "dialog.directory.breadcrumbs": "Folder path",
   "dialog.directory.search.placeholder": "Search projects or enter ~/path…",
   "dialog.directory.recent": "Recent",

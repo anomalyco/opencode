@@ -1390,9 +1390,7 @@ test("the location dialog separates added projects from server projects and tags
   await options.filter({ hasText: "Add project" }).click()
   await expect(options).toHaveText(["hailmaryThis computer", "apollo"])
   await options.filter({ hasText: "apollo" }).click()
-  await expect(
-    page.getByRole("dialog", { name: "Open project", exact: true }).getByRole("button", { name: /^Open / }),
-  ).toBeEnabled()
+  await expect(page.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
   await expect.poll(() => files.length).toBeGreaterThan(0)
 })
 
@@ -1420,9 +1418,7 @@ for (const binding of ["mod+alt+p", "none"]) {
     if (binding === "none") return
 
     await search.press(`${modifier}+Alt+p`)
-    await expect(
-      page.getByRole("dialog", { name: "Open project", exact: true }).getByRole("button", { name: /^Open / }),
-    ).toBeEnabled()
+    await expect(page.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
   })
 }
 

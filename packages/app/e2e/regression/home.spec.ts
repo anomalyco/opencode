@@ -635,7 +635,7 @@ test("Home and the directory picker load without newer browser APIs", async ({ p
 
   await page.getByRole("button", { name: "Add project", exact: true }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog.getByRole("button", { name: /^Open / })).toBeEnabled()
+  await expect(dialog.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect(target).toBeVisible()
@@ -666,8 +666,8 @@ test("adding a project to a signed-out server re-pairs it, then continues at the
   await editor.getByRole("button", { name: "Save", exact: true }).click()
 
   // The folder picker reads the paired address; the removed one would reject the request.
-  const picker = page.getByRole("dialog", { name: "Open project", exact: true })
-  await expect(picker.getByRole("button", { name: /^Open / })).toBeEnabled()
+  const picker = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Select folder" }) })
+  await expect(picker.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
   await expect(picker.getByText("Unable to read this folder")).toHaveCount(0)
 })
 
@@ -693,11 +693,11 @@ test("a server whose saved password changes works with the new password", async 
   })
   await openHome(page, { fileList: () => [] })
   const remote = page.locator("[data-home-row]").filter({ hasText: "Remote" })
-  const picker = page.getByRole("dialog", { name: "Open project", exact: true })
+  const picker = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Select folder" }) })
 
   // Use the server once, so its controller exists with the old password.
   await remote.getByRole("button", { name: "Add project", exact: true }).click()
-  await expect(picker.getByRole("button", { name: /^Open / })).toBeEnabled()
+  await expect(picker.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
   await picker.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(picker).toHaveCount(0)
 
@@ -712,7 +712,7 @@ test("a server whose saved password changes works with the new password", async 
 
   // The picker reads the folder through the server's controller, which must use the saved password now.
   await remote.getByRole("button", { name: "Add project", exact: true }).click()
-  await expect(picker.getByRole("button", { name: /^Open / })).toBeEnabled()
+  await expect(picker.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
   await expect(picker.getByText("Unable to read this folder")).toHaveCount(0)
 })
 
