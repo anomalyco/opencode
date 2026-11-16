@@ -2,7 +2,6 @@ name: publish
 run-name: "${{ format('release {0}', inputs.bump) }}"
 
 # Signing and publishing use the v1-release environment for both previews and versioned releases.
-# The version job needs that environment only when generating release notes.
 
 on:
   push:
@@ -20,6 +19,10 @@ on:
           - patch
       version:
         description: "Override version (optional)"
+        required: false
+        type: string
+      release_notes:
+        description: "Reviewed v1 release notes (required for a versioned release)"
         required: false
         type: string
 
@@ -40,6 +43,8 @@ jobs:
     # Only v1 publishes. Every other job needs this one, so a dispatch on another ref publishes nothing.
     if: github.repository == 'anomalyco/opencode' && github.ref == 'refs/heads/v1'
     environment: ${{ (inputs.bump || inputs.version) && 'v1-release' || '' }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
@@ -47,32 +52,13 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install OpenCode
-        if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai
-
-      # A preview (push to v1) has no release environment and never runs the changelog, so it needs no API key.
-      - name: Configure AWS credentials
-        if: inputs.bump || inputs.version
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-v1-release
-          role-session-name: opencode-${{ github.run_id }}
-          aws-region: us-east-1
-
-      - name: Read version secrets
-        if: inputs.bump || inputs.version
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: OPENCODE_API_KEY,opencode/v1-release/OPENCODE_API_KEY
-          parse-json-secrets: false
-
       - id: version
         run: |
           ./script/version.ts
         env:
           GH_TOKEN: ${{ github.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
+          OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
           OPENCODE_VERSION: ${{ inputs.version }}
           GH_REPO: ${{ github.repository }}
     outputs:
@@ -378,7 +364,6 @@ jobs:
           secret-ids: |
             APPLE_SIGNING_CERTIFICATE,shared/APPLE_SIGNING_CERTIFICATE
             APPLE_NOTARY_KEY,shared/APPLE_NOTARY_KEY
-            SENTRY_AUTH_TOKEN,opencode/v1-release/SENTRY_AUTH_TOKEN
           parse-json-secrets: false
 
       # The certificate has no password, which apple-actions/import-codesign-certs rejects. electron-builder reads
@@ -450,9 +435,6 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: prod
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
-          SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: production
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}

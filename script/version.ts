@@ -4,14 +4,10 @@ import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
 
 const output = [`version=${Script.version}`]
-const sha = process.env.GITHUB_SHA ?? (await $`git rev-parse HEAD`.text()).trim()
 
 if (!Script.preview) {
-  await $`bun script/changelog.ts --to ${sha}`.cwd(process.cwd())
-  const file = `${process.cwd()}/UPCOMING_CHANGELOG.md`
-  const body = await Bun.file(file)
-    .text()
-    .catch(() => "No notable changes")
+  const body = process.env.OPENCODE_RELEASE_NOTES?.trim()
+  if (!body) throw new Error("Provide reviewed release_notes when dispatching a versioned v1 release")
   const dir = process.env.RUNNER_TEMP ?? "/tmp"
   const notesFile = `${dir}/opencode-release-notes.txt`
   await Bun.write(notesFile, body)
