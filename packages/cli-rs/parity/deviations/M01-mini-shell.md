@@ -19,7 +19,8 @@ paragraph shows once it is followed by a blank line or the entry ends.
 
 As in the TUI (`V04-reasoning-blocks.md`): TS draws reasoning with `<code filetype="markdown">`, whose conceal
 hides `_Thinking:_`'s markers. opentui-rust's `Code` has no conceal, so the Markdown widget draws it in the
-reasoning color.
+reasoning color. TS draws `Thinking:` in the Markdown emphasis color and the rest in the text color; Rust draws the
+whole row in the muted reasoning color (`M.2/system-theme-no-defaults`, 1 line).
 
 ## SIGINT and SIGUSR2
 
