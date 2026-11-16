@@ -16,6 +16,12 @@
   display: block;
 }
 
+/* The peek's extra width, the docked sidebar's gap before the content, goes to its end inset, so the contents sit
+   where they do docked. */
+[data-slot="vertical-tabs-sidebar"][data-peek] [data-slot="vertical-tabs-mount"] {
+  padding-inline-end: calc(var(--sidebar-inset-end) + var(--shell-inline-inset, 8px));
+}
+
 /* The collapsed toggle is the one in reach while the sidebar peeks; the docked one's spot stays empty. */
 [data-slot="vertical-tabs-sidebar"][data-peek] [data-slot="sidebar-header"] > :last-child {
   visibility: hidden;
