@@ -162,7 +162,12 @@ impl Inner {
         let (Some(tui), Some(session)) = (self.tui.upgrade(), self.session.borrow().clone()) else { return };
         let client = tui.data.client().clone();
         tui.request(
-            async move { client.session_revert_clear(&SessionRevertClearInput { session_id: session }).await },
+            async move {
+                client
+                    .session_revert_clear(&SessionRevertClearInput { session_id: session })
+                    .await
+                    .map_err(|error| error.tui_message())
+            },
             |_, ()| {},
         );
     }

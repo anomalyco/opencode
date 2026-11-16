@@ -223,7 +223,7 @@ impl Inner {
                 match result {
                     Ok(_) => append_prompt(&tui, &target, prompt.clone()),
                     Err(error) => tui.toasts.show(
-                        ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)),
+                        ToastOptions::new(Variant::Error, error.tui_message()).duration(Duration::from_millis(5000)),
                     ),
                 }
             }),
@@ -239,7 +239,7 @@ impl Inner {
             bind!(tui, |tui, _, result| {
                 if let Err(error) = result {
                     tui.toasts.show(
-                        ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)),
+                        ToastOptions::new(Variant::Error, error.tui_message()).duration(Duration::from_millis(5000)),
                     );
                 }
                 tui.dialogs.clear();

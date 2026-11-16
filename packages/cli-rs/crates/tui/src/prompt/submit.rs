@@ -388,7 +388,7 @@ impl Failure {
         if let Some(id) = self.startup_id.filter(|_| !exists) {
             tui.startup.restore_new_session_id(id);
         }
-        tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
+        tui.toasts.show(ToastOptions::new(Variant::Error, error.tui_message()).title(title));
         // What was typed in the new session since, else its stashed draft, else the sent prompt, becomes home's draft.
         let routed = tui.route() == (Route::Session { id: session.clone() });
         let active =
@@ -413,7 +413,7 @@ impl Failure {
 /// Shows the error, also after the composer unmounted, and restores the prompt unless something new was typed.
 fn fail(tui: &std::rc::Weak<Tui>, prompt: &std::rc::Weak<Inner>, title: &str, error: &Error, entry: &Value) {
     let Some(tui) = tui.upgrade() else { return };
-    tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
+    tui.toasts.show(ToastOptions::new(Variant::Error, error.tui_message()).title(title));
     let Some(prompt) = prompt.upgrade() else { return };
     if prompt.textarea.text().is_empty() {
         prompt.restore(entry.clone());
