@@ -62,6 +62,9 @@ export type PromptSite = typeof PromptSite.Type
 /** The longest page-supplied text a prompt shows: a dialog's message, its prompt's default value, a sign-in realm. */
 export const PROMPT_TEXT_MAX = 2_000
 
+/** The longest user name or password a sign-in sends; the form stops there, so the answer always passes. */
+export const SIGN_IN_TEXT_MAX = 1_024
+
 /**
  * What a tab waits on the user for, which only the window shows and only the user answers. `waiting` counts the
  * others behind it. `focus` is true when the page held keyboard focus as it was reported, so the pane may move focus
@@ -120,7 +123,7 @@ const PromptAnswer = Schema.Union([
     allow: Schema.Boolean,
     remember: Schema.Boolean,
   }),
-  Schema.Struct({ kind: Schema.Literal("auth"), username: detail(1_024), password: detail(1_024) }),
+  Schema.Struct({ kind: Schema.Literal("auth"), username: detail(SIGN_IN_TEXT_MAX), password: detail(SIGN_IN_TEXT_MAX) }),
   Schema.Struct({ kind: Schema.Literal("dismiss") }),
 ])
 

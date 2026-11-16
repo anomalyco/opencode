@@ -8,7 +8,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { createSignal, createUniqueId, Match, onMount, Show, Switch, type JSX } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import type definition from "./index"
-import type { PromptAnswer, PromptSite, PromptView } from "./ipc"
+import { PROMPT_TEXT_MAX, SIGN_IN_TEXT_MAX, type PromptAnswer, type PromptSite, type PromptView } from "./ipc"
 
 type Ask<Kind extends PromptView["ask"]["kind"]> = Extract<PromptView["ask"], { kind: Kind }>
 
@@ -35,6 +35,16 @@ export function PromptDialog(props: {
   let box: HTMLDivElement | undefined
   const pageDialog = () => (props.view.ask.kind === "dialog" ? props.view.ask : undefined)
   const signIn = () => (props.view.ask.kind === "auth" ? props.view.ask : undefined)
+  // Only text that is there describes the dialog: an empty alert has none.
+  const described = () => {
+    const ask = props.view.ask
+
+    if (ask.kind === "dialog") return !!ask.message
+
+    if (ask.kind === "auth") return ask.failed || !!ask.realm
+
+    return true
+  }
 
   const cancel = () => {
     const ask = props.view.ask
@@ -60,8 +70,10 @@ export function PromptDialog(props: {
       return cancel()
     }
 
-    // A click on the dialog's text focuses the dialog itself, where Enter answers as its main button does.
-    if (event.key === "Enter" && !event.isComposing && event.target === box) {
+    // A click on the dialog's text focuses the dialog, or the page's text, where Enter answers as the main button does.
+    const text = event.target instanceof HTMLElement && event.target.dataset.pageText !== undefined
+
+    if (event.key === "Enter" && !event.isComposing && box && (event.target === box || text)) {
       event.preventDefault()
 
       return box.querySelector("form")?.requestSubmit()
@@ -109,7 +121,7 @@ export function PromptDialog(props: {
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={title}
-        aria-describedby={description}
+        aria-describedby={described() ? description : undefined}
         tabIndex={-1}
         style={{ width: "min(100%, 480px)", "max-height": "100%", outline: "none" }}
         onKeyDown={keyDown}
@@ -182,6 +194,7 @@ function PageDialog(props: {
               class="!w-full self-stretch"
               value={text()}
               aria-label={ctx.t("prompt.value")}
+              maxLength={PROMPT_TEXT_MAX}
               autofocus
               autocomplete="off"
               spellcheck={false}
@@ -248,7 +261,8 @@ function SignIn(props: {
             </Show>
             <Show when={props.ask.realm}>
               <p class="text-[13px] font-[440] leading-[20px] text-v2-text-text-muted [overflow-wrap:anywhere]">
-                {ctx.t("prompt.auth.realm")} <bdi class="text-v2-text-text-base">“{props.ask.realm}”</bdi>
+                {/* First-strong isolates keep a right-to-left realm from reordering the sentence around it. */}
+                {ctx.t("prompt.auth.realm", { realm: `\u2068${props.ask.realm}\u2069` })}
               </p>
             </Show>
           </div>
@@ -258,6 +272,7 @@ function SignIn(props: {
             value={username()}
             placeholder={ctx.t("prompt.auth.username")}
             aria-label={ctx.t("prompt.auth.username")}
+            maxLength={SIGN_IN_TEXT_MAX}
             autofocus
             autocomplete="off"
             spellcheck={false}
@@ -270,6 +285,7 @@ function SignIn(props: {
             value={password()}
             placeholder={ctx.t("prompt.auth.password")}
             aria-label={ctx.t("prompt.auth.password")}
+            maxLength={SIGN_IN_TEXT_MAX}
             autocomplete="off"
             onInput={(event) => setPassword(event.currentTarget.value)}
           />
@@ -341,13 +357,18 @@ function Frame(props: {
   )
 }
 
-/** Text a page wrote: plain, in the page's direction, bounded, scrolling inside its own box. */
+/**
+ * Text a page wrote: plain, in the page's direction, bounded, scrolling inside its own box, which keyboard users can
+ * focus to scroll; Enter there answers as the dialog's main button does.
+ */
 function PageText(props: { id: string; children: string }) {
   return (
     <p
       id={props.id}
       dir="auto"
       tabIndex={0}
+      data-scrollable
+      data-page-text
       class="max-h-[160px] overflow-y-auto whitespace-pre-wrap text-[13px] font-[440] leading-[20px] text-v2-text-text-base outline-none [overflow-wrap:anywhere] [unicode-bidi:plaintext]"
     >
       {props.children}
@@ -361,6 +382,7 @@ function PageText(props: { id: string; children: string }) {
  */
 export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnswer) => void; focus: boolean }) {
   const ctx = usePlugin<typeof definition>()
+  const text = createUniqueId()
   let first: HTMLButtonElement | undefined
 
   onMount(() => {
@@ -375,6 +397,7 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
       data-component="browser-prompt"
       role={permission() ? "alertdialog" : "status"}
       aria-label={permission() ? ctx.t("prompt.permission.label") : undefined}
+      aria-describedby={text}
       class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-01 px-3 py-2"
       onKeyDown={(event) => {
         if (event.key !== "Escape") return
@@ -384,7 +407,7 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
       }}
     >
       <Icon name={permission() ? "outline-globe" : "warning"} class="shrink-0 text-v2-icon-icon-muted" />
-      <p class="min-w-0 flex-[1_1_200px] text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base [overflow-wrap:anywhere]">
+      <p id={text} class="min-w-0 flex-[1_1_200px] text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base [overflow-wrap:anywhere]">
         <Show
           when={permission()}
           fallback={<Show when={system()}>{(ask) => <>{ctx.t(`prompt.system.${ask().device}.${ask().platform}`)}</>}</Show>}
@@ -447,12 +470,10 @@ function siteSays(ctx: Plugin, site: PromptSite) {
 }
 
 function permissionText(ctx: Plugin, ask: Ask<"permission">) {
-  // A page asks for one feature at a time, or for the camera and microphone together.
-  const wants = ctx.t(
-    ask.permissions.length > 1 ? "prompt.permission.camera-microphone" : `prompt.permission.${ask.permissions[0] ?? "camera"}`,
-  )
+  // A page asks for one feature at a time, or for the camera and microphone together; each is a whole sentence.
+  const feature = ask.permissions.length > 1 ? "camera-microphone" : (ask.permissions[0] ?? "camera")
 
   return ask.site.kind === "web"
-    ? ctx.t("prompt.permission.web", { host: ask.site.host, features: wants })
-    : ctx.t("prompt.permission.file", { features: wants })
+    ? ctx.t(`prompt.permission.web.${feature}`, { host: ask.site.host })
+    : ctx.t(`prompt.permission.file.${feature}`)
 }
