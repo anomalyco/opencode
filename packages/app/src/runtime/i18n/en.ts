@@ -615,8 +615,8 @@ export const dict = {
   "tips.browse.description": "Let OpenCode work in your browser with your tabs, logins, and extensions.",
   "tips.browse.install": "Install",
   "tips.hex.title": "Use your voice",
-  "tips.hex.description": "Hold a key and speak your prompts. Runs locally and works across your whole computer.",
-  "tips.hex.install": "Install",
+  "tips.hex.description": "Hex lets you hold a key and speak your prompts. It runs on your computer and works in any app.",
+  "tips.hex.install": "Install Hex",
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
   "session.tab.session": "Session",

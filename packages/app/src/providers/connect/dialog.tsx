@@ -27,7 +27,7 @@ import { Persistence } from "@/runtime/persistence/schema"
 import { Schema } from "effect"
 import type { FormField, IntegrationInfo } from "@opencode/client/promise"
 import { createProviderDialogController, modelKey } from "./controller"
-import { CONSOLE_INTEGRATION, type ProviderDialogBody, type ProviderDialogFrame } from "./dialog-machine"
+import { CONSOLE_INTEGRATION, type ProviderDialogBody } from "./dialog-machine"
 import { connectMethods, selectProviderConnectView, type ProviderConnectMethod } from "./machine"
 import type { ProviderFormInput, ProviderFormView } from "./form-machine"
 import { ConsoleAuthorization } from "./console"
@@ -58,14 +58,6 @@ type ProviderDialogController = ReturnType<typeof createProviderDialogController
 
 // What a step without a sign-in reads, so the sign-in views never branch on a missing one.
 const NO_CONNECT = selectProviderConnectView({ status: "disposed" })
-
-// A provider step fits its content; the list and the models keep a fixed height.
-const FRAME_HEIGHT = {
-  picker: "!h-[min(calc(100vh_-_16px),512px)]",
-  models: "!h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]",
-  accounts: "!h-auto !max-h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]",
-  provider: "!h-auto !max-h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]",
-} satisfies Record<ProviderDialogFrame, string>
 
 export const DialogConnectProvider: Component<{
   directory?: string
@@ -115,11 +107,10 @@ export const DialogConnectProvider: Component<{
 
   return (
     <Dialog
+      size="normal"
+      fit
+      anchored
       preventBackdropDismiss={view().preventBackdropDismiss}
-      // The top edge stays where the provider list puts it, so a step that fits its content only moves the bottom edge.
-      containerClass={`!self-start !rounded-[12px] !bg-v2-background-bg-base [--connect-top:max(8px,calc((100vh_-_512px)/2))] !mt-[var(--connect-top)] !w-[min(calc(100vw_-_16px),640px)] ${
-        FRAME_HEIGHT[frame()]
-      }`}
       onCloseAutoFocus={(event) => {
         if (view().completed && props.selection && props.onDone) {
           event.preventDefault()
@@ -405,8 +396,8 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
           }}
         />
       </div>
-      <div class="relative min-h-0 flex-1">
-        <div class="flex size-full min-h-0 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div class="relative flex min-h-0 flex-1 flex-col">
+        <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <For each={groups()}>
             {(group) => (
               <Show when={group.items().length > 0}>

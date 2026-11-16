@@ -29,7 +29,6 @@ import { Agent } from "@opencode/core/agent"
 import { ID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { daemonShells } from "./fixture/shell-daemon"
-import { SubagentCompletion } from "@opencode/core/session/subagent-completion"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Logger, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -1422,7 +1421,8 @@ describe("SessionRestart background recovery", () => {
         run: Deferred.await(complete),
       })
       yield* jobs.background(child)
-      yield* Deferred.succeed(complete, "Recovered result")
+      const output = "Example from the docs:\n\nBackground work still running:\n- shell (sh_1): bun test"
+      yield* Deferred.succeed(complete, output)
       yield* jobs.wait({ id: child })
 
       const parentWoken = yield* Deferred.make<void>()
@@ -1444,7 +1444,12 @@ describe("SessionRestart background recovery", () => {
 
       expect(drained).toEqual([parent])
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
-        { payload: { text: expect.stringContaining("Recovered result"), metadata: { state: "completed" } } },
+        {
+          payload: {
+            text: `<subagent sessionID="${child}" state="completed" description="Completed inspection">\n${output}\n</subagent>`,
+            metadata: { state: "completed" },
+          },
+        },
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
@@ -1458,25 +1463,19 @@ describe("SessionRestart background recovery", () => {
       const child = Session.ID.make("ses_outbox_child")
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent })
-      const output = SubagentCompletion.formatBody("Started tests", child, [
-        { kind: "shell", sessionID: child, shellID: "sh_1", command: "bun test" },
-      ])
-      const complete = yield* Deferred.make<string>()
-      yield* jobs.start({
-        id: child,
-        type: "subagent",
+      yield* jobs.recordSubagentReport({
+        notificationID: SessionMessage.ID.create(),
+        status: "completed",
+        output: "Started tests",
         recovery: {
           kind: "subagent",
           parentSessionID: parent,
           childSessionID: child,
           agent: "explore",
           description: "Outbox inspection",
+          outstanding: [{ kind: "shell", sessionID: child, shellID: "sh_1", command: "bun test" }],
         },
-        run: Deferred.await(complete),
       })
-      yield* jobs.background(child)
-      yield* Deferred.succeed(complete, output)
-      yield* jobs.wait({ id: child })
 
       const drained: Session.ID[] = []
       const parentWoken = yield* Deferred.make<void>()
@@ -1495,13 +1494,13 @@ describe("SessionRestart background recovery", () => {
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
       yield* Deferred.await(parentWoken)
 
-      // Replay delivers the formatted row verbatim, its still-running list labelling the tag; the child never runs again.
+      // Replay uses the snapshot even though the shell is no longer running.
       expect(drained).toEqual([parent])
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
         {
           type: "synthetic",
           payload: {
-            text: `<subagent sessionID="${child}" state="running" description="Outbox inspection">\n${output}\n</subagent>`,
+            text: `<subagent sessionID="${child}" state="running" description="Outbox inspection">\nStarted tests\n\nBackground work still running:\n- shell (sh_1): bun test\n</subagent>`,
             metadata: { source: "subagent", childID: child, agent: "explore", state: "completed" },
           },
         },
