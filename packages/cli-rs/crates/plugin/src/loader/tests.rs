@@ -1422,6 +1422,22 @@ fn a_replaced_decision_stays_replaced() {
     assert_eq!(one.decision(&artifact(path, "bb")), Some(approval::Decision::Approved));
 }
 
+// Expected (win11-runs D3): a decision made for a plugin directory spelled plainly holds for its verbatim spelling and the
+// other way round, and stays apart from another directory's.
+#[test]
+fn a_verbatim_spelling_is_the_same_place() {
+    let project = Project::new();
+    let approvals = project.approvals();
+    let plain = std::path::Path::new(r"C:\p\.opencode\plugins\x\plugin.dll");
+    let verbatim = std::path::Path::new(r"\\?\C:\p\.opencode\plugins\x\plugin.dll");
+    let other = std::path::Path::new(r"C:\q\.opencode\plugins\x\plugin.dll");
+    approvals.decide(&artifact(plain, "aa"), approval::Decision::Approved).unwrap();
+    assert_eq!(approvals.decision(&artifact(verbatim, "aa")), Some(approval::Decision::Approved));
+    assert_eq!(approvals.decision(&artifact(other, "aa")), None);
+    approvals.decide(&artifact(verbatim, "aa"), approval::Decision::Declined).unwrap();
+    assert_eq!(approvals.decision(&artifact(plain, "aa")), Some(approval::Decision::Declined));
+}
+
 // Expected (bigboi-7, carbon-3): a path that is not Unicode is kept exactly, with either answer, and the other
 // decisions stay; the store is private to the user.
 #[cfg(unix)]

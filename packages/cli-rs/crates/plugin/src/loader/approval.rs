@@ -386,9 +386,12 @@ impl Stored {
     }
 }
 
+/// `path` as a decision keys it: one directory spelled with Windows' verbatim prefix (`\\?\C:\x`) or without it is
+/// one place (win11-runs D3); another letter case is the start directory's to settle, which names the project as the
+/// file system does (`opencode_local::paths::current_dir`).
 fn encode(path: &Path) -> String {
     match path.to_str() {
-        Some(text) => text.to_owned(),
+        Some(text) => opencode_util::path::strip_verbatim(text).into_owned(),
         None => {
             let bytes = path.as_os_str().as_encoded_bytes();
             format!("hex:{}", bytes.iter().map(|byte| format!("{byte:02x}")).collect::<String>())

@@ -123,8 +123,23 @@ pub fn start_directory() -> io::Result<PathBuf> {
 /// The error says "Failed to change directory to <root>", the TypeScript message.
 pub fn enter(root: &Path) -> io::Result<PathBuf> {
     std::env::set_current_dir(root)
-        .and_then(|()| std::env::current_dir())
+        .and_then(|()| current_dir())
         .map_err(|err| io::Error::new(err.kind(), format!("Failed to change directory to {}", root.display())))
+}
+
+/// The process working directory as Unix's `getcwd` gives it: the real path. Windows keeps the spelling it was entered
+/// by (another letter case, a `\\?\` prefix; an 8.3 name it expands), which made one directory several locations,
+/// each with its own sessions and plugin approvals (win11-runs D3). So the working directory becomes its canonical path
+/// without the verbatim prefix, which names it as the file system does; one that cannot become that stays as it is.
+pub fn current_dir() -> io::Result<PathBuf> {
+    let dir = std::env::current_dir()?;
+    let real = std::fs::canonicalize(&dir).ok().and_then(|real| {
+        real.to_str().map(|text| PathBuf::from(opencode_util::path::strip_verbatim(text).into_owned()))
+    });
+    match real.filter(|real| *real == dir || std::env::set_current_dir(real).is_ok()) {
+        Some(real) => Ok(real),
+        None => Ok(dir),
+    }
 }
 
 #[cfg(test)]
@@ -222,6 +237,22 @@ mod tests {
             let entered = enter(&link).unwrap();
             std::env::set_current_dir(before).unwrap();
             assert_eq!(entered, real.canonicalize().unwrap());
+        }
+        // Expected (win11-runs D3): another letter case and the verbatim spelling enter the same directory, named as the
+        // file system names it; a sibling stays another directory.
+        #[cfg(windows)]
+        {
+            let sibling = dir.path().join("Real2");
+            std::fs::create_dir(&sibling).unwrap();
+            let named =
+                opencode_util::path::strip_verbatim(real.canonicalize().unwrap().to_str().unwrap()).into_owned();
+            let before = std::env::current_dir().unwrap();
+            let spellings = [named.clone(), named.to_uppercase(), named.to_lowercase(), format!(r"\\?\{named}")];
+            let entered: Vec<PathBuf> = spellings.iter().map(|spelling| enter(Path::new(spelling)).unwrap()).collect();
+            let other = enter(&sibling).unwrap();
+            std::env::set_current_dir(before).unwrap();
+            assert!(entered.iter().all(|entered| entered == Path::new(&named)), "{entered:?} as {named}");
+            assert_ne!(other, Path::new(&named));
         }
         let missing = dir.path().join("missing");
         let err = enter(&missing).unwrap_err();
