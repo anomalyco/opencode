@@ -76,6 +76,19 @@ library from OpenTUI's source and set `OPENTUI_LIB_DIR` to it.
 Cargo finds `.cargo/config.toml` only when it runs inside `packages/cli-rs`, which is why the
 commands go through `bun run --cwd packages/cli-rs cargo`.
 
+### Editor
+
+rust-analyzer looks for a `Cargo.toml` only at the root of the folder you open and one level below it, so in an editor
+opened at the repository root it finds no project. Open `packages/cli-rs` itself, or point rust-analyzer at the
+workspace, in VS Code with:
+
+```json
+{ "rust-analyzer.linkedProjects": ["packages/cli-rs/Cargo.toml"] }
+```
+
+Its `cargo check` runs in `packages/cli-rs`, so it reads `.cargo/config.toml`. On a fresh checkout it fails in
+`opentui-sys` until the native library is installed: run `bun run --cwd packages/cli-rs opentui:native` once.
+
 ## Run against the live service
 
 ```sh
@@ -118,6 +131,23 @@ Main keys, with the default leader `ctrl+x`:
 
 Known gap: the release binary keeps line-table debug info (about 180 MB). `strip` brings it to about 40 MB.
 
+## Plugins
+
+`opencode-native` runs the TypeScript TUI plugins the TypeScript TUI runs, on a Bun process of its own (the JS host):
+a directory under `~/.config/opencode/plugins/`, or a package that `opencode-native plugin add <name>` installs. It also
+loads native plugins, shared libraries on a C ABI.
+
+- To write a native plugin, start with the quick start in [`crates/plugin-abi/README.md`](crates/plugin-abi/README.md).
+  `opencode-native plugin dev <crate dir>` builds it, runs the TUI with it and reloads it on each change, and
+  `opencode-native plugin test <crate dir> [--command NAME] [--wait TEXT]` prints its screen with no server. Neither is
+  in `--help`, which matches the TypeScript CLI's (deviation `D01-plugin-dev-test`); each takes `-h`.
+- A plugin in C uses [`crates/plugin-abi/include/opencode_plugin.h`](crates/plugin-abi/include/opencode_plugin.h);
+  `crates/plugin/examples/c` is one.
+- [`docs/P.4.md`](docs/P.4.md) is the reference: discovery, the JS host, and how to debug a TypeScript plugin.
+
+`/plugins` shows each plugin's state, and the error of one that failed or was skipped ("view error"). The log (`opencode.log` in the `log`
+directory that `opencode-native debug paths` prints) has every failure.
+
 ## Layout
 
 | Crate | Contents |
@@ -127,6 +157,9 @@ Known gap: the release binary keeps line-table debug info (about 180 MB). `strip
 | `opencode-service` | Finding, probing, and starting the server |
 | `opencode-store` | The client data store |
 | `opencode-ui` | Themes, keymap, dialogs, content widgets |
+| `opencode-api-types` | The generated API types alone, which the plugin SDK uses |
+| `opencode-util` | Small shared helpers (temporary directories, `dlopen`, process jobs) |
+| `opencode-plugin-abi` | The SDK of native plugins: the C ABI and its Rust bindings |
 | `opencode-plugin`, `opencode-latex`, `opencode-mermaid` | The plugin API and its first plugins |
 | `opencode-tui` | The full-screen TUI |
 | `opencode-mini` | `mini` |
@@ -142,7 +175,13 @@ fixtures.
 
 Each command runs the TypeScript client and `opencode-native` on the same input and compares the results.
 Run them from this directory with `bun run <command>`. Each one builds the debug binary first, unless
-`OPENCODE_RS_BIN` names a binary.
+`OPENCODE_RS_BIN` names a binary. The TypeScript side runs from source, so run `bun install` at the repository root
+once first; without it a run fails with `Cannot find module '@opentui/solid/preload'`. Scenario paths are relative to
+this directory:
+
+```sh
+bun run parity:cli parity/scenarios/C.10/server-down.cli.ts
+```
 
 | Command | Compares |
 | --- | --- |
