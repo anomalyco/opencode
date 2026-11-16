@@ -14450,6 +14450,8 @@ pub struct ConfigEntryDocumentInfoCompaction {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keep: Option<ConfigEntryDocumentInfoCompactionKeep>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub buffer: Option<ConfigEntryDocumentInfoCompactionBuffer>,
@@ -14907,8 +14909,6 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub todo: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub background_compaction: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_blob: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedules: Option<bool>,
@@ -14918,6 +14918,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub console_watches: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_events: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub full_codemode: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
