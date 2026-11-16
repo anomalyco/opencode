@@ -40,6 +40,11 @@ elif zig version > /dev/null 2>&1; then
 else
     zig='zig 0.17.1'
 fi
+# Without Zig the check fails deep in a build script, as cc-rs's "exec: zig: not found".
+if ! $zig version > /dev/null 2>&1; then
+    printf 'check-target.sh: %s does not run: put Zig on PATH, or set ZIG to its command\n' "$zig" >&2
+    exit 2
+fi
 # The header of the pin's library: from the shell's OPENTUI_LIB_DIR; for a release pin, from the directory
 # script/opentui-native.ts fills (the one .cargo/config.toml names, relative to this package); for a `rev` pin, from
 # the directory .cargo/config.toml names.
