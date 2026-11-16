@@ -366,41 +366,98 @@ fn a_project_luau_plugin_waits_for_an_approval_of_its_directory() {
     assert_eq!(status(), Status::Pending);
 }
 
-/// A linked plugin whose command does nothing, for the overhead measure.
-fn noop(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("noop".to_owned()), |_, _| {});
+/// A host that reads nothing and does nothing, for the call measures.
+struct Nop;
+
+impl abi::Read for Nop {
+    fn theme_mode(&self) -> abi::ThemeMode {
+        abi::ThemeMode::Dark
+    }
+
+    fn color(&self, _: &str) -> Option<abi::Rgba> {
+        None
+    }
+}
+
+impl abi::Host for Nop {
+    fn storage_set(&self, _: &str, _: serde_json::Value) {}
+    fn dispatch(&self, _: &str, _: Option<&str>) {}
+    fn toast(&self, _: abi::Toast) {}
+    fn attention(&self, _: abi::Attention) {}
+    fn open_route(&self, _: &str) {}
+    fn navigate(&self, _: abi::Route) {}
+    #[allow(deprecated)]
+    fn fetch(&self, _: abi::Fetch) -> abi::RequestId {
+        abi::RequestId(0)
+    }
+    fn dialog(&self, _: abi::Dialog) {}
+    fn copy(&self, _: &str, _: Option<abi::Action>) {}
+}
+
+/// `examples/hello`'s Rust source: a command and a footer claim.
+fn hello(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = abi::Command::default()
+        .with_name("hello.greet".to_owned())
+        .with_title("Say hello".to_owned())
+        .with_palette(true);
+    setup.command(command, |host, _| host.toast(abi::Toast::new(abi::Variant::Success, "Hello from a plugin")));
+    setup.slot(abi::Placement::append("home.footer"), |_, _, _| {
+        let text = abi::Node::text([abi::Span::new("hello").fg("text.muted")]);
+        abi::Render::Show(text.on_click(abi::Click::command("hello.greet", None)))
+    });
     Ok(())
 }
 
-// The spike's measures, printed: a command's dispatch on the linked, C ABI (byte shims) and Luau carriers, and what an
-// idle VM of each example holds. Run with `--ignored --nocapture`.
+/// The mean time of `f` over `rounds`, after a warm-up.
+fn each(rounds: u32, mut f: impl FnMut()) -> Duration {
+    (0..rounds / 10).for_each(|_| f());
+    let start = Instant::now();
+    (0..rounds).for_each(|_| f());
+    start.elapsed() / rounds
+}
+
+// The spike's carrier measure, printed: one render of the quick start's claim and one run of its command, linked, as
+// the C ABI carries it (the request and the answer through JSON both ways, without the FFI call, which costs
+// nanoseconds), and in Luau. Run with `--release --ignored --nocapture`.
 #[test]
 #[ignore]
-fn measure_call_overhead_and_idle_memory() {
-    let host = host();
-    let luau = r#"
-        local plugin = require("@opencode/plugin")
-        return plugin.define(function(setup) setup:command({ name = "noop" }, function() end) end)
-    "#;
-    let carriers: [(&str, crate::Definition); 3] = [
-        ("linked", abi::Plugin { id: "test.noop", setup: noop }.into()),
-        ("c-abi", crate::Builtin::Abi(abi::Plugin { id: "test.noop", setup: noop }).into()),
-        ("luau", define(&sources(luau), None).unwrap().0),
-    ];
-    for (name, definition) in carriers {
-        let registry = running(&host, definition);
-        let rounds = 20_000;
-        for _ in 0..1000 {
-            keymap(&host).dispatch("noop", None);
-        }
-        let start = Instant::now();
-        for _ in 0..rounds {
-            keymap(&host).dispatch("noop", None);
-        }
-        let each = start.elapsed() / rounds;
-        println!("dispatch {name}: {each:?} a call");
-        drop(registry);
+fn measure_one_call_on_each_carrier() {
+    let (input, changed) = (abi::SlotInput::default(), abi::Changed::everything());
+    let mut linked = abi::Registered::new("example.hello", None);
+    hello(&mut linked.setup()).unwrap();
+    let mut luau = abi::Registered::new("example.luau-hello", None);
+    let compiled = Rc::new(vm::Compiled::new(&Sources::read(&example("hello")).unwrap(), "init.luau").unwrap());
+    let _plugin = bind::setup(&compiled, &mut luau.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
+    let rounds = 200_000;
+    for (name, registered) in [("linked", &linked), ("luau", &luau)] {
+        let (_, _, render) = registered.renders().next().unwrap();
+        let (_, command) = registered.commands().next().unwrap();
+        let rendered = each(rounds, || drop(std::hint::black_box(render(&Nop, &input, &changed))));
+        let ran = each(rounds, || command(&Nop, None));
+        println!("{name}: render {rendered:?}, command {ran:?}");
     }
+    // The C ABI's work on top of the linked call: the request to JSON and back, and the answer to JSON and back.
+    let (_, _, render) = linked.renders().next().unwrap();
+    let request = abi::Request::Render { claim: 0, input: input.clone(), changed: changed.clone() };
+    let carried = each(rounds, || {
+        let bytes = serde_json::to_vec(&request).unwrap();
+        let abi::Request::Render { input, changed, .. } = serde_json::from_slice(&bytes).unwrap() else { panic!() };
+        let answer = serde_json::to_vec(&render(&Nop, &input, &changed)).unwrap();
+        drop(std::hint::black_box(serde_json::from_slice::<abi::Render>(&answer).unwrap()));
+    });
+    println!("c-abi: render {carried:?}");
+    // What arming the Luau budget reads each call: the thread's CPU time, a system call on Linux.
+    let cpu = each(rounds, || {
+        std::hint::black_box(crate::contain::thread_cpu());
+    });
+    println!("thread_cpu: {cpu:?}");
+}
+
+// The spike's memory measure, printed: what an idle VM of each example holds once its setup ran, and what compiling
+// the counter costs. Run with `--release --ignored --nocapture`.
+#[test]
+#[ignore]
+fn measure_idle_memory_and_compile() {
     for name in ["hello", "counter", "force-input"] {
         let sources = Sources::read(&example(name)).unwrap();
         println!("idle VM {name}: {} bytes", idle_memory(&sources).unwrap());
