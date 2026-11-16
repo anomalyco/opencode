@@ -19,6 +19,8 @@ export default {
   "address.search": "Search or enter a URL",
   "address.suggestions": "Suggestions",
   "refused.web": "Only web pages can open here.",
+  "refused.external": "This link opens another app.",
+  "refused.dismiss": "Dismiss notice",
   "refused.workspace": "Only web pages and files inside this session's workspace can open here.",
   "refused.credentials": "Addresses with a user name or password can't open here.",
   inspect: "Select an element to comment on",

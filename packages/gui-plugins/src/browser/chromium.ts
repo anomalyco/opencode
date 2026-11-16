@@ -54,10 +54,10 @@ import {
   extensionURL,
   localFileURL,
   normalizeURL,
-  refusal,
   type Policy,
 } from "./policy"
-import type { PaneElement } from "./ipc"
+import type { PaneElement, RefusalNotice } from "./ipc"
+import { navigationNotice } from "./refusal-notice"
 import { previewAddress, previewFile, reloadAddress } from "./preview"
 import { previewScheme } from "./scheme"
 import { workspaceFile } from "./workspace-file"
@@ -200,6 +200,7 @@ export function createBrowserPage(
     partition: string
     network: BrowserNetwork | null
     publish: (error?: string) => void
+    refused: (notice: RefusalNotice) => void
     /** Reports the element picker starting, stopping, or picking an element. */
     inspect?: (event: { active: boolean; element?: PaneElement }) => void
     /** Reports the page's icon or zoom changing. */
@@ -517,35 +518,38 @@ export function createBrowserPage(
     if (!local && (!event.isMainFrame || allowedDestination(event.url, policy))) return
     event.preventDefault()
     // The same reason a typed address gets, so a blocked link and a blocked address read alike.
-    publish(refusal(event.url, policy) ?? "ERR_BLOCKED_BY_CLIENT")
+    options.refused(navigationNotice(event.url, policy))
   }
 
   contents.on("will-frame-navigate", guard)
   contents.on("will-redirect", guard)
   // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
-  contents.setWindowOpenHandler(({ url, disposition }) =>
-    url === "about:blank" || destinationOrigin(url) || extensionURL(url, policy.extensions ?? []) ||
-    preview(url)
-      ? {
-          action: "allow",
-          outlivesOpener: true,
-          overrideBrowserWindowOptions: {
-            webPreferences: {
-              nodeIntegration: false,
-              contextIsolation: true,
-              sandbox: true,
-              webSecurity: true,
-              webviewTag: false,
-              devTools: false,
-              // Electron applies these preferences before the popup is adopted by our view.
-              focusOnNavigation: false,
-              partition: options.partition,
-            },
-          },
-          createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab"),
-        }
-      : { action: "deny" },
-  )
+  contents.setWindowOpenHandler(({ url, disposition }) => {
+    if (url !== "about:blank" && !destinationOrigin(url) && !extensionURL(url, policy.extensions ?? []) && !preview(url)) {
+      options.refused(navigationNotice(url, policy))
+
+      return { action: "deny" }
+    }
+
+    return {
+      action: "allow",
+      outlivesOpener: true,
+      overrideBrowserWindowOptions: {
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+          webSecurity: true,
+          webviewTag: false,
+          devTools: false,
+          // Electron applies these preferences before the popup is adopted by our view.
+          focusOnNavigation: false,
+          partition: options.partition,
+        },
+      },
+      createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab"),
+    }
+  })
 
   // Called from the session's one download listener (`guardSession`) for a download this page started. One the user
   // started is left to the system's save flow, so it goes where they save it and the agent never reads it.

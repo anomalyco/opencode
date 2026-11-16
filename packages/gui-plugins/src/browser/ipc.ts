@@ -39,8 +39,16 @@ const FindView = Schema.Struct({
 
 export type FindView = typeof FindView.Type
 
+const RefusalNotice = Schema.Union([
+  Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web"]) }),
+  Schema.Struct({ reason: Schema.Literal("external"), target: text(2048) }),
+])
+
+export type RefusalNotice = typeof RefusalNotice.Type
+
 export const PaneEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("find"), tabID: Browser.TabID, view: Schema.NullOr(FindView) }),
+  Schema.Struct({ type: Schema.Literal("refusal"), tabID: Browser.TabID, notice: RefusalNotice }),
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
   Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
   Schema.Struct({

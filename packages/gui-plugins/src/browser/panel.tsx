@@ -848,9 +848,19 @@ export default function SessionBrowserPane(props: {
         </div>
       </Show>
       <Show when={state()?.id} keyed>
-        {(id) => <Show when={!suspended() && props.model.search(props.session, id)}>{(view) => (
+        {(id) => <><Show when={props.model.notice(props.session, id)}>{(notice) => (
+          <section class="flex shrink-0 items-center gap-3 border-b-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-01 px-3 py-2">
+            <div role="status" class="min-w-0 flex-1 text-13-regular text-v2-text-text-base">
+              {notice().text}
+              <Show when={notice().target}>{(target) => (
+                <bdi dir="ltr" class="block truncate text-12-regular text-v2-text-text-muted" title={target()}>{target()}</bdi>
+              )}</Show>
+            </div>
+            <IconButton variant="ghost-muted" size="small" aria-label={plugin.t("refused.dismiss")} icon={<Icon name="close" />} onClick={() => props.model.dismissNotice(props.session, id)} />
+          </section>
+        )}</Show><Show when={!suspended() && props.model.search(props.session, id)}>{(view) => (
           <FindBar view={view()} input={(el) => { findInput = el }} run={find} />
-        )}</Show>}
+        )}</Show></>}
       </Show>
       {/* Above a page, where a signed-out site is the reason to import; the new tab page shows the offer as a card. */}
       <Show when={offering() && !empty() && !suspended()}>

@@ -16,7 +16,7 @@ import {
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
-import { BrowserPane, type FindAction, type FindView, type PaneEvent } from "./ipc"
+import { BrowserPane, type FindAction, type FindView, type PaneEvent, type RefusalNotice } from "./ipc"
 import {
   addressFocusTab,
   createInitialState,
@@ -51,7 +51,7 @@ type ModelState = {
   machine: State
   /** Each session's page icons and zoom by tab, as this desktop reports them. */
   pages: Record<string, Record<string, PageDetail | undefined> | undefined>
-  searches: Record<string, Record<string, FindView | undefined> | undefined>
+  chrome: Record<string, Record<string, { find?: FindView; notice?: RefusalNotice } | undefined> | undefined>
 }
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
@@ -104,7 +104,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const owner = getOwner()
   const history = ctx.stores.history
-  const [state, setState] = createStore<ModelState>({ machine: createInitialState(untrack(ipc)), pages: {}, searches: {} })
+  const [state, setState] = createStore<ModelState>({ machine: createInitialState(untrack(ipc)), pages: {}, chrome: {} })
   const machine = () => state.machine
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
   // The I/O handles the machine's effects drive. They are never read as state.
@@ -153,7 +153,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (current?.attempt !== effect.attempt) return
       registrations.delete(effect.sessionKey)
-      setState("searches", effect.sessionKey, undefined)
+      setState("chrome", effect.sessionKey, undefined)
       current.registration.close()
 
       return
@@ -267,16 +267,22 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const receive = (drive: Drive, attempt: number, event: PaneEvent) => {
     const sessionKey = drive.ref.key
 
-    if (event.type === "find") {
-      setState("searches", sessionKey, (old) => ({ ...old, [event.tabID]: event.view ?? undefined }))
+    if (event.type === "find" || event.type === "refusal") {
+      setState("chrome", sessionKey, (old) => ({ ...old, [event.tabID]: {
+        ...old?.[event.tabID], ...(event.type === "find" ? { find: event.view ?? undefined } : { notice: event.notice }),
+      } }))
 
       return
     }
 
     if (event.type === "state") {
       const open = event.state?.tabs
-      Object.keys(state.searches[sessionKey] ?? {}).forEach((id) => {
-        if (!open?.some((tab) => tab.id === id)) setState("searches", sessionKey, id, undefined)
+      Object.keys(state.chrome[sessionKey] ?? {}).forEach((id) => {
+        const tab = open?.find((item) => item.id === id)
+
+        if (!tab) return setState("chrome", sessionKey, id, undefined)
+
+        if (tab.generation !== sessionTab(machine(), sessionKey, id)?.generation) setState("chrome", sessionKey, id, "notice", undefined)
       })
 
       return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error })
@@ -392,7 +398,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       .filter((item) => item.startsWith(`${sessionKey}\n`))
       .forEach((item) => recorded.delete(item))
     setState("pages", sessionKey, undefined)
-    setState("searches", sessionKey, undefined)
+    setState("chrome", sessionKey, undefined)
   }
 
   // A server whose plugin lacked the browser RPC may have it once its plugins finish loading, its event stream
@@ -617,7 +623,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     /** A page's icon and zoom, once this desktop reported them. */
     page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
-    search: (session: Session, tabID: string) => state.searches[session.key]?.[tabID],
+    search: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.find,
+    notice(session: Session, tabID: string) {
+      const notice = state.chrome[session.key]?.[tabID]?.notice
+
+      if (!notice) return
+
+      return notice.reason === "external" ? { text: ctx.t("refused.external"), target: notice.target } : { text: describe(notice.reason) }
+    },
+    dismissNotice: (session: Session, tabID: string) => setState("chrome", session.key, tabID, "notice", undefined),
     find(session: Session, tabID: Browser.TabID, action: FindAction) {
       return registration(session)?.find(tabID, action) ?? Promise.reject(new Error("browser.pane.unavailable"))
     },

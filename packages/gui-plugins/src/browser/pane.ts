@@ -584,6 +584,9 @@ export function createBrowserPane(input: {
       shared,
       embeds: input.embeds,
       fail,
+      refused: (notice) => {
+        if (current()) emit(binding, { type: "refusal", tabID: id, notice })
+      },
       publish: (error) => {
         if (current()) dispatchBinding(binding, { type: "tab.published", tabID: id, attempt, tab: page.state(), error })
       },
