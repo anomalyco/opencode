@@ -8,7 +8,7 @@ import { previewPath } from "./preview-path.js"
 
 /** Exact lookup only: each request, including an asset or a History API route, checks the server's current disk. */
 export async function previewSize(path: string, directory: string) {
-  if (!previewPath(path)) return
+  if (!previewPath(path, process.platform === "win32")) return
   const { resolve } = await import("node:path")
   const { stat } = await import("node:fs/promises")
   const target = await workspaceTarget(resolve(directory, path), [directory])
@@ -75,7 +75,8 @@ export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, 
     const check = async (candidate: string): Promise<Located | undefined> => {
       const absolute = resolve(directory, candidate)
       const path = relative(directory, absolute).replaceAll("\\", "/")
-      if (isAbsolute(path) || (path && !previewPath(path))) return { absolute, found: false, directory: false, outside: true }
+      if (isAbsolute(path) || path === ".." || path.startsWith("../")) return { absolute, found: false, directory: false, outside: true }
+      if (path && !previewPath(path, process.platform === "win32")) return { absolute, found: false, directory: false, invalid: true }
       try {
         const target = await workspaceTarget(absolute, [directory])
         if (!target) return { absolute, found: false, directory: false, outside: true }
@@ -103,7 +104,7 @@ export function address(path: string) {
   return /^[a-z][a-z\d+.-]+:/i.test(path.trim())
 }
 
-type Located = { readonly absolute: string; readonly found: boolean | undefined; readonly directory: boolean; readonly outside?: true }
+type Located = { readonly absolute: string; readonly found: boolean | undefined; readonly directory: boolean; readonly outside?: true; readonly invalid?: true }
 
 // The pane's search index skips ignored files; skipping dependency and VCS folders keeps this walk small too.
 async function findBySuffix(directory: string, relative: string) {

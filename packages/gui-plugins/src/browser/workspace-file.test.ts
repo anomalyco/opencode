@@ -60,7 +60,7 @@ test("preview and reveal resolve existing regular files under the real workspace
     expect(await resolve(disk.replace("//local", "//remote"))).toBeUndefined()
     remotePaths.length = 0
 
-    for (const path of ["%2e%2e/x", "a%2fb", "a%5cb", "/x", "a/../x", "nul.txt", "c:/x"])
+    for (const path of ["%2e%2e/x", "a%2fb", "a%5cb", "/x", "a/../x", "c:/x"])
       expect(await resolve(`oc-preview://remote/${path}`)).toBeUndefined()
     expect(await resolve("oc-preview://remote/server-only.html", "GET", "oc-preview://local")).toBeUndefined()
     expect(await resolve("oc-preview://remote/server-only.html", "POST")).toBeUndefined()

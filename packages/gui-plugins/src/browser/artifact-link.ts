@@ -11,7 +11,7 @@ function parts(value: string) {
   const match = /^(art_[a-zA-Z0-9]+)\/(.*)$/u.exec(value)
 
   if (!match || /[?#\s\x00-\x1f]/u.test(value)) return
-  const path = match[2] ? remotePath(match[2], "") : ""
+  const path = match[2] ? remotePath(match[2], "", true) : ""
 
   if (path === undefined) return
 

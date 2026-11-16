@@ -118,6 +118,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   // Send the exact workspace entry we checked, not the unverified input (which might be a suffix or line link).
   const previewable = Effect.fn("BrowserTools.previewable")(function* (path: string) {
     const located = yield* BrowserFiles.locate(path, ctx.location.directory)
+    if (located?.invalid) return yield* new Tool.Error({ metadata: { code: "invalid_path" }, message: "This path is not a valid workspace filename on the server." })
     if (!located || located.outside)
       return yield* new Tool.Error({ metadata: { code: "outside_workspace" }, message: "browser.preview cannot show a file outside this session's workspace. Choose a file inside the workspace." })
     if (located.found === undefined)

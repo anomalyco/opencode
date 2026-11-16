@@ -6,7 +6,7 @@ export function workspacePrefix(session: string) {
 }
 
 /** Parse before URL normalization: reject alternate authorities, dot segments and encoded separators. */
-export function remotePath(address: string, prefix: string) {
+export function remotePath(address: string, prefix: string, windows = false) {
   if (!address.startsWith(prefix)) return
   const encoded = address.slice(prefix.length).split(/[?#]/, 1)[0]
 
@@ -15,7 +15,7 @@ export function remotePath(address: string, prefix: string) {
   try {
     const path = decodeURIComponent(encoded)
 
-    return previewPath(path) ? path : undefined
+    return previewPath(path, windows) ? path : undefined
   } catch {
     return undefined
   }
