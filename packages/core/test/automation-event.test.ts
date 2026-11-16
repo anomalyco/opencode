@@ -37,7 +37,7 @@ import { advance } from "./lib/clock"
 
 const wakes: Session.ID[] = []
 const Wake = Context.Reference<Effect.Effect<void>>("test/automation/wake", { defaultValue: () => Effect.void })
-let current: McpClient.Events | undefined
+let current: () => McpClient.Events | undefined = () => undefined
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
@@ -54,7 +54,7 @@ const it = testEffect(
       PluginSupervisor.node.replace(Layer.empty),
       Mcp.node.replace(
         Layer.mock(Mcp.Service, {
-          events: (name) => Effect.sync(() => (name === "ci" ? current : undefined)),
+          events: (name) => Effect.sync(() => (name === "ci" ? current() : undefined)),
           tools: () => Effect.succeed([]),
         }),
       ),
@@ -134,12 +134,13 @@ const types = [
 
 const connect = Effect.fnUntraced(function* (directory: string) {
   const producer = yield* eventProducer(types)
-  current = (yield* McpClient.connect({
+  const connection = yield* McpClient.connect({
     server: "ci",
     config: { type: "attached", transport: producer.client },
     directory,
     events: true,
-  }).pipe(Effect.provide(hostEnvironmentLayer))).events
+  }).pipe(Effect.provide(hostEnvironmentLayer))
+  current = () => connection.events
   return {
     ...producer,
     event: (stream: string | number, id: string, status: string) =>
@@ -367,8 +368,15 @@ it.effect("a broken stream opens on the replacement connection, replaying from t
     const first = yield* f.opened
     yield* f.event(first.id, "p1", "pending")
     yield* f.settled(a.id, (row) => row.runCount === 1)
-    const replacement = yield* connect(f.location.directory)
+    let offline = false
+    current = () => {
+      offline = true
+      return undefined
+    }
     yield* f.close(first.id)
+    yield* advance(() => offline)
+    expect((yield* f.automations.get(a.id)).status).toBe("active")
+    const replacement = yield* connect(f.location.directory)
     yield* advance(() => replacement.state.streams.length > 0)
     const next = yield* replacement.opened
     expect(next.params.cursor).toBe("p1")

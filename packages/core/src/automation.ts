@@ -775,10 +775,10 @@ const layer = Layer.effect(
           return yield* new InvalidError({
             reason: "No replay cursor; recreate the watch to start from now",
           })
-        const stream = yield* AutomationEvent.resolve(trigger).pipe(inDirectory(row.directory))
+        const stream = yield* AutomationEvent.resolve(trigger, position.cursor).pipe(inDirectory(row.directory))
         // Even a crash before the first heartbeat must not silently turn a restart into a fresh watch.
         if (position.cursor === undefined) yield* settle(row, { event_position: { ...position, cursor: null } })
-        return stream(position.cursor).pipe(
+        return stream.pipe(
           Stream.takeWhileEffect(
             Effect.fnUntraced(function* (message) {
               const current = yield* find(id)

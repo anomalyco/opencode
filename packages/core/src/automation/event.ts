@@ -28,10 +28,14 @@ function validator(schema: McpClient.EventType["payloadSchema"]) {
   return (data: unknown) => Option.isSome(decode(data))
 }
 
-export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event) {
+export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event, cursor?: string) {
   const mcp = yield* Mcp.Service
   const events = yield* mcp.events(trigger.server)
-  if (!events) return yield* Effect.fail(new Error(`MCP server ${trigger.server} is not connected or offers no events`))
+  if (!events) {
+    const message = `MCP server ${trigger.server} is not connected or offers no events`
+    // A known watch may have to wait for its replacement connection; a new watch needs a producer now.
+    return yield* Effect.fail(cursor === undefined ? new Error(message) : new Disconnected({ message }))
+  }
   const type = (yield* events.list()).find((type) => type.name === trigger.event)
   if (!type?.delivery?.includes("push"))
     return yield* Effect.fail(new Error(`No push event ${trigger.event} on ${trigger.server}`))
@@ -40,36 +44,31 @@ export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event) {
   const valid = validator(type.payloadSchema)
   if (!valid) return yield* Effect.fail(new Error("Unsupported event payloadSchema"))
   const lifecycle = yield* LocationLifecycle.Service
-  return (cursor?: string) =>
-    events.stream({ name: trigger.event, arguments: trigger.args, cursor }).pipe(
-      Stream.onStart(lifecycle.retain),
-      Stream.scoped,
-      Stream.interruptWhen(lifecycle.awaitShutdown),
-      Stream.concat(Stream.fail(new Error("MCP event stream closed"))),
-      Stream.mapError((error) =>
-        error instanceof McpClient.EventStreamRejectedError || error instanceof McpClient.EventStreamTerminatedError
-          ? error
-          : new Disconnected({ message: error.message }),
-      ),
-      Stream.filter((message) => message.type !== "error"),
-      Stream.mapEffect((message) => {
-        if (message.cursor && message.cursor.length > 4096) return Effect.fail(new Error("Oversized event cursor"))
-        if ((message.type === "active" && message.truncated) || (cursor !== undefined && message.cursor === null))
-          return Effect.fail(
-            new Error("Server could not replay from the saved cursor; reconcile and recreate the watch"),
-          )
-        if (
-          message.type === "event" &&
-          (message.name !== trigger.event ||
-            Buffer.byteLength(JSON.stringify(input(message))) > 16_384 ||
-            !valid(message.data))
-        )
-          return Effect.fail(
-            new Error("Invalid MCP event: wrong name, oversized event or data does not match payloadSchema"),
-          )
-        return Effect.succeed(message)
-      }),
-    )
+  return events.stream({ name: trigger.event, arguments: trigger.args, cursor }).pipe(
+    Stream.onStart(lifecycle.retain),
+    Stream.scoped,
+    Stream.interruptWhen(lifecycle.awaitShutdown),
+    Stream.concat(Stream.fail(new Error("MCP event stream closed"))),
+    Stream.mapError((error) =>
+      error instanceof McpClient.EventStreamRejectedError || error instanceof McpClient.EventStreamTerminatedError
+        ? error
+        : new Disconnected({ message: error.message }),
+    ),
+    Stream.filter((message) => message.type !== "error"),
+    Stream.mapEffect((message) => {
+      if (message.cursor && message.cursor.length > 4096) return Effect.fail(new Error("Oversized event cursor"))
+      if ((message.type === "active" && message.truncated) || (cursor !== undefined && message.cursor === null))
+        return Effect.fail(new Error("Server could not replay from the saved cursor; reconcile and recreate the watch"))
+      if (
+        message.type === "event" &&
+        (message.name !== trigger.event ||
+          Buffer.byteLength(JSON.stringify(input(message))) > 16_384 ||
+          !valid(message.data))
+      )
+        return Effect.fail(new Error("Invalid MCP event: wrong name, oversized event or data does not match payloadSchema"))
+      return Effect.succeed(message)
+    }),
+  )
 })
 
 /** JSON on one indented line: even backticks or Unicode separators cannot escape the quoted data block. */
