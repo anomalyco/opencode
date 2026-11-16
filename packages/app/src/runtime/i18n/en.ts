@@ -733,6 +733,7 @@ export const dict = {
   "session.new.workspace.local": "Local repository",
   "session.new.workspace.existingLabel": "Worktree",
   "session.new.workspace.fromBranch": "from {{branch}}",
+  "session.new.workspace.useMainCheckout": "Use main checkout",
   "session.new.workspace.branch.search.placeholder": "Search branches",
   "session.new.git.none": "No Git",
 
