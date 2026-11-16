@@ -1,4 +1,5 @@
 import { homedir } from "node:os"
+import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
@@ -52,7 +53,6 @@ import {
   destinationOrigin,
   downloadOwner,
   excludedFrames,
-  extensionURL,
   localFileURL,
   normalizeURL,
   type Policy,
@@ -534,7 +534,15 @@ export function createBrowserPage(
 
   // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load,
   // except file: documents, which must stay inside the allowed roots at every depth.
-  const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
+  const resource = (url: string, origin: string) => extensionResource(url, origin, (id) => contents.session.extensions.getExtension(id))
+
+  const guard = (event: Electron.Event<Electron.WebContentsWillNavigateEventParams>) => {
+    if (URL.parse(event.url)?.protocol === "chrome-extension:" && !resource(event.url, event.initiator?.origin ?? "")) {
+      event.preventDefault()
+
+      return refused(event.url)
+    }
+
     if (event.url === "about:blank") return
 
     const local = /^file:/i.test(event.url) || event.url.toLowerCase().startsWith(`${previewScheme}:`)
@@ -550,11 +558,11 @@ export function createBrowserPage(
   contents.on("will-frame-navigate", guard)
   contents.on("will-redirect", guard)
   // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
-  contents.setWindowOpenHandler(({ url, disposition, postBody }) => {
+  contents.setWindowOpenHandler(({ url, disposition, postBody, referrer }) => {
     const activated = popupActivated(popupReport, url)
     popupReport = undefined
 
-    if (url !== "about:blank" && !destinationOrigin(url) && !extensionURL(url, policy.extensions ?? []) && !preview(url)) {
+    if (url !== "about:blank" && !destinationOrigin(url) && !resource(url, referrer.url) && !preview(url)) {
       refused(url)
 
       return { action: "deny" }

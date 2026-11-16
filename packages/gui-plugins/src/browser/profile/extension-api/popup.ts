@@ -133,13 +133,13 @@ export function createPopups(input: { partition: string; tabs: ExtensionTabs }) 
 
       // The popup stays on its extension's pages; anything else opens as a pane tab, as Chrome opens it in a tab.
       contents.on("will-navigate", (event) => {
-        if (URL.canParse(event.url) && new URL(event.url).host === extension) return
+        if (URL.parse(event.url)?.protocol === "chrome-extension:" && new URL(event.url).host === extension) return
         event.preventDefault()
-        void openTab(window, event.url, dismiss)
+        void openTab(window, event.url, extension, dismiss)
       })
 
       contents.setWindowOpenHandler((details) => {
-        void openTab(window, details.url, dismiss)
+        void openTab(window, details.url, extension, dismiss)
 
         return { action: "deny" }
       })
@@ -156,10 +156,10 @@ export function createPopups(input: { partition: string; tabs: ExtensionTabs }) 
     close,
   }
 
-  async function openTab(window: BrowserWindow, url: string, dismiss: () => void) {
+  async function openTab(window: BrowserWindow, url: string, extension: string, dismiss: () => void) {
     const tab = input.tabs.activeTab(window)
     const anchor = tab ? input.tabs.get(tab.id) : undefined
-    await anchor?.open(url, true).catch(() => undefined)
+    await anchor?.open(url, true, extension).catch(() => undefined)
     dismiss()
   }
 }

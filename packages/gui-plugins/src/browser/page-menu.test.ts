@@ -1,9 +1,25 @@
 import { expect, test } from "bun:test"
 import { menuAddress, pageMenu } from "./page-menu"
+import { extensionResource } from "./profile/extension-api/resource"
 
 const policy = { fileRoots: ["/work"], previewHost: "binding", extensions: ["installed"], local: true }
 
 const preview = "oc-preview://binding/work/page.html"
+
+test.each([
+  ["https://site.test", "public/a.js?q=1", true], ["https://site.test", "private.html", false],
+  ["https://other.test", "public/a.js", false], ["null", "public/a.js", false],
+  ["https://site.test", "session/a.js", false], ["https://site.test", "public/%5c..%5cprivate.html", false],
+  ["chrome-extension://installed", "private.html", true], ["chrome-extension://other", "public/a.js", false],
+  ["https://site.test", "public/../private.html", false], ["https://site.test", "public/a.js:stream", false],
+] as const)("%s may open %s: %s", (origin, path, allowed) => {
+  const manifest = { manifest_version: 3, web_accessible_resources: [
+    { resources: ["public/*"], matches: ["https://site.test/*"] },
+    { resources: ["session/*"], matches: ["<all_urls>"], use_dynamic_url: true },
+  ] }
+
+  expect(extensionResource(`chrome-extension://installed/${path}`, origin, () => ({ manifest }))).toBe(allowed)
+})
 
 test.each([
   ["https://example.test/a", "https://example.test/", "https://example.test/a"],
@@ -14,7 +30,7 @@ test.each([
   ["oc-preview://foreign/work/image.png", preview, undefined],
   ["oc-preview://binding/outside/image.png", preview, undefined],
   ["javascript:alert(0)", preview, undefined],
-  ["chrome-extension://installed/page", preview, "chrome-extension://installed/page"],
+  ["chrome-extension://installed/page", preview, undefined],
   ["chrome-extension://unknown/page", preview, undefined],
 ] as const)("context target %s in %s", (raw, frame, address) => {
   expect(menuAddress(raw, frame, policy)).toBe(address)
