@@ -330,12 +330,12 @@ export function Session(props: {
     ),
   )
 
-  // Descendant requests wait for the transcript so a large family does not compete with its first page.
+  // Descendant requests can start once the root session is ready, without waiting for older history.
   createEffect(
     on(
-      [descendantSessionIDs, () => client.connection.status(), synced, rowsSynced],
-      ([sessionIDs, status, ready, rowsReady]) => {
-        if (status !== "connected" || !ready || !rowsReady) return
+      [descendantSessionIDs, () => client.connection.status(), synced],
+      ([sessionIDs, status, ready]) => {
+        if (status !== "connected" || !ready) return
         void Promise.allSettled(
           sessionIDs.flatMap((sessionID) => [
             data.session.permission.sync(sessionID),
