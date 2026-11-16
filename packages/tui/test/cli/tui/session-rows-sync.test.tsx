@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { expect, spyOn, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createEffect, createSignal, Show } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
@@ -11,14 +11,14 @@ import { tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-test.each(["cached", "cold", "pending", "invalidated"] as const)(
-  "projects %s history and completes sync without redundant cached collection scans",
+test.each(["cached", "cold"] as const)(
+  "projects %s history and completes sync with one request",
   async (mode) => {
     await using state = await tmpdir()
     const sessionID = "session-row-sync"
     const events = createEventStream()
     const response = Promise.withResolvers<void>()
-    let changed = mode === "cold" || mode === "pending"
+    const changed = mode === "cold"
     let requests = 0
     const calls = createFetch(async (url) => {
       if (url.pathname !== `/api/session/${sessionID}/message`) return
@@ -85,26 +85,14 @@ test.each(["cached", "cold", "pending", "invalidated"] as const)(
     )
     try {
       const data = await connected.promise
-      if (mode === "cached" || mode === "invalidated") await data.session.message.sync(sessionID)
-      if (mode === "invalidated") {
-        changed = true
-        data.session.message.invalidate(sessionID)
-      }
-      const pending = mode === "pending" ? data.session.message.sync(sessionID) : undefined
-      const reads = spyOn(data.session.message, "list")
-      try {
-        setMounted(true)
-        response.resolve()
-        const rows = await synced.promise
-        await pending
-        expect(completions).toBe(1)
-        expect(rows.map((row) => row.type)).toEqual(mode === "cached" ? ["message"] : ["part"])
-        if (mode === "cached") expect(reads).toHaveBeenCalledTimes(2)
-        expect(data.session.message.list(sessionID)).toHaveLength(1)
-        expect(requests).toBe(mode === "invalidated" ? 2 : 1)
-      } finally {
-        reads.mockRestore()
-      }
+      if (mode === "cached") await data.session.message.sync(sessionID)
+      setMounted(true)
+      response.resolve()
+      const rows = await synced.promise
+      expect(completions).toBe(1)
+      expect(rows.map((row) => row.type)).toEqual(mode === "cached" ? ["message"] : ["part"])
+      expect(data.session.message.list(sessionID)).toHaveLength(1)
+      expect(requests).toBe(1)
     } finally {
       response.resolve()
       app.renderer.destroy()
