@@ -21,11 +21,13 @@ test("an in-page navigation is a fragment change only when nothing but the fragm
 })
 
 test("a load the page's beforeunload kept reports its error for the top frame instead of throwing", () => {
+  let address = "https://a.example/form"
+
   // Electron's loadURL emits did-fail-load with no frame process or routing id when the page holds its unload.
   const contents = Object.assign(new EventEmitter(), {
     id: 7,
     isDestroyed: () => false,
-    getURL: () => "https://a.example/form",
+    getURL: () => address,
   })
 
   const emitted: [string, readonly Wire[]][] = []
@@ -40,6 +42,14 @@ test("a load the page's beforeunload kept reports its error for the top frame in
   createWebNavigation({ tabs, emit: (event, args) => emitted.push([event, args]) })
 
   contents.emit("did-fail-load", {}, -3, "ERR_ABORTED", "https://b.example/", true)
+  address = "oc-preview://private/report"
+
+  for (const url of ["https://b.example/", "data:text/html,ok", "about:srcdoc"]) {
+    contents.emit("did-start-navigation", { url, isMainFrame: false })
+    contents.emit("did-frame-navigate", {}, url, 200, "OK", false)
+    contents.emit("did-navigate-in-page", {}, url, false)
+    contents.emit("did-fail-load", {}, -3, "ERR_ABORTED", url, false)
+  }
 
   expect(emitted).toEqual([
     [

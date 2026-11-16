@@ -42,24 +42,24 @@ test("an extension sees a tab's address only with the tabs permission or host ac
   expect(reveals({ permissions: ["storage"], hosts: ["https://other.com/*"] }, value.url)).toBe(false)
 })
 
-test("url and title filters reveal nothing about tabs the extension may not read", () => {
-  const tabs = [tab({ id: 2, url: "https://mail.example.com/inbox", title: "Inbox (3)" }), tab({ id: 3, url: "https://docs.test/" })]
-  const windows = { current: 1, lastFocused: 1 }
-  const none: Parameters<typeof answerQuery>[3] = { permissions: [], hosts: [] }
+test("filtered queries match only readable fields; non-sensitive filters still enumerate redacted tabs", () => {
+  const tabs = [tab({ id: 1 }), tab({ id: 2, url: "https://other.test/" }), tab({ id: 3, url: "oc-preview://grant/report" })]
+  const access = { permissions: [], hosts: ["https://example.com/*"] }
 
-  const ids = (query: Parameters<typeof matchesQuery>[1], access = none) =>
-    answerQuery(tabs, query, windows, access).map((item) => item.id)
+  for (const query of [{}, { active: true }, { windowId: 1 }]) {
+    const result = answerQuery(tabs, query, {}, access)
+    expect(result.map(t => t.id)).toEqual([1, 2, 3])
 
-  // Without access the filters are ignored, as Chrome ignores them: every probe answers the same.
-  expect(ids({ url: "https://mail.example.com/*" })).toEqual([2, 3])
-  expect(ids({ url: "https://nothing.test/*" })).toEqual([2, 3])
-  expect(ids({ title: "Inbox*" })).toEqual([2, 3])
-  expect(answerQuery(tabs, {}, windows, none)[0]).not.toHaveProperty("url")
-  // With host access to one site, the filters apply there.
-  expect(ids({ url: "https://mail.example.com/*" }, { permissions: [], hosts: ["https://mail.example.com/*"] })).toEqual([
-    2, 3,
-  ])
-  expect(ids({ url: "https://docs.test/*" }, { permissions: ["tabs"], hosts: [] })).toEqual([3])
+    for (const t of result.slice(1)) {
+      for (const field of ["url", "title", "favIconUrl"]) expect(t).not.toHaveProperty(field)
+    }
+  }
+
+  for (const query of [{ url: "<all_urls>" }, { url: ["https://example.com/*"] }, { title: "Ex*" }]) {
+    expect(answerQuery(tabs, query, {}, access).map(t => t.id)).toEqual([1])
+  }
+
+  expect(answerQuery(tabs, { title: "No match" }, {}, access)).toEqual([])
 })
 
 test("Manifest V2 host patterns among permissions count as hosts", () => {
@@ -68,14 +68,4 @@ test("Manifest V2 host patterns among permissions count as hosts", () => {
     hosts: ["https://a.com/*", "<all_urls>"],
   })
   expect(apiManifest({ manifest: "not a manifest" })).toMatchObject({ permissions: [], hosts: [], version: undefined })
-})
-
-test("a private preview is enumerable, but never a matching URL or title in a filtered query", () => {
-  const tabs = [tab({ id: 3 }), tab({ id: 4, url: "oc-preview://private/report.html", title: "Q4" })]
-  const access = { permissions: ["tabs"], hosts: ["<all_urls>"] }
-  expect(answerQuery(tabs, {}, {}, access)[1]).not.toHaveProperty("url")
-
-  for (const query of [{ url: "<all_urls>" }, { title: "*" }]) {
-    expect(answerQuery(tabs, query, {}, access).map((item) => item.id)).toEqual([3])
-  }
 })

@@ -4,7 +4,7 @@ import electron, { type BrowserWindow, type Extension } from "electron"
 import { closestIcon, extensionPage, readIcon } from "../extensions"
 import { method, none, optional, type ApiModule, type ApiNamespace, type Emit, type ExtensionContext } from "./api"
 import type { Manifests } from "./manifest"
-import { tabInfo, type ExtensionTabs } from "./tabs"
+import { privateFile, reveals, tabInfo, type ExtensionTabs } from "./tabs"
 
 /** What an extension set on its toolbar button: for every tab, or for one tab over that. */
 export type ActionValues = {
@@ -258,8 +258,11 @@ export function createActions(input: {
         return true
       }
 
-      const name = input.manifest(extension).version === 2 ? "browserAction" : "action"
-      input.emit(`${name}.onClicked`, [tab ? tabInfo(tab, true) : undefined], extension.id)
+      if (tab && privateFile(tab.url)) return true
+      const manifest = input.manifest(extension)
+      const name = manifest.version === 2 ? "browserAction" : "action"
+      const info = tab && tabInfo(tab, manifest.permissions.includes("activeTab") || reveals(manifest, tab.url))
+      input.emit(`${name}.onClicked`, [info], extension.id)
 
       return true
     },

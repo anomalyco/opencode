@@ -33,6 +33,7 @@ export function createWebNavigation(input: { tabs: ExtensionTabs; emit: Emit }):
     const contents = tab.contents
     const tabId = contents.id
     const urls = new Map<number, string>()
+    const hidden = (url: string, main: boolean) => privateFile(url) || (!main && privateFile(contents.getURL()))
 
     const base = (frame: WebFrameMain | null | undefined, main: boolean) => ({
       tabId,
@@ -46,7 +47,7 @@ export function createWebNavigation(input: { tabs: ExtensionTabs; emit: Emit }):
       process === undefined || routing === undefined ? undefined : electron.webFrameMain.fromId(process, routing)
 
     const started = (event: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>) => {
-      if (event.isSameDocument || privateFile(event.url)) return
+      if (event.isSameDocument || hidden(event.url, event.isMainFrame)) return
       input.emit("webNavigation.onBeforeNavigate", [
         { ...base(event.frame, event.isMainFrame), url: event.url, frameType: event.isMainFrame ? "outermost_frame" : "sub_frame" },
       ])
@@ -61,11 +62,11 @@ export function createWebNavigation(input: { tabs: ExtensionTabs; emit: Emit }):
       process: number,
       routing: number,
     ) => {
+      if (hidden(url, main)) return
       const frame = frameOf(process, routing)
       const details = base(frame, main)
       urls.set(details.frameId, url)
 
-      if (privateFile(url)) return
       input.emit("webNavigation.onCommitted", [{ ...details, url, transitionType: "link", transitionQualifiers: [] }])
     }
 
@@ -80,7 +81,7 @@ export function createWebNavigation(input: { tabs: ExtensionTabs; emit: Emit }):
       const details = base(frame, main)
       const url = frame?.url ?? contents.getURL()
 
-      if (privateFile(url)) return
+      if (hidden(url, main)) return
 
       if (!main) input.emit("webNavigation.onDOMContentLoaded", [{ ...details, url }])
       input.emit("webNavigation.onCompleted", [{ ...details, url }])
@@ -95,15 +96,15 @@ export function createWebNavigation(input: { tabs: ExtensionTabs; emit: Emit }):
       process: number,
       routing: number,
     ) => {
-      if (!privateFile(url)) input.emit("webNavigation.onErrorOccurred", [{ ...base(frameOf(process, routing), main), url, error: description }])
+      if (!hidden(url, main)) input.emit("webNavigation.onErrorOccurred", [{ ...base(frameOf(process, routing), main), url, error: description }])
     }
 
     const inPage = (_event: Electron.Event, url: string, main: boolean, process: number, routing: number) => {
+      if (hidden(url, main)) return
       const details = base(frameOf(process, routing), main)
       const previous = urls.get(details.frameId)
       urls.set(details.frameId, url)
 
-      if (privateFile(url)) return
       const name = fragmentOnly(previous, url) ? "onReferenceFragmentUpdated" : "onHistoryStateUpdated"
       input.emit(`webNavigation.${name}`, [{ ...details, url, transitionType: "link", transitionQualifiers: [] }])
     }
@@ -130,6 +131,8 @@ export function createWebNavigation(input: { tabs: ExtensionTabs; emit: Emit }):
     const tab = input.tabs.get(tabId)
 
     if (!tab) throw new Error(`No tab with id: ${tabId}.`)
+
+    if (privateFile(tab.contents.getURL())) return []
 
     return tab.contents.mainFrame.framesInSubtree.filter((frame) => !privateFile(frame.url) && !privateFile(frame.origin)).map((frame) => ({
       url: frame.url,

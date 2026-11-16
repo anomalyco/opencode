@@ -129,8 +129,7 @@ export function reveals(manifest: { readonly permissions: readonly string[]; rea
 }
 
 /**
- * What `chrome.tabs.query` answers: each tab that matches, as the extension may see it. As in Chrome, the `url` and
- * `title` filters are ignored for a tab whose address and title the extension may not read, so they reveal nothing.
+ * An unreadable tab remains enumerable, but cannot be counted as a URL or title match.
  */
 export function answerQuery(
   tabs: readonly TabSnapshot[],
@@ -139,13 +138,11 @@ export function answerQuery(
   access: { readonly permissions: readonly string[]; readonly hosts: readonly string[] },
 ) {
   return tabs.flatMap((tab) => {
-    // A private preview can be listed as a tab, but is never an address/title match. In particular, callers
-    // enumerating <all_urls> to initialize their web tabs must not receive a preview with no `url` at all.
-    if (privateFile(tab.url) && (query.url != null || query.title != null)) return []
     const revealed = reveals(access, tab.url)
-    const filter = revealed ? query : { ...query, url: undefined, title: undefined }
 
-    return matchesQuery(tab, filter, windows) ? [tabInfo(tab, revealed)] : []
+    if (!revealed && (query.url != null || query.title != null)) return []
+
+    return matchesQuery(tab, query, windows) ? [tabInfo(tab, revealed)] : []
   })
 }
 
@@ -203,11 +200,13 @@ export function createExtensionTabs(input: {
   }
 
   // Each extension hears a tab event with what it may see of the tab.
-  const emitTab = (name: string, tab: PaneTab, args: (info: Wire, revealed: boolean) => readonly Wire[]) =>
+  const emitTab = (name: string, tab: PaneTab, args: (info: Wire, revealed: boolean) => readonly Wire[] | undefined) =>
     input.extensions().forEach((extension) => {
       const value = snapshot(tab)
       const revealed = reveals(input.manifest(extension), value.url)
-      input.emit(name, args(tabInfo(value, revealed), revealed), extension.id)
+      const event = args(tabInfo(value, revealed), revealed)
+
+      if (event) input.emit(name, event, extension.id)
     })
 
   const currentWindow = (context: ExtensionContext) => {
@@ -449,13 +448,13 @@ export function createExtensionTabs(input: {
       tabs.set(id, tab)
       emitTab("tabs.onCreated", tab, (info) => [info])
 
-      const updated = (change: (revealed: boolean) => Record<string, Wire>) =>
-        emitTab("tabs.onUpdated", tab, (info, revealed) => [id, change(revealed), info])
+      const updated = (change: () => Record<string, Wire>, needsAccess = false) =>
+        emitTab("tabs.onUpdated", tab, (info, revealed) => !needsAccess || revealed ? [id, change(), info] : undefined)
 
       const loading = () => updated(() => ({ status: "loading" }))
       const complete = () => updated(() => ({ status: "complete" }))
-      const navigated = () => updated((revealed) => (revealed ? { url: contents.getURL() } : {}))
-      const titled = () => updated((revealed) => (revealed ? { title: contents.getTitle() } : {}))
+      const navigated = () => updated(() => ({ url: contents.getURL() }), true)
+      const titled = () => updated(() => ({ title: contents.getTitle() }), true)
       const audio = () => updated(() => ({ audible: contents.isCurrentlyAudible() }))
       const focused = () => activate(id)
       contents.on("did-start-loading", loading)
