@@ -1,4 +1,4 @@
-import { index, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { Timestamps } from "../database/schema.sql.js"
 import type { Job } from "../job.js"
 import type { SessionMessage } from "../session/message.js"
@@ -16,6 +16,8 @@ export const JobTable = sqliteTable(
     status: text().$type<Job.Status>().notNull(),
     output: text(),
     error: text(),
+    /** PID of the process running the job, so a restart sweep can tell an orphan from a live owner sharing the database. */
+    pid: integer(),
     recovery: text({ mode: "json" }).$type<Job.Recovery>().notNull(),
     ...Timestamps,
   },

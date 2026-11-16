@@ -75,9 +75,12 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.MediaInfo } | undefined>
   /**
-   * Sessions holding an execution claim, including directly driven children.
+   * Sessions holding an execution claim, including directly driven children,
+   * with the PID of the process that holds it when known.
    */
-  readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
+  readonly listSuspended: () => Effect.Effect<
+    ReadonlyArray<{ readonly sessionID: Session.ID; readonly pid: number | undefined }>
+  >
   /**
    * Records the execution claim: the durable write-ahead intent that a turn is
    * (or was) in flight. Set when execution starts; a claim that survives to the
@@ -239,31 +242,40 @@ const layer = Layer.effect(
       }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
         return yield* db
-          .select({ sessionID: SessionTable.id })
+          .select({ sessionID: SessionTable.id, pid: SessionTable.suspended_pid })
           .from(SessionTable)
           .where(isNotNull(SessionTable.time_suspended))
           .all()
           .pipe(
             Effect.orDie,
-            Effect.map((rows) => rows.map((row) => row.sessionID)),
+            Effect.map((rows) => rows.map((row) => ({ sessionID: row.sessionID, pid: row.pid ?? undefined }))),
           )
       }),
       claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
-        // The null guard makes re-claiming a still-claimed Session a zero-row
-        // no-op (a resumed turn re-claims through the same started hook).
-        // Claim bookkeeping never counts as user activity: time_updated is
-        // pinned so session ordering only moves on real changes.
+        // Re-claiming a still-claimed Session keeps the original timestamp but
+        // hands the claim to this process (a resumed turn re-claims through the
+        // same started hook). Claim bookkeeping never counts as user activity:
+        // time_updated is pinned so session ordering only moves on real changes.
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: Date.now(), time_updated: sql`${SessionTable.time_updated}` })
-          .where(and(eq(SessionTable.id, sessionID), isNull(SessionTable.time_suspended)))
+          .set({
+            time_suspended: sql`coalesce(${SessionTable.time_suspended}, ${Date.now()})`,
+            suspended_pid: process.pid,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
+          .where(eq(SessionTable.id, sessionID))
           .run()
           .pipe(Effect.orDie)
       }),
       release: Effect.fn("SessionStore.release")(function* (sessionID) {
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .set({
+            time_suspended: null,
+            suspended_pid: null,
+            resume_attempts: 0,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
           .where(eq(SessionTable.id, sessionID))
           .run()
           .pipe(Effect.orDie)
@@ -271,7 +283,12 @@ const layer = Layer.effect(
       releaseOrphanedChildClaims: Effect.fn("SessionStore.releaseOrphanedChildClaims")(() =>
         db
           .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .set({
+            time_suspended: null,
+            suspended_pid: null,
+            resume_attempts: 0,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
           .where(
             and(
               isNotNull(SessionTable.time_suspended),
