@@ -148,7 +148,7 @@ const layer = Layer.effect(
       const start = yield* frame(input.start, "start")
       const end = yield* frame(input.end, "end")
       const id = GenerationID.create()
-      const retention = (input.expiresAfter ?? 24 * 60 * 60) * 1000
+      const retention = input.expiresAfter ?? 24 * 60 * 60 * 1000
       // Recorded before the paid call: a restart that finds this row still submitting reports an unknown outcome
       // instead of submitting again.
       yield* db

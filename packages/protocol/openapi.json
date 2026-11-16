@@ -19481,7 +19481,7 @@
           },
           "expiresAfter": {
             "type": "integer",
-            "maximum": 2592000,
+            "maximum": 2592000000,
             "exclusiveMinimum": 0
           }
         },

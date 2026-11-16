@@ -118,9 +118,9 @@ export const VideoRequest = Schema.Struct({
   sound: Schema.Boolean.pipe(optional).annotate(
     description("Whether the video has a generated soundtrack; unset leaves the model's default"),
   ),
-  expiresAfter: PositiveInt.check(Schema.isLessThanOrEqualTo(30 * 24 * 60 * 60))
+  expiresAfter: PositiveInt.check(Schema.isLessThanOrEqualTo(30 * 24 * 60 * 60 * 1000))
     .pipe(optional)
-    .annotate(description("Seconds the finished video stays available; defaults to 86400 (24 hours)")),
+    .annotate(description("Milliseconds the finished video stays available; defaults to 86400000 (24 hours)")),
 }).annotate({ identifier: "Generate.VideoRequest" })
 
 export const VideoErrorReason = Schema.Literals(["failed", "cancelled", "expired", "unknown"]).annotate({

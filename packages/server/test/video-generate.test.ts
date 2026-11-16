@@ -64,7 +64,7 @@ it.live("generates a video in the background and serves it by hash with Range an
     const started = yield* call(`${base}/generate/video`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: { providerID: "test", id: "video" }, prompt: "a cat", expiresAfter: 3600 }),
+      body: JSON.stringify({ model: { providerID: "test", id: "video" }, prompt: "a cat", expiresAfter: 3_600_000 }),
     })
     expect(started.status).toBe(200)
     const { data } = (yield* Effect.promise(() => started.json())) as { data: { id: string; status: string } }
