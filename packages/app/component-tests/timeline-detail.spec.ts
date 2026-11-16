@@ -103,9 +103,9 @@ story("only highlights the eye when hovering the icon, not its activity label", 
   for (const hidden of [false, true]) {
     if (hidden) await label.click()
     await visibility.hover()
-    await expect(visibility).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+    await expect(visibility).not.toHaveCSS("background-image", "none")
     await label.hover()
-    await expect(visibility).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+    await expect(visibility).toHaveCSS("background-image", "none")
   }
 })
 
