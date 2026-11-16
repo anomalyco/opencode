@@ -25,7 +25,15 @@ loader (`crates/plugin/src/loader/npm.rs`) finds the package as `Npm.resolve` do
 the key being the spec's text and not a version it resolves to (`npm.ts:60-97`: `<name>@<spec>` for a version, range or
 tag, `<name>@latest` for a bare name, `git-<slug>-<hash>` for a git spec, else the spec), in the generation with the
 largest number (`npm.ts:149-162`), as `node_modules/<name>` (`installedName`, `npm.ts:173-183`); so the same spec
-picks the same directory, and a range is never matched against another version installed under another key. The JS
+picks the same directory, and a range is never matched against another version installed under another key. The
+classification is `npm-package-arg` 13 and `hosted-git-info` 9 ported: hosted git URLs (HTTPS, SSH, SCP
+`git@host:path`, `www.`), `name@<hosted URL>`, GitHub's `user/repo` with a `#committish`, sourcehut's `~user/repo`,
+and tarballs keyed by their text. `plugin_npm.rs` checks 95 specs against TS's own `Npm.cacheKey`. Unlike TS, only a
+spec TS's `parse` classifies (a version, range or tag of a named package, or a git spec) is looked up (carbon
+`jsnpm-4`). A tarball, a URL, an alias or a path keyed by its text names no package, and such a key can lead out of the
+cache, as `existing@1.0.0/../../x` does in TS. The name joined under `node_modules` must be a package name (`name`,
+`@scope/name`, as `validate-npm-package-name` takes it), so a `dependencies` key that is absolute or `..` is refused.
+The package's real path must lie under the cache's `npm` directory, so a link out of it is refused too. The JS
 host loads its `./tui` export, as for a directory. The TUI module must be one of the plugin's own files (carbon
 `jsnpm-3`). TS's client imports whatever `<name>/tui` resolves to (`packages/plugin/src/host.ts` `resolve`); TS's
 server checks only its own server entry (`FSUtil.contains`, `core/src/config/plugin/source.ts`). The JS host refuses a

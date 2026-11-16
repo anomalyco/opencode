@@ -73,8 +73,8 @@ fn status(pipe: &Pipe, target: &str) -> Option<Status> {
 }
 
 // Expected (TS `Npm.cacheKey`, run with Bun on this checkout): each spec form is keyed in the cache as TS keys it, so
-// the same spec finds the same directory: a bare name, a version, ranges, tags, a scope, git and hosted specs, an alias,
-// a path, a URL, and specs `npm-package-arg` refuses.
+// the same spec finds the same directory: a bare name, a version, ranges, tags, a scope, git and hosted specs (URLs,
+// SSH, SCP, shortcuts, committishes), an alias, paths, URLs, tarballs, and specs `npm-package-arg` refuses.
 #[test]
 fn a_spec_is_keyed_as_ts_keys_it() {
     let Some(root) = support::ts_root() else { return };
@@ -113,6 +113,69 @@ fn a_spec_is_keyed_as_ts_keys_it() {
         "_foo",
         "@s",
         "opencode-sidebar-tokens@0.1.3",
+        // carbon jsnpm-4: hosted git URLs, SSH and SCP, a name with a hosted URL, `~`, and tarballs.
+        "https://github.com/u/r",
+        "https://github.com/u/r.git",
+        "https://gitlab.com/u/r",
+        "https://bitbucket.org/u/r",
+        "ssh://git@github.com/u/r.git",
+        "git@github.com:u/r.git",
+        "foo@https://github.com/u/r",
+        "u/r~1",
+        "plugin.tgz",
+        "plugin.tar.gz",
+        "plugin.tar",
+        // Around them: committishes, other hosts, shortcuts, non-hosted git, paths, and refused specs.
+        "u/r#semver:^1",
+        "u/r#a::b",
+        "u/r#semver:^1::v2",
+        "github:u/r#abc",
+        "https://x.org/y.git",
+        "https://x.org/y",
+        "git@x.org:y/z.git",
+        "git+ssh://git@x.org/y.git",
+        "git+ssh://git@x.org:22/y.git",
+        "foo@git@github.com:u/r.git",
+        "foo@u/r",
+        "./x.tgz",
+        "/abs/x.tgz",
+        "x.tgz.bak",
+        "@s/x@./y.tgz",
+        "http://github.com/u/r",
+        "https://github.com/u/r/tree/main",
+        "https://github.com/u",
+        "https://www.github.com/u/r",
+        "github:u",
+        "gitlab:g/s/p",
+        "gist:abc123",
+        "bitbucket:u/r",
+        "https://gist.github.com/u/abc",
+        "foo@github:u/r",
+        "sourcehut:u/r",
+        "https://git.sr.ht/~u/r",
+        "~/x",
+        "~u/r",
+        "a/b/c",
+        "u/r.git",
+        "U/r#x",
+        "-u/r",
+        "..",
+        "../x",
+        "x/..",
+        "x/../y",
+        "@s/../x",
+        "@s/x/y",
+        "existing@1.0.0/../../../outside",
+        "-foo",
+        "foo bar@",
+        "node_modules",
+        "@s/.x",
+        "@../x",
+        "ftp://x.org/y",
+        "git+file:///tmp/r",
+        "github:u/r%zz",
+        "https://github.com/u/r%zz",
+        "foo@npm:bar@1",
     ];
     let script = format!(
         "const {{ Npm }} = await import({:?}); const specs = JSON.parse(process.argv[1]); \
@@ -127,9 +190,15 @@ fn a_spec_is_keyed_as_ts_keys_it() {
     assert!(output.status.success(), "{output:?}");
     let ts: Vec<String> = serde_json::from_slice(&output.stdout).unwrap();
     let rust: Vec<String> = specs.iter().map(|spec| opencode_plugin::loader::npm::cache_key(spec)).collect();
-    for ((spec, ts), rust) in specs.iter().zip(&ts).zip(&rust) {
-        assert_eq!(rust, ts, "{spec}");
-    }
+    let differ: Vec<String> = specs
+        .iter()
+        .zip(&ts)
+        .zip(&rust)
+        .filter(|((_, ts), rust)| ts != rust)
+        .map(|((spec, ts), rust)| format!("{spec}: TS {ts}, Rust {rust}"))
+        .collect();
+    assert_eq!(ts.len(), specs.len());
+    assert!(differ.is_empty(), "{} of {} keys differ:\n{}", differ.len(), specs.len(), differ.join("\n"));
 }
 
 // Expected (TS `Npm.resolve`, `prepare`): a `cli.json` entry that names an installed package loads its TUI entry from
