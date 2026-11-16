@@ -1046,7 +1046,11 @@ pub fn discover(directories: &[PathBuf]) -> Vec<PathBuf> {
 pub fn local_source(target: &str, directory: &Path) -> Option<PathBuf> {
     let path = if target.starts_with("file://") {
         opencode_api_types::js::parse_url(target).ok()?.to_file_path().ok()?
-    } else if target.starts_with("./") || target.starts_with("../") || Path::new(target).has_root() {
+    } else if target.starts_with("./")
+        || target.starts_with("../")
+        || (cfg!(windows) && (target.starts_with(".\\") || target.starts_with("..\\")))
+        || Path::new(target).has_root()
+    {
         directory.join(target)
     } else {
         return None;
