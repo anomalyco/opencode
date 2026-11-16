@@ -585,7 +585,11 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
       return content.map((part) => part.text).join("")
     })(),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-    ...(details !== undefined ? { reasoning_details: details } : {}),
+    // A model that declares its reasoning field reads reasoning there, so an empty list would only add an
+    // undeclared field.
+    ...(details !== undefined && (details.length > 0 || configuredField === undefined)
+      ? { reasoning_details: details }
+      : {}),
     ...(opaque !== undefined ? { reasoning_opaque: opaque } : {}),
   }
   if (field === undefined || reasoningText === undefined) return result

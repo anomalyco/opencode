@@ -1408,6 +1408,30 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("replays only the declared reasoning field when no reasoning details are recognized", () =>
+    Effect.gen(function* () {
+      const declared = LanguageModel.update(model, { compatibility: { reasoningField: "reasoning_content" } })
+      yield* Effect.forEach([[], [{ type: "reasoning.future", state: { opaque: true } }]], (details) =>
+        Effect.gen(function* () {
+          const response = yield* LLMClient.generate({ ...request, model: declared }).pipe(
+            Effect.provide(
+              fixedResponse(
+                sseEvents(
+                  { choices: [{ delta: { reasoning: "thinking", reasoning_details: details } }] },
+                  { choices: [{ delta: { content: "Hello" } }] },
+                  { choices: [{ delta: {}, finish_reason: "stop" }] },
+                ),
+              ),
+            ),
+          )
+
+          const replay = yield* compileRequest(ai.request({ model: declared, messages: [response.message] }))
+          expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
+        }),
+      )
+    }),
+  )
+
   it.effect("preserves and replays reasoning details alongside scalar reasoning", () =>
     Effect.gen(function* () {
       const details = [
