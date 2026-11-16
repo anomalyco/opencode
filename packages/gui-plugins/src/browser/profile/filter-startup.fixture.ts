@@ -1,19 +1,21 @@
-import { app, session, WebContentsView } from "electron"
+import { app, session, type WebContents, WebContentsView } from "electron"
+import assert from "node:assert/strict"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { filterReady } from "./filter-startup"
+import { createFilterGate, filterReady } from "./filter-startup"
 
-// Run the real readiness probes in the pinned Electron. Both installs have working backgrounds but neither can
-// block a request: a disabled static ruleset is a valid DNR configuration; a webRequest-only worker is unsupported.
+// Run the real worker, DNR and MV2 background probes in the pinned Electron.
 void app.whenReady().then(async () => {
   const profile = session.fromPartition("persist:readiness")
   const signal = new AbortController().signal
 
-  const install = async (name: string, manifest: { permissions: string[]; background?: { service_worker: string }; declarative_net_request?: { rule_resources: { id: string; enabled: boolean; path: string }[] } }) => {
+  const install = async (name: string, manifest: { manifest_version?: number; permissions: string[]; background?: { service_worker: string } | { scripts: string[] }; declarative_net_request?: { rule_resources: { id: string; enabled: boolean; path: string }[] } }) => {
     const folder = path.join(app.getPath("userData"), name)
     await mkdir(folder)
     await writeFile(path.join(folder, "manifest.json"), JSON.stringify({ name, version: "1", manifest_version: 3, ...manifest }))
-    await writeFile(path.join(folder, "worker.js"), "")
+    await writeFile(path.join(folder, "worker.js"), manifest.manifest_version === 2
+      ? "chrome.webRequest.onBeforeRequest.addListener(() => {}, {urls:['http://example.test/*']})"
+      : "")
     await writeFile(path.join(folder, "rules.json"), "[]")
 
     return profile.extensions.loadExtension(folder)
@@ -24,6 +26,66 @@ void app.whenReady().then(async () => {
   const page = new WebContentsView({ webPreferences: { session: profile, sandbox: true } }).webContents
   await page.loadURL(new URL("manifest.json", dnr.url).href)
   await page.executeJavaScript("chrome.declarativeNetRequest.updateEnabledRulesets({disableRulesetIds:['one']})")
-  console.log(JSON.stringify({ worker: await filterReady(profile, worker, signal), emptyRules: await filterReady(profile, dnr, signal) }))
+  const reported: string[] = []
+  const generic = (id: string) => reported.push(id)
+  const result = { worker: await filterReady(profile, worker, signal, generic), emptyRules: await filterReady(profile, dnr, signal, generic) }
+
+  const loaded = Promise.withResolvers<WebContents>()
+  app.on("web-contents-created", (_, contents) => {
+    if (contents.session === profile && contents.getType() === "backgroundPage") contents.once("did-finish-load", () => loaded.resolve(contents))
+  })
+  const requests = await install("Unrelated name", { manifest_version: 2, background: { scripts: ["worker.js"] }, permissions: ["webRequest", "http://example.test/*"] })
+  const background = await loaded.promise
+  const set = (code: string) => background.executeJavaScript(code)
+  const unconfirmed: string[] = []
+  const gate = createFilterGate(signal, id => unconfirmed.push(id))
+
+  const start = () => {
+    const first = Promise.withResolvers<boolean>()
+    gate.start(requests.id, async life => {
+      const ready = await filterReady(profile, requests, life, generic)
+      first.resolve(ready)
+
+      return ready
+    })
+
+    return { first: first.promise, opening: gate.wait("http://example.test/", signal) }
+  }
+
+  // Drive the production gate's timers in main; the probe still reads a real, loaded extension background.
+  const { mock } = await import("node:test")
+  mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 })
+
+  for (const setup of ["void 0", "globalThis.µBlock={readyToFilter:false}; globalThis.vAPI={net:{}}", "vAPI.net.suspendableListener=17"]) {
+    await set(setup)
+    const fallback = start()
+    assert.equal(await fallback.first, true)
+    await fallback.opening
+    assert.equal(Date.now(), 0)
+  }
+
+  assert.deepEqual(reported, [requests.id])
+
+  await set("vAPI.net.suspendableListener=undefined")
+  const warming = start()
+  assert.equal(await warming.first, false)
+  await set("µBlock.readyToFilter=true")
+  assert.equal(await filterReady(profile, requests, signal, generic), false)
+  await set("vAPI.net.suspendableListener=()=>{}; void 0")
+  mock.timers.tick(50)
+  await warming.opening
+  assert.deepEqual(unconfirmed, [])
+
+  await set("µBlock.readyToFilter=false")
+  const stuck = start()
+  assert.equal(await stuck.first, false)
+  mock.timers.tick(4999)
+  assert.deepEqual(unconfirmed, [])
+  mock.timers.tick(1)
+  await stuck.opening
+  assert.deepEqual(unconfirmed, [requests.id])
+  assert.ok(profile.extensions.getExtension(requests.id))
+  mock.timers.reset()
+  console.log(JSON.stringify(result))
   app.exit(0)
 }).catch(error => { console.error(error); app.exit(1) })

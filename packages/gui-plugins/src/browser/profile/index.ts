@@ -191,7 +191,9 @@ export async function createBrowserProfile(input: {
 
   const monitor = (extension: Extension) => {
     if (filterKind(extension)) {
-      filters.start(extension.id, signal => filterReady(session, extension, signal))
+      filters.start(extension.id, signal => filterReady(session, extension, signal, id => {
+        input.log.write("info", "filter engine shape not recognized; using registered request listeners", { id })
+      }))
     }
   }
 

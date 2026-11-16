@@ -91,9 +91,11 @@ const Background = Schema.Struct({
   service_worker: Schema.optional(Schema.String),
 })
 
+const reported = new WeakMap<Session, Set<string>>()
+
 /** Each retry rechecks Chromium's actual background. A failed start/message during registration is not a permanent
  * failure. Absence of a background is valid for a purely declarative extension. Never expose a package value to main. */
-export async function filterReady(session: Session, extension: Extension, signal: AbortSignal) {
+export async function filterReady(session: Session, extension: Extension, signal: AbortSignal, generic: (id: string) => void) {
   const kind = filterKind(extension)
 
   if (!kind) return true
@@ -119,7 +121,20 @@ export async function filterReady(session: Session, extension: Extension, signal
 
     if (!page || page.isDestroyed() || page.isCrashed() || page.getURL() !== url || page.isLoadingMainFrame()) return false
 
-    if (kind === "requests") return backgroundReady(page, extension.name === "uBlock Origin", signal)
+    if (kind === "requests") {
+      const result = await backgroundReady(page, signal)
+
+      if (result !== "generic") return result
+      const ids = reported.get(session) ?? new Set<string>()
+
+      if (!ids.has(extension.id)) {
+        ids.add(extension.id)
+        reported.set(session, ids)
+        generic(extension.id)
+      }
+
+      return true
+    }
   }
 
   if (kind === "rulesets") return manifestQuery(session, extension.url, "rulesets", signal)
@@ -129,7 +144,7 @@ export async function filterReady(session: Session, extension: Extension, signal
 
 /** A first-install background can reload itself while its JS call is in flight. Electron need not settle that
  * call for the old frame; let the next poll find the replacement instead of consuming the entire gate deadline. */
-async function backgroundReady(page: WebContents, ublock: boolean, signal: AbortSignal) {
+async function backgroundReady(page: WebContents, signal: AbortSignal) {
   const lost = Promise.withResolvers<false>()
   const stop = () => lost.resolve(false)
   const timer = setTimeout(stop, 500)
@@ -137,12 +152,27 @@ async function backgroundReady(page: WebContents, ublock: boolean, signal: Abort
   page.once("render-process-gone", stop)
   signal.addEventListener("abort", stop, { once: true })
   const listeners = `['onBeforeRequest','onBeforeSendHeaders','onHeadersReceived','onAuthRequired','onCompleted','onErrorOccurred','onBeforeRedirect','onResponseStarted','onSendHeaders'].some(name => chrome.webRequest?.[name]?.hasListeners?.())`
-  const engine = "globalThis.µBlock?.readyToFilter === true && typeof globalThis.vAPI?.net?.suspendableListener === 'function'"
+
+  // In uBO the listener slot exists with value undefined before the engine installs its function. A missing
+  // slot is different: do not make a renamed build (or any other MV2 blocker) wait for a private contract.
+  const probe = `(() => {
+    if (!(${listeners})) return false
+    try {
+      const ready = globalThis.µBlock?.readyToFilter
+      const net = globalThis.vAPI?.net
+      if (typeof ready !== 'boolean' || !net || typeof net !== 'object' || !Object.hasOwn(net, 'suspendableListener')) return 'generic'
+      const listener = net.suspendableListener
+      if (listener !== undefined && typeof listener !== 'function') return 'generic'
+      return ready && typeof listener === 'function'
+    } catch { return 'generic' }
+  })()`
 
   try {
     signal.throwIfAborted()
 
-    return await Promise.race([page.mainFrame.executeJavaScript(ublock ? `${listeners} && ${engine}` : listeners), lost.promise]) === true
+    const result: unknown = await Promise.race([page.mainFrame.executeJavaScript(probe), lost.promise])
+
+    return result === "generic" ? "generic" : result === true
   } finally {
     clearTimeout(timer)
     signal.removeEventListener("abort", stop)
