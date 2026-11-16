@@ -967,7 +967,7 @@ story("asks for a site's permission in a bar while the page stays usable", async
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
   const bar = root.getByRole("alertdialog", { name: "Site permission request" })
-  await expect(bar).toContainText("alpha.example wants to use your camera and microphone.")
+  await expect(bar).toContainText("alpha.example wants to show notifications.")
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
   const always = bar.getByRole("button", { name: "Always allow", exact: true })
   const answered = root.getByText('Answers: [{"kind":"permission","allow":true,"remember":true}]', { exact: true })
@@ -981,6 +981,39 @@ story("asks for a site's permission in a bar while the page stays usable", async
     await expect(answered).toBeVisible({ timeout: 200 })
   }).toPass()
   await expect(bar).toBeHidden()
+})
+
+story("starts the bar's input protection over when the page asks again", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const bar = root.getByRole("alertdialog", { name: "Site permission request" })
+  const once = bar.getByRole("button", { name: "Allow this time", exact: true })
+  await expect(once).toBeVisible()
+  // The delay is the contract: let the first appearance's run out, so only a restart can refuse the next press.
+  await page.waitForTimeout(600)
+  // The page asks again: the same bar shows anew, so a press at once does nothing.
+  await root.getByRole("button", { name: "Repeat permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
+  await once.click()
+  await expect(bar).toBeVisible()
+  await expect(root.getByText("Answers: []", { exact: true })).toBeVisible()
+  await expect(async () => {
+    await once.click({ timeout: 1_000 })
+    await expect(root.getByText('Answers: [{"kind":"permission","allow":true,"remember":false}]', { exact: true })).toBeVisible({
+      timeout: 200,
+    })
+  }).toPass()
+})
+
+story("takes the keyboard from the window for a dialog and gives it back where it was", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const composer = root.getByRole("textbox", { name: "Composer stand-in" })
+  await composer.focus()
+  await root.getByRole("button", { name: "Page confirm", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const dialog = page.getByRole("alertdialog", { name: "alpha.example says" })
+  await expect(dialog.getByRole("button", { name: "OK", exact: true })).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+  await expect(composer).toBeFocused()
 })
 
 story("asks again for an agent's request without offering to keep the answer, and says why", async ({ page }) => {

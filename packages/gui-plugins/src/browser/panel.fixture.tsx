@@ -738,6 +738,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
                     id: 1,
                     waiting: 1,
                     focus: true,
+                    asked: 1,
+                    page: false,
                     ask: {
                       kind: "dialog",
                       dialog: "confirm",
@@ -761,12 +763,15 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
                     id: 2,
                     waiting: 0,
                     focus: false,
+                    asked: 1,
+                    page: false,
                     ask: {
                       kind: "permission",
                       site: { kind: "web", host: "alpha.example", embedded: false },
-                      permissions: ["camera", "microphone"],
+                      permissions: ["notifications"],
                       remember: "kept",
                       agent: false,
+                      system: false,
                     },
                   },
                 })
@@ -780,15 +785,45 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
                   type: "prompt",
                   tabID: current().id,
                   prompt: {
+                    id: 2,
+                    waiting: 0,
+                    focus: false,
+                    asked: 2,
+                    page: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      permissions: ["notifications"],
+                      remember: "kept",
+                      agent: false,
+                      system: false,
+                    },
+                  },
+                })
+              }
+            >
+              Repeat permission request
+            </button>
+            {/* Where the keyboard is in the window outside the pane, as the chat composer. */}
+            <input aria-label="Composer stand-in" />
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
                     id: 3,
                     waiting: 0,
                     focus: false,
+                    asked: 1,
+                    page: false,
                     ask: {
                       kind: "permission",
                       site: { kind: "web", host: "alpha.example", embedded: false },
                       permissions: ["microphone"],
                       remember: "none",
                       agent: true,
+                      system: false,
                     },
                   },
                 })
@@ -805,6 +840,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
                     id: 4,
                     waiting: 0,
                     focus: true,
+                    asked: 1,
+                    page: false,
                     ask: {
                       kind: "dialog",
                       dialog: "prompt",
@@ -828,6 +865,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
                     id: 5,
                     waiting: 0,
                     focus: true,
+                    asked: 1,
+                    page: false,
                     ask: { kind: "auth", host: "intranet.alpha.example", realm: "Staff area", failed: true },
                   },
                 })

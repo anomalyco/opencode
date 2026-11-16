@@ -19,6 +19,8 @@ export type Waiting =
       readonly remember: "kept" | "session" | "none"
       /** The agent drives the tab: the answer is for this request only. */
       readonly agent: boolean
+      /** macOS has not asked about a device yet: it asks after the user allows the site. */
+      readonly system: boolean
     }
   | {
       readonly kind: "auth"
@@ -36,9 +38,12 @@ export type Waiting =
   | { readonly kind: "leave"; readonly id: number; readonly key: string }
   | { readonly kind: "system"; readonly id: number; readonly key: string; readonly device: "camera" | "microphone" }
 
+/** Each item, with how many requests it holds (`asked`): a repeated request shows the same item again. */
+export type Asked = Waiting & { readonly asked: number }
+
 export type WaitingRequest = Waiting extends infer Item ? (Item extends Waiting ? Omit<Item, "id"> : never) : never
 
-export type PromptState = { readonly next: number; readonly items: readonly Waiting[] }
+export type PromptState = { readonly next: number; readonly items: readonly Asked[] }
 
 export type PromptEvent =
   | { readonly type: "requested"; readonly request: WaitingRequest }
@@ -62,9 +67,15 @@ export function transitionPrompts(state: PromptState, event: PromptEvent): Promp
     case "requested": {
       const joined = state.items.find((item) => item.key === event.request.key && item.kind === event.request.kind)
 
-      if (joined) return { state, id: joined.id, ended: [] }
+      // A repeat shows the same item again, which the pane treats as new: its input protection starts over.
+      if (joined)
+        return {
+          state: { ...state, items: state.items.map((item) => (item === joined ? { ...item, asked: item.asked + 1 } : item)) },
+          id: joined.id,
+          ended: [],
+        }
       // SAFETY: `request` is one member of the union without its id; adding the id gives back that member.
-      const item = { ...event.request, id: state.next } as Waiting
+      const item = { ...event.request, id: state.next, asked: 1 } as Asked
 
       return { state: { next: state.next + 1, items: [...state.items, item] }, id: item.id, ended: [] }
     }

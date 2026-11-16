@@ -8,6 +8,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { createSignal, createUniqueId, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import { guardActivation } from "./activation-delay"
+import { cancels } from "./prompt-keys"
 import type definition from "./index"
 import { PROMPT_TEXT_MAX, SIGN_IN_TEXT_MAX, type PromptAnswer, type PromptSite, type PromptView } from "./ipc"
 
@@ -35,12 +36,16 @@ export function PromptDialog(props: {
   const description = createUniqueId()
   let box: HTMLDivElement | undefined
   // A page can open a dialog under a click or key press already in flight: its default answer waits for a new one,
-  // from each dialog it shows on.
+  // from each dialog it shows on and each time the page asks again.
   let guard: ReturnType<typeof guardActivation> | undefined
   createKeyed(
-    () => props.view.id,
+    () => `${props.view.id}:${props.view.asked}`,
     () => guard?.changed(),
   )
+  // Where the keyboard was in the window, which gets it back once the dialog ends; a page that had it gets it back from
+  // main instead (`page`), and focus the window left behind earlier is not where the user was.
+  const before = !props.view.page && document.hasFocus() ? document.activeElement : null
+  const previous = before instanceof HTMLElement && before !== document.body && !before.closest("[data-browser-prompt]") ? before : undefined
   const pageDialog = () => (props.view.ask.kind === "dialog" ? props.view.ask : undefined)
   const signIn = () => (props.view.ask.kind === "auth" ? props.view.ask : undefined)
 
@@ -68,6 +73,13 @@ export function PromptDialog(props: {
     if (!box) return
     guard = guardActivation(box)
     onCleanup(guard.dispose)
+    onCleanup(() => {
+      const active = document.activeElement
+
+      // Only while the keyboard is still on the dialog or nowhere: the user may have moved it on.
+      if (previous?.isConnected && (!active || active === document.body || box?.contains(active)))
+        previous.focus({ preventScroll: true })
+    })
 
     if (!props.focus) return
     const target = box.querySelector<HTMLElement>("[autofocus]") ?? box
@@ -76,7 +88,7 @@ export function PromptDialog(props: {
 
   // Tab and Shift+Tab cycle inside the dialog; the page behind it is a still.
   const keyDown = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && !event.isComposing) {
+    if (cancelKey(event)) {
       event.preventDefault()
       event.stopPropagation()
 
@@ -399,10 +411,10 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
   let first: HTMLButtonElement | undefined
   let bar: HTMLElement | undefined
   // The bar appears where the page was: a click or key press already in flight, or a page's double-click target, must
-  // not land on its answers, for each request it shows.
+  // not land on its answers, for each request it shows and each time the page asks again.
   let guard: ReturnType<typeof guardActivation> | undefined
   createKeyed(
-    () => props.view.id,
+    () => `${props.view.id}:${props.view.asked}`,
     () => guard?.changed(),
   )
 
@@ -426,7 +438,7 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
       aria-describedby={text}
       class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-01 px-3 py-2"
       onKeyDown={(event) => {
-        if (event.key !== "Escape") return
+        if (!cancelKey(event)) return
         event.preventDefault()
         event.stopPropagation()
         props.answer({ kind: "dismiss" })
@@ -443,6 +455,9 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
               {permissionText(ctx, ask())}
               <Show when={ask().agent}>
                 <span class="ms-1 font-[530]">{ctx.t("prompt.permission.agent")}</span>
+              </Show>
+              <Show when={ask().system}>
+                <span class="ms-1">{ctx.t("prompt.permission.system")}</span>
               </Show>
             </>
           )}
@@ -500,6 +515,10 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
 }
 
 type Plugin = ReturnType<typeof usePlugin<typeof definition>>
+
+const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
+
+const cancelKey = (event: KeyboardEvent) => cancels(event, mac)
 
 function siteSays(ctx: Plugin, site: PromptSite) {
   if (site.kind === "web") return ctx.t(site.embedded ? "prompt.site.embedded" : "prompt.site.web", { host: site.host })
