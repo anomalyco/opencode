@@ -282,9 +282,9 @@ test("preview paths resolve the way the Review pane resolves them", async () => 
   try {
     await mkdir(join(directory, "site", "docs"), { recursive: true })
     await Bun.write(join(directory, "site", "index.html"), "<h1>hi</h1>")
-    const locate = (path: string) => Effect.runPromise(BrowserFiles.locate(path, directory))
+    const locate = (path: string) => Effect.runPromise(BrowserFiles.locate(path, directory, () => Effect.void))
     const page = join(directory, "site", "index.html")
-    const narrower = (path: string) => Effect.runPromise(BrowserFiles.locate(path, join(directory, "site", "docs")))
+    const narrower = (path: string) => Effect.runPromise(BrowserFiles.locate(path, join(directory, "site", "docs"), () => Effect.void))
     await symlink(directory, join(directory, "site", "docs", "other"), process.platform === "win32" ? "junction" : "dir")
     for (const path of [page, "../index.html", "other/site/index.html"])
       expect(await narrower(path)).toMatchObject({ outside: true })
@@ -298,10 +298,8 @@ test("preview paths resolve the way the Review pane resolves them", async () => 
     ])
       expect(await locate(path)).toEqual({ absolute: page, found: true, directory: false })
     expect(await locate(pathToFileURL(page).href)).toEqual({ absolute: page, found: true, directory: false })
-    // The pane opens the one workspace file whose path ends with a relative path that does not resolve.
-    expect(await locate("index.html")).toMatchObject({ found: true })
-    await Bun.write(join(directory, "site", "docs", "index.html"), "second")
-    expect(await locate("index.html")).toMatchObject({ found: undefined })
+    // No implicit directory walk for an agent: it has permission only for the exact entry it named.
+    expect(await locate("index.html")).toMatchObject({ found: false })
     expect(await locate("missing.html")).toEqual({
       absolute: join(directory, "missing.html"),
       found: false,
