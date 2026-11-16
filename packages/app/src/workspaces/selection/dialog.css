@@ -214,7 +214,8 @@
   --trees-font-size-override: 13px;
   --trees-item-height: 24px;
   --trees-border-radius-override: 4px;
-  --trees-padding-inline-override: 0px;
+  /* Matches the 6px scrollbar gutter, which the tree takes out of the end padding. */
+  --trees-padding-inline-override: 6px;
   --trees-item-margin-x-override: 0px;
   --trees-item-padding-x-override: 8px;
   --trees-item-row-gap-override: 6px;

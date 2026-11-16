@@ -232,7 +232,7 @@ test("input equal to the open root has nothing to suggest", () => {
 
 const selected = { ...context, committed: "/projects/acme/" }
 
-test("a draft never clears the selection, and Escape shows the selection again", () => {
+test("a draft never clears the selection, survives a selection that settles while typing, and Escape reverts it", () => {
   const synced = run([{ type: "synced" }], createPickerComboboxState(), selected)
   const edited = run([{ type: "input.changed", value: "/projects/ac" }], synced.state, selected)
   const cleared = run([{ type: "cleared" }], synced.state, selected)
@@ -247,6 +247,11 @@ test("a draft never clears the selection, and Escape shows the selection again",
     expect(reverted.state).toMatchObject({ status: "closed", input: "/projects/acme/" })
     expect(reverted.effects).toEqual(draft.status === "loading" ? [{ type: "search.cancel" }] : [])
   }
+
+  const moved = { ...selected, committed: "/projects/billing/" }
+
+  expect(run([{ type: "synced" }], edited.state, moved).state).toBe(edited.state)
+  expect(run([{ type: "synced" }], cleared.state, moved).state).toMatchObject({ input: "/projects/billing/" })
 
   const escaped = run([key("Escape")], synced.state, selected)
 

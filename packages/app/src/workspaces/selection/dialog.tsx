@@ -176,8 +176,18 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   const committed = createMemo(() => {
     const selected = treeView().selected
 
-    return selected ? displayInputDirectory(selected, home()) : ""
+    if (!selected) return ""
+
+    return policy.action === "file" ? displayPickerPath(selected, "", home()) : displayInputDirectory(selected, home())
   })
+
+  function atSelection(input: HTMLInputElement) {
+    if (!input.value) return true
+
+    const end = input.value.length
+
+    return input.value === committed() && input.selectionStart === end && input.selectionEnd === end
+  }
 
   function choose(directory: string) {
     dispatchCombobox({ type: "dismissed" })
@@ -574,10 +584,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         [data-item-section="git"] {
           display: none;
         }
-        /* The tree keeps a scrollbar gutter on the right; one on the left too keeps the rows centred. */
         [data-file-tree-virtualized-scroll] {
           overscroll-behavior: contain;
-          scrollbar-gutter: stable both-edges;
         }
       `,
       onExpansionChange(change) {
@@ -656,11 +664,17 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             aria-controls="directory-picker-suggestions"
             aria-activedescendant={comboboxView().activeDescendant}
             onKeyDown={(event) => {
-              // A held key that just cleared the text must not keep climbing.
-              if (event.key === "Backspace" && !event.repeat && !comboboxView().input && !event.isComposing) {
+              // Goes up a level from the shown selection; a held key that just cleared the text must not keep climbing.
+              if (
+                event.key === "Backspace" &&
+                !event.repeat &&
+                !event.isComposing &&
+                atSelection(event.currentTarget)
+              ) {
                 event.preventDefault()
+                const selected = treeView().selected
 
-                return navigate(pickerParent(treeView().root))
+                return selected ? choose(pickerParent(selected)) : navigate(pickerParent(treeView().root))
               }
 
               const next = dispatchCombobox({

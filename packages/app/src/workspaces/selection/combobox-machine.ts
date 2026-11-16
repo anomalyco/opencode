@@ -13,8 +13,8 @@ export const PICKER_SEARCH_TIMEOUT_MS = 10_000
 export type PickerSuggestion = { readonly absolute: string; readonly type: "file" | "directory" }
 
 /**
- * What the input resolves and searches against. `fallback` is the base for relative input before a root opens, and
- * `committed` is the selected folder as the input shows it ("" when nothing is selected).
+ * What the input resolves and searches against. `fallback` is the base for relative input before a root opens;
+ * `committed` is the selection as the input shows it.
  */
 export type PickerComboboxContext = {
   readonly policy: PickerPolicy
@@ -27,9 +27,9 @@ export type PickerComboboxContext = {
 
 /**
  * The path input and its suggestion list. The input shows the committed selection; typed input is a draft that only
- * changes the selection once committed (Enter, a suggestion, or `submitted`). Only `open` holds items, and only for its `input`, so a key pressed while the
- * next search runs never acts on the previous query's results. `active` is null until the user steps or hovers;
- * `step` is an arrow key pressed while the search runs.
+ * changes the selection once committed (Enter, a suggestion, or `submitted`). Only `open` holds items, and only for
+ * its `input`, so a key pressed while the next search runs never acts on the previous query's results. `active` is
+ * null until the user steps or hovers; `step` is an arrow key pressed while the search runs.
  */
 export type PickerComboboxState =
   | { readonly status: "closed"; readonly attempt: number; readonly input: string }
@@ -98,10 +98,11 @@ export function transitionPickerCombobox(
     return withInput(state, input, context, [])
   }
 
+  // A selection that settles while the user types keeps the draft; picking in the tree closes the list first.
   if (event.type === "synced") {
-    if (state.status === "closed" && state.input === context.committed) return unchanged(state)
+    if (state.status !== "closed" || state.input === context.committed) return unchanged(state)
 
-    return result(close(state, context.committed), cancel(state))
+    return result(close(state, context.committed))
   }
 
   if (event.type === "submitted") {
