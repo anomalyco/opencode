@@ -25,6 +25,7 @@ export function noticeActions(
         show(notice.reason === "external" ? { ...notice, action: "copy" } : { reason: "popup", target: notice.target })
       }, 60_000)
     }
+
     report(notice, token)
   }
 

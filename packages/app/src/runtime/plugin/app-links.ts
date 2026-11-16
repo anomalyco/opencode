@@ -63,7 +63,7 @@ export function createAppLinks(review: (href: string) => void) {
 
     // A stream can replace the anchor or change its target between press and release.
     if (event.type !== "click" || !event.isTrusted || modified(event) || event.button !== 0) return
-    const paired = start?.anchor === link.anchor && start.href === link.href
+    const paired = event.detail !== 0 && start?.anchor === link.anchor && start.href === link.href
     const assistive = !start && event.detail === 0 && link.anchor === document.activeElement
 
     if (paired || assistive) review(link.href)

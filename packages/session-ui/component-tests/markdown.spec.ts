@@ -82,18 +82,21 @@ story("limits authored presentation to text and keeps application link hit areas
       '<a href="mailto:fixture@example.invalid"><div>Block label</div></a>',
     ].join(""))
     const anchors = [...fragment.content.querySelectorAll("a")]
+
     return {
       style: fragment.content.querySelector("p")?.style.cssText,
       active: fragment.content.querySelectorAll("[popover], [commandfor], [command], [popovertarget], dialog").length,
       links: anchors.map(a => [a.dataset.appLink, a.hasAttribute("href"), a.hasAttribute("style"), a.textContent]),
     }
   }, fixture)
+
   expect(result).toEqual({ style: "color: teal; text-align: center;", active: 0, links: [["obsidian:fixture", false, false, "Label"], [undefined, false, false, "Block label"]] })
 })
 
 story("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
+
     return [
       '<a href="file:///C:/workspace/a.ts">file</a>', '<a href="src/a.ts">relative</a>',
       '<a download href="obsidian:fixture">download</a>', '<a href="opencode:fixture">deep link</a>',
@@ -103,9 +106,11 @@ story("retains local and download link routing and bounds untrusted application 
       const parent = document.createElement("div")
       parent.innerHTML = sanitizeMarkdown(html)
       const a = parent.querySelector("a")!
+
       return [a.dataset.localLink, a.dataset.appLink, a.hasAttribute("href")]
     })
   }, fixture)
+
   expect(result).toEqual([["C:/workspace/a.ts", undefined, false], ["src/a.ts", undefined, false],
     [undefined, undefined, false], [undefined, "opencode:fixture", false], [undefined, undefined, false],
     [undefined, "DaTa:text/plain,test", false], [undefined, undefined, false], [undefined, undefined, false]])

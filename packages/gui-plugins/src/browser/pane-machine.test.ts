@@ -10,6 +10,7 @@ import {
   isCurrentPage,
   resolveControlFrame,
   selectBinding,
+  selectOwnedBinding,
   transitionBinding,
   transitionPane,
   type BindingEvent,
@@ -72,6 +73,13 @@ function frame(data: {
 function attached(restore?: Browser.State) {
   return play(createPaneState(), registered(restore), on({ type: "server.attached", fileRoots: [] })).state
 }
+
+test("only the registering window owns the binding used to review a conversation link", () => {
+  const state = attached()
+  expect(selectOwnedBinding(state, 1, "b1")).toBeDefined()
+  expect(selectOwnedBinding(state, 2, "b1")).toBeUndefined()
+  expect(selectOwnedBinding(state, 1, "missing")).toBeUndefined()
+})
 
 test("a refused restore keeps its saved address, reports the reason once and consumes no page attempt", () => {
   const url = "file:///old/project/index.html"

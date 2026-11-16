@@ -1313,6 +1313,7 @@ function updateBlock(
 
   if (source === next) disposeCodeHosts(next)
   source.innerHTML = block.html
+
   if (appLinks) enableMarkdownAppLinks(source)
   const pending = markInlineCode(source, next, block.mode === "live", signal, localFileExists)
   markCodeLinks(source)

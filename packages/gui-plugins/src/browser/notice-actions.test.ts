@@ -8,11 +8,13 @@ test("Open belongs to one presentation and expires even if the timer has not run
   jest.useFakeTimers()
   const tokens: string[] = []
   const launches: string[] = []
+
   const actions = noticeActions((_, token) => tokens.push(token), {
     tab: async () => {},
     app: async (url) => { launches.push(url) },
     copy() {},
   })
+
   const notice = navigationNotice("obsidian:fixture", {}, "conversation")
   actions.show(notice)
   actions.show(notice)

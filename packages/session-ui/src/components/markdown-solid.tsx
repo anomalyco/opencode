@@ -87,8 +87,10 @@ function parseNode(node: Node, key: string, words: boolean, animate: boolean, in
   }
 
   if (!(node instanceof Element)) return []
+
   // Keep the MathML namespace: Dynamic would recreate its descendants as HTML elements.
-  if (node instanceof MathMLElement && node.localName === "math") return [{ key: `${key}:math`, type: "math", element: node }]
+  if (node.localName === "math" && typeof MathMLElement !== "undefined" && node instanceof MathMLElement)
+    return [{ key: `${key}:math`, type: "math", element: node }]
   const code = node.tagName === "CODE" && node.parentElement?.tagName !== "PRE"
 
   const element: Extract<MarkdownNode, { type: "element" }> = {

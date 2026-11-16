@@ -59,14 +59,17 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     if (attr.attrName !== "style") return
     style.cssText = attr.attrValue
     allowedStyle.cssText = ""
+
     for (const property of ["color", "background-color", "font-weight", "font-style", "text-decoration-line", "text-align"]) {
       allowedStyle.setProperty(property, style.getPropertyValue(property))
     }
+
     attr.attrValue = allowedStyle.cssText
     attr.keepAttr = !!attr.attrValue
   })
   purifier.addHook("beforeSanitizeAttributes", (node) => {
     if (node instanceof Element) node.removeAttribute("data-app-link")
+
     if (node instanceof HTMLAnchorElement) {
       // Local file links never navigate the document; the host decides how to open them.
       node.removeAttribute("data-local-link")
@@ -79,8 +82,10 @@ if (typeof window !== "undefined" && purifier.isSupported) {
         if (href.length > 2048 || /[<>\x00-\x1f\x7f-\x9f]/.test(href)) return node.removeAttribute("href")
         node.removeAttribute("style")
         node.removeAttribute("class")
+
         // A card or an entire paragraph is not a link label. Keep its contents, but don't arm that hit area.
         if (node.querySelector(":not(b,i,em,strong,s,span,code)")) return node.removeAttribute("href")
+
         if (node.childElementCount) node.textContent = node.textContent
         appLinks.set(node, href)
       }
@@ -113,6 +118,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     // URL parser might trim: the desktop policy checks exactly what the author wrote.
     if (href !== undefined) {
       node.dataset.appLink = href
+
       if (!node.hasAttribute("href")) {
         node.removeAttribute("tabindex")
         node.removeAttribute("role")

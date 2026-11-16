@@ -449,11 +449,13 @@ export function createBrowserPage(
   const attachFrames = (sessionID?: string) => attachChildren(cdp, sessionID)
 
   const activity = options.activity
+
   const notices = noticeActions((notice, token) => options.refused(notice, token, destinationOrigin(contents.getURL())), {
     tab: options.menu.open,
     app: (url) => electron.shell.openExternal(url),
     copy: (url) => electron.clipboard.writeText(url),
   })
+
   constructing.defer(notices.clear)
   const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
   const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
