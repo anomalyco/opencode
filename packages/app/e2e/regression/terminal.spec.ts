@@ -301,7 +301,7 @@ test("a terminal list that fails says why, and Try again lists the terminals", a
 
   const failure = side(page).getByRole("alert")
   await expect(failure.getByText("Couldn't load terminals", { exact: true })).toBeVisible()
-  await expect(failure.getByText("Listing terminals failed", { exact: true })).toBeVisible()
+  await expect(failure.getByText("UnexpectedStatus: 500", { exact: true })).toBeVisible()
   // Without the list the restored tab has no title yet, but it shows and stays selected.
   await expect(side(page).getByRole("tab", { name: "Terminal", exact: true })).toHaveAttribute("aria-selected", "true")
 

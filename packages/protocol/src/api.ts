@@ -1,7 +1,6 @@
 import { Context } from "effect"
 import { HttpApi, HttpApiGroup, HttpApiMiddleware, OpenApi } from "effect/http-api"
 import { SchemaErrorMiddleware } from "./middleware/schema-error.js"
-import { DefectResponseMiddleware } from "./middleware/defect-response.js"
 import { GenerateGroup } from "./groups/generate.js"
 import { ExperimentalGroup } from "./groups/experimental.js"
 import { VoiceGroup } from "./groups/voice.js"
@@ -127,21 +126,18 @@ export type Api<
   "server",
   HttpApiGroup.AddMiddleware<
     HttpApiGroup.AddMiddleware<
-      HttpApiGroup.AddMiddleware<
-        ApiGroups<
-          LocationId,
-          LocationService,
-          FormLocationId,
-          FormLocationService,
-          SessionLocationId,
-          SessionLocationService,
-          Event
-        >,
-        Authorization
+      ApiGroups<
+        LocationId,
+        LocationService,
+        FormLocationId,
+        FormLocationService,
+        SessionLocationId,
+        SessionLocationService,
+        Event
       >,
-      SchemaErrorMiddleware
+      Authorization
     >,
-    DefectResponseMiddleware
+    SchemaErrorMiddleware
   >
 >
 
@@ -210,8 +206,6 @@ const makeApiFromGroup = <
     )
     .middleware(Authorization)
     .middleware(SchemaErrorMiddleware)
-    // Outermost of the three: it must see defects from the handlers and the other middleware alike.
-    .middleware(DefectResponseMiddleware)
 
 export const makeApi = <
   const Definitions extends ReadonlyArray<Definition>,

@@ -199,9 +199,9 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(layer),
         Layer.provide(authorizationLayer),
         Layer.provide(schemaErrorLayer),
-        Layer.provide(defectResponseLayer),
         Layer.provide(auth),
         HttpRouter.provideRequest(requestServices),
+        Layer.merge(defectResponseLayer),
         Layer.provideMerge(services),
         Layer.provideMerge(HttpRouter.layer),
       )
