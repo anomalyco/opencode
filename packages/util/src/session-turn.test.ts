@@ -33,6 +33,17 @@ test("falls back to the request window for steps recorded without a first token"
   expect(SessionTurn.tokensPerSecond(messages, final)).toBe(65 / 7)
 })
 
+test("falls back to the request window when tokens arrive in a burst after the first token", () => {
+  // Hidden reasoning before the first output event: 236 tokens land within 13ms after a 3.6s wait.
+  const first = step("assistant-1", { created: 0, firstToken: 3_600, streamed: 3_613, completed: 4_000 }, 36, 200)
+  // A normally streamed step keeps its decode window.
+  const final = step("assistant-2", { created: 5_000, firstToken: 6_000, streamed: 9_000, completed: 9_500 }, 300, 0)
+  const messages = [input("user-1", 0), first, final]
+
+  // 536 tokens over the burst step's 3.613s request window plus the streamed step's 3s decode window.
+  expect(SessionTurn.tokensPerSecond(messages, final)).toBe(536 / 6.613)
+})
+
 test("measures request throughput including reasoning without tool time", () => {
   const first = step("assistant-1", { created: 6_000, streamed: 10_000, completed: 20_000 }, 20, 5)
   const final = step("assistant-2", { created: 24_000, streamed: 30_000, completed: 31_000 }, 30, 10)

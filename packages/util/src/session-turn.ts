@@ -34,25 +34,38 @@ export function duration(messages: readonly Message[], message: Message, options
 }
 
 /**
+ * The fastest rate a step's first-token window is trusted to show. Providers can generate tokens before their first
+ * output event, such as hidden reasoning or a buffered tool call, and then deliver them in a burst; dividing those
+ * tokens by the burst alone reports rates no provider decodes at.
+ */
+const MAX_DECODE_TOKENS_PER_SECOND = 3_000
+
+/**
  * Output and reasoning tokens per second while the provider streamed them, or undefined until every step has streamed.
  *
  * Each step counts from its first streamed token to the end of the response body, so the wait for that first token
- * (time to first token) is not divided into the output rate. Steps recorded before `time.firstToken` existed count
- * from request dispatch instead, which is what this measured for them before the field existed.
+ * (time to first token) is not divided into the output rate. A step whose tokens could not have been decoded in that
+ * window, and steps recorded before `time.firstToken` existed, count from request dispatch instead.
  */
 export function tokensPerSecond(messages: readonly Message[], message: Message, options: Options = {}) {
   const steps = turnSteps(messages, message, options)
-  const durations = steps.flatMap((step) =>
-    step.time.streamed === undefined
-      ? []
-      : [Math.max(0, step.time.streamed - (step.time.firstToken ?? step.time.created))],
-  )
+  const durations = steps.flatMap((step) => {
+    if (step.time.streamed === undefined) return []
+    const request = Math.max(0, step.time.streamed - step.time.created)
+    if (step.time.firstToken === undefined) return [request]
+    const decode = Math.max(0, step.time.streamed - step.time.firstToken)
+    return [stepTokens(step) > (decode / 1_000) * MAX_DECODE_TOKENS_PER_SECOND ? request : decode]
+  })
   if (steps.length === 0 || durations.length !== steps.length) return
-  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0) + (step.tokens?.reasoning ?? 0), 0)
+  const output = steps.reduce((total, step) => total + stepTokens(step), 0)
   const total = durations.reduce((sum, value) => sum + value, 0)
   if (output <= 0 || total <= 0) return
   // Aggregate before dividing so each step is weighted by its provider-active duration.
   return output / (total / 1_000)
+}
+
+function stepTokens(step: Message) {
+  return (step.tokens?.output ?? 0) + (step.tokens?.reasoning ?? 0)
 }
 
 export function legacy(messages: readonly Message[]) {
