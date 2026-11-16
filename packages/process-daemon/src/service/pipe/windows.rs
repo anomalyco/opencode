@@ -38,20 +38,20 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows_sys::Win32::System::JobObjects::{
-    CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_BASIC_LIMIT_INFORMATION,
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
-    SetInformationJobObject, TerminateJobObject,
+    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    JOBOBJECT_BASIC_LIMIT_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
 };
 use windows_sys::Win32::System::Pipes::{
     CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DeleteProcThreadAttributeList,
-    EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess, GetExitCodeProcess, INFINITE,
-    InitializeProcThreadAttributeList, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-    PROC_THREAD_ATTRIBUTE_JOB_LIST, PROCESS_INFORMATION, ResetEvent, STARTF_USESTDHANDLES,
-    STARTUPINFOEXW, SetEvent, TerminateProcess, UpdateProcThreadAttribute, WaitForMultipleObjects,
-    WaitForSingleObject,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
+    DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess,
+    GetExitCodeProcess, INFINITE, InitializeProcThreadAttributeList,
+    PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROC_THREAD_ATTRIBUTE_JOB_LIST, PROCESS_INFORMATION,
+    ResetEvent, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW, SetEvent, TerminateProcess,
+    UpdateProcThreadAttribute, WaitForMultipleObjects, WaitForSingleObject,
 };
 
 use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, Waiter, create_process_refused_job, start_pipe};
@@ -224,18 +224,33 @@ fn spawn(
     job: Option<Job>,
     client: OwnedHandle,
 ) -> Result<Process> {
-    let (created, job) = match create_process(request, job.as_ref(), &client) {
+    let (created, job) = match create_process(request, job.as_ref(), &client, false) {
         Ok(created) => (created, job),
         Err(error) if job.is_some() && create_process_refused_job(error.raw_os_error()) => {
-            // An outer job with UI restrictions refuses new members. Run the
-            // command anyway; only the main process can be killed then.
-            let created = create_process(request, None, &client)
+            // A packaged executable refuses the job attribute but can still
+            // join the job once created; an outer job with UI restrictions
+            // refuses both. The child starts suspended, so it cannot start
+            // anything outside the job before it is assigned.
+            let created = create_process(request, None, &client, true)
                 .with_context(|| format!("failed to spawn {}", request.program))?;
-            eprintln!(
-                "pipe process {id}: cannot join the job object, killing only the main process: {error}"
-            );
-            drop(job);
-            (created, None)
+            let job = job.and_then(|job| match job.assign(&created.process) {
+                Ok(()) => Some(job),
+                Err(assign) => {
+                    eprintln!(
+                        "pipe process {id}: cannot join the job object, killing only the main process: {error}; {assign}"
+                    );
+                    None
+                }
+            });
+            if let Err(error) = created.resume() {
+                // SAFETY: the process handle is open; a failed kill leaves
+                // nothing more to clean up here.
+                unsafe {
+                    TerminateProcess(created.process.as_raw_handle(), 1);
+                }
+                return Err(error).context(format!("failed to resume {}", request.program));
+            }
+            (created, job)
         }
         Err(error) => return Err(error).context(format!("failed to spawn {}", request.program)),
     };
@@ -258,12 +273,29 @@ fn spawn(
 struct Spawned {
     pid: u32,
     process: OwnedHandle,
+    /// The main thread, kept only while a suspended process waits to resume.
+    thread: Option<OwnedHandle>,
+}
+
+impl Spawned {
+    /// Starts a process created suspended. A no-op for any other process.
+    fn resume(&self) -> io::Result<()> {
+        let Some(thread) = &self.thread else {
+            return Ok(());
+        };
+        // SAFETY: the thread handle stays open through the call.
+        if unsafe { ResumeThread(thread.as_raw_handle()) } == u32::MAX {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
 }
 
 fn create_process(
     request: &CreatePipe,
     job: Option<&Job>,
     client: &OwnedHandle,
+    suspended: bool,
 ) -> io::Result<Spawned> {
     let stdin = null_handle()?;
     // A child that closes one of stdout or stderr must still write to the
@@ -297,7 +329,10 @@ fn create_process(
             null(),
             null(),
             1,
-            CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+            CREATE_NO_WINDOW
+                | CREATE_UNICODE_ENVIRONMENT
+                | EXTENDED_STARTUPINFO_PRESENT
+                | if suspended { CREATE_SUSPENDED } else { 0 },
             environment.as_ptr().cast(),
             directory.as_ptr(),
             (&raw const startup).cast(),
@@ -308,12 +343,13 @@ fn create_process(
         return Err(io::Error::last_os_error());
     }
     // SAFETY: CreateProcessW returned new, uniquely owned handles; the thread
-    // handle is not needed.
+    // handle is needed only to resume a suspended process.
     let process = owned_handle(info.hProcess)?;
-    drop(owned_handle(info.hThread)?);
+    let thread = owned_handle(info.hThread)?;
     Ok(Spawned {
         pid: info.dwProcessId,
         process,
+        thread: suspended.then_some(thread),
     })
 }
 
@@ -692,6 +728,15 @@ impl Job {
 
     fn handle(&self) -> HANDLE {
         self.0.as_raw_handle()
+    }
+
+    /// Adds a process created without the job attribute to the job.
+    fn assign(&self, process: &OwnedHandle) -> io::Result<()> {
+        // SAFETY: both handles stay open through the call.
+        if unsafe { AssignProcessToJobObject(self.handle(), process.as_raw_handle()) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
     }
 }
 
