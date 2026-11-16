@@ -2,6 +2,8 @@ export * as BrowserConnection from "./connection.js"
 
 import { hostname } from "node:os"
 import { createHash } from "node:crypto"
+import { rm } from "node:fs/promises"
+import { BrowserFiles } from "./files.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
 import { Location } from "@opencode/schema/location"
@@ -317,8 +319,12 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       }).pipe(
         // A deleted session's grant went with it, and no revoke will forget its owner record.
         Effect.andThen(
-          event.type === "session.deleted"
-            ? ctx.storage.remove(GRANT_PREFIX + event.data.sessionID).pipe(Effect.ignore)
+            event.type === "session.deleted"
+              ? Effect.all([
+                  ctx.storage.remove(GRANT_PREFIX + event.data.sessionID),
+                  Effect.tryPromise(() => rm(BrowserFiles.exportRoot(event.data.sessionID), { recursive: true, force: true }))
+                    .pipe(Effect.tapError((error) => Effect.logWarning("Could not remove deleted session's browser exports", error))),
+                ]).pipe(Effect.ignore)
             : Effect.void,
         ),
       ),

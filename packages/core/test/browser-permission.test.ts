@@ -23,6 +23,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { BrowserConnection } from "../../plugin-browser/src/connection"
+import { BrowserFiles } from "../../plugin-browser/src/files"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -266,11 +267,18 @@ it.live("deleting an attached session forgets the record of who granted it the b
     const storage = PluginHost.storage(yield* KV.Service, "opencode.browser")
     const sessions = yield* Session.Service
     expect(yield* storage.get(`grant:${browser.session.id}`)).toBeDefined()
+    const file = { id: Browser.FileID.make(`file_${crypto.randomUUID()}`), name: "report.txt", mime: "text/plain", data: new TextEncoder().encode("report") }
+    const [saved] = yield* BrowserFiles.save([file], BrowserFiles.exportPaths([file], BrowserFiles.exportRoot(browser.session.id)))
+    expect(yield* Effect.promise(() => Bun.file(saved!.path).exists())).toBe(true)
     yield* sessions.remove(browser.session.id)
     yield* storage.get(`grant:${browser.session.id}`).pipe(
       Effect.flatMap((owner) => (owner === undefined ? Effect.void : Effect.fail("record still there"))),
       Effect.retry(Schedule.spaced("10 millis")),
       Effect.timeout("5 seconds"),
+    )
+    yield* Effect.promise(() => Bun.file(saved!.path).exists()).pipe(
+      Effect.flatMap((exists) => exists ? Effect.fail("session export still there") : Effect.void),
+      Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("5 seconds"),
     )
   }),
 )

@@ -126,7 +126,7 @@ test("saved capture names never escape their directory or name a Windows device"
     data: new TextEncoder().encode(name),
   })
   const files = [file(".."), file("."), file("CON.txt"), file("lpt1"), file("report.html")]
-  const saved = await Effect.runPromise(BrowserFiles.save(files, BrowserFiles.exportPaths(files)))
+  const saved = await Effect.runPromise(BrowserFiles.save(files, BrowserFiles.exportPaths(files, tmpdir())))
   try {
     expect(saved.map((entry) => basename(entry.path))).toEqual([
       "capture",

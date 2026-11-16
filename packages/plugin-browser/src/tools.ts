@@ -183,7 +183,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     const output = yield* Effect.fromResult(decodeResult<Browser.Operation["output"]>(operation, response))
     if (checked.type === "preview" && /\.html?$/i.test(checked.path) && (!("tabID" in output) || !output.tabID || !("url" in output) || !output.url))
       return yield* new Tool.Error({ metadata: { code: "unsupported" }, message: "This desktop acknowledged the HTML preview but did not return its tab. Update the desktop before driving this preview." })
-    const plan = BrowserFiles.exportPaths(response.files)
+    const plan = BrowserFiles.exportPaths(response.files, BrowserFiles.exportRoot(tool.sessionID))
     if (plan.paths.length) yield* BrowserFiles.authorize(ctx, tool, "edit", plan.paths)
     const saved = yield* BrowserFiles.save(response.files, plan)
     return yield* modelResult(action.type === "preview" ? { ...output, path: action.path } : output, response.files, saved)

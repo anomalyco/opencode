@@ -11,7 +11,7 @@ import { workspaceTarget } from "./workspace.js"
 import { previewPath } from "./preview-path.js"
 import { realpath, stat } from "node:fs/promises"
 import { basename, dirname, extname, join, parse, relative, resolve } from "node:path"
-import { tmpdir } from "node:os"
+import { createHash } from "node:crypto"
 
 // Match core FileAccess's lexical resources; the plugin SDK exposes permission.assert, not FileAccess.Service.
 export const authorize = Effect.fn("BrowserFiles.authorize")(function* (
@@ -165,8 +165,13 @@ const types: Record<string, string> = {
   ".gz": "application/gzip",
 }
 
-export function exportPaths(files: readonly Browser.File[]) {
-  const directory = join(tmpdir(), `opencode-browser-${crypto.randomUUID()}`)
+/** A session owns one private cache tree. Neither file names nor session IDs are interpreted as directory paths. */
+export function exportRoot(sessionID: string) {
+  return join(Global.Path.cache, "browser-exports", createHash("sha256").update(sessionID).digest("hex"))
+}
+
+export function exportPaths(files: readonly Browser.File[], root: string) {
+  const directory = join(root, crypto.randomUUID())
   return { directory, paths: files.map((file, index) => join(directory, String(index), captureName(file.name))) }
 }
 
@@ -179,6 +184,7 @@ export const save = Effect.fn("BrowserFiles.save")((files: readonly Browser.File
           "Capture files exceed the 5 MiB total transfer limit. Use a smaller screenshot, a shorter trace/profile, or a smaller page for heap capture; do not retry the identical capture.",
         )
       const { mkdir, writeFile } = await import("node:fs/promises")
+      await mkdir(dirname(plan.directory), { recursive: true, mode: 0o700 })
       await mkdir(plan.directory, { mode: 0o700 })
       return Promise.all(
         files.map(async (file, index) => {
