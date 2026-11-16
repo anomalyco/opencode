@@ -1,6 +1,7 @@
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client/promise"
 import type { MiniFrontendInput } from "@opencode/tui/mini"
+import { I18n } from "@opencode/tui/i18n"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { setTimeout } from "node:timers/promises"
 import { readStdin } from "./util/io"
@@ -198,7 +199,7 @@ function validate(input: MiniCommandInput) {
   if (input.replayLimit !== undefined && (!Number.isInteger(input.replayLimit) || input.replayLimit <= 0)) {
     fail("--replay-limit must be a positive integer")
   }
-  if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
+  if (input.fork && !input.continue && !input.session) fail(I18n.t("cli.forkRequires"))
 }
 
 function localDirectory(): string {
@@ -207,7 +208,7 @@ function localDirectory(): string {
     process.chdir(root)
     return process.cwd()
   } catch {
-    throw new MiniInputError(`Failed to change directory to ${root}`)
+    throw new MiniInputError(I18n.t("cli.chdirFailed", { path: root }))
   }
 }
 

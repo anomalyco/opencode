@@ -251,6 +251,9 @@ export const Info = Schema.Struct({
     description: "Experimental features that may change or be removed at any time",
   }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
+  language: Schema.optional(Schema.Literals(["auto", "en", "zh", "zht"])).annotate({
+    description: "Interface language; 'auto' detects from the environment (default)",
+  }),
   highlights: Schema.optional(Schema.Boolean).annotate({
     description: "Show the release highlights once after OpenCode updates",
   }),

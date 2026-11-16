@@ -16,6 +16,7 @@ import path from "path"
 import stripAnsi from "strip-ansi"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { LANGUAGE_EXTENSIONS } from "../util/filetype"
+import { I18n } from "../i18n"
 import { Locale } from "../util/locale"
 import {
   canonicalToolName,
@@ -276,10 +277,10 @@ function span(frame: ToolFrame): string {
 function fail(ctx: ToolFrame): string {
   const error = toolError(ctx)
   if (error) {
-    return `✖ ${ctx.name} failed: ${error}`
+    return I18n.t("tool.failedReason", { name: ctx.name, error })
   }
 
-  return `✖ ${ctx.name} failed`
+  return I18n.t("tool.failed", { name: ctx.name })
 }
 
 function toolError(ctx: ToolFrame): string {
@@ -315,10 +316,10 @@ function fallbackFinal(ctx: ToolFrame): string {
 
   const time = span(ctx)
   if (!time) {
-    return `${ctx.name} completed`
+    return I18n.t("tool.completed", { name: ctx.name })
   }
 
-  return `${ctx.name} completed · ${time}`
+  return I18n.t("tool.completedTime", { name: ctx.name, time })
 }
 
 export function toolPath(input?: string, opts: { home?: boolean; directory?: string } = {}): string {
@@ -334,7 +335,7 @@ function displayPath(p: ToolProps, input?: string, opts: { home?: boolean } = {}
 }
 
 function fallbackInline(ctx: ToolFrame): ToolInline {
-  const title = Object.keys(ctx.input).length > 0 ? JSON.stringify(ctx.input) : "Unknown"
+  const title = Object.keys(ctx.input).length > 0 ? JSON.stringify(ctx.input) : I18n.t("tool.unknown")
 
   return {
     icon: "⚙",
@@ -342,16 +343,17 @@ function fallbackInline(ctx: ToolFrame): ToolInline {
   }
 }
 
-function count(n: number, label: string): string {
-  return `${n} ${label}${n === 1 ? "" : "es"}`
+function plural(base: "tool.matches" | "tool.patchFiles" | "tool.asked" | "tool.batchTools", count: number): string {
+  return I18n.t(count === 1 ? `${base}.one` : `${base}.other`, { count })
 }
 
 function runGlob(p: ToolProps): ToolInline {
   const root = p.input.path ?? ""
-  const title = `Glob "${p.input.pattern ?? ""}"`
-  const suffix = root ? `in ${displayPath(p, root)}` : ""
+  const title = `${I18n.t("tool.glob")} "${p.input.pattern ?? ""}"`
+  const suffix = root ? I18n.t("tool.inDir", { path: displayPath(p, root) }) : ""
   const matches = p.metadata.count
-  const description = matches === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${count(matches, "match")}`
+  const description =
+    matches === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${plural("tool.matches", matches)}`
   return {
     icon: "✱",
     title,
@@ -361,10 +363,11 @@ function runGlob(p: ToolProps): ToolInline {
 
 function runGrep(p: ToolProps): ToolInline {
   const root = p.input.path ?? ""
-  const title = `Grep "${p.input.pattern ?? ""}"`
-  const suffix = root ? `in ${displayPath(p, root)}` : ""
+  const title = `${I18n.t("tool.grep")} "${p.input.pattern ?? ""}"`
+  const suffix = root ? I18n.t("tool.inDir", { path: displayPath(p, root) }) : ""
   const matches = p.metadata.matches
-  const description = matches === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${count(matches, "match")}`
+  const description =
+    matches === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${plural("tool.matches", matches)}`
   return {
     icon: "✱",
     title,
@@ -376,7 +379,7 @@ function runList(p: ToolProps): ToolInline {
   const dir = text(dict(p.input).path)
   return {
     icon: "→",
-    title: dir ? `List ${displayPath(p, dir)}` : "List",
+    title: dir ? I18n.t("tool.listPath", { path: displayPath(p, dir) }) : I18n.t("tool.list"),
   }
 }
 
@@ -385,7 +388,7 @@ function runRead(p: ToolProps): ToolInline {
   const description = primitiveInputSummary(p.frame.input, ["path"]) || undefined
   return {
     icon: "→",
-    title: `Read ${file}`,
+    title: I18n.t("tool.readPath", { path: file }),
     ...(description && { description }),
   }
 }
@@ -393,7 +396,7 @@ function runRead(p: ToolProps): ToolInline {
 function runWrite(p: ToolProps): ToolInline {
   return {
     icon: "←",
-    title: `Write ${displayPath(p, p.input.path)}`,
+    title: I18n.t("tool.writePath", { path: displayPath(p, p.input.path) }),
     mode: "block",
     body: p.frame.status === "completed" ? p.frame.output : undefined,
   }
@@ -403,7 +406,7 @@ function runWebfetch(p: ToolProps): ToolInline {
   const url = p.input.url ?? ""
   return {
     icon: "%",
-    title: url ? `WebFetch ${url}` : "WebFetch",
+    title: url ? I18n.t("tool.webfetchUrl", { url }) : I18n.t("tool.webfetch"),
   }
 }
 
@@ -411,7 +414,7 @@ function runEdit(p: ToolProps): ToolInline {
   const file = list<PatchFile>(p.metadata.files)[0]
   return {
     icon: "←",
-    title: `Edit ${displayPath(p, p.input.path)}`,
+    title: I18n.t("tool.editPath", { path: displayPath(p, p.input.path) }),
     mode: "block",
     body: file?.patch ?? p.metadata.diff,
   }
@@ -431,8 +434,8 @@ function runTask(p: ToolProps): ToolInline {
   const icon = p.frame.status === "error" ? "✗" : p.frame.status === "running" ? "•" : "✓"
   return {
     icon,
-    title: desc || `${kind} Subagent`,
-    description: desc ? `${kind} Agent` : undefined,
+    title: desc || I18n.t("tool.subagent", { agent: kind }),
+    description: desc ? I18n.t("tool.subagentKind", { agent: kind }) : undefined,
   }
 }
 
@@ -440,7 +443,7 @@ function runSkill(p: ToolProps): ToolInline {
   const name = p.metadata.name ?? p.input.id ?? ""
   return {
     icon: "→",
-    title: `Skill "${name}"`,
+    title: I18n.t("tool.skill", { name }),
   }
 }
 
@@ -449,20 +452,20 @@ function runPatch(p: ToolProps): ToolInline {
   if (files === 0) {
     return {
       icon: "%",
-      title: "Patch",
+      title: I18n.t("tool.patch"),
     }
   }
 
   return {
     icon: "%",
-    title: `Patch ${files} file${files === 1 ? "" : "s"}`,
+    title: plural("tool.patchFiles", files),
   }
 }
 
 function runTodo(p: ToolProps): ToolInline {
   return {
     icon: "#",
-    title: "Todos",
+    title: I18n.t("tool.todos"),
     mode: "block",
     body: parseTodos(p.frame.input.todos)
       .map((item) => `${todoMarker(item.status)} ${item.content}`)
@@ -474,14 +477,14 @@ function runQuestion(p: ToolProps): ToolInline {
   const total = list(p.frame.input.questions).length
   return {
     icon: "→",
-    title: `Asked ${total} question${total === 1 ? "" : "s"}`,
+    title: plural("tool.asked", total),
   }
 }
 
 function runInvalid(p: ToolProps): ToolInline {
   return {
     icon: "✗",
-    title: "Invalid Tool",
+    title: I18n.t("tool.invalid"),
     mode: "block",
     body: p.frame.status === "completed" ? p.frame.output : undefined,
   }
@@ -491,7 +494,7 @@ function runBatch(p: ToolProps): ToolInline {
   const calls = list(dict(p.input).tool_calls).length
   return {
     icon: "#",
-    title: calls > 0 ? `Batch ${calls} tool${calls === 1 ? "" : "s"}` : "Batch",
+    title: calls > 0 ? plural("tool.batchTools", calls) : I18n.t("tool.batch"),
     mode: "block",
     body: p.frame.status === "completed" ? p.frame.output : undefined,
   }
@@ -512,10 +515,10 @@ function lspTitle(
   const char = typeof input.character === "number" ? input.character : undefined
   const pos = line !== undefined && char !== undefined ? `:${line}:${char}` : ""
   if (!file) {
-    return `LSP ${op}`
+    return I18n.t("tool.lsp", { operation: op })
   }
 
-  return `LSP ${op} ${file}${pos}`
+  return I18n.t("tool.lspFile", { operation: op, suffix: `${file}${pos}` })
 }
 
 function runLsp(p: ToolProps): ToolInline {
@@ -527,16 +530,16 @@ function runLsp(p: ToolProps): ToolInline {
 
 function patchTitle(file: PatchFile, directory?: string): string {
   if (file.status === "added") {
-    return `# Created ${toolPath(file.file, { directory })}`
+    return `# ${I18n.t("tool.created", { path: toolPath(file.file, { directory }) })}`
   }
   if (file.status === "deleted") {
-    return `# Deleted ${toolPath(file.file, { directory })}`
+    return `# ${I18n.t("tool.deleted", { path: toolPath(file.file, { directory }) })}`
   }
   if (file.status === "moved") {
-    return `# Moved ${toolPath(file.from, { directory })} -> ${toolPath(file.file, { directory })}`
+    return `# ${I18n.t("tool.moved", { from: toolPath(file.from, { directory }), to: toolPath(file.file, { directory }) })}`
   }
 
-  return `# Patched ${toolPath(file.file, { directory })}`
+  return `# ${I18n.t("tool.patched", { path: toolPath(file.file, { directory }) })}`
 }
 
 function snapWrite(p: ToolProps): ToolSnapshot | undefined {
@@ -548,7 +551,7 @@ function snapWrite(p: ToolProps): ToolSnapshot | undefined {
 
   return {
     kind: "code",
-    title: `# Wrote ${displayPath(p, file)}`,
+    title: `# ${I18n.t("tool.wrote", { path: displayPath(p, file) })}`,
     content,
     file,
   }
@@ -566,7 +569,7 @@ function snapEdit(p: ToolProps): ToolSnapshot | undefined {
     kind: "diff",
     items: [
       {
-        title: `# Edited ${displayPath(p, file)}`,
+        title: `# ${I18n.t("tool.edited", { path: displayPath(p, file) })}`,
         diff,
         file,
       },
@@ -618,7 +621,7 @@ function snapTask(p: ToolProps): ToolSnapshot {
 
   return {
     kind: "task",
-    title: `# ${kind} Subagent`,
+    title: `# ${I18n.t("tool.subagent", { agent: kind })}`,
     rows,
     tail: "",
   }
@@ -636,8 +639,8 @@ function snapQuestion(p: ToolProps): ToolSnapshot {
   const items = list<{ question?: string }>(p.frame.input.questions).map((item, i) => {
     const answer = list<string>(answers[i]).filter((entry) => typeof entry === "string")
     return {
-      question: item.question || `Question ${i + 1}`,
-      answer: answer.length > 0 ? answer.join(", ") : "(no answer)",
+      question: item.question || I18n.t("tool.question", { index: i + 1 }),
+      answer: answer.length > 0 ? answer.join(", ") : I18n.t("tool.noAnswer"),
     }
   })
 
@@ -706,20 +709,20 @@ function scrollShellFinal(p: ToolProps): string {
   const time = span(p.frame)
   if (code === undefined) {
     if (!time) {
-      return "shell completed"
+      return I18n.t("tool.shellCompleted")
     }
 
-    return `shell completed · ${time}`
+    return I18n.t("tool.shellCompletedTime", { time })
   }
 
-  return `shell completed (exit ${code})${time ? ` · ${time}` : ""}`
+  return I18n.t("tool.shellExit", { code }) + (time ? ` · ${time}` : "")
 }
 
 function scrollReadStart(p: ToolProps): string {
   const file = displayPath(p, p.input.path)
   const extra = primitiveInputSummary(p.frame.input, ["path"])
   const tail = extra ? ` ${extra}` : ""
-  return `→ Read ${file}${tail}`.trim()
+  return `→ ${I18n.t("tool.readPath", { path: file })}${tail}`.trim()
 }
 
 function scrollWriteStart(_: ToolProps): string {
@@ -736,17 +739,17 @@ function scrollPatchStart(_: ToolProps): string {
 
 function patchLine(file: PatchFile, directory?: string): string {
   if (file.status === "added") {
-    return `+ Created ${toolPath(file.file, { directory })}`
+    return `+ ${I18n.t("tool.created", { path: toolPath(file.file, { directory }) })}`
   }
 
   if (file.status === "deleted") {
-    return `- Deleted ${toolPath(file.file, { directory })}`
+    return `- ${I18n.t("tool.deleted", { path: toolPath(file.file, { directory }) })}`
   }
   if (file.status === "moved") {
-    return `→ Moved ${toolPath(file.from, { directory })} → ${toolPath(file.file, { directory })}`
+    return `→ ${I18n.t("tool.moved", { from: toolPath(file.from, { directory }), to: toolPath(file.file, { directory }) })}`
   }
 
-  return `~ Patched ${toolPath(file.file, { directory })}`
+  return `~ ${I18n.t("tool.patched", { path: toolPath(file.file, { directory }) })}`
 }
 
 function scrollPatchFinal(p: ToolProps): string {
@@ -758,17 +761,17 @@ function scrollPatchFinal(p: ToolProps): string {
   if (files.length === 0) {
     const time = span(p.frame)
     if (!time) {
-      return "patch"
+      return I18n.t("tool.patchDone")
     }
 
-    return `patch · ${time}`
+    return I18n.t("tool.patchDoneTime", { time })
   }
 
   const showModified = !files.some((file) => file?.status && file.status !== "modified")
   const shown = files.filter((file) => showModified || file.status !== "modified")
   const rows = shown.slice(0, 6).map((file) => patchLine(file, p.frame.directory))
   if (shown.length > 6) {
-    rows.push(`… and ${shown.length - 6} more`)
+    rows.push(I18n.t("tool.more", { count: shown.length - 6 }))
   }
 
   if (rows.length > 0) {
@@ -808,10 +811,10 @@ function scrollTaskFinal(p: ToolProps): string {
   const kind = Locale.titlecase(p.input.agent || "general")
   const row = p.input.description
   if (!row) {
-    return `# ${kind} Subagent`
+    return `# ${I18n.t("tool.subagent", { agent: kind })}`
   }
 
-  return `# ${kind} Subagent\n${row}`
+  return `# ${I18n.t("tool.subagent", { agent: kind })}\n${row}`
 }
 
 function scrollTodoStart(_: ToolProps): string {
@@ -828,22 +831,22 @@ function scrollQuestionFinal(p: ToolProps): string {
   const time = span(p.frame)
   if (q.length === 0) {
     if (!time) {
-      return "0 questions"
+      return I18n.t("tool.zeroQuestions")
     }
 
-    return `0 questions · ${time}`
+    return I18n.t("tool.zeroQuestionsTime", { time })
   }
 
   const rows: string[] = []
   for (const [i, item] of q.slice(0, 4).entries()) {
     const prompt = item.question
     const reply = a[i] ?? []
-    rows.push(`? ${prompt || `Question ${i + 1}`}`)
-    rows.push(`  ${reply.length > 0 ? reply.join(", ") : "(no answer)"}`)
+    rows.push(`? ${prompt || I18n.t("tool.question", { index: i + 1 })}`)
+    rows.push(`  ${reply.length > 0 ? reply.join(", ") : I18n.t("tool.noAnswer")}`)
   }
 
   if (q.length > 4) {
-    rows.push(`… and ${q.length - 4} more`)
+    rows.push(I18n.t("tool.more", { count: q.length - 4 }))
   }
 
   return rows.join("\n")
@@ -1286,7 +1289,7 @@ function structuredFallback(value: ToolDict): RunEntryBody | undefined {
   if (Object.keys(value).length === 0) return
   const content = JSON.stringify(value, null, 2)
   if (!content) return
-  const suffix = "\n… [truncated]"
+  const suffix = "\n" + I18n.t("tool.truncated")
   return {
     type: "code",
     content:

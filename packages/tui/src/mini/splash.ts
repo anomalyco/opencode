@@ -15,12 +15,12 @@ import {
 } from "@opentui/core"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
+import { I18n } from "../i18n"
 import { go } from "../logo"
 import { monoTruncate } from "./mono"
 import type { RunSplashTheme } from "./theme"
 
 const SPLASH_TITLE_LIMIT = 50
-const SPLASH_TITLE_FALLBACK = "Untitled session"
 
 type SplashInput = {
   title: string | undefined
@@ -68,8 +68,9 @@ function cells(line: string): Cell[] {
 }
 
 function title(text: string | undefined, mono = false): string {
+  const fallback = I18n.t("splash.untitled")
   if (!text) {
-    return SPLASH_TITLE_FALLBACK
+    return fallback
   }
 
   let value = ""
@@ -89,7 +90,7 @@ function title(text: string | undefined, mono = false): string {
   }
 
   if (!value) {
-    return SPLASH_TITLE_FALLBACK
+    return fallback
   }
 
   return mono ? monoTruncate(value, SPLASH_TITLE_LIMIT, true) : Locale.truncate(value, SPLASH_TITLE_LIMIT)
@@ -179,8 +180,8 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
   const mark = input.mono ? ["[O]"] : go.right.slice(1)
   const top = 1
   const body_left = (mark[0]?.length ?? 0) + 2
-  const session = "Session  "
-  const label = "Continue "
+  const session = I18n.t("splash.session")
+  const label = I18n.t("splash.continue")
   const command = `opencode mini -s ${meta.session_id}`
   const wide = body_left + stringWidth(label + command) <= width
   const commandHeight = wide ? 1 : Math.ceil(stringWidth(command) / width)
@@ -197,7 +198,7 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
 
     if (input.showSession !== false) {
       push(lines, body_left, top, session, left)
-      push(lines, body_left + session.length, top, meta.title, right, undefined, TextAttributes.BOLD)
+      push(lines, body_left + stringWidth(session), top, meta.title, right, undefined, TextAttributes.BOLD)
     }
     push(lines, body_left, top + 1, label, left)
   }
@@ -217,9 +218,9 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
   root.add(
     new TextRenderable(ctx.renderContext, {
       position: "absolute",
-      left: wide ? body_left + label.length : 0,
+      left: wide ? body_left + stringWidth(label) : 0,
       top: wide ? top + 1 : top,
-      width: wide ? width - body_left - label.length : width,
+      width: wide ? width - body_left - stringWidth(label) : width,
       height: commandHeight,
       wrapMode: "char",
       content: command,

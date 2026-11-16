@@ -45,7 +45,7 @@ export function webSearchProviderName(provider: unknown) {
 
 export function webSearchProviderLabel(provider: unknown) {
   const name = webSearchProviderName(provider)
-  return name ? `Web Search via ${name}` : "Web Search"
+  return name ? I18n.t("websearch.via", { name }) : I18n.t("websearch.label")
 }
 
 export function toolDisplayMetadata(state: unknown): Record<string, unknown> {
@@ -67,4 +67,5 @@ export function nonEmptyToolContent<T>(content: ReadonlyArray<T> | undefined): [
   return first === undefined ? undefined : [first, ...rest]
 }
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { I18n } from "../i18n"
 import { isRecord } from "./record"

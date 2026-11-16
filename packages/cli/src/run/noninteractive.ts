@@ -15,6 +15,7 @@ import {
 import { SessionMessage } from "@opencode/schema/session-message"
 import { EOL } from "node:os"
 import { toolOutputText, type MiniToolPart } from "@opencode/tui/mini/tool"
+import { I18n } from "@opencode/tui/i18n"
 import { UI } from "./ui"
 
 type Input = {
@@ -66,7 +67,7 @@ const PERMISSION_REJECTED_FEEDBACK =
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
   const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
-  if ((await stream.next()).done) throw new Error("Event stream disconnected before prompt admission")
+  if ((await stream.next()).done) throw new Error(I18n.t("cli.streamDisconnectedAdmission"))
 
   const messageID = SessionMessage.ID.create()
   const render = renderer(input)
@@ -147,7 +148,7 @@ export async function runNonInteractivePrompt(input: Input) {
       })
       if (next.done) {
         if (controller.signal.aborted) return
-        throw new Error("Event stream disconnected during prompt execution")
+        throw new Error(I18n.t("cli.streamDisconnectedExecution"))
       }
       const event = next.value
       if (event.type === "permission.asked") {
@@ -312,14 +313,14 @@ function finalError(
   state: { failure?: RunError; outcomes: Outcome[] },
 ) {
   if (state.failure) return state.failure
-  if (!run.found) return { type: "unknown", message: "Prompt was not promoted" }
+  if (!run.found) return { type: "unknown", message: I18n.t("cli.notPromoted") }
   const idles = run.messages.filter((message) => message.type === "idle")
   const recorded = idles.length > 0 ? idles : state.outcomes
   // The first marker closes this prompt's turn. Later ones count only as replies woken by this
   // prompt's background jobs; otherwise they belong to other prompts, possibly from another client.
   const turns = run.background ? recorded : recorded.slice(0, 1)
   const final = turns.find((turn) => turn.outcome !== "succeeded") ?? turns[0]
-  if (!final) return { type: "unknown", message: "Session ended without a recorded outcome" }
+  if (!final) return { type: "unknown", message: I18n.t("cli.noOutcome") }
   if (final.outcome === "succeeded") return
   const fallback = { type: final.outcome === "failed" ? "unknown" : "aborted", message: `Session ${final.outcome}` }
   return final.error ?? state.outcomes.find((turn) => turn.id === final.id)?.error ?? fallback

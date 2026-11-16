@@ -8,6 +8,7 @@ import { readStdin, readStdinIfReady } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
 import { createWorktreeLocation, parseSessionTargetModel, resolveSessionTarget } from "../session-target"
 import { toolInlineInfo } from "@opencode/tui/mini/tool"
+import { I18n } from "@opencode/tui/i18n"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
 import { Env } from "../env"
@@ -56,9 +57,8 @@ export function runNonInteractive(input: RunCommandInput, signal: AbortSignal) {
 }
 
 async function run(input: RunCommandInput, signal: AbortSignal) {
-  if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
-  if (input.worktree !== undefined && (input.continue || input.session))
-    fail("--worktree starts a new session and cannot be combined with --continue or --session")
+  if (input.fork && !input.continue && !input.session) fail(I18n.t("cli.forkRequires"))
+  if (input.worktree !== undefined && (input.continue || input.session)) fail(I18n.t("cli.worktreeConflict"))
   const root = process.env.PWD ?? process.cwd()
   const directory = localDirectory(root)
   const argument = input.message.join(" ") || undefined
@@ -70,7 +70,7 @@ async function run(input: RunCommandInput, signal: AbortSignal) {
       ? await readStdinIfReady(PIPED_INPUT_GRACE_MS)
       : await readStdin()
   const message = mergeInput(argument, piped)
-  if (!message?.trim()) fail("You must provide a message")
+  if (!message?.trim()) fail(I18n.t("cli.messageRequired"))
   const files = await Promise.all(input.file.map((file) => prepareFile(file, root)))
   return execute(input, { directory, message, files }, input.server.endpoint, signal)
 }
@@ -92,7 +92,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
           location,
           name: input.worktree === true ? undefined : input.worktree,
         })
-  if (worktree) UI.println(UI.Style.TEXT_DIM + "worktree " + worktree.root + UI.Style.TEXT_NORMAL)
+  if (worktree) UI.println(UI.Style.TEXT_DIM + I18n.t("cli.worktreeLabel") + worktree.root + UI.Style.TEXT_NORMAL)
   const target = await resolveSessionTarget({
     client,
     location: worktree ? { directory: worktree.directory } : location,
@@ -106,7 +106,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     environment: input.server.service ? Env.session() : undefined,
     prepare: async (next) => {
       if (explicit?.variant && !next.model)
-        throw new RunTargetError("Cannot select a variant before selecting a model", next.session?.id)
+        throw new RunTargetError(I18n.t("cli.variantBeforeModel"), next.session?.id)
       return { model: next.model, agent: next.agent }
     },
   }).catch((error) => {
@@ -154,7 +154,7 @@ function localDirectory(root: string) {
     process.chdir(root)
     return process.cwd()
   } catch {
-    fail(`Failed to change directory to ${root}`)
+    fail(I18n.t("cli.chdirFailed", { path: root }))
   }
 }
 
@@ -169,11 +169,10 @@ export function parseRunModel(value?: string) {
 
 async function prepareFile(input: string, directory: string): Promise<FilePart> {
   const file = path.resolve(directory, input)
-  const handle = await open(file, "r").catch(() => fail(`File not found: ${input}`))
+  const handle = await open(file, "r").catch(() => fail(I18n.t("cli.fileNotFound", { file: input })))
   try {
     const stat = await handle.stat()
-    if (!stat.isFile() || stat.size > ATTACH_FILE_MAX_BYTES)
-      fail(`Cannot attach a directory, special file, or file larger than 10 MiB: ${input}`)
+    if (!stat.isFile() || stat.size > ATTACH_FILE_MAX_BYTES) fail(I18n.t("cli.attachInvalid", { file: input }))
     const content = Buffer.alloc(Number(stat.size))
     let offset = 0
     while (offset < content.length) {
@@ -222,7 +221,7 @@ async function renderTool(part: SessionMessageAssistantTool, directory: string) 
 
 async function renderToolError(part: SessionMessageAssistantTool, directory: string) {
   const info = toolInlineInfo(part, directory)
-  UI.println(UI.Style.TEXT_NORMAL + "✗", UI.Style.TEXT_NORMAL + `${info.title} failed`)
+  UI.println(UI.Style.TEXT_NORMAL + "✗", UI.Style.TEXT_NORMAL + I18n.t("cli.toolFailed", { title: info.title }))
 }
 
 export function reportRunError(input: Pick<RunCommandInput, "format">, message: string, sessionID?: string) {

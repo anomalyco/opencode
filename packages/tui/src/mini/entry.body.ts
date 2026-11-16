@@ -1,4 +1,5 @@
 import { toolEntryBody } from "./tool"
+import { I18n } from "../i18n"
 import { monoPrefix, monoToolText } from "./mono"
 import type { RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
@@ -67,10 +68,10 @@ function reasoningBody(raw: string, mono: boolean): RunEntryBody {
 
   const lead = clean.match(/^\n+/)?.[0] ?? ""
   const body = lead ? clean.slice(lead.length) : clean
-  const mark = "Thinking:"
+  const mark = I18n.t("entry.thinking")
   if (body.startsWith(mark)) {
     if (mono) return textBody(`${lead}${mark} ${body.slice(mark.length).trimStart()}`)
-    return codeBody(`${lead}_Thinking:_ ${body.slice(mark.length).trimStart()}`, "markdown")
+    return codeBody(`${lead}_${I18n.t("entry.thinking").trim()}_ ${body.slice(mark.length).trimStart()}`, "markdown")
   }
 
   return mono ? textBody(clean) : codeBody(clean, "markdown")
@@ -197,7 +198,7 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
   const mono = options?.mono === true
 
   if (commit.image) {
-    const caption = raw.trim() || "Image"
+    const caption = raw.trim() || I18n.t("entry.image")
     return commit.kind === "user" ? userBody(caption, mono) : textBody(monoToolText(caption, mono))
   }
 
@@ -218,7 +219,7 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
     }
 
     if (commit.phase === "final") {
-      return commit.interrupted ? textBody("assistant interrupted") : RUN_ENTRY_NONE
+      return commit.interrupted ? textBody(I18n.t("entry.assistantInterrupted")) : RUN_ENTRY_NONE
     }
 
     return markdownBody(raw)
@@ -230,7 +231,7 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
     }
 
     if (commit.phase === "final") {
-      return commit.interrupted ? textBody("reasoning interrupted") : RUN_ENTRY_NONE
+      return commit.interrupted ? textBody(I18n.t("entry.reasoningInterrupted")) : RUN_ENTRY_NONE
     }
 
     return reasoningBody(raw, mono)

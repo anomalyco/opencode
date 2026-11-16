@@ -1,4 +1,5 @@
 import type { MiniSettingChange, MiniSettings, MiniVerbosity } from "./types"
+import { I18n } from "../i18n"
 
 const levels: readonly MiniVerbosity[] = ["quiet", "default", "everything"]
 
@@ -31,10 +32,10 @@ const presets = {
 } as const satisfies Record<MiniVerbosity, VerbosityKnobs>
 
 const labels = {
-  quiet: "Quiet",
-  default: "Default",
-  everything: "Everything",
-  custom: "Custom",
+  quiet: I18n.t("verbosity.quiet"),
+  default: I18n.t("verbosity.default"),
+  everything: I18n.t("verbosity.everything"),
+  custom: I18n.t("verbosity.custom"),
 } as const
 
 export function verbosityPreset(level: MiniVerbosity): VerbosityKnobs {

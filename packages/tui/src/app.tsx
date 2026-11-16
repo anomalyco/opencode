@@ -104,6 +104,7 @@ import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
+import { I18n } from "./i18n"
 import { destroyRenderer, setTerminalTitle } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
@@ -216,6 +217,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
   })
+  I18n.setLocale(config.language)
   const headers = Service.headers(input.server.endpoint)
   const options = {
     baseUrl: input.server.endpoint.url,

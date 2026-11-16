@@ -1,4 +1,5 @@
 import { EOL } from "node:os"
+import { I18n } from "@opencode/tui/i18n"
 
 export const Style = {
   TEXT_DIM: "\x1b[90m",
@@ -20,8 +21,9 @@ export function empty() {
 }
 
 export function error(message: string) {
-  if (message.startsWith("Error: ")) message = message.slice("Error: ".length)
-  println(Style.TEXT_DANGER_BOLD + "Error: " + Style.TEXT_NORMAL + message)
+  const prefix = I18n.t("cli.errorPrefix")
+  if (message.startsWith(prefix)) message = message.slice(prefix.length)
+  println(Style.TEXT_DANGER_BOLD + prefix + Style.TEXT_NORMAL + message)
 }
 
 export * as UI from "./ui"
