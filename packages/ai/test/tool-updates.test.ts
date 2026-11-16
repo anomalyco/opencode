@@ -264,11 +264,7 @@ describe("Anthropic Messages tool updates", () => {
         { role: "user", content: [{ type: "text", text: "Next." }] },
         {
           role: "system",
-          content: [
-            definition(write),
-            removal("edit"),
-            { type: "text", text: "`edit` is no longer available. Do not call it." },
-          ],
+          content: [definition(write), removal("edit")],
         },
       ])
       const addition = prepared.body.messages[3]?.content[0]
@@ -292,7 +288,7 @@ describe("Anthropic Messages tool updates", () => {
     }),
   )
 
-  it.effect("only mentions removals that match no current tool in the note", () =>
+  it.effect("drops removals that match no current tool", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
@@ -303,13 +299,17 @@ describe("Anthropic Messages tool updates", () => {
         }),
       )
 
-      expect(prepared.body.messages.at(-1)).toEqual({
-        role: "system",
-        content: [
-          removal("read"),
-          { type: "text", text: "`read` and `ghost` are no longer available. Do not call them." },
-        ],
-      })
+      const unknown = yield* compileRequest(
+        ai.request({
+          model: opus5,
+          tools: [read],
+          messages: [Message.user("Go."), Message.tools({ remove: ["ghost"] })],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages.at(-1)).toEqual({ role: "system", content: [removal("read")] })
+      expect(unknown.body.messages).toEqual([{ role: "user", content: [{ type: "text", text: "Go." }] }])
     }),
   )
 
@@ -323,7 +323,7 @@ describe("Anthropic Messages tool updates", () => {
     }),
   )
 
-  it.effect("lists several removals in one note", () =>
+  it.effect("sends several removals as blocks in one message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
@@ -336,12 +336,7 @@ describe("Anthropic Messages tool updates", () => {
 
       expect(prepared.body.messages.at(-1)).toEqual({
         role: "system",
-        content: [
-          removal("read"),
-          removal("edit"),
-          removal("write"),
-          { type: "text", text: "`read`, `edit` and `write` are no longer available. Do not call them." },
-        ],
+        content: [removal("read"), removal("edit"), removal("write")],
       })
     }),
   )
@@ -411,9 +406,20 @@ describe("OpenAI Responses tool updates", () => {
       (item) => "type" in item && (item.type === "additional_tools" || ("role" in item && item.role === "developer")),
     )
 
-  it.effect("lowers additions to additional_tools items and removals to developer text in place", () =>
+  it.effect("lowers additions to additional_tools items in place", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(ai.request({ model: astra, tools: [read, edit], messages: conversation }))
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: astra,
+          tools: [read, edit],
+          messages: [
+            Message.user("Fix it."),
+            Message.assistant("Done."),
+            Message.tools({ add: [write] }),
+            Message.user("Next."),
+          ],
+        }),
+      )
       const plain = yield* compileRequest(ai.request({ model: astra, tools: [read, write], prompt: "x" }))
 
       expect(prepared.body.tools?.map((entry) => ("name" in entry ? entry.name : entry.type))).toEqual(["read", "edit"])
@@ -421,12 +427,26 @@ describe("OpenAI Responses tool updates", () => {
         { type: "message", role: "user", content: [{ type: "input_text", text: "Fix it." }] },
         { type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Done." }] },
         { type: "additional_tools", role: "developer", tools: [plain.body.tools?.[1]] },
-        {
-          type: "message",
-          role: "developer",
-          content: "`edit` is no longer available. Do not call it.",
-        },
         { type: "message", role: "user", content: [{ type: "input_text", text: "Next." }] },
+      ])
+    }),
+  )
+
+  it.effect("folds every marker when any marker removes a tool", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: astra,
+          tools: [read, edit],
+          messages: [Message.user("Go."), Message.tools({ add: [jira] }), ...conversation],
+        }),
+      )
+
+      expect(updates(prepared.body)).toEqual([])
+      expect(prepared.body.tools?.map((entry) => ("name" in entry ? entry.name : entry.type))).toEqual([
+        "read",
+        "jira",
+        "write",
       ])
     }),
   )

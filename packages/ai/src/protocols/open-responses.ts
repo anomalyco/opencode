@@ -31,7 +31,7 @@ import {
 } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
-import { removalNotice, toolsUpdate } from "../tool-updates.js"
+import { toolsUpdate } from "../tool-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -444,7 +444,7 @@ export interface ProviderAdapter {
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
-  /** Lowers the tools a `Message.tools(...)` marker adds; routes without it must fold tool updates. */
+  /** Lowers the tools a `Message.tools(...)` marker adds; routes without it, and removals, must fold tool updates. */
   readonly lowerAdditionalTools?: (
     tools: ReadonlyArray<ToolEntry>,
     custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
@@ -683,19 +683,13 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
       }
       const tools = toolsUpdate(message)
       if (tools) {
-        if (adapter.lowerAdditionalTools === undefined)
+        if (adapter.lowerAdditionalTools === undefined || tools.remove.length > 0)
           return yield* ProviderShared.invalidRequest(`${adapter.name} does not support mid-conversation tool updates`)
         if (tools.add.length > 0)
           input.push({
             type: "additional_tools",
             role: "developer",
             tools: yield* adapter.lowerAdditionalTools(tools.add, custom),
-          })
-        if (tools.remove.length > 0)
-          input.push({
-            type: "message",
-            role: "developer",
-            content: removalNotice(tools.remove),
           })
         if (message.content.length === 0) continue
       }

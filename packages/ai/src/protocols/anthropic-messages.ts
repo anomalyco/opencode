@@ -29,7 +29,7 @@ import {
 import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared, withUntypedFrames } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
-import { foldTools, removalNotice, toolsUpdate } from "../tool-updates.js"
+import { foldTools, toolsUpdate } from "../tool-updates.js"
 import * as Cache from "./utils/cache.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -806,10 +806,9 @@ const lowerWrappedSystemUpdate = Effect.fnUntraced(function* (
 const lowerToolsUpdate = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   update: ToolChanges,
-  removal: ToolRemoval,
+  removed: ReadonlyArray<string>,
   breakpoints: Cache.Breakpoints,
 ) {
-  const noticed = [...removal.removed, ...removal.unknown]
   const text = message.content.length === 0 ? [] : (yield* lowerNativeSystemUpdate(message, breakpoints)).content
   return {
     role: "system" as const,
@@ -818,35 +817,25 @@ const lowerToolsUpdate = Effect.fnUntraced(function* (
         type: "tool_addition" as const,
         tool: { type: "tool_definition" as const, definition: lowerTool(breakpoints, tool) },
       })),
-      ...removal.removed.map((name) => ({
+      ...removed.map((name) => ({
         type: "tool_removal" as const,
         tool: { type: "tool_reference" as const, name },
       })),
-      ...(noticed.length === 0 ? [] : [{ type: "text" as const, text: removalNotice(noticed) }]),
       ...text,
     ],
   }
 })
 
-interface ToolRemoval {
-  readonly removed: ReadonlyArray<string>
-  /** Names that match no current tool: only mentioned in the note, since a native removal of them may be rejected. */
-  readonly unknown: ReadonlyArray<string>
-}
-
-// Removing a namespace removes every flattened tool inside it.
+// Removing a namespace removes every flattened tool inside it. Names that match no current tool are dropped.
 const toolRemovals = (request: LLMRequest) => {
-  const removals = new Map<ToolChanges, ToolRemoval>()
+  const removals = new Map<ToolChanges, ReadonlyArray<string>>()
   request.messages.reduce((tools, message) => {
     const update = toolsUpdate(message)
     if (update === undefined) return tools
-    const names = new Set(tools.map((tool) => tool.name))
-    removals.set(update, {
-      removed: ProviderShared.flattenTools(tools.filter((tool) => update.remove.includes(tool.name))).map(
-        (tool) => tool.name,
-      ),
-      unknown: update.remove.filter((name) => !names.has(name)),
-    })
+    removals.set(
+      update,
+      ProviderShared.flattenTools(tools.filter((tool) => update.remove.includes(tool.name))).map((tool) => tool.name),
+    )
     return foldTools(tools, update.add, update.remove)
   }, request.tools)
   return removals
@@ -872,12 +861,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
       const tools = toolsUpdate(update)
       if (tools !== undefined) {
         if (!native) return yield* invalid("Anthropic Messages tool updates must follow a user message or tool result")
-        const lowered = yield* lowerToolsUpdate(
-          update,
-          tools,
-          removals.get(tools) ?? { removed: [], unknown: [] },
-          breakpoints,
-        )
+        const lowered = yield* lowerToolsUpdate(update, tools, removals.get(tools) ?? [], breakpoints)
         if (lowered.content.length > 0) messages.push(lowered)
         continue
       }

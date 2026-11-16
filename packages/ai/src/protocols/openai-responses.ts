@@ -9,6 +9,7 @@ import { HttpTransport } from "../route/transport/index.js"
 import type { LLMRequest, ToolDefinition, ToolEntry } from "../schema/index.js"
 import { requestTTL } from "../cache-policy.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
+import { toolsUpdate } from "../tool-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { JsonObject, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -175,9 +176,12 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   return match !== null && Number(match[1]) >= 6
 }
 
-// Without starting tools there is no cached tool list to preserve.
+// Without starting tools there is no cached tool list to preserve. `additional_tools` can't remove a tool, so a
+// request whose markers remove any folds as a whole.
 const supportsToolUpdates = (request: LLMRequest) =>
-  request.model.capabilities?.tools?.updates === true && request.tools.length > 0
+  request.model.capabilities?.tools?.updates === true &&
+  request.tools.length > 0 &&
+  request.messages.every((message) => (toolsUpdate(message)?.remove.length ?? 0) === 0)
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
   const native = tool.native?.openai

@@ -53,10 +53,3 @@ export const mapToolUpdates = (
     ),
   }
 }
-
-/** The note sent with removals: a provider may not stop the model from calling a removed tool. */
-export const removalNotice = (names: ReadonlyArray<string>) => {
-  const quoted = names.map((name) => `\`${name}\``)
-  if (quoted.length === 1) return `${quoted[0]} is no longer available. Do not call it.`
-  return `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)} are no longer available. Do not call them.`
-}
