@@ -5,8 +5,9 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use crate::wire::{
-    Reply, WireOptions, assert_matches, child_created, delivered, durable_event, ephemeral_event, events, lock,
-    permission_asked, start_session, succeeded, text_delta, tool_called, tool_started, tool_succeeded, turn,
+    Reply, WireOptions, assert_matches, background_shell, child_created, delivered, durable_event, ephemeral_event,
+    events, lock, permission_asked, shell_notice, start_session, succeeded, text_delta, tool_called, tool_started,
+    tool_succeeded, turn,
 };
 
 fn child_work() -> WireOptions {
@@ -205,6 +206,58 @@ async fn streams_resumed_parent_turns_after_background_children_report_across_pr
             { "messageId": "msg_chat", "content": { "text": "chat reply" } },
             { "messageId": "msg_reaction_2", "content": { "text": "second reaction" } },
             { "messageId": "msg_reaction_3", "content": { "text": "followup reaction" } },
+        ]),
+    );
+}
+
+// #64262: a background shell's notice wakes the session after the prompt responded, and that turn streams. The
+// second shell finishes as its turn ends: the notice is queued in it but wakes the session afterwards.
+#[tokio::test]
+async fn streams_resumed_turns_after_background_shells_finish() {
+    let acp = start_session(
+        WireOptions {
+            on_prompt: Some(events(|call| {
+                let session = call.session_id.as_str();
+                let shell = format!("sh_{}", call.text);
+                let mut events = background_shell(session, &shell);
+                if call.text == "second" {
+                    events.push(shell_notice(session, "msg_notice_second", &shell, true));
+                }
+                turn(session, &call.id, events)
+            })),
+            ..WireOptions::default()
+        },
+        json!({}),
+    )
+    .await;
+    let session = acp.session_id.clone();
+    let reaction = |text: &'static str| move |item: &Value| item.to_string().contains(text);
+
+    assert_eq!(acp.prompt(&session, "first").await.unwrap()["stopReason"], "end_turn");
+    let mut wake = vec![shell_notice(&session, "msg_notice_first", "sh_first", true)];
+    wake.extend(turn(&session, "msg_notice_first", vec![text_delta(&session, "msg_reaction_1", "first reaction", 0)]));
+    acp.server.send(&wake);
+    acp.wait_for_update("first reaction", reaction("first reaction")).await;
+
+    assert_eq!(acp.prompt(&session, "second").await.unwrap()["stopReason"], "end_turn");
+    acp.server.send(&turn(
+        &session,
+        "msg_notice_second",
+        vec![text_delta(&session, "msg_reaction_2", "second reaction", 0)],
+    ));
+    acp.wait_for_update("second reaction", reaction("second reaction")).await;
+
+    let chunks: Vec<Value> = acp
+        .turn_updates()
+        .into_iter()
+        .map(|item| item["update"].clone())
+        .filter(|update| update["sessionUpdate"] == "agent_message_chunk")
+        .collect();
+    assert_matches(
+        &json!(chunks),
+        &json!([
+            { "messageId": "msg_reaction_1", "content": { "text": "first reaction" } },
+            { "messageId": "msg_reaction_2", "content": { "text": "second reaction" } },
         ]),
     );
 }

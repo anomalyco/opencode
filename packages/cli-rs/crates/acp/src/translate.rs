@@ -108,6 +108,8 @@ pub struct TurnState {
     pub compactions: compaction::Tracked,
     pub children: HashMap<String, child::Session>,
     pub open_children: HashSet<String>,
+    /// Background shells that will wake their session, with the inbox ID of their notice once it is queued.
+    pub shells: HashMap<String, Option<String>>,
     pub asks: HashSet<String>,
     pub finish: Option<String>,
     pub usage: Option<Usage>,
@@ -189,12 +191,24 @@ pub fn fold(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Folded {
     if session_id != ctx.session_id && child.is_none() {
         return Folded::default();
     }
-    if session_id == ctx.session_id
-        && kind(event) == "session.inbox.delivered"
-        && ctx.start.as_ref().is_none_or(|start| text(data, "inboxID") == Some(&start.id))
-    {
-        state.started = true;
-        return Folded::default();
+    match kind(event) {
+        "session.inbox.enqueued" => {
+            shell_noticed(state, data);
+            return Folded::default();
+        }
+        "session.inbox.delivered" | "session.inbox.cancelled" => {
+            if let Some(inbox) = text(data, "inboxID") {
+                state.shells.retain(|_, notice| notice.as_deref() != Some(inbox));
+            }
+            if session_id == ctx.session_id
+                && kind(event) == "session.inbox.delivered"
+                && ctx.start.as_ref().is_none_or(|start| text(data, "inboxID") == Some(&start.id))
+            {
+                state.started = true;
+            }
+            return Folded::default();
+        }
+        _ => {}
     }
     if child.is_none() && !state.started {
         return Folded::default();
@@ -203,6 +217,23 @@ pub fn fold(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Folded {
         Some(child) => child_event(state, event, ctx, &child),
         None => root_event(state, event, ctx),
     }
+}
+
+/// Whether work that outlives the turn, such as a background child or shell, can still wake the session.
+pub fn pending(state: &TurnState) -> bool {
+    !state.open_children.is_empty() || !state.shells.is_empty()
+}
+
+/// A background shell's notice wakes the session once delivered, so the shell stays pending until then. Only a
+/// job's notice wakes it: a user's shell command queues one without a job ID that waits for the next prompt.
+fn shell_noticed(state: &mut TurnState, data: &Value) {
+    let item = data.get("item").unwrap_or(&Value::Null);
+    if text(item, "type") != Some("synthetic") {
+        return;
+    }
+    let metadata = item.get("payload").and_then(|payload| payload.get("metadata")).unwrap_or(&Value::Null);
+    let (Some(shell), Some(_)) = (text(metadata, "shellID"), text(metadata, "jobID")) else { return };
+    state.shells.insert(shell.to_owned(), text(data, "inboxID").map(str::to_owned));
 }
 
 /// `projectChild`: without the child capability, only the prompt turn that started a child shows its work.
@@ -459,6 +490,13 @@ fn session_event(state: &mut TurnState, event: &Value, ctx: &TurnContext, child:
                 .shift_remove(&tool_key(tool_session, id))
                 .unwrap_or_else(|| new_tool(tool_session, id, None));
             let metadata = data.get("metadata").filter(|value| !value.is_null());
+            // A shell moved to the background reports its end through a notice that wakes the session. A command
+            // that exits at once can queue its notice first; keep the notice it already has.
+            if let Some(metadata) = metadata.filter(|metadata| text(metadata, "status") == Some("running"))
+                && let Some(shell) = text(metadata, "shellID")
+            {
+                state.shells.entry(shell.to_owned()).or_insert(None);
+            }
             let mut update = completed_tool_update(
                 id,
                 &tool.name,

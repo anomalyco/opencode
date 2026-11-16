@@ -247,6 +247,7 @@ impl Turns {
             let inherited = lock(&previous.state);
             state.children = inherited.children.clone();
             state.open_children = inherited.open_children.clone();
+            state.shells = inherited.shells.clone();
         }
         let scope = self.scope.child_token();
         let (event_sender, events) = mpsc::unbounded_channel();
@@ -479,7 +480,7 @@ impl Turns {
         }
         let state = lock(&turn.state).clone();
         let mut backgrounds = lock(&self.backgrounds);
-        if state.open_children.is_empty() {
+        if !translate::pending(&state) {
             if !state.children.is_empty() {
                 let background =
                     Background { attached: Arc::downgrade(attached), state: turn.state.clone(), follower: None };
@@ -488,8 +489,8 @@ impl Turns {
             close.cancel();
             return;
         }
-        // Children outlive a cancelled turn, so their asks and the parent turns their reports start still reach
-        // the client.
+        // Children and background shells outlive a cancelled turn, so their asks and the turns they wake still
+        // reach the client.
         let next = Arc::new(Mutex::new(TurnState { started: false, ..state }));
         let (stop, ended) = (CancellationToken::new(), CancellationToken::new());
         let follower = Some((stop.clone(), ended.clone()));
@@ -512,7 +513,7 @@ impl Turns {
             let follow = async {
                 // The prompt's response goes first.
                 let _ = responded.wait_for(|done| *done).await;
-                let _ = this.follow_children(&background).await;
+                let _ = this.follow_background(&background).await;
             };
             tokio::select! {
                 () = follow => {}
@@ -569,18 +570,19 @@ impl Turns {
         )
     }
 
-    /// Folds the next event and interprets its outputs. Returns the terminal and whether children stay open.
+    /// Folds the next event and interprets its outputs. Returns the terminal and whether background work can still
+    /// wake the session.
     async fn advance(self: &Arc<Self>, turn: &Turn) -> Result<(Option<Terminal>, bool), Failure> {
         let event = take(&turn.subscription).await?;
-        let (folded, children_open) = {
+        let (folded, pending) = {
             let mut state = lock(&turn.state);
             let folded = translate::fold(&mut state, &event, &turn.ctx);
-            (folded, !state.open_children.is_empty())
+            (folded, translate::pending(&state))
         };
         for output in folded.outputs {
             self.interpret(turn, output).await?;
         }
-        Ok((folded.terminal, children_open))
+        Ok((folded.terminal, pending))
     }
 
     async fn consume(self: &Arc<Self>, turn: &Turn) -> Result<Terminal, Failure> {
@@ -593,11 +595,11 @@ impl Turns {
         }
     }
 
-    /// Until a parent turn ends with no child open.
-    async fn follow_children(self: &Arc<Self>, turn: &Turn) -> Result<(), Failure> {
+    /// Until a parent turn ends with no child open and no background shell left to wake it.
+    async fn follow_background(self: &Arc<Self>, turn: &Turn) -> Result<(), Failure> {
         loop {
-            let (terminal, children_open) = self.advance(turn).await?;
-            if terminal.is_some() && !children_open {
+            let (terminal, pending) = self.advance(turn).await?;
+            if terminal.is_some() && !pending {
                 asks_settled(&turn.subscription).await;
                 return Ok(());
             }

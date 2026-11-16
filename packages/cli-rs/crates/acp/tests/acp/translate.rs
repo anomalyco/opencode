@@ -5,8 +5,8 @@ use opencode_acp::translate::{self, Output, StartKind, Terminal, TurnContext, Tu
 use serde_json::{Value, json};
 
 use crate::wire::{
-    assert_matches, child_created, delivered, durable_event, failed, reasoning_delta, step_ended, succeeded,
-    text_delta, tool_called, tool_failed, tool_progress, tool_started, tool_succeeded, usage,
+    assert_matches, background_shell, child_created, delivered, durable_event, failed, reasoning_delta, shell_notice,
+    step_ended, succeeded, text_delta, tool_called, tool_failed, tool_progress, tool_started, tool_succeeded, usage,
 };
 
 const ROOT: &str = "ses_root";
@@ -85,6 +85,7 @@ fn translated(events: &[Value], ctx: &TurnContext) -> Value {
         "response": result.terminal.map(|terminal| translate::response(&result.state, ROOT, terminal)),
         "failure": translate::failure(&result.state).map(|failure| failure.tag()),
         "context": usage,
+        "pending": translate::pending(&result.state),
         "abandoned": updates(&translate::abandon(&mut result.state, ctx).outputs),
     })
 }
@@ -365,6 +366,86 @@ fn turn_translation() {
                 },
                 { "toolCallId": "ses_child:call_child", "status": "failed", "title": "Explore: read" },
             ] }),
+        ),
+        (
+            "keeps a background shell pending after its turn ends",
+            false,
+            live([background_shell(ROOT, "sh_bg"), vec![succeeded(ROOT)]].concat()),
+            json!({ "terminal": "succeeded", "pending": true }),
+        ),
+        (
+            "keeps a background shell pending until its queued notice is delivered",
+            false,
+            live(
+                [
+                    background_shell(ROOT, "sh_bg"),
+                    vec![shell_notice(ROOT, "msg_notice", "sh_bg", true), succeeded(ROOT)],
+                ]
+                .concat(),
+            ),
+            json!({ "pending": true }),
+        ),
+        (
+            "settles a background shell once its notice is delivered",
+            false,
+            live(
+                [
+                    background_shell(ROOT, "sh_bg"),
+                    vec![shell_notice(ROOT, "msg_notice", "sh_bg", true), delivered(ROOT, "msg_notice")],
+                ]
+                .concat(),
+            ),
+            json!({ "pending": false }),
+        ),
+        (
+            "settles a background shell whose notice is cancelled",
+            false,
+            live(
+                [
+                    background_shell(ROOT, "sh_bg"),
+                    vec![
+                        shell_notice(ROOT, "msg_notice", "sh_bg", true),
+                        durable_event("session.inbox.cancelled", json!({ "sessionID": ROOT, "inboxID": "msg_notice" })),
+                    ],
+                ]
+                .concat(),
+            ),
+            json!({ "pending": false }),
+        ),
+        (
+            "settles a shell that exits before its call's result arrives",
+            false,
+            live(
+                [
+                    vec![shell_notice(ROOT, "msg_notice", "sh_fast", true)],
+                    background_shell(ROOT, "sh_fast"),
+                    vec![delivered(ROOT, "msg_notice")],
+                ]
+                .concat(),
+            ),
+            json!({ "pending": false }),
+        ),
+        (
+            "leaves a user's shell command, whose notice waits for the next prompt, out of pending work",
+            false,
+            live(vec![shell_notice(ROOT, "msg_user_shell", "sh_user", false), succeeded(ROOT)]),
+            json!({ "pending": false }),
+        ),
+        (
+            "keeps a finished child's background shell pending",
+            false,
+            live(
+                [
+                    vec![
+                        child_created("ses_child", ROOT, "Explore"),
+                        durable_event("session.execution.started", json!({ "sessionID": "ses_child" })),
+                    ],
+                    background_shell("ses_child", "sh_child"),
+                    vec![succeeded("ses_child"), succeeded(ROOT)],
+                ]
+                .concat(),
+            ),
+            json!({ "terminal": "succeeded", "pending": true }),
         ),
     ];
     for (name, child_updates, events, expected) in rows {
