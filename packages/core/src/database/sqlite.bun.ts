@@ -14,5 +14,4 @@ export const sqliteLayer = (config: SqliteClient.SqliteClientConfig): Layer.Laye
   Layer.orDie(SqliteClient.layer(config))
 
 // bun:sqlite throws SQLiteError, whose errno is SQLite's extended result code.
-export const driverError = (cause: unknown) =>
-  cause instanceof SQLiteError ? { code: cause.errno, message: cause.message } : undefined
+export const resultCode = (cause: unknown) => (cause instanceof SQLiteError ? cause.errno : undefined)

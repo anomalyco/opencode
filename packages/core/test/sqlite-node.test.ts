@@ -42,7 +42,7 @@ describe.skipIf(process.platform === "win32" || !node)("node sqlite client", () 
         raw: 1,
         leakedTransaction: [],
         leakedReserve: [],
-        storageFailure: { full: "Storage error: database or disk is full", constraint: null },
+        storageFailure: { full: "Storage is full", constraint: null },
       })
     } finally {
       await rm(dir, { recursive: true, force: true })

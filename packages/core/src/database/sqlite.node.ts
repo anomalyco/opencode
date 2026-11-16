@@ -15,11 +15,11 @@ export const sqliteLayer = (config: SqliteClient.SqliteClientConfig): Layer.Laye
 // node:sqlite has no error class: SQLite failures are an Error marked ERR_SQLITE_ERROR that carries SQLite's extended
 // result code in errcode.
 const decodeDriverError = Schema.decodeUnknownOption(
-  Schema.Struct({ code: Schema.Literal("ERR_SQLITE_ERROR"), errcode: Schema.Number, message: Schema.String }),
+  Schema.Struct({ code: Schema.Literal("ERR_SQLITE_ERROR"), errcode: Schema.Number }),
 )
 
-export const driverError = (cause: unknown) =>
+export const resultCode = (cause: unknown) =>
   decodeDriverError(cause).pipe(
-    Option.map((error) => ({ code: error.errcode, message: error.message })),
+    Option.map((error) => error.errcode),
     Option.getOrUndefined,
   )

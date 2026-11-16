@@ -22,11 +22,11 @@ it.live("a full database is a storage failure for a statement and for a query", 
     yield* client`PRAGMA max_page_count = 1`
 
     const statement = yield* client`INSERT INTO probe VALUES (${large})`.pipe(Effect.flip)
-    expect(StorageFailure.fromSqlError(statement)).toBe("Storage error: database or disk is full")
-    expect(StorageFailure.message(Cause.fail(statement))).toBe("Storage error: database or disk is full")
+    expect(StorageFailure.fromSqlError(statement)).toBe("Storage is full")
+    expect(StorageFailure.message(Cause.fail(statement))).toBe("Storage is full")
 
     const query = yield* db.run(sql`INSERT INTO probe VALUES (${large})`).pipe(Effect.flip)
-    expect(StorageFailure.message(Cause.die(query))).toBe("Storage error: database or disk is full")
+    expect(StorageFailure.message(Cause.die(query))).toBe("Storage is full")
   }).pipe(Effect.provide(sqliteLayer({ filename: ":memory:" }))),
 )
 
@@ -48,7 +48,7 @@ it.live("an extended result code is a storage failure by its primary code", () =
       const error = yield* client`INSERT INTO probe VALUES ('mine')`.pipe(Effect.flip)
       yield* client`ROLLBACK`
       expect(error.reason.cause).toMatchObject({ errno: 517 })
-      expect(StorageFailure.fromSqlError(error)).toBe("Storage error: database is locked")
+      expect(StorageFailure.fromSqlError(error)).toBe("Storage is in use by another process")
     }).pipe(Effect.provide(sqliteLayer({ filename })))
   }),
 )

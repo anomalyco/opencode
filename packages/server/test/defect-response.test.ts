@@ -57,7 +57,7 @@ it.live("a write on a full disk answers 500 with the storage reason instead of a
     expect(prompt.status).toBe(500)
     expect(JSON.parse(prompt.body)).toEqual({
       _tag: "UnknownError",
-      message: "Storage error: database or disk is full",
+      message: "Storage is full",
       ref: expect.stringMatching(/^err_[0-9a-f]{8}$/),
     })
   }),
