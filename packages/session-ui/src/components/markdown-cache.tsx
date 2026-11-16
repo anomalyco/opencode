@@ -10,6 +10,7 @@ import {
 } from "./markdown-cache-machine"
 import { abortParseMarkdown, markdownWorkerDisposed, startParseMarkdown } from "./markdown-worker"
 import { localImagePath, localLinkPath } from "./markdown-image"
+import type { MarkdownHTML } from "./markdown-worker-protocol"
 
 export type { MarkdownCacheEntry } from "./markdown-cache-machine"
 
@@ -41,28 +42,69 @@ const workerIds = new Map<number, number>()
 // A private instance keeps this hook set separate from other DOMPurify users.
 const purifier = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 
+const rendered = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
+
 if (typeof window !== "undefined" && purifier.isSupported) {
   const appLinks = new WeakMap<HTMLAnchorElement, string>()
+
+  const prose = new Set(
+    "a b blockquote br center code col colgroup dd del details div dl dt em h1 h2 h3 h4 h5 h6 hr i img input kbd li mark ol p pre s small span strong sub summary sup table tbody td th thead tr ul".split(
+      " ",
+    ),
+  )
+
   const style = document.createElement("span").style
   const allowedStyle = document.createElement("span").style
+
   // A config passed to sanitize() rebuilds every allow-list on each call; set once, every call reuses them.
-  purifier.setConfig({
+  const config = {
     USE_PROFILES: { html: true, mathMl: true },
     SANITIZE_NAMED_PROPS: true,
     FORBID_TAGS: ["style", "dialog"],
-    FORBID_ATTR: ["popover", "popovertarget", "popovertargetaction", "command", "commandfor", "data-floating-overlay"],
+    FORBID_ATTR: [
+      "popover",
+      "popovertarget",
+      "popovertargetaction",
+      "command",
+      "commandfor",
+      "data-floating-overlay",
+      "data-markdown-renderer",
+    ],
     FORBID_CONTENTS: ["style", "script"],
     ADD_TAGS: ["svg", "path"],
     ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
-  })
-  purifier.addHook("uponSanitizeAttribute", (_, attr) => {
+  }
+
+  purifier.setConfig(config)
+  // These fragments still pass DOMPurify's structural/URI checks, but their renderer owns their inline geometry.
+  rendered.setConfig({ ...config, RETURN_DOM_FRAGMENT: true })
+  purifier.addHook("uponSanitizeAttribute", (node, attr) => {
+    const sized = /^(?:IMG|TABLE|TH|TD|COL)$/.test(node.nodeName)
+
+    if (attr.attrName === "width" && sized) {
+      const width = contentWidth(attr.attrValue, true)
+      attr.keepAttr = !!width
+      attr.attrValue = width
+
+      return
+    }
+
     if (attr.attrName !== "style") return
     style.cssText = attr.attrValue
     allowedStyle.cssText = ""
 
-    for (const property of ["color", "background-color", "font-weight", "font-style", "text-decoration-line", "text-align"]) {
+    for (const property of [
+      "color",
+      "background-color",
+      "font-weight",
+      "font-style",
+      "text-decoration-line",
+      "text-align",
+    ]) {
       allowedStyle.setProperty(property, style.getPropertyValue(property))
     }
+
+    if (sized) allowedStyle.width = contentWidth(style.width, false)
 
     attr.attrValue = allowedStyle.cssText
     attr.keepAttr = !!attr.attrValue
@@ -111,6 +153,30 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     node.removeAttribute("srcset")
   })
   purifier.addHook("afterSanitizeAttributes", (node: Element) => {
+    // Plain prose stays in normal flow. Mark anything that could take on app CSS (classes, IDs, data
+    // attributes or an unfamiliar element) for a containing block that clips fixed descendants too. This marker
+    // only ever *adds* containment. Generated math and code do not pass through this authored-content hook.
+    if (node instanceof Element && (node.hasAttributes() || !prose.has(node.localName)) && node.localName !== "body") {
+      const plain =
+        prose.has(node.localName) &&
+        node
+          .getAttributeNames()
+          .every(
+            (name) =>
+              /^(align|alt|checked|disabled|dir|download|height|href|open|rel|src|start|style|target|title|width)$/.test(
+                name,
+              ) ||
+              (node.localName === "input" && name === "type" && node.getAttribute("type") === "checkbox") ||
+              (node.localName === "a" && name === "class" && node.getAttribute("class") === "external-link") ||
+              (node.localName === "a" &&
+                ["data-local-link", "role", "tabindex"].includes(name) &&
+                node.hasAttribute("data-local-link")) ||
+              (node.localName === "img" && name === "data-local-image"),
+          )
+
+      if (!plain) node.setAttribute("data-markdown-contain", "")
+    }
+
     if (!(node instanceof HTMLAnchorElement)) return
     const href = appLinks.get(node)
 
@@ -135,10 +201,34 @@ if (typeof window !== "undefined" && purifier.isSupported) {
   })
 }
 
-export function sanitizeMarkdown(html: string) {
+function contentWidth(value: string, attribute: boolean) {
+  const match = /^(\d+(?:\.\d+)?)(px|%)?$/i.exec(value.trim())
+
+  if (!match) return ""
+  const unit = match[2] === "%" ? "%" : attribute ? "" : "px"
+
+  return `${Math.min(Number(match[1]), unit === "%" ? 100 : 2048)}${unit}`
+}
+
+export function sanitizeMarkdown(html: MarkdownHTML) {
   if (!purifier.isSupported) return ""
 
-  return purifier.sanitize(html)
+  // SAFETY: MarkdownHTML is the worker's typed union; a string is the common case with no renderer fragments.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
+  if (typeof html === "string") return purifier.sanitize(html)
+  const template = document.createElement("template")
+  template.innerHTML = purifier.sanitize(html.html)
+
+  for (const [key, output] of html.fragments) {
+    // Replace the complete slot, never bless it or its children. Author input cannot populate the worker's map.
+    const slot = template.content.getElementById(`user-content-${key}`)
+
+    if (!slot) continue
+    const fragment = rendered.sanitize(output, { RETURN_DOM_FRAGMENT: true })
+    slot.replaceWith(fragment)
+  }
+
+  return template.innerHTML
 }
 
 /** Only the desktop session installs a reviewer for inert application targets. */
@@ -321,7 +411,7 @@ function parsed(
   jobId: number,
   raw: string,
   src: string,
-  html: string,
+  html: MarkdownHTML,
 ): Extract<MarkdownCacheEvent, { type: "parse.succeeded" | "parse.failed" }> {
   try {
     const hash = checksum(src)

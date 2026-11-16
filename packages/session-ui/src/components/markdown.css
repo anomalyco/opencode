@@ -54,8 +54,9 @@
   /* Reset & Base Typography */
   min-width: 0;
   max-width: 100%;
-  /* Clip authored content without creating a scroll container for sticky headers. */
-  contain: paint;
+  /* Bare prose keeps its collapsed margins and rasterization. Markup that could pick up layout from the app's
+     styles is paint-contained, including fixed descendants, without creating a scrollport for sticky headers. */
+  &:has([data-markdown-contain]) { contain: paint; }
   overflow-wrap: break-word;
   color: var(--v2-text-text-base);
   font-family: var(--font-family-sans);
@@ -200,20 +201,9 @@
     cursor: pointer;
   }
 
-  a[data-app-link] {
+  a[data-app-link][role="link"][tabindex="0"] {
     cursor: pointer;
     text-decoration: underline;
-  }
-
-  /* KaTeX's HTML fallback depends on arbitrary inline offsets. Use its native MathML presentation instead. */
-  .katex > .katex-html { display: none; }
-  .katex > .katex-mathml {
-    position: static;
-    clip: auto;
-    clip-path: none;
-    height: auto;
-    width: auto;
-    overflow: visible;
   }
 
   &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code) {
@@ -493,6 +483,7 @@
 
   table {
     width: 100%;
+    max-width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     color: var(--v2-text-text-base);

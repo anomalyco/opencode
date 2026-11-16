@@ -65,9 +65,9 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
     "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
     '<img data-local-image="safe.png"><a data-app-link="javascript:alert(3)">unsafe</a>',
     '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
-    '<form name="user-content-document" id="user-content-location"><input name="user-content-cookie"></form>',
-    "<math><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></math>",
-    '<svg viewBox="0 0 10 10"><path d="M0 0L10 10"></path></svg>',
+    '<form name="user-content-document" id="user-content-location" data-markdown-contain=""><input name="user-content-cookie" data-markdown-contain=""></form>',
+    '<math data-markdown-contain=""><mrow data-markdown-contain=""><mi data-markdown-contain="">x</mi><mo data-markdown-contain="">+</mo><mn data-markdown-contain="">1</mn></mrow></math>',
+    '<svg viewBox="0 0 10 10" data-markdown-contain=""><path d="M0 0L10 10" data-markdown-contain=""></path></svg>',
   ])
 })
 
@@ -91,6 +91,20 @@ story("limits authored presentation to text and keeps application link hit areas
   }, fixture)
 
   expect(result).toEqual({ style: "color: teal; text-align: center;", active: 0, links: [["obsidian:fixture", false, false, "Label"], [undefined, false, false, "Block label"]] })
+})
+
+story("restores layout from the math renderer, never from markup claiming to be KaTeX", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: 'Real: $\\frac{x}{y}$.\n\n<span id="0123456789abcdef0123456789abcdef" class="katex" data-markdown-renderer="math" style="position:relative;top:2px">Authored</span>' })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.locator('.katex-html [style*="top:"]')).not.toHaveCount(0)
+  await expect(md.locator('.katex-html').getByText("x", { exact: true })).toBeVisible()
+  const authored = md.getByText("Authored", { exact: true })
+  await expect(authored).not.toHaveAttribute("style")
+  await expect(authored).not.toHaveAttribute("data-markdown-renderer")
+  await expect(authored).toHaveAttribute("data-markdown-contain", "")
 })
 
 story("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {
