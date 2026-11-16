@@ -320,9 +320,11 @@ const layer = Layer.effect(
                 cancel: input.cancel,
               }
               const lookup = (advertised: string) => {
-                const name = input.definitions ? input.definitions.get(advertised)?.name : advertised
-                if (name === undefined) return
-                return targets.get(name)
+                if (!input.definitions) return targets.get(advertised)
+                const definition = input.definitions.get(advertised)
+                if (!definition) return
+                const target = targets.get(definition.name)
+                return target && { tool: target.tool, definition }
               }
               const called = input.call.name
               const selected = yield* prepare(called, input.call.input, lookup, (name, args) =>
@@ -330,7 +332,7 @@ const layer = Layer.effect(
               )
               if (selected.target) {
                 const note =
-                  called !== selected.name && !lookup(called)
+                  called !== selected.name && !(input.definitions ?? targets).has(called)
                     ? aliasNote(JSON.stringify(called), JSON.stringify(selected.name))
                     : undefined
                 return yield* executeTool(
