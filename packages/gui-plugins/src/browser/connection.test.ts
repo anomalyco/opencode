@@ -99,3 +99,14 @@ test("main's answer to the register reaches the owner", async () => {
   expect(accepted.outcomes).toEqual(["accepted"])
   expect(rejected.outcomes).toEqual(["browser.pane.registration.invalid"])
 })
+
+test("a plugin open requires its session on screen, including after registration", async () => {
+  const app = fixture()
+  const url = "https://example.invalid"
+  await expect(app.registration.createTab("owner", url, () => false)).rejects.toThrow("notOnScreen")
+  const route = { current: true }
+  const opening = app.registration.createTab("owner", url, () => route.current)
+  route.current = false
+  await expect(opening).rejects.toThrow("notOnScreen")
+  expect(await app.registration.createTab("owner", url, () => true)).toBe("handle")
+})

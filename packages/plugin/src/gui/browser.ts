@@ -30,7 +30,7 @@ export interface Browser {
   /** Experimental: may change without compatibility guarantees. */
   readonly experimental: {
     /**
-     * Opens a new tab and returns an opaque handle for this plugin instance. Rejects if the pane is unavailable.
+     * Opens a new tab and returns an opaque handle for this plugin instance. Rejects if the pane is unavailable or the session is not on screen.
      * @param session - The session whose pane opens it.
      * @param url - The URL to open.
      */

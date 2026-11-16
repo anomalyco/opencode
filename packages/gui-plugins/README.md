@@ -23,7 +23,7 @@ flowchart LR
 
 ## Anatomy
 
-The desktop `Browser` contract (`@opencode/plugin/gui/browser`) can return a handle to a new tab. Use
+The desktop `Browser` contract (`@opencode/plugin/gui/browser`) can return a handle to a new tab in the session on screen. Use
 `const id = await browser.experimental.open(session, url)` and `await browser.experimental.close(id)` from the same
 plugin instance. The handle is not a layout or agent tab ID. An unknown or expired handle does nothing; handles
 expire when the pane detaches. The shipped `open(session, url)` is an alias for `experimental.open`.

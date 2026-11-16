@@ -633,7 +633,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (!target) throw new Error("browser.pane.unavailable")
 
-      return target.registration.createTab(owner, url)
+      return target.registration.createTab(owner, url, () => sessions.current()?.key === sessionKey)
     },
     closeOwned: (owner: string, id: string) => client()?.closeTab({ owner, id }),
     command,

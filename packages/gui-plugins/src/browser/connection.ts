@@ -17,7 +17,7 @@ export type Registration = {
   /** Creates a restored tab's page, which then reports its embed. */
   load(tabID: Browser.TabID): void
   command(command: Browser.Action): Promise<void>
-  createTab(owner: string, url: string): Promise<string>
+  createTab(owner: string, url: string, onScreen: () => boolean): Promise<string>
   inspect(tabID: Browser.TabID, enabled: boolean): void
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
   zoom(tabID: Browser.TabID, zoom: Zoom): void
@@ -67,7 +67,14 @@ export function openBinding(input: {
       void ready.then(() => client.load({ binding, tabID })).catch(() => undefined)
     },
     command: (command) => ready.then(() => client.command({ binding, command })),
-    createTab: (owner, url) => ready.then(() => client.createTab({ binding, owner, url })),
+    async createTab(owner, url, onScreen) {
+      if (!onScreen()) throw new Error("browser.pane.notOnScreen")
+      await ready
+
+      if (status.closed || !onScreen()) throw new Error("browser.pane.notOnScreen")
+
+      return client.createTab({ binding, owner, url })
+    },
     find: (tabID, action) => ready.then(() => client.find({ binding, tabID, action })),
     notice: (tabID, token, dismiss) => ready.then(() => client.notice({ binding, tabID, token, dismiss })),
     answer: (tabID, id, answer) => ready.then(() => client.answer({ binding, tabID, id, answer })),
