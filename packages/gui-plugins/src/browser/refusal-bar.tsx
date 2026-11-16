@@ -13,12 +13,14 @@ export function RefusalBar(props: {
   answer: (dismiss: boolean) => Promise<void>
 }) {
   const ctx = usePlugin<typeof definition>()
+
   const guard = createMemo(
     on(
       () => props.notice.token,
       () => actionGuard(performance.now()),
     ),
   )
+
   const press = (event: PointerEvent) => guard().press(event)
 
   const key = (event: KeyboardEvent) => {
