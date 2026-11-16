@@ -497,7 +497,6 @@ function NewSessionLocationDialog(props: {
             placeholder={placeholder()}
             leadingIcon={
               <Show when={view().ownsEscape && !view().titleKey} fallback={<Icon name="magnifying-glass" />}>
-                {/* Steps with no heading to click back from: the arrow takes the search icon's place. */}
                 <Tooltip value={language.t("session.new.location.back")} placement="bottom-start">
                   <button
                     type="button"

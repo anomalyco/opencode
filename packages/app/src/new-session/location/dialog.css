@@ -16,7 +16,7 @@
   padding-inline-start: 6px;
 }
 
-/* Padding and a matching negative margin leave the button the icon's size in the layout, so swapping them shifts nothing. */
+/* The negative margin cancels the padding, so the button takes the icon's space. */
 .new-session-location-search-back {
   display: flex;
   align-items: center;
@@ -40,7 +40,6 @@
   opacity: 0.5;
 }
 
-/* Like the integrations search: the hairline sits 6px under the field, 12px under the icon. */
 .new-session-location-divider {
   height: 1px;
   flex-shrink: 0;
@@ -58,7 +57,6 @@
   gap: 2px;
 }
 
-/* Without a header, rows start 6px under the divider, as far as the field sits above it. */
 .new-session-location .command-palette-group:not(:has(> .command-palette-group-title:first-child)) {
   padding-top: 4px;
 }
@@ -72,7 +70,6 @@
   transform: scaleY(0.5);
 }
 
-/* Headers, rows and weights follow the integrations dialog. */
 .new-session-location .command-palette-group-title {
   display: flex;
   flex-shrink: 0;

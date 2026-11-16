@@ -74,7 +74,6 @@
   white-space: nowrap;
 }
 
-/* Timestamps sit a step below the row text, as in the session lists. */
 .command-palette-meta {
   flex-shrink: 0;
   font-size: 11px;
@@ -138,14 +137,12 @@
   display: none;
 }
 
-/* Rows then start 6px under the divider, as far as the field sits above it. */
 .command-palette
   [data-slot="search-list-results"]:not(:has(> [data-slot="search-list-section"] ~ [data-slot="search-list-section"])) {
   padding-top: 4px;
 }
 
 .command-palette-compact {
-  /* Like the integrations search: the hairline sits 6px under the field, 12px under the icon. */
   [data-slot="search-list-search"] {
     display: flex;
     flex-direction: column;
@@ -188,7 +185,6 @@
     padding: 0 6px 6px;
   }
 
-  /* Rows, headers and spacing follow the integrations dialog. */
   [data-slot="search-list-section"] {
     gap: 2px;
 

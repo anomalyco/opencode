@@ -131,7 +131,6 @@ export function DialogUsage(props: {
         <UsageFrame>
           <Switch>
             <Match when={view().status === "signed-out"}>
-              {/* Inset like a loaded section's panels, rather than centred in the loading box. */}
               <div class="flex flex-col px-3 pb-3">
                 <Panel gap={8}>
                   <Message
@@ -500,7 +499,6 @@ function Item(props: { children: JSX.Element }) {
   return <div class="flex flex-col gap-4 self-stretch px-4">{props.children}</div>
 }
 
-// A panel's title with a line of explanation under it, as for an empty or signed-out state.
 function Message(props: { title: string; body: string }) {
   return (
     <div class="flex flex-col gap-1 self-stretch px-4">

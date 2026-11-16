@@ -1183,7 +1183,6 @@ test("the location dialog separates added projects from server projects and tags
   await others.click()
   await expect(names).toHaveText(["console", "sstapollo"])
   await expect(back).toHaveCount(0)
-  // Without a heading to click back from, the arrow takes the search icon's place without moving the field.
   await expect(arrow).toBeVisible()
   expect(await leading.boundingBox()).toEqual(leadingBox)
   expect(await input.boundingBox()).toEqual(inputBox)

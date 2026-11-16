@@ -7,7 +7,6 @@ export type ConnectMethod = "link" | "password"
 export function ConnectMethodSwitch(props: {
   method: ConnectMethod
   disabled?: boolean
-  /** Where the row sits: centred under a page's form, or on the fields' edge in a dialog. */
   align?: "start" | "center"
   class?: string
   onChange: (method: ConnectMethod) => void
