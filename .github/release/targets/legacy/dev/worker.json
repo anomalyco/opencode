@@ -3,14 +3,10 @@
   "compatibilityDate": "2026-07-25",
   "compatibilityFlags": ["nodejs_compat"],
   "domains": ["dev.opncd.ai", "api.dev.opencode.ai"],
-  "logpush": true,
+  "logpush": false,
   "observability": { "enabled": true },
   "workersDev": false,
   "previewUrls": false,
-  "env": {
-    "GITHUB_APP_ID": { "type": "secret" },
-    "GITHUB_APP_PRIVATE_KEY": { "type": "secret" }
-  },
   "manifest": {
     "type": "complete",
     "mainModule": "index.js",

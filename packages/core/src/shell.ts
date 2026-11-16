@@ -1,6 +1,7 @@
 export * as Shell from "./shell.js"
 
 import path from "path"
+import { isUtf8 } from "node:buffer"
 import {
   Context,
   Deferred,
@@ -22,6 +23,7 @@ import { AppProcess } from "@opencode/util/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
 import { FileRetention } from "./file-retention.js"
@@ -141,8 +143,8 @@ type Ended = {
  * here; callers (e.g. `ShellTool`) own that association and store the shell ID.
  *
  * Local commands run in the process daemon when it is available (`Daemon`), so they outlive a planned server
- * restart: the next server takes them back. Remote workspaces, Windows and an unavailable daemon keep spawning
- * them from the server.
+ * restart: the next server takes them back. Remote workspaces and an unavailable daemon keep spawning them from
+ * the server.
  */
 export interface Interface {
   readonly create: <E = never, R = never>(
@@ -615,12 +617,9 @@ const layer = () =>
       // Commands this server spawned for the Location; daemon commands live in `runs`, owned by the server.
       const commands = new Map<Shell.ID, Spawned>()
       const exitOrder: Shell.ID[] = []
-      // Remote workspaces and Windows keep spawning commands from the server. Taken back before the service is
-      // returned, so session restart recovery sees them.
+      // Take local commands back before returning the service so session restart recovery sees them.
       const runs =
-        location.workspaceID === undefined && process.platform !== "win32" && PersistentPty.available
-          ? yield* daemon.at(location)
-          : undefined
+        location.workspaceID === undefined && PersistentPty.available ? yield* daemon.at(location) : undefined
 
       const outputDir = path.join(global.data, DIRECTORY, location.project.id)
       const { mkdir, unlink, stat } = yield* Effect.promise(() => import("fs/promises"))
@@ -750,13 +749,23 @@ const layer = () =>
         const command = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
+        const running = command.info.status === "running"
         const size = yield* sizeOf(command)
         if (cursor >= size) return { output: "", cursor: size, size, truncated: false }
         const start = Math.max(0, cursor)
-        const bytes = yield* readRange(command.info.file, start, Math.min(limit, size - start))
+        if (limit <= 0) return { output: "", cursor: start, size, truncated: false }
+        // A UTF-8 character can straddle either edge by up to three bytes.
+        const offset = Math.max(0, start - 3)
+        const bytes = yield* readRange(command.info.file, offset, Math.min(size, start + limit + 3) - offset)
+        const from = start - offset
+        const to = Math.min(bytes.length, from + limit)
+        const first = splitCharacter(bytes, from, running)?.end ?? from
+        const last = splitCharacter(bytes, to, running)
+        // Keep the usual limit unless even the first complete character would not fit.
+        const end = last && last.start === first && last.end !== undefined ? last.end : (last?.start ?? to)
         return {
-          output: bytes.toString("utf8"),
-          cursor: start + bytes.length,
+          output: bytes.toString("utf8", first, end),
+          cursor: offset + Math.max(first, end),
           size,
           truncated: false,
         }
@@ -828,7 +837,7 @@ const layer = () =>
           // Read the byte before the window too, to tell whether the window starts on a line boundary.
           const before = Math.max(0, start - 1)
           const window = yield* readRange(info.file, before, size - before)
-          const page = window.subarray(charBoundary(window, start - before)).toString("utf8")
+          const page = TextBoundary.utf8Tail(window, size - start)
           const partial = start > 0 && window[0] !== 10
           const endsWithNewline = page.endsWith("\n")
           const lines = page.split("\n")
@@ -1125,6 +1134,21 @@ const layer = () =>
     }),
   )
 
+// Find a character crossing this byte offset. A valid prefix at a live EOF has no end yet.
+function splitCharacter(bytes: Buffer, cut: number, running: boolean) {
+  for (let start = cut - 1; start >= Math.max(0, cut - 3); start--) {
+    const lead = bytes[start]
+    if ((lead & 0xc0) === 0x80) continue
+    if (lead < 0xc2 || lead > 0xf4) return
+    const end = start + (lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4)
+    if (end <= cut) return
+    const char = bytes.subarray(start, end)
+    if (end <= bytes.length) return isUtf8(char) ? { start, end } : undefined
+    if (running && new TextDecoder().decode(char, { stream: true }) === "") return { start, end: undefined }
+    return
+  }
+}
+
 // Spans carry only the command text, truncated; never env, stdin or output. Shells outlive the turn that started
 // them, so the session comes from the shell's own metadata rather than the caller's span annotations.
 function annotate(info: Info) {
@@ -1143,13 +1167,6 @@ function annotate(info: Info) {
 function spanCommand(command: string) {
   if (command.length <= SPAN_COMMAND_LIMIT) return command.toWellFormed()
   return `${command.slice(0, SPAN_COMMAND_LIMIT).toWellFormed()}…`
-}
-
-// Moves past UTF-8 continuation bytes (at most 3) so a byte cut never splits a character.
-function charBoundary(bytes: Buffer, offset: number) {
-  const limit = Math.min(bytes.length, offset + 3)
-  for (let index = offset; index < limit; index++) if ((bytes[index] & 0xc0) !== 0x80) return index
-  return limit
 }
 
 function formatSize(bytes: number) {

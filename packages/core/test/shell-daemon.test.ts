@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { existsSync, readdirSync, realpathSync } from "node:fs"
-import { mkdir, rm, utimes, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, rm, utimes, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
@@ -23,15 +23,12 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 import { binaryPath } from "@opencode/pty"
 import { it } from "./lib/effect"
 
-const unix = process.platform !== "win32"
-const test = unix ? it.live : it.live.skip
-// On the test clock, for timers.
-const timed = unix ? it.effect : it.effect.skip
+const windows = process.platform === "win32"
 
 const lines = (count: number) => Array.from({ length: count }, (_, index) => `line ${index + 1}\n`).join("")
 
 describe("Shell on the process daemon", () => {
-  test("runs a command with the server's environment, an absolute cwd and its metadata", () =>
+  it.live("runs a command with the server's environment, an absolute cwd and its metadata", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       yield* Effect.promise(() => mkdir(path.join(env.directory, "sub")))
@@ -103,9 +100,72 @@ describe("Shell on the process daemon", () => {
           expect(yield* shell.list()).toEqual([])
         }),
       )
-    }))
+    }),
+  )
 
-  test("counts lines like the spawner and reads only what reached the file after a write error", () =>
+  it.live("pages shell output at UTF-8 boundaries with byte cursors", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const info = yield* shell.create({ shell: "/bin/sh", command: "pages" })
+          const prefix = "a".repeat(65535)
+          for (const char of ["é", "€", "😀"]) {
+            const text = `${prefix}${char}\uFEFFz`
+            yield* Effect.promise(() => writeFile(info.file, text))
+            const page = yield* shell.output(info.id)
+            expect(page.cursor).toBe(prefix.length)
+            expect(page.size).toBe(Buffer.byteLength(text))
+            const rest = yield* shell.output(info.id, { cursor: page.cursor })
+            expect(page.output + rest.output).toBe(text)
+            expect(rest.cursor).toBe(page.size)
+            const tiny = yield* shell.output(info.id, { cursor: page.cursor, limit: 1 })
+            expect(tiny).toEqual({
+              output: char,
+              cursor: page.cursor + Buffer.byteLength(char),
+              size: page.size,
+              truncated: false,
+            })
+            const tail = yield* shell.output(info.id, { cursor: page.cursor + 1 })
+            expect(tail.output).toBe("\uFEFFz")
+            expect(tail.cursor).toBe(page.size)
+          }
+          expect(yield* shell.output(info.id, { cursor: 65536, limit: 0 })).toMatchObject({ output: "", cursor: 65536 })
+        }),
+      )
+    }),
+  )
+
+  it.live("retries an incomplete live character and consumes malformed bytes at exit", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const info = yield* shell.create({ shell: "/bin/sh", command: "partial" })
+          yield* Effect.promise(() => writeFile(info.file, Buffer.from([0xff, 0xf0, 0x9f])))
+          const page = yield* shell.output(info.id)
+          expect(page).toEqual({ output: "�", cursor: 1, size: 3, truncated: false })
+          expect(yield* shell.output(info.id, { cursor: page.cursor, limit: 1 })).toMatchObject({
+            output: "",
+            cursor: 1,
+          })
+          yield* Effect.promise(() => appendFile(info.file, Buffer.from([0x98, 0x80, 0xe0, 0x80, 0xe2])))
+          const rest = yield* shell.output(info.id, { cursor: page.cursor })
+          expect(rest).toEqual({ output: "😀��", cursor: 7, size: 8, truncated: false })
+          env.daemon.exit(1, 0)
+          yield* shell.wait(info.id)
+          expect(yield* shell.output(info.id, { cursor: rest.cursor })).toEqual({
+            output: "�",
+            cursor: 8,
+            size: 8,
+            truncated: false,
+          })
+        }),
+      )
+    }),
+  )
+
+  it.live("counts lines like the spawner and reads only what reached the file after a write error", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
@@ -139,9 +199,10 @@ describe("Shell on the process daemon", () => {
           )
         }),
       )
-    }))
+    }),
+  )
 
-  test("bounds what it reads to number lines the daemon has not counted yet", () =>
+  it.live("bounds what it reads to number lines the daemon has not counted yet", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
@@ -168,9 +229,10 @@ describe("Shell on the process daemon", () => {
           )
         }),
       )
-    }))
+    }),
+  )
 
-  test("reports a command lost with the daemon as killed, with what it wrote", () =>
+  it.live("reports a command lost with the daemon as killed, with what it wrote", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
@@ -185,9 +247,10 @@ describe("Shell on the process daemon", () => {
           })
         }),
       )
-    }))
+    }),
+  )
 
-  test("stops what a failed command left in its group, and leaves a successful one's", () =>
+  it.live("stops what a failed command left in its group, and leaves a successful one's", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
@@ -203,9 +266,10 @@ describe("Shell on the process daemon", () => {
           expect(env.signals(1)).toEqual([])
         }),
       )
-    }))
+    }),
+  )
 
-  test("fails a command the daemon rejected instead of spawning it", () =>
+  it.live("fails a command the daemon rejected instead of spawning it", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       env.daemon.failCreate.message = "output path is a symlink"
@@ -217,10 +281,11 @@ describe("Shell on the process daemon", () => {
           expect(yield* shell.list()).toEqual([])
         }),
       )
-    }))
+    }),
+  )
 
   // On the test clock: the timeout and the grace period pass without waiting for them.
-  timed("stops a timed-out command with SIGTERM, then SIGKILL after the grace period, and keeps it", () =>
+  it.effect("stops a timed-out command with SIGTERM, then SIGKILL after the grace period, and keeps it", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       env.daemon.trap.add(1)
@@ -250,7 +315,7 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
-  test("forgets a command in the daemon before deleting its file, on remove and on eviction", () =>
+  it.live("forgets a command in the daemon before deleting its file, on remove and on eviction", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
@@ -280,9 +345,10 @@ describe("Shell on the process daemon", () => {
           expect(existsSync(finished[1]!.file)).toBe(true)
         }),
       )
-    }))
+    }),
+  )
 
-  test("takes its commands back after a restart and leaves other Locations' alone", () =>
+  it.live("takes its commands back after a restart and leaves other Locations' alone", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       env.daemon.trap.add(4)
@@ -346,10 +412,11 @@ describe("Shell on the process daemon", () => {
           expect(yield* shell.wait(before.running.id)).toMatchObject({ status: "exited", exit: 0 })
         }),
       )
-    }))
+    }),
+  )
 
   // A reload or an eviction closes a Location while the server keeps running.
-  timed("a Location closed while the server runs keeps enforcing its commands' timeouts", () =>
+  it.effect("a Location closed while the server runs keeps enforcing its commands' timeouts", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       const closing = yield* env.openLocation(env.directory)
@@ -363,7 +430,7 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
-  timed("a closed Location and its replacement see the same commands, with one timer and one report each", () =>
+  it.effect("a closed Location and its replacement see the same commands, with one timer and one report each", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       const closing = yield* env.openLocation(env.directory)
@@ -404,7 +471,7 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
-  test("finishes taking a Location's commands back even if the call that started it is interrupted", () =>
+  it.live("finishes taking a Location's commands back even if the call that started it is interrupted", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       const created = yield* env.withShell(env.directory, (shell) =>
@@ -435,9 +502,10 @@ describe("Shell on the process daemon", () => {
       const runs = yield* server.at(place)
       expect(runs.list().map((run) => run.info.id)).toEqual([created.id])
       expect(lists()).toBe(before + 1)
-    }))
+    }),
+  )
 
-  test("the sweep keeps a running command's file, and deletes a finished one's file and forgets it", () =>
+  it.live("the sweep keeps a running command's file, and deletes a finished one's file and forgets it", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       const ids = yield* env.withShell(env.directory, (shell) =>
@@ -481,11 +549,12 @@ describe("Shell on the process daemon", () => {
       expect(env.daemon.processes.map((process) => process.id)).toEqual([1])
       // The old process's file is recent, so it stays.
       expect(existsSync(ids.old.file)).toBe(true)
-    }))
+    }),
+  )
 })
 
 // Against the real opencode-pty, like server/test/persistent-pty.test.ts.
-const binary = unix ? (process.env.OPENCODE_PTY_BIN ?? binaryPath) : undefined
+const binary = process.env.OPENCODE_PTY_BIN ?? binaryPath
 const real = binary !== undefined && existsSync(binary) ? it.live : it.live.skip
 
 describe("Shell on a real process daemon", () => {
@@ -502,12 +571,15 @@ describe("Shell on a real process daemon", () => {
         yield* Effect.addFinalizer(() => Effect.sync(() => delete process.env.OPENCODE_TEST_REMOVED))
         yield* Effect.gen(function* () {
           const shell = yield* Shell.Service
+          const pty = yield* PersistentPty.Service
           yield* Shell.cleanup()
           expect(started()).toBe(false)
           const info = yield* shell.create(
             {
-              shell: "/bin/sh",
-              command: 'printf "%s|%s|%s\\n" "${OPENCODE_TEST_REMOVED:-unset}" "$TERM" "$(pwd)"; printf tail',
+              shell: windows ? (Bun.which("pwsh") ?? "powershell.exe") : "/bin/sh",
+              command: windows
+                ? "if ($env:OPENCODE_TEST_REMOVED) { exit 1 }; [Console]::Out.Write('unset|' + $env:TERM + '|' + $PWD.Path + [char]10 + 'tail')"
+                : 'printf "%s|%s|%s\\n" "${OPENCODE_TEST_REMOVED:-unset}" "$TERM" "$(pwd)"; printf tail',
             },
             (invocation) =>
               Effect.sync(() => {
@@ -515,6 +587,7 @@ describe("Shell on a real process daemon", () => {
               }),
           )
           expect(started()).toBe(true)
+          expect(yield* pty.listPipes()).toMatchObject([{ pid: info.pid, metadata: { id: info.id } }])
           expect(yield* shell.result(info)).toMatchObject({
             info: { status: "exited", exit: 0 },
             capture: {

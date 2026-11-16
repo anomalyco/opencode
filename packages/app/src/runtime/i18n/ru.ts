@@ -159,11 +159,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "Посмотреть ещё более 70 провайдеров",
 
   "dialog.provider.viewAll": "Показать больше провайдеров",
-
   "provider.connect.title": "Подключить {{provider}}",
+
   "provider.connect.method.apiKey": "Ключ API",
   "provider.connect.status.inProgress": "Авторизация…",
-  "provider.connect.status.waiting": "Ожидание авторизации…",
+  "provider.connect.status.waiting": "Ожидание авторизации",
   "provider.connect.status.failed": "Ошибка авторизации: {{error}}",
   "provider.connect.apiKey.description":
     "Введите ключ API {{provider}}, чтобы подключить аккаунт и использовать модели {{provider}} в OpenCode.",
@@ -913,7 +913,6 @@ export const dict = {
     "Это навсегда удалит {{count}} рабочих деревьев без связанных сессий.",
   "command.session.location.cycle": "Сменить расположение сеанса",
   "dialog.provider.anthropic.note": "Прямой доступ к моделям Claude по API-ключу",
-  "provider.connect.title.anthropicProMax": "Войти через Anthropic",
   "prompt.toast.uploading.cancelFile": "Отменить загрузку файла {{filename}}",
   "prompt.toast.uploadFailed.title": "Не удалось загрузить файл",
   "prompt.toast.uploading.percent": "{{percent}}%",

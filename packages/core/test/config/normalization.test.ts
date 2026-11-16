@@ -570,7 +570,6 @@ describe("ConfigNormalize", () => {
           background_compaction: true,
           media_blob: true,
           part_rows: true,
-          codemode_vm: true,
           image_generate: { model: "openai/gpt-image-2" },
           subagent_depth: 0,
           location_idle_timeout: "2 hours",
@@ -584,7 +583,6 @@ describe("ConfigNormalize", () => {
         background_compaction: true,
         media_blob: true,
         part_rows: true,
-        codemode_vm: true,
         image_generate: { model: { providerID: "openai", model: "gpt-image-2" } },
         subagent_depth: 0,
         location_idle_timeout: "7200000 millis",
@@ -624,6 +622,12 @@ describe("ConfigNormalize", () => {
     expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
       ["invalid", ["experimental", "schedules"]],
     ])
+  })
+
+  test("accepts deprecated codemode_vm and ignores retired codemodeVm without diagnostics", () => {
+    const result = normalized({ experimental: { codemode_vm: true, codemodeVm: false } })
+    expect(result.encoded.experimental).toEqual({ codemode_vm: true })
+    expect(result.diagnostics).toEqual([])
   })
 
   test("passes experimental.all_flags through as a boolean", () => {

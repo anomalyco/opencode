@@ -84,9 +84,10 @@ export type CreateDataInput = {
   readonly onError?: (error: unknown) => void
   /**
    * Drops the payload of inline `data:` files in tool results before they enter the store. For clients that never
-   * render tool-result files: a session full of screenshots otherwise keeps hundreds of MB of base64 alive.
+   * render tool-result files: a session full of screenshots otherwise keeps hundreds of MB of base64 alive. A function
+   * is read for each message and event, so a client can follow a setting that changes while it runs.
    */
-  readonly omitToolFileData?: boolean
+  readonly omitToolFileData?: boolean | (() => boolean)
 }
 
 const messagePageLimit = 20
@@ -182,8 +183,23 @@ function omitFileData(content: [ToolContent, ...ToolContent[]]): [ToolContent, .
   return [omit(content[0]), ...content.slice(1).map(omit)]
 }
 
+const hasFileData = (part: Extract<SessionMessageInfo, { type: "assistant" }>["content"][number]) =>
+  part.type === "tool" &&
+  "content" in part.state &&
+  !!part.state.content?.some((item) => item.type === "file" && item.uri.startsWith("data:"))
+
+// A tool file whose `data:` payload `omitFileData` emptied.
+const isDroppedFile = (item: ToolContent) => item.type === "file" && item.uri === `data:${item.mime};base64,`
+
+const hasDroppedFileData = (message: SessionMessageInfo) =>
+  message.type === "assistant" &&
+  message.content.some(
+    (part) => part.type === "tool" && "content" in part.state && !!part.state.content?.some(isDroppedFile),
+  )
+
+// Returns the same message when there is nothing to drop, so the store keeps its objects.
 function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
-  if (message.type !== "assistant") return message
+  if (message.type !== "assistant" || !message.content.some(hasFileData)) return message
   return {
     ...message,
     content: message.content.map((part) =>
@@ -268,16 +284,35 @@ export function createData(config: CreateDataInput) {
 
   function refresh(load: () => Promise<unknown>) {
     if (disposed || (config.connection && config.connection.status() !== "connected")) return
-    void load().catch((error) => {
-      if (disposed || (config.connection && config.connection.status() !== "connected")) return
-      if (isSessionNotFoundError(error)) {
-        markDeleted(error.sessionID)
-        return
-      }
-      if (isMessageNotFoundError(error)) return
-      if (config.onError) return config.onError(error)
-      console.error("Failed to refresh client data", error)
-    })
+    void load().catch(refreshFailed)
+  }
+
+  // Copies back only the emptied tool files: live events may have moved the message on since the server read it.
+  function restoreMessageFiles(sessionID: string, messageID: string) {
+    return api()
+      .session.message.get({ sessionID, messageID })
+      .then((item) => {
+        if (item.type !== "assistant" || omitFiles()) return
+        message.editAssistant(sessionID, item.id, (assistant) => {
+          assistant.content.forEach((part) => {
+            if (part.type !== "tool" || !("content" in part.state) || !part.state.content?.some(isDroppedFile)) return
+            const fetched = item.content.findLast((other) => other.type === "tool" && other.id === part.id)
+            if (fetched?.type === "tool" && "content" in fetched.state && fetched.state.content)
+              part.state.content = fetched.state.content
+          })
+        })
+      })
+  }
+
+  function refreshFailed(error: unknown) {
+    if (disposed || (config.connection && config.connection.status() !== "connected")) return
+    if (isSessionNotFoundError(error)) {
+      markDeleted(error.sessionID)
+      return
+    }
+    if (isMessageNotFoundError(error)) return
+    if (config.onError) return config.onError(error)
+    console.error("Failed to refresh client data", error)
   }
 
   // Runs `load` once a burst of same-key events goes quiet, so N events cost one refetch.
@@ -319,7 +354,9 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
-  const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
+  const omitFiles = () =>
+    typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
+  const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
@@ -1103,7 +1140,7 @@ export function createData(config: CreateDataInput) {
             status: "completed",
             input: tool.state.input,
             metadata: event.data.metadata,
-            content: config.omitToolFileData ? omitFileData(event.data.content) : [...event.data.content],
+            content: omitFiles() ? omitFileData(event.data.content) : [...event.data.content],
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1119,7 +1156,7 @@ export function createData(config: CreateDataInput) {
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
             content:
-              config.omitToolFileData && event.data.content ? omitFileData(event.data.content) : event.data.content,
+              omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1822,6 +1859,23 @@ export function createData(config: CreateDataInput) {
           const messages = store.session.message[sessionID]
           const position = messageIndex.get(sessionID)?.get(messageID)
           return position === undefined ? undefined : messages?.[position]
+        },
+        /** Re-reads every loaded message whose tool file data was dropped, for a client that starts showing tool files. */
+        restoreFiles() {
+          const sessions = Object.entries(store.session.message).flatMap(([sessionID, messages]) => {
+            const ids = (messages ?? []).filter(hasDroppedFileData).map((item) => item.id)
+            return ids.length === 0 ? [] : [{ sessionID, ids }]
+          })
+          // Each session's messages are re-read one at a time, so many screenshots don't fan out at once.
+          return Promise.all(
+            sessions.map((session) =>
+              session.ids.reduce(
+                (previous, messageID) =>
+                  previous.then(() => restoreMessageFiles(session.sessionID, messageID).catch(refreshFailed)),
+                Promise.resolve(),
+              ),
+            ),
+          )
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {

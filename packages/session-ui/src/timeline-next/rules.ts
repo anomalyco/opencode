@@ -19,8 +19,7 @@ export type ToolMode = "explore" | "edit" | "run" | "tool"
  * How a call shows when it stands on its own:
  * - `line`: one line of activity, a command's included: commands run long, so its row cuts the command to a line.
  * - `file`: a file's name and changes, opening to its whole diff.
- * - `event`: work that runs on: a subagent, or a shell started in the background. Grouped, starting it is counted in
- *   the group's label; on its own, it is counted with others like it: Started 2 subagents.
+ * - `event`: a subagent task or a shell started in the background.
  */
 export type ToolLayout = "line" | "file" | "event"
 
@@ -122,7 +121,8 @@ export function textShows(content: Exclude<Content, { type: "tool" }>) {
 
 /**
  * The group a part folds into with its neighbours, or none when it stands on its own:
- * - `events`: subagents and background shells, counted in one row.
+ * - `subagent`: a single event about a task.
+ * - `events`: background shells counted in one row.
  * - `context`: the activity group, where the part's category is grouped.
  * - `read`: files read one after another, where reads stand on their own.
  * - `file`: a file's changes, as a card.
@@ -132,6 +132,8 @@ export function contentGroup(detail: TimelineDetail, content: Content, commentar
 
   if (content.type === "reasoning") return detail.thinking.placement === "grouped" ? ("context" as const) : undefined
   const rule = toolRule(content)
+
+  if (rule.category === "subagents") return "subagent" as const
 
   // Starting work that runs on is an action like any other, so it joins the activity group where its setting groups
   // it. A launch that failed keeps its own row, as failures do.
@@ -189,11 +191,6 @@ export function liveThinkingShows(detail: TimelineDetail) {
   return detail.thinking.placement !== "hidden"
 }
 
-/** A command the user ran always shows, whole where shell details expand and its last lines otherwise. */
-export function userShellOpens(detail: TimelineDetail) {
-  return detail.shell.details === "expanded"
-}
-
 /** The notice the agent gets about a command the user ran repeats that command's own card, so it never shows. */
 export function echoesUserShell(message: SessionMessageInfo, userShellIDs: ReadonlySet<string>) {
   const shellID = message.type === "synthetic" ? message.metadata?.shellID : undefined
@@ -208,7 +205,7 @@ export function echoesUserShell(message: SessionMessageInfo, userShellIDs: Reado
 
 /**
  * Where a notice shows. What the user did and what changed the session always stands on its own. Background work
- * reports its outcome as its own row, following the setting its launch follows: a subagent's the subagent setting, a
+ * reports its outcome as an event, following the setting its launch follows: a subagent's the subagent setting, a
  * shell's the shell setting.
  */
 export function noticePlacement(detail: TimelineDetail, message: SessionMessageInfo): TimelinePlacement {
@@ -234,6 +231,11 @@ export function sessionEvent(message: SessionMessageInfo) {
     return true
 
   return goal(message)
+}
+
+/** A move to where the session already is changes nothing, so it shows nothing. */
+export function movedInPlace(message: SessionMessageInfo) {
+  return message.type === "location-switched" && message.previous?.location.directory === message.location.directory
 }
 
 /** A goal the user set, which reads as their own message. */

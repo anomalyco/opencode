@@ -9,7 +9,7 @@ export type State =
   | { readonly type: "checking" }
   | { readonly type: "missing" }
   | { readonly type: "failed"; readonly message: string }
-  | { readonly type: "ready"; readonly probe: ClaudeProbe.Result }
+  | { readonly type: "ready"; readonly probe: ClaudeProbe.Result; readonly fromChat?: boolean }
 
 export interface Interface {
   readonly state: SubscriptionRef.SubscriptionRef<State>

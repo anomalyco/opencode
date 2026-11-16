@@ -16,3 +16,7 @@ export function stage(mode: string | undefined): Stage {
 export function stageHost(value: Stage) {
   return hosts[value]
 }
+
+export function stageAccount(value: Stage) {
+  return value === "dev" ? "d8e944f537ceef3f06a5bd3aec1d7a53" : "15d29c8639fd3733b1b5486a2acfd968"
+}
