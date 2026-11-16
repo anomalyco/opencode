@@ -19,7 +19,7 @@ export interface Browser {
    */
   canOpen(session: SessionRef, path?: string): boolean
   /**
-   * Opens a URL (http(s) or file://) as a browser tab in the session's side panel.
+   * Opens an HTTP(S) page in the session's side panel. A file:// URL inside the built-in server's workspace opens as a scoped preview; file:// URLs outside that workspace or on remote sessions are refused.
    *
    * @param session - The session whose pane opens it.
    * @param url - The URL to open.
