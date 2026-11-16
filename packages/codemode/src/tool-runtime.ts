@@ -97,6 +97,9 @@ export type ToolDescription = {
 const defaultSearchLimit = 10
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
 const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+const decodeCallOptions = Schema.decodeUnknownSync(Schema.Struct({ timeoutMs: Schema.optionalKey(PositiveInt) }), {
+  onExcessProperty: "error",
+})
 const SearchInput = Schema.Struct({
   query: Schema.optionalKey(Schema.String),
   namespace: Schema.optionalKey(Schema.String),
@@ -635,6 +638,7 @@ export const make = <R>(
   prepared: Prepared<R>,
   maxToolCalls: number | undefined,
   hooks: Hooks<R> = {},
+  toolTimeouts = false,
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
   const invocations = new Map<string, ToolInvocation>()
@@ -650,6 +654,8 @@ export const make = <R>(
   const decode = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
     Effect.gen(function* () {
       const normalized = args.length === 0 ? [{}] : args
+      if (toolTimeouts && normalized.length > 1 && "_tag" in tool.execute && tool.execute._tag === "CodeModeDurable")
+        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' does not accept call options.`)
       if (normalized.length !== 1)
         throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
       const input = normalized[0]
@@ -697,14 +703,37 @@ export const make = <R>(
       }
       const run = "_tag" in tool.execute ? tool.execute.execute : tool.execute
       const key = options.key
-      const input = yield* decode(name, tool, args)
+      if (toolTimeouts && args.length > 2)
+        throw new ToolRuntimeError(
+          "InvalidToolInput",
+          `Tool '${name}' expects at most one input object and one call-options object.`,
+        )
+      const timeoutMs =
+        !toolTimeouts || args.length < 2
+          ? undefined
+          : (yield* Effect.try({
+              try: () => decodeCallOptions(args[1]),
+              catch: (cause) =>
+                new ToolRuntimeError("InvalidToolInput", `Invalid call options for tool '${name}': ${String(cause)}`),
+            })).timeoutMs
+      const input = yield* decode(name, tool, toolTimeouts ? args.slice(0, 1) : args)
       yield* Effect.sync(() => options.admit(name))
       return yield* hooked(
         { name, input, key },
         hooks["tool.before"],
         hooks["tool.after"],
         Effect.gen(function* () {
-          const raw = yield* failure(Effect.suspend(() => run(input, { key })))
+          const execute = Effect.suspend(() => run(input, { key }))
+          const raw = yield* failure(
+            timeoutMs === undefined
+              ? execute
+              : execute.pipe(
+                  Effect.timeoutOrElse({
+                    duration: timeoutMs,
+                    orElse: () => Effect.fail(toolError(`Tool '${name}' timed out after ${timeoutMs}ms.`)),
+                  }),
+                ),
+          )
           return yield* output(name, tool, raw)
         }),
         options.detaching,

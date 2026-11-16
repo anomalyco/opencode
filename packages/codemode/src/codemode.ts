@@ -68,6 +68,8 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   extensions?: Extensions
   /** Resource limits enforced on each execution. Time counts active time only, across every resume of a run. */
   limits?: ExecutionLimits
+  /** Allow plain and idempotent tool calls to supply a second `{ timeoutMs?: number }` argument. Off by default. */
+  toolTimeouts?: boolean
 }
 
 /** The Effect environment an execution needs: what the tools and the extensions' Effect globals require. */
@@ -228,6 +230,7 @@ export function make<
   const setup: Setup<R> = {
     prepared,
     limits,
+    toolTimeouts: options.toolTimeouts ?? false,
     hooks: options.hooks ?? {},
     globals: extensions.length === 0 ? undefined : (ctx) => extensionGlobals(ctx, extensions),
     lossy: extensions.some((extension) => extension.snapshot === undefined),

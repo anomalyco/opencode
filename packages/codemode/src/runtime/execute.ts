@@ -29,6 +29,7 @@ type Globals<R> = (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value
 export type Setup<R> = {
   readonly prepared: ToolRuntime.Prepared<R>
   readonly limits: ResolvedExecutionLimits
+  readonly toolTimeouts?: boolean
   readonly hooks: ToolRuntime.Hooks<R>
   /** The host's globals, made again for a restored run; see `Interpreter`. */
   readonly globals?: Globals<R> | undefined
@@ -122,7 +123,7 @@ const restoreInto = (saved: unknown, vm: Vm): Snapshot =>
 // A new runtime: intrinsics, the host globals, the program's bindings, a fresh tool bridge, and its VM.
 const instantiate = <R>(setup: Setup<R>, bindings?: Globals<R>): Interpreter<R> => {
   const ctx = new Interpreter<R>({
-    tools: ToolRuntime.make(setup.prepared, setup.limits.maxToolCalls, setup.hooks),
+    tools: ToolRuntime.make(setup.prepared, setup.limits.maxToolCalls, setup.hooks, setup.toolTimeouts),
     builtins: createBuiltins(),
     logs: [],
     globals: setup.globals,

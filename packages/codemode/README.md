@@ -101,6 +101,39 @@ runs before the call reaches the host, and a failing one denies it: the host fun
 catches the failure as a thrown error. A denied call fails the way the call itself would: a tool call or asynchronous
 global rejects its promise, and a synchronous global throws.
 
+#### Optional per-call timeouts
+
+Hosts can enable `toolTimeouts: true` in `CodeMode.make` or `CodeMode.execute` to let programs bound individual plain
+and `Tool.idempotent` tool calls:
+
+```ts
+const runtime = CodeMode.make({ tools, toolTimeouts: true })
+
+const result = await Effect.runPromise(
+  runtime.execute(`
+    return await Promise.allSettled([
+      tools.orders.lookup({ id: "order_42" }, { timeoutMs: 120_000 }),
+      tools.orders.lookup({ id: "order_43" }),
+    ])
+  `),
+)
+```
+
+The capability is off by default. The second argument is a separate options object; it never becomes part of tool
+input, even when that input has its own `timeoutMs` field. `timeoutMs` must be a positive safe integer in milliseconds.
+Invalid options, including unknown fields, reject the call before hooks or the executor run. Omit the second argument
+or pass `{}` to add no deadline. Empty-input tools use `tools.example({}, { timeoutMs: 100 })`; freeform tools still
+accept strings, as in `tools.patch("patch text", { timeoutMs: 100 })`. Catalog signatures remain unchanged.
+
+Expiry rejects only that invocation with an ordinary catchable tool error naming the tool and duration. The existing
+`tool.after` hook observes one failure, and other calls and the program can continue. The deadline covers the tool's
+executable effect, including waits inside it, and requests cancellation through its existing Effect scope and Promise
+abort signal. It does not guarantee that remote work stops or side effects roll back. Existing earlier interpreter or
+tool deadlines still win; caller interruption remains interruption. No retry or default deadline is added.
+
+`Tool.durable` calls retain their single-argument contract and reject a second options argument. Per-call timeouts do
+not change their suspension or snapshot format.
+
 ### Suspending and resuming a run
 
 `CodeMode.make` returns a `CodeMode.Runtime`, which can also run a program step by step:
