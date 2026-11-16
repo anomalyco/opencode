@@ -4,7 +4,7 @@ import {
   addressFocusTab,
   createInitialState,
   REGISTER_TIMEOUT_MS,
-  serverSupported,
+  sessionSupported,
   sessionError,
   sessionPending,
   sessionRegistration,
@@ -252,26 +252,19 @@ describe("browser pane machine", () => {
     )
   })
 
-  test("an unsupported server stops every session on it until the server changes", () => {
+  test("a cold location keeps every other session on its server running and retries on plugin update", () => {
     const start = ready(replay([...attach(), ...attach(other)]).state)
     const unsupported = transition(start, paneState(start, null, "browser.pane.unsupported"))
-    expect(serverSupported(unsupported.state, server)).toBe(false)
-    expect(attachment(unsupported.state)).toBeUndefined()
-    expect(attachment(unsupported.state, other)).toBeUndefined()
+    expect(sessionSupported(unsupported.state, key)).toBe(false)
+    expect(attachment(unsupported.state,other)).toBe(attachment(start,other))
     expect(unsupported.effects).toEqual([
       { type: "close-registration", sessionKey: key, attempt: attempt(start) },
-      { type: "detach", sessionKey: key },
-      { type: "cancel-register-timeout", sessionKey: other },
-      { type: "close-registration", sessionKey: other, attempt: attempt(start, other) },
-      { type: "detach", sessionKey: other },
-      { type: "watch-server", serverID: server },
     ])
     expect(replay(attach(), unsupported.state).state).toBe(unsupported.state)
 
-    const changed = transition(unsupported.state, { type: "server.changed", serverID: server })
-    expect(serverSupported(changed.state, server)).toBe(true)
-    expect(changed.effects).toEqual([{ type: "unwatch-server", serverID: server }])
-    expect(types(replay(attach(), changed.state).effects)).toEqual(["open-registration", "schedule-register-timeout"])
+    const changed = transition(unsupported.state, { type: "session.capability.changed", sessionKey:key })
+    expect(sessionSupported(changed.state,key)).toBe(true)
+    expect(types(changed.effects)).toEqual(["open-registration", "schedule-register-timeout"])
   })
 
   test("a focus held while the strip cannot be written is dropped when its tab closes first", () => {
@@ -620,10 +613,18 @@ describe("browser pane machine", () => {
     }
   })
 
-  test("removing a session closes its binding", () => {
+  test("list absence suspends, reappearance restores, and only explicit deletion forgets", () => {
     const start = ready()
+    const tabs = inventory(tab(tabA),tab(tabB))
+    const listed = transition(start,paneState(start,tabs)).state
+    const absent = transition(listed,{type:"session.presence",sessionKey:key,listed:false})
+    expect(types(absent.effects)).toEqual(["close-registration"])
+    expect(attachment(absent.state)?.browser).toEqual(tabs)
+    const resumed = transition(absent.state,{type:"session.presence",sessionKey:key,listed:true})
+    expect(resumed.effects).toContainEqual(expect.objectContaining({type:"open-registration",restore:tabs}))
     expect(transition(start, { type: "session.removed", sessionKeys: [key, other] }).effects).toEqual([
       { type: "close-registration", sessionKey: key, attempt: attempt(start) },
+      { type:"forget-tabs",sessionKey:key },
       { type: "detach", sessionKey: key },
     ])
     expect(transition(start, { type: "session.removed", sessionKeys: [other] }).state).toBe(start)

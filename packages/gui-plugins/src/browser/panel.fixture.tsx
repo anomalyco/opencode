@@ -493,6 +493,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         report()
       },
       close: async () => undefined,
+      forget: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {
         // SAFETY: the pane's Ipc has one event, whose payload is exactly this binding and PaneEvent.
@@ -1267,6 +1268,7 @@ export function mountBrowserRegion(input: RegionHost) {
       answer: async () => undefined,
       reveal: async () => undefined,
       close: async () => undefined,
+      forget: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {
         // SAFETY: the pane's Ipc has one event, so every listener takes that event's payload.

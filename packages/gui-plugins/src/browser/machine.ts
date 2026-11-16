@@ -30,8 +30,8 @@ export type Phase =
   | { readonly status: "registering"; readonly attempt: number; readonly attempts: number }
   | { readonly status: "ready"; readonly attempt: number }
   | { readonly status: "backoff"; readonly attempt: number; readonly attempts: number }
-  | { readonly status: "suspended"; readonly reason: "idle" | "ipc" }
-  | { readonly status: "blocked"; readonly reason: "replaced" | "missing" }
+  | { readonly status: "suspended"; readonly reason: "idle" | "ipc" | "unlisted" }
+  | { readonly status: "blocked"; readonly reason: "replaced" | "missing" | "unsupported" }
 
 /** How the session's side-panel strip follows the desktop's tab inventory. */
 export type Strip = {
@@ -75,14 +75,13 @@ export type Attachment = {
 
 /**
  * Every attachment of this window, which belongs to its shell session tab rather than the route. `issued` is the last
- * attempt or request id handed out. `unsupported` lists servers whose plugin lacks the browser RPC.
+ * attempt or request id handed out. A Location whose browser RPC is not available blocks only its session.
  */
 export type State =
   | {
       readonly status: "open"
       readonly ipc: Ipc
       readonly issued: number
-      readonly unsupported: Readonly<Record<string, true | undefined>>
       readonly sessions: Readonly<Record<string, Attachment | undefined>>
     }
   | { readonly status: "disposed" }
@@ -90,8 +89,9 @@ export type State =
 export type Event =
   | { readonly type: "disposed" }
   | { readonly type: "ipc.changed"; readonly ipc: Ipc }
-  /** An unsupported server reconnected, restarted, or is no longer listed: it may have the browser RPC now. */
-  | { readonly type: "server.changed"; readonly serverID: string }
+  | { readonly type: "session.capability.changed"; readonly sessionKey: string }
+  | { readonly type: "session.presence"; readonly sessionKey: string; readonly listed: boolean }
+  | { readonly type: "session.rebind"; readonly sessionKey: string }
   | {
       readonly type: "session.attached"
       readonly sessionKey: string
@@ -203,8 +203,7 @@ export type MachineEffect =
   | { readonly type: "record-history"; readonly sessionKey: string }
   /** The session is no longer attached: drop its per-session resources. */
   | { readonly type: "detach"; readonly sessionKey: string }
-  | { readonly type: "watch-server"; readonly serverID: string }
-  | { readonly type: "unwatch-server"; readonly serverID: string }
+  | { readonly type: "forget-tabs"; readonly sessionKey: string }
 
 export type Transition = { readonly state: State; readonly effects: readonly MachineEffect[] }
 
@@ -221,7 +220,7 @@ type Bound = Extract<Phase, { status: "registering" | "ready" }>
 
 type SessionEvent = Exclude<
   Event,
-  { type: "disposed" | "ipc.changed" | "server.changed" | "session.attached" | "session.removed" | "session.routed" }
+  { type: "disposed" | "ipc.changed" | "session.attached" | "session.removed" | "session.routed" }
 >
 
 // No attachment shares an object with another, not even an empty one: the model reconciles the state into its store,
@@ -229,7 +228,7 @@ type SessionEvent = Exclude<
 const noFocus = (): AddressFocus => ({ status: "none" })
 
 export function createInitialState(ipc: Ipc): State {
-  return { status: "open", ipc, issued: 0, unsupported: {}, sessions: {} }
+  return { status: "open", ipc, issued: 0, sessions: {} }
 }
 
 export function transition(state: State, event: Event): Transition {
@@ -238,8 +237,6 @@ export function transition(state: State, event: Event): Transition {
   if (event.type === "disposed") return dispose(state)
 
   if (event.type === "ipc.changed") return ipcChanged(state, event.ipc)
-
-  if (event.type === "server.changed") return serverChanged(state, event.serverID)
 
   if (event.type === "session.attached") return attached(state, event)
 
@@ -253,8 +250,10 @@ export function transition(state: State, event: Event): Transition {
   return session(state, event.sessionKey, attachment, event)
 }
 
-export function serverSupported(state: State, serverID: string) {
-  return state.status === "open" && !state.unsupported[serverID]
+export function sessionSupported(state: State, key: string) {
+  const phase = attachmentOf(state, key)?.phase
+
+  return state.status === "open" && !(phase?.status === "blocked" && phase.reason === "unsupported")
 }
 
 function attachmentOf(state: State, sessionKey: string) {
@@ -276,7 +275,7 @@ export function sessionPending(state: State, target: Target) {
   if (state.status === "disposed") return false
   const attachment = state.sessions[target.key]
 
-  if (!attachment) return !state.unsupported[target.server.id] && target.server.compatible && !target.pending
+  if (!attachment) return target.server.compatible && !target.pending
 
   if (attachment.browser || attachment.error) return false
   const phase = attachment.phase
@@ -341,7 +340,6 @@ function dispose(state: Open): Transition {
     state: { status: "disposed" },
     effects: [
       ...listed(state.sessions).flatMap(([key, attachment]) => [...stop(key, attachment.phase), detach(key)]),
-      ...Object.keys(state.unsupported).map((serverID): MachineEffect => ({ type: "unwatch-server", serverID })),
     ],
   }
 }
@@ -385,20 +383,8 @@ function ipcChanged(state: Open, ipc: Ipc): Transition {
   )
 }
 
-function serverChanged(state: Open, serverID: string): Transition {
-  if (!state.unsupported[serverID]) return { state, effects: [] }
-
-  return {
-    state: {
-      ...state,
-      unsupported: Object.fromEntries(Object.entries(state.unsupported).filter((entry) => entry[0] !== serverID)),
-    },
-    effects: [{ type: "unwatch-server", serverID }],
-  }
-}
-
 function attached(state: Open, event: Extract<Event, { type: "session.attached" }>): Transition {
-  if (state.unsupported[event.serverID] || state.sessions[event.sessionKey]) return { state, effects: [] }
+  if (state.sessions[event.sessionKey]) return { state, effects: [] }
 
   return put(state, event.sessionKey, {
     serverID: event.serverID,
@@ -421,7 +407,7 @@ function removed(state: Open, sessionKeys: readonly string[]): Transition {
       ...state,
       sessions: Object.fromEntries(listed(state.sessions).filter((entry) => !sessionKeys.includes(entry[0]))),
     },
-    effects: gone.flatMap(([key, attachment]) => [...stop(key, attachment.phase), detach(key)]),
+    effects: gone.flatMap(([key, attachment]) => [...stop(key, attachment.phase), {type:"forget-tabs" as const,sessionKey:key}, detach(key)]),
   }
 }
 
@@ -449,6 +435,23 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
   const phase = attachment.phase
 
   switch (event.type) {
+    case "session.capability.changed":
+      if (phase.status !== "blocked" || phase.reason !== "unsupported") return {state,effects:[]}
+
+      return wake(state,key,suspend(attachment,"idle"),false)
+    case "session.presence":
+      if (event.listed) return phase.status === "suspended" && phase.reason === "unlisted" ? wake(state,key,suspend(attachment,"idle"),false) : {state,effects:[]}
+
+      if (phase.status === "suspended" && phase.reason === "unlisted") return {state,effects:[]}
+
+      return put(state,key,suspend(attachment,"unlisted"),stop(key,phase))
+    case "session.rebind": {
+      if (phase.status === "suspended" && phase.reason === "unlisted") return {state,effects:[]}
+      const next = wake(state,key,suspend(attachment,"idle"),false)
+
+      return {...next,effects:[...stop(key,phase),...next.effects]}
+    }
+
     case "session.located":
       return located(state, key, attachment, event.located)
     case "session.wake":
@@ -568,6 +571,8 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
 function wake(state: Open, key: string, attachment: Attachment, created: boolean): Transition {
   const phase = attachment.phase
 
+  if (phase.status === "suspended" && phase.reason === "unlisted") return {state,effects:[]}
+
   if (phase.status === "registering" || phase.status === "ready" || phase.status === "backoff")
     return { state, effects: [] }
 
@@ -615,7 +620,7 @@ function command(
       request,
     )
 
-  if (phase.status === "backoff" || phase.status === "blocked") {
+  if (phase.status === "backoff" || phase.status === "blocked" || (phase.status === "suspended" && phase.reason === "unlisted")) {
     const error =
       phase.status === "blocked" && phase.reason === "replaced" ? "browser.pane.replaced" : "browser.pane.unavailable"
 
@@ -698,22 +703,9 @@ function paneState(
 
   if (!phase) return { state, effects: [] }
 
-  // The server's plugin lacks the browser RPC: every session on it stops until the server changes.
+  // RPC registration belongs to a Location. A cold project says nothing about the other projects on its server.
   if (event.error === "browser.pane.unsupported") {
-    const serverID = attachment.serverID
-    const gone = listed(state.sessions).filter((entry) => entry[1].serverID === serverID)
-
-    return {
-      state: {
-        ...state,
-        unsupported: { ...state.unsupported, [serverID]: true },
-        sessions: Object.fromEntries(listed(state.sessions).filter((entry) => entry[1].serverID !== serverID)),
-      },
-      effects: [
-        ...gone.flatMap(([item, value]) => [...stop(item, value.phase), detach(item)]),
-        { type: "watch-server", serverID },
-      ],
-    }
+    return put(state,key,{...attachment,phase:{status:"blocked",reason:"unsupported"},embeds:{}},stop(key,phase))
   }
 
   if (event.error === "browser.pane.replaced" || event.error === "browser.pane.missing") {
@@ -855,7 +847,7 @@ function blank(tab: Browser.Tab) {
   return !tab.url || tab.url === "about:blank"
 }
 
-function suspend(attachment: Attachment, reason: "idle" | "ipc", browser = attachment.browser): Attachment {
+function suspend(attachment: Attachment, reason: Extract<Phase,{status:"suspended"}>["reason"], browser = attachment.browser): Attachment {
   return {
     ...attachment,
     phase: { status: "suspended", reason },

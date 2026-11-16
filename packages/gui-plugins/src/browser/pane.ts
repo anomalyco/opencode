@@ -446,7 +446,16 @@ export function createBrowserPane(input: {
     },
     async close(window: number, binding: string) {
       owned(window, binding)
-      dispatchBinding(binding, { type: "client.closed" })
+      dispatchBinding(binding, { type: "owner.closed" })
+    },
+    forget(server: string, session: string) {
+      const storageKey = `${server}\n${session}`
+
+      for (const binding of handles.keys()) {
+        if (selectBinding(machine.state,binding)?.storageKey === storageKey) dispatchBinding(binding,{type:"client.closed"})
+      }
+
+      restore.remove(storageKey)
     },
     /**
      * The plugin is going away (reload, disable, or quit). Windows keep each pane's tabs as a

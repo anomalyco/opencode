@@ -84,7 +84,7 @@ export type BindingEvent =
   | { readonly type: "register.timed-out" }
   /** The window navigated or was destroyed. */
   | { readonly type: "owner.closed" }
-  /** The window closed the binding; its saved tabs are forgotten. */
+  /** An explicit session deletion (not disposal of a window, location or IPC binding). */
   | { readonly type: "client.closed" }
   | { readonly type: "pane.disposed" }
   | { readonly type: "request.started"; readonly requestID: string }
@@ -239,7 +239,7 @@ export function transitionBinding(state: BindingState, event: BindingEvent): Bin
   if (state.status === "closed") return { state, effects: [] }
   const reason = closeReason(state, event)
 
-  if (reason) return close(state, reason, event.type === "client.closed" || reason === "browser.pane.missing")
+  if (reason) return close(state, reason, event.type === "client.closed")
 
   if (event.type === "control.unrecognized")
     return {

@@ -29,7 +29,7 @@ import {
 import {
   addressFocusTab,
   createInitialState,
-  serverSupported,
+  sessionSupported,
   sessionAttached,
   sessionBrowser,
   sessionEmbed,
@@ -125,7 +125,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const registrations = new Map<string, { attempt: number; registration: Registration }>()
   const registerTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
-  const servers = new Map<string, () => void>()
   const listeners = new Map<string, (event: PaneEvent) => void>()
   const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
   // Each tab's last recorded page, so a state that repeats it does not write the history again.
@@ -221,9 +220,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (effect.type === "detach") return detach(effect.sessionKey)
 
-    if (effect.type === "watch-server") return watchServer(effect.serverID)
-    servers.get(effect.serverID)?.()
-    servers.delete(effect.serverID)
+    if (effect.type === "forget-tabs") {
+      const ref = drives.get(effect.sessionKey)?.ref
+
+      if (ref) void client()?.forget({server: ref.server.id, session:ref.id}).catch(() => undefined)
+    }
   }
 
   const schedule = (
@@ -436,35 +437,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     setState("chrome", sessionKey, undefined)
   }
 
-  // A server whose plugin lacked the browser RPC may have it once its plugins finish loading, its event stream
-  // reconnects, or a restarted server replaces its controller. Leaving the list ends the watch too: its next session
-  // asks again.
-  const watchServer = (serverID: string) => {
-    servers.get(serverID)?.()
-    const changed = () => queueMicrotask(() => dispatch({ type: "server.changed", serverID }))
-    const find = () => sessions.list().find((ref) => ref.server.id === serverID)?.server
-    const marked = untrack(find)?.data
-
-    if (!marked) return changed()
-
-    servers.set(
-      serverID,
-      createRoot((dispose) => {
-        createKeyed(
-          () => find()?.data,
-          (data) => {
-            if (data !== marked) return changed()
-            onCleanup(data.on("server.connected", changed))
-            onCleanup(data.on("plugin.updated", changed))
-          },
-          { otherwise: changed },
-        )
-
-        return dispose
-      }, owner),
-    )
-  }
-
   // The SDK removes the listener when the Ipc's generation ends.
   createKeyed(pane, (current) => current.on("event", (value) => listeners.get(value.binding)?.(value.event)))
 
@@ -488,7 +460,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const attach = (ref: SessionRef) => {
     const sessionKey = ref.key
 
-    if (drives.has(sessionKey) || !serverSupported(untrack(machine), ref.server.id)) return
+    if (drives.has(sessionKey)) return
     const drive: Drive = { ref, previews: [], dispose: () => undefined }
     drives.set(sessionKey, drive)
     dispatch({ type: "session.attached", sessionKey, serverID: ref.server.id, located: !!ref.location })
@@ -497,9 +469,21 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     drive.dispose = createRoot((dispose) => {
       // A new session appears in the UI before its server-side creation finishes. The listeners follow the server's
       // live data: a re-authenticated server gets a new controller under the same ref.
+      let controller = ref.server.data
       createKeyed(
         () => ref.server.data,
         (data) => {
+          if (data !== controller) dispatch({type:"session.rebind", sessionKey})
+          controller = data
+          const changed = () => dispatch({type:"session.capability.changed", sessionKey})
+          onCleanup(data.on("plugin.updated", changed))
+          onCleanup(data.on("server.connected", changed))
+          onCleanup(data.on("session.deleted", event => {
+            if (event.data.sessionID === ref.id) dispatch({type:"session.removed", sessionKeys:[sessionKey]})
+          }))
+          onCleanup(data.on("session.moved", event => {
+            if (event.data.sessionID === ref.id) dispatch({type:"session.rebind", sessionKey})
+          }))
           onCleanup(
             data.on("session.created", (event) => {
               if (event.data.sessionID === ref.id) dispatch({ type: "session.created", sessionKey })
@@ -512,6 +496,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           )
         },
       )
+
+      // The shell list is a view, not a deletion log. It can disappear during re-authentication or a refresh.
+      createKeyed(() => sessions.list().some(item => item.key === sessionKey && item.server.compatible) ? "listed" : "absent",
+        value => dispatch({ type:"session.presence", sessionKey, listed:value === "listed" }))
 
       // The server finished creating the session.
       createKeyed(
@@ -543,27 +531,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (!view?.id) return
     const ref = sessions.list().find((item) => item.key === view.key)
 
-    return ref?.server.compatible && serverSupported(machine(), ref.server.id) ? ref : undefined
+    return ref?.server.compatible ? ref : undefined
   }, attach)
 
-  // An attachment closes with its shell tab, or when its server stops being compatible.
-  createKeyed(
-    () => {
-      const current = machine()
-
-      if (current.status !== "open") return
-      const owned = new Set(sessions.list().map((ref) => ref.key))
-
-      const stale = Object.keys(current.sessions).filter((id) => {
-        const drive = drives.get(id)
-
-        return !!drive && !(owned.has(id) && drive.ref.server.compatible)
-      })
-
-      return stale.length > 0 ? stale : undefined
-    },
-    (stale) => dispatch({ type: "session.removed", sessionKeys: stale }),
-  )
   onCleanup(() => {
     dispatch({ type: "disposed" })
     recorded.clear()
@@ -587,7 +557,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const attached = (session: Session) => sessionAttached(machine(), session.key)
 
   const available = (session: SessionRef) =>
-    serverSupported(machine(), session.server.id) && !!session.id && session.server.compatible && !layout.narrow()
+    sessionSupported(machine(), session.key) && !!session.id && session.server.compatible && !layout.narrow()
 
   const tab = (session: Session, tabID: string) => sessionTab(machine(), session.key, tabID)
 

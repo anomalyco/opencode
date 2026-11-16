@@ -233,11 +233,11 @@ describe("binding close reason", () => {
     expect(attachmentFailure(new Error("socket hang up"))).toBe("closed")
   })
 
-  test("a missing session and the window's close forget the saved tabs; other closes keep them", () => {
+  test("only explicit deletion forgets the saved tabs, not a missing session or suspended window", () => {
     const removes = (event: BindingEvent) =>
       play(attached(), on(event)).effects.some((effect) => effect.type === "remove-restore")
 
-    expect(removes({ type: "attachment.ended", outcome: "missing" })).toBe(true)
+    expect(removes({ type: "attachment.ended", outcome: "missing" })).toBe(false)
     expect(removes({ type: "client.closed" })).toBe(true)
     expect(removes({ type: "owner.closed" })).toBe(false)
     expect(removes({ type: "attachment.ended", outcome: "closed" })).toBe(false)

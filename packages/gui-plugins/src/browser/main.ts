@@ -147,6 +147,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
     reveal: async (input, caller) => (await pane()).reveal(caller.window, input.binding, input.tabID),
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),
+    forget: async (input) => (await load()).forget(input.server,input.session),
   })
 
   // Jobs that write the profile run one after another, whichever window or surface started them: each surface runs

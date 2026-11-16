@@ -20,6 +20,7 @@ function fixture(reject?: Error) {
   const events: PaneEvent[] = []
 
   const client: Client = {
+    forget: async () => undefined,
     register: async (input) => {
       registered.push(input)
 

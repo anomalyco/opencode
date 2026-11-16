@@ -247,6 +247,7 @@ export const BrowserPane = Ipc.define({
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     reveal: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     close: { input: Schema.Struct({ binding }) },
+    forget: { input: Schema.Struct({server:text(16_384),session:text(256).check(Schema.isStartingWith("ses"))}) },
   },
   events: {
     event: Schema.Struct({ binding: Schema.String, event: PaneEvent }),
