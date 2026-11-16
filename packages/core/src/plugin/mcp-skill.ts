@@ -14,10 +14,11 @@ import { SkillDiscovery } from "../skill/discovery.js"
 const MANIFEST = "SKILL.md"
 
 type Listed = Mcp.Skill & { readonly resources: Exclude<Mcp.Skill["entry"]["resources"], "dynamic"> }
+type Named = Listed & { readonly id: Skill.ID }
 
 /**
  * Experimental: registers the skills connected MCP servers list through MCP Skills, a beta extension, as
- * `<server>:<name>`. Nothing is fetched until a skill is loaded or one of its files is read, and every file is verified
+ * `<server>:<name>`, telling same-named skills of one server apart by their paths. Nothing is fetched until a skill is loaded or one of its files is read, and every file is verified
  * against the listed entry.
  */
 export const Plugin = define({
@@ -27,47 +28,52 @@ export const Plugin = define({
     const mcp = yield* Mcp.Service
     const bus = yield* Bus.Service
     const skills = yield* Skill.Service
-    const loaded = { skills: [] as Listed[] }
+    const loaded = { skills: [] as Named[] }
 
     const discover = Effect.gen(function* () {
-      const kept = new Map<string, Listed>()
-      // Listed by server, then URI, so the alphabetically first URI keeps a name its server repeats.
-      for (const skill of yield* mcp.skills()) {
-        const resources = skill.entry.resources
-        // Dynamic skills publish no digests, so their content cannot be verified.
-        if (resources === "dynamic") continue
-        const id = `${skill.server}:${skill.entry.frontmatter.name}`
-        // The ID is the first segment of the skill's `skill://` paths, so a `/` in it would make its files unreadable.
-        if (!SkillDiscovery.isSafeSegment(id)) {
-          yield* Effect.logWarning("skipping MCP skill whose name cannot form a path", { server: skill.server, id })
-          continue
-        }
-        const existing = kept.get(id)
-        if (!existing) {
-          kept.set(id, { ...skill, resources })
-          continue
-        }
-        yield* Effect.logWarning("skipping MCP skill with a duplicate name", {
-          server: skill.server,
-          name: skill.entry.frontmatter.name,
-          uri: skill.entry.uri,
-          kept: existing.entry.uri,
-        })
-      }
-      loaded.skills = Array.from(kept.values())
+      // Dynamic skills publish no digests, so their content cannot be verified.
+      const listed = (yield* mcp.skills()).flatMap((skill): Listed[] =>
+        skill.entry.resources === "dynamic" ? [] : [{ ...skill, resources: skill.entry.resources }],
+      )
+      const named = Array.from(
+        Map.groupBy(listed, (skill) => `${skill.server}:${skill.entry.frontmatter.name}`),
+      ).flatMap(([id, group]) => (group.length === 1 ? [{ ...group[0]!, id: Skill.ID.make(id) }] : disambiguate(group)))
+      // The ID is the first segment of the skill's `skill://` paths, so a `/` in it would make its files unreadable.
+      yield* Effect.forEach(
+        named.filter((skill) => !SkillDiscovery.isSafeSegment(skill.id)),
+        (skill) =>
+          Effect.logWarning("skipping MCP skill whose name cannot form a path", { server: skill.server, id: skill.id }),
+        { discard: true },
+      )
+      loaded.skills = named.filter((skill) => SkillDiscovery.isSafeSegment(skill.id))
     })
 
+    // Registered after every other skill source, so a taken ID is visible and reported rather than silently replaced.
+    const shadowed = new Set<string>()
+    const report = Effect.suspend(() =>
+      Effect.forEach(
+        shadowed,
+        (id) => Effect.logWarning("skipping MCP skill whose ID another skill already uses", { id }),
+        { discard: true },
+      ),
+    )
+
     yield* bus.subscribe(Mcp.SkillsChanged).pipe(
-      Stream.runForEach(() => discover.pipe(Effect.andThen(skills.reload()))),
+      Stream.runForEach(() => discover.pipe(Effect.andThen(skills.reload()), Effect.andThen(report))),
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* discover
 
     // One transform reading the latest discovery, so a refresh keeps its place among other skill sources.
     yield* skills.transform((editor) => {
+      shadowed.clear()
       for (const skill of loaded.skills) {
         const entry = skill.entry
-        const id = Skill.ID.make(`${skill.server}:${entry.frontmatter.name}`)
+        const id = skill.id
+        if (editor.get(id, { content: false })) {
+          shadowed.add(id)
+          continue
+        }
         const read = (ref?: string) => mcp.readSkill({ server: skill.server, entry, ref })
         const root = entry.uri.slice(0, entry.uri.lastIndexOf("/") + 1)
         const files = skill.resources.flatMap((resource) => {
@@ -90,5 +96,25 @@ export const Plugin = define({
         )
       }
     })
+    yield* report
   }),
 })
+
+// Same-named skills from one server are told apart by the trailing segments of their paths that differ, joined with
+// `.`, which a skill name cannot contain: `acme/billing/refunds` and `acme/support/refunds` become `billing.refunds` and
+// `support.refunds`. Paths that never differ, such as one skill under two URI schemes, also get a hash of the URI.
+function disambiguate(group: ReadonlyArray<Listed>): Named[] {
+  const segments = group.map((skill) =>
+    skill.entry.uri
+      .replace(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//, "")
+      .slice(0, -`/${MANIFEST}`.length)
+      .split("/"),
+  )
+  const longest = Math.max(...segments.map((parts) => parts.length))
+  const labels =
+    Array.from({ length: longest - 1 }, (_, index) =>
+      segments.map((parts) => parts.slice(-(index + 2)).join(".")),
+    ).find((candidate) => new Set(candidate).size === candidate.length) ??
+    group.map((skill, index) => `${segments[index]!.join(".")}.${Hash.sha256(skill.entry.uri).slice(0, 8)}`)
+  return group.map((skill, index) => ({ ...skill, id: Skill.ID.make(`${skill.server}:${labels[index]}`) }))
+}

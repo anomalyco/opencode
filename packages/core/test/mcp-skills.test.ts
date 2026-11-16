@@ -76,7 +76,28 @@ const mcpSkillNode = makeLocationNode({
   deps: [Flag.node, Mcp.node, Bus.node, Skill.node],
 })
 
-const stack = (flags: string, policies: ConfigPolicy.Info[] = []) => {
+// A local skill registered before MCP skills, as config and plugin skills are in production.
+const shadowedMcpSkillNode = makeLocationNode({
+  name: "test/mcp-skills-plugin-shadowed",
+  layer: Layer.effectDiscard(
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      yield* skills.transform((editor) =>
+        editor.add({
+          id: Skill.ID.make("team:deploy"),
+          name: Skill.Name.make("team:deploy"),
+          description: "Local",
+          path: AbsolutePath.make("/local/team:deploy/SKILL.md"),
+          content: "Local.",
+        }),
+      )
+      yield* McpSkillPlugin.Plugin.effect(host())
+    }),
+  ),
+  deps: [Flag.node, Mcp.node, Bus.node, Skill.node],
+})
+
+const stack = (flags: string, policies: ConfigPolicy.Info[] = [], plugin = mcpSkillNode) => {
   const config = Config.testLayer([new Document({ type: "document", info: new Info({ policies }) })])
   return AppNodeBuilder.build(
     LayerNode.group([
@@ -87,7 +108,7 @@ const stack = (flags: string, policies: ConfigPolicy.Info[] = []) => {
       Bus.node,
       skillToolNode,
       readToolNode,
-      mcpSkillNode,
+      plugin,
     ]),
     [
       Config.node.replace(config),
@@ -307,18 +328,35 @@ describe("MCP skills", () => {
     }),
   )
 
-  it.live("keeps the alphabetically first URI when a server repeats a skill name", () =>
+  it.live("tells same-named skills of one server apart by their paths", () =>
     Effect.gen(function* () {
       const server = yield* skillServer({
-        "b/deploy": { "SKILL.md": "---\nname: deploy\ndescription: Second\n---\nB\n" },
-        "a/deploy": { "SKILL.md": "---\nname: deploy\ndescription: First\n---\nA\n" },
+        "support/refunds": { "SKILL.md": "---\nname: refunds\ndescription: Support\n---\nS\n" },
+        "billing/refunds": { "SKILL.md": "---\nname: refunds\ndescription: Billing\n---\nB\n" },
+        deploy: { "SKILL.md": DEPLOY },
       })
-      const listed = yield* connect(server.url, ["team:deploy"])
-      expect(listed.map((skill) => skill.description)).toEqual(["First"])
-      const result = yield* run("call-first", "skill", { id: "team:deploy" })
-      expect(result.output.content).toContain("\nA\n")
-      expect(reads).toEqual(["skill://a/deploy/SKILL.md"])
+      const listed = yield* connect(server.url, ["team:billing.refunds", "team:deploy", "team:support.refunds"])
+      expect(listed.map((skill) => [skill.id, skill.description]).toSorted()).toEqual([
+        ["team:billing.refunds", "Billing"],
+        ["team:deploy", "Deploy the app"],
+        ["team:support.refunds", "Support"],
+      ])
+      const result = yield* run("call-support", "skill", { id: "team:support.refunds" })
+      expect(result.output.content).toContain("\nS\n")
+      expect(reads).toEqual(["skill://support/refunds/SKILL.md"])
     }),
+  )
+
+  testEffect(stack("mcp_skills", [], shadowedMcpSkillNode)).live(
+    "keeps a skill that already uses an MCP skill's ID",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* skillServer({ deploy: deployFiles, review: { "SKILL.md": REVIEW } })
+        const skills = yield* Skill.Service
+        yield* connect(server.url, ["team:review"])
+        expect((yield* skills.get(Skill.ID.make("team:deploy"), { content: false }))?.description).toBe("Local")
+        expect(reads).toEqual([])
+      }),
   )
 
   testEffect(stack("mcp_skills", [{ action: "skill.use", resource: "team:*", effect: "deny" }])).live(
