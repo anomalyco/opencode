@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - packages/process-daemon/**
+      - .github/actions/prefetch-ghostty/**
       - .github/workflows/check-process-daemon.yml
   push:
     branches: [dev]
     paths:
       - packages/process-daemon/**
+      - .github/actions/prefetch-ghostty/**
       - .github/workflows/check-process-daemon.yml
   workflow_dispatch:
 
@@ -59,6 +61,8 @@ jobs:
       - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
         with:
           version: 0.16.0
+          use-cache: false
+      - uses: ./.github/actions/prefetch-ghostty
       - name: Install Rust
         run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -109,7 +113,7 @@ jobs:
         if: matrix.arch == 'x64'
         with:
           version: 0.16.0
-          cache-key: ${{ matrix.target }}
+          use-cache: false
       # Zig 0.16 crashes when building Ghostty on the native ARM64 host.
       # Use x64-hosted compilers on this ARM64 runner, but execute ARM64 tests natively.
       - name: Install x64 Zig for ARM64 cross-compilation
@@ -145,6 +149,7 @@ jobs:
           if ($compiler -notcontains 'host: x86_64-pc-windows-msvc') { throw 'Unexpected Rust compiler host' }
           Write-Output "Executable target: $env:CARGO_BUILD_TARGET"
           zig version
+      - uses: ./.github/actions/prefetch-ghostty
       # No cache-on-failure: a timed-out run once saved a partial cache that broke re-runs.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:

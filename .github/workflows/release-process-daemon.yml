@@ -10,8 +10,10 @@ on:
       - "process-daemon-v*"
   pull_request:
     paths:
+      - .github/actions/prefetch-ghostty/**
       - .github/workflows/release-process-daemon.yml
       - packages/process-daemon/build.rs
+      - packages/process-daemon/ghostty-revision
       - packages/process-daemon/npm/**
       - packages/process-daemon/script/npm-packages.mjs
   workflow_dispatch:
@@ -39,6 +41,8 @@ jobs:
       - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
         with:
           version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+      - uses: ./.github/actions/prefetch-ghostty
       - name: Configure baseline Zig builds
         run: |
           chmod +x "$GITHUB_WORKSPACE/packages/process-daemon/script/release-bin/zig"
@@ -94,7 +98,8 @@ jobs:
       - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
         with:
           version: ${{ env.ZIG_VERSION }}
-          cache-key: ${{ matrix.target }}
+          use-cache: false
+      - uses: ./.github/actions/prefetch-ghostty
       - name: Configure baseline Zig builds
         run: |
           chmod +x "$GITHUB_WORKSPACE/packages/process-daemon/script/release-bin/zig"
@@ -187,7 +192,7 @@ jobs:
         if: matrix.arch == 'x64'
         with:
           version: ${{ env.ZIG_VERSION }}
-          cache-key: release-${{ matrix.target }}
+          use-cache: false
       # Zig 0.16 crashes when building Ghostty on the native ARM64 host, so use
       # the x64-hosted compiler there (matching check-process-daemon.yml).
       - name: Install x64 Zig for ARM64 cross-compilation
@@ -208,6 +213,7 @@ jobs:
           [System.IO.File]::WriteAllText($file, $source.Replace($old, '@ptrCast(@alignCast(try si.loadNtdllProc(@tagName(proc))))'))
       - name: Install Rust toolchain and target
         run: rustup toolchain install $env:RUSTUP_TOOLCHAIN --force-non-host --profile minimal --target $env:CARGO_BUILD_TARGET
+      - uses: ./.github/actions/prefetch-ghostty
       - name: Build
         run: cargo build --locked --release
       - name: Smoke test
