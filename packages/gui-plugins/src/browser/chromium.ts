@@ -1,5 +1,6 @@
 import { homedir } from "node:os"
 import { navigationTurn } from "./navigation-turn"
+import { accessibilitySnapshot } from "./snapshot"
 import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
@@ -1339,7 +1340,7 @@ export function createBrowserPage(
         return result({ tab: state(), frames: await frames() })
       case "snapshot":
       case "find":
-        return result({ tab: state(), ...(await snapshot(action)) })
+        return result({ tab: state(), ...(await snapshot(action, signal)) })
       case "evaluate": {
         if (action.ref && action.frameID)
           throw new Error(
@@ -2235,7 +2236,8 @@ export function createBrowserPage(
     await input("Input.dispatchKeyEvent", { type: "keyUp", ...params })
   }
 
-  async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>) {
+  async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>, signal: AbortSignal) {
+    const generation = documentGeneration(documentState)
     const tree = await frames()
     const selected = action.type === "snapshot" && action.ref ? target(action.ref) : undefined
     const named = selected?.frameID ?? action.frameID
@@ -2246,79 +2248,35 @@ export function createBrowserPage(
         "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
       )
     const sessionID = sessionFor(frameID, tree)
-    const depth = action.type === "snapshot" ? (action.depth ?? 8) : 8
-    const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID, depth }, sessionID)
-    const nodes = new Map(ax.nodes.map((node) => [node.nodeId, node]))
-    const root = selected ? ax.nodes.find((node) => node.backendDOMNodeId === selected.backendID) : ax.nodes[0]
+    const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID }, sessionID)
+    abortError(signal)
 
-    if (!root)
-      throw new Error(
-        "Element is absent from this frame's accessibility snapshot. Retry browser.snapshot with the same tabID and no ref to refresh the frame, then choose a returned ref.",
-      )
+    const byNode = (source: Map<string, Element>) => new Map(Array.from(source)
+      .filter(([, element]) => element.frameID === frameID && element.sessionID === sessionID)
+      .map(([ref, element]) => [element.backendID, ref]))
+
+    const snapshot = await accessibilitySnapshot(ax.nodes, {
+      root: selected?.backendID,
+      depth: action.type === "snapshot" ? action.depth : undefined,
+      text: action.type === "find" ? action.text : undefined,
+      previous: byNode(refs),
+      picked: byNode(picked),
+      ref: options.shared.ref,
+      box: action.type === "snapshot" && action.boxes ? async (backendID) => {
+        abortError(signal)
+        const box = await rect({ backendID, frameID, sessionID }).catch(() => undefined)
+
+        return box ? ` box=${JSON.stringify(box)}` : ""
+      } : undefined,
+    })
+
+    abortError(signal)
+
+    if (documentGeneration(documentState) !== generation) throw new CodedError(Browser.FailureCode.documentChanged, "Document changed during snapshot; request a fresh snapshot.")
     refs.clear()
-    const pinned = new Map(Array.from(picked, ([ref, element]) => [`${element.frameID}:${element.backendID}`, ref]))
-    const lines: string[] = []
-    let truncated = false
+    snapshot.refs.forEach((backendID, ref) => refs.set(ref, { backendID, frameID, sessionID }))
 
-    const walk = async (node: Protocol.Accessibility.AXNode, level: number): Promise<void> => {
-      if (level > depth || lines.length >= 500) {
-        truncated = true
-
-        return
-      }
-
-      const role = String(node.role?.value ?? "node")
-        .replace(/[^a-zA-Z0-9_-]/g, "")
-        .slice(0, 40)
-
-      const properties = new Map(node.properties?.map((property) => [property.name, property.value.value]) ?? [])
-
-      if (!node.ignored) {
-        const actionable =
-          role !== "RootWebArea" &&
-          (properties.get("focusable") || /^(button|link|textbox|combobox|checkbox|radio|option)$/.test(role))
-
-        // A picked element keeps the ref its comment names, even when it is not otherwise actionable.
-        const known = node.backendDOMNodeId ? pinned.get(`${frameID}:${node.backendDOMNodeId}`) : undefined
-        const ref = known ?? (actionable && node.backendDOMNodeId ? options.shared.ref() : "")
-        const element = node.backendDOMNodeId ? { backendID: node.backendDOMNodeId, frameID, sessionID } : undefined
-
-        if (ref && element && !known) refs.set(ref, element)
-
-        const flags = (["checked", "disabled", "expanded", "selected"] as const).flatMap((name) =>
-          properties.has(name) ? [`${name}=${properties.get(name)}`] : [],
-        )
-
-        const box =
-          action.type === "snapshot" && action.boxes && ref && element
-            ? await rect(element).catch(() => undefined)
-            : undefined
-
-        lines.push(
-          `${"  ".repeat(level)}${ref ? `@${ref} ` : ""}[${role}] ${JSON.stringify(
-            String(node.name?.value ?? "")
-              .replace(/\s+/g, " ")
-              .slice(0, 300),
-          )} ${flags.join(" ")}${box ? ` box=${JSON.stringify(box)}` : ""}`,
-        )
-      }
-
-      if (["textbox", "searchbox"].includes(role) || properties.get("editable")) return
-
-      for (const childID of node.childIds ?? []) {
-        const child = nodes.get(childID)
-
-        if (child) await walk(child, level + 1)
-      }
-    }
-
-    await walk(root, 0)
-
-    const content = (
-      action.type === "find" ? lines.filter((line) => line.toLowerCase().includes(action.text.toLowerCase())) : lines
-    ).join("\n")
-
-    return { content: content.slice(0, Browser.MAX_TEXT), truncated: truncated || content.length > Browser.MAX_TEXT }
+    return { content: snapshot.content, truncated: snapshot.truncated }
   }
 
   /** Moves the picker and runs its effects; resolves once they ran, so input waits for the picker to disarm. */
