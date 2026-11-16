@@ -76,6 +76,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       const protocol = URL.parse(href)?.protocol
 
       if (protocol && (!path || protocol === "file:") && !/^https?:$/.test(protocol)) {
+        if (href.length > 2048 || /[<>\x00-\x1f\x7f-\x9f]/.test(href)) return node.removeAttribute("href")
         node.removeAttribute("style")
         node.removeAttribute("class")
         // A card or an entire paragraph is not a link label. Keep its contents, but don't arm that hit area.
