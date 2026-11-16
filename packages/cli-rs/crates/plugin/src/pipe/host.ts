@@ -19,11 +19,11 @@
 
 import path from "node:path"
 import { Console } from "node:console"
-import { existsSync, readFileSync, realpathSync, writeSync } from "node:fs"
+import { existsSync, readFileSync, writeSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { isBuiltin } from "node:module"
 import { plugin as runtime } from "bun"
-import { context as compat, modules, reported } from "./compat.js"
+import { context as compat, inside, modules, real, reported } from "./compat.js"
 
 const MAGIC = "opencode-js-host"
 const VERSION = 1
@@ -42,7 +42,9 @@ process.stdout.write = ((chunk: unknown, encoding?: unknown, callback?: unknown)
 // `node_modules`, as the TS client's runtime plugin support gives its own (P8). Virtual modules, since Bun resolves the
 // JSX runtime a `@jsxImportSource` pragma names without a plugin's `onResolve`.
 // The approved copies of project plugins (P8), each a root its own files may import from alone: a module of the
-// layer and the runtime's own aside, an import that resolves outside it is refused (bigboi P8-1).
+// layer and the runtime's own aside, an import that resolves outside it is refused (bigboi P8-1). Each is kept by its
+// real path, and paths are compared by `inside` (carbon recheck-3: a verbatim prefix, a drive letter's case or an 8.3
+// name on Windows).
 const confined = new Set<string>()
 // `Bun.resolveSync` calls this `onResolve` again, with the importer's directory and then each parent as the importer,
 // and resolving from those fails a relative import (FT-3): the call made inside answers Bun's own resolution.
@@ -56,22 +58,22 @@ runtime({
       build.module(name, () => ({ exports, loader: "object" }))
     build.onResolve({ filter: /.*/ }, (args) => {
       const importer = args.importer?.split("?")[0]
-      // A root is kept with its separator; the root itself is an importer too, as `resolveEntry` resolves from it
-      // (carbon jsnpm-3), and resolves from itself rather than from its parent.
-      const root =
-        importer && !resolving
-          ? [...confined].find((root) => importer.startsWith(root) || importer === root.slice(0, -1))
-          : undefined
-      if (!root || args.path in modules || builtin(args.path)) return undefined
+      if (!importer || resolving || confined.size === 0 || args.path in modules || builtin(args.path)) return undefined
+      // The root itself is an importer too, as `resolveEntry` resolves from it (carbon jsnpm-3), and resolves from
+      // itself rather than from its parent.
+      const within = (file: string) => [...confined].find((root) => inside(root, file))
+      const root = within(importer) ?? within(real(importer))
+      if (!root) return undefined
+      const at = path.relative(root, importer) === "" || path.relative(root, real(importer)) === ""
       resolving = true
       const resolved = (() => {
         try {
-          return Bun.resolveSync(args.path, importer === root.slice(0, -1) ? importer : path.dirname(importer!))
+          return Bun.resolveSync(args.path, at ? importer : path.dirname(importer))
         } finally {
           resolving = false
         }
       })()
-      if (resolved.startsWith(root) || builtin(resolved)) return undefined
+      if (inside(root, resolved) || inside(root, real(resolved)) || builtin(resolved)) return undefined
       throw new Error(`${args.path} ${OUTSIDE}`)
     })
   },
@@ -677,14 +679,8 @@ function resolveEntry(dir: string): { entry: string } | { error: string } | unde
     }
   })()
   if (typeof entry !== "string") return entry
-  const inside = (() => {
-    try {
-      return realpathSync(entry).startsWith(realpathSync(dir) + path.sep)
-    } catch {
-      return false
-    }
-  })()
-  return inside ? { entry } : { error: `its TUI module ${entry} is outside the plugin's directory` }
+  const own = existsSync(entry) && inside(real(dir), real(entry)) && path.relative(real(dir), real(entry)) !== ""
+  return own ? { entry } : { error: `its TUI module ${entry} is outside the plugin's directory` }
 }
 
 // Sets up `plugin`, a candidate activation. The running activation of its ID, if any, keeps answering what the host
@@ -786,8 +782,8 @@ async function load(seq: number, target: string, dir: string, options: Json, wit
   const entry = resolved.entry
   // Each load imports the plugin's modules afresh, as a generation of its own: its helpers as much as its entry, so a
   // changed module's new code runs. The running generation keeps the modules it has.
-  const roots = [dir, realpathSync(dir)].map((root) => root + path.sep)
-  for (const key of Object.keys(require.cache)) if (roots.some((root) => key.startsWith(root))) delete require.cache[key]
+  const root = real(dir)
+  for (const key of Object.keys(require.cache)) if (inside(root, key) || inside(dir, key)) delete require.cache[key]
   let module: Json
   try {
     // A URL, so a drive letter, `#` or `%` in the path is not read as one.
@@ -909,7 +905,7 @@ async function handle(message: Json) {
     case "hello":
       return
     case "load":
-      if (message.confined) for (const root of [message.dir, realpathSync(message.dir)]) confined.add(root + path.sep)
+      if (message.confined) confined.add(real(message.dir))
       return load(message.seq, message.target, message.dir, message.options, message.setup, message.seed)
     case "setup": {
       const plugin = described.get(message.load)

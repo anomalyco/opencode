@@ -415,3 +415,49 @@ test("the renderer's missing methods do nothing", async () => {
     "t.renderer: renderer.idle is not supported by opencode-native yet",
   ])
 })
+
+// Expected (carbon recheck-3): the JS host's containment, as TS's `FSUtil.contains` decides it, holds on Windows paths
+// in every spelling of the same file: a drive letter or a name in another case, and a verbatim `\\?\` or `\\?\UNC\`
+// prefix on either side, are inside; a sibling with the root as a prefix, a climb out, and another drive are not. On
+// POSIX, case counts.
+test("a plugin's files are inside its directory in every spelling Windows gives them", async () => {
+  const { inside, stripVerbatim } = await import("./compat/paths")
+  const win = (await import("node:path")).win32
+  const posix = (await import("node:path")).posix
+  const within: [string, string][] = [
+    ["C:\\Users\\runneradmin\\p", "C:\\Users\\runneradmin\\p\\tui.ts"],
+    ["C:\\Users\\runneradmin\\p", "c:\\users\\RUNNERADMIN\\p\\dist\\tui.js"],
+    ["\\\\?\\C:\\a\\p", "C:\\a\\p\\x.ts"],
+    ["C:\\a\\p", "\\\\?\\c:\\a\\p\\x.ts"],
+    ["\\\\?\\UNC\\srv\\share\\p", "\\\\srv\\share\\p\\x.ts"],
+    ["C:\\a\\p", "C:\\a\\p"],
+    ["C:\\a\\p\\", "C:\\a\\p\\x"],
+  ]
+  for (const [root, child] of within) expect([root, child, inside(root, child, win)]).toEqual([root, child, true])
+  const outside: [string, string][] = [
+    ["C:\\a\\p", "C:\\a\\pq\\x.ts"],
+    ["C:\\a\\p", "C:\\a\\p\\..\\q\\x.ts"],
+    ["C:\\a\\p", "D:\\a\\p\\x.ts"],
+    ["\\\\?\\C:\\a\\p", "\\\\?\\C:\\a\\x.ts"],
+    ["C:\\a\\p", "\\\\srv\\share\\a\\p\\x.ts"],
+  ]
+  for (const [root, child] of outside) expect([root, child, inside(root, child, win)]).toEqual([root, child, false])
+  expect(inside("/a/p", "/a/p/x.ts", posix)).toBe(true)
+  expect(inside("/a/p", "/a/pq/x.ts", posix)).toBe(false)
+  expect(inside("/a/p", "/a/P/x.ts", posix)).toBe(false)
+  expect(stripVerbatim("\\\\?\\C:\\a", win)).toBe("C:\\a")
+  expect(stripVerbatim("\\\\?\\UNC\\srv\\share\\a", win)).toBe("\\\\srv\\share\\a")
+  expect(stripVerbatim("\\\\?\\C:\\a", posix)).toBe("\\\\?\\C:\\a")
+})
+
+// Expected (carbon recheck-3): `real` follows links, as the containment compares real paths.
+test("a plugin's real path follows its links", async () => {
+  const { real } = await import("./compat/paths")
+  const { mkdtempSync, mkdirSync, symlinkSync, realpathSync } = await import("node:fs")
+  const nodePath = await import("node:path")
+  const root = realpathSync(mkdtempSync(nodePath.join((await import("node:os")).tmpdir(), "paths-")))
+  mkdirSync(nodePath.join(root, "real-state"))
+  symlinkSync(nodePath.join(root, "real-state"), nodePath.join(root, "link-state"))
+  expect(real(nodePath.join(root, "link-state"))).toBe(nodePath.join(root, "real-state"))
+  expect(real(nodePath.join(root, "missing", ".."))).toBe(root)
+})

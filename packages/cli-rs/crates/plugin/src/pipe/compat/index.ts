@@ -82,3 +82,4 @@ export const modules: Record<string, Record<string, unknown>> = {
 }
 
 export { context, reported }
+export { inside, real } from "./paths"
