@@ -150,4 +150,14 @@ mod tests {
         let status = Error::UnexpectedStatus { status: 500 };
         assert_eq!(status.error_message(), "UnexpectedStatus: 500");
     }
+
+    #[test]
+    fn a_handler_defect_shows_its_message_without_the_ref() {
+        let message = "Server failed to handle the request. Check server logs for details.";
+        let defect = Error::Declared(Box::new(DeclaredError::new(
+            500,
+            json!({ "_tag": "UnknownError", "message": message, "ref": "err_1234abcd" }),
+        )));
+        assert_eq!((defect.error_message(), defect.tui_message()), (message.to_owned(), message.to_owned()));
+    }
 }

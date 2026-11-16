@@ -61,7 +61,7 @@ fn revert(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
                 (Ok(_), None) => {}
                 (Err(error), _) => tui
                     .toasts
-                    .show(ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000))),
+                    .show(ToastOptions::new(Variant::Error, error.tui_message()).duration(Duration::from_millis(5000))),
             }
         }),
     );

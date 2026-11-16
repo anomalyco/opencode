@@ -257,7 +257,7 @@ fn missing(tui: &Tui, id: &SessionID, task: Task<()>) {
         opencode_ui::bind!(tui, |tui, _, result| {
             let message = match result {
                 Err(error) => {
-                    tui.toasts.error(error.to_string());
+                    tui.toasts.error(error.tui_message());
                     if matches!(*error, opencode_api::error::Error::Transport(_)) {
                         return;
                     }
