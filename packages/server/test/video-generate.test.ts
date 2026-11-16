@@ -57,7 +57,7 @@ const serve = (dir: string, enabled: boolean) =>
 const base = "http://opencode.local/api/experimental"
 const unknown = `video_${"0".repeat(12)}${"A".repeat(14)}`
 
-it.live("generates a video in the background and serves it by hash with Range and ETag support", () =>
+it.live("generates a video in the background and serves it by ID with Range and ETag support", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-video-route-")).path
     const handler = yield* serve(dir, true)
