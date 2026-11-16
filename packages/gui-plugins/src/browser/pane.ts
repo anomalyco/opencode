@@ -11,7 +11,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure, CodedError, missingArtifact } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { agentDriven, agentRefusal, childActivity, destinationOrigin, normalizeURL, refusal, restoreRefusal, type TabActivity } from "./policy"
+import { agentDriven, agentRefusal, childActivity, destinationOrigin, normalizeURL, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { FindAction, PaneEvent, PromptAnswer } from "./ipc"
@@ -1021,9 +1021,7 @@ export function createBrowserPane(input: {
       const activities = handles.get(binding)?.activity
       const activity = activities?.get(action.tabID) ?? { agentRuns: 0 }
 
-      if (origin === "agent") activity.agentEndedAt = Date.now()
-
-      if (origin === "user") activity.userInputAt = Date.now()
+      recordTabFocus(activity, origin)
       activities?.set(action.tabID, activity)
 
       if (origin === "user") dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID, fromStrip: true })

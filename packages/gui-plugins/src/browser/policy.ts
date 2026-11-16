@@ -120,6 +120,11 @@ export const DOWNLOAD_GRACE_MS = 30_000
 
 export type TabActivity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number; agent?: string }
 
+/** An agent focus is an agent operation. A strip selection (including auto-reveal) is not input to the page. */
+export function recordTabFocus(activity: TabActivity, origin: "agent" | "user") {
+  if (origin === "agent") activity.agentEndedAt = Date.now()
+}
+
 /**
  * Whether the agent drives a tab: the one rule for every "did the agent cause this". Without `now` it is sticky: true
  * from the tab's first agent command, or one inherited from its opener (`childActivity`), until the tab closes; site
