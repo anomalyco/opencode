@@ -258,10 +258,10 @@ export function createActions(input: {
         return true
       }
 
-      if (tab && privateFile(tab.url)) return true
+      if (!tab || privateFile(tab.url)) return true
       const manifest = input.manifest(extension)
       const name = manifest.version === 2 ? "browserAction" : "action"
-      const info = tab && tabInfo(tab, manifest.permissions.includes("activeTab") || reveals(manifest, tab.url))
+      const info = tabInfo(tab, manifest.permissions.includes("activeTab") || reveals(manifest, tab.url))
       input.emit(`${name}.onClicked`, [info], extension.id)
 
       return true

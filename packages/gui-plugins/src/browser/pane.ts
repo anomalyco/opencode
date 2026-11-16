@@ -895,7 +895,7 @@ export function createBrowserPane(input: {
 
         if (!existing) opening.defer(() => { if (page(binding, tabID) === tab) dispatchBinding(binding, { type: "tab.closed", tabID }) })
         dispatchBinding(binding, { type: "tab.focused", tabID })
-          await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
+        await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
         refresh(binding, tabID, tab)
         opening.move()
 
@@ -997,7 +997,7 @@ export function createBrowserPane(input: {
     const target = acquire(action.tabID)
 
     if (!target) throw new Error("Browser tab is unavailable. Call browser.tabs.list({}) and use an existing tabID.")
-      const result = await target.execute(command, signal, origin)
+    const result = await target.execute(command, signal, origin)
     refresh(binding, action.tabID, target)
 
     return result
