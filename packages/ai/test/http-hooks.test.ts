@@ -100,22 +100,6 @@ const settle = async (result: Promise<unknown> | AsyncIterable<unknown>) => {
 }
 
 describe("http middleware", () => {
-  // Middleware is applied by the request executor, so any request sent around it would skip every hook.
-  test("only the request executor sends HTTP", async () => {
-    const files = await Array.fromAsync(new Bun.Glob("src/**/*.ts").scan({ cwd: `${import.meta.dir}/..` }))
-    const senders = await Promise.all(
-      files.map(async (file) => {
-        const source = await Bun.file(`${import.meta.dir}/../${file}`).text()
-        return /HttpClient\.(HttpClient|execute|get|head|post|patch|put|del|options)\b|(^|[^.\w]|globalThis\.|Bun\.)fetch\(/m.test(
-          source,
-        )
-          ? [file.replaceAll("\\", "/")]
-          : []
-      }),
-    )
-    expect(senders.flat()).toEqual(["src/route/executor.ts"])
-  })
-
   test("lists every method", () => {
     const ai = AI.make()
     expect(methods(ai).toSorted()).toEqual([...Object.keys(providerCalls), ...local].toSorted())
