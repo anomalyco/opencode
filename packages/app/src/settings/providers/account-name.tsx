@@ -36,7 +36,7 @@ export function AccountNameInput(props: {
       readOnly={rename.saving()}
       aria-busy={rename.saving() || undefined}
       class={`field-sizing-content rounded-[6px] px-1 py-1 ${props.class ?? ""}`}
-      style={{ "--inline-input-shadow": "none", "text-align": "start" }}
+      style={{ "text-align": "start" }}
       onInput={(event) => rename.input(event.currentTarget.value)}
       data-owns-escape
       onKeyDown={rename.keyDown}

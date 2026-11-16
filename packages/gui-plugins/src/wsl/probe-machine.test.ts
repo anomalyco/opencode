@@ -42,7 +42,6 @@ function input(state: WslServersState, selectedDistro: string | null = null): Ws
     plan: addServerProbePlan({
       state,
       view: "main",
-      adding: false,
       busy,
       selectedDistro,
       addableInstalledDistros: addable,

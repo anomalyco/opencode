@@ -30,7 +30,7 @@ describe("Cloudflare Workers AI Images", () => {
         http: { body: { guidance: 5 } },
       })
 
-      expect(response.image.mediaType).toBe("image/png")
+      expect(response.images[0].mediaType).toBe("image/png")
       expect(response.providerMetadata).toEqual({ "cloudflare-workers-ai": { usage: { neurons: 12 } } })
     }).pipe(
       Effect.provide(

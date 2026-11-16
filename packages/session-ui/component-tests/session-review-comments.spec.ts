@@ -86,6 +86,27 @@ story("keeps typed comment text while other lines and comments are used", async 
   await expect(textbox).toHaveValue("draft text")
 })
 
+story("mentions in a diff comment pick a path, and Escape without a list cancels", async ({ mount }) => {
+  const root = await mount("components-session-review--interactive-comments")
+  const review = root.locator('[data-component="session-review"]')
+  const textbox = review.getByRole("textbox")
+  const items = review.locator('[data-slot="line-comment-mention-item"]')
+
+  await review.locator('[data-line-type="change-addition"] [data-diff-span]').click()
+  await textbox.pressSequentially("see @rev")
+  await expect(items).toHaveCount(2)
+  await textbox.press("ArrowDown")
+  await expect(items.nth(1)).toHaveAttribute("data-active", "")
+  await textbox.press("Enter")
+  await expect(textbox).toHaveValue("see @src/review.test.ts ")
+  await expect(items).toHaveCount(0)
+
+  // A bare `@` shows no list, yet used to swallow the first Escape as if one were open.
+  await textbox.pressSequentially("@")
+  await textbox.press("Escape")
+  await expect(textbox).toHaveCount(0)
+})
+
 story("a focus request opens the comment and clears once the comment shows", async ({ mount }) => {
   const root = await mount("components-session-review--focused-comment")
   const comment = root.locator('[data-comment-id="comment-1"]')

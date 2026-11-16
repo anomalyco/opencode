@@ -1,5 +1,6 @@
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
@@ -15,14 +16,12 @@ import "./activity-chips.css"
 
 export type SessionActivityItem = {
   key: string
-  type: "subagent" | "shell"
   label?: string
   agent?: string
-  sessionID?: string
   target: string
   // When the work started running, from the server's record of it.
   started: number
-}
+} & ({ type: "subagent"; sessionID: string } | { type: "shell" })
 
 type DurationKey =
   | "ui.message.duration.seconds"
@@ -57,7 +56,7 @@ export function SessionActivityChips(props: {
     output: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     ended: Parameters<typeof createShellPanel>[0]["ended"]
   }
-  onOpen: (item: SessionActivityItem) => void
+  onOpen: (item: Extract<SessionActivityItem, { type: "subagent" }>) => void
   onStop: (item: SessionActivityItem) => Promise<boolean>
   // The menu closed with nothing left running, so the capsule and its trigger are gone; focus goes to the composer.
   onEmpty: () => void
@@ -105,21 +104,19 @@ export function SessionActivityChips(props: {
 
   const alignment = useComposerLaneAlignment()
 
-  // A subagent can only be interrupted once its child session exists.
-  const stoppable = (item: SessionActivityItem) => item.type === "shell" || !!item.sessionID
-
   const row = (item: SessionActivityItem) => ({
-    "data-stoppable": stoppable(item) || undefined,
     // A shell opens its own panel in place; a subagent opens where it runs.
     closeOnSelect: item.type !== "shell",
     onSelect: () => (item.type === "shell" ? panel.open(item) : props.onOpen(item)),
     onKeyDown: (event: KeyboardEvent) => {
-      if ((event.key !== "Delete" && event.key !== "Backspace") || !stoppable(item)) return
+      if (event.key !== "Delete" && event.key !== "Backspace") return
 
       event.preventDefault()
-      void props.onStop(item)
+      panel.stop(item)
     },
   })
+
+  const rowStopping = (item: SessionActivityItem) => view().stoppingKeys[item.key] !== undefined
 
   // One clock for every row, ticking only while the panel is open and something still runs.
   const [now, setNow] = createSignal(Date.now())
@@ -132,7 +129,7 @@ export function SessionActivityChips(props: {
     onCleanup(() => clearInterval(timer))
   })
 
-  // The run time and the stop button share the row's end; hovering a stoppable row swaps one for the other.
+  // The run time and the stop button share the row's end; hovering a row swaps one for the other.
   const end = (item: SessionActivityItem) => (
     <span data-slot="session-activity-end">
       <span
@@ -142,12 +139,6 @@ export function SessionActivityChips(props: {
       >
         {formatElapsed(now() - item.started, language.t)}
       </span>
-      {stop(item)}
-    </span>
-  )
-
-  const stop = (item: SessionActivityItem) => (
-    <Show when={stoppable(item)}>
       {/* The row selects on press, so the stop button keeps its pointer events to itself. */}
       <IconButton
         type="button"
@@ -155,8 +146,10 @@ export function SessionActivityChips(props: {
         variant="ghost-muted"
         tabIndex={-1}
         data-slot="session-activity-stop"
-        icon={<Icon name="outline-xmark" size="small" />}
+        icon={rowStopping(item) ? <Loader /> : <Icon name="outline-xmark" size="small" />}
         aria-label={language.t(item.type === "shell" ? "session.running.stop.shell" : "session.running.stop.subagent")}
+        aria-disabled={rowStopping(item) || undefined}
+        aria-busy={rowStopping(item) || undefined}
         onPointerDown={(event) => {
           event.preventDefault()
           event.stopPropagation()
@@ -164,10 +157,10 @@ export function SessionActivityChips(props: {
         onPointerUp={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation()
-          void props.onStop(item)
+          panel.stop(item)
         }}
       />
-    </Show>
+    </span>
   )
 
   const label = () => language.activitySummary(counts())
@@ -271,7 +264,7 @@ export function SessionActivityChips(props: {
                             data-slot="session-activity-shell-stop"
                             closeOnSelect={false}
                             aria-disabled={view().stopDisabled || undefined}
-                            onSelect={panel.stop}
+                            onSelect={() => panel.stop()}
                           >
                             {language.t(
                               view().stopping ? "session.activity.shell.stopping" : "session.activity.shell.stop",

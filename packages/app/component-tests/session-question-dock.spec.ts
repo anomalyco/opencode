@@ -1009,12 +1009,13 @@ story.describe("with the new question UI experiment enabled", () => {
       expect(values.slice(1).every((value, i) => way * (value - values[i]!) >= -0.01)).toBe(true)
     }
 
-    story("fades Back in and out and turns Next into Submit with the switch", async ({ mount }) => {
+    story("fades Back in and out and turns Next into Submit with the switch", async ({ mount, page }) => {
       const component = await mount("session-question-switch--question-series")
       const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
       const back = question.locator('[data-slot="question-footer-back"]')
       await expect(question.getByRole("radio").first()).toBeFocused()
       await expect(question.getByRole("button", { name: "Back", exact: true })).toHaveCount(0)
+      await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
       // Going on from the first question, Back comes in and can be clicked at once, while Next stays where it is.
       const nextBox = await question.getByRole("button", { name: "Next", exact: true }).boundingBox()

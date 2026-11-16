@@ -49,7 +49,15 @@ import {
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { holdLandingWidth } from "@/shell/panel-motion"
 import type { TimelineFollow } from "./follow"
-import { defersAdjustments, END_EPSILON, MIN_OVERFLOW, needsEndProbe, ZOOM_SLACK } from "./machine"
+import {
+  CONTACT_LOST_EVENT,
+  defersAdjustments,
+  END_EPSILON,
+  isTouchHeld,
+  MIN_OVERFLOW,
+  needsEndProbe,
+  ZOOM_SLACK,
+} from "./machine"
 
 const fallbackItemSize = 60
 
@@ -60,6 +68,10 @@ const upwardKeys = new Set(["up", "page-up", "home"])
 const settledEvent = { type: "scroll.settled", atReachableEnd: false } as const
 
 const settledAtEndEvent = { type: "scroll.settled", atReachableEnd: true } as const
+
+const touchStartEvent = { type: "touch.start", nested: false } as const
+
+const nestedTouchStartEvent = { type: "touch.start", nested: true } as const
 
 const touchEndEvent = { type: "touch.end", scrolling: false } as const
 
@@ -88,6 +100,8 @@ type Input = {
   active?: Accessor<boolean>
   sessionKey: Accessor<string>
   presentationKey?: Accessor<string>
+  /** Whether what the user opened or closed survives a change of detail setting, as in the New timeline. */
+  keepsDisclosure?: boolean
   projection: Projection
   showHeader: Accessor<boolean>
   /** Whether the timeline follows the newest content. Drives every anchoring decision. */
@@ -108,7 +122,6 @@ type Input = {
     disclosure: Readonly<Record<string, boolean | undefined>>,
   ) => boolean
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
-  setRevealPart?: (fn: (target: string) => boolean) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
@@ -154,14 +167,19 @@ export function createTimelineVirtualizer(input: Input) {
   const [visibleArea, setVisibleArea] = createSignal<HTMLDivElement>()
   const [viewRoot, setViewRoot] = createSignal<HTMLDivElement>()
   const bottomInset = () => input.bottomInset?.() ?? 0
-  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
+
+  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(
+    (input.keepsDisclosure ? entry : cached)?.toolOpen ?? {},
+  )
+
   const patchGroupKeys = cached?.patchGroupKeys ?? new Map<string, string>()
   createEffect(
     on(
       () => input.presentationKey?.(),
       () => {
         patchGroupKeys.clear()
-        setToolOpen(reconcile({}))
+
+        if (!input.keepsDisclosure) setToolOpen(reconcile({}))
       },
       { defer: true },
     ),
@@ -231,8 +249,10 @@ export function createTimelineVirtualizer(input: Input) {
   })
 
   const measuredElements = new WeakSet<Element>()
-  let touchStart: number | undefined
+  // The finger's last position, a measurement only: whether it is down is the follow machine's `isTouchHeld`.
+  let lastTouchY = 0
   let touchTarget: EventTarget | null = null
+  // Size compensation deferred during one resize delivery, committed or dropped before the delivery ends.
   let touchAdjustment = 0
   let maxScroll = 0
   let virtualContent: HTMLDivElement | undefined
@@ -301,13 +321,13 @@ export function createTimelineVirtualizer(input: Input) {
           if (
             rendering.scrollAdjustment !== 0 &&
             root &&
-            (logicalOffset <= 0 || offset <= 0 || (touchStart !== undefined && offset <= root.clientHeight))
+            (logicalOffset <= 0 || offset <= 0 || (isTouchHeld(input.follow.peek()) && offset <= root.clientHeight))
           )
             flushTouchAdjustment()
 
           if (scrolling) return
 
-          if (touchStart === undefined) flushTouchAdjustment()
+          if (!isTouchHeld(input.follow.peek())) flushTouchAdjustment()
           input.follow.dispatch(
             root && needsEndProbe(input.follow.peek()) && atReachableEnd(root) ? settledAtEndEvent : settledEvent,
           )
@@ -353,6 +373,7 @@ export function createTimelineVirtualizer(input: Input) {
       if (!active()) return
 
       if (coldMountFlushing(untrack(coldMount)) && input.follow.following()) return
+      touchAdjustment = 0
       setRendering("scrollAdjustment", 0)
 
       if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
@@ -413,7 +434,12 @@ export function createTimelineVirtualizer(input: Input) {
       const sizes = [...pendingSizes]
       pendingSizes.clear()
 
-      if (!active()) return
+      if (!active()) {
+        touchAdjustment = 0
+
+        return
+      }
+
       // The hidden pinned mount needs one bottom write after the whole batch,
       // not a layout-forcing scroll adjustment for every measured row.
       dispatchCold(SIZES_FLUSHING)
@@ -427,8 +453,12 @@ export function createTimelineVirtualizer(input: Input) {
           // TanStack recalculates its range after each resize. Advance the
           // logical fold before deciding whether the next row needs anchoring.
           if (!touchAdjustment) return
-          setRendering("scrollAdjustment", (value) => value + touchAdjustment)
+          const delta = touchAdjustment
           touchAdjustment = 0
+
+          // A delta deferred under momentum that has since ended is dropped rather than translating the rows.
+          if (!defersAdjustments(input.follow.peek())) return
+          setRendering("scrollAdjustment", (value) => value + delta)
           const root = listRoot()
 
           if (root) reportOffset?.(root.scrollTop, virtualizer.isScrolling)
@@ -569,6 +599,7 @@ export function createTimelineVirtualizer(input: Input) {
   }
 
   function flushTouchAdjustment() {
+    touchAdjustment = 0
     const adjustment = rendering.scrollAdjustment
     const root = listRoot()
 
@@ -612,7 +643,6 @@ export function createTimelineVirtualizer(input: Input) {
       reportOffset?.(root.scrollTop, false)
       dispatchCold(CHECK_REQUESTED)
     })
-    input.setRevealPart?.(revealPart)
     input.setRevealMessage?.((id, partID) => {
       if (!active()) return
 
@@ -831,7 +861,23 @@ export function createTimelineVirtualizer(input: Input) {
   }
 
   onMount(() => dispatchCold({ type: "mounted", active: active() }))
-  createEffect(on(active, (value) => dispatchCold(value ? ACTIVATED : DEACTIVATED), { defer: true }))
+  createEffect(
+    on(
+      active,
+      (value) => {
+        dispatchCold(value ? ACTIVATED : DEACTIVATED)
+
+        if (value) return
+        // A view that goes inactive mid-touch never sees its finger lift; its translation would outlive the gesture.
+        clearTouchTarget()
+        flushTouchAdjustment()
+        setRendering("scrollAdjustment", 0)
+
+        if (input.sessionKey() === ownerSessionKey) input.follow.dispatch(CONTACT_LOST_EVENT)
+      },
+      { defer: true },
+    ),
+  )
 
   let measuredSessionKey = input.sessionKey()
   createEffect(() => {
@@ -882,15 +928,17 @@ export function createTimelineVirtualizer(input: Input) {
   const handleListTouchStart = (event: TouchEvent) => {
     clearTouchTarget()
 
-    if (!active()) return
+    const touch = event.touches[0]
+
+    if (!active() || !touch) return
     input.onUserScroll(event.target)
-    touchStart = event.touches[0]?.clientY
+    lastTouchY = touch.clientY
     const root = listRoot()
     const nested = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-scrollable]") : null
-    input.follow.dispatch({
-      type: "touch.start",
-      nested: !!nested && nested !== root && nested.scrollHeight > nested.clientHeight,
-    })
+
+    input.follow.dispatch(
+      nested && nested !== root && nested.scrollHeight > nested.clientHeight ? nestedTouchStartEvent : touchStartEvent,
+    )
     // Native touch events keep their original target, even when streaming or
     // virtualization detaches it. Listen there instead of relying on bubbling.
     touchTarget = event.target
@@ -905,13 +953,13 @@ export function createTimelineVirtualizer(input: Input) {
     if (!(event instanceof TouchEvent)) return
     const current = event.touches[0]?.clientY
 
-    if (current === undefined || touchStart === undefined) return
-    const previous = touchStart
-    touchStart = current
+    if (current === undefined) return
+    const previous = lastTouchY
+    lastTouchY = current
 
-    // A retained target can outlive its whole session view. Only the active
-    // timeline may change the shared follow state; release still cleans up below.
-    if (!active()) return
+    // A retained target can outlive its whole session view. Only the active timeline may change the shared follow
+    // state, and only while the finger it started with is still down; release still cleans up below.
+    if (!active() || !isTouchHeld(input.follow.peek())) return
 
     // Dragging the content downward reveals earlier messages.
     if (current <= previous) return
@@ -922,7 +970,9 @@ export function createTimelineVirtualizer(input: Input) {
 
   const handleListTouchEnd = () => {
     clearTouchTarget()
-    touchStart = undefined
+    touchAdjustment = 0
+
+    if (!active()) return
     input.follow.dispatch(virtualizer.isScrolling ? touchMomentumEvent : touchEndEvent)
 
     if (!virtualizer.isScrolling) flushTouchAdjustment()
@@ -947,25 +997,35 @@ export function createTimelineVirtualizer(input: Input) {
     input.follow.dispatch(pointerDownEvent)
   }
 
-  // A window that loses focus or hides mid-press may never see the release. A release only ends a pointer gesture, so
-  // every view may report it, including one that went inactive mid-press.
+  // A release only ends a pointer gesture, so every view may report it, including one that went inactive mid-press.
+  // On touch devices it also fires beside touchend, which owns the touch gesture.
   const releasePointer = () => input.follow.dispatch(pointerUpEvent)
 
-  const releaseHiddenPointer = () => {
-    if (document.visibilityState === "hidden") releasePointer()
+  // A window that loses focus or hides mid-press may never see the release, of a pointer or of a finger. Every view may
+  // report it, as the window lost all contact.
+  const loseContact = () => {
+    clearTouchTarget()
+    touchAdjustment = 0
+
+    if (active()) flushTouchAdjustment()
+    input.follow.dispatch(CONTACT_LOST_EVENT)
+  }
+
+  const loseHiddenContact = () => {
+    if (document.visibilityState === "hidden") loseContact()
   }
 
   onMount(() => {
     window.addEventListener("pointerup", releasePointer)
     window.addEventListener("pointercancel", releasePointer)
-    window.addEventListener("blur", releasePointer)
-    document.addEventListener("visibilitychange", releaseHiddenPointer)
+    window.addEventListener("blur", loseContact)
+    document.addEventListener("visibilitychange", loseHiddenContact)
   })
   onCleanup(() => {
     window.removeEventListener("pointerup", releasePointer)
     window.removeEventListener("pointercancel", releasePointer)
-    window.removeEventListener("blur", releasePointer)
-    document.removeEventListener("visibilitychange", releaseHiddenPointer)
+    window.removeEventListener("blur", loseContact)
+    document.removeEventListener("visibilitychange", loseHiddenContact)
   })
 
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
@@ -1180,7 +1240,6 @@ export function createTimelineVirtualizer(input: Input) {
     if (active()) {
       input.setScrollRef(undefined)
       input.setRevealMessage?.(() => {})
-      input.setRevealPart?.(() => false)
       input.setScrollToEnd?.(() => {})
       input.setPage?.(() => {})
     }

@@ -25,17 +25,122 @@ const allowAll = permissionService({ assert: () => Effect.void })
 const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
   CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
 
+test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
+  const input = Schema.Struct({ text: Schema.NonEmptyString })
+  const send = {
+    name: "send",
+    description: "Send text",
+    input,
+    output: Schema.String,
+    execute: ({ text }) => Effect.succeed({ output: text }),
+  } satisfies Info<typeof input, typeof Schema.String>
+  const tools = new Map<string, Info>([
+    ["echo", { ...send, name: "echo" }],
+    ["send", { ...send, freeform: { type: "text" } }],
+  ])
+  const codeMode = createCodeMode(tools)
+  expect(codeMode.freeform).toEqual({ type: "text" })
+  expect(CodeModeTool.catalog({ tools }).tools.map((tool) => "signature" in tool && tool.signature)).toEqual([
+    "tools.echo({\n  /** @minLength 1 */\n  text: string,\n}): Promise<string>",
+    "tools.send(/** @minLength 1 */ text: string): Promise<string>",
+  ])
+  const calls = await Effect.runPromise(
+    codeMode.execute({ code: 'return [await tools.send("first"), await tools.send({text: "second"})]' }, context),
+  )
+  expect(JSON.parse(calls.output.output)).toEqual(["first", "second"])
+  expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
+})
+
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
       "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+      "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
       "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-      "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+      "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
       "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
       "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
     ].join("\n"),
   )
+})
+
+test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
+  const declared: Info = {
+    name: "declared",
+    description: "Declared",
+    input: Schema.Struct({ value: Schema.String }),
+    output: Schema.Struct({ value: Schema.String }),
+    execute: ({ value }) => Effect.succeed({ output: { value } }),
+  }
+  const modelOnlyInput = Schema.Struct({})
+  const modelOnly = {
+    name: "model_only",
+    description: "Model only",
+    input: modelOnlyInput,
+    execute: () => Effect.succeed({ content: "visible only", metadata: { kind: "model" } }),
+  } satisfies Info<typeof modelOnlyInput, undefined>
+  const raw: Info = {
+    name: "raw",
+    description: "Raw",
+    input: {},
+    output: {},
+    execute: (input) => Effect.succeed({ output: input, content: "raw" }),
+  }
+
+  expect(await Effect.runPromise(execute(declared, { value: "encoded" }, context))).toEqual({
+    output: { value: "encoded" },
+    content: [{ type: "text", text: '{"value":"encoded"}' }],
+  })
+  expect(await Effect.runPromise(execute(modelOnly, {}, context))).toEqual({
+    output: undefined,
+    content: [{ type: "text", text: "visible only" }],
+    metadata: { kind: "model" },
+  })
+  expect(await Effect.runPromise(execute(raw, { unchecked: true }, context))).toEqual({
+    output: { unchecked: true },
+    content: [{ type: "text", text: "raw" }],
+  })
+})
+
+test("declared outputs cannot bypass validation and raw outputs stay JSON-compatible", async () => {
+  const missing: Info = {
+    name: "missing",
+    description: "Missing output",
+    input: Schema.Struct({}),
+    output: Schema.String,
+    execute: () => Effect.succeed({ content: "not an output" }),
+  }
+  const invalid: Info = {
+    name: "invalid",
+    description: "Invalid raw output",
+    input: {},
+    output: {},
+    execute: () => Effect.succeed({ output: 1n, content: "not JSON" }),
+  }
+
+  expect((await Effect.runPromiseExit(execute(missing, {}, context))).toString()).toContain(
+    "Tool did not return its declared output",
+  )
+  expect((await Effect.runPromiseExit(execute(invalid, {}, context))).toString()).toContain(
+    "Tool returned a non-JSON value",
+  )
+})
+
+test("foreign typed failures settle as Tool.Error at the untrusted boundary", async () => {
+  class ForeignFailure extends Schema.TaggedError<ForeignFailure>()("Plugin.ForeignFailure", {
+    message: Schema.String,
+  }) {}
+  const lying: Info = {
+    name: "lying",
+    description: "Fails with a non-Tool.Error typed failure",
+    input: Schema.Struct({}),
+    execute: () => new ForeignFailure({ message: "transport died" }) as never,
+  }
+
+  const error = await Effect.runPromise(execute(lying, {}, context).pipe(Effect.flip))
+  expect(error).toBeInstanceOf(Tool.Error)
+  expect(error.message).toBe("transport died")
 })
 
 test("execute rejects filesystem fetches", async () => {
@@ -45,6 +150,120 @@ test("execute rejects filesystem fetches", async () => {
 
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
+})
+
+describe("streaming fetch", () => {
+  const run = (url: URL, code: string, permission = allowAll) =>
+    createCodeMode(new Map(), permission).execute(
+      { code: `const res = await fetch(${JSON.stringify(url.href)}); ${code}` },
+      context,
+    )
+
+  // Stays open after the first chunk so buffering would block until the test times out.
+  const openBody = (cancel: () => void) =>
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(Uint8Array.of(42))
+      },
+      cancel,
+    })
+
+  test.each([
+    ["return with a live reader", "const reader = res.body.getReader(); return (await reader.read()).value[0]"],
+    [
+      "reader cancellation",
+      "const reader = res.body.getReader(); const chunk = await reader.read(); await reader.cancel(); return chunk.value[0]",
+    ],
+    [
+      "break from async iteration",
+      "let first; for await (const chunk of res.body) { first = chunk[0]; break } return res.body.locked ? 'locked' : first",
+    ],
+  ])("reads the first chunk before EOF: %s", async (_, code) => {
+    const closed = Promise.withResolvers<void>()
+    await using server = Bun.serve({
+      port: 0,
+      fetch: () => new Response(openBody(closed.resolve)),
+    })
+    const result = await Effect.runPromise(run(server.url, code))
+    expect(result.output.output).toBe("42")
+    await closed.promise
+  })
+
+  test("interrupting execute aborts a pending request", async () => {
+    const started = Promise.withResolvers<void>()
+    const closed = Promise.withResolvers<void>()
+    await using server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        req.signal.addEventListener("abort", () => closed.resolve(), { once: true })
+        started.resolve()
+        await closed.promise
+        return new Response(null)
+      },
+    })
+    const fiber = Effect.runFork(run(server.url, "return res.status"))
+    await started.promise
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    await closed.promise
+  })
+
+  test("whole-body methods share consumption and expose Bun's empty body", async () => {
+    await using server = Bun.serve({
+      port: 0,
+      fetch: (req) => (req.method === "HEAD" ? new Response(null) : Response.json(42)),
+    })
+    const result = await Effect.runPromise(
+      run(
+        server.url,
+        `
+      const before = res.bodyUsed
+      const number = await res.json()
+      const second = await res.text().catch(e => e.name)
+      const bytes = await (await fetch(res.url)).bytes()
+      const buffer = await (await fetch(res.url)).arrayBuffer()
+      const empty = await fetch(res.url, { method: "HEAD" })
+      return [res.headers.get("Content-Type"), before, number, res.bodyUsed, second, [...bytes], [...buffer], empty.body === null]
+    `,
+      ),
+    )
+    expect(JSON.parse(result.output.output)).toEqual([
+      "application/json;charset=utf-8",
+      false,
+      42,
+      true,
+      "TypeError",
+      [52, 50],
+      [52, 50],
+      true,
+    ])
+  })
+
+  test("discards a redirect body before reading the destination", async () => {
+    const discarded = Promise.withResolvers<void>()
+    await using server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        if (new URL(req.url).pathname === "/")
+          return new Response(openBody(discarded.resolve), { status: 302, headers: { location: "/next" } })
+        await discarded.promise
+        return new Response("ok")
+      },
+    })
+    const result = await Effect.runPromise(
+      run(
+        server.url,
+        `
+      const reader = res.body.getReader()
+      const first = await reader.read()
+      const end = await reader.read()
+      reader.releaseLock()
+      return [res.redirected, [...first.value], end.done, res.body.locked, await res.text().catch(e => e.name)]
+    `,
+        permissionService({ assert: () => Effect.void, assertNotDenied: () => Effect.void }),
+      ),
+    )
+    expect(JSON.parse(result.output.output)).toEqual([true, [111, 107], true, false, "TypeError"])
+  })
 })
 
 describe("fetch permissions", () => {
@@ -163,84 +382,6 @@ describe("fetch permissions", () => {
   })
 })
 
-test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
-  const declared: Info = {
-    name: "declared",
-    description: "Declared",
-    input: Schema.Struct({ value: Schema.String }),
-    output: Schema.Struct({ value: Schema.String }),
-    execute: ({ value }) => Effect.succeed({ output: { value } }),
-  }
-  const modelOnlyInput = Schema.Struct({})
-  const modelOnly = {
-    name: "model_only",
-    description: "Model only",
-    input: modelOnlyInput,
-    execute: () => Effect.succeed({ content: "visible only", metadata: { kind: "model" } }),
-  } satisfies Info<typeof modelOnlyInput, undefined>
-  const raw: Info = {
-    name: "raw",
-    description: "Raw",
-    input: {},
-    output: {},
-    execute: (input) => Effect.succeed({ output: input, content: "raw" }),
-  }
-
-  expect(await Effect.runPromise(execute(declared, { value: "encoded" }, context))).toEqual({
-    output: { value: "encoded" },
-    content: [{ type: "text", text: '{"value":"encoded"}' }],
-  })
-  expect(await Effect.runPromise(execute(modelOnly, {}, context))).toEqual({
-    output: undefined,
-    content: [{ type: "text", text: "visible only" }],
-    metadata: { kind: "model" },
-  })
-  expect(await Effect.runPromise(execute(raw, { unchecked: true }, context))).toEqual({
-    output: { unchecked: true },
-    content: [{ type: "text", text: "raw" }],
-  })
-})
-
-test("declared outputs cannot bypass validation and raw outputs stay JSON-compatible", async () => {
-  const missing: Info = {
-    name: "missing",
-    description: "Missing output",
-    input: Schema.Struct({}),
-    output: Schema.String,
-    execute: () => Effect.succeed({ content: "not an output" }),
-  }
-  const invalid: Info = {
-    name: "invalid",
-    description: "Invalid raw output",
-    input: {},
-    output: {},
-    execute: () => Effect.succeed({ output: 1n, content: "not JSON" }),
-  }
-
-  expect((await Effect.runPromiseExit(execute(missing, {}, context))).toString()).toContain(
-    "Tool did not return its declared output",
-  )
-  expect((await Effect.runPromiseExit(execute(invalid, {}, context))).toString()).toContain(
-    "Tool returned a non-JSON value",
-  )
-})
-
-test("foreign typed failures settle as Tool.Error at the untrusted boundary", async () => {
-  class ForeignFailure extends Schema.TaggedError<ForeignFailure>()("Plugin.ForeignFailure", {
-    message: Schema.String,
-  }) {}
-  const lying: Info = {
-    name: "lying",
-    description: "Fails with a non-Tool.Error typed failure",
-    input: Schema.Struct({}),
-    execute: () => new ForeignFailure({ message: "transport died" }) as never,
-  }
-
-  const error = await Effect.runPromise(execute(lying, {}, context).pipe(Effect.flip))
-  expect(error).toBeInstanceOf(Tool.Error)
-  expect(error.message).toBe("transport died")
-})
-
 test("execute supports callable namespace tools", async () => {
   const callable: Info = {
     name: "admin",
@@ -274,7 +415,7 @@ test("execute supports callable namespace tools", async () => {
       { tool: "slack.admin.create", status: "completed" },
     ],
   })
-  expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
+  expect(result.content).toEqual([{ type: "text", text: '["admin","created"]' }])
 })
 
 test("executions share the prepared runtime of an inventory while keeping per-call state", async () => {
@@ -310,10 +451,10 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
       .pipe(Effect.map((result) => ({ output: result.output.output, progress })))
   }
 
-  expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
   const results = await Effect.runPromise(
     Effect.all([run("first"), run("second")], { concurrency: "unbounded" }).pipe(Effect.provide(TestClock.layer())),
   )
+  expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
   expect<unknown>(results).toEqual(
     ["first", "second"].map((id) => ({
       output: `${id}:${id}`,
@@ -366,7 +507,9 @@ it.effect("execute sends at most one progress update per 100 ms with the latest 
     const progress: Array<Tool.Metadata> = []
     const fiber = yield* progressCodeMode(started, Effect.sleep("250 millis"))
       .execute(
-        { code: "for (const i of [1, 2, 3]) await tools.step({}); await tools.wait({}); return await tools.step({})" },
+        {
+          code: "for (const i of [1, 2, 3]) await tools.step({}); await tools.wait({}); return await tools.step({})",
+        },
         { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
       )
       .pipe(Effect.forkChild({ startImmediately: true }))

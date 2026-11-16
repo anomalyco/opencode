@@ -3,15 +3,19 @@ import {
   ai,
   ImageClient,
   ImageModel,
+  type ImageJob,
   type ImageModelOptions,
   type ImageOptions,
   type ImageRequest,
+  type ImageResponse,
+  type ImageStatus,
   Media,
 } from "../src/effect.js"
 import type { Service } from "../src/image-client.js"
 import { Anthropic, Google, OpenAI, XAI, ZAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
+type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends true> = T
 
@@ -177,6 +181,15 @@ void typedRequest
 const generated = ImageClient.generate(request)
 type GenerateRequirements = Assert<Equal<Requirements<typeof generated>, Service>>
 void (true satisfies GenerateRequirements)
+
+type StartSuccess = Assert<Equal<Success<ReturnType<typeof ImageClient.start>>, ImageJob>>
+type StatusSuccess = Assert<Equal<Success<ReturnType<typeof ai.image.status>>, ImageStatus>>
+type ResultSuccess = Assert<Equal<Success<ReturnType<typeof ai.image.result>>, ImageResponse>>
+type CancelSuccess = Assert<Equal<Success<ReturnType<typeof ai.image.cancel>>, void>>
+void (true satisfies StartSuccess)
+void (true satisfies StatusSuccess)
+void (true satisfies ResultSuccess)
+void (true satisfies CancelSuccess)
 
 // @ts-expect-error Image requests use `n`, not `count`.
 ai.image.generate({ model: openai, prompt: "A lighthouse", count: 2 })

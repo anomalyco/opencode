@@ -1,45 +1,81 @@
 import { Predicate } from "effect"
 import type { Bridge, BridgeMessage } from "@opencode/plugin/gui/host"
 import type { PluginFailure } from "../shared/ipc-rpc/plugins"
+import { getOwner, onCleanup } from "solid-js"
 import { api } from "./api"
 import { cancellable, invoke, listen, send } from "./ipc-client"
-
-/** The listeners' attachment to main's plugin events, while any listener is registered. */
-type Attachment = { stop?: () => void }
+import {
+  createPluginBridgeState,
+  selectPluginSubscriptions,
+  transitionPluginBridge,
+  type PluginBridgeEffect,
+  type PluginBridgeEvent,
+  type PluginBridgeSubscription,
+} from "./plugins-machine"
 
 /** The renderer end of the GUI plugin bridge; main hosts every Ipc and embed. */
 export function createPluginBridge(): Bridge {
-  const listeners = new Set<(message: BridgeMessage) => void>()
-  const dispatch = (message: BridgeMessage) => listeners.forEach((listener) => listener(message))
-  const attached: Attachment = {}
-  // MenubarItem contributions change through events; a window that starts listening late asks once.
-  const menubar = { revision: 0 }
+  let state = createPluginBridgeState()
+  // Edge handles only: the unsubscribers of main's plugin events while attached.
+  let stops: (() => void)[] = []
 
-  const attach = () => {
-    const stops = [
-      listen("PluginState", (event) => dispatch({ type: "state", ipc: event.ipc, state: event.state })),
-      listen("PluginEvent", (event) => dispatch({ type: "event", ipc: event.ipc, name: event.name, data: event.data })),
-      listen("PluginAvailable", (event) => dispatch({ type: "available", ipc: event.ipc, available: event.available })),
-      listen("PluginsChanged", (event) => dispatch({ type: "installed", list: event.list })),
-      listen("WindowFocusChanged", (event) => dispatch({ type: "focus", focused: event.focused })),
-      listen("PluginGuisChanged", (event) =>
-        dispatch({ type: "pluginGuis", plugins: event.plugins, reserved: event.reserved }),
-      ),
-      listen("PluginMenubarItemsChanged", (event) => {
-        menubar.revision++
-        dispatch({ type: "menubarItems", items: event.items })
-      }),
-    ]
-
-    const revision = menubar.revision
-    void invoke("PluginMenubarItems")
-      .then((items) => {
-        if (attached.stop && menubar.revision === revision) dispatch({ type: "menubarItems", items })
-      })
-      .catch((cause: unknown) => console.error("[plugin] menubar items failed", cause))
-
-    return () => stops.forEach((stop) => stop())
+  const dispatch = (event: PluginBridgeEvent) => {
+    const next = transitionPluginBridge(state, event)
+    state = next.state
+    next.effects.forEach(run)
   }
+
+  const receive = (message: BridgeMessage) =>
+    selectPluginSubscriptions(state).forEach((subscription) => subscription.listener(message))
+
+  const run = (effect: PluginBridgeEffect) => {
+    if (effect.type === "attach") {
+      stops = [
+        listen("PluginState", (event) => receive({ type: "state", ipc: event.ipc, state: event.state })),
+        listen("PluginEvent", (event) =>
+          receive({ type: "event", ipc: event.ipc, name: event.name, data: event.data }),
+        ),
+        listen("PluginAvailable", (event) =>
+          receive({ type: "available", ipc: event.ipc, available: event.available }),
+        ),
+        listen("PluginsChanged", (event) => receive({ type: "installed", list: event.list })),
+        listen("WindowFocusChanged", (event) => receive({ type: "focus", focused: event.focused })),
+        listen("PluginGuisChanged", (event) =>
+          receive({ type: "pluginGuis", plugins: event.plugins, reserved: event.reserved }),
+        ),
+        listen("PluginMenubarItemsChanged", (event) => dispatch({ type: "menubar.changed", items: event.items })),
+      ]
+
+      return
+    }
+
+    if (effect.type === "detach") {
+      stops.forEach((stop) => stop())
+      stops = []
+
+      return
+    }
+
+    if (effect.type === "seed-menubar") {
+      void invoke("PluginMenubarItems").then(
+        (items) => dispatch({ type: "menubar.seeded", attempt: effect.attempt, items }),
+        (cause: unknown) => dispatch({ type: "menubar.seed-failed", attempt: effect.attempt, cause }),
+      )
+
+      return
+    }
+
+    if (effect.type === "log-seed-error") {
+      console.error("[plugin] menubar items failed", effect.cause)
+
+      return
+    }
+
+    const message: BridgeMessage = { type: "menubarItems", items: effect.items }
+    effect.subscriptions.forEach((subscription) => subscription.listener(message))
+  }
+
+  if (getOwner()) onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
     packaged: api.getWindowBootstrap().packaged ?? false,
@@ -49,16 +85,10 @@ export function createPluginBridge(): Bridge {
       }),
     subscribe: (ipc) => invoke("PluginSubscribe", { ipc }),
     on(listener) {
-      listeners.add(listener)
-      attached.stop ??= attach()
+      const subscription: PluginBridgeSubscription = { listener }
+      dispatch({ type: "listener.added", subscription })
 
-      return () => {
-        listeners.delete(listener)
-
-        if (listeners.size > 0) return
-        attached.stop?.()
-        attached.stop = undefined
-      }
+      return () => dispatch({ type: "listener.removed", subscription })
     },
     embed: (id, layout) => send("PluginEmbed", { id, layout }),
     capture: (id) => invoke("PluginCapture", { id }).then((data) => data ?? undefined),

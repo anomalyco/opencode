@@ -15,7 +15,7 @@ import {
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { ActivityRing } from "@opencode/ui/activity-ring"
-import { useDialog } from "@opencode/ui/context/dialog"
+import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
@@ -29,9 +29,12 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
-import { sessionTitle } from "@/session/title"
+import { sessionLabel, sessionTitle } from "@/session/title"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
+import { RenameDialog } from "./project-session-row"
 import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
-import { compareWorking } from "./inbox-working"
+import { compareWorking, workingSince } from "./inbox-working"
 
 const RECENT_LIMIT = 10
 
@@ -49,6 +52,8 @@ export function SidebarInbox() {
   const servers = useServers()
   const inbox = createSessionInbox({ archived: true })
 
+  const exporter = createSessionExporter()
+
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
     workingExpanded: true,
     recentExpanded: false,
@@ -56,16 +61,33 @@ export function SidebarInbox() {
 
   const [announcement, setAnnouncement] = createStore({ text: "" })
 
-  createEffect((previous: Map<string, InboxStatus> | undefined) => {
+  createEffect((previous: { underway: Map<string, number>; statuses: Map<string, InboxStatus> } | undefined) => {
     if (inbox.loading()) return
 
     const entries = inbox.entries()
 
+    // Runs the server's index shows as started at the first paint, keyed by their start. The running-session snapshot
+    // can land after that paint and move them into Working; they had already started, so they are not announced.
+    const underway =
+      previous?.underway ??
+      new Map(
+        entries.flatMap((entry) => {
+          const since = workingSince(entry.session)
+
+          return since === undefined ? [] : [[entry.key, since] as const]
+        }),
+      )
+
     if (previous) {
       const text = entries
         .flatMap((entry) => {
-          if (!previous.has(entry.key) || previous.get(entry.key) === entry.status || entry.status === "ready")
-            return []
+          const status = previous.statuses.get(entry.key)
+
+          if (status === undefined || status === entry.status || entry.status === "ready") return []
+
+          const since = workingSince(entry.session)
+
+          if (entry.status === "working" && since !== undefined && underway.get(entry.key) === since) return []
 
           return [
             language.t(`sidebar.inbox.announce.${entry.status}`, {
@@ -78,7 +100,7 @@ export function SidebarInbox() {
       if (text) setAnnouncement("text", text)
     }
 
-    return new Map(entries.map((entry) => [entry.key, entry.status]))
+    return { underway, statuses: new Map(entries.map((entry) => [entry.key, entry.status])) }
   })
 
   const sections = createMemo(() => {
@@ -141,34 +163,6 @@ export function SidebarInbox() {
     inbox.loadBranches([...visible.needs, ...visible.current, ...visible.working, ...visible.unread, ...visible.recent])
   })
 
-  function DeleteDialog(props: { entry: InboxEntry }) {
-    const confirm = async () => {
-      await inbox.remove(props.entry)
-      dialog.close()
-    }
-
-    return (
-      <Dialog fit>
-        <DialogHeader hideClose>
-          <DialogTitleGroup
-            title={language.t("session.delete.title")}
-            description={language.t("session.delete.confirm", {
-              name: sessionTitle(props.entry.session.title) ?? language.t("command.session.new"),
-            })}
-          />
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
-            {language.t("common.cancel")}
-          </Button>
-          <Button variant="danger" onClick={confirm}>
-            {language.t("session.delete.button")}
-          </Button>
-        </DialogFooter>
-      </Dialog>
-    )
-  }
-
   // Takes an accessor so only the For tracks the section. Reading it here would recreate the For, remounting every
   // row on any session change and resetting the list's scroll.
   const rows = (list: () => InboxEntry[]) => (
@@ -188,10 +182,42 @@ export function SidebarInbox() {
               branch={inbox.branch(entry())}
               worktree={inbox.inWorktree(entry())}
               archived={inboxArchived(entry())}
+              actions={
+                <>
+                  <Menu.Item
+                    onSelect={() => {
+                      const current = entry()
+
+                      void dialog.show(() => (
+                        <RenameDialog
+                          title={sessionLabel(current.session)}
+                          onRename={(title) => inbox.rename(current, title)}
+                        />
+                      ))
+                    }}
+                  >
+                    {language.t("common.rename")}
+                  </Menu.Item>
+                  <Menu.Item
+                    disabled={exporter.exporting({ server: entry().server, sessionID: entry().session.id })}
+                    onSelect={() => exporter.export({ server: entry().server, sessionID: entry().session.id })}
+                  >
+                    {language.t("common.export")}…
+                  </Menu.Item>
+                  <SessionReadMenuItem server={entry().server} session={entry().session} />
+                  <Menu.Separator />
+                </>
+              }
               onOpen={() => inbox.open(entry())}
               onArchive={() => void inbox.archive(entry())}
               onUnarchive={() => void inbox.unarchive(entry())}
-              onDelete={() => dialog.show(() => <DeleteDialog entry={entry()} />)}
+              onDelete={() => {
+                const current = entry()
+
+                void dialog.show(() => (
+                  <DeleteDialog title={current.session.title} onConfirm={() => void inbox.remove(current)} />
+                ))
+              }}
             />
           )}
         </Show>
@@ -274,6 +300,42 @@ export function SidebarInbox() {
         void dialog.show(() => <DialogSessionSearch archived />)
       }}
     />
+  )
+}
+
+// The session leaves the list at once, so the dialog closes before the delete request instead of after it.
+function DeleteDialog(props: { title: string | undefined; onConfirm: () => void }) {
+  const language = useLanguage()
+  const dialog = useDialog()
+  const layer = useDialogLayer()
+
+  const close = () => dialog.close(layer?.id)
+
+  const confirm = () => {
+    if (dialog.closing) return
+    close()
+    props.onConfirm()
+  }
+
+  return (
+    <Dialog fit>
+      <DialogHeader hideClose>
+        <DialogTitleGroup
+          title={language.t("session.delete.title")}
+          description={language.t("session.delete.confirm", {
+            name: sessionTitle(props.title) ?? language.t("command.session.new"),
+          })}
+        />
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="ghost" autofocus disabled={dialog.closing} onClick={close}>
+          {language.t("common.cancel")}
+        </Button>
+        <Button variant="danger" disabled={dialog.closing} onClick={confirm}>
+          {language.t("session.delete.button")}
+        </Button>
+      </DialogFooter>
+    </Dialog>
   )
 }
 
@@ -525,6 +587,7 @@ export function InboxSessionCard(props: {
   onArchive: () => void
   onUnarchive: () => void
   onDelete: () => void
+  actions?: JSX.Element
 }) {
   const language = useLanguage()
   const navigation = useContext(InboxNavigation)
@@ -640,6 +703,7 @@ export function InboxSessionCard(props: {
       </Menu.Context.Trigger>
       <Menu.Context.Portal>
         <Menu.Context.Content>
+          {props.actions}
           <Show
             when={props.archived}
             fallback={<Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>}

@@ -4,6 +4,7 @@ import { directory, json } from "./fixture/tui-client"
 import { takeDraft } from "../src/component/prompt/draft-stash"
 import type { PromptInfo } from "../src/prompt/history"
 import { copyPlugin } from "./fixture/fixture"
+import { waitForHighlightedFrame } from "./fixture/frame"
 
 const hash = "e".repeat(64)
 const png = Buffer.from(
@@ -117,7 +118,7 @@ async function openSession(server: { inbox?: unknown[]; plugins?: string[]; resp
       return response
     },
   })
-  await setup.waitForFrame((frame) => frame.includes("Looked at it"))
+  await waitForHighlightedFrame(setup, (frame) => frame.includes("Looked at it"))
   return Object.assign(setup, { calls, capabilities })
 }
 
@@ -303,7 +304,7 @@ async function leaveAndReturn(app: App) {
   app.mockInput.pressEnter()
   await app.waitForFrame((frame) => frame.includes("Sessions") && frame.includes("Media refs"))
   app.mockInput.pressEnter()
-  await app.waitForFrame((frame) => frame.includes("Looked at it"))
+  await waitForHighlightedFrame(app, (frame) => frame.includes("Looked at it"))
 }
 
 for (const queued of [false, true]) {

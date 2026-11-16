@@ -61,7 +61,7 @@ testEffect(
         headers.push(String(request.model.id))
         return { "x-deployment": "fixture", "x-override": "route" }
       },
-      defaults: {
+      options: {
         headers: { "x-default": "configured", "x-override": "configured" },
         providerOptions: { store: false },
         http: { body: { instructions: "default instructions" } },

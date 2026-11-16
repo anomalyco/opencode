@@ -4,6 +4,7 @@ import { motionTimeScale } from "@opencode/ui/motion-tuning"
 import {
   createPanelMotionState,
   PANEL_FLIGHT_TIMEOUT_MS,
+  selectPanelMounted,
   selectPanelPresent,
   transitionPanelMotion,
   type PanelMotionEffect,
@@ -264,7 +265,8 @@ export function createPanelMotion(input: {
   let stop: (() => void) | undefined
   let flightTimer: ReturnType<typeof setTimeout> | undefined
 
-  const paint = () => input.paint(Math.min(1, Math.max(0, motion.value / 100)))
+  const closed = () => Math.min(1, Math.max(0, motion.value / 100))
+  const paint = () => input.paint(closed())
 
   // Where the flight's current leg started, for how much of it remains.
   let from = 0
@@ -378,6 +380,10 @@ export function createPanelMotion(input: {
 
   return {
     present: createMemo(() => selectPanelPresent(motionState())),
+    /** From the first open on, for contents that stay mounted once closed. */
+    mounted: createMemo(() => selectPanelMounted(motionState())),
+    /** How far closed the panel is now, from 0 (open) to 1 (closed); not reactive, as it moves every frame. */
+    closed,
     /** Shows `open` at once, also when the change hasn't reached this motion yet, e.g. inside a batch. */
     sync: (open: boolean) => dispatch({ type: "sync.requested", open, current: untrack(input.open) }),
     whenSettled: (run: () => void) => dispatch({ type: "waiter.queued", open: untrack(input.open), run }),

@@ -36,7 +36,7 @@ describe("createDispatch", () => {
 
     // The dialog that never opened reads as closed, so Pair device opens it again.
     expect(box.state.dialog).toEqual({ status: "closed" })
-    expect(ran).toEqual(["read-remote", "abort", "wait", "open-dialog"])
+    expect(ran).toEqual(["read-remote", "read-screen", "abort", "wait", "open-dialog"])
 
     dispatch({ type: "dialog.opened" })
 

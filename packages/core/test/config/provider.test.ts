@@ -236,8 +236,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
       })
       expect(configured.compatibility).toEqual({ supportsPromptCacheKey: true, requireFinishReason: false })
       // The OpenAI chat package enables the key by default; provider config overrides it on the runtime model.
-      expect((yield* ModelResolver.fromCatalogModel(catalog)).compatibility?.supportsPromptCacheKey).toBe(false)
-      expect((yield* ModelResolver.fromCatalogModel(configured)).compatibility?.supportsPromptCacheKey).toBe(true)
+      expect((yield* ModelResolver.fromCatalogModel(catalog)).capabilities?.promptCacheKey).toBe(false)
+      expect((yield* ModelResolver.fromCatalogModel(configured)).capabilities?.promptCacheKey).toBe(true)
     }),
   )
 
@@ -262,7 +262,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const catalog = required(yield* models.get(providerID, Model.ID.make("catalog")))
       expect(catalog.compatibility).toEqual({ streamUsage: false })
-      expect((yield* ModelResolver.fromCatalogModel(catalog)).compatibility?.streamUsage).toBe(false)
+      expect((yield* ModelResolver.fromCatalogModel(catalog)).capabilities?.streamUsage).toBe(false)
     }),
   )
 
@@ -453,9 +453,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       expect(yield* models.available()).toEqual([])
       expect((yield* models.available(["image"])).map((model) => model.id)).toEqual([retypedID])
-      expect((yield* models.available(["decision"])).map((model) => [model.id, model.name])).toEqual([
-        [keptID, "Kept"],
-      ])
+      expect((yield* models.available(["decision"])).map((model) => [model.id, model.name])).toEqual([[keptID, "Kept"]])
     }),
   )
 
@@ -644,6 +642,16 @@ describe("ConfigProviderPlugin.Plugin", () => {
       },
     },
     {
+      name: "provider baseURL alongside api",
+      legacy: { api: "openai", options: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+      native: { settings: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+    },
+    {
+      name: "empty provider baseURL falls back to api",
+      legacy: { api: "http://127.0.0.1:4000/v1", options: { baseURL: "" }, models: { chat: {} } },
+      native: { settings: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+    },
+    {
       name: "model package, limits, costs, and variant overrides",
       legacy: {
         npm: "@ai-sdk/openai",
@@ -695,6 +703,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
       name: "zero costs and omitted cache costs",
       legacy: { models: { chat: { cost: { input: 0, output: 0 } } } },
       native: { models: { chat: { cost: { input: 0, output: 0 } } } },
+    },
+    {
+      name: "context-only limits",
+      legacy: { models: { chat: { limit: { context: 1000000 } } } },
+      native: { models: { chat: { limit: { context: 1000000 } } } },
     },
   ]) {
     it.effect(`matches native configuration for migrated ${scenario.name}`, () =>
@@ -749,6 +762,28 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(result.diagnostics).toEqual([])
       yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
       expect(yield* models.get(providerID, modelID)).toEqual(before)
+    }),
+  )
+
+  it.effect("keeps catalog capabilities that a migrated override omits", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("chat")
+      yield* providers.transform((editor) => {
+        editor.models.update(providerID, modelID, (model) => {
+          model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
+        })
+      })
+      const result = ConfigNormalize.normalize({ provider: { custom: { models: { chat: { tool_call: true } } } } })
+      if (result.type !== "normalized") throw new Error("Expected normalized config")
+      yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
+      expect((yield* models.get(providerID, modelID))?.capabilities).toEqual({
+        tools: true,
+        input: ["audio"],
+        output: ["audio"],
+      })
     }),
   )
 
@@ -1032,7 +1067,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
                 models: {
                   reasoner: {
                     releaseDate: "2026-02-03",
-                    capabilities: { temperature: false },
+                    capabilities: { temperature: false, freeform: ["text", "regex"] },
                     compatibility: { reasoningField: "reasoning_content" },
                   },
                 },
@@ -1045,6 +1080,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const model = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("reasoner")))
       expect(model.time.released).toBe(Date.UTC(2026, 1, 3))
       expect(model.capabilities.temperature).toBe(false)
+      expect(model.capabilities.freeform).toEqual(["text", "regex"])
       expect(model.compatibility?.reasoningField).toBe("reasoning_content")
     }),
   )

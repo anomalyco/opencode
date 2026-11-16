@@ -19,7 +19,10 @@ import {
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
 
-type FileApi = { find?: (input: never) => Promise<object>; list?: (input: never, options: never) => Promise<object> }
+type FileApi = {
+  find?: (input: never, options: never) => Promise<object>
+  list?: (input: never, options: never) => Promise<object>
+}
 
 // SAFETY: the picker only reads `api.file.find` and `api.file.list`, which every fake here provides.
 // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- a partial fake stands in for the generated SDK client
@@ -487,6 +490,57 @@ test("aborting one running task frees its slot for the next", async () => {
   await aborted.promise
   expect(await hung).toBeUndefined()
   expect(await next).toBe("next")
+})
+
+test("a folder listing that failed once is read again by the next search", async () => {
+  const location = { directory: "/repo" }
+  const listed: unknown[] = []
+
+  const api = sdk({
+    find: async () => ({ location, data: [] }),
+    list: async (input: { path: string }) => {
+      listed.push(input.path)
+
+      if (listed.length === 1) throw new Error("server is starting")
+
+      return { location, data: [{ path: "components/", type: "directory" }] }
+    },
+  })
+
+  const search = createDirectorySearch({ sdk: api, home: () => "", base: () => "/repo", location: () => location })
+
+  expect(await search("comp")).toEqual([])
+  expect(await search("comp")).toEqual(["/repo/components"])
+  expect(listed).toEqual(["/repo", "/repo"])
+})
+
+test("a search passes its signal to the server search, and closing the picker aborts its folder reads", async () => {
+  const location = { directory: "/repo" }
+  const signals: Array<AbortSignal | undefined> = []
+  const listing = Promise.withResolvers<AbortSignal>()
+
+  const api = sdk({
+    find: async (_input: never, options: { signal?: AbortSignal }) => {
+      signals.push(options.signal)
+
+      return { location, data: [] }
+    },
+    list: (_input: never, options: { signal: AbortSignal }) => {
+      listing.resolve(options.signal)
+
+      return new Promise<object>(() => {})
+    },
+  })
+
+  const search = createDirectorySearch({ sdk: api, home: () => "", base: () => "/repo", location: () => location })
+  const controller = new AbortController()
+  const pending = search("comp", { signal: controller.signal })
+  const read = await listing.promise
+  expect(signals).toEqual([controller.signal])
+
+  search.dispose()
+  expect(read.aborted).toBe(true)
+  expect(await pending).toEqual([])
 })
 
 test("listing a folder passes the abort signal to the request", async () => {

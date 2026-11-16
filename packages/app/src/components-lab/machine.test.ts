@@ -1,12 +1,90 @@
 import { expect, test } from "bun:test"
 import {
   createLabStageState,
+  INITIAL_LAB_BROWSE_STATE,
   labStageIndex,
+  selectShouldToggleFolder,
+  transitionLabBrowse,
   transitionLabStage,
+  type LabBrowseEvent,
+  type LabBrowseState,
   type LabStageEvent,
   type LabStageState,
   type LabStageTransition,
 } from "./machine"
+
+/** Each event's effects from `state`, and the state after the last. */
+const browse = (state: LabBrowseState, ...events: LabBrowseEvent[]) =>
+  events.reduce<{ state: LabBrowseState; effects: string[] }>(
+    (current, event) => {
+      const next = transitionLabBrowse(current.state, event)
+
+      return { state: next.state, effects: [...current.effects, ...next.effects.map((effect) => effect.type)] }
+    },
+    { state, effects: [] },
+  )
+
+test("focus moving inside the stage at rest stays at rest", () => {
+  const focused = browse(INITIAL_LAB_BROWSE_STATE, { type: "stage.focused" }, { type: "stage.focused" })
+
+  expect(focused.state).toBe(INITIAL_LAB_BROWSE_STATE)
+  expect(focused.effects).toEqual([])
+
+  // Many focus moves later, a story opened from the tree still gets exactly three returns.
+  const opened = browse(
+    focused.state,
+    { type: "story.opened", fromTree: true },
+    ...Array.from({ length: 4 }, () => ({ type: "stage.focused" }) as const),
+  )
+
+  expect(opened.effects).toEqual(["focus.tree", "focus.tree", "focus.tree"])
+  expect(opened.state).toBe(INITIAL_LAB_BROWSE_STATE)
+})
+
+test.each([{ type: "key.ended" }, { type: "window.blurred" }] as const)(
+  "a Space press in the tree no longer toggles folders after $type",
+  (end) => {
+    const pressed = browse(INITIAL_LAB_BROWSE_STATE, { type: "key.down", key: " ", inTree: true })
+
+    expect(selectShouldToggleFolder(pressed.state)).toBe(true)
+    expect(selectShouldToggleFolder(browse(pressed.state, end).state)).toBe(false)
+  },
+)
+
+test("a Space press outside the tree and arrow keys in it never toggle folders", () => {
+  expect(selectShouldToggleFolder(INITIAL_LAB_BROWSE_STATE)).toBe(false)
+  expect(browse(INITIAL_LAB_BROWSE_STATE, { type: "key.down", key: " ", inTree: false }).state).toBe(
+    INITIAL_LAB_BROWSE_STATE,
+  )
+  expect(
+    selectShouldToggleFolder(
+      browse(
+        INITIAL_LAB_BROWSE_STATE,
+        { type: "key.down", key: " ", inTree: true },
+        { type: "key.down", key: "ArrowDown", inTree: true },
+      ).state,
+    ),
+  ).toBe(false)
+})
+
+test("a click in the tree toggles folders until the press ends", () => {
+  const pressed = browse(INITIAL_LAB_BROWSE_STATE, { type: "pointer.down", inTree: true })
+
+  expect(selectShouldToggleFolder(pressed.state)).toBe(true)
+  expect(browse(pressed.state, { type: "pointer.ended" }).state).toBe(INITIAL_LAB_BROWSE_STATE)
+})
+
+test.each([
+  { type: "key.down", key: "Tab", inTree: true },
+  { type: "pointer.down", inTree: false },
+] as const)("$type ends browsing before the stage takes focus", (exit) => {
+  const ended = browse(INITIAL_LAB_BROWSE_STATE, { type: "story.opened", fromTree: true }, exit, {
+    type: "stage.focused",
+  })
+
+  expect(ended.effects).toEqual([])
+  expect(ended.state).toBe(INITIAL_LAB_BROWSE_STATE)
+})
 
 const names = ["Closed", "Opening", "Open"]
 

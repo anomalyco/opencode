@@ -188,7 +188,15 @@ async function blobID(blob: Blob) {
   return id
 }
 
-export async function createBlobReference(blob: Blob): Promise<BlobReference> {
+// A pasted or dropped File can be backed by a file on disk that the browser reads lazily. Clipboard
+// tools delete such temp files once something else is copied, and the preview and the send would
+// then fail to read it, so keep the bytes in memory from the start.
+async function detach(blob: Blob) {
+  return blob instanceof File ? new Blob([await blob.arrayBuffer()], { type: blob.type }) : blob
+}
+
+export async function createBlobReference(source: Blob): Promise<BlobReference> {
+  const blob = await detach(source)
   const id = await blobID(blob)
 
   return { id, url: blobUrl(id, blob) }
@@ -220,7 +228,8 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
 
   storeLoaders.set(storeId, loadBlobUrl)
 
-  const putBlob = async (blob: Blob) => {
+  const putBlob = async (source: Blob) => {
+    const blob = await detach(source)
     const id = await driver.putBlob(blob)
 
     return { id, url: blobUrl(id, blob, grace) }

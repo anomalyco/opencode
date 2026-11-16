@@ -1,4 +1,5 @@
 import { Agent } from "@opencode/core/agent"
+import { App } from "@opencode/core/app"
 import { Artifact } from "@opencode/core/artifact"
 import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
@@ -7,6 +8,7 @@ import { Credential } from "@opencode/core/credential"
 import { Database } from "@opencode/core/database/database"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
+import { Flag } from "@opencode/core/flag"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -86,9 +88,10 @@ const permissionLayer = Layer.succeed(
   }),
 )
 
-export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer, mcp = emptyMcpLayer) =>
+export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer) =>
   AppNodeBuilder.build(
     LayerNode.group([
+      App.node,
       AppProcess.node,
       FileSystem.node,
       FSUtil.node,
@@ -96,6 +99,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Npm.node,
       Credential.node,
       Config.node,
+      Flag.node,
       Database.node,
       Environment.node,
       FileAccess.node,
@@ -138,7 +142,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Location.node.replace(tempLocationLayer),
       Npm.node.replace(npmLayer),
       Config.node.replace(configLayer),
-      Mcp.node.replace(mcp),
+      Mcp.node.replace(emptyMcpLayer),
       Generate.node.replace(generate),
       Permission.node.replace(permission),
       offlineModels,

@@ -211,6 +211,7 @@ export const dict = {
   "ui.common.dismiss": "Ignora",
   "ui.common.close": "Chiudi",
   "ui.common.next": "Avanti",
+  "ui.common.continue": "Continua",
   "ui.common.submit": "Invia",
   "ui.common.showMore": "Mostra di più",
   "ui.permission.deny": "Nega",

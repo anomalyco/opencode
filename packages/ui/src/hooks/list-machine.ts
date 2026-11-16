@@ -1,5 +1,8 @@
 import fuzzysort from "fuzzysort"
 
+/** How long an async `items(query)` may run before the list reports it failed rather than loading forever. */
+export const LIST_LOAD_TIMEOUT_MS = 15_000
+
 export type ListGroup<T> = { category: string; items: T[] }
 
 export type ListConfig<T> = {
@@ -25,10 +28,17 @@ type ListData<T> = {
   readonly highlight: ListHighlight
 }
 
-/** `loading` keeps the last rows on screen; `epoch` is the last attempt that settled. */
+/**
+ * `loading` keeps the last rows on screen; `epoch` is the last attempt that settled. `failed` means the current
+ * query's async load rejected or timed out, which the list reports instead of "No results". `disposed` keeps the last
+ * data for readers that run during cleanup and ignores every event.
+ */
 export type ListState<T> =
-  | (ListData<T> & { readonly status: "ready"; readonly epoch: number })
+  | (ListData<T> & { readonly status: "ready" | "failed"; readonly epoch: number })
   | (ListData<T> & { readonly status: "loading"; readonly attempt: number })
+  | (ListData<T> & { readonly status: "disposed" })
+
+type LiveListState<T> = Exclude<ListState<T>, { readonly status: "disposed" }>
 
 export type ListKeyDown = {
   readonly type: "key.down"
@@ -51,16 +61,25 @@ export type ListEvent<T> =
   | { readonly type: "items.reload" }
   | { readonly type: "load.resolved"; readonly attempt: number; readonly items: T[] }
   | { readonly type: "load.failed"; readonly attempt: number }
+  | { readonly type: "load.timed-out"; readonly attempt: number }
   | { readonly type: "pointer.move"; readonly key: string; readonly moved: boolean }
   | { readonly type: "pointer.leave" }
   | { readonly type: "active.set"; readonly key: string | null }
   | { readonly type: "active.reset" }
+  | { readonly type: "disposed" }
   | ListKeyDown
 
 export type ListEffect<T> =
   | { readonly type: "load"; readonly attempt: number; readonly query: string }
+  /** Stops the settled or abandoned attempt's timeout. */
+  | { readonly type: "cancel.load" }
   | { readonly type: "notify.filter"; readonly value: string }
   | { readonly type: "select"; readonly item: T; readonly index: number }
+
+export type ListEmptyState =
+  | { readonly type: "loading" }
+  | { readonly type: "failed" }
+  | { readonly type: "empty"; readonly query: string }
 
 export type ListTransition<T> = {
   readonly state: ListState<T>
@@ -81,6 +100,21 @@ export function createListState<T>(filter?: string): ListState<T> {
 }
 
 export function transitionList<T>(state: ListState<T>, event: ListEvent<T>, config: ListConfig<T>): ListTransition<T> {
+  if (state.status === "disposed") return unchanged(state)
+
+  if (event.type === "disposed")
+    return changed(
+      {
+        status: "disposed",
+        filter: state.filter,
+        groups: state.groups,
+        rows: state.rows,
+        keys: state.keys,
+        highlight: state.highlight,
+      },
+      state.status === "loading" ? [{ type: "cancel.load" }] : [],
+    )
+
   if (event.type === "query.change") return queryChanged(state, event.value, event.force === true)
 
   if (event.type === "filter.controlled") {
@@ -99,22 +133,29 @@ export function transitionList<T>(state: ListState<T>, event: ListEvent<T>, conf
 
   if (event.type === "items.reload") return load(state, state.filter)
 
-  if (event.type === "load.resolved" || event.type === "load.failed") {
-    if (state.status !== "loading" || event.attempt !== state.attempt) return unchanged(state)
+  if (event.type === "load.resolved" || event.type === "load.failed" || event.type === "load.timed-out") {
+    const current = state.status === "loading" ? state.attempt : state.epoch
+    // A slow search that timed out still shows its results when they arrive, until a newer attempt starts.
+    const late = state.status === "failed" && event.type === "load.resolved"
+
+    if ((state.status !== "loading" && !late) || event.attempt !== current) return unchanged(state)
     const groups = event.type === "load.resolved" ? filterItems(event.items, state.filter.query, config) : []
     const rows = groups.flatMap((group) => group.items)
     const keys = rows.map(config.key)
 
-    return changed({
-      status: "ready",
-      epoch: state.attempt,
-      filter: state.filter,
-      groups,
-      rows,
-      keys,
-      // Each result set opens on its first row; `current` only marks the selected item.
-      highlight: { mode: state.highlight.mode, activeKey: keys[0] ?? null },
-    })
+    return changed(
+      {
+        status: event.type === "load.resolved" ? "ready" : "failed",
+        epoch: current,
+        filter: state.filter,
+        groups,
+        rows,
+        keys,
+        // Each result set opens on its first row; `current` only marks the selected item.
+        highlight: { mode: state.highlight.mode, activeKey: keys[0] ?? null },
+      },
+      late ? [] : [{ type: "cancel.load" }],
+    )
   }
 
   if (event.type === "pointer.move") {
@@ -135,6 +176,23 @@ export function transitionList<T>(state: ListState<T>, event: ListEvent<T>, conf
   if (event.type === "active.reset") return state.keys.length ? highlight(state, state.keys[0]) : unchanged(state)
 
   return keyDown(state, event)
+}
+
+export function selectListLoading<T>(state: ListState<T>) {
+  return state.status === "loading"
+}
+
+export function selectListFailed<T>(state: ListState<T>) {
+  return state.status === "failed"
+}
+
+/** What the list says when it has no rows to show. */
+export function selectListEmptyState<T>(state: ListState<T>): ListEmptyState {
+  if (state.status === "loading") return { type: "loading" }
+
+  if (state.status === "failed") return { type: "failed" }
+
+  return { type: "empty", query: state.filter.query }
 }
 
 /** The highlighted row and its index among all rows. */
@@ -175,7 +233,7 @@ export function groupItems<T>(items: T[], config: Pick<ListConfig<T>, "groupBy" 
   return config.sortGroupsBy ? groups.sort(config.sortGroupsBy) : groups
 }
 
-function queryChanged<T>(state: ListState<T>, value: string, force: boolean): ListTransition<T> {
+function queryChanged<T>(state: LiveListState<T>, value: string, force: boolean): ListTransition<T> {
   const same = value === state.filter.query
 
   if (same && !force) return unchanged(state)
@@ -188,7 +246,7 @@ function queryChanged<T>(state: ListState<T>, value: string, force: boolean): Li
   return { ...next, effects: [notify, ...next.effects] }
 }
 
-function load<T>(state: ListState<T>, filter: ListFilter): ListTransition<T> {
+function load<T>(state: LiveListState<T>, filter: ListFilter): ListTransition<T> {
   const attempt = (state.status === "loading" ? state.attempt : state.epoch) + 1
 
   return changed(
@@ -205,7 +263,7 @@ function load<T>(state: ListState<T>, filter: ListFilter): ListTransition<T> {
   )
 }
 
-function highlight<T>(state: ListState<T>, activeKey: string | null): ListTransition<T> {
+function highlight<T>(state: LiveListState<T>, activeKey: string | null): ListTransition<T> {
   if (activeKey === state.highlight.activeKey) return unchanged(state)
 
   return changed({ ...state, highlight: { mode: state.highlight.mode, activeKey } })
