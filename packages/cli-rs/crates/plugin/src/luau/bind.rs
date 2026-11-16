@@ -3,17 +3,18 @@
 //! text. A Luau error in any call fails the plugin as a panic of a built-in does: none of the call's effects apply.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
-use mlua::{Function, Lua, LuaSerdeExt, MultiValue, Table, Value};
+use mlua::{Function, Lua, MultiValue, Table, Value};
 use opencode_plugin_abi::interact::{self, Handled};
 use opencode_plugin_abi::{self as abi, v2};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use super::current::{Current, Enter, Slot};
+use super::inputs::Inputs;
+use super::json;
 use super::vm::{self, Compiled, Vm};
 
 /// A plugin activation: its VM, what its calls reach, and the objects every call is handed.
@@ -24,6 +25,8 @@ pub(crate) struct Plugin {
     read: Table,
     host: Table,
     memo: Function,
+    /// The tables its calls' inputs are handed in ([`Inputs`]).
+    inputs: Rc<Inputs>,
 }
 
 /// The module `@opencode/plugin`: `plugin.define` and the node helpers, in Luau.
@@ -45,7 +48,8 @@ pub(crate) fn setup(
     let module: Table = vm.lua.load(MODULE).set_name("=@opencode/plugin").call(()).map_err(error)?;
     vm.lua.register_module("@opencode/plugin", &module).map_err(error)?;
     let lua = vm.lua.clone();
-    let plugin = Rc::new(Plugin { vm: RefCell::new(Some(vm)), current, read, host, memo });
+    let inputs = Inputs::new(&lua).map_err(error)?;
+    let plugin = Rc::new(Plugin { vm: RefCell::new(Some(vm)), current, read, host, memo, inputs });
     let started = |f: &mut dyn FnMut(&Vm) -> Result<Value, String>| match &*plugin.vm.borrow() {
         Some(vm) => f(vm),
         None => Err("the plugin has ended".to_owned()),
@@ -89,97 +93,38 @@ fn fail(error: String) -> ! {
     std::panic::resume_unwind(Box::new(error))
 }
 
-/// A value of the contract as a Luau value: `None` is `nil`, a sequence a plain table.
+/// A value of the contract as a Luau value: `None` is `nil`, a sequence a plain table ([`json::luau`]).
 pub(crate) fn out<T: Serialize + ?Sized>(lua: &Lua, value: &T) -> mlua::Result<Value> {
-    let options = mlua::serde::ser::Options::new()
-        .serialize_none_to_null(false)
-        .serialize_unit_to_null(false)
-        .set_array_metatable(false);
-    lua.to_value_with(value, options)
+    let value = serde_json::to_value(value).map_err(|error| mlua::Error::runtime(error.to_string()))?;
+    json::luau(lua, &value)
 }
 
-/// A Luau value as a value of the contract. It is walked first, against bounds ([`Walk`]): a value past them is refused
-/// before the decoder allocates anything for it, and the refusal fails the call ([`vm::refuse`]).
+/// A Luau value as JSON, walked against bounds ([`json::Walk`]): a value past them is refused before anything is
+/// decoded, and the refusal fails the call ([`vm::refuse`]).
+fn json(lua: &Lua, value: &Value) -> mlua::Result<serde_json::Value> {
+    match json::Walk::new().json(lua, value) {
+        Ok(value) => Ok(value),
+        Err(json::Refused::Bound(reason)) => {
+            let reason = format!("the plugin's value is refused: {reason}");
+            vm::refuse(lua, &reason);
+            Err(mlua::Error::runtime(reason))
+        }
+        Err(json::Refused::Value(reason)) => Err(mlua::Error::runtime(reason)),
+    }
+}
+
+/// A Luau table as a JSON object: an empty table, which is an empty array otherwise, is no fields.
+fn object(lua: &Lua, value: &Value) -> mlua::Result<serde_json::Map<String, serde_json::Value>> {
+    match json(lua, value)? {
+        serde_json::Value::Object(fields) => Ok(fields),
+        serde_json::Value::Array(items) if items.is_empty() => Ok(serde_json::Map::new()),
+        _ => Err(mlua::Error::runtime("the fields to merge are a table of named fields")),
+    }
+}
+
+/// A Luau value as a value of the contract, through one `serde_json::Value`.
 fn input<T: DeserializeOwned>(lua: &Lua, value: Value) -> mlua::Result<T> {
-    let limits = crate::limits::get();
-    let mut walk = Walk {
-        values: 0,
-        bytes: 0,
-        most_values: VALUES_A_NODE * limits.nodes,
-        most_bytes: limits.plugin_content,
-        seen: HashSet::new(),
-        refused: None,
-    };
-    if let Err(reason) = walk.value(&value, 0) {
-        let reason = format!("the plugin's value is refused: {reason}");
-        vm::refuse(lua, &reason);
-        return Err(mlua::Error::runtime(reason));
-    }
-    lua.from_value(value)
-}
-
-/// The parts (keys, values) a value may hold for each node a tree may hold ([`crate::limits::Limits::nodes`]).
-const VALUES_A_NODE: u64 = 16;
-
-/// How deep a value's tables may nest: past the layout depth ([`crate::reconcile::MAX_DEPTH`]) twice over, as a node's
-/// children are a table in a table.
-const DEPTH: usize = 2 * crate::reconcile::MAX_DEPTH as usize;
-
-/// The walk of a Luau value before it is decoded: the decoder allocates on the Rust heap, outside the VM's cap, with no
-/// safepoint of the budget's, so what it would build is bounded here. Each table is taken once: a table reused in
-/// one value (a DAG of shared tables) would be decoded once for each place it appears, exponentially more than the
-/// VM holds.
-struct Walk {
-    values: u64,
-    bytes: u64,
-    most_values: u64,
-    most_bytes: u64,
-    seen: HashSet<*const std::ffi::c_void>,
-    /// Why the walk stopped inside a table's iteration.
-    refused: Option<String>,
-}
-
-impl Walk {
-    fn value(&mut self, value: &Value, depth: usize) -> Result<(), String> {
-        self.values += 1;
-        if self.values > self.most_values {
-            return Err(format!("it holds more than {} parts", self.most_values));
-        }
-        match value {
-            Value::String(text) => {
-                self.bytes += text.as_bytes().len() as u64;
-                if self.bytes > self.most_bytes {
-                    return Err(format!("its text is more than {} bytes", self.most_bytes));
-                }
-                Ok(())
-            }
-            Value::Table(table) => {
-                if depth >= DEPTH {
-                    return Err(format!("its tables nest more than {DEPTH} deep"));
-                }
-                if !self.seen.insert(table.to_pointer()) {
-                    return Err(
-                        "a table appears twice in it; give each place a table of its own (`table.clone`)".to_owned()
-                    );
-                }
-                let walked = table.for_each::<Value, Value>(|key, value| {
-                    match self.value(&key, depth + 1).and_then(|()| self.value(&value, depth + 1)) {
-                        Ok(()) => Ok(()),
-                        Err(reason) => {
-                            self.refused = Some(reason);
-                            Err(mlua::Error::runtime("refused"))
-                        }
-                    }
-                });
-                match (walked, self.refused.take()) {
-                    (_, Some(reason)) => Err(reason),
-                    (Err(error), None) => Err(error.to_string()),
-                    (Ok(()), None) => Ok(()),
-                }
-            }
-            _ => Ok(()),
-        }
-    }
+    serde_json::from_value(json(lua, &value)?).map_err(|error| mlua::Error::runtime(error.to_string()))
 }
 
 /// A Luau value as a value of the contract whose fields the table leaves out are its defaults' (a command needs only
@@ -187,7 +132,7 @@ impl Walk {
 fn defaulted<T: Default + Serialize + DeserializeOwned>(lua: &Lua, value: Value) -> mlua::Result<T> {
     let error = |error: serde_json::Error| mlua::Error::runtime(error.to_string());
     let mut whole = serde_json::to_value(T::default()).map_err(error)?;
-    if let (Some(whole), serde_json::Value::Object(given)) = (whole.as_object_mut(), input(lua, value)?) {
+    if let (Some(whole), serde_json::Value::Object(given)) = (whole.as_object_mut(), json(lua, &value)?) {
         whole.extend(given);
     }
     serde_json::from_value(whole).map_err(error)
@@ -246,7 +191,9 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let plugin = plugin.clone();
         setup.slot(abi::Placement::new(at.kind, at.path), move |read, slot, changed| {
             plugin.run(Current::reading(read), |lua| {
-                let value = render.call::<Value>((plugin.read.clone(), out(lua, slot)?, out(lua, changed)?))?;
+                let value = plugin.inputs.lend(lua, |inputs| {
+                    render.call::<Value>((plugin.read.clone(), inputs.slot(slot)?, inputs.changed(lua, changed)?))
+                })?;
                 Ok(optional(lua, value)?.unwrap_or(abi::Render::Hide))
             })
         });
@@ -257,7 +204,9 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let plugin = plugin.clone();
         setup.route(&name, move |read, changed| {
             plugin.run(Current::reading(read), |lua| {
-                let value = render.call::<Value>((plugin.read.clone(), out(lua, changed)?))?;
+                let value = plugin
+                    .inputs
+                    .lend(lua, |inputs| render.call::<Value>((plugin.read.clone(), inputs.changed(lua, changed)?)))?;
                 Ok(optional(lua, value)?.unwrap_or(abi::Render::Hide))
             })
         });
@@ -347,11 +296,13 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
 fn surface_view(plugin: &Rc<Plugin>, view: &Function, surface: &mut v2::View<'_>) -> v2::Node {
     let surface_input = surface.input;
     plugin.run(Current::viewing(surface), |lua| {
-        let object = lua.create_table()?;
-        object.raw_set("read", plugin.read.clone())?;
-        object.raw_set("input", out(lua, surface_input)?)?;
-        object.raw_set("memo", plugin.memo.clone())?;
-        let node = view.call::<Value>(object)?;
+        let node = plugin.inputs.lend(lua, |inputs| {
+            let object = lua.create_table()?;
+            object.raw_set("read", plugin.read.clone())?;
+            object.raw_set("input", inputs.surface(lua, surface_input)?)?;
+            object.raw_set("memo", plugin.memo.clone())?;
+            view.call::<Value>(object)
+        })?;
         input(lua, node)
     })
 }
@@ -429,17 +380,10 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         "session" => |r, _lua, id: String| r.session(&id);
         "sessions" => |r, _lua| r.sessions();
         "family" => |r, _lua, id: String| r.family(&id);
-        "messages" => |r, lua, id: String| {
-            let mut list = Value::Nil;
-            let mut failed = None;
-            r.messages(&id, &mut |messages| match out(lua, messages) {
-                Ok(value) => list = value,
-                Err(error) => failed = Some(error),
-            });
-            if let Some(error) = failed {
-                return Err(error);
-            }
-            list
+        "messages" => |r, _lua, id: String| {
+            let mut list = Ok(serde_json::Value::Null);
+            r.messages(&id, &mut |messages| list = serde_json::to_value(messages));
+            list.map_err(|error| mlua::Error::runtime(error.to_string()))?
         };
         "model" => |r, _lua| r.model();
         "info" => |r, _lua| r.info();
@@ -461,7 +405,7 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
     }
     verbs! {
         "storageSet" => |h, lua, key: String, value: Value| h.storage_set(&key, input(lua, value)?);
-        "storageMerge" => |h, lua, key: String, fields: Value| h.storage_merge(&key, input(lua, fields)?);
+        "storageMerge" => |h, lua, key: String, fields: Value| h.storage_merge(&key, object(lua, &fields)?);
         "dispatch" => |h, _lua, name: String, value: Option<String>| h.dispatch(&name, value.as_deref());
         "toast" => |h, lua, toast: Value| h.toast(input(lua, toast)?);
         "attention" => |h, lua, attention: Value| h.attention(input(lua, attention)?);
@@ -507,7 +451,7 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
     let memo = {
         let current = current.clone();
         lua.create_function(move |lua, (this, key, value, build): (Value, String, Value, Function)| {
-            let value: serde_json::Value = input(lua, value)?;
+            let value = json(lua, &value)?;
             let view = current.get().view().ok_or_else(|| mlua::Error::runtime("view:memo runs only in a view"))?;
             let mut failed = None;
             let node = view.memo(key, value, |inner| {
