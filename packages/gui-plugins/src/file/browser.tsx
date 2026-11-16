@@ -326,6 +326,7 @@ export function SessionFileBrowserTab(props: {
                       screen={props.screen}
                       id={resultsID}
                       role="listbox"
+                      ariaLabel={ctx.t("search.results")}
                       optionID={optionID}
                       files={results().files}
                       kinds={props.kinds}

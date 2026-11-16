@@ -36,5 +36,6 @@ export default {
   "releaseNotes.action.getStarted": "Get started",
   "releaseNotes.action.next": "Next",
   "releaseNotes.action.hideFuture": "Don't show these in the future",
+  "releaseNotes.pagination": "Go to slide {{index}} of {{total}}",
   "releaseNotes.media.alt": "Release preview",
 }

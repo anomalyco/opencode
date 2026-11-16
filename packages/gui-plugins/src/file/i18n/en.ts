@@ -53,4 +53,5 @@ export default {
   "search.failed": "Couldn't search files",
   "search.timeout": "The server took too long to answer",
   "search.offline": "Can't reach this server",
+  "search.results": "Search results",
 }
