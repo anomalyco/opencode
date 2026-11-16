@@ -215,4 +215,7 @@ export default {
   "preview.offline": "The workspace server is disconnected. Reconnect to load this preview.",
   "artifact.unavailable": "The artifact cannot be opened right now. Check the server connection and try again.",
   "preview.upgrade": "Update this session's server to open workspace previews, then reload this tab.",
+  "settings.extensions.source.folder": "From folder {{path}}. Not verified by a store signature.",
+  "settings.extensions.source.browser": "Copied from {{source}} ({{profile}}). Not verified by a store signature.",
+  "settings.extensions.source.store": "From the store listing. The package signature matches the extension ID.",
 }

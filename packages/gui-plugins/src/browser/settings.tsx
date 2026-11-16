@@ -414,6 +414,17 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                   </ChoiceRow>
                 )}
               </Show>
+              <Show when={confirming()}>
+                {(confirm) => <p class="break-words text-v2-text-text-muted">{(() => {
+                  const job = confirm().job
+
+                  if (job.type === "install-folder") return ctx.t("settings.extensions.source.folder", { path: job.path })
+
+                  if (job.type === "install-browser") return ctx.t("settings.extensions.source.browser", { source: job.source, profile: job.profile })
+
+                  return ctx.t("settings.extensions.source.store")
+                })()}</p>}
+              </Show>
               <Show when={confirming() ? message().compatibility : undefined}>
                 {(compatibility) => (
                   <span class="text-v2-text-text-muted">
@@ -470,8 +481,6 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                           source: choice().source.id,
                           profile: choice().profile.id,
                           id: item.id,
-                          // The row already says it will not work here.
-                          force: true,
                         })
                       }
                     >

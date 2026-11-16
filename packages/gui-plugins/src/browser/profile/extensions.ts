@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, createPublicKey, createVerify } from "node:crypto"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -188,7 +188,11 @@ export async function extensionIcon(directory: string, manifest: Manifest) {
 
 /** The extension id Chromium derives from a public key: its SHA-256, first 16 bytes, each nibble as `a`-`p`. */
 export function extensionID(publicKey: Uint8Array) {
-  return Array.from(createHash("sha256").update(publicKey).digest().subarray(0, 16))
+  return encodeID(createHash("sha256").update(publicKey).digest().subarray(0, 16))
+}
+
+function encodeID(bytes: Uint8Array) {
+  return Array.from(bytes)
     .flatMap((byte) => [byte >> 4, byte & 15])
     .map((nibble) => String.fromCharCode(97 + nibble))
     .join("")
@@ -197,11 +201,19 @@ export function extensionID(publicKey: Uint8Array) {
 /** The id of a store listing: a bare id, or a Chrome Web Store or Edge Add-ons URL that ends with one. */
 export function storeTarget(input: string) {
   const value = input.trim()
-  const id = /(?:^|\/)([a-p]{32})(?:[/?#]|$)/.exec(value)?.[1]
 
-  if (!id) return undefined
+  if (/^[a-p]{32}$/.test(value)) return { id: value, store: "chrome" as const }
+  const url = URL.parse(value)
+  const id = url?.pathname.match(/\/([a-p]{32})\/?$/)?.[1]
 
-  return { id, store: /microsoftedge\.microsoft\.com/i.test(value) ? ("edge" as const) : ("chrome" as const) }
+  if (!url || !id || url.protocol !== "https:" || url.username || url.password || url.port) return undefined
+
+  if (url.hostname === "microsoftedge.microsoft.com" && url.pathname.startsWith("/addons/detail/"))
+    return { id, store: "edge" as const }
+
+  if ((url.hostname === "chromewebstore.google.com" && url.pathname.startsWith("/detail/")) ||
+      (url.hostname === "chrome.google.com" && url.pathname.startsWith("/webstore/detail/")))
+    return { id, store: "chrome" as const }
 }
 
 /** The address a store serves an extension's package from, for a browser of this Chromium version. */
@@ -211,83 +223,83 @@ export function storeDownloadURL(target: { id: string; store: "chrome" | "edge" 
   if (target.store === "edge")
     return `https://edge.microsoft.com/extensionwebstorebase/v1/crx?response=redirect&x=${query}`
 
-  return `https://clients2.google.com/service/update2/crx?response=redirect&prodversion=${chromeVersion}&acceptformat=crx2,crx3&x=${query}`
+  return `https://clients2.google.com/service/update2/crx?response=redirect&prodversion=${chromeVersion}&acceptformat=crx3&x=${query}`
 }
 
-/**
- * Splits a CRX package into its zip archive and the developer's public key, so the unpacked extension keeps its store
- * id. CRX3 carries the keys in a protobuf header whose signed data names the id, and the key is the one whose hash is
- * that id (the store adds a key of its own, which never names the package); CRX2 carries one key. Undefined for
- * anything that is not a well-formed CRX2 or CRX3 file.
- */
-export function parseCrx(data: Uint8Array) {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+/** Chromium components/crx_file/crx3.proto and crx_verifier.cc. The caller, not the package, names the signer. */
+export function parseCrx(bytes: Uint8Array, expected: string) {
+  const data = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 
-  if (data.byteLength < 12 || new TextDecoder().decode(data.subarray(0, 4)) !== "Cr24") return undefined
-  const version = view.getUint32(4, true)
+  if (data.length < 12 || data.toString("latin1", 0, 4) !== "Cr24" || data.readUInt32LE(4) !== 3) return
+  const length = data.readUInt32LE(8)
 
-  if (version === 2) {
-    const keyLength = data.byteLength >= 16 ? view.getUint32(8, true) : Infinity
-    const signatureLength = data.byteLength >= 16 ? view.getUint32(12, true) : Infinity
+  if (length > 1024 * 1024 || 12 + length >= data.length) return
+  const fields = protobufFields(data.subarray(12, 12 + length))
+  const signed = singleField(fields, 10000)
+  const id = signed && singleField(protobufFields(signed), 1)
 
-    if (16 + keyLength + signatureLength > data.byteLength) return undefined
+  if (!fields || !signed || id?.length !== 16 || encodeID(id) !== expected) return
+  const zip = data.subarray(12 + length)
+  const size = Buffer.alloc(4)
+  size.writeUInt32LE(signed.length)
+  const proofs = fields.filter((field) => field.number === 2 || field.number === 3)
 
-    return { zip: data.subarray(16 + keyLength + signatureLength), key: data.subarray(16, 16 + keyLength) }
+  if (proofs.length > 8) return
+  let developer: Buffer | undefined
+
+  for (const proof of proofs) {
+    const fields = protobufFields(proof.value)
+    const key = singleField(fields, 1)
+    const signature = singleField(fields, 2)
+
+    if (!key || !signature || key.length > 4096 || signature.length > 2048) return
+
+    try {
+      const publicKey = createPublicKey({ key, format: "der", type: "spki" })
+
+      if (!publicKey.export({ format: "der", type: "spki" }).equals(key)) return
+
+      if (proof.number === 2 ? publicKey.asymmetricKeyType !== "rsa" :
+        publicKey.asymmetricKeyType !== "ec" || publicKey.asymmetricKeyDetails?.namedCurve !== "prime256v1") return
+
+      if (!createVerify("sha256").update("CRX3 SignedData\0").update(size).update(signed).update(zip).verify(publicKey, signature)) return
+    } catch {
+      // OpenSSL rejects malformed SubjectPublicKeyInfo and malformed signature encodings by throwing.
+      return
+    }
+
+    if (extensionID(key) === expected) developer = key
   }
 
-  const length = view.getUint32(8, true)
-
-  if (version !== 3 || 12 + length > data.byteLength) return undefined
-  const fields = protobufFields(data.subarray(12, 12 + length))
-
-  if (!fields) return undefined
-  // SignedData { bytes crx_id = 1 } in field 10000 names the id.
-  const signed = fields.find((field) => field.number === 10000)?.value
-  const crxID = signed ? protobufFields(signed)?.find((field) => field.number === 1)?.value : undefined
-
-  const key = fields
-    .filter((field) => field.number === 2 || field.number === 3)
-    .flatMap((proof) => (protobufFields(proof.value) ?? []).filter((field) => field.number === 1))
-    .map((field) => field.value)
-    .find(
-      (candidate) =>
-        !!crxID && createHash("sha256").update(candidate).digest().subarray(0, 16).equals(Buffer.from(crxID)),
-    )
-
-  return { zip: data.subarray(12 + length), key }
+  return developer ? { zip, key: developer } : undefined
 }
 
-/** The length-delimited fields of a protobuf message, other wire types skipped; undefined when it is malformed. */
-function protobufFields(data: Uint8Array) {
-  const fields: { number: number; value: Uint8Array }[] = []
+type Field = { number: number; value: Buffer }
+
+function singleField(fields: Field[] | undefined, number: number) {
+  const matches = fields?.filter((field) => field.number === number)
+
+  return matches?.length === 1 ? matches[0]?.value : undefined
+}
+
+/** All fields in the CRX3 schema are length-delimited. Bound the number of fields before allocating. */
+function protobufFields(data: Buffer) {
+  const fields: Field[] = []
   const cursor = { offset: 0 }
 
   while (cursor.offset < data.byteLength) {
     const tag = varint(data, cursor)
-    const wire = tag === undefined ? -1 : tag % 8
-    const length = fieldLength(wire, data, cursor)
 
-    if (tag === undefined || length === undefined || cursor.offset + length > data.byteLength) return undefined
+    if (fields.length >= 32 || tag === undefined || tag < 8 || tag > 0xffffffff || tag % 8 !== 2) return
+    const length = varint(data, cursor)
 
-    if (wire === 2) fields.push({ number: Math.floor(tag / 8), value: data.subarray(cursor.offset, cursor.offset + length) })
+    if (length === undefined || cursor.offset + length > data.byteLength) return undefined
+
+    fields.push({ number: Math.floor(tag / 8), value: data.subarray(cursor.offset, cursor.offset + length) })
     cursor.offset += length
   }
 
   return fields
-}
-
-/**
- * How many bytes a field of this wire type has after its tag: a length-delimited field's length, which it reads, 0 for
- * a varint, which it skips, and the fixed sizes; undefined for a wire type CRX headers never use or a varint cut short.
- */
-function fieldLength(wire: number, data: Uint8Array, cursor: { offset: number }) {
-  if (wire === 2) return varint(data, cursor)
-
-  if (wire === 0) return varint(data, cursor) === undefined ? undefined : 0
-
-  if (wire === 1) return 8
-
-  return wire === 5 ? 4 : undefined
 }
 
 /** A protobuf varint at the cursor, which it moves past; undefined when it runs off the end or past 2^53. */
@@ -354,7 +366,7 @@ export function readZip(zip: Uint8Array) {
   const data = Buffer.from(zip.buffer, zip.byteOffset, zip.byteLength)
   const end = data.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]))
 
-  if (end < 0 || end + 22 > data.length) return undefined
+  if (end < 0 || end + 22 > data.length || end + 22 + data.readUInt16LE(end + 20) !== data.length) return undefined
   const count = data.readUInt16LE(end + 10)
 
   if (count > ZIP_LIMITS.entries) return undefined

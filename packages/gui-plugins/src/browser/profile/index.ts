@@ -14,14 +14,12 @@ import { createPreviews } from "./previews"
 import {
   displayName,
   extensionIcon,
-  extensionID,
   extensionFiles,
   extensionPage,
   extensionPages,
   parseCrx,
   pinKey,
   readManifest,
-  storeDownloadURL,
   storeTarget,
   unzip,
   type ExtensionFiles,
@@ -208,12 +206,12 @@ export async function createBrowserProfile(input: {
     const access = extensionAccess(manifest)
     // Installing one again, such as an update, keeps it, as the user added it before.
     const known = stored.value.find((record) => record.directory === folder)
-    const review = compatibility.level === "unsupported" ? "unsupported" : access.length > 0 ? "review" : undefined
+    const review = compatibility.level === "unsupported" ? "unsupported" : "review"
 
     // Chromium keeps the loaded copy's files open; the new one loads in its place.
     if (known && session.extensions.getExtension(known.id)) session.extensions.removeExtension(known.id)
 
-    if (review && !force && !known) {
+    if (!force && !known) {
       const name = await displayName(folder, manifest)
       const icon = await extensionIcon(folder, manifest)
 
@@ -440,21 +438,16 @@ export async function createBrowserProfile(input: {
 
       const target = storeTarget(request.url)
 
-      const crx = target
-        ? await download(session, storeDownloadURL(target, process.versions.chrome ?? "140.0.0.0"))
-        : undefined
+      if (!target) return { type: "failed", reason: "download" }
+      const crx = await download(session, target)
+      const parsed = crx && parseCrx(crx, target.id)
 
-      const parsed = crx ? parseCrx(crx) : undefined
-
-      // The developer's key names the package: one that names another extension is not the one the user asked for.
-      if (!target || !parsed || (parsed.key && extensionID(parsed.key) !== target.id))
-        return { type: "failed", reason: "download" }
-      const key = parsed.key
+      if (!parsed) return { type: "failed", reason: "download" }
 
       return replace(path.join(directory, target.id), "store", request.force, async (staging) => {
         await unzip(parsed.zip, staging)
 
-        return !key || pinKey(staging, key)
+        return pinKey(staging, parsed.key)
       })
     },
     async remove(id: string) {
