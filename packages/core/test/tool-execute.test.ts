@@ -501,6 +501,52 @@ const progressCodeMode = (started: Deferred.Deferred<void>, wait: Effect.Effect<
 
 const row = (tool: string, status: string) => ({ tool, status })
 
+it.effect("publishes one running row for an unchanged call while the tool waits", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const progress: Array<Tool.Metadata> = []
+    const fiber = yield* progressCodeMode(started, Effect.never)
+      .execute(
+        { code: "await tools.wait({})" },
+        {
+          ...context,
+          progress: (update) => Effect.sync(() => progress.push(update)),
+        },
+      )
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(started)
+    yield* TestClock.adjust("100 millis")
+    expect(progress).toEqual([{ toolCalls: [row("wait", "running")] }])
+    yield* Fiber.interrupt(fiber)
+  }),
+)
+
+it.effect("interrupting execute during asynchronous repair settles the admitted row", () =>
+  Effect.gen(function* () {
+    const repairing = yield* Deferred.make<void>()
+    const progress: Array<Tool.Metadata> = []
+    const codeMode = CodeModeTool.create(
+      { tools: new Map() },
+      () => Effect.die("unexpected handler"),
+      allowAll,
+      () => Deferred.succeed(repairing, undefined).pipe(Effect.andThen(Effect.never)),
+    )
+    const fiber = yield* codeMode
+      .execute(
+        { code: "await tools.unknown()" },
+        {
+          ...context,
+          progress: (update) => Effect.sync(() => progress.push(update)),
+        },
+      )
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(repairing)
+    expect(progress).toEqual([{ toolCalls: [row("unknown", "running")] }])
+    yield* Fiber.interrupt(fiber)
+    expect(progress.at(-1)).toEqual({ toolCalls: [row("unknown", "error")] })
+  }),
+)
+
 it.effect("execute sends at most one progress update per 100 ms with the latest rows", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>()

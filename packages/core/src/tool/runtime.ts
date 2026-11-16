@@ -7,6 +7,9 @@ import { $ZodType, toJSONSchema } from "zod/v4/core"
 
 const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
+export const aliasNote = (called: string, target: string) =>
+  `There is no ${called} tool, so this ran as ${target}. Call ${target} directly.`
+
 // Codecs for raw JSON Schema inputs (mostly MCP tools), built once per schema object; schemas are not edited after
 // registration. Not an Effect `Cache`: each entry keeps its lookup fiber, which keeps the caller's stack frames and
 // through them the `Effect.fn` closures over its Location's services, so evicted Locations stayed alive.

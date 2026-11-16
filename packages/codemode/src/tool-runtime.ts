@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Formatter, Schema } from "effect"
+import { Cause, Effect, Exit, Formatter, Option, Schema } from "effect"
 import type { Json } from "./data.js"
 import type { DiagnosticKind } from "./codemode.js"
 import { toolError } from "./tool-error.js"
@@ -62,6 +62,11 @@ export type CallResult =
 export type Hooks<R = never> = {
   readonly "tool.before"?: ((call: ToolInvocation) => Effect.Effect<void, unknown, R>) | undefined
   readonly "tool.after"?: ((call: ToolInvocation, result: CallResult) => Effect.Effect<void, never, R>) | undefined
+  /**
+   * Handles a call to a path with no tool, with the input as the program wrote it. `Some` is the call's result, crossing as JSON;
+   * `None` fails it as an unknown tool, with suggestions. The call is plain: a suspend waits for it to finish.
+   */
+  readonly "tool.missing"?: ((call: ToolInvocation) => Effect.Effect<Option.Option<unknown>, unknown, R>) | undefined
   readonly "extension.before"?: ((call: ExtensionInvocation) => Effect.Effect<void, unknown, R>) | undefined
   readonly "extension.after"?:
     | ((call: ExtensionInvocation, result: CallResult) => Effect.Effect<void, never, R>)
@@ -527,16 +532,22 @@ const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Reado
 
 const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: ReadonlyArray<SearchEntry>): Tool<R> => {
   const segments = canonicalSegments(path)
-  const node = lookup(root, segments)
-  if (node === undefined) {
-    const name = segments.join(".")
+  const tool = lookup(root, segments)?.tool
+  if (tool === undefined) throw unknownTool(root, segments, index)
+  return tool
+}
+
+// Why `segments` names no tool: nothing is there, or only a namespace, with the closest tools as suggestions.
+const unknownTool = <R>(root: ToolNode<R>, segments: ReadonlyArray<string>, index: ReadonlyArray<SearchEntry>) => {
+  const name = segments.join(".")
+  if (lookup(root, segments) === undefined) {
     const ns = segments.length > 1 && root.children.has(segments[0]) ? segments[0] : undefined
     const closest = rank(
       ns ? index.filter((entry) => entry.description.path.startsWith(`${ns}.`)) : index,
       ns ? segments.slice(1).join(" ") : name,
       index,
     )[0]
-    throw new ToolRuntimeError(
+    return new ToolRuntimeError(
       "UnknownTool",
       closest
         ? `Unknown tool '${name}'. Did you mean ${toolExpression(closest.description.path)}?`
@@ -544,27 +555,23 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: Reado
       ["Use search to find available tools."],
     )
   }
-  if (node.tool === undefined) {
-    const name = segments.join(".")
-    const under = index.filter((entry) => entry.description.path.startsWith(`${name}.`))
-    const ranked = rank(under, segments.at(-1) ?? "", index)
-    const shown = [...ranked, ...under.filter((entry) => !ranked.includes(entry))]
-      .slice(0, 3)
-      .map((entry) => toolExpression(entry.description.path))
-    const more = under.length - shown.length
-    throw new ToolRuntimeError(
-      "UnknownTool",
-      shown.length === 0
-        ? `Tool '${name}' is not callable.`
-        : `Tool '${name}' is not callable, it is a namespace. Did you mean ${new Intl.ListFormat("en", { type: "disjunction" }).format(shown)}?`,
-      [
-        more > 0
-          ? `${more} more under '${name}'. Use search({ namespace: ${JSON.stringify(name)} }) to list them.`
-          : "Use search to find available tools.",
-      ],
-    )
-  }
-  return node.tool
+  const under = index.filter((entry) => entry.description.path.startsWith(`${name}.`))
+  const ranked = rank(under, segments.at(-1) ?? "", index)
+  const shown = [...ranked, ...under.filter((entry) => !ranked.includes(entry))]
+    .slice(0, 3)
+    .map((entry) => toolExpression(entry.description.path))
+  const more = under.length - shown.length
+  return new ToolRuntimeError(
+    "UnknownTool",
+    shown.length === 0
+      ? `Tool '${name}' is not callable.`
+      : `Tool '${name}' is not callable, it is a namespace. Did you mean ${new Intl.ListFormat("en", { type: "disjunction" }).format(shown)}?`,
+    [
+      more > 0
+        ? `${more} more under '${name}'. Use search({ namespace: ${JSON.stringify(name)} }) to list them.`
+        : "Use search to find available tools.",
+    ],
+  )
 }
 
 export class ToolRuntimeError extends Error {
@@ -711,6 +718,40 @@ export const make = <R>(
       )
     })
 
+  // The host's answer for a path with no tool. Nothing to decode against, so the input goes as written.
+  const missingTool = (
+    segments: ReadonlyArray<string>,
+    args: Array<Json | undefined>,
+    options: ExecuteCallOptions,
+    missing: NonNullable<Hooks<R>["tool.missing"]>,
+  ) =>
+    Effect.gen(function* () {
+      const name = segments.join(".")
+      if (args.length > 1)
+        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
+      const call: ToolInvocation = { name, input: args[0] ?? {}, key: options.key }
+      yield* Effect.sync(() => options.admit(name))
+      return yield* hooked(
+        call,
+        hooks["tool.before"],
+        hooks["tool.after"],
+        failure(Effect.suspend(() => missing(call))).pipe(
+          Effect.flatMap((answer) => {
+            if (Option.isNone(answer)) throw unknownTool(root, segments, prepared.searchIndex)
+            return Effect.try({
+              try: (): Json | undefined => {
+                const text = JSON.stringify(answer.value)
+                return text === undefined ? undefined : JSON.parse(text)
+              },
+              catch: (cause) =>
+                new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
+            })
+          }),
+        ),
+        options.detaching,
+      )
+    })
+
   const durableTool = (
     path: ReadonlyArray<string>,
   ): {
@@ -741,6 +782,8 @@ export const make = <R>(
         // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
         if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
           return executeTool("search", makeSearchTool(prepared.searchIndex), args, options)
+        const missing = hooks["tool.missing"]
+        if (missing && lookup(root, segments)?.tool === undefined) return missingTool(segments, args, options, missing)
         return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args, options)
       }),
     mode: (path) => {
