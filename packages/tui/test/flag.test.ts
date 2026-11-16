@@ -19,3 +19,14 @@ const cases: ReadonlyArray<[string, Record<string, boolean> | undefined, string,
 test.each(cases)("rich_media is %s", (_, experimental, channel, overrides, expected) => {
   expect(flagEnabled({ key: "rich_media", experimental, channel, overrides })).toBe(expected)
 })
+
+// An opt-in-only flag, full_codemode, turns on only by name.
+test.each([
+  ["off in a local build", undefined, "local", undefined, false],
+  ["not turned on by all_flags", { all_flags: true }, "local", undefined, false],
+  ["not turned on by OPENCODE_FLAGS=all", undefined, "local", "all", false],
+  ["on by name in config", { full_codemode: true }, "latest", undefined, true],
+  ["on by name in OPENCODE_FLAGS", undefined, "latest", "all,full_codemode", true],
+] as const)("full_codemode is %s", (_, experimental, channel, overrides, expected) => {
+  expect(flagEnabled({ key: "full_codemode", experimental, channel, overrides })).toBe(expected)
+})
