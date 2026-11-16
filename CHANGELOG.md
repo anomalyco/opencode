@@ -2,6 +2,45 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.3.0-shuv.3 — 2026-11-15
+
+Maintenance release on upstream v2.3.0, syncing `dev` from `cbe71595e1` through `0fad04b3d5` (22 commits) as [#497](https://github.com/shuv1337/shuvcode/pull/497), plus the updater fix from [#496](https://github.com/shuv1337/shuvcode/pull/496). The latest upstream release remains v2.3.0.
+
+### Updates
+
+- A current Volta- or mise-installed copy now reports itself up to date instead of unavailable; when a newer release exists, the check names that release and the matching `volta install` / `mise use -g npm:` command.
+
+### Text and shell output
+
+- Shell output pages, the shell output dialog, the TUI shell display and the New-timeline shell follower cut at UTF-8 boundaries, so multi-byte characters stay intact across a page edge.
+- Read, search and session-title text use the same shared cut, so truncation no longer leaves half a surrogate pair.
+
+### Search tools
+
+- `glob` and `grep` name an invalid filename glob ("Invalid glob in pattern ..." and "Invalid glob in include ...") instead of reporting a generic failure.
+
+### Server
+
+- A handler defect answers with a JSON 500 that carries a `ref` for the matching server-log entry instead of an empty body. The public client does not decode that undeclared body yet, so it still shows a generic failure; tracked in [#498](https://github.com/shuv1337/shuvcode/issues/498).
+
+### Subagents and the New timeline
+
+- A replayed subagent report derives its still-running state from the outstanding-work snapshot instead of a tag inside the report text, so the report body keeps the agent's own output.
+- Run summaries in the New timeline describe background shells only, so subagents are no longer counted there.
+- Subagent rows show a Started or Completed chip with a static glyph instead of a spinner.
+
+### App
+
+- A server paired by QR code takes the name in the pairing payload.
+- Hex install detection matches Rune's checks, the tip hides once Hex is installed, and its copy is clearer.
+- Dialogs share consistent size presets.
+
+### Also included
+
+- Strobe 0.40.0 through 0.42.0 benchmark pins and a main-thread scroll-history benchmark.
+- Go docs add Qwen4 Max and keep Gemini 4 Argon listed.
+- Retains Shuvcode identity, npm-only updates and guarded publishing, the hidden Claude Agent SDK provider, and the #490-#492 sync/release CI fixes.
+
 ## v2.3.0-shuv.2 — 2026-11-13
 
 Maintenance release on upstream v2.3.0, syncing `dev` from `73abe63ac2` through `cbe71595e1` (40 commits) as [#494](https://github.com/shuv1337/shuvcode/pull/494). The latest upstream release remains v2.3.0.
