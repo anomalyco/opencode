@@ -592,9 +592,12 @@ saved, as in TS.
 
 ### TypeScript plugins on the JS host (P7)
 
-With `OPENCODE_PLUGIN_JS=1` (it is off by default) and Bun found, a directory target without a native build runs on
-the JS host: one Bun process for every TypeScript TUI plugin, started with the first one (`crates/plugin/src/pipe`,
-rich-plugins 3.7 and 4.3). Bun is `OPENCODE_BUN` (an absolute path); else the opencode binary of a local server (a
+The JS host is on by default (O-166); `OPENCODE_PLUGIN_JS` set to `0`, `false` or `off` (any case) turns it off, and
+TypeScript plugins are then skipped with a reason that says to unset it. With it on, a directory target without a
+native build runs on the JS host: one Bun process for every TypeScript TUI plugin, started with the first one
+(`crates/plugin/src/pipe`, rich-plugins 3.7 and 4.3). Bun is looked for only then, when a plugin first needs the JS
+host (`Scripts::runtime`): looking runs a binary, so a client with no TypeScript plugin, no plugin named by npm package
+and no server TUI part starts no process. Without Bun the plugin is skipped saying Bun is missing. Bun is `OPENCODE_BUN` (an absolute path); else the opencode binary of a local server (a
 background service or a standalone server, not `--server`) run as the Bun it embeds (`BUN_BE_BUN=1`), when that Bun
 reports a version of 1.4.0 or newer: the executable of the server's process where the client can tell it (Linux and
 Windows), else the first `opencode` in an absolute `PATH` entry outside the project that answers so (its real path,

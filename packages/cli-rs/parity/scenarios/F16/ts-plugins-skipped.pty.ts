@@ -1,7 +1,8 @@
 // FT-10: a server plugin with a TUI part. TS loads that part from the server's list (`serverTuiPlugins`, here the
-// directory `energy` beside `cli.json`, whose command shows in `/plugins` as an active TUI plugin); opencode-native does
-// not load TypeScript TUI plugins with the JS host off, says so once in a notice, and lists the part as skipped
-// (`F16-typescript-plugins-skipped`).
+// directory `energy` beside `cli.json`, whose command shows in `/plugins` as an active TUI plugin). The JS host is on by
+// default (O-166); here `OPENCODE_PLUGIN_JS=0` turns it off, so opencode-native does not load TypeScript TUI plugins,
+// says so once in a notice with how to turn it back on, and lists the part as skipped (`F16-typescript-plugins-skipped`).
+// `ts-plugin-loads` is the default.
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { definePty } from "../../pty/run"
@@ -22,6 +23,7 @@ const plugin = `export default {
 
 export default definePty({
   args: [],
+  env: { OPENCODE_PLUGIN_JS: "0" },
   cols: 120,
   rows: 30,
   server: {

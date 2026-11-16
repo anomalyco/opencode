@@ -24,7 +24,7 @@ use opencode_tui::{Deps, Route};
 use crate::plugin_surface::{Carrier, builtin};
 use crate::support::{self, Harness};
 
-const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../plugin/examples/pipe");
+pub(crate) const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../plugin/examples/pipe");
 
 /// Bun, or `None` to skip.
 pub fn bun() -> Option<PathBuf> {

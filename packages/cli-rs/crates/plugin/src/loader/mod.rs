@@ -23,7 +23,7 @@ use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
 use crate::pipe::{Scripts, Step};
-use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, SKIPPED_JS_OFF, Status};
+use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, SKIPPED_JS_OFF, SKIPPED_NO_BUN, Status};
 use approval::{Approvals, Artifact, Decision};
 
 /// The file name of a plugin directory's native build: `plugin.so`, `plugin.dylib`, or `plugin.dll`.
@@ -585,6 +585,10 @@ impl Loader {
         if self.scripted(target)
             && let (Some(scripts), Some(dir)) = (&self.scripts, &target.local)
         {
+            // Bun is looked for only now, for the first TypeScript plugin (O-166); without it the plugin is skipped.
+            if !scripts.runtime() {
+                return skip(SKIPPED_NO_BUN);
+            }
             return self.script(host, registry, target, scripts, dir, &listed);
         }
         let Some(file) = target.library() else {

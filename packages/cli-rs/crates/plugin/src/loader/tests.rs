@@ -2313,3 +2313,57 @@ fn windows_paths_reach_the_js_host_without_a_verbatim_prefix() {
         assert!(!local.starts_with(r"\\?\"), "{local}");
     }
 }
+
+/// Scripts whose Bun is looked for lazily, the way the client's are (O-166): `found` decides whether one is found, and
+/// the count says how often it was looked for.
+fn lazy_scripts(host: &Rc<TestHost>, found: bool) -> (Rc<crate::pipe::Scripts>, Rc<Cell<usize>>) {
+    let looks = Rc::new(Cell::new(0));
+    let find = crate::pipe::Find(Rc::new({
+        let looks = looks.clone();
+        move || {
+            looks.set(looks.get() + 1);
+            found.then(|| crate::pipe::Config::new("bun".into()))
+        }
+    }));
+    let config = crate::pipe::Config { find: Some(find), ..crate::pipe::Config::new(Default::default()) };
+    (crate::pipe::Scripts::new(config, &dynamic(host)), looks)
+}
+
+// Expected (O-166): with the JS host on by default, a client whose plugins are native builds, built-ins or none looks
+// for no Bun and starts nothing; the first TypeScript plugin makes it look, once.
+#[test]
+fn no_typescript_plugin_looks_for_no_bun() {
+    let project = Project::new();
+    project.plugin("native", "id=native");
+    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let (scripts, looks) = lazy_scripts(&host, false);
+    let loader = project.loader(fake.clone(), Vec::new()).with_scripts(scripts.clone());
+    loader.reconcile(&dynamic(&host), &registry);
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!((looks.get(), scripts.looked(), scripts.pid()), (0, false, None));
+    write(&project.global().join("tui.ts"), "export default {}\n");
+    loader.reconcile(&dynamic(&host), &registry);
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!((looks.get(), scripts.pid()), (1, None));
+}
+
+// Expected (O-166): with the JS host on and no Bun found, a TypeScript plugin is skipped saying Bun is missing, not
+// that the JS host is off; with the JS host turned off, it says how to turn it back on.
+#[test]
+fn a_typescript_plugin_without_bun_says_bun_is_missing() {
+    let project = Project::new();
+    write(&project.global().join("tui.ts"), "export default {}\n");
+    let target = project.global().to_string_lossy().into_owned();
+    let host = host();
+    let (scripts, _) = lazy_scripts(&host, false);
+    for (scripts, reason) in [(Some(scripts), crate::SKIPPED_NO_BUN), (None, crate::SKIPPED_JS_OFF)] {
+        let registry = Registry::define(Vec::new(), []);
+        let loader = project.loader(Rc::new(Fake::default()), Vec::new());
+        let loader = match scripts {
+            Some(scripts) => loader.with_scripts(scripts),
+            None => loader,
+        };
+        loader.reconcile(&dynamic(&host), &registry);
+        assert_eq!(entry(&registry.entries(), &target).status, Status::Skipped(reason.to_owned()));
+    }
+}

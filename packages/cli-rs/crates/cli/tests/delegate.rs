@@ -88,9 +88,10 @@ fn the_child_keeps_the_process_stdio_and_exit_code() {
     assert_eq!(fake.read("env"), "print-logs=1\n");
 }
 
-// Expected (FT-11, js-npm): after the TypeScript binary added a TUI package to `cli.json`, `plugin add` says, while the
-// JS host is off, that `opencode-native` loads it on the JS host and how to turn that on; with the JS host on it says
-// nothing more, as TS, since the package loads from the cache the add filled. An add that changes nothing, or fails,
+// Expected (FT-11, js-npm, O-166): after the TypeScript binary added a TUI package to `cli.json`, `plugin add` says, while
+// `OPENCODE_PLUGIN_JS` turns the JS host off, that `opencode-native` loads it on the JS host and how to turn that back
+// on; with the JS host on, the default, it says nothing more, as TS, since the package loads from the cache the add
+// filled. An add that changes nothing, or fails,
 // says nothing more and keeps the exit code.
 #[test]
 fn adding_a_tui_package_says_how_opencode_native_loads_it() {
@@ -122,25 +123,31 @@ echo "TUI plugin \"$3\" installed and added to $OPENCODE_CONFIG_DIR/cli.json"
         command.output().unwrap()
     };
     let installed = "TUI plugin \"opencode-pulse-ticker@0.2.1\" installed";
-    let output = run("opencode-pulse-ticker@0.2.1", None);
-    assert!(output.status.success(), "{output:?}");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut lines = stdout.lines();
-    assert!(lines.next().is_some_and(|line| line.starts_with(installed)));
-    let warning = lines.next().unwrap_or_default();
-    assert!(
-        warning.starts_with(
-            "opencode-native loads TUI plugin \"opencode-pulse-ticker@0.2.1\" on its JS host, which is off"
-        ) && warning.contains("OPENCODE_PLUGIN_JS=1"),
-        "{stdout}"
-    );
-    assert_eq!(lines.next(), None);
-    let output = run("opencode-pulse-ticker@0.2.1", Some("1"));
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success() && stdout.lines().count() == 1 && stdout.starts_with(installed), "{stdout}");
-    let output = run("same", None);
+    for off in ["0", "false", "off"] {
+        let output = run("opencode-pulse-ticker@0.2.1", Some(off));
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut lines = stdout.lines();
+        assert!(lines.next().is_some_and(|line| line.starts_with(installed)));
+        let warning = lines.next().unwrap_or_default();
+        assert!(
+            warning.starts_with(
+                "opencode-native loads TUI plugin \"opencode-pulse-ticker@0.2.1\" on its JS host, which \
+                 OPENCODE_PLUGIN_JS turns off: unset it"
+            ),
+            "{stdout}"
+        );
+        assert_eq!(lines.next(), None);
+    }
+    // On by default (O-166), and with any other value: nothing more, as TS.
+    for on in [None, Some("1")] {
+        let output = run("opencode-pulse-ticker@0.2.1", on);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success() && stdout.lines().count() == 1 && stdout.starts_with(installed), "{stdout}");
+    }
+    let output = run("same", Some("0"));
     assert!(output.status.success() && output.stdout.is_empty(), "{output:?}");
-    let output = run("fail", None);
+    let output = run("fail", Some("0"));
     assert_eq!(output.status.code(), Some(4));
     assert!(output.stdout.is_empty(), "{output:?}");
 }
