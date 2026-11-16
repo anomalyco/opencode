@@ -8,7 +8,7 @@ Maintenance release on upstream v2.3.0, syncing `dev` from `cbe71595e1` through 
 
 ### Updates
 
-- A Volta- or mise-installed copy reports the release it would install and the matching `volta install` / `mise use -g npm:` command, instead of a generic unavailable message.
+- A current Volta- or mise-installed copy now reports itself up to date instead of unavailable; when a newer release exists, the check names that release and the matching `volta install` / `mise use -g npm:` command.
 
 ### Text and shell output
 
