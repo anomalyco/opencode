@@ -43,11 +43,11 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/VideoGeneration") {}
 
 /**
- * Jobs live in memory only: a restart forgets the running ones, and their videos are never collected. A video stored
- * before the restart stays readable by its ID until it expires.
+ * Jobs without a session live in memory only: a restart forgets the running ones, and their videos are never
+ * collected. A finished video stays readable by its ID until it expires. Jobs linked to a session (added with the
+ * agent tool) run on the `job` table instead and survive a restart.
  *
- * TODO: make the `job` table's session link optional (it is keyed by the session message that announces a result), so
- * these jobs can be recorded there and survive a restart.
+ * TODO: make the `job` table's session link optional, so jobs without a session can be recorded there too.
  */
 const layer = Layer.effect(
   Service,
