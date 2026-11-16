@@ -277,6 +277,43 @@ describe("Anthropic Messages tool updates", () => {
     }),
   )
 
+  it.effect("folds markers that no user message or tool result would precede", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: opus5,
+          tools: [read, edit],
+          messages: [Message.user("Fix it."), Message.assistant("Done."), swap],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages.some((message) => message.role === "system")).toBe(false)
+      expect(prepared.body.tools?.map((entry) => entry.name)).toEqual(["read", "write"])
+    }),
+  )
+
+  it.effect("only mentions removals that match no current tool in the note", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: opus5,
+          tools: [read],
+          messages: [Message.user("Go."), Message.tools({ remove: ["read", "ghost"] })],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "system",
+        content: [
+          removal("read"),
+          { type: "text", text: "`read` and `ghost` are no longer available. Do not call them." },
+        ],
+      })
+    }),
+  )
+
   it.effect("drops a marker that changes nothing", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -501,6 +538,24 @@ describe("OpenAI Responses tool updates", () => {
       )
 
       expect(response.toolCalls.map((call) => [call.name, call.namespace])).toEqual([["jira", undefined]])
+    }),
+  )
+
+  it.effect("folds markers that add a tool named like a starting tool", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: astra,
+          tools: [read, edit],
+          messages: [Message.user("Go."), Message.tools({ add: [defineTool("edit", "edit v2")] })],
+        }),
+      )
+
+      expect(updates(prepared.body)).toEqual([])
+      expect(prepared.body.tools?.map((entry) => ("description" in entry ? entry.description : entry.type))).toEqual([
+        "read tool",
+        "edit v2",
+      ])
     }),
   )
 

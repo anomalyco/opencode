@@ -806,9 +806,10 @@ const lowerWrappedSystemUpdate = Effect.fnUntraced(function* (
 const lowerToolsUpdate = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   update: ToolChanges,
-  removed: ReadonlyArray<string>,
+  removal: ToolRemoval,
   breakpoints: Cache.Breakpoints,
 ) {
+  const noticed = [...removal.removed, ...removal.unknown]
   const text = message.content.length === 0 ? [] : (yield* lowerNativeSystemUpdate(message, breakpoints)).content
   return {
     role: "system" as const,
@@ -817,26 +818,35 @@ const lowerToolsUpdate = Effect.fnUntraced(function* (
         type: "tool_addition" as const,
         tool: { type: "tool_definition" as const, definition: lowerTool(breakpoints, tool) },
       })),
-      ...removed.map((name) => ({ type: "tool_removal" as const, tool: { type: "tool_reference" as const, name } })),
-      ...(removed.length === 0 ? [] : [{ type: "text" as const, text: removalNotice(removed) }]),
+      ...removal.removed.map((name) => ({
+        type: "tool_removal" as const,
+        tool: { type: "tool_reference" as const, name },
+      })),
+      ...(noticed.length === 0 ? [] : [{ type: "text" as const, text: removalNotice(noticed) }]),
       ...text,
     ],
   }
 })
 
+interface ToolRemoval {
+  readonly removed: ReadonlyArray<string>
+  /** Names that match no current tool: only mentioned in the note, since a native removal of them may be rejected. */
+  readonly unknown: ReadonlyArray<string>
+}
+
 // Removing a namespace removes every flattened tool inside it.
 const toolRemovals = (request: LLMRequest) => {
-  const removals = new Map<ToolChanges, ReadonlyArray<string>>()
+  const removals = new Map<ToolChanges, ToolRemoval>()
   request.messages.reduce((tools, message) => {
     const update = toolsUpdate(message)
     if (update === undefined) return tools
-    removals.set(
-      update,
-      update.remove.flatMap((name) => {
-        const entries = tools.filter((tool) => tool.name === name)
-        return entries.length === 0 ? [name] : ProviderShared.flattenTools(entries).map((tool) => tool.name)
-      }),
-    )
+    const names = new Set(tools.map((tool) => tool.name))
+    removals.set(update, {
+      removed: ProviderShared.flattenTools(tools.filter((tool) => update.remove.includes(tool.name))).map(
+        (tool) => tool.name,
+      ),
+      unknown: update.remove.filter((name) => !names.has(name)),
+    })
     return foldTools(tools, update.add, update.remove)
   }, request.tools)
   return removals
@@ -862,7 +872,12 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
       const tools = toolsUpdate(update)
       if (tools !== undefined) {
         if (!native) return yield* invalid("Anthropic Messages tool updates must follow a user message or tool result")
-        const lowered = yield* lowerToolsUpdate(update, tools, removals.get(tools) ?? [], breakpoints)
+        const lowered = yield* lowerToolsUpdate(
+          update,
+          tools,
+          removals.get(tools) ?? { removed: [], unknown: [] },
+          breakpoints,
+        )
         if (lowered.content.length > 0) messages.push(lowered)
         continue
       }
@@ -998,7 +1013,18 @@ const supportsEffortUpdates = (request: LLMRequest) => {
 const supportsToolUpdates = (request: LLMRequest) =>
   request.model.capabilities?.tools?.updates === true &&
   supportsNativeSystemUpdates(request) &&
-  request.tools.length > 0
+  request.tools.length > 0 &&
+  markersFollowUserTurns(request.messages)
+
+// A held marker is released just before the next assistant message, where Anthropic only accepts a native system
+// message after a user message or tool result. Markers that would land elsewhere fold instead.
+const markersFollowUserTurns = (messages: LLMRequest["messages"]) =>
+  messages.every((message, index) => {
+    if (toolsUpdate(message) === undefined) return true
+    const end = messages.findIndex((next, at) => at > index && next.role === "assistant")
+    const role = messages.slice(0, end === -1 ? undefined : end).findLast((next) => next.role !== "system")?.role
+    return role === "user" || role === "tool"
+  })
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
   if (isThinkingOff(thinking)) return thinking
