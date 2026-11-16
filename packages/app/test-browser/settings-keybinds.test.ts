@@ -85,25 +85,25 @@ function key(key: string, init?: KeyboardEventInit) {
 
 describe("keybind settings controller", () => {
   test("shows prompt aliases and rejects them as conflicts until explicitly released", () => {
-    const titles = { submit: "Submit", newline: "Newline", alternate: "Alternate" }
+    const titles = { submit: "Submit", newline: "Newline", alternate: "Alternate", first: "Queue first" }
     const defaults = setup({}, undefined, undefined, promptKeybindOptions(titles))
-    expect(defaults.controller.catalog.alternatives("prompt.submit")).toContain("Alt")
+    expect(defaults.controller.catalog.alternatives("prompt.submit.first")).toContain("Alt")
     defaults.controller.capture.toggle("prompt.newline")
     document.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Enter", altKey: true, bubbles: true, cancelable: true }),
     )
     expect(defaults.changes).toEqual([])
-    expect(defaults.notifications[0]?.description).toContain("Submit")
+    expect(defaults.notifications[0]?.description).toContain("Queue first")
     defaults.dispose()
 
     const custom = setup(
-      { "prompt.submit": "enter" },
+      { "prompt.submit.first": "none" },
       undefined,
       undefined,
-      promptKeybindOptions(titles, { submit: "enter" }),
+      promptKeybindOptions(titles, { first: "none" }),
     )
 
-    expect(custom.controller.catalog.alternatives("prompt.submit")).not.toContain("Alt")
+    expect(custom.controller.catalog.alternatives("prompt.submit.first")).not.toContain("Alt")
     custom.controller.capture.toggle("prompt.newline")
     document.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Enter", altKey: true, bubbles: true, cancelable: true }),

@@ -2,6 +2,7 @@ export type ComposerKeybinds = {
   submit: (event: KeyboardEvent) => boolean
   newline: (event: KeyboardEvent) => boolean
   alternate: (event: KeyboardEvent) => boolean
+  first: (event: KeyboardEvent) => boolean
 }
 
 export function resolveComposerKeyAction(event: KeyboardEvent, keybinds: ComposerKeybinds, composing: boolean) {
@@ -12,6 +13,8 @@ export function resolveComposerKeyAction(event: KeyboardEvent, keybinds: Compose
   if (keybinds.submit(event)) return "submit" as const
 
   if (keybinds.alternate(event)) return "alternate" as const
+
+  if (keybinds.first(event)) return "first" as const
 }
 
 export function handleComposerKeyDown(input: {
@@ -22,14 +25,14 @@ export function handleComposerKeyDown(input: {
   handleController: () => boolean
   editFirst?: () => boolean
   insertNewline: () => void
-  submit: (alternate: boolean) => void
+  submit: (action: "submit" | "alternate" | "first") => void
 }) {
-  const submit = (alternate = false) => {
+  const submit = (action: "submit" | "alternate" | "first") => {
     input.event.preventDefault()
     input.event.stopPropagation()
 
     if (input.event.repeat || (input.event.key === "Enter" && input.selectSuggestion())) return
-    input.submit(alternate)
+    input.submit(action)
   }
 
   const ime = input.event.isComposing || input.composing || input.event.keyCode === 229
@@ -47,9 +50,7 @@ export function handleComposerKeyDown(input: {
 
   if (ime) return
 
-  if (action === "submit") return submit()
-
-  if (action === "alternate") return submit(true)
+  if (action === "submit" || action === "alternate" || action === "first") return submit(action)
 
   if (input.handleController()) return
   const mod = input.event.metaKey || input.event.ctrlKey
@@ -67,5 +68,6 @@ export function handleComposerKeyDown(input: {
     return
   }
 
-  if (!input.keybinds && input.event.key === "Enter" && !input.event.shiftKey) return submit(mod)
+  if (!input.keybinds && input.event.key === "Enter" && !input.event.shiftKey)
+    return submit(mod ? "alternate" : input.event.altKey ? "first" : "submit")
 }

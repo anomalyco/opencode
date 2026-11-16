@@ -70,7 +70,7 @@ export function Composer(props: {
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         alternateKeybind={command.keybindParts(PROMPT_KEYBINDS.alternate.id)}
-        queueFirstKeybind={[formatKeybind("alt", language.t), "↵"]}
+        queueFirstKeybind={command.keybindParts(PROMPT_KEYBINDS.first.id)}
         queueFirstLabel={language.t("session.queue.first")}
         exitShellKeybind={[formatKeybind("esc", language.t)]}
         suggestionBoundary={props.suggestionBoundary}

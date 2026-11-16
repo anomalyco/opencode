@@ -74,6 +74,7 @@ function PromptCommands() {
       submit: language.t(PROMPT_KEYBINDS.submit.title),
       newline: language.t(PROMPT_KEYBINDS.newline.title),
       alternate: language.t(PROMPT_KEYBINDS.alternate.title),
+      first: language.t(PROMPT_KEYBINDS.first.title),
     }),
   )
 

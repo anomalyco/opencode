@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { NO_PROVIDER, SERVER, T0, expectPath, holdRoute, pageMessagesFrom, provider, sessionHref } from "../utils/app"
 import { mockWorkspace, openDraft, openSession } from "../utils/workspace"
+import { promptShortcuts } from "../utils/prompt-shortcuts"
 import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-server"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
@@ -924,28 +925,6 @@ async function expectCaretVisible(input: Locator) {
     .toBe(true)
 }
 
-async function promptShortcuts(page: Page) {
-  const settings = page.getByTestId("settings-screen")
-  const binding = (id: string) => settings.locator(`[data-keybind-id="prompt.${id}"]`)
-  const modifier = await page.evaluate(() => (/Mac|iPod|iPhone|iPad/.test(navigator.platform) ? "Meta" : "Control"))
-
-  await page.keyboard.press(`${modifier}+,`)
-  await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
-  await expect(settings.getByRole("heading", { name: "Keyboard shortcuts", exact: true })).toBeVisible()
-
-  return {
-    settings,
-    binding,
-    record: async (id: string, keys: string, label: string | RegExp) => {
-      await binding(id).click()
-      await expect(binding(id)).toHaveText("Press keys")
-      await page.keyboard.press(keys)
-      await expect(binding(id)).toHaveText(label)
-    },
-    close: () => settings.getByRole("button", { name: "Back to app", exact: true }).click(),
-  }
-}
-
 test("prompt shortcuts rebind through Settings and preserve selected newline undo", async ({ page }) => {
   const prompts: { text: unknown; delivery: unknown }[] = []
 
@@ -994,10 +973,10 @@ test("prompt shortcuts support Alt+Enter, alternate delivery, disabling, and res
   })
 
   const shortcuts = await promptShortcuts(page)
-  await shortcuts.binding("submit").hover()
+  await shortcuts.binding("submit.first").hover()
   await expect(page.getByRole("tooltip")).toHaveText(/Alt|⌥/)
-  // An exact Enter override releases the legacy Alt+Enter submit alias for newline.
-  await shortcuts.record("submit", "Enter", "Enter")
+  // Rebinding Queue first releases Alt+Enter for newline.
+  await shortcuts.record("submit.first", "Control+q", /^(Ctrl\+|⌃)Q$/)
   await shortcuts.record("newline", "Alt+Enter", /^(Alt\+|⌥)Enter$/)
   await shortcuts.record("submit.alternate", "Control+Shift+Enter", /^(Ctrl\+Shift\+|⌃⇧)Enter$/)
   await shortcuts.close()
@@ -1018,11 +997,13 @@ test("prompt shortcuts support Alt+Enter, alternate delivery, disabling, and res
 
   const disabled = await promptShortcuts(page)
 
-  for (const id of ["submit", "newline", "submit.alternate"]) await disabled.record(id, "Backspace", "Unassigned")
+  for (const id of ["submit", "newline", "submit.alternate", "submit.first"])
+    await disabled.record(id, "Backspace", "Unassigned")
   await disabled.close()
   await editor.fill("disabled shortcuts")
 
-  for (const keys of ["Enter", "Alt+Enter", "Control+Enter", "Control+Shift+Enter"]) await editor.press(keys)
+  for (const keys of ["Enter", "Alt+Enter", "Control+Enter", "Control+Shift+Enter", "Control+q"])
+    await editor.press(keys)
   await expect(editor).toHaveText("disabled shortcuts")
   await expect(page.locator('[data-action="composer-alternate-delivery"] [data-slot="keybind-v2-label"]')).toHaveCount(
     0,

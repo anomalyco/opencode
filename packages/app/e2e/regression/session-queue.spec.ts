@@ -10,6 +10,7 @@ import type { MockServerConfig } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 import { chooseUserMessageAction, openUserMessageMenu } from "../utils/timeline"
 import { openSession } from "../utils/workspace"
+import { promptShortcuts } from "../utils/prompt-shortcuts"
 
 const sessionID = "ses_session_queue_regression"
 
@@ -262,6 +263,50 @@ test("Alt+Enter queues a follow-up first without steering, regardless of the fol
   await view.input.fill("Another follow-up")
   await view.composer.locator('[data-action="composer-alternate-delivery"]').hover()
   await expect(page.getByRole("tooltip")).toContainText("Queue first")
+
+  const shortcuts = await promptShortcuts(page)
+  await shortcuts.record("submit.first", "Control+q", /^(Ctrl\+|⌃)Q$/)
+  await shortcuts.record("newline", "Shift+Enter", /^(Shift\+|⇧)Enter$/)
+  await shortcuts.record("submit.alternate", "Control+Shift+Enter", /^(Ctrl\+Shift\+|⌃⇧)Enter$/)
+  // An explicit submit chord must not inherit Alt+Enter's queue-first semantics.
+  await shortcuts.record("submit", "Alt+Enter", /^(Alt\+|⌥)Enter$/)
+  await shortcuts.close()
+  await view.input.fill("Rebound first")
+  await view.composer.locator('[data-action="composer-alternate-delivery"]').hover()
+  await expect(page.getByRole("tooltip").locator('[data-slot="keybind-v2-label"]')).toHaveText([
+    /^(Ctrl|⌃)$/,
+    /^(Shift|⇧)$/,
+    "Enter",
+    /^(Ctrl|⌃)$/,
+    "Q",
+  ])
+  await view.input.press("Control+q")
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
+    "Rebound first",
+    "Follow-up C",
+    "Follow-up A",
+    "Follow-up B",
+  ])
+  await view.input.fill("Explicit submit")
+  await view.input.press("Alt+Enter")
+  await expect
+    .poll(() => mock.prompts.filter((prompt) => prompt.text === "Explicit submit").map((prompt) => prompt.delivery))
+    .toEqual(["steer"])
+  await expect(view.input).toBeEmpty()
+  const first = view.rows.filter({ hasText: "Rebound first" })
+  await first.hover()
+  await first.locator('[data-action="session-queue-steer"]').hover()
+  await expect(page.getByRole("tooltip").locator('[data-slot="keybind-v2-label"]')).toHaveText([
+    /^(Ctrl|⌃)$/,
+    /^(Shift|⇧)$/,
+    "Enter",
+  ])
+  await view.input.press("Control+Shift+Enter")
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
+    "Follow-up C",
+    "Follow-up A",
+    "Follow-up B",
+  ])
 })
 
 for (const behavior of ["queue", "steer"] as const) {

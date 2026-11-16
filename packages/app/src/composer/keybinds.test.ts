@@ -8,10 +8,15 @@ function keyEvent(input: KeyboardEventInit = {}) {
 
 describe("prompt keybind matching", () => {
   test("declares every accepted default variant for Settings conflict detection", () => {
-    const options = promptKeybindOptions({ submit: "Submit", newline: "Newline", alternate: "Alternate" })
+    const options = promptKeybindOptions({
+      submit: "Submit",
+      newline: "Newline",
+      alternate: "Alternate",
+      first: "Queue first",
+    })
 
     for (const input of [
-      { id: "prompt.submit", event: keyEvent({ altKey: true }) },
+      { id: "prompt.submit.first", event: keyEvent({ altKey: true }) },
       { id: "prompt.newline", event: keyEvent({ ctrlKey: true, shiftKey: true }) },
       { id: "prompt.newline", event: keyEvent({ altKey: true, metaKey: true, shiftKey: true }) },
       { id: "prompt.submit.alternate", event: keyEvent({ ctrlKey: true }) },
@@ -25,7 +30,7 @@ describe("prompt keybind matching", () => {
 
   test("advertises only remaining defaults after an explicit binding takes a chord", () => {
     const options = promptKeybindOptions(
-      { submit: "Submit", newline: "Newline", alternate: "Alternate" },
+      { submit: "Submit", newline: "Newline", alternate: "Alternate", first: "Queue first" },
       { submit: "ctrl+shift+enter" },
     )
 
@@ -38,7 +43,7 @@ describe("prompt keybind matching", () => {
     expect(options.find((option) => option.id === "prompt.submit")?.keybind).toBe("ctrl+shift+enter")
   })
 
-  test("preserves all sixteen legacy Enter modifier combinations", () => {
+  test("preserves all sixteen upstream Enter modifier combinations", () => {
     const expected = [
       "submit",
       "newline",
@@ -48,7 +53,7 @@ describe("prompt keybind matching", () => {
       "newline",
       "alternate",
       "newline",
-      "submit",
+      "first",
       "newline",
       "alternate",
       "newline",
@@ -69,6 +74,7 @@ describe("prompt keybind matching", () => {
       expect(matchPromptKeybind("submit", {}, event)).toBe(action === "submit")
       expect(matchPromptKeybind("newline", {}, event)).toBe(action === "newline")
       expect(matchPromptKeybind("alternate", {}, event)).toBe(action === "alternate")
+      expect(matchPromptKeybind("first", {}, event)).toBe(action === "first")
     })
   })
 
@@ -87,7 +93,7 @@ describe("prompt keybind matching", () => {
     expect(matchPromptKeybind("submit", {}, keyEvent())).toBe(true)
     expect(matchPromptKeybind("submit", {}, keyEvent({ ctrlKey: true }))).toBe(false)
     expect(matchPromptKeybind("submit", {}, keyEvent({ metaKey: true }))).toBe(false)
-    expect(matchPromptKeybind("submit", {}, keyEvent({ altKey: true }))).toBe(true)
+    expect(matchPromptKeybind("submit", {}, keyEvent({ altKey: true }))).toBe(false)
   })
 
   test("preserves shifted newline variants without an override", () => {

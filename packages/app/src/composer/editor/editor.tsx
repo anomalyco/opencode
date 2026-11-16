@@ -393,11 +393,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   editFirst: view.submit.queue?.editFirst,
                   insertNewline: props.controller.insertNewline,
                   // On touch, Cmd+Return is the touch bar's primary action, since plain Return cannot send.
-                  submit: (alternate) =>
+                  submit: (action) =>
                     props.controller.submit(
-                      !touch() && event.altKey && !event.metaKey && !event.ctrlKey
+                      !touch() && action === "first"
                         ? { first: true }
-                        : alternate && !touch()
+                        : action === "alternate" && !touch()
                           ? { alternate: true }
                           : undefined,
                     ),
