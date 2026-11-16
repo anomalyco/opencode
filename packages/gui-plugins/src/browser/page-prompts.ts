@@ -613,10 +613,8 @@ function deviceAccess(kind: "camera" | "microphone") {
 
   if (status === "denied" || status === "restricted") return "denied" as const
 
-  if (process.platform !== "darwin" || status !== "not-determined") return "granted" as const
-
-  // This app declares no camera use (NSCameraUsageDescription), so macOS would end it for asking.
-  return kind === "camera" ? ("denied" as const) : ("ask" as const)
+  // The app declares both in its Info.plist and entitlements, so macOS may ask for either.
+  return process.platform === "darwin" && status === "not-determined" ? ("ask" as const) : ("granted" as const)
 }
 
 /** The asking frame's own origin (equesterOrigin); a media request's security origin must agree with it. */
