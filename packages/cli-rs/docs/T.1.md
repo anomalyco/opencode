@@ -72,7 +72,8 @@ dialogs (absolute, z 3000), toasts (in root)
   `Options { leader_timeout }`.
 - `dialog::route_keys` is installed once. It sets the keymap focus from the focused widget and its
   ancestors, and stops the key when the keymap handles it, before widgets see it.
-- After every key, if `leader_deadline()` is set, a timer at that instant calls `expire_leader`.
+- `dialog::expire_leader` clears a pending leader sequence `leader.timeout` after its last stroke. It listens to
+  the keymap's pending sequence, since `route_keys` stops the keys before `App::on_key`.
 - `textarea_enabled` reads `Tui::textarea`, a slot E.2 fills with the prompt's textarea; while it holds,
   the textarea's own key handling must be off (E.2).
 - As `app.tsx:1303-1335`, T.1's commands sit in a `global` layer without bindings (so the palette

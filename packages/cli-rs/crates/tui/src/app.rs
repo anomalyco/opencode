@@ -742,20 +742,7 @@ fn install_keys(tui: &Rc<Tui>) {
     crate::terminal::install_keys(tui);
     route_keys(tui);
     // The leader sequence expires on a timer (`leader.timeout`).
-    let weak = tui.weak();
-    let timer = Rc::new(Cell::new(None::<TimerId>));
-    tui.app.on_key(bind!(weak, |tui, cx, _| {
-        if let Some(previous) = timer.take() {
-            cx.cancel_timer(previous);
-        }
-        let Some(deadline) = tui.keymap.leader_deadline() else { return };
-        timer.set(Some(cx.set_timeout(
-            deadline.saturating_duration_since(cx.now()),
-            bind!(tui, |tui, cx| {
-                tui.keymap.expire_leader(cx.now());
-            }),
-        )));
-    }));
+    tui.layers.borrow_mut().push(opencode_ui::dialog::expire_leader(&tui.app, &tui.keymap));
 
     tui.keymap.set_first_layer(app_commands());
     // As `app.tsx:1303-1335`: the commands live in a global layer without bindings, so the palette
