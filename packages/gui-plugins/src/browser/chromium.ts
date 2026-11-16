@@ -872,7 +872,7 @@ export function createBrowserPage(
   })
 
   const load = async (url: string, retry = false) => {
-    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, () => notices.show({reason:"browser.preview.restricted"}), retry ? contents.getURL() : undefined) : url
+    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, (guarded) => notices.show({reason: guarded ? "browser.preview.agentRestricted" : "browser.preview.restricted"}), retry ? contents.getURL() : undefined) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
 
@@ -941,6 +941,8 @@ export function createBrowserPage(
     contents,
     state,
     childActivity: () => childActivity(activity),
+    previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
+    previewIdentity: () => options.workspace?.identity(),
     answerNotice: notices.answer,
     ready,
     /** The host embed the renderer lays this page out with. */

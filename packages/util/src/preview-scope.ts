@@ -69,7 +69,7 @@ export async function openPreviewFile(
       () => false,
     ))
   )
-    return opened
+    return { ...opened, relativePath: relative(root.path, opened.path) }
   await opened.file.close()
   return "denied"
 }

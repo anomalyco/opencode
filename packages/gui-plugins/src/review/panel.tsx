@@ -453,6 +453,12 @@ function ReviewPanelSidebar(props: {
         <Match when={props.status === "error"}>
           <div class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("load.failed")}</div>
         </Match>
+        <Match when={!props.diffs.length}>
+          <div role="status" class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("sidebar.noChanges")}</div>
+        </Match>
+        <Match when={!views()}>
+          <div role="status" class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("sidebar.unavailable")}</div>
+        </Match>
         <Match when={true}>
           <Show
             when={props.searching}

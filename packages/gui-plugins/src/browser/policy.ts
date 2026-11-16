@@ -118,7 +118,7 @@ export function pagePermission(permission: string, origin: string, declared: (id
  */
 export const DOWNLOAD_GRACE_MS = 30_000
 
-export type TabActivity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number }
+export type TabActivity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number; agent?: string }
 
 /**
  * Whether the agent drives a tab: the one rule for every "did the agent cause this". Without `now` it is sticky: true
@@ -142,7 +142,7 @@ export function agentDriven(activity: Readonly<TabActivity>, now?: number): bool
 
 /** A child inherits provenance, not its opener's in-flight run counter. */
 export function childActivity(activity: Readonly<TabActivity>): TabActivity {
-  return activity.agentRuns ? { agentRuns: 0, agentEndedAt: Date.now() } : { ...activity }
+  return activity.agentRuns ? { ...activity, agentRuns: 0, agentEndedAt: Date.now() } : { ...activity }
 }
 
 /** What a tab's activity was when something happened in it, at `now`. */

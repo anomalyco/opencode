@@ -28,7 +28,7 @@ export type WorkspaceSource =
     }
 
 export type PreviewSource =
-  | (WorkspaceSource & { document: string; identity: string; takeEntry(): boolean; denied(): void })
+  | (WorkspaceSource & { localRoots?: readonly string[]; document: string; identity: string; takeEntry(): boolean; denied(): void })
   | { type: "artifact"; id: string; read(route: string, method: string, signal: AbortSignal): Promise<Response> }
 
 /** The grant must still belong to this binding after asynchronous path resolution. */
@@ -56,7 +56,11 @@ export async function resolvePreviewRequest(
   if (grant.type === "remote") {
     const origin = `oc-preview://${host}`
 
-    const path = remotePath(url, `${origin}/`)
+    const local = grant.localRoots && previewResource(url, host, initiator, grant.localRoots)
+
+    const path = grant.localRoots
+      ? local && relative(grant.root, fileURLToPath(local)).replaceAll("\\", "/")
+      : remotePath(url, `${origin}/`)
 
     if (!path) {
       grant.denied()

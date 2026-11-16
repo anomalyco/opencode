@@ -11,7 +11,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure, CodedError } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { agentRefusal, childActivity, destinationOrigin, refusal, type TabActivity } from "./policy"
+import { agentDriven, agentRefusal, childActivity, destinationOrigin, refusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { FindAction, PaneEvent, PromptAnswer } from "./ipc"
@@ -59,7 +59,7 @@ type Handle = {
   partition: string
   /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
   shared: boolean
-  workspace?: () => ReturnType<typeof workspacePages>
+  workspace?: (activity: TabActivity, identity?: string) => ReturnType<typeof workspacePages>
   artifacts?: () => ReturnType<typeof artifactPages>
   source?: WorkspaceSource
   abort: AbortController
@@ -214,7 +214,8 @@ export function createBrowserPane(input: {
 
             handle.source = source
             handle.artifacts = () => artifactPages(previews, server, session.location.directory, abort.signal)
-            handle.workspace = () => workspacePages(previews, session.location.directory, source, abort.signal)
+            handle.workspace = (activity, identity) => workspacePages(previews, session.location.directory, source, abort.signal,
+              () => agentDriven(activity) ? remotePreview(server, sessionID, options.location, abort.signal, {agent:activity.agent}) : undefined, identity)
 
             if (shared) handle.network = createDirectNetwork(input.profile.session)
 
@@ -567,7 +568,7 @@ export function createBrowserPane(input: {
   }
 
   /** The tab's page, created the first time the pane shows a restored or crashed tab or a command names it. */
-  function load(binding: string, tabID: Browser.TabID) {
+  function load(binding: string, tabID: Browser.TabID, identity?: string) {
     const existing = page(binding, tabID)
 
     if (existing) return existing
@@ -578,6 +579,7 @@ export function createBrowserPane(input: {
 
     // A crashed tab's error belongs to its last page; the new page reports its own.
     return create(binding, {
+      identity,
       restore: {
         id: tab.id,
         url: tab.url,
@@ -597,6 +599,7 @@ export function createBrowserPane(input: {
       readonly initialize?: boolean
       readonly popupOptions?: Electron.BrowserWindowConstructorOptions
       readonly activity?: TabActivity
+      readonly identity?: string
     } = {},
   ) {
     const entry = selectBinding(machine.state, binding)
@@ -606,7 +609,8 @@ export function createBrowserPane(input: {
       throw new Error("Browser network is not ready; no tab was opened.")
     const id = options.restore?.id ?? Browser.TabID.make(`tab_${crypto.randomUUID()}`)
     const running = !options.restore && Array.from(handle.activity.values()).find((tab) => tab.agentRuns > 0)
-    const activity = handle.activity.get(id) ?? (running ? childActivity(running) : options.activity) ?? { agentRuns: 0 }
+    const inherited = options.activity && agentDriven(options.activity) ? options.activity : running ? childActivity(running) : undefined
+    const activity = handle.activity.get(id) ?? inherited ?? options.activity ?? { agentRuns: 0 }
     handle.activity.set(id, activity)
     const attempt = entry.nextAttempt
     const win = handle.win
@@ -633,7 +637,7 @@ export function createBrowserPane(input: {
       restore: options.restore,
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
-      workspace: handle.workspace?.(),
+      workspace: handle.workspace?.(activity, options.identity),
       artifacts: handle.artifacts?.(),
       remote: remoteSource(binding),
       local: handle.shared,
@@ -644,7 +648,7 @@ export function createBrowserPane(input: {
         t: input.t,
         extensions: (contents, params) => handle.shared ? input.profile.extensionMenu(contents, params) : [],
         navigate: async (type) => { if (current()) await execute(binding, { action: { type, tabID: id }, files: [] }, handle.abort.signal, "user") },
-        open: async (url) => { if (current()) await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user") },
+        open: async (url) => { if (current()) await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", childActivity(activity)) },
       },
       embeds: input.embeds,
       sites: input.sites,
@@ -794,6 +798,26 @@ export function createBrowserPane(input: {
 
   async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity): Promise<Browser.Result> {
     const action = command.action
+    const driven = { agentRuns: 0, agentEndedAt: Date.now(), agent: command.agent }
+
+    // A user preview may already have consumed files that the agent may not read. Revoke its origins and
+    // discard the complete WebContents before handing the agent a target; rechecking only future fetches is too late.
+    const acquire = (id: Browser.TabID) => {
+      if (origin !== "agent") return load(binding, id)
+      const handle = handles.get(binding)
+      const activity = handle?.activity.get(id) ?? { agentRuns: 0 }
+      const changed = !agentDriven(activity) || activity.agent !== command.agent
+      const current = page(binding, id)
+      const identity = current?.previewIdentity()
+      activity.agentEndedAt = Date.now()
+      activity.agent = command.agent
+      handle?.activity.set(id, activity)
+
+      if (changed && current?.previewUsed()) dispatchBinding(binding, {type:"tab.restricted", tabID:id, url:current.state().url})
+      else if (changed && current) current.contents.setBackgroundThrottling(false)
+
+      return load(binding, id, identity)
+    }
 
     if (signal.aborted)
       throw new Error(
@@ -812,7 +836,7 @@ export function createBrowserPane(input: {
           throw new CodedError(Browser.FailureCode.previewUnavailable, remote?.needsUpdate?.() ? "Update this session's server to open workspace previews." : "The workspace file no longer exists or cannot be read by this session.")
         signal.throwIfAborted()
         const existing = inventory(binding).tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === url)
-        const tab = existing ? load(binding, existing.id) : create(binding)
+        const tab = existing ? acquire(existing.id) : create(binding, {activity: origin === "agent" ? driven : undefined})
 
         if (!tab) throw new Error("Workspace preview tab is unavailable.")
         const tabID = tab.state().id
@@ -859,7 +883,7 @@ export function createBrowserPane(input: {
         }
       }
 
-      const opened = create(binding, { activity: origin === "agent" ? { agentRuns: 0, agentEndedAt: Date.now() } : inherited })
+      const opened = create(binding, { activity: origin === "agent" ? driven : inherited })
       const tabID = opened.state().id
 
       if (file) openingFiles.set(opened, file)
@@ -888,6 +912,8 @@ export function createBrowserPane(input: {
       )
 
     if (action.type === "tabs.focus") {
+      const restricted = origin === "agent" ? acquire(action.tabID) : undefined
+      await restricted?.ready
       const activities = handles.get(binding)?.activity
       const activity = activities?.get(action.tabID) ?? { agentRuns: 0 }
 
@@ -897,7 +923,7 @@ export function createBrowserPane(input: {
       activities?.set(action.tabID, activity)
       dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID })
 
-      return { value: slot.tab, files: [] }
+      return { value: restricted?.state() ?? slot.tab, files: [] }
     }
 
     if (action.type === "tabs.close") {
@@ -909,7 +935,7 @@ export function createBrowserPane(input: {
       return { value: inventory(binding), files: [] }
     }
 
-    const target = load(binding, action.tabID)
+    const target = acquire(action.tabID)
 
     if (!target) throw new Error("Browser tab is unavailable. Call browser.tabs.list({}) and use an existing tabID.")
     await target.ready

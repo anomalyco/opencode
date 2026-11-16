@@ -1,4 +1,8 @@
 import { Session } from "@opencode/core/session"
+import { FileAccess } from "@opencode/core/file-access"
+import { Permission } from "@opencode/core/permission"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { Agent } from "@opencode/schema/agent"
 import { openPreviewFile, previewRoot } from "@opencode/util/preview-scope"
 import { Effect, Stream } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -8,13 +12,17 @@ import { missingSession } from "./session-error"
 
 export const makePreviewRead = Effect.gen(function* () {
   const sessions = yield* Session.Service
+  const locations = yield* LocationServiceMap.Service
   return Effect.fn("Preview.read")(function* (
     query: { sessionID: Session.ID; path: string; document: string; root: string; entry?: "1"; location?: { directory?: string; workspace?: string } },
     req: HttpServerRequest.HttpServerRequest,
   ) {
     const session = yield* sessions.get(query.sessionID).pipe(Effect.mapError(missingSession))
+    // Set by the authenticated desktop transport, not copied from the page's request.
+    const guarded = req.headers["x-opencode-preview-policy"] === "agent"
     const headers = {
       "x-opencode-preview": "3",
+      ...(guarded && { "x-opencode-preview-policy": "agent" }),
       "cache-control": "no-store, no-transform",
       "accept-ranges": "bytes",
       ...ContentHeaders.download({ path: query.path, mime: "application/octet-stream" }),
@@ -42,6 +50,29 @@ export const makePreviewRead = Effect.gen(function* () {
     )
     if (opened === "denied") return HttpServerResponse.empty({ status: 404, headers: {...headers,"x-opencode-preview-denied":"1"} })
     if (!opened) return HttpServerResponse.empty({ status: 404, headers })
+    if (guarded) {
+      // Authorize the spelling requested AND the physical name of the handle that supplies the bytes.
+      // Evaluate anew for HEAD and GET, including ranges. Never turn an ask into a page-initiated prompt.
+      const allowed = yield* Effect.gen(function* () {
+        const access = yield* FileAccess.Service
+        const permission = yield* Permission.Service
+        const id = req.headers["x-opencode-preview-agent"]
+        const agent = id ? Agent.ID.make(decodeURIComponent(id)) : session.agent
+        const paths = [query.path, opened.relativePath, opened.path]
+        const resources = new Set<string>()
+        const external = new Set<string>()
+        for (const path of new Set(paths)) {
+          const target = yield* access.resolve({ path, kind: "file" })
+          resources.add(target.resource)
+          if (target.externalDirectory) external.add(target.externalDirectory.resource)
+        }
+        const input = { sessionID: session.id, agent }
+        const passive = { requireConfiguredAllow: true }
+        if (external.size && !(yield* permission.allows({ ...input, action: "external_directory", resources: [...external] }, passive))) return false
+        return yield* permission.allows({ ...input, action: "read", resources: [...resources] }, passive)
+      }).pipe(Effect.provide(locations.get(session.location)), Effect.orElseSucceed(() => false))
+      if (!allowed) return HttpServerResponse.empty({ status: 404, headers: { ...headers, "x-opencode-preview-denied": "1" } })
+    }
     const range = req.headers.range ? parseRange(req.headers.range, opened.size) : undefined
     if (range === "unsatisfiable")
       return HttpServerResponse.empty({

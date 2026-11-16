@@ -8,6 +8,7 @@ export function remotePreview(
   session: string,
   location: { directory: string; workspace?: string },
   lifetime: AbortSignal,
+  policy?: { agent?: string },
 ): Extract<WorkspaceSource, { type: "remote" }> {
   let outdated = false
 
@@ -23,6 +24,13 @@ export function remotePreview(
 
     if (location.workspace) url.searchParams.set("location[workspace]", location.workspace)
     const headers = new Headers(server.headers)
+
+    if (policy) {
+      headers.set("x-opencode-preview-policy", "agent")
+
+      if (policy.agent) headers.set("x-opencode-preview-agent", encodeURIComponent(policy.agent))
+    }
+
     headers.set("accept-encoding", "identity")
 
     if (range) headers.set("range", range)
@@ -37,7 +45,7 @@ export function remotePreview(
         signal: AbortSignal.any([signal, lifetime, timeout.signal]),
       })
 
-      if (response.headers.get("x-opencode-preview") === "3") {
+      if (response.headers.get("x-opencode-preview") === "3" && (!policy || response.headers.get("x-opencode-preview-policy") === "agent")) {
         outdated = false
 
         return response

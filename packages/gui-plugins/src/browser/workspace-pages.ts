@@ -14,9 +14,13 @@ export function workspacePages(
   root: string,
   source: WorkspaceSource,
   lifetime: AbortSignal,
+  guarded: () => Extract<WorkspaceSource, { type: "remote" }> | undefined,
+  previousRoot?: string,
 ) {
-  const grants = new Map<string, { document: string; identity: string; release(): void }>()
-  let lastRoot: string | undefined
+  const grants = new Map<string, { document: string; identity: string; reader: WorkspaceSource; release(): void }>()
+  let lastRoot = previousRoot
+  let exposed = false
+  let disposed = false
   const remote = source.type === "remote" ? source.prefix : undefined
   const roots = source.type === "local" ? [root] : []
 
@@ -28,22 +32,29 @@ export function workspacePages(
         : undefined
 
   return {
-    async load(address: string, refused: () => void, retryFrom?: string) {
+    used: () => exposed,
+    identity: () => lastRoot,
+    async load(address: string, refused: (guarded: boolean) => void, retryFrom?: string) {
       const document = path(address)
 
       if (!document) return
+      exposed = true
+      const restricted = guarded()
+      const reader = restricted ?? source
       const old = retryFrom && this.host(retryFrom)
       const prior = retryFrom === undefined ? undefined : (old && grants.get(old)?.identity) || lastRoot
-      const identity = prior ?? (source.type === "remote" ? await source.pin(document, lifetime) : await previewRoot(root).then(pin => pin.id, () => undefined))
+      const identity = prior ?? previousRoot ?? (reader.type === "remote" ? await reader.pin(document, lifetime) : await previewRoot(root).then(pin => pin.id, () => undefined))
 
-      if (lifetime.aborted) return
+      if (lifetime.aborted || disposed) return
+      previousRoot = undefined
       lastRoot = identity
       let first = true
       let notified = false
 
       const grant = previews.grant(
         {
-          ...source,
+          ...reader,
+          localRoots: restricted && source.type === "local" ? roots : undefined,
           document,
           // An unavailable initial bind must still let Chromium report a failed load. Never read without a pin.
           identity: identity ?? "",
@@ -56,13 +67,13 @@ export function workspacePages(
           denied() {
             if (notified || lifetime.aborted) return
             notified = true
-            refused()
+            refused(!!restricted)
           },
         },
         lifetime,
       )
 
-      grants.set(grant.host, { document, identity: identity ?? "", release: grant.release })
+      grants.set(grant.host, { document, identity: identity ?? "", reader, release: grant.release })
 
       return previewAddress(address, grant.host, roots, remote)
     },
@@ -104,7 +115,7 @@ export function workspacePages(
       if (!grant || !file) return false
       const doc = grant.document
 
-      if (source.type === "remote") return Number.isSafeInteger(await source.stat(file, signal, doc, file === doc, grant.identity))
+      if (grant.reader.type === "remote") return Number.isSafeInteger(await grant.reader.stat(file, signal, doc, file === doc, grant.identity))
       const opened = await openPreviewFile(root, doc, file, file === doc, grant.identity).catch(() => undefined)
 
       if (!opened || opened === "denied") return false
@@ -113,6 +124,7 @@ export function workspacePages(
       return true
     },
     dispose() {
+      disposed = true
       grants.forEach((grant) => grant.release())
       grants.clear()
     },
