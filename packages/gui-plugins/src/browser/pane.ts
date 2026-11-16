@@ -200,8 +200,7 @@ export function createBrowserPane(input: {
 
             const source: PreviewSource = builtin
               ? { type: "local", roots: () => selectFileRoots(machine.state, binding) }
-              : remotePreview(server, sessionID, options.location, abort.signal, (path, signal) =>
-                  runtime.runPromise(rpc["preview.stat"]({ ...attachment, path }, options), { signal }))
+              : remotePreview(server, sessionID, options.location, abort.signal)
 
             const grant = yield* Effect.acquireRelease(Effect.sync(() => previews.grant(source, abort.signal)), (grant) => Effect.sync(grant.release))
             handle.source = source
@@ -760,7 +759,7 @@ export function createBrowserPane(input: {
         const url = remote ? `${remote.prefix}${action.path.split("/").map(encodeURIComponent).join("/")}` : roots[0] && workspaceFileURL(roots[0], action.path)
 
         if (!url || !(remote ? await remote.stat(action.path, signal) !== null : await workspaceFile(url, roots)))
-          throw new CodedError(Browser.FailureCode.previewUnavailable, "The workspace file no longer exists or cannot be read by this session.")
+          throw new CodedError(Browser.FailureCode.previewUnavailable, remote?.needsUpdate?.() ? "Update this session's server to open workspace previews." : "The workspace file no longer exists or cannot be read by this session.")
         signal.throwIfAborted()
         const existing = inventory(binding).tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === url)
         const tab = existing ? load(binding, existing.id) : create(binding)

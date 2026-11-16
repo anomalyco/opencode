@@ -11,7 +11,6 @@ import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semapho
 import { BrowserMachine } from "./machine.js"
 import { Browser } from "./rpc.js"
 import { BrowserTunnel } from "./tunnel.js"
-import { previewSize } from "./files.js"
 
 type Attachment = {
   readonly closed: Deferred.Deferred<"closed" | "replaced", "unavailable">
@@ -278,10 +277,6 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             ? dispatch({ type: "request.settled", ...input })
             : Effect.fail(call.error("unavailable", "Browser is unavailable.", {})),
         ),
-      "preview.stat": (input, call) =>
-        BrowserMachine.isAttachedConnection(machine.state, input.sessionID, input.connectionID)
-          ? Effect.promise(async () => (await previewSize(input.path, ctx.location.directory).catch(() => undefined)) ?? null)
-          : Effect.fail(call.error("unavailable", "Browser attachment is unavailable.", {})),
       "tunnel.open": (input, call) =>
         tunnels(input).pipe(
           Effect.flatMap((network) => network.open(input.target)),

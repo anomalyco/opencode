@@ -10,6 +10,26 @@ beforeAll(() => GlobalRegistrator.unregister())
 
 afterAll(() => GlobalRegistrator.register())
 
+test("an unmarked router 404 requires an update, not a missing-file message", async () => {
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(null, { status: 404 }) })
+
+  try {
+    const signal = new AbortController().signal
+
+    const preview = remotePreview(
+      { id: "old", sameMachine: false, headers: {}, url: server.url.href },
+      "ses_a",
+      { directory: "/work" },
+      signal,
+    )
+
+    expect(await preview.stat("index.html", signal)).toBeNull()
+    expect(preview.needsUpdate?.()).toBe(true)
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("the authenticated read under a server base path names exactly the file validated by stat", async () => {
   const checked: string[] = []
   const reads: string[] = []
@@ -23,9 +43,11 @@ test("the authenticated read under a server base path names exactly the file val
       expect(req.headers.get("authorization")).toBe("fixture")
       expect(req.headers.get("accept-encoding")).toBe("identity")
       expect(url.pathname).toBe("/sub/api/experimental/preview/read")
-      reads.push(url.searchParams.get("path") ?? "")
 
-      return new Response("x", { headers: { "x-opencode-preview": "1" } })
+      if (req.method === "HEAD") checked.push(url.searchParams.get("path") ?? "")
+      else reads.push(url.searchParams.get("path") ?? "")
+
+      return new Response("x", { headers: { "x-opencode-preview": "1", "content-length": "1" } })
     },
   })
 
@@ -36,11 +58,6 @@ test("the authenticated read under a server base path names exactly the file val
     "ses_x",
     { directory: "/work" },
     controller.signal,
-    async (path) => {
-      checked.push(path)
-
-      return 1
-    },
   )
 
   const grants = new Map<string, PreviewSource>([["grant", source]])

@@ -8,15 +8,6 @@ import { previewPath } from "./preview-path.js"
 import { stat } from "node:fs/promises"
 import { resolve } from "node:path"
 
-/** Exact lookup only: each request, including an asset or a History API route, checks the server's current disk. */
-export async function previewSize(path: string, directory: string) {
-  if (!previewPath(path, process.platform === "win32")) return
-  const target = await workspaceTarget(resolve(directory, path), [directory])
-  const info = target && await stat(target)
-
-  return info && info.isFile() ? info.size : undefined
-}
-
 // Files cross machines as bytes. Only this endpoint interprets its local paths.
 export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], directory: string) =>
   Effect.tryPromise({

@@ -945,7 +945,7 @@ export default function SessionBrowserPane(props: {
             <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
               {plugin.t("failed.title")}
             </div>
-            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t("failed.description")}</div>
+            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t(state()?.loadError === "browser.preview.unsupported" ? "preview.upgrade" : "failed.description")}</div>
           </div>
         </Show>
         <Show when={suspended()}>

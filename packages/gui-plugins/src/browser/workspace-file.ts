@@ -13,6 +13,7 @@ export type PreviewSource =
   | {
       type: "remote"
       prefix: string
+      needsUpdate?(): boolean
       stat(path: string, signal: AbortSignal): Promise<number | null>
       read(path: string, range: string | undefined, signal: AbortSignal): Promise<Response>
     }

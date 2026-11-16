@@ -259,11 +259,13 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
   const open = (session: MountedSession, path: string, options?: OpenOptions) => {
     if (!desktop || artifactKind(path) !== "html") return openSource(session, path, options)
+
     if (ctx.screen.current()?.file.absolute(path)) {
       ctx.toast.show({ variant: "error", title: ctx.t("preview.outside") })
 
       return
     }
+
     const pane = shared.browser()
 
     if (pane.status === "active" && pane.value.canOpen(session, path)) return pane.value.openFile(session, path)

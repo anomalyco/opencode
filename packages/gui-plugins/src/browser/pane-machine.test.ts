@@ -72,6 +72,13 @@ function attached(restore?: Browser.State) {
   return play(createPaneState(), registered(restore), on({ type: "server.attached", fileRoots: [] })).state
 }
 
+test("a restored preview retries the failed attempt when the server returns", () => {
+  const state = attached({tabs:[{ ...tab(tabA,"workspace://ses_x/report.html"), loadError:"ERR_FAILED" }], focusedTabID:tabA})
+  const restored = entry(state).tabs.get(tabA)?.tab
+  expect(restored?.url).toBe("workspace://ses_x/report.html")
+  expect(restored?.loadError).toBeUndefined()
+})
+
 test("an offline registration returns the saved inventory for retry without forgetting it", () => {
   const tab = { id: tabA, url: "workspace://ses_x/report.html" }
   const start = registered()

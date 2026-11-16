@@ -214,4 +214,5 @@ export default {
   "preview.workspace": "Server workspace file",
   "preview.offline": "The workspace server is disconnected. Reconnect to load this preview.",
   "artifact.unavailable": "The artifact cannot be opened right now. Check the server connection and try again.",
+  "preview.upgrade": "Update this session's server to open workspace previews, then reload this tab.",
 }

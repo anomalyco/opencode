@@ -684,7 +684,6 @@ export const Definition = Rpc.define({
     state: { input: Schema.Struct({ ...attachment, state: State }), output: Schema.Void, errors },
     command: { input: Schema.Struct(request), output: Command, errors },
     result: { input: Schema.Struct({ ...request, outcome: Outcome }), output: Schema.Void, errors },
-    "preview.stat": { input: Schema.Struct({ ...attachment, path: text }), output: Schema.NullOr(count), errors },
     "tunnel.open": { input: Schema.Struct({ ...attachment, target: TunnelTarget }), output: short, errors },
     "tunnel.read": { input: Schema.Struct(tunnel), output: TunnelRead, errors },
     "tunnel.write": {

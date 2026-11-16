@@ -100,11 +100,13 @@ async function readLocal(target: { root: string; relative: string; size: number 
 
     return !signal.aborted && target.size === opened.size ? new Response(null) : Response.error()
   }
+
   const start = slice.range ? Number(slice.range.slice(6).split("-")[0]) : 0
   const stream = opened.file.createReadStream({ start, end: start + slice.length - 1, signal })
 
   // SAFETY: toWeb adapts this byte-only file stream to a WHATWG stream. Node and DOM disagree on the BYOB overload.
   const body = Readable.toWeb(stream, { strategy: { highWaterMark: 64 * 1024, size: (chunk: Uint8Array) => chunk.byteLength } })
+
   if (body instanceof ReadableStream) return new Response(body)
   await body.cancel()
 
