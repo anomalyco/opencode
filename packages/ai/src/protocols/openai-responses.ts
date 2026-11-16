@@ -9,7 +9,6 @@ import { HttpTransport } from "../route/transport/index.js"
 import type { LLMRequest, ToolDefinition, ToolEntry } from "../schema/index.js"
 import { requestTTL } from "../cache-policy.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
-import { toolsUpdate } from "../tool-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { JsonObject, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -176,13 +175,9 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   return match !== null && Number(match[1]) >= 6
 }
 
-// Without starting tools there is no cached tool list to preserve. Calls to tools added through `additional_tools`
-// come back under a namespace named after the tool, which can't tell a redefined starting tool from the original.
-const supportsToolUpdates = (request: LLMRequest) => {
-  if (request.model.capabilities?.tools?.updates !== true || request.tools.length === 0) return false
-  const starting = new Set(request.tools.map((tool) => tool.name))
-  return request.messages.every((message) => !toolsUpdate(message)?.add.some((tool) => starting.has(tool.name)))
-}
+// Without starting tools there is no cached tool list to preserve.
+const supportsToolUpdates = (request: LLMRequest) =>
+  request.model.capabilities?.tools?.updates === true && request.tools.length > 0
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
   const native = tool.native?.openai

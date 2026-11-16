@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { ai, LLMEvent, type LLMResponse, Message, tool, ToolCallPart, ToolDefinition } from "../src/effect.js"
+import { ai, LLMEvent, Message, tool, ToolCallPart, ToolDefinition } from "../src/effect.js"
 import { AI } from "../src/index.js"
 import { Gemini } from "../src/protocols/gemini.js"
 import { TestLLM } from "../src/testing.js"
-import { Auth, LLMClient } from "../src/route.js"
+import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
@@ -13,8 +13,7 @@ import { gatewayProtocol } from "../src/protocols/utils/gateway-protocol.js"
 import { GoogleVertexMessages } from "../src/providers.js"
 import { applyToolUpdates, foldToolUpdates } from "../src/tool-updates.js"
 import { it, testEffect } from "./lib/effect.js"
-import { dynamicResponse, fixedResponse } from "./lib/http.js"
-import { sseEvents } from "./lib/sse.js"
+import { dynamicResponse } from "./lib/http.js"
 
 const defineTool = (name: string, description = `${name} tool`) =>
   ToolDefinition.make({ name, description, inputSchema: { type: "object" } })
@@ -450,32 +449,6 @@ describe("OpenAI Responses tool updates", () => {
     }),
   )
 
-  it.effect("replays calls to inline-only tools from another model under a namespace named after the tool", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        ai.request({
-          model: astra,
-          tools: [read],
-          messages: [
-            Message.user("File it."),
-            Message.tools({ add: [jira] }),
-            Message.assistant([
-              ToolCallPart.make({ id: "call_1", name: "jira", input: {} }),
-              ToolCallPart.make({ id: "call_2", name: "read", input: {} }),
-            ]),
-            Message.tool({ id: "call_1", name: "jira", result: "ok" }),
-            Message.tool({ id: "call_2", name: "read", result: "ok" }),
-          ],
-        }),
-      )
-
-      expect(prepared.body.input.filter((item) => "type" in item && item.type === "function_call")).toEqual([
-        { type: "function_call", call_id: "call_1", name: "jira", namespace: "jira", arguments: "{}" },
-        { type: "function_call", call_id: "call_2", name: "read", namespace: undefined, arguments: "{}" },
-      ])
-    }),
-  )
-
   it.effect("adds freeform tools as custom tools and replays their calls as custom tool calls", () =>
     Effect.gen(function* () {
       const run = ToolDefinition.make({
@@ -508,66 +481,7 @@ describe("OpenAI Responses tool updates", () => {
     }),
   )
 
-  it.effect("replays the namespace of returned calls to inline-only tools exactly as received", () =>
-    Effect.gen(function* () {
-      const messages = [Message.user("File it."), Message.tools({ add: [jira] })]
-      const returned = (namespace?: string) =>
-        LLMClient.generate(ai.request({ model: astra, tools: [read], messages })).pipe(
-          Effect.provide(
-            fixedResponse(
-              sseEvents(
-                {
-                  type: "response.output_item.done",
-                  item: {
-                    type: "function_call",
-                    id: "fc_1",
-                    call_id: "call_1",
-                    name: "jira",
-                    namespace,
-                    arguments: "{}",
-                  },
-                },
-                { type: "response.completed", response: { id: "resp_1" } },
-              ),
-            ),
-          ),
-        )
-      const replayed = (response: LLMResponse) =>
-        compileRequest(
-          ai.request({
-            model: astra,
-            tools: [read],
-            messages: [...messages, response.message, Message.tool({ id: "call_1", name: "jira", result: "ok" })],
-          }),
-        ).pipe(
-          Effect.map((prepared) => prepared.body.input.find((item) => "type" in item && item.type === "function_call")),
-        )
-      const namespaced = yield* returned("jira")
-      const plain = yield* returned(undefined)
-
-      expect(namespaced.toolCalls.map((call) => [call.name, call.namespace])).toEqual([["jira", undefined]])
-      expect(namespaced.toolCalls[0]?.providerMetadata).toEqual({ openai: { itemId: "fc_1", namespace: "jira" } })
-      expect(yield* replayed(namespaced)).toEqual({
-        type: "function_call",
-        id: "fc_1",
-        call_id: "call_1",
-        name: "jira",
-        namespace: "jira",
-        arguments: "{}",
-      })
-      expect(plain.toolCalls[0]?.providerMetadata).toEqual({ openai: { itemId: "fc_1" } })
-      expect(yield* replayed(plain)).toEqual({
-        type: "function_call",
-        id: "fc_1",
-        call_id: "call_1",
-        name: "jira",
-        namespace: undefined,
-        arguments: "{}",
-      })
-    }),
-  )
-
-  it.effect("folds markers that add a tool named like a starting tool", () =>
+  it.effect("redefines a starting tool natively, keeping the top-level tools", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
@@ -577,10 +491,12 @@ describe("OpenAI Responses tool updates", () => {
         }),
       )
 
-      expect(updates(prepared.body)).toEqual([])
+      expect(updates(prepared.body).map((item) => ("tools" in item ? item.tools : undefined))).toEqual([
+        [expect.objectContaining({ name: "edit", description: "edit v2" })],
+      ])
       expect(prepared.body.tools?.map((entry) => ("description" in entry ? entry.description : entry.type))).toEqual([
         "read tool",
-        "edit v2",
+        "edit tool",
       ])
     }),
   )

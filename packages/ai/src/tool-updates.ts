@@ -54,17 +54,6 @@ export const mapToolUpdates = (
   }
 }
 
-/** Names of top-level tools that only exist through tool updates, not the starting `tools`. */
-export const inlineToolNames = (request: LLMRequest) => {
-  const starting = new Set(request.tools.map((tool) => tool.name))
-  return new Set(
-    request.messages
-      .flatMap((message) => toolsUpdate(message)?.add ?? [])
-      .filter((tool) => tool.type === "tool" && !starting.has(tool.name))
-      .map((tool) => tool.name),
-  )
-}
-
 /** The note sent with removals: a provider may not stop the model from calling a removed tool. */
 export const removalNotice = (names: ReadonlyArray<string>) => {
   const quoted = names.map((name) => `\`${name}\``)

@@ -31,7 +31,7 @@ import {
 } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
-import { inlineToolNames, removalNotice, toolsUpdate } from "../tool-updates.js"
+import { removalNotice, toolsUpdate } from "../tool-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -469,7 +469,6 @@ export interface ParserState {
   readonly outputItems: Readonly<Record<number, string>>
   readonly message: { readonly id: string; readonly phase: MessagePhase | null | undefined } | undefined
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
-  readonly inlineTools: ReadonlySet<string>
 }
 
 type ReasoningSummaryStatus = "active" | "can-conclude" | "concluded"
@@ -557,7 +556,6 @@ const lowerToolCall = (
   part: ToolCallPart,
   providerMetadataKey: string,
   custom: OpenAIFreeform.Custom | undefined,
-  inlineTools: ReadonlySet<string>,
 ): OpenResponsesInputItem => {
   const id = OpenAIFreeform.keepsItemID(part.providerMetadata, providerMetadataKey, custom !== undefined)
     ? itemID(part.providerMetadata, providerMetadataKey)
@@ -575,18 +573,9 @@ const lowerToolCall = (
     ...(id === undefined ? {} : { id }),
     call_id: part.id,
     name: part.name,
-    namespace: part.namespace ?? addedToolCallNamespace(part, providerMetadataKey, inlineTools),
+    namespace: part.namespace,
     arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   }
-}
-
-// A call parsed from this route replays its namespace as received. gpt-5.x rejects a call to a tool added through
-// `additional_tools` without the tool-named namespace, so a call from another model gets one.
-const addedToolCallNamespace = (part: ToolCallPart, providerMetadataKey: string, inlineTools: ReadonlySet<string>) => {
-  if (!inlineTools.has(part.name)) return undefined
-  const metadata = part.providerMetadata?.[providerMetadataKey]
-  if (metadata?.itemId === undefined) return part.name
-  return typeof metadata.namespace === "string" ? metadata.namespace : undefined
 }
 
 const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
@@ -676,7 +665,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
   const custom = OpenAIFreeform.tools(request)
   const customTool = (part: ToolCallPart | ToolResultPart) =>
     part.namespace === undefined ? custom.get(part.name) : undefined
-  const inlineTools = inlineToolNames(request)
 
   for (const message of request.messages) {
     const rawMetadata =
@@ -789,7 +777,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey, customTool(part), inlineTools))
+          input.push(lowerToolCall(part, providerMetadataKey, customTool(part)))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
@@ -1063,24 +1051,6 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
   compaction: "cmp",
 }
 
-// Some models return calls to tools added through `additional_tools` under a namespace named after the tool. The call
-// keeps the tool's own name, and its metadata keeps the namespace so replay sends it back as received.
-const addedToolNamespace = (state: Pick<ParserState, "inlineTools">, item: OutputItem) =>
-  item.namespace !== undefined && item.namespace === item.name && state.inlineTools.has(item.namespace)
-    ? item.namespace
-    : undefined
-
-const callNamespace = (state: Pick<ParserState, "inlineTools">, item: OutputItem) =>
-  addedToolNamespace(state, item) === undefined ? item.namespace : undefined
-
-const callMetadata = (state: ParserState, item: OutputItem, custom: boolean) => {
-  const namespace = addedToolNamespace(state, item)
-  return providerMetadata(state, {
-    ...OpenAIFreeform.metadata(item.id, custom),
-    ...(namespace === undefined ? {} : { namespace }),
-  })
-}
-
 // An item adopts the id already open in its output slot, since GitHub Copilot
 // sends a different id on every event, including the item's own done event.
 // Otherwise it keeps its id or gets a locally minted one.
@@ -1242,13 +1212,13 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
   if ((item.type !== "function_call" && item.type !== "custom_tool_call") || !item.call_id) return [state, NO_EVENTS]
   if (state.tools[item.id] !== undefined) return [state, NO_EVENTS]
   const custom = item.type === "custom_tool_call"
-  const metadata = callMetadata(state, item, custom)
+  const metadata = providerMetadata(state, OpenAIFreeform.metadata(item.id, custom))
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   const tools = ToolStream.start(state.tools, item.id, {
     id: item.call_id,
     name: item.name ?? "",
-    namespace: callNamespace(state, item),
+    namespace: item.namespace,
     input: custom ? "" : (item.arguments ?? ""),
     providerMetadata: metadata,
   })
@@ -1262,7 +1232,7 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
       LLMEvent.toolInputStart({
         id: item.call_id,
         name: item.name ?? "",
-        namespace: callNamespace(state, item),
+        namespace: item.namespace,
         providerMetadata: metadata,
       }),
       ...(opened?.events ?? []),
@@ -1378,7 +1348,7 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
   if (item.type === "function_call" || item.type === "custom_tool_call") {
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
     const custom = item.type === "custom_tool_call"
-    const metadata = callMetadata(state, item, custom)
+    const metadata = providerMetadata(state, OpenAIFreeform.metadata(item.id, custom))
     const final = { custom: state.custom.get(item.name), raw: rawInput(item) }
     const input = custom ? OpenAIFreeform.fromRaw(final.custom, final.raw) : item.arguments
     const registered = state.tools[item.id] !== undefined
@@ -1388,7 +1358,7 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
       : ToolStream.start(state.tools, item.id, {
           id: item.call_id,
           name: item.name,
-          namespace: callNamespace(state, item),
+          namespace: item.namespace,
           providerMetadata: metadata,
         })
     const result = yield* ToolStream.finish(state.id, tools, item.id, input)
@@ -1402,7 +1372,7 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
             LLMEvent.toolInputStart({
               id: item.call_id,
               name: item.name,
-              namespace: callNamespace(state, item),
+              namespace: item.namespace,
               providerMetadata: metadata,
             }),
             ...finished,
@@ -1642,7 +1612,6 @@ export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADA
   outputItems: {},
   message: undefined,
   reasoningItems: {},
-  inlineTools: inlineToolNames(request),
 })
 
 export const protocol = Protocol.make({
