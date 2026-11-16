@@ -1,6 +1,6 @@
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
-import type { MajorUpdateState, UpdaterState } from "@opencode-ai/app/updater"
+import type { MajorUpdatePrompt, MajorUpdateState, UpdaterState } from "@opencode-ai/app/updater"
 import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 export type {
   WslDistroProbe,
@@ -29,7 +29,7 @@ export type UpdaterAPI = {
   install: () => Promise<void>
   major: {
     subscribe: (cb: (state: MajorUpdateState) => void) => Promise<() => void>
-    prompt: () => Promise<boolean>
+    prompt: () => Promise<MajorUpdatePrompt>
     restart: () => Promise<void>
     schedule: () => Promise<void>
   }

@@ -94,7 +94,7 @@ export function registerIpcHandlers(deps: Deps) {
     event.sender.once("destroyed", () => updaterSubscriptions.delete(id))
   })
   ipcMain.handle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
-  ipcMain.handle("updater-check", () => deps.updater.check())
+  ipcMain.handle("updater-check", () => deps.updater.checkNow())
   ipcMain.handle("updater-install", () => deps.updater.install())
   ipcMain.handle("updater-major-prompt", () => deps.updater.major.prompt())
   ipcMain.handle("updater-major-restart", () => deps.updater.major.restart())
