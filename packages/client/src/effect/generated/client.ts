@@ -269,6 +269,8 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalConsoleSlackMessageInput,
+  ExperimentalConsoleSlackMessageOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1715,6 +1717,14 @@ const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (
     ),
   )
 
+const EndpointExperimentalConsoleSlackMessage =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalConsoleSlackMessageInput) =>
+    preserveEffect<ExperimentalConsoleSlackMessageOutput>()(
+      raw["console.slackMessage"]({ query: { location: input["location"], url: input["url"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1745,6 +1755,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
   job: { list: EndpointExperimentalJobList(raw) },
+  console: { slackMessage: EndpointExperimentalConsoleSlackMessage(raw) },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>

@@ -2526,6 +2526,35 @@ export type ExperimentalJobListOperation<E = never> = (
   input?: ExperimentalJobListInput,
 ) => Effect.Effect<ExperimentalJobListOutput, E>
 
+export type ExperimentalConsoleSlackMessageInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+}
+export type ExperimentalConsoleSlackMessageOutput =
+  | {
+      readonly status: "found"
+      readonly message: {
+        readonly permalink: string
+        readonly channel: {
+          readonly id: string
+          readonly name: string | null
+          readonly kind: "public" | "private" | "dm" | "group" | "external"
+        }
+        readonly author: { readonly name: string; readonly avatarUrl: string | null }
+        readonly text: string
+        readonly ts: string
+        readonly threadTs: string | null
+        readonly replyCount: number
+      }
+    }
+  | {
+      readonly status: "unavailable"
+      readonly reason: "no_console" | "no_slack_connection" | "no_access" | "not_found" | "invalid_url"
+    }
+export type ExperimentalConsoleSlackMessageOperation<E = never> = (
+  input: ExperimentalConsoleSlackMessageInput,
+) => Effect.Effect<ExperimentalConsoleSlackMessageOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2556,6 +2585,7 @@ export interface ExperimentalApi<E = never> {
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
   readonly job: { readonly list: ExperimentalJobListOperation<E> }
+  readonly console: { readonly slackMessage: ExperimentalConsoleSlackMessageOperation<E> }
 }
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

@@ -349,6 +349,21 @@ export type JobStatus = "running" | "completed" | "error" | "cancelled"
 
 export type JobTime = { started: number; completed?: number }
 
+export type ConsoleSlackMessage =
+  | {
+      status: "found"
+      message: {
+        permalink: string
+        channel: { id: string; name: string | null; kind: "public" | "private" | "dm" | "group" | "external" }
+        author: { name: string; avatarUrl: string | null }
+        text: string
+        ts: string
+        threadTs: string | null
+        replyCount: number
+      }
+    }
+  | { status: "unavailable"; reason: "no_console" | "no_slack_connection" | "no_access" | "not_found" | "invalid_url" }
+
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
 export type VcsBranch = { current?: string; default?: string }
@@ -2594,6 +2609,7 @@ export type ConfigEntry =
           schedules?: boolean
           artifacts?: boolean
           console_watches?: boolean
+          console_slack_preview?: boolean
           mcp_events?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
@@ -4756,6 +4772,13 @@ export type ExperimentalJobListInput = {
 }
 
 export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
+
+export type ExperimentalConsoleSlackMessageInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+}
+
+export type ExperimentalConsoleSlackMessageOutput = ConsoleSlackMessage
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
