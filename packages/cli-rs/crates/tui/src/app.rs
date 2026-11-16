@@ -223,9 +223,9 @@ impl Tui {
         // Mounting may move the focus (a docked panel, a pending permission); an open dialog keeps it.
         let dialog = self.dialogs.is_open().then(|| self.app.focused());
         // A remount (a plugin loaded, a theme change) keeps the composer's open list open in the new composer, as TS's
-        // stays open (js-followups).
+        // stays open (js-followups), with its place on the mode stack: a dialog over it keeps its keys (review jsnpm-1).
         let complete = remount
-            .then(|| self.prompt.current.borrow().upgrade().and_then(|prompt| prompt.autocomplete.get()?.open()))
+            .then(|| self.prompt.current.borrow().upgrade().and_then(|prompt| prompt.autocomplete.get()?.take_open()))
             .flatten();
         // A remount of a plugin's route drops the old view once the new one is mounted, so a plugin that counts its
         // mounts (`mounts()`) hears the new one begin before the old one ends, and keeps its state (review carbon-4).
@@ -263,13 +263,13 @@ impl Tui {
         let target = view.focus_target();
         match dialog {
             None => {
-                if let Some(widget) = target {
+                if let Some(widget) = &target {
                     widget.focus();
                 }
             }
             Some(dialog) => {
-                if let Some(widget) = target {
-                    self.dialogs.refocus(&widget);
+                if let Some(widget) = &target {
+                    self.dialogs.refocus(widget);
                 }
                 match dialog {
                     Some(widget) => widget.focus(),
@@ -278,11 +278,23 @@ impl Tui {
             }
         }
         *self.view.borrow_mut() = Some(view);
-        let prompt = complete.and_then(|open| Some((self.prompt.current.borrow().upgrade()?, open)));
-        if let Some((prompt, open)) = prompt
-            && let Some(complete) = prompt.autocomplete.get()
-        {
-            complete.reopen(open);
+        // Only over the new composer when it takes the focus (now, or once the dialog closes); else the list's mode goes
+        // after the event, as a dropped prompt's does, and keys reach what has the focus.
+        if let Some(open) = complete {
+            let prompt = self.prompt.current.borrow().upgrade();
+            let focused = |prompt: &Rc<crate::prompt::editor::Inner>| target == Some(prompt.textarea.as_any());
+            match prompt.as_ref().filter(|prompt| focused(prompt)).and_then(|prompt| prompt.autocomplete.get()) {
+                Some(complete) => complete.reopen(open),
+                None => {
+                    let weak = self.weak();
+                    self.app.defer(move |_| {
+                        drop(open);
+                        if let Some(tui) = weak.upgrade() {
+                            tui.keymap.sync_mode();
+                        }
+                    });
+                }
+            }
         }
         crate::features::title::route_changed(self);
         crate::features::devtools::route_changed(self);
