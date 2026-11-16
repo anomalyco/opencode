@@ -382,6 +382,49 @@ it.effect("a broken stream opens on the replacement connection, replaying from t
   }),
 )
 
+it.effect("reopens after four healthy streams disconnect, each from its last committed cursor", () =>
+  Effect.gen(function* () {
+    const f = yield* setup()
+    const a = yield* f.create()
+    yield* f.start
+    let stream = yield* f.opened
+    for (const run of [1, 2, 3, 4]) {
+      const cursor = `p${run}`
+      yield* f.event(stream.id, cursor, "pending")
+      yield* f.settled(a.id, (row) => row.runCount === run)
+      yield* f.close(stream.id)
+      yield* advance(() => f.state.streams.length > run)
+      stream = yield* f.opened
+      expect(stream.params.cursor).toBe(cursor)
+    }
+    yield* f.event(stream.id, "final", "success")
+    expect(yield* f.settled(a.id, (row) => row.status !== "active")).toMatchObject({ status: "done", runCount: 5 })
+  }),
+)
+
+it.effect("pauses after three consecutive reconnects without confirmed stream output", () =>
+  Effect.gen(function* () {
+    const f = yield* setup()
+    const a = yield* f.create()
+    yield* f.start
+    const first = yield* f.opened
+    yield* f.event(first.id, "saved", "pending")
+    yield* f.settled(a.id, (row) => row.runCount === 1)
+    yield* f.close(first.id)
+    for (const attempt of [1, 2, 3]) {
+      yield* advance(() => f.state.streams.length > attempt)
+      const stream = yield* f.opened
+      expect(stream.params.cursor).toBe("saved")
+      yield* f.close(stream.id)
+    }
+    expect(yield* f.settled(a.id, (row) => row.status !== "active")).toMatchObject({
+      status: "paused",
+      runCount: 1,
+      lastOutcome: "failed",
+    })
+  }),
+)
+
 it.effect("pause, restart, resume and delete cancel and reacquire exactly one stream", () =>
   Effect.gen(function* () {
     const f = yield* setup()

@@ -410,13 +410,15 @@ const layer = Layer.effect(
     ) {
       const ended = yield* Clock.currentTimeMillis
       const strikes = row.failures + 1
-      const output = outcome.output === undefined ? outcome.error : `${outcome.output}\n${outcome.error}`
-      if (row.trigger.type === "event") return yield* pauseWith(row, now, output)
+      // Preserve the diagnostic even when logs alone would fill the budget.
+      const reason = outcome.output === undefined ? outcome.error : `${outcome.error}\n${outcome.output}`
+      const output = (prefix = "") => AutomationCode.boundedOutput(prefix + reason)
+      if (row.trigger.type === "event") return yield* pauseWith(row, now, output())
       if (!outcome.invalid && strikes < MAX_CODE_FAILURES) {
         return yield* settle(row, {
           failures: strikes,
           last_outcome: "failed",
-          last_output: output,
+          last_output: output(),
           retry_at: ended + CODE_FAILED_RETRY,
           time_updated: ended,
         })
@@ -428,7 +430,7 @@ const layer = Layer.effect(
           failures: strikes,
           last_run_at: now,
           last_outcome: "failed",
-          last_output: outcome.invalid ? `Paused: ${output}` : `Paused after ${strikes} failed runs: ${output}`,
+          last_output: output(outcome.invalid ? "Paused: " : `Paused after ${strikes} failed runs: `),
           retry_at: null,
           time_updated: ended,
         },
@@ -746,9 +748,9 @@ const layer = Layer.effect(
       const open = Effect.gen(function* () {
         const row = yield* find(id)
         const trigger = row.trigger
-        if (row.status !== "active" || trigger.type !== "event") return
+        if (row.status !== "active" || trigger.type !== "event") return Stream.empty
         const now = yield* Clock.currentTimeMillis
-        if (row.expires_at !== null && now >= row.expires_at) return yield* expireWatch(row, now)
+        if (row.expires_at !== null && now >= row.expires_at) return Stream.fromEffectDrain(expireWatch(row, now))
         yield* checkWatch(row, trigger.server)
         const position = row.event_position
         if (!position)
@@ -762,8 +764,8 @@ const layer = Layer.effect(
         const stream = yield* AutomationEvent.resolve(trigger).pipe(inDirectory(row.directory))
         // Even a crash before the first heartbeat must not silently turn a restart into a fresh watch.
         if (position.cursor === undefined) yield* settle(row, { event_position: { ...position, cursor: null } })
-        yield* stream(position.cursor).pipe(
-          Stream.runForEachWhile(
+        return stream(position.cursor).pipe(
+          Stream.takeWhileEffect(
             Effect.fnUntraced(function* (message) {
               const current = yield* find(id)
               const at = yield* Clock.currentTimeMillis
@@ -790,22 +792,20 @@ const layer = Layer.effect(
           ),
         )
       }).pipe(
-        Effect.catchIf(
-          (error) => error instanceof AutomationEvent.Disconnected,
-          (error) =>
-            Effect.gen(function* () {
-              if ((yield* find(id)).event_position?.cursor == null)
-                return yield* new InvalidError({
-                  reason: "No replay cursor; recreate the watch to start from now",
-                })
-              return yield* Effect.fail(error)
-            }),
+        Stream.unwrap,
+        Stream.tapError(
+          Effect.fnUntraced(function* (error) {
+            if (error instanceof AutomationEvent.Disconnected && (yield* find(id)).event_position?.cursor == null)
+              return yield* new InvalidError({ reason: "No replay cursor; recreate the watch to start from now" })
+          }),
         ),
-        Effect.retry({
-          while: (error) => error instanceof AutomationEvent.Disconnected,
-          times: 3,
-          schedule: Schedule.exponential("1 second"),
-        }),
+        // Only a validated, processed message resets Stream.retry, never opening an empty stream.
+        Stream.retry(
+          Schedule.exponential("1 second").pipe(
+            Schedule.while(({ input, attempt }) => input instanceof AutomationEvent.Disconnected && attempt <= 3),
+          ),
+        ),
+        Stream.runDrain,
       )
       const run =
         expires === null

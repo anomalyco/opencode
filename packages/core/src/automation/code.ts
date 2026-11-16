@@ -22,12 +22,15 @@ const CODE_LIMITS: CodeMode.ExecutionLimits = {
   maxOutputBytes: MAX_OUTPUT_BYTES,
 }
 
-/** Keep the delivery visible first, including when the logs use the entire byte budget. */
-export function handoffOutput(delivery: string, logs?: string) {
-  const text = logs === undefined ? delivery : `${delivery}\n${logs}`
+export function boundedOutput(text: string) {
   if (Buffer.byteLength(text) <= MAX_OUTPUT_BYTES) return text
   const { read } = new TextEncoder().encodeInto(text, new Uint8Array(MAX_OUTPUT_BYTES - Buffer.byteLength("…")))
   return text.slice(0, read) + "…"
+}
+
+/** Keep the delivery visible first, including when the logs use the entire byte budget. */
+export function handoffOutput(delivery: string, logs?: string) {
+  return boundedOutput(logs === undefined ? delivery : `${delivery}\n${logs}`)
 }
 
 /** Tools that must not receive an unattended grant from an automation. */
@@ -193,7 +196,7 @@ export const run = Effect.fnUntraced(
       })
       .pipe(Effect.provideService(Permission.Unattended, unattended))
 
-    const output = result.logs?.length ? result.logs.join("\n") : undefined
+    const output = result.logs?.length ? boundedOutput(result.logs.join("\n")) : undefined
     if (!result.ok) {
       const invalid =
         result.error.kind === "ParseError" ||

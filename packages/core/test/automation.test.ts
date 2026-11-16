@@ -1339,6 +1339,28 @@ describe("Automation", () => {
       }),
     )
 
+    it.effect("bounds failed code output including the pause reason in UTF-8 bytes", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const automation = yield* automations.create({
+          sessionID,
+          name: "verbose failure",
+          trigger: every("1 minute"),
+          action: code(`console.log("starting check"); throw new Error("check failed: " + "🧪".repeat(20000))`),
+        })
+        for (const strike of [1, 2, 3]) {
+          yield* tick(automations)
+          const row = yield* automations.get(automation.id)
+          const output = row.lastOutput ?? ""
+          expect(Buffer.byteLength(output)).toBeLessThanOrEqual(32 * 1024)
+          expect(row.status).toBe(strike === 3 ? "paused" : "active")
+          expect(output).toContain("check failed: ")
+          expect(output.endsWith("🧪…")).toBe(true)
+          if (strike === 3) expect(output.startsWith("Paused after 3 failed runs: ")).toBe(true)
+        }
+      }),
+    )
+
     it.effect("bad targets and session or agent policy never deliver or commit the rest of the result", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
