@@ -5,7 +5,7 @@ import { FileVerificationError } from "@opencode/util/file-verification"
 /** A failure the server acts on by its code, such as a wait whose condition never held. */
 export class CodedError extends Error {
   constructor(
-    readonly code: (typeof Browser.FailureCode)[keyof typeof Browser.FailureCode],
+    readonly code: (typeof Browser.FailureCode)[keyof typeof Browser.FailureCode] | "navigation_failed",
     message: string,
     options?: ErrorOptions,
   ) {

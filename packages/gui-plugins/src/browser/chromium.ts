@@ -1,5 +1,5 @@
 import { homedir } from "node:os"
-import { navigationTurn } from "./navigation-turn"
+import { navigationTurn, replacementNavigation } from "./navigation-turn"
 import { accessibilitySnapshot } from "./snapshot"
 import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
@@ -997,18 +997,33 @@ export function createBrowserPage(
     }
 
     contents.once("did-navigate", commit)
+    const next = replacementNavigation()
+    contents.on("did-start-navigation", next.start)
+    contents.on("did-navigate", next.commit)
+    contents.on("did-stop-loading", next.stop)
+    contents.once("destroyed", next.stop)
 
-    return navigationDeadline(contents.loadURL(destination))
-      .catch((error: Error) => {
-          if (committedLoad(error, committed)) return
+    return navigationDeadline(contents.loadURL(destination).catch(async (error: Error) => {
+      if (committedLoad(error, committed)) return
 
-          if (options.previewFailure?.(destination)) throw new FileVerificationError()
+      if (destinationOrigin(destination) && await next.after(error)) return
 
-        if (destination.startsWith(`${previewScheme}://`))
-          throw new CodedError(Browser.FailureCode.previewUnavailable, `The preview could not be loaded: ${url}`)
-        throw error
-      })
-      .finally(() => contents.off("did-navigate", commit))
+      if (options.previewFailure?.(destination)) throw new FileVerificationError()
+
+      if (destination.startsWith(`${previewScheme}://`))
+        throw new CodedError(Browser.FailureCode.previewUnavailable, `The preview could not be loaded: ${url}`)
+
+      if (!committed && "errno" in error && (error.errno === -2 || error.errno === -3))
+        throw new CodedError("navigation_failed", "No page committed. The navigation was cancelled, failed, or became a download. Check the tab and its downloads before navigating again.")
+      throw error
+    })).finally(() => {
+      next.stop()
+      contents.off("destroyed", next.stop)
+      contents.off("did-stop-loading", next.stop)
+      contents.off("did-navigate", next.commit)
+      contents.off("did-start-navigation", next.start)
+      contents.off("did-navigate", commit)
+    })
   }
 
   const reload = async (signal = options.signal, ignoreCache = false) => {

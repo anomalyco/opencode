@@ -1,5 +1,22 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 
+/** Electron rejects loadURL as soon as a second main-frame navigation starts, before its document commits. */
+export function replacementNavigation() {
+  let starts = 0
+  let replacement: ReturnType<typeof Promise.withResolvers<boolean>> | undefined
+
+  return {
+    start(event: { isMainFrame: boolean; isSameDocument: boolean }) {
+      if (event.isMainFrame && !event.isSameDocument && ++starts === 2) replacement = Promise.withResolvers<boolean>()
+    },
+    commit: () => replacement?.resolve(true),
+    stop: () => replacement?.resolve(false),
+    after(error: Error) {
+      return "errno" in error && error.errno === -3 ? replacement?.promise : undefined
+    },
+  }
+}
+
 /** A page owns at most one not-yet-issued navigation. Once issued, Chromium owns cancellation and history. */
 export function navigationTurn(
   wait: ((url: string, signal: AbortSignal) => Promise<void> | undefined) | undefined,
