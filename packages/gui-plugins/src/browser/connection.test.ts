@@ -40,6 +40,8 @@ function fixture(reject?: Error) {
     clearSite: async () => undefined,
     reveal: async () => undefined,
     openPage: async () => undefined,
+    createTab: async () => "handle",
+    closeTab: async () => undefined,
     close: async (input) => {
       closed.push(input.binding)
     },

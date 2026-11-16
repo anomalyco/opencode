@@ -225,6 +225,8 @@ export const BrowserPane = Ipc.define({
     // Creates the page of a restored tab the first time the pane shows it.
     load: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     command: { input: Schema.Struct({ binding, command: Browser.Action }) },
+    createTab: { input: Schema.Struct({ binding, owner: text(128), url: text(16_384) }), output: text(128) },
+    closeTab: { input: Schema.Struct({ owner: text(128), id: text(128) }) },
     find: { input: Schema.Struct({ binding, tabID: Browser.TabID, action: FindAction }) },
     notice: { input: Schema.Struct({ binding, tabID: Browser.TabID, token: text(128), dismiss: Schema.Boolean }) },
     // The user answers what the tab waits for; an answer to a prompt that already ended does nothing.

@@ -13,10 +13,11 @@ import {
 } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { Command, createKeyed, LinkHandler, MenuItem, SettingsPage, Style, type Plugin } from "@opencode/plugin/gui"
-import { BuiltinCommand, BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
+import { builtinContext, BuiltinCommand, BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser } from "@opencode/plugin/gui/browser"
 import type definition from "./index"
 import type { Model } from "./model"
+import { uuid } from "@opencode/util/uuid"
 import {
   BROWSER_MODEL_LOAD_TIMEOUT_MS,
   createBrowserModelState,
@@ -139,11 +140,31 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const opened = createMemo((seen: boolean) => seen || !!sessions.current(), false)
   createKeyed(opened, () => dispatchModel({ type: "load.requested" }))
 
-  ctx.provide(Browser, {
-    attached: (session) => model()?.attached(session) ?? false,
-    canOpen: (session, path) => model()?.canOpen(session, path) ?? false,
-    open: (session, url) => model()?.openURL(session, url),
-    openFile: (session, path) => model()?.openFile(session, path),
+  builtinContext(ctx).provideFor(Browser, (_consumer, signal) => {
+    const owner = uuid()
+    const experimental: Browser["experimental"] = {
+      async open(session, url) {
+        signal.throwIfAborted()
+        ctx.signal.throwIfAborted()
+        const pane = model()
+
+        if (!pane) throw new Error("browser.pane.unavailable")
+
+        return pane.createTab(session.key, owner, url)
+      },
+      async close(id) {
+        if (!id || id.length > 128 || signal.aborted || ctx.signal.aborted) return
+        await model()?.closeOwned(owner, id)
+      },
+    }
+
+    return {
+      attached: (session) => model()?.attached(session) ?? false,
+      canOpen: (session, path) => model()?.canOpen(session, path) ?? false,
+      open: experimental.open,
+      experimental,
+      openFile: (session, path) => model()?.openFile(session, path),
+    }
   })
 
   ctx.add(Command, (): Command | undefined => {

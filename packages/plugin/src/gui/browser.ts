@@ -23,8 +23,24 @@ export interface Browser {
    *
    * @param session - The session whose pane opens it.
    * @param url - The URL to open.
+   * @returns An opaque tab handle owned by this plugin instance. Rejects when the pane cannot open the tab.
+   * @deprecated Use `experimental.open`. Removed in the next minor.
    */
-  open(session: SessionRef, url: string): void
+  open(session: SessionRef, url: string): Promise<string>
+  /** Experimental: may change without compatibility guarantees. */
+  readonly experimental: {
+    /**
+     * Opens a new tab and returns an opaque handle for this plugin instance. Rejects if the pane is unavailable.
+     * @param session - The session whose pane opens it.
+     * @param url - The URL to open.
+     */
+    open(session: SessionRef, url: string): Promise<string>
+    /**
+     * Closes the tab this instance opened. Unknown, foreign and already closed handles do nothing.
+     * @param id - The handle returned by this plugin's `open`, not an agent or layout tab ID.
+     */
+    close(id: string): Promise<void>
+  }
   /**
    * Opens a workspace file as a browser tab. Local tabs display file: addresses and remote tabs display workspace: addresses. Check `canOpen(session, path)` first.
    *

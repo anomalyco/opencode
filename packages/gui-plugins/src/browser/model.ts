@@ -613,6 +613,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     canOpen,
     openFile,
     openURL,
+    async createTab(sessionKey: string, owner: string, url: string) {
+      const target = registrations.get(sessionKey)
+
+      if (!target) throw new Error("browser.pane.unavailable")
+
+      return target.registration.createTab(owner, url)
+    },
+    closeOwned: (owner: string, id: string) => client()?.closeTab({ owner, id }),
     command,
     tab,
     /** Opens a blank tab for the user, whose pane then focuses the address field. */

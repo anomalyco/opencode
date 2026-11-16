@@ -49,6 +49,7 @@ import { FileVerificationError } from "@opencode/util/file-verification"
 import { artifactKind } from "@opencode/util/artifact"
 import { reusableFile, workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
+import { pluginTabs } from "./plugin-tabs"
 import { remotePreview } from "./remote-preview"
 import { artifactPages } from "./artifact-preview"
 import { invalidReply, wireOutcome, wireState } from "./wire"
@@ -76,6 +77,7 @@ type Handle = {
   pages: Map<number, BrowserPage>
   /** Survives unloading the page, but not closing its tab or releasing the binding. */
   activity: Map<Browser.TabID, TabActivity>
+  pluginTabs: ReturnType<typeof pluginTabs>
   /** Agent requests in flight by request ID. */
   requests: Map<string, AbortController>
 }
@@ -173,6 +175,7 @@ export function createBrowserPane(input: {
         },
         pages: new Map(),
         activity: new Map(),
+        pluginTabs: pluginTabs(),
         requests: new Map(),
       }
 
@@ -460,6 +463,27 @@ export function createBrowserPane(input: {
       owned(window, binding)
       dispatchBinding(binding, { type: "owner.closed" })
     },
+    async createTab(window: number, binding: string, owner: string, url: string) {
+      owned(window, binding)
+      // Never adopt an existing file tab, even when this plugin opens the same URL as the user.
+      const result = await execute(binding, { action: { type: "tabs.open", url }, files: [] }, new AbortController().signal, "user", "new")
+
+      const tab = Schema.decodeUnknownSync(Schema.Struct({ id: Browser.TabID }))(result.value).id
+      const handle = handles.get(binding)
+
+      if (!handle || !selectTabSlot(machine.state, binding, tab)) throw new Error("browser.pane.unavailable")
+
+      return handle.pluginTabs.grant(owner, tab)
+    },
+    async closeTab(window: number, owner: string, id: string) {
+      for (const [binding, handle] of handles) {
+        if (handle.window !== window) continue
+
+        const tabID = handle.pluginTabs.resolve(owner, id)
+
+        if (tabID) return this.command(window, binding, { type: "tabs.close", tabID })
+      }
+    },
     forget(server: string, session: string) {
       const storageKey = `${server}\n${session}`
 
@@ -487,7 +511,10 @@ export function createBrowserPane(input: {
   }
 
   function dispatchBinding(binding: string, event: BindingEvent) {
-    if (event.type === "tab.closed") handles.get(binding)?.activity.delete(event.tabID)
+    if (event.type === "tab.closed") {
+      handles.get(binding)?.activity.delete(event.tabID)
+      handles.get(binding)?.pluginTabs.forget(event.tabID)
+    }
     dispatch({ type: "binding", binding, event })
 
     // Extensions hear which tab is active in a window.
