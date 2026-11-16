@@ -902,7 +902,12 @@ fn asked(host: &TestHost) -> Vec<String> {
 /// The user's answer on the build of `target` the loader holds back now, as the plugin manager gives it.
 fn answer(loader: &Loader, target: &str, decision: approval::Decision) -> bool {
     let shown = loader.held(target).and_then(Result::ok).expect("a build is held back");
-    loader.decide(target, &shown, decision).unwrap()
+    decide(loader, target, &shown, decision).unwrap()
+}
+
+/// The user's `decision` on `shown`, checked against the disk as the host checks it once the answer came.
+fn decide(loader: &Loader, target: &str, shown: &Artifact, decision: approval::Decision) -> Result<bool, String> {
+    loader.decide(target, shown, decision, loader.found(target).map(super::Found::identify))
 }
 
 fn library(target: &str) -> std::path::PathBuf {
@@ -986,7 +991,7 @@ fn an_answer_records_nothing_for_a_build_replaced_while_it_was_asked() {
         write(&library(&target), "id=b");
         loader.reconcile(&dynamic(&host), &registry);
         assert_eq!(asked(&host).len(), 2);
-        assert_eq!(loader.decide(&target, &shown, decision), Ok(false));
+        assert_eq!(decide(&loader, &target, &shown, decision), Ok(false));
         loader.reconcile(&dynamic(&host), &registry);
         assert_eq!(entry(&registry.entries(), &target).status, Status::Pending, "{decision:?}");
         // The build shown comes back: nothing was recorded for it.
@@ -1010,7 +1015,7 @@ fn an_answer_before_the_watcher_saves_nothing_for_a_changed_build() {
         loader.reconcile(&dynamic(&host), &registry);
         let shown = loader.held(&target).unwrap().unwrap();
         write(&library(&target), "id=b");
-        assert_eq!(loader.decide(&target, &shown, decision), Ok(false), "{decision:?}");
+        assert_eq!(decide(&loader, &target, &shown, decision), Ok(false), "{decision:?}");
         assert!(!project.store().exists(), "{decision:?}: a decision was saved");
         loader.reconcile(&dynamic(&host), &registry);
         assert_eq!(entry(&registry.entries(), &target).status, Status::Pending, "{decision:?}");
@@ -1020,7 +1025,7 @@ fn an_answer_before_the_watcher_saves_nothing_for_a_changed_build() {
         assert_eq!((entry(&registry.entries(), &target).status.clone(), fake.loads.get()), (Status::Pending, 0));
         // The same build unchanged is saved, as before.
         let again = loader.held(&target).unwrap().unwrap();
-        assert_eq!(loader.decide(&target, &again, decision), Ok(true), "{decision:?}");
+        assert_eq!(decide(&loader, &target, &again, decision), Ok(true), "{decision:?}");
         assert!(project.store().exists(), "{decision:?}");
     }
 }
@@ -1045,7 +1050,7 @@ fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
     std::os::unix::fs::symlink(&b, plugins.join("p")).unwrap();
     loader.reconcile(&dynamic(&host), &registry);
     assert_ne!(loader.held(&target).unwrap().unwrap().path, shown.path);
-    assert_eq!(loader.decide(&target, &shown, approval::Decision::Approved), Ok(false));
+    assert_eq!(decide(&loader, &target, &shown, approval::Decision::Approved), Ok(false));
     loader.reconcile(&dynamic(&host), &registry);
     assert_eq!(entry(&registry.entries(), &target).status, Status::Pending);
 }

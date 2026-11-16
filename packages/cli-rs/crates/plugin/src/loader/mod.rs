@@ -95,6 +95,25 @@ impl Target {
     }
 }
 
+/// The build a target holds on the disk now ([`Loader::found`]).
+pub enum Found {
+    /// A library, identified at once.
+    Build(Result<Artifact, String>),
+    /// A TypeScript plugin's directory, whose full hash can take seconds with a large `node_modules`: the caller runs
+    /// [`Found::identify`] off the UI thread (FT-2).
+    Tree(PathBuf),
+}
+
+impl Found {
+    /// The artifact: a tree is hashed now ([`Artifact::tree`]).
+    pub fn identify(self) -> Result<Artifact, String> {
+        match self {
+            Self::Build(identified) => identified,
+            Self::Tree(dir) => Artifact::tree(&dir),
+        }
+    }
+}
+
 /// What the loader last saw of a target.
 struct Seen {
     /// The digest of the build it loaded or failed on.
@@ -529,22 +548,23 @@ impl Loader {
         // A project's TypeScript plugin runs only once the user approved its files, as a native build does: until then
         // nothing of it reaches the JS host, which does not start for it. What the JS host imports is a copy of exactly
         // the approved files (bigboi P8-1); a save since the approval holds the plugin back for a decision on it.
-        // Its files are hashed off the UI thread (FT-2): until the first walk ended it is starting. A copy that does not
-        // stage, as the files changed since the walk, is read again here.
+        // Its files are hashed and copied off the UI thread (FT-2): until the first walk, or the copy of an approved
+        // tree, ended it is starting. A copy that does not stage, as the files changed under a stamp the walk could not
+        // tell from the approved one, is held back with why, and its tree is hashed whole again off the UI thread: the
+        // new build is asked about once that walk ends.
         let staged = match target.project {
             true => {
                 let Some(tree) = scripts.tree(dir) else {
                     return !registry.loaded(name) && starting(registry, name, listed);
                 };
                 match self.approved(host, registry, name, tree) {
-                    Ok(artifact) => match self.approvals.staging().and_then(|root| artifact.stage(&root)) {
-                        Ok(staged) => Some(staged),
-                        Err(error) => {
-                            log::warn!("plugin {name}: {error}");
+                    Ok(artifact) => match self.approvals.staging().map(|root| scripts.staged(&artifact, &root)) {
+                        Ok(None) => return !registry.loaded(name) && starting(registry, name, listed),
+                        Ok(Some(Ok(staged))) => Some(staged),
+                        Ok(Some(Err(error))) | Err(error) => {
                             scripts.forget(name);
-                            let changed = Artifact::tree(dir);
-                            let decision = changed.as_ref().ok().and_then(|changed| self.approvals.decision(changed));
-                            return self.hold(host, registry, name, changed, decision);
+                            scripts.rewalk(dir);
+                            return self.hold(host, registry, name, Err(error), None);
                         }
                     },
                     Err(changed) => {
@@ -636,31 +656,40 @@ impl Loader {
         true
     }
 
-    /// Records the user's `decision` on `artifact`, the build of `target` they were shown (bigboi-1, carbon-1). It is
-    /// recorded only while that build is the one held back: `Ok(false)` records nothing when the build changed since,
-    /// and the user is asked about the new one. An error when it cannot be saved; nothing changes then. The next
-    /// [`Loader::reconcile`] applies it: an approved build loads, a declined one is not asked about again.
-    pub fn decide(&self, target: &str, artifact: &Artifact, decision: Decision) -> Result<bool, String> {
+    /// Records the user's `decision` on `artifact`, the build of `target` they were shown (bigboi-1, carbon-1), once
+    /// `now`, what [`Loader::found`] identified on the disk after the answer, is that build. It is recorded only while
+    /// that build is the one held back: `Ok(false)` records nothing when the build changed since, and the user is asked
+    /// about the new one. An error when it cannot be saved; nothing changes then. The next [`Loader::reconcile`]
+    /// applies it: an approved build loads, a declined one is not asked about again.
+    pub fn decide(
+        &self,
+        target: &str,
+        artifact: &Artifact,
+        decision: Decision,
+        now: Option<Result<Artifact, String>>,
+    ) -> Result<bool, String> {
         if self.held.borrow().get(target) != Some(&Ok(artifact.clone())) {
             return Ok(false);
         }
-        // The build is identified again now, from the disk: one that changed since the question opened, before the
-        // watcher told the loader, leaves no decision behind for either build (final review big-boi 9). The load still
-        // hashes what it opens.
-        let now = self.targets().into_iter().find(|known| known.target == target).map(|known| self.identify(&known));
+        // A build that changed since the question opened, before the watcher told the loader, leaves no decision behind
+        // for either build (final review big-boi 9). The load still hashes what it opens.
         if now.as_ref().is_none_or(|now| now.as_ref() != Ok(artifact)) {
             return Ok(false);
         }
         self.approvals.decide(artifact, decision).map(|()| true)
     }
 
-    /// The artifact `target` holds on the disk now, as a reconcile reads it: its TypeScript tree, or its library.
-    fn identify(&self, target: &Target) -> Result<Artifact, String> {
-        if let (true, Some(dir)) = (self.scripted(target), &target.local) {
-            return Artifact::tree(dir);
+    /// The build `target` holds on the disk now, as a reconcile reads it, for [`Loader::decide`]: its library, or its
+    /// TypeScript tree to hash ([`Found::identify`]). `None` when it is no target.
+    pub fn found(&self, target: &str) -> Option<Found> {
+        let known = self.targets().into_iter().find(|known| known.target == target)?;
+        if let (true, Some(dir)) = (self.scripted(&known), &known.local) {
+            return Some(Found::Tree(dir.clone()));
         }
-        let file = target.library().ok_or_else(|| format!("{}: no build", target.target))?;
-        Artifact::open(target.local.as_deref().unwrap_or(&file), &file).map(|(artifact, _)| artifact)
+        let identified = known.library().ok_or_else(|| format!("{}: no build", known.target)).and_then(|file| {
+            Artifact::open(known.local.as_deref().unwrap_or(&file), &file).map(|(artifact, _)| artifact)
+        });
+        Some(Found::Build(identified))
     }
 
     /// The one place that decides whether the library of `target`, at `file`, may be opened, before anything of it

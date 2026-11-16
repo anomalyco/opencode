@@ -750,5 +750,5 @@ fn approve(pipe: &Pipe, dir: &Path) {
     let target = dir.to_string_lossy().into_owned();
     let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(tui, &target) else { panic!("nothing is held") };
     assert!(artifact.script, "{artifact:?}");
-    opencode_tui::plugins::host::decide(tui, &target, &artifact, Decision::Approved).unwrap();
+    assert_eq!(crate::plugin_pipe::decide(&pipe.harness, &target, &artifact, Decision::Approved), Ok(true));
 }
