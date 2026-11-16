@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test"
 import { selectTip, type Tip } from "./queue"
 
-const fresh = { current: "", shownAt: 0, dismissed: [], dismissedAt: 0 }
+const hours = 60 * 60 * 1000
+
+// Installed an hour before time 0, so the first-tip delay has already passed.
+const fresh = { current: "", shownAt: 0, dismissed: [], dismissedAt: 0, firstSeen: -hours }
 
 const first: Tip = { id: "first", title: "tips.browse.title", description: "tips.browse.description" }
 
@@ -9,7 +12,13 @@ const second: Tip = { ...first, id: "second" }
 
 const tips = [first, second]
 
-const hours = 60 * 60 * 1000
+test("the first tip waits an hour after the app first ran", () => {
+  const installed = { ...fresh, firstSeen: 10 * hours }
+  expect(selectTip(tips, installed, 11 * hours - 1)).toBeUndefined()
+  expect(selectTip(tips, installed, 11 * hours)).toBe(first)
+  expect(selectTip(tips, { ...fresh, firstSeen: 0 }, 5 * hours)).toBeUndefined()
+  expect(selectTip(tips, { ...installed, dismissed: [first.id], dismissedAt: 1 }, 25 * hours)).toBe(second)
+})
 
 test("first eligible tip wins until it is handled or stops being eligible", () => {
   expect(selectTip(tips, fresh, 1)).toBe(first)

@@ -249,6 +249,29 @@ const logged = RequestExecutor.middleware((request, next) =>
 const everything = AIClient.layerWith(logged) // or AI.make({ layer: logged })
 ```
 
+To hook only some calls, such as adding a per-user header, scope middleware to them. It runs on every provider request
+they make, whatever the modality: submits, polls, results and cancels. Executor-wide middleware wraps it.
+
+```ts
+const signed: HttpMiddleware = (request, next) => next(HttpClientRequest.setHeader(request, "x-user", "user-1"))
+
+// Effect: an Effect or a Stream
+const video =
+  yield *
+  Effect.gen(function* () {
+    const job = yield* ai.video.start({ model, prompt: "A red balloon floats up" })
+    return yield* ai.video.result(model, job.id)
+  }).pipe(RequestExecutor.withMiddleware(signed))
+
+// Promise: `http` on any call's options; a handle it returns keeps it
+await AI.ai.video.start({ model, prompt: "A red balloon floats up" }, { http: signed })
+```
+
+Downloading a `url` asset never uses the caller's scoped middleware, so hooks that add credentials can't reach another
+host such as a CDN or a presigned storage URL. A result URL on the provider's own origin carries the middleware of the
+call that returned it (`asset.middleware`), so it downloads the same way later. Set `middleware` yourself with
+`Media.url(url, { middleware })`.
+
 ## Venice AI
 
 `Venice` provides native Chat Completions with streaming tools and reasoning. `model` and `chat`
@@ -1031,12 +1054,29 @@ const program = Effect.gen(function* () {
 
 The hosted result is represented as a provider-executed tool call and a tool result whose content carries the generated image as a file. Gemini image-capable models instead emit a first-class `media` `LLMEvent` for inline image output (`response.message` then carries a `media` part). Retaining `response.message` preserves the generated image for continuation on both routes.
 
+### Image jobs
+
+`ai.image.generate` and `ai.image.stream` poll a queued image route for you. To manage the job yourself, use the same
+calls as video: `start` submits it and returns `{ id }` at once, the provider's job ID as a string you can store and
+read back from another process, and `status`, `result` and `cancel` take the model and that `id`. `status` is one read;
+`result` fails with an `InvalidRequest` reason while the job is still running; `cancel` fails with an
+`UnsupportedOperation` reason when the provider has no cancel endpoint. No shipped image route is queued yet, so on
+every image model today all four fail with an `UnsupportedOperation` reason before sending anything.
+
+```ts
+const program = Effect.gen(function* () {
+  const job = yield* ai.image.start({ model, prompt: "A lighthouse" })
+  const status = yield* ai.image.status(model, job.id) // { status, progress? }
+  if (status.status === "completed") return yield* ai.image.result(model, job.id)
+})
+```
+
 ## Video generation
 
 Video generation is a job: `start` submits it and returns at once, and the caller decides when to read its `status`,
 fetch its `result`, or `cancel` it. Nothing polls for you. Every call after `start` takes the model and the job's
-`token`, plain JSON you can store and read back from another process, so recovering after a restart is the same call
-as a normal status read. Models come from `.video(...)` selectors on the `XAI`, `OpenRouter`, `Volcengine`,
+`id`, the provider's job ID as a string you can store and read back from another process, so recovering after a restart
+is the same call as a normal status read. Models come from `.video(...)` selectors on the `XAI`, `OpenRouter`, `Volcengine`,
 `BytePlus`, `MiniMax` and `Google` facades.
 
 ```ts
@@ -1057,21 +1097,28 @@ const program = Effect.gen(function* () {
     resolution: "720p", // 480p | 720p | 1080p | 4k, or any provider value
     sound: false,
   })
-  job.token // `{ requestID }` for xAI: store it with the provider and model ID
+  job.id // the provider's job ID: store it with the provider and model ID
 
-  const status = yield* ai.video.status(model, job.token)
-  status.status // "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
+  const status = yield* ai.video.status(model, job.id)
+  status.status // "running" | "completed" | "error"
+  status.reason // "failed" | "cancelled" | "expired", only when status is "error"
   status.progress // 0..1, only when the provider reports it
 
-  const response = yield* ai.video.result(model, job.token)
+  const response = yield* ai.video.result(model, job.id)
   yield* Media.write(response.video, "./kitten.mp4") // streams the download to disk
 })
 ```
 
 The shared fields are `prompt`, `start`, `end`, `references`, `duration`, `aspect`, `resolution` and `sound`;
 everything else is provider-specific and goes under `providerOptions`, typed from the selected model. A request only
-fails before sending when its protocol has no way to express it, such as a reference video on xAI. Values the provider
+fails before sending when its protocol has no way to express it, such as a reference video on xAI. `sound` is the
+exception: on models whose sound can't be switched (MiniMax H3 and Gemini Omni always have it, Hailuo never does) it
+isn't sent, and the model's own behavior applies. Values the provider
 may reject, like an unsupported duration or too many references, go to the provider, and its error comes back typed.
+
+`start` and `end` are images. They take a URL, data URL, base64 string or bytes, or an asset built with
+`Media.image(...)`, which rejects assets known to be video, audio or documents; URLs and provider file references
+whose type isn't stated are sent and checked by the provider. `references` take any kind.
 
 `status` is one read; `result` fails with an `InvalidRequest` reason when the job hasn't finished, and with the
 provider's reason (and terminal document on `reason.body`) when it failed, was cancelled or expired. Moderation
@@ -1110,11 +1157,11 @@ Provider notes:
   `/v1`, and a bare host (`https://api.minimax.io`) works as is. On H3, `start`, `end` and `references` become `content[]` items with `first_frame`, `last_frame` and `reference_image` /
   `reference_video` / `reference_audio` roles, MiniMax file refs become `mm_file://` URLs, `aspect: "auto"` becomes
   `ratio: "adaptive"`, and `resolution` is uppercased (`480P`, `2K`). H3 requires `resolution` and `duration`, plus a
-  `ratio` for text-only prompts; nothing is filled in, so MiniMax rejects a request without them. H3 always has sound,
-  so `sound: false` fails before sending. On Hailuo, `start` and `end` map to `first_frame_image` and
+  `ratio` for text-only prompts; nothing is filled in, so MiniMax rejects a request without them. H3 always has sound
+  and has no field for it, so `sound` isn't sent. On Hailuo, `start` and `end` map to `first_frame_image` and
   `last_frame_image`, image references to `subject_reference`, and the result looks up the file's download URL, which
-  expires after one hour. Hailuo is silent and has no aspect field, so `sound: true`, an explicit `aspect`, and video
-  or audio references fail before sending. Cancel works on H3 (only while queued); Hailuo has no cancel. Native fields
+  expires after one hour. Hailuo is always silent, so `sound` isn't sent; it has no aspect field, so an explicit
+  `aspect` and video or audio references fail before sending. Cancel works on H3 (only while queued); Hailuo has no cancel. Native fields
   such as `extra.prompt_expansion_mode` (H3), `prompt_optimizer` (Hailuo) and `callback_url` go under `providerOptions`.
 - **Google** (`Google.video("gemini-omni-1.2-flash")`) starts a background Gemini Omni interaction. Omni has no
   role field for media, so `start`, `end` and `references` go into `input` in that order (images, plus video
@@ -1122,7 +1169,7 @@ Provider notes:
   `reference_to_video` for references only; with both, the prompt decides. `duration` becomes
   `response_format.duration` (`"3s"`), and `aspect` and `resolution` go to `response_format` as is (resolution
   lowercased); `aspect: "auto"` leaves the ratio out. It rejects `end` without `start` (a lone image reads as the
-  first frame) and `sound: false` (Omni always generates audio). Videos come back as inline bytes. `cancel` posts to
+  first frame). Omni always generates audio and has no field for it, so `sound` isn't sent. Videos come back as inline bytes. `cancel` posts to
   `/interactions/{id}/cancel`. `providerOptions` takes native Interactions fields, such as `previous_interaction_id`
   to edit or extend a generated video, `generation_config.video_config.task`, `service_tier` and `webhook_config`.
 
@@ -1132,8 +1179,8 @@ The promise client has the same calls, each accepting `{ signal }`:
 import { ai } from "@opencode/ai"
 
 const job = await ai.video.start({ model, prompt })
-const status = await ai.video.status(model, job.token)
-if (status.status === "completed") await ai.write((await ai.video.result(model, job.token)).video, "./kite.mp4")
+const status = await ai.video.status(model, job.id)
+if (status.status === "completed") await ai.write((await ai.video.result(model, job.id)).video, "./kite.mp4")
 ```
 
 ## Public API
@@ -1147,9 +1194,9 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
-- **`ai.image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
+- **`ai.image.request` / `generate` / `stream` / `start` / `status` / `result` / `cancel`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model. `start`, `status`, `result` and `cancel` address a queued job by the provider's job ID, like video; see [Image jobs](#image-jobs).
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
-- **`ai.video.request` / `start` / `status` / `result` / `cancel`** — video generation as a job addressed by a stored token; see [Video generation](#video-generation). `VideoClient` is its Effect service and layer.
+- **`ai.video.request` / `start` / `status` / `result` / `cancel`** — video generation as a job addressed by the provider's job ID; see [Video generation](#video-generation). `VideoClient` is its Effect service and layer.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
@@ -1305,8 +1352,8 @@ const program = Effect.gen(function* () {
 })
 ```
 
-Inline routes emit only `finish` from `stream` (no faked deltas); queued routes emit `generation-queued` /
-`generation-progress` before it.
+Inline routes emit only `finish` from `stream` (no faked deltas); queued routes emit `generation-progress`
+before it.
 
 Provider notes:
 

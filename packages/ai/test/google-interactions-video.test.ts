@@ -9,7 +9,7 @@ const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   VideoClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
 const model = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("gemini-omni-1.2-flash")
-const token = { interactionID: "v1_abc" }
+const id = "v1_abc"
 const started = { id: "v1_abc", status: "in_progress", object: "interaction", model: "gemini-omni-1.2-flash" }
 // "AAAAIGZ0eXBpc29t" is the base64 of an MP4 `ftyp` box header.
 const completed = {
@@ -65,7 +65,7 @@ describe("ai.video.start / Google Interactions", () => {
             ),
           ),
         )
-      expect(job).toEqual({ id: "v1_abc", token })
+      expect(job).toEqual({ id: "v1_abc" })
       expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
         "POST https://google.test/v1beta/interactions?trace=1",
       ])
@@ -100,8 +100,10 @@ describe("ai.video.start / Google Interactions", () => {
       const { body } = yield* sent({
         model,
         prompt: "Morph",
-        start: Media.fromDataUrl("data:image/png;base64,AQID"),
-        end: Media.ref("google", "https://generativelanguage.googleapis.com/v1beta/files/last", "image/jpeg"),
+        start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
+        end: Media.image(
+          Media.ref("google", "https://generativelanguage.googleapis.com/v1beta/files/last", "image/jpeg"),
+        ),
       })
       expect(body.input).toEqual([
         { type: "image", data: "AQID", mime_type: "image/png" },
@@ -147,9 +149,15 @@ describe("ai.video.start / Google Interactions", () => {
     }),
   )
 
+  it.effect("sends nothing for sound, since Omni always generates audio and has no field for it", () =>
+    Effect.gen(function* () {
+      const silent = yield* sent({ model, prompt: "x", sound: false })
+      expect(JSON.stringify(silent.body)).not.toContain("audio")
+    }),
+  )
+
   for (const rejected of [
     { name: "an end frame without a start frame", input: { end: "data:image/png;base64,AQID" }, operation: "end" },
-    { name: "silent video", input: { sound: false }, operation: "sound" },
   ])
     it.effect(`rejects ${rejected.name}, which Omni has no way to send, before sending`, () =>
       Effect.gen(function* () {
@@ -170,7 +178,7 @@ describe("ai.video.status / result / cancel / Google Interactions", () => {
       const calls: Array<Call> = []
       const statuses = yield* Effect.gen(function* () {
         const job = yield* ai.video.start({ model, prompt: "x" })
-        const decoded: unknown = JSON.parse(JSON.stringify(job.token))
+        const decoded: unknown = job.id
         return [yield* ai.video.status(model, decoded), yield* ai.video.status(model, decoded)]
       }).pipe(
         Effect.provide(
@@ -198,32 +206,24 @@ describe("ai.video.status / result / cancel / Google Interactions", () => {
         ["in_progress", "completed", "incomplete", "failed", "cancelled", "requires_action", "constructor"],
         (status) =>
           ai.video
-            .status(model, token)
+            .status(model, id)
             .pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { id: "v1_abc", status }))))),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "running",
-        "completed",
-        "completed",
-        "failed",
-        "cancelled",
-        "running",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "completed" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "error", reason: "cancelled" },
+        { status: "running" },
+        { status: "running" },
       ])
     }),
   )
 
-  it.effect("rejects a token from another provider", () =>
-    Effect.gen(function* () {
-      const error = yield* ai.video.status(model, { requestID: "req_1" }).pipe(Effect.flip)
-      expect(error.reason._tag).toBe("InvalidRequest")
-      expect(error.message).toContain("cannot resume")
-    }).pipe(Effect.provide(layer(() => Effect.die("a foreign token reached the network")))),
-  )
-
   it.effect("decodes the inline video with token usage and interaction metadata", () =>
     Effect.gen(function* () {
-      const response = yield* ai.video.result(model, token)
+      const response = yield* ai.video.result(model, id)
       expect(response.videos).toHaveLength(1)
       expect(response.video.source.type).toBe("bytes")
       expect(response.video.mediaType).toBe("video/mp4")
@@ -237,7 +237,7 @@ describe("ai.video.status / result / cancel / Google Interactions", () => {
 
   it.effect("keeps a Files API video URI as a Google reference", () =>
     Effect.gen(function* () {
-      const response = yield* ai.video.result(model, token)
+      const response = yield* ai.video.result(model, id)
       expect(response.video.source).toEqual({
         type: "ref",
         provider: "google",
@@ -272,7 +272,7 @@ describe("ai.video.status / result / cancel / Google Interactions", () => {
 
   it.effect("fails a result read before the interaction finishes", () =>
     Effect.gen(function* () {
-      const error = yield* ai.video.result(model, token).pipe(Effect.flip)
+      const error = yield* ai.video.result(model, id).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toBe(
         "Google Interactions Video generation v1_abc has not finished; await it before reading the result",
@@ -323,7 +323,7 @@ describe("ai.video.status / result / cancel / Google Interactions", () => {
   ])
     it.effect(`fails the result of a ${terminal.body.status} interaction as ${terminal.tag}`, () =>
       Effect.gen(function* () {
-        const error = yield* ai.video.result(model, token).pipe(Effect.flip)
+        const error = yield* ai.video.result(model, id).pipe(Effect.flip)
         expect(error.reason._tag).toBe(terminal.tag)
         expect(error.message).toBe(terminal.message)
         expect(error.reason.body).toBe(JSON.stringify(terminal.body))
@@ -334,7 +334,7 @@ describe("ai.video.status / result / cancel / Google Interactions", () => {
     Effect.gen(function* () {
       const calls: Array<Call> = []
       yield* ai.video
-        .cancel(model, token)
+        .cancel(model, id)
         .pipe(
           Effect.provide(
             layer((input) =>

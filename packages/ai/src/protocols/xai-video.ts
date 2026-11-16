@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -36,7 +35,8 @@ export type Request = VideoRequest<VideoModel<XAIVideoOptions>>
 // 2. Token and response schemas
 // ---------------------------------------------------------------------------
 
-export const Token = Schema.Struct({ requestID: Schema.String })
+/** The provider's job ID; it is all a later status, result or cancel call needs. */
+export const Token = Schema.String
 export type Token = Schema.Schema.Type<typeof Token>
 
 const StartResponse = Schema.Struct({ request_id: Schema.String })
@@ -65,7 +65,7 @@ const STATUS = {
   done: "completed",
   failed: "failed",
   expired: "expired",
-} as const satisfies Record<string, Status>
+} as const satisfies Record<string, MediaProtocol.State>
 
 // Documented video error codes; `service_unavailable`, `internal_error`, and unknown codes are provider-side.
 const FAILURE = {
@@ -132,7 +132,7 @@ const fromRequest = Effect.fn("XAIVideo.fromRequest")(function* (request: Reques
 // ---------------------------------------------------------------------------
 
 const decodeStart = route.decodeStarted(StartResponse, (value) => ({
-  token: { requestID: value.request_id },
+  token: value.request_id,
   snapshot: { id: value.request_id, status: "running" },
 }))
 
@@ -147,8 +147,11 @@ const decodeStatus = Effect.fn("XAIVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeVideoStatus(response)
-  const status = MediaProtocol.status(STATUS, output.value.status)
-  return { id: context.token.requestID, status, progress: fraction(output.value.progress) }
+  return {
+    id: context.token,
+    ...MediaProtocol.status(STATUS, output.value.status),
+    progress: fraction(output.value.progress),
+  }
 })
 
 const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
@@ -157,8 +160,8 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeVideoStatus(response)
   const decoded = output.value
-  const status = MediaProtocol.status(STATUS, decoded.status)
-  if (status === "running") return yield* output.pending(context.token.requestID)
+  const status = MediaProtocol.state(STATUS, decoded.status)
+  if (status === "running") return yield* output.pending(context.token)
   if (status === "failed") {
     const code = decoded.error?.code ?? undefined
     const message = decoded.error?.message ?? undefined
@@ -168,8 +171,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
       MediaProtocol.failure(FAILURE, code),
     )
   }
-  if (status !== "completed")
-    return yield* output.ended("expired", `${route.name} request ${context.token.requestID} expired`)
+  if (status !== "completed") return yield* output.ended("expired", `${route.name} request ${context.token} expired`)
   // `respect_moderation: false` marks a filtered result; a URL may still be present, so only a missing one fails.
   const moderated = decoded.video?.respect_moderation === false
   const url = decoded.video?.url ?? undefined
@@ -186,7 +188,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
     ],
     providerMetadata: {
       xai: {
-        requestId: context.token.requestID,
+        requestId: context.token,
         model: decoded.model ?? undefined,
         respectModeration: decoded.video?.respect_moderation ?? undefined,
       },
@@ -198,7 +200,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-const statusPath = (token: Token) => `${STATUS_PATH}/${token.requestID}`
+const statusPath = (token: Token) => `${STATUS_PATH}/${encodeURIComponent(token)}`
 
 export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
   token: Token,
@@ -215,7 +217,7 @@ const startPath = (request: Request) => {
 }
 
 export const model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<XAIVideoOptions, Token>(
+  VideoModel.fromRoute<XAIVideoOptions>(
     {
       protocol,
       baseURL: DEFAULT_BASE_URL,

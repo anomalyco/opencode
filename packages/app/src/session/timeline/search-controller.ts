@@ -1,3 +1,4 @@
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
@@ -103,15 +104,36 @@ function applyHighlights(
   CSS.highlights.set(HIGHLIGHT_ACTIVE, new Highlight(...active))
 }
 
-export function createTimelineSearchController(input: {
+type TimelineSearchInput = {
   sessionID: () => string | undefined
   scrollRef: () => HTMLDivElement | undefined
   revealMessage: (id: string, partID?: string) => void
   pauseAutoScroll: () => void
-}) {
+}
+
+export function createTimelineSearchController(input: TimelineSearchInput) {
   const command = useCommand()
-  const language = useLanguage()
   const data = useData()
+
+  const controller = createTranscriptSearch({ ...input, messages: (id) => data.session.message.list(id) })
+
+  command.register("session.search", () => [
+    {
+      id: "session.search",
+      title: controller.query.placeholder(),
+      keybind: "mod+f",
+      hidden: true,
+      onSelect: controller.query.open,
+    },
+  ])
+
+  return controller
+}
+
+export function createTranscriptSearch(
+  input: TimelineSearchInput & { messages: (id: string) => readonly SessionMessageInfo[] },
+) {
+  const language = useLanguage()
   const [searchState, setSearchState] = createSignal(createTimelineSearchState())
   const view = createMemo(() => timelineSearchView(searchState()))
   const visible = createMemo(() => view().visible)
@@ -124,7 +146,7 @@ export function createTimelineSearchController(input: {
   let seekFrame: number | undefined
 
   const searchableParts = (sessionID: string | undefined) =>
-    sessionID ? extractSearchableParts(data.session.message.list(sessionID)) : NO_PARTS
+    sessionID ? extractSearchableParts(input.messages(sessionID)) : NO_PARTS
 
   // Reads the transcript only while a query exists, so a closed or empty Find bar costs nothing while a reply
   // streams, and typing reuses the lowercased parts.
@@ -185,16 +207,6 @@ export function createTimelineSearchController(input: {
   })
 
   onCleanup(() => dispatch({ type: "disposed" }))
-
-  command.register("session.search", () => [
-    {
-      id: "session.search",
-      title: language.t("session.search.placeholder"),
-      keybind: "mod+f",
-      hidden: true,
-      onSelect: open,
-    },
-  ])
 
   function open() {
     dispatch({ type: "open", sessionID: untrack(input.sessionID) })
