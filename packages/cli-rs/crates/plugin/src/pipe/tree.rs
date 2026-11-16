@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use crate::loader::approval::{self, Artifact};
@@ -31,6 +31,10 @@ pub(crate) struct Trees {
     /// The bytes of plugin files the walks and copies read.
     hashed: Arc<AtomicU64>,
     wake: Arc<dyn Fn() + Send + Sync>,
+    /// Walks and copies that ended with something new and have not posted their wake yet: until they do, a walk is still
+    /// running as far as [`Trees::walking`] says, so no one waits for walks, sees none, and misses the reconcile that
+    /// wake brings (flakes-10).
+    waking: Arc<AtomicUsize>,
     /// While set, a copy waits before it reads anything ([`Trees::pause_stages`]).
     paused: Arc<(Mutex<bool>, Condvar)>,
 }
@@ -65,6 +69,7 @@ impl Trees {
             state: Arc::default(),
             stages: Arc::default(),
             hashed: Arc::default(),
+            waking: Arc::default(),
             wake: Arc::new(wake),
             paused: Arc::default(),
         }
@@ -109,12 +114,15 @@ impl Trees {
         stages.insert(key, (changes, None));
         drop(stages);
         let (stages, hashed, wake) = (self.stages.clone(), self.hashed.clone(), self.wake.clone());
-        let (owned, to, paused) = (artifact.clone(), root.to_owned(), self.paused.clone());
+        let (owned, to, paused, waking) = (artifact.clone(), root.to_owned(), self.paused.clone(), self.waking.clone());
         let spawned = std::thread::Builder::new().name("plugin-stage".to_owned()).spawn(move || {
             let (flag, resumed) = &*paused;
             drop(resumed.wait_while(lock(flag), |paused| *paused).unwrap_or_else(|poisoned| poisoned.into_inner()));
+            // Counted before the copy's result shows, so a wait on walks lasts until this wake is posted.
+            waking.fetch_add(1, Ordering::SeqCst);
             stage(&stages, &hashed, &owned, &to, changes);
             wake();
+            waking.fetch_sub(1, Ordering::SeqCst);
         });
         // Without a thread, the copy is made here.
         if spawned.is_err() {
@@ -141,6 +149,7 @@ impl Trees {
     pub(crate) fn walking(&self) -> bool {
         lock(&self.state).values().any(|entry| entry.running)
             || lock(&self.stages).values().any(|(_, staged)| staged.is_none())
+            || self.waking.load(Ordering::SeqCst) > 0
     }
 
     fn ask(&self, dir: &Path, full: bool) -> Answer {
@@ -155,12 +164,13 @@ impl Trees {
         entry.running = true;
         drop(state);
         let (state, hashed, wake, owned) = (self.state.clone(), self.hashed.clone(), self.wake.clone(), dir.to_owned());
+        let waking = self.waking.clone();
         let spawned = std::thread::Builder::new()
             .name("plugin-tree".to_owned())
-            .spawn(move || walks(&state, &hashed, &*wake, &owned));
+            .spawn(move || walks(&state, &hashed, &waking, &*wake, &owned));
         // Without a thread (the system has none to give), the walk runs here: an answer is never left stale.
         if spawned.is_err() {
-            walks(&self.state, &self.hashed, &|| {}, dir);
+            walks(&self.state, &self.hashed, &self.waking, &|| {}, dir);
             let state = lock(&self.state);
             return state.get(dir).map_or(answer, |entry| (entry.light.clone(), entry.artifact.clone()));
         }
@@ -169,7 +179,13 @@ impl Trees {
 }
 
 /// Walks `dir` until no question came during the last walk.
-fn walks(state: &Mutex<HashMap<PathBuf, Entry>>, hashed: &AtomicU64, wake: &dyn Fn(), dir: &Path) {
+fn walks(
+    state: &Mutex<HashMap<PathBuf, Entry>>,
+    hashed: &AtomicU64,
+    waking: &AtomicUsize,
+    wake: &dyn Fn(),
+    dir: &Path,
+) {
     loop {
         let (known, full, has, stale) = {
             let mut state = lock(state);
@@ -206,11 +222,16 @@ fn walks(state: &Mutex<HashMap<PathBuf, Entry>>, hashed: &AtomicU64, wake: &dyn 
                 }
             }
             let again = std::mem::take(&mut entry.again);
+            // Counted while the walk still runs, so no one sees it end before its wake is posted.
+            if changed {
+                waking.fetch_add(1, Ordering::SeqCst);
+            }
             entry.running = again;
             (changed, again)
         };
         if changed {
             wake();
+            waking.fetch_sub(1, Ordering::SeqCst);
         }
         if !again {
             return;
@@ -358,7 +379,7 @@ mod tests {
         let state = Mutex::new(HashMap::from([(dir.to_path_buf(), Entry { full: true, ..Entry::default() })]));
         let walk = |stale: bool| {
             lock(&state).get_mut(dir).unwrap().stale = stale;
-            walks(&state, &AtomicU64::new(0), &|| {}, dir);
+            walks(&state, &AtomicU64::new(0), &AtomicUsize::new(0), &|| {}, dir);
             lock(&state)[dir].artifact.clone().unwrap().unwrap().sha256
         };
         let first = walk(false);
@@ -399,5 +420,42 @@ mod tests {
         assert_eq!(trees.staged(&artifact, &staging), None, "a failure on files since changed was given");
         settle();
         assert_eq!(trees.staged(&artifact, &staging), Some(Ok(staging.join(&artifact.sha256))));
+    }
+
+    // Expected (flakes-10): a walk or a copy that found something new is still walking until its wake is posted. A wait
+    // on walks that saw it end before that took the next turn without the reconcile the wake brings, and the approval
+    // model then saw a declined build where the new one was already on the disk.
+    #[test]
+    fn a_walk_or_a_copy_runs_until_its_wake_is_posted() {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let (dir, staging) = (root.path().join("p"), root.path().join("staged"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("tui.ts"), "a").unwrap();
+        let (entered, waking) = std::sync::mpsc::channel::<()>();
+        let (release, go) = std::sync::mpsc::channel::<()>();
+        let (entered, go) = (Mutex::new(entered), Mutex::new(go));
+        let trees = Trees::new(move || {
+            let _ = lock(&entered).send(());
+            let _ = lock(&go).recv();
+        });
+        let ended = |trees: &Trees| {
+            let begun = std::time::Instant::now();
+            while trees.walking() {
+                assert!(begun.elapsed() < std::time::Duration::from_secs(10), "it never ended");
+                std::thread::yield_now();
+            }
+        };
+        let posting = |trees: &Trees| {
+            waking.recv_timeout(std::time::Duration::from_secs(10)).expect("a wake");
+            assert!(trees.walking(), "it ended before its wake was posted");
+            release.send(()).unwrap();
+            ended(trees);
+        };
+        assert_eq!(trees.artifact(&dir), None);
+        posting(&trees);
+        let artifact = trees.artifact(&dir).unwrap().unwrap();
+        assert_eq!(trees.staged(&artifact, &staging), None);
+        posting(&trees);
+        assert!(trees.staged(&artifact, &staging).unwrap().is_ok());
     }
 }
