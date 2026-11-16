@@ -55,6 +55,7 @@ export function addressParts(url: string) {
  * - `local`: HTTP on a loopback host, which resolves on the machine running the server.
  * - `insecure`: HTTP elsewhere.
  * - `file`: a workspace file.
+ * - `workspace`: a file read by the session's server, not from the desktop's disk.
  */
 export function connection(url: string) {
   if (!URL.canParse(url)) return
@@ -63,6 +64,8 @@ export function connection(url: string) {
   if (parsed.protocol === "https:") return "secure"
 
   if (parsed.protocol === "file:") return "file"
+
+  if (parsed.protocol === "workspace:") return "workspace"
 
   if (parsed.protocol !== "http:") return
 

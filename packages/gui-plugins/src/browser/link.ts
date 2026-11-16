@@ -1,7 +1,9 @@
 import { encodeFilePath } from "@opencode/util/path"
-import type { Files } from "@opencode/plugin/gui"
+import { workspacePrefix } from "./remote-address"
 
 /** The file:// URL of a workspace-relative path. */
-export function workspaceFileURL(files: Files, path: string) {
-  return `file://${encodeFilePath(`${files.root.replaceAll("\\", "/").replace(/\/+$/, "")}/${path}`)}`
+export function workspaceFileURL(root: string, path: string, remoteSession?: string) {
+  if (remoteSession) return `${workspacePrefix(remoteSession)}${encodeFilePath(path)}`
+
+  return `file://${encodeFilePath(`${root.replaceAll("\\", "/").replace(/\/+$/, "")}/${path}`)}`
 }

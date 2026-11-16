@@ -10,7 +10,7 @@ export type LinkResolution =
   /** Several workspace files end with the link's path. */
   | { readonly kind: "picker"; readonly query: string }
   /** An HTML file the browser pane can load. */
-  | { readonly kind: "browser"; readonly url: string }
+  | { readonly kind: "browser"; readonly path: string }
   | { readonly kind: "file"; readonly path: string; readonly selection?: LineRange }
 
 /**
@@ -106,7 +106,7 @@ export type LinkOpenEffect =
       readonly background: boolean
     }
   | { readonly type: "open-picker"; readonly query: string; readonly background: boolean }
-  | { readonly type: "open-browser"; readonly url: string }
+  | { readonly type: "open-browser"; readonly path: string }
   | { readonly type: "toast-failed"; readonly path: string; readonly error?: string }
   | { readonly type: "toast-timeout"; readonly path: string }
 
@@ -207,7 +207,7 @@ function resolved(state: Extract<LinkOpenState, { status: "resolving" }>, resolu
   if (resolution.kind === "picker")
     return finish(state, [{ type: "open-picker", query: resolution.query, background: state.background }])
 
-  if (resolution.kind === "browser") return finish(state, [{ type: "open-browser", url: resolution.url }])
+  if (resolution.kind === "browser") return finish(state, [{ type: "open-browser", path: resolution.path }])
 
   return {
     state: {

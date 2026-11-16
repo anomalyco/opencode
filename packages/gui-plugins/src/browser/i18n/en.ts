@@ -210,4 +210,7 @@ export default {
   "menu.languages": "Spellcheck languages",
   "refused.popup": "Pop-up blocked",
   "refused.open": "Open",
+  "preview.source": "View source",
+  "preview.workspace": "Server workspace file",
+  "preview.offline": "The workspace server is disconnected. Reconnect to load this preview.",
 }

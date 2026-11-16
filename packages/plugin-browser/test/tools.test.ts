@@ -280,6 +280,11 @@ test("preview paths resolve the way the Review pane resolves them", async () => 
     expect(await locate(pathToFileURL(page).href)).toEqual({ absolute: page, found: true, directory: false })
     // The pane opens the one workspace file whose path ends with a relative path that does not resolve.
     expect(await locate("index.html")).toMatchObject({ found: true })
+    await Bun.write(join(directory, "site", "docs", "index.html"), "second")
+    expect(await locate("index.html")).toMatchObject({ found: undefined })
+    expect(await BrowserFiles.previewSize("site/docs/index.html", directory)).toBe(6)
+    for (const path of ["other/site/index.html", "../index.html", page, "dir/file:stream", "dir/CON.txt", "index.html/"])
+      expect(await BrowserFiles.previewSize(path, join(directory, "site", "docs"))).toBeUndefined()
     expect(await locate("missing.html")).toEqual({
       absolute: join(directory, "missing.html"),
       found: false,

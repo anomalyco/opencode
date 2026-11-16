@@ -182,11 +182,11 @@ describe("transitionLinkOpen", () => {
     expect(
       replay([
         click,
-        { type: "link.resolved", attempt: 1, route: here, resolution: { kind: "browser", url: "file:///a.html" } },
+        { type: "link.resolved", attempt: 1, route: here, resolution: { kind: "browser", path: "a.html" } },
       ]).effects,
     ).toEqual([
       { type: "abort", attempt: 1 },
-      { type: "open-browser", url: "file:///a.html" },
+      { type: "open-browser", path: "a.html" },
     ])
   })
 

@@ -101,6 +101,7 @@ export default function ArtifactView(props: {
 
   // Media the browser could not decode falls back to the binary placeholder.
   const kind = createMemo(() => selectArtifactStageKind(viewerState(), props.path, props.content))
+  const sourceOnly = () => !!ctx.desktop && kind() === "html"
   const previewable = createMemo(() => selectArtifactPreviewable(props.path, props.content))
 
   const table = createMemo(() =>
@@ -173,12 +174,12 @@ export default function ArtifactView(props: {
         screen={props.screen}
         path={props.path}
         text={previewable() ? props.content.content : undefined}
-        mode={selectArtifactMode(viewerState(), props.content)}
-        onModeChange={previewable() ? (mode) => dispatchViewer({ type: "mode.changed", mode }) : undefined}
+        mode={sourceOnly() ? "source" : selectArtifactMode(viewerState(), props.content)}
+        onModeChange={previewable() && !sourceOnly() ? (mode) => dispatchViewer({ type: "mode.changed", mode }) : undefined}
         meta={meta()}
         html={kind() === "html"}
       />
-      <Show when={selectArtifactShowingPreview(viewerState(), props.path, props.content)} fallback={props.source}>
+      <Show when={!sourceOnly() && selectArtifactShowingPreview(viewerState(), props.path, props.content)} fallback={props.source}>
         <Switch
           fallback={
             <ArtifactBinary

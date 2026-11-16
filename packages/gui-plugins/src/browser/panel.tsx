@@ -23,6 +23,8 @@ import {
   type SessionScreen,
 } from "@opencode/plugin/gui"
 import { addressParts, connection, externalAction } from "./address"
+import { FileSource } from "../file/contract"
+import { remotePath, workspacePrefix } from "./remote-address"
 import {
   ADDRESS_HINT_MAX_LENGTH,
   addressSuggestions,
@@ -85,9 +87,31 @@ export default function SessionBrowserPane(props: {
   const state = () => props.model.tab(props.session, props.tab().id)
   const address = () => (state()?.url === "about:blank" ? "" : (state()?.url ?? ""))
   const failed = () => !!state()?.loadError
-  const suspended = () => props.model.suspended(props.session)
+  const offline = () => address().startsWith("workspace:") && !props.session.server.connected
+  const suspended = () => offline() || props.model.suspended(props.session)
   const command = (action: Browser.Action) => props.model.command(props.session, action)
   const profile = plugin.use(BrowserProfile)
+  const fileSource = plugin.use(FileSource)
+
+  const sourcePath = () => {
+    const url = address()
+
+    if (!url.startsWith("file:///")) {
+      const prefix = workspacePrefix(props.session.id ?? "")
+
+      return remotePath(url, prefix) ? url.slice(prefix.length).split(/[?#]/, 1)[0] : undefined
+    }
+
+    return url
+  }
+
+  const source = () => {
+    const provider = fileSource()
+    const path = sourcePath()
+
+    return provider.status === "active" && path ? () => provider.value.open(props.session, path) : undefined
+  }
+
   // The pane offers to import sign-ins until the user imports or declines once, and keeps the offer's confirmation of
   // an import until the user closes it.
   const [confirming, setConfirming] = createSignal(false)
@@ -161,7 +185,7 @@ export default function SessionBrowserPane(props: {
   const empty = () => !address() && !state()?.loading && !addressBar().navigating
   // The desktop page hides blank and loading documents itself; only hide here
   // while the pane shows its own empty or failed state over the embed.
-  const shown = () => visible() && !empty() && !failed()
+  const shown = () => visible() && !empty() && !failed() && !suspended()
 
   const embed = () => {
     const tab = state()
@@ -679,6 +703,7 @@ export default function SessionBrowserPane(props: {
                     icon={<Icon name="outline-globe-plus" />}
                   />
                 </Tooltip>
+                <Show when={!address().startsWith("workspace:")}>
                 <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
                   <IconButton
                     type="button"
@@ -691,6 +716,7 @@ export default function SessionBrowserPane(props: {
                     icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
                   />
                 </Tooltip>
+                </Show>
               </div>
             </Show>
           </form>
@@ -825,9 +851,14 @@ export default function SessionBrowserPane(props: {
                   {plugin.t("link.copy")}
                 </Menu.Item>
                 <Menu.Item disabled={!inspectable()} onSelect={() => find({ type: "open" })}>{plugin.t("find.open")}</Menu.Item>
+                <Show when={source()}>
+                  {(open) => <Menu.Item onSelect={() => open()()}>{plugin.t("preview.source")}</Menu.Item>}
+                </Show>
+                <Show when={!address().startsWith("workspace:")}>
                 <Menu.Item disabled={!reachable()} onSelect={openExternal}>
                   {plugin.t(address().startsWith("file:") ? "external.reveal" : "external.menu")}
                 </Menu.Item>
+                </Show>
                 <Menu.Separator />
                 <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("settings.open")}</Menu.Item>
                 <Menu.Separator />
@@ -918,7 +949,7 @@ export default function SessionBrowserPane(props: {
         </Show>
         <Show when={suspended()}>
           <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
-            {plugin.t("suspended")}
+            {plugin.t(offline() ? "preview.offline" : "suspended")}
           </p>
         </Show>
         <Show when={comment()}>
@@ -1141,6 +1172,7 @@ const connections = {
   insecure: { icon: "outline-hexagonal-warning", title: "site.insecure", description: "site.insecure.description" },
   local: { icon: "monitor", title: "site.local", description: "site.local.description" },
   file: { icon: "folder", title: "site.file", description: "site.file.description" },
+  workspace: { icon: "folder", title: "preview.workspace", description: "site.file.description" },
 } as const
 
 /**
@@ -1214,7 +1246,7 @@ function SiteInformation(props: {
   const web = () => {
     const value = connection(props.url)
 
-    return !!value && value !== "file"
+    return !!value && value !== "file" && value !== "workspace"
   }
 
   const cookieDetail = () => {

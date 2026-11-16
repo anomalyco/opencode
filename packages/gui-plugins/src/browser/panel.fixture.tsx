@@ -795,7 +795,7 @@ type RegionHost = {
       ipc: (token: Ipc) => PaneClient | undefined
     }>
   >
-  usePluginHost(): { ready(): boolean }
+  usePluginHost(): { ready(): boolean; links: { open(link: { href: string; exact: boolean; session: MountedSession }): void } }
   createRegion(input: {
     region: "side"
     view: Accessor<MountedSession>
@@ -853,6 +853,8 @@ type RegionFixtureState = {
   sessions: number
   /** How many browser tabs the pane asked main to open. */
   opens: number
+  previewURL?: string
+  toast?: string
   /** How many page reloads the pane asked main for. */
   reloads: number
   reopens: number
@@ -1068,7 +1070,10 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       load: async () => undefined,
       command: async (value) => {
-        if (value.command.type === "tabs.open") setStore("opens", (count) => count + 1)
+        if (value.command.type === "tabs.open") {
+          setStore("opens", (count) => count + 1)
+          setStore("previewURL", value.command.url)
+        }
 
         if (value.command.type === "reload") setStore("reloads", (count) => count + 1)
 
@@ -1126,7 +1131,11 @@ export function mountBrowserRegion(input: RegionHost) {
       system: () => ({ copy: async () => undefined, openExternal() {}, save: async () => false }),
       sessions: () => ({ list: () => refs, current: view }),
       screen: () => ({ current: () => screen }),
-      toast: () => ({ show: () => ({ dismiss() {} }) }),
+      toast: () => ({ show: (input: { title: string }) => {
+        setStore("toast", input.title)
+
+        return { dismiss() {} }
+      } }),
       tabs: () => ({ list: () => [], open() {}, focus() {}, move() {}, close() {} }),
       layout,
       storage,
@@ -1273,7 +1282,12 @@ export function mountBrowserRegion(input: RegionHost) {
     function Ready(props: ParentProps) {
       const plugins = input.usePluginHost()
 
-      return <Show when={plugins.ready()}>{props.children}</Show>
+      return <Show when={plugins.ready()}>
+        <button onClick={() => plugins.links.open({ href: "report.html", exact: true, session: view() })}>Open workspace HTML</button>
+        <output>{store.previewURL}</output>
+        <output>{store.toast}</output>
+        {props.children}
+      </Show>
     }
 
     return (

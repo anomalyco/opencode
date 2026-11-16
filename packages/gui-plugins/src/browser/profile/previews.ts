@@ -1,11 +1,12 @@
 import { net, type Session } from "electron"
 import { previewScheme } from "../scheme"
-import { resolvePreviewRequest } from "../workspace-file"
+import { resolvePreviewRequest, type PreviewSource } from "../workspace-file"
+import { FSUtil } from "@opencode/util/fs-util"
 import { previewRange } from "./range"
 
 export function createPreviews(session: Session, signal: AbortSignal) {
   signal.throwIfAborted()
-  const grants = new Map<string, () => readonly string[]>()
+  const grants = new Map<string, PreviewSource>()
 
   const release = (host: string) => {
     if (!grants.delete(host)) return
@@ -18,12 +19,24 @@ export function createPreviews(session: Session, signal: AbortSignal) {
     // SAFETY: Electron's Protocol.handle assigns ProtocolRequest.initiatorOrigin (string or undefined).
     const initiator = (request as Request & { initiatorOrigin?: string }).initiatorOrigin
 
-    const target = await resolvePreviewRequest(request.url, request.method, initiator, grants)
+    const target = await resolvePreviewRequest(request.url, request.method, initiator, grants, request.signal)
 
     if (!target) return Response.error()
     const slice = previewRange(request.headers.get("range"), target.size)
-    const response = slice.status === 416 ? undefined : await net.fetch(target.href, { method: request.method, headers: slice.range ? { range: slice.range } : undefined })
-    const headers = new Headers(response?.headers)
+
+    const response = slice.status === 416 || request.method === "HEAD" ? undefined : target.type === "remote"
+      ? await target.read(target.path, slice.range, request.signal)
+      : await net.fetch(target.href, { headers: slice.range ? { range: slice.range } : undefined, signal: request.signal })
+
+    // Trust no upstream headers. A changed size, ignored range, auth challenge or redirect is not this file.
+    if (target.type === "remote" && response && (response.status !== slice.status ||
+      response.headers.get("content-length") !== String(slice.length) || response.headers.get("content-range") !== (slice.content ?? null))) {
+      await response.body?.cancel()
+
+      return Response.error()
+    }
+
+    const headers = new Headers({ "Content-Type": target.type === "local" && response?.headers.get("Content-Type") || FSUtil.mimeType(target.path) })
     headers.set("Accept-Ranges", "bytes")
     headers.set("Content-Length", String(slice.length))
 
@@ -32,8 +45,6 @@ export function createPreviews(session: Session, signal: AbortSignal) {
     headers.set("Content-Security-Policy", "frame-ancestors 'self'")
     headers.set("Referrer-Policy", "no-referrer")
     headers.set("Cache-Control", "no-store")
-
-    if (request.method === "HEAD") await response?.body?.cancel()
 
     if (!grants.has(host)) {
       await response?.body?.cancel()
@@ -60,12 +71,21 @@ export function createPreviews(session: Session, signal: AbortSignal) {
   signal.addEventListener("abort", dispose, { once: true })
 
   return {
-    grant(roots: () => readonly string[]) {
+    grant(source: PreviewSource, lifetime: AbortSignal) {
       signal.throwIfAborted()
+      lifetime.throwIfAborted()
       const host = crypto.randomUUID()
-      grants.set(host, roots)
+      grants.set(host, source)
 
-      return { host, release: () => release(host) }
+      const revoke = () => {
+        lifetime.removeEventListener("abort", revoke)
+        release(host)
+      }
+
+      // Revoke at detach, not after the attachment's asynchronous network finalizers complete.
+      lifetime.addEventListener("abort", revoke, { once: true })
+
+      return { host, release: revoke }
     },
     dispose,
   }

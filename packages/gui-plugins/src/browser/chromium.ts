@@ -63,7 +63,8 @@ import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { previewAddress, previewFile, reloadAddress } from "./preview"
 import { previewScheme } from "./scheme"
-import { workspaceFile } from "./workspace-file"
+import { workspaceFile, type PreviewSource } from "./workspace-file"
+import { remotePath } from "./remote-address"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
@@ -224,8 +225,10 @@ export function createBrowserPage(
     popupOptions?: Electron.BrowserWindowConstructorOptions
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
-    /** This binding's non-local origin for workspace previews; absent for remote workspaces. */
+    /** This binding's isolated origin for workspace previews. */
     previewHost?: string
+    remote?: Extract<PreviewSource, { type: "remote" }>
+    signal: AbortSignal
     /** Extensions whose `chrome-extension://` pages may open, such as their popups and options. */
     extensions?: () => ReadonlyArray<string>
     shared: Shared
@@ -235,6 +238,7 @@ export function createBrowserPage(
 ) {
   const policy: Policy = {
     home: homedir(),
+    remote: options.remote?.prefix,
     get fileRoots() {
       return options.fileRoots?.() ?? []
     },
@@ -259,7 +263,7 @@ export function createBrowserPage(
   })
 
   const contents = view.webContents
-  const preview = (url: string) => previewFile(url, options.previewHost, policy.fileRoots ?? [])
+  const preview = (url: string) => previewFile(url, options.previewHost, policy.fileRoots ?? [], policy.remote)
   const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
   contents.on("before-mouse-event", (_event, mouse) => {
@@ -499,7 +503,13 @@ export function createBrowserPage(
 
     if (!file) return
     // History API routes never pass the protocol handler. Keep the last validated address for virtual routes.
-    void workspaceFile(file, policy.fileRoots ?? []).then((target) => {
+    const path = options.remote && remotePath(file, options.remote.prefix)
+
+    const exists = options.remote
+      ? path && options.remote.stat(path, options.signal).then((size) => size !== null)
+      : workspaceFile(file, policy.fileRoots ?? [])
+
+    void Promise.resolve(exists).then((target) => {
       if (target && !closed() && !contents.isDestroyed() && contents.getURL() === url) report(file)
     })
   })
@@ -722,7 +732,7 @@ export function createBrowserPage(
   })
 
   const load = (url: string) => {
-    const destination = localFileURL(url) ? previewAddress(url, options.previewHost, policy.fileRoots ?? []) : url
+    const destination = localFileURL(url) || url.startsWith("workspace:") ? previewAddress(url, options.previewHost, policy.fileRoots ?? [], policy.remote) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
     let committed = false
@@ -742,7 +752,7 @@ export function createBrowserPage(
   }
 
   const reload = async () => {
-    const address = reloadAddress(contents.getURL(), state().url, options.previewHost, policy.fileRoots ?? [])
+    const address = reloadAddress(contents.getURL(), state().url, options.previewHost, policy.fileRoots ?? [], policy.remote)
 
     if (address) return void await load(address)
     contents.reload()
