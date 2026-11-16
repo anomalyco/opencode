@@ -220,8 +220,6 @@ export const dict = {
   "dialog.fork.empty": "Nav ziņu, no kurām atzarot",
   "dialog.directory.action.selectFile": "Izvēlieties failu",
   "dialog.directory.action.selectFolder": "Izvēlieties mapi",
-  "dialog.directory.root": "Sakne",
-  "dialog.directory.parent": "Vecāks",
   "dialog.directory.readError": "Neizdevās nolasīt šo mapi",
   "dialog.server.add.title": "Pievienot serveri",
   "dialog.server.add.url": "Servera adrese",

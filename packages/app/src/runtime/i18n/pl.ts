@@ -224,8 +224,6 @@ export const dict = {
   "dialog.fork.empty": "Brak wiadomości do rozwidlenia",
   "dialog.directory.action.selectFile": "Wybierz plik",
   "dialog.directory.action.selectFolder": "Wybierz folder",
-  "dialog.directory.root": "Katalog główny",
-  "dialog.directory.parent": "Folder nadrzędny",
   "dialog.directory.readError": "Nie można odczytać tego folderu",
   "dialog.server.add.title": "Dodaj serwer",
   "dialog.server.add.url": "Adres URL serwera",

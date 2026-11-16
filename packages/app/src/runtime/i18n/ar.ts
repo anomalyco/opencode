@@ -233,8 +233,6 @@ export const dict = {
   "dialog.fork.empty": "لا توجد رسائل للتفرع منها",
   "dialog.directory.action.selectFile": "اختيار ملف",
   "dialog.directory.action.selectFolder": "اختيار مجلد",
-  "dialog.directory.root": "الجذر",
-  "dialog.directory.parent": "المجلد الأصل",
   "dialog.directory.readError": "تعذرت قراءة هذا المجلد",
   "dialog.server.add.title": "إضافة خادم",
   "dialog.server.add.url": "عنوان URL للخادم",

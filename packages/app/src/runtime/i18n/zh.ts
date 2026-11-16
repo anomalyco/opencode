@@ -267,8 +267,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "选择文件",
   "dialog.directory.action.selectFolder": "选择文件夹",
-  "dialog.directory.root": "根目录",
-  "dialog.directory.parent": "上级目录",
   "dialog.directory.readError": "无法读取此文件夹",
 
   "dialog.server.add.title": "添加服务器",

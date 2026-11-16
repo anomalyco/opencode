@@ -228,8 +228,6 @@ export const dict = {
   "dialog.fork.empty": "Tiada mesej untuk dicabang",
   "dialog.directory.action.selectFile": "Pilih fail",
   "dialog.directory.action.selectFolder": "Pilih folder",
-  "dialog.directory.root": "Akar",
-  "dialog.directory.parent": "Induk",
   "dialog.directory.readError": "Tidak dapat membaca folder ini",
   "dialog.server.add.title": "Tambah pelayan",
   "dialog.server.add.url": "Alamat pelayan",

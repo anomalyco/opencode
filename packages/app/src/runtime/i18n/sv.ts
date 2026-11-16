@@ -420,8 +420,6 @@ export const dict = {
   "dialog.fork.empty": "Inga meddelanden att förgrena från",
   "dialog.directory.action.selectFile": "Välj fil",
   "dialog.directory.action.selectFolder": "Välj mapp",
-  "dialog.directory.root": "Rotmapp",
-  "dialog.directory.parent": "Överordnad mapp",
   "dialog.directory.readError": "Det går inte att läsa den här mappen",
   "dialog.server.add.title": "Lägg till server",
   "dialog.server.add.url": "Serveradress",

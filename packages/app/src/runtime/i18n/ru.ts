@@ -242,8 +242,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Выбрать файл",
   "dialog.directory.action.selectFolder": "Выбрать папку",
-  "dialog.directory.root": "Корень",
-  "dialog.directory.parent": "Родительская папка",
   "dialog.directory.readError": "Не удалось прочитать эту папку",
 
   "dialog.server.add.title": "Добавить сервер",

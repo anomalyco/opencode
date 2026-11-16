@@ -221,8 +221,6 @@ export const dict = {
   "dialog.fork.empty": "Nuk ka mesazhe për të marrë nga",
   "dialog.directory.action.selectFile": "Zgjidhni skedarin",
   "dialog.directory.action.selectFolder": "Zgjidhni dosjen",
-  "dialog.directory.root": "Rrënja",
-  "dialog.directory.parent": "Prindi",
   "dialog.directory.readError": "Nuk mund të lexohet kjo dosje",
   "dialog.server.add.title": "Shto server",
   "dialog.server.add.url": "Adresa e serverit",

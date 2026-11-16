@@ -228,8 +228,6 @@ export const dict = {
   "dialog.fork.empty": "کوئی پیغامات نہیں ہیں جن سے فورک کیا جائے۔",
   "dialog.directory.action.selectFile": "فائل منتخب کریں۔",
   "dialog.directory.action.selectFolder": "فولڈر منتخب کریں۔",
-  "dialog.directory.root": "بنیادی فولڈر",
-  "dialog.directory.parent": "بالائی فولڈر",
   "dialog.directory.readError": "یہ فولڈر پڑھا نہیں جا سکا",
   "dialog.server.add.title": "سرور شامل کریں۔",
   "dialog.server.add.url": "سرور کا پتہ",

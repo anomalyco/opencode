@@ -224,8 +224,6 @@ export const dict = {
   "dialog.fork.empty": "ෆෝක් කිරීමට පණිවිඩ නැත",
   "dialog.directory.action.selectFile": "ගොනුව තෝරන්න",
   "dialog.directory.action.selectFolder": "ෆෝල්ඩරය තෝරන්න",
-  "dialog.directory.root": "මූල",
-  "dialog.directory.parent": "දෙමාපිය",
   "dialog.directory.readError": "මෙම ෆෝල්ඩරය කියවීමට නොහැක",
   "dialog.server.add.title": "සේවාදායකය එක් කරන්න",
   "dialog.server.add.url": "සේවාදායක ලිපිනය",

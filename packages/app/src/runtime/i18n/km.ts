@@ -227,8 +227,6 @@ export const dict = {
   "dialog.fork.empty": "គ្មានសារដែលត្រូវបំបែកពី",
   "dialog.directory.action.selectFile": "ជ្រើសរើសឯកសារ",
   "dialog.directory.action.selectFolder": "ជ្រើសរើសថត",
-  "dialog.directory.root": "ឫស",
-  "dialog.directory.parent": "មាតាបិតា",
   "dialog.directory.readError": "មិនអាចអានថតឯកសារនេះបានទេ។",
   "dialog.server.add.title": "បន្ថែមម៉ាស៊ីនមេ",
   "dialog.server.add.url": "អាសយដ្ឋានម៉ាស៊ីនមេ",

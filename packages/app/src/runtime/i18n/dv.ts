@@ -224,8 +224,6 @@ export const dict = {
   "dialog.fork.empty": "ފޯކް ކުރާނެ މެސެޖެއް ނެތެވެ",
   "dialog.directory.action.selectFile": "ފައިލް ހޮވާށެވެ",
   "dialog.directory.action.selectFolder": "ފޯލްޑަރ ހޮވާށެވެ",
-  "dialog.directory.root": "މޫ",
-  "dialog.directory.parent": "ބެލެނިވެރިޔާއެވެ",
   "dialog.directory.readError": "މި ފޯލްޑަރ ކިޔަން ނުކުޅެދިއްޖެއެވެ",
   "dialog.server.add.title": "ސަރވަރ އިތުރުކުރުން",
   "dialog.server.add.url": "ސަރވަރ އެޑްރެސް",

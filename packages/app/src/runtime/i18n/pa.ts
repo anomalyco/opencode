@@ -227,8 +227,6 @@ export const dict = {
   "dialog.fork.empty": "فورک کرن لئی کوئی پیغام نئیں",
   "dialog.directory.action.selectFile": "فائل چنو",
   "dialog.directory.action.selectFolder": "فولڈر چنو",
-  "dialog.directory.root": "Root",
-  "dialog.directory.parent": "اُتلا فولڈر",
   "dialog.directory.readError": "اس فولڈر نوں پڑھن توں قاصر",
   "dialog.server.add.title": "سرور شامل کرو",
   "dialog.server.add.url": "سرور دا پتہ",

@@ -234,8 +234,6 @@ export const dict = {
   "dialog.fork.empty": "Нема порука од којих треба да се рачвате",
   "dialog.directory.action.selectFile": "Изаберите датотеку",
   "dialog.directory.action.selectFolder": "Изаберите фасциклу",
-  "dialog.directory.root": "Роот",
-  "dialog.directory.parent": "Родитељ",
   "dialog.directory.readError": "Није могуће прочитати ову фасциклу",
   "dialog.server.add.title": "Додај сервер",
   "dialog.server.add.url": "Адреса сервера",

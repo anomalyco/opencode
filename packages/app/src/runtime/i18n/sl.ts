@@ -246,8 +246,6 @@ export const dict = {
   "dialog.fork.empty": "Ni sporočil za odcepitev",
   "dialog.directory.action.selectFile": "Izberite datoteko",
   "dialog.directory.action.selectFolder": "Izberite mapo",
-  "dialog.directory.root": "Koren",
-  "dialog.directory.parent": "starš",
   "dialog.directory.readError": "Te mape ni mogoče prebrati",
   "dialog.server.add.title": "Dodaj strežnik",
   "dialog.server.add.url": "Naslov strežnika",

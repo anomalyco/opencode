@@ -220,8 +220,6 @@ export const dict = {
   "dialog.fork.empty": "Žádné zprávy k rozvětvení",
   "dialog.directory.action.selectFile": "Vyberte soubor",
   "dialog.directory.action.selectFolder": "Vyberte složku",
-  "dialog.directory.root": "Kořen",
-  "dialog.directory.parent": "Rodič",
   "dialog.directory.readError": "Tuto složku nelze přečíst",
   "dialog.server.add.title": "Přidat server",
   "dialog.server.add.url": "Adresa serveru",
