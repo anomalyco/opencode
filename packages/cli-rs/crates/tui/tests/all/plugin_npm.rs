@@ -224,7 +224,10 @@ fn a_project_local_server_part_waits_for_approval_and_a_cached_one_does_not() {
     let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(&pipe.harness.tui, &target) else {
         panic!("no artifact held for {target}")
     };
+    // Its tree is hashed again and staged off the UI thread, as a project directory's is (js-followups).
+    let before = opencode_plugin::loader::approval::hashed();
     let decision = opencode_plugin::loader::approval::Decision::Approved;
-    opencode_tui::plugins::host::decide(&pipe.harness.tui, &target, &artifact, decision).unwrap();
+    assert_eq!(crate::plugin_pipe::decide(&pipe.harness, &target, &artifact, decision), Ok(true));
     pipe.active("sidebar.prompt");
+    assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the part's files");
 }
