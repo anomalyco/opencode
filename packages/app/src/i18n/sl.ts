@@ -1163,8 +1163,12 @@ export const dict = {
   "dialog.update.major.title": "OpenCode 2.0 je pripravljen",
   "dialog.update.major.lead":
     "Naslednja glavna različica je prenesena. Znova zaženite aplikacijo, da dokončate nadgradnjo.",
+  "dialog.update.major.new.browser": "Vgrajeni brskalnik",
+  "dialog.update.major.new.background": "Podagenti in ukazi v ozadju",
+  "dialog.update.major.new.plugins": "Namizni vtičniki, s katerimi aplikacija postane vaša",
+  "dialog.update.major.new.sessions": "Iste seje v aplikaciji, terminalu in spletu",
+  "dialog.update.major.new.pair": "Seznanite telefon ali drug računalnik",
   "dialog.update.major.keeps.data": "Ohrani vaše seje, projekte in nastavitve",
-  "dialog.update.major.keeps.config": "Deluje z vašo trenutno konfiguracijo",
   "dialog.update.major.plugins": "Vtičnike, izdelane za OpenCode 1, je treba posodobiti",
   "dialog.update.major.scheduled": "OpenCode 2.0 bo nameščen ob izhodu iz aplikacije.",
   "dialog.update.major.failed": "OpenCode 2.0 ni bilo mogoče namestiti.",

@@ -1162,8 +1162,12 @@ export const dict = {
   "dialog.update.major.title": "OpenCode 2.0 este gata",
   "dialog.update.major.lead":
     "Următoarea versiune majoră a fost descărcată. Repornește pentru a finaliza actualizarea.",
+  "dialog.update.major.new.browser": "Navigator integrat",
+  "dialog.update.major.new.background": "Subagenți și comenzi în fundal",
+  "dialog.update.major.new.plugins": "Pluginuri desktop care fac aplicația a ta",
+  "dialog.update.major.new.sessions": "Aceleași sesiuni în aplicație, în terminal și pe web",
+  "dialog.update.major.new.pair": "Asociază un telefon sau un alt calculator",
   "dialog.update.major.keeps.data": "Păstrează sesiunile, proiectele și setările tale",
-  "dialog.update.major.keeps.config": "Funcționează cu configurația ta actuală",
   "dialog.update.major.plugins": "Pluginurile create pentru OpenCode 1 trebuie actualizate",
   "dialog.update.major.scheduled": "OpenCode 2.0 se va instala când închizi aplicația.",
   "dialog.update.major.failed": "OpenCode 2.0 nu a putut fi instalat.",

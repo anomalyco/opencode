@@ -1170,8 +1170,12 @@ export const dict = {
   "dialog.update.major.title": "Az OpenCode 2.0 készen áll",
   "dialog.update.major.lead":
     "A következő főverzió letöltődött. A frissítés befejezéséhez indítsa újra az alkalmazást.",
+  "dialog.update.major.new.browser": "Beépített böngésző",
+  "dialog.update.major.new.background": "Háttérben futó alügynökök és parancsok",
+  "dialog.update.major.new.plugins": "Asztali beépülő modulok az alkalmazás testreszabásához",
+  "dialog.update.major.new.sessions": "Ugyanazok a munkamenetek az alkalmazásban, a terminálban és a weben",
+  "dialog.update.major.new.pair": "Telefon vagy másik számítógép párosítása",
   "dialog.update.major.keeps.data": "Megőrzi a munkameneteit, projektjeit és beállításait",
-  "dialog.update.major.keeps.config": "Működik a jelenlegi konfigurációjával",
   "dialog.update.major.plugins": "Az OpenCode 1-hez készült beépülő modulokat frissíteni kell",
   "dialog.update.major.scheduled": "Az OpenCode 2.0 kilépéskor települ.",
   "dialog.update.major.failed": "Az OpenCode 2.0 telepítése nem sikerült.",

@@ -1181,8 +1181,12 @@ export const dict: Record<string, string> = {
   "dialog.update.major.title": "OpenCode 2.0 གྲ་སྒྲིག་ཡོད",
   "dialog.update.major.lead":
     "ཐོན་རིམ་གཙོ་བོ་ཤུལ་མམ་འདི་ ཕབ་ལེན་འབད་ཚར་ཡི། དུས་མཐུན་བཟོ་ནི་འདི་མཇུག་བསྡུ་ནིའི་དོན་ལུ་ ལོག་འགོ་བཙུགས།",
+  "dialog.update.major.new.browser": "གློག་རིམ་ནང་གི་བརའུ་ཟར",
+  "dialog.update.major.new.background": "རྒྱབ་གཞི་ནང་གི་ཡན་ལག་ལས་ཚབ་དང་བརྡ་བཀོད་ཚུ",
+  "dialog.update.major.new.plugins": "གློག་རིམ་འདི་སྲོལ་སྒྲིག་འབད་མི་ ཌེཀསི་ཊོཔ་པ་ལག་ཨིན་ཚུ",
+  "dialog.update.major.new.sessions": "གློག་རིམ་དང་ ཊར་མི་ནཱལ་ ཝེབ་ཚུ་ནང་ ལཱ་ཡུན་གཅིག་མཚུངས",
+  "dialog.update.major.new.pair": "འགྲུལ་འཕྲིན་ ཡང་ན་ གློག་རིག་གཞན་ཅིག་མཐུད",
   "dialog.update.major.keeps.data": "ཁྱོད་ཀྱི་ལཱ་ཡུན་དང་ ལས་གཞི་ སྒྲིག་སྟངས་ཚུ་རང་འཇགས་བཞགཔ་ཨིན",
-  "dialog.update.major.keeps.config": "ཁྱོད་ཀྱི་ད་ལྟོའི་རིམ་སྒྲིག་དང་གཅིག་ཁར་ལཱ་འབདཝ་ཨིན",
   "dialog.update.major.plugins": "OpenCode 1 གི་དོན་ལུ་བཟོ་ཡོད་པའི་པ་ལག་ཨིན་ཚུ་ དུས་མཐུན་བཟོ་དགོཔ་ཨིན",
   "dialog.update.major.scheduled": "ཁྱོད་ཀྱིས་ཕྱིར་འཐོན་འབདཝ་ད་ OpenCode 2.0 གཞི་བཙུགས་འབད་འོང་།",
   "dialog.update.major.failed": "OpenCode 2.0 གཞི་བཙུགས་འབད་མ་ཚུགས།",

@@ -1151,8 +1151,12 @@ export const dict = {
   "dialog.update.major.title": "OpenCode 2.0 on valmis",
   "dialog.update.major.lead":
     "Järgmine põhiversioon on alla laaditud. Värskendamise lõpuleviimiseks taaskäivitage rakendus.",
+  "dialog.update.major.new.browser": "Sisseehitatud brauser",
+  "dialog.update.major.new.background": "Alamagendid ja käsud taustal",
+  "dialog.update.major.new.plugins": "Töölauapluginad, millega rakendust enda järgi kohandada",
+  "dialog.update.major.new.sessions": "Samad seansid rakenduses, terminalis ja veebis",
+  "dialog.update.major.new.pair": "Paaristage telefon või teine arvuti",
   "dialog.update.major.keeps.data": "Säilitab teie seansid, projektid ja seaded",
-  "dialog.update.major.keeps.config": "Töötab teie praeguse konfiguratsiooniga",
   "dialog.update.major.plugins": "OpenCode 1 jaoks loodud pluginad vajavad värskendamist",
   "dialog.update.major.scheduled": "OpenCode 2.0 installitakse rakendusest väljumisel.",
   "dialog.update.major.failed": "OpenCode 2.0 installimine ebaõnnestus.",

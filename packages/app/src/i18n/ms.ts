@@ -1157,8 +1157,12 @@ export const dict = {
   "dialog.update.major.title": "OpenCode 2.0 sudah sedia",
   "dialog.update.major.lead":
     "Keluaran utama seterusnya telah dimuat turun. Mulakan semula untuk melengkapkan naik taraf.",
+  "dialog.update.major.new.browser": "Pelayar dalam aplikasi",
+  "dialog.update.major.new.background": "Subagen dan arahan di latar belakang",
+  "dialog.update.major.new.plugins": "Plugin desktop untuk menyesuaikan aplikasi ikut cara anda",
+  "dialog.update.major.new.sessions": "Sesi yang sama dalam aplikasi, terminal, dan web",
+  "dialog.update.major.new.pair": "Gandingkan telefon atau komputer lain",
   "dialog.update.major.keeps.data": "Mengekalkan sesi, projek, dan tetapan anda",
-  "dialog.update.major.keeps.config": "Berfungsi dengan konfigurasi semasa anda",
   "dialog.update.major.plugins": "Plugin yang dibuat untuk OpenCode 1 perlu dikemas kini",
   "dialog.update.major.scheduled": "OpenCode 2.0 akan dipasang apabila anda keluar.",
   "dialog.update.major.failed": "OpenCode 2.0 tidak dapat dipasang.",

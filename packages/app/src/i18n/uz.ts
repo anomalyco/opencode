@@ -1171,8 +1171,12 @@ export const dict = {
   "dialog.update.major.title": "OpenCode 2.0 tayyor",
   "dialog.update.major.lead":
     "Keyingi asosiy versiya yuklab olindi. Yangilashni yakunlash uchun qayta ishga tushiring.",
+  "dialog.update.major.new.browser": "Ilova ichidagi brauzer",
+  "dialog.update.major.new.background": "Fonda ishlaydigan subagentlar va buyruqlar",
+  "dialog.update.major.new.plugins": "Ilovani oʻzingizga moslaydigan ish stoli plaginlari",
+  "dialog.update.major.new.sessions": "Bir xil seanslar ilovada, terminalda va vebda",
+  "dialog.update.major.new.pair": "Telefon yoki boshqa kompyuterni ulang",
   "dialog.update.major.keeps.data": "Seanslar, loyihalar va sozlamalaringizni saqlab qoladi",
-  "dialog.update.major.keeps.config": "Joriy konfiguratsiyangiz bilan ishlaydi",
   "dialog.update.major.plugins": "OpenCode 1 uchun yaratilgan plaginlarni yangilash kerak",
   "dialog.update.major.scheduled": "Ilovadan chiqqaningizda OpenCode 2.0 oʻrnatiladi.",
   "dialog.update.major.failed": "OpenCode 2.0 versiyasini oʻrnatib boʻlmadi.",

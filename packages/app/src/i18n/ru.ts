@@ -571,8 +571,12 @@ export const dict = {
   "dialog.update.major.title": "OpenCode 2.0 готов к установке",
   "dialog.update.major.lead":
     "Следующий крупный релиз уже загружен. Перезапустите приложение, чтобы завершить обновление.",
+  "dialog.update.major.new.browser": "Встроенный браузер",
+  "dialog.update.major.new.background": "Фоновые субагенты и команды",
+  "dialog.update.major.new.plugins": "Плагины для приложения, чтобы настроить его под себя",
+  "dialog.update.major.new.sessions": "Одни и те же сессии в приложении, терминале и браузере",
+  "dialog.update.major.new.pair": "Сопряжение с телефоном или другим компьютером",
   "dialog.update.major.keeps.data": "Сохраняет ваши сессии, проекты и настройки",
-  "dialog.update.major.keeps.config": "Работает с вашей текущей конфигурацией",
   "dialog.update.major.plugins": "Плагины, созданные для OpenCode 1, требуют обновления",
   "dialog.update.major.scheduled": "OpenCode 2.0 будет установлен при выходе из приложения.",
   "dialog.update.major.failed": "Не удалось установить OpenCode 2.0.",

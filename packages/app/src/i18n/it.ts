@@ -454,8 +454,12 @@ export const dict = {
   "dialog.update.major.title": "OpenCode 2.0 è pronto",
   "dialog.update.major.lead":
     "La prossima versione principale è stata scaricata. Riavvia per completare l'aggiornamento.",
+  "dialog.update.major.new.browser": "Browser integrato",
+  "dialog.update.major.new.background": "Subagenti e comandi in background",
+  "dialog.update.major.new.plugins": "Plugin desktop per rendere tua l'app",
+  "dialog.update.major.new.sessions": "Le stesse sessioni nell'app, nel terminale e sul web",
+  "dialog.update.major.new.pair": "Associa un telefono o un altro computer",
   "dialog.update.major.keeps.data": "Mantiene le tue sessioni, i progetti e le impostazioni",
-  "dialog.update.major.keeps.config": "Funziona con la tua configurazione attuale",
   "dialog.update.major.plugins": "I plugin creati per OpenCode 1 devono essere aggiornati",
   "dialog.update.major.scheduled": "OpenCode 2.0 verrà installato quando esci.",
   "dialog.update.major.failed": "Impossibile installare OpenCode 2.0.",

@@ -1177,8 +1177,12 @@ export const dict = {
   "dialog.update.major.title": "OpenCode 2.0 ތައްޔާރުވެއްޖެ",
   "dialog.update.major.lead":
     "ދެން އޮތް މައިގަނޑު ރިލީޒް ޑައުންލޯޑް ކުރެވިއްޖެއެވެ. އަޕްގްރޭޑް ނިންމުމަށް ރީސްޓާޓް ކުރާށެވެ.",
+  "dialog.update.major.new.browser": "އެޕްގެ ތެރޭގައިވާ ބްރައުޒާ",
+  "dialog.update.major.new.background": "ބެކްގްރައުންޑްގައި ހިނގާ ސަބްއޭޖެންޓުންނާއި ކޮމާންޑްތައް",
+  "dialog.update.major.new.plugins": "އެޕް ތިބާ ބޭނުން ގޮތަށް ބައްޓަންކޮށްދޭ ޑެސްކްޓޮޕް ޕްލަގިންސް",
+  "dialog.update.major.new.sessions": "އެޕް، ޓާމިނަލް އަދި ވެބްގައި ހަމަ އެ ސެޝަންތައް",
+  "dialog.update.major.new.pair": "ފޯނެއް ނުވަތަ އެހެން ކޮމްޕިއުޓަރެއް ޕެއަރ ކުރުން",
   "dialog.update.major.keeps.data": "ތިބާގެ ސެޝަންތަކާއި، މަޝްރޫއުތަކާއި އަދި ސެޓިންގސް ދެމިހުންނާނެއެވެ",
-  "dialog.update.major.keeps.config": "ތިބާގެ މިހާރުގެ ކޮންފިގް އާއެކު މަސައްކަތްކުރާނެއެވެ",
   "dialog.update.major.plugins": "OpenCode 1 އަށް ހަދާފައިވާ ޕްލަގިންސް އަޕްޑޭޓް ކުރަން ޖެހޭނެއެވެ",
   "dialog.update.major.scheduled": "އެޕް ބަންދުކުރާއިރު OpenCode 2.0 އިންސްޓޯލް ވާނެއެވެ.",
   "dialog.update.major.failed": "OpenCode 2.0 އިންސްޓޯލް ނުކުރެވުނެވެ.",

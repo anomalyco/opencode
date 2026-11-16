@@ -11,6 +11,12 @@ import { showToast } from "@/utils/toast"
 export const V2_ANNOUNCEMENT_URL = "https://anoma.ly/notes/opencode-2-0"
 export const MAJOR_INSTRUCTIONS = "https://opencode.ai/v2/docs"
 
+const ROW: Record<string, { class: string; path: string }> = {
+  new: { class: "text-v2-text-text-accent", path: "M7 3V11M3 7H11" },
+  kept: { class: "text-v2-state-fg-success", path: "M3 7.4L5.8 10L11 4" },
+  breaks: { class: "text-v2-state-fg-warning", path: "M7 3.5V8M7 10.2V10.4" },
+}
+
 // The card image ships with the app and is decoded before the dialog opens. The dialog shows this same element, so
 // nothing loads again and the card never paints without its image.
 export function preloadMajorUpdateImage() {
@@ -93,9 +99,13 @@ export function DialogMajorUpdate(props: { major: MajorUpdaterPlatform; image?: 
                     <span class="flex flex-col gap-1.5">
                       <For
                         each={[
-                          { ok: true, text: language.t("dialog.update.major.keeps.data") },
-                          { ok: true, text: language.t("dialog.update.major.keeps.config") },
-                          { ok: false, text: language.t("dialog.update.major.plugins") },
+                          { kind: "new", text: language.t("dialog.update.major.new.browser") },
+                          { kind: "new", text: language.t("dialog.update.major.new.background") },
+                          { kind: "new", text: language.t("dialog.update.major.new.plugins") },
+                          { kind: "new", text: language.t("dialog.update.major.new.sessions") },
+                          { kind: "new", text: language.t("dialog.update.major.new.pair") },
+                          { kind: "kept", text: language.t("dialog.update.major.keeps.data") },
+                          { kind: "breaks", text: language.t("dialog.update.major.plugins") },
                         ]}
                       >
                         {(item) => (
@@ -106,13 +116,9 @@ export function DialogMajorUpdate(props: { major: MajorUpdaterPlatform; image?: 
                               viewBox="0 0 14 14"
                               fill="none"
                               aria-hidden="true"
-                              class={item.ok ? "text-v2-state-fg-success" : "text-v2-state-fg-warning"}
+                              class={ROW[item.kind].class}
                             >
-                              <path
-                                d={item.ok ? "M3 7.4L5.8 10L11 4" : "M7 3.5V8M7 10.2V10.4"}
-                                stroke="currentColor"
-                                stroke-width="1.4"
-                              />
+                              <path d={ROW[item.kind].path} stroke="currentColor" stroke-width="1.4" />
                             </svg>
                             {item.text}
                           </span>
