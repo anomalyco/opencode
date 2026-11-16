@@ -297,7 +297,10 @@ struct Results {
 /// A mounted prompt's autocomplete. Dropping it removes its layers and its popup.
 pub struct Autocomplete(Rc<State>);
 
-/// An open popup's place ([`Autocomplete::open`]).
+/// The search a file or directory request was for: its mode, its query and the location's directory.
+type Requested = Option<(Mode, String, String)>;
+
+/// An open popup's place ([`Autocomplete::take_open`]).
 pub struct Open {
     mode: Mode,
     index: u32,
@@ -305,6 +308,11 @@ pub struct Open {
     offset: usize,
     /// The anchor's row on the screen.
     placed: f64,
+    /// The popup's entry on the keymap's mode stack, handed on rather than pushed again, so the stack stays as it was:
+    /// a dialog opened over the list stays above it.
+    entry: Option<Disposer>,
+    /// The last file or directory search's results and the search they answer, unless one was still on its way.
+    results: Option<(Results, Requested)>,
 }
 
 struct State {
@@ -321,7 +329,7 @@ struct State {
     confirming: RefCell<Option<String>>,
     results: RefCell<Results>,
     /// The search the last request was for, since the popup opened.
-    requested: RefCell<Option<(Mode, String, String)>>,
+    requested: RefCell<Requested>,
     loading: Cell<bool>,
     generation: Cell<u64>,
     /// Set while a pick edits the prompt; its input is handled once the pick is done.
@@ -416,20 +424,29 @@ impl Autocomplete {
         self.0.render(tui);
     }
 
-    /// Where the open popup is: what it lists from which trigger, and its selection and first row.
-    pub fn open(&self) -> Option<Open> {
+    /// Takes where the open popup is: what it lists from which trigger, its selection and first row, its results, and
+    /// its entry on the mode stack. The popup goes with its prompt.
+    pub fn take_open(&self) -> Option<Open> {
         let state = &self.0;
         let mode = state.visible.get()?;
         let (index, selected, offset) = (state.index.get(), state.selected.get(), state.offset.get());
-        Some(Open { mode, index, selected, offset, placed: state.anchor.rect().screen_y })
+        let results =
+            (!state.loading.get()).then(|| (state.results.borrow().clone(), state.requested.borrow().clone()));
+        let (placed, entry) = (state.anchor.rect().screen_y, state.mode.take());
+        Some(Open { mode, index, selected, offset, placed, entry, results })
     }
 
     /// Opens the popup where `open` was, over the prompt's text as it is now: a remount of the route keeps an open
     /// list open, as TS's stays open while a plugin loads. The options are those of now, the selection kept by its
-    /// place, as TS keeps `selected` until the search changes.
+    /// place, as TS keeps `selected` until the search changes; a file or directory search is not asked again.
     pub fn reopen(&self, open: Open) {
         let state = &self.0;
         state.placed.set(Some(open.placed));
+        *state.mode.borrow_mut() = open.entry;
+        if let Some((results, requested)) = open.results {
+            state.results.replace(results);
+            state.requested.replace(requested);
+        }
         state.show(open.mode, open.index);
         let count = state.options.borrow().len();
         state.offset.set(open.offset);
