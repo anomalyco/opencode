@@ -250,7 +250,6 @@ export default function Layout(props: ParentProps) {
             data-state={preferences.appearance.sidebarOpen() ? "open" : "closed"}
             data-peek={peek.shown() ? "" : undefined}
             style={{
-              // A peek also covers the gap the docked sidebar leaves before the content, so its end inset matches.
               "--sidebar-peek-width": peek.shown()
                 ? `calc(${state.tabsWidth}px + var(--shell-inline-inset, 8px))`
                 : `${state.tabsWidth}px`,
