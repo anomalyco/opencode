@@ -272,6 +272,12 @@ const it = testEffect(
 
 const sessionID = Session.ID.make("ses_automation_test")
 const otherID = Session.ID.make("ses_automation_other")
+const invocation = Permission.invocation({
+  sessionID,
+  agent: Agent.defaultID,
+  messageID: SessionMessage.ID.make("msg_author"),
+  id: Tool.CallID.make("create_automation"),
+})
 
 const insertSession = (id: Session.ID, directory: string) =>
   Session.Service.use((sessions) => sessions.create({ id, location: { directory: AbsolutePath.make(directory) } }))
@@ -412,6 +418,24 @@ describe("Automation", () => {
     }),
   )
 
+  it.effect("rejects tool-created code and child actions if the session switched agents during the model request", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup()
+      const sessions = yield* Session.Service
+      const helper = Agent.ID.make("helper")
+      yield* sessions.setPermissions({ sessionID, permissions: [{ action: "*", resource: "*", effect: "allow" }] })
+      yield* sessions.switchAgent({ sessionID, agent: helper })
+      for (const action of [code("return"), { ...prompt("triage"), to: { subagent: helper } }]) {
+        const stale = automations.create({ sessionID, name: "stale", trigger: every("1 minute"), action }, invocation)
+        expect(yield* Effect.flip(stale)).toMatchObject({
+          _tag: "Automation.InvalidError",
+          reason: expect.stringContaining("current agent"),
+        })
+      }
+      expect(yield* automations.list()).toEqual([])
+    }),
+  )
+
   it.effect("sends a prompt to another existing Session", () =>
     Effect.gen(function* () {
       const automations = yield* setup()
@@ -525,12 +549,15 @@ describe("Automation", () => {
     Effect.gen(function* () {
       const automations = yield* setup()
       const create = (agent: string) =>
-        automations.create({
-          sessionID,
-          name: "x",
-          trigger: every("1 hour"),
-          action: { type: "prompt", prompt: "x", to: { subagent: Agent.ID.make(agent) } },
-        })
+        automations.create(
+          {
+            sessionID,
+            name: "x",
+            trigger: every("1 hour"),
+            action: { ...prompt("x"), to: { subagent: Agent.ID.make(agent) } },
+          },
+          invocation,
+        )
       const automation = yield* create("helper")
       expect(automation.status).toBe("active")
       expect(yield* Effect.flip(create("nobody"))).toMatchObject({ reason: "Unknown subagent: nobody" })
@@ -1623,14 +1650,13 @@ describe("Automation", () => {
         const automations = yield* setup()
         agentRules = [{ action: "*", resource: "*", effect: "ask" }]
         const { asked, answerLoop } = yield* answerAsks
-        const automation = yield* automations.create({
-          sessionID,
-          name: "thread",
-          trigger: every("1 minute"),
-          action: code(watchThread, { channel: "#ops" }),
-        })
+        const automation = yield* automations.create(
+          { sessionID, name: "thread", trigger: every("1 minute"), action: code(watchThread, { channel: "#ops" }) },
+          invocation,
+        )
         yield* Fiber.interrupt(answerLoop)
         expect(asked.map((request) => request.action)).toEqual(["slack_read_thread", "slack_post"])
+        for (const request of asked) expect(request).toMatchObject({ sessionID, source: invocation.source })
         expect(asked[0]).toMatchObject({
           metadata: {
             automation: "thread",
@@ -1705,14 +1731,12 @@ describe("Automation", () => {
           { action: "execute", resource: "*", effect: "ask" },
         ]
         const { asked, answerLoop } = yield* answerAsks
-        yield* automations.create({
-          sessionID,
-          name: "read",
-          trigger: every("1 minute"),
-          action: code(`await tools.slack.read_thread({})`),
-        })
+        yield* automations.create(
+          { sessionID, name: "read", trigger: every("1 minute"), action: code(`await tools.slack.read_thread({})`) },
+          invocation,
+        )
         yield* Fiber.interrupt(answerLoop)
-        expect(asked.map((request) => request.action)).toEqual(["execute"])
+        expect(asked).toMatchObject([{ action: "execute", sessionID, source: invocation.source }])
 
         // Nobody present to approve: refused rather than created.
         expect(

@@ -12,6 +12,7 @@ import type { SessionSchema } from "../session/schema.js"
 import { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
 import { Wildcard } from "../util/wildcard.js"
+import { type Invocation, matchesAuthor } from "./author.js"
 import type { AutomationEvent } from "./event.js"
 
 export const TIMEOUT_MS = 30_000
@@ -83,12 +84,15 @@ export const authorize = Effect.fnUntraced(function* (
   name: string,
   trigger: Automation.Trigger,
   action: Automation.CodeAction,
+  invocation?: Invocation,
 ) {
   const paths = yield* Effect.fromResult(scan(action.code))
   yield* Plugin.awaitActivation
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
+  if (invocation && !matchesAuthor(session, agent.info, invocation))
+    return yield* Effect.fail("Create the automation with the session's current agent")
   const actions = (yield* resolveTools(paths)).actions
   const rules = Permission.merge(agent.info?.permissions ?? [], session.permissions ?? [])
   // A rule scoped to some resources (`vault:*: ask`) must prompt too, not only the catch-all `*`.
@@ -98,8 +102,7 @@ export const authorize = Effect.fnUntraced(function* (
       "*",
       ...scopedRules(rules, item).flatMap((rule) => (rule.effect === "ask" ? [rule.resource] : [])),
     ]),
-    sessionID: session.id,
-    agent: agent.id,
+    ...(invocation ?? { sessionID: session.id, agent: agent.id }),
   })
   const all = ["execute", ...actions]
   // Fail fast on any explicit deny before asking the user to approve earlier tools.

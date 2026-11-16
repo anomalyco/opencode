@@ -41,6 +41,7 @@ import {
 import type { ProjectID } from "@opencode/schema/project-id"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Agent } from "./agent.js"
+import { type Invocation, matchesAuthor } from "./automation/author.js"
 import { AutomationCode } from "./automation/code.js"
 import { AutomationEvent } from "./automation/event.js"
 import { AutomationTable } from "./automation/sql.js"
@@ -94,7 +95,7 @@ export interface ListInput {
 export interface Interface {
   readonly create: (
     input: CreateInput,
-    invocation?: ReturnType<typeof Permission.invocation>,
+    invocation?: Invocation,
   ) => Effect.Effect<Info, InvalidError | DisabledError | Session.NotFoundError | Permission.Error>
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly get: (id: ID) => Effect.Effect<Info, NotFoundError>
@@ -243,7 +244,7 @@ const layer = Layer.effect(
      * primary-only, within the depth limit and already allowed in the owner's current Location. The code/tools
      * authorized when the automation was created do not grant permission to start a child.
      */
-    const subagent = (owner: SessionSchema.Info, id: Agent.ID) =>
+    const subagent = (owner: SessionSchema.Info, id: Agent.ID, invocation?: Invocation) =>
       Effect.gen(function* () {
         yield* Plugin.awaitActivation
         const location = yield* Location.Service
@@ -262,13 +263,14 @@ const layer = Layer.effect(
           return yield* new InvalidError({
             reason: `Creating session's agent not found: ${owner.agent ?? "(default)"}`,
           })
+        if (invocation && !matchesAuthor(owner, creator, invocation))
+          return yield* new InvalidError({ reason: "Create the automation with the session's current agent" })
         const permission = yield* Permission.Service
         yield* permission
           .assert({
             action: "subagent",
             resources: [agent.id],
-            sessionID: owner.id,
-            agent: creator.id,
+            ...(invocation ?? { sessionID: owner.id, agent: creator.id }),
           })
           .pipe(
             // Only consulted for an ask. Never borrow an ambient grant, even if a hook turned a config allow into an ask.
@@ -964,6 +966,7 @@ const layer = Layer.effect(
       trigger: Trigger,
       directory: string,
       projectID: ProjectID,
+      invocation?: Invocation,
     ) {
       const action = input.action
       if (action.type === "prompt") {
@@ -977,14 +980,14 @@ const layer = Layer.effect(
           // The child of each run hangs off the creating Session.
           if (owner === undefined)
             return yield* new InvalidError({ reason: "A prompt to a subagent needs a session to be its parent" })
-          yield* subagent(owner, to.subagent)
+          yield* subagent(owner, to.subagent, invocation)
         }
         return { type: "prompt" as const, prompt: action.prompt, to }
       }
       // Tool permissions are asked in, and checked against, the creating Session.
       if (owner === undefined) return yield* new InvalidError({ reason: "A code action needs a session" })
       const code = { type: "code" as const, code: action.code, args: action.args }
-      yield* AutomationCode.authorize(owner, input.name, trigger, code).pipe(
+      yield* AutomationCode.authorize(owner, input.name, trigger, code, invocation).pipe(
         inDirectory(directory),
         Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
       )
@@ -1009,14 +1012,14 @@ const layer = Layer.effect(
             return yield* new InvalidError({
               reason: "Event automations require experimental.mcp_events",
             })
-          if (!owner || !invocation || invocation.sessionID !== owner.id || owner.location.workspaceID !== undefined)
+          if (!owner || !invocation || owner.location.workspaceID !== undefined)
             return yield* new InvalidError({
               reason: "Create an event automation from a tool call in a local session",
             })
           yield* Effect.gen(function* () {
             const agents = yield* Agent.Service
             const agent = yield* agents.select(owner.agent)
-            if (!agent.info || agent.id !== invocation.agent)
+            if (!matchesAuthor(owner, agent.info, invocation))
               return yield* new InvalidError({
                 reason: "Create the watch with the session's current agent",
               })
@@ -1049,7 +1052,7 @@ const layer = Layer.effect(
             reason: "The automation expires before it first runs",
           })
         const projectID = owner?.projectID ?? (yield* projects.resolve(AbsolutePath.make(directory))).id
-        const action = yield* resolveAction(input, owner, first.trigger, directory, projectID).pipe(
+        const action = yield* resolveAction(input, owner, first.trigger, directory, projectID, invocation).pipe(
           Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
         )
 
