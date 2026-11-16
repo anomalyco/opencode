@@ -631,11 +631,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (!notice) return
 
       if (notice.reason === "external" || notice.reason === "popup") return {
+        token: notice.token,
         text: ctx.t(notice.reason === "external" ? "refused.external" : "refused.popup"), target: notice.target,
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
 
-      return { text: describe(notice.reason) }
+      return { token: notice.token, text: describe(notice.reason) }
     },
     async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean) {
       const token = state.chrome[session.key]?.[tabID]?.notice?.token

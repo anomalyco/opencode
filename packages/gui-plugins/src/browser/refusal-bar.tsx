@@ -3,14 +3,21 @@ import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { showToast } from "@opencode/ui/toast"
-import { Show } from "solid-js"
+import { createMemo, on, Show } from "solid-js"
+import { actionGuard } from "./action-guard"
 import type definition from "./index"
 
 export function RefusalBar(props: {
-  notice: { text: string; target?: string; label?: string }
+  notice: { token: string; text: string; target?: string; label?: string }
   answer: (dismiss: boolean) => Promise<void>
 }) {
   const ctx = usePlugin<typeof definition>()
+  const guard = createMemo(on(() => props.notice.token, () => actionGuard(performance.now())))
+  const press = (event: PointerEvent) => guard().press(event)
+
+  const key = (event: KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") guard().press(event, event.repeat)
+  }
 
   const answer = (dismiss: boolean) =>
     void props.answer(dismiss).catch(() => showToast({ title: ctx.t("common.requestFailed") }))
@@ -33,8 +40,12 @@ export function RefusalBar(props: {
           <Button
             variant="neutral"
             size="small"
+            onPointerDown={press}
+            onPointerCancel={() => guard().cancel()}
+            onBlur={() => guard().cancel()}
+            onKeyDown={key}
             onClick={(event: MouseEvent) => {
-              if (event.isTrusted) answer(false)
+              if (guard().accept(event)) answer(false)
             }}
           >
             {label()}
@@ -46,7 +57,11 @@ export function RefusalBar(props: {
         size="small"
         aria-label={ctx.t("refused.dismiss")}
         icon={<Icon name="close" />}
-        onClick={() => answer(true)}
+        onPointerDown={press}
+        onPointerCancel={() => guard().cancel()}
+        onBlur={() => guard().cancel()}
+        onKeyDown={key}
+        onClick={(event) => { if (guard().accept(event)) answer(true) }}
       />
     </section>
   )
