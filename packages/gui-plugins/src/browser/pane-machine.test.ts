@@ -73,6 +73,16 @@ function attached(restore?: Browser.State) {
   return play(createPaneState(), registered(restore), on({ type: "server.attached", fileRoots: [] })).state
 }
 
+test("reconnect tears down the previous native pages before restoring the same window and session", () => {
+  const opened = play(attached(), on({type:"tab.opened", tabID: tabA, attempt:1, tab:tab(tabA,"workspace://session/index.html")}))
+  const replacement = registered(undefined, "b2")
+
+  if (replacement.type !== "registered") throw new Error("expected registration")
+  const next = transitionPane(opened.state, {...replacement, storageKey:"server\nb1"})
+  expect(selectBinding(next.state,"b1")).toBeUndefined()
+  expect(next.effects.map(effect => effect.type)).toEqual(["emit", "release-pages", "teardown", "start-timer"])
+})
+
 test("sharing a preview releases its old page without closing the tab or exposing its old title", () => {
   const start = attached()
   const attempt = entry(start).nextAttempt
@@ -95,14 +105,17 @@ test("tab inventories and command replies cross the same JSON boundary, includin
   for (const url of ["about:blank", "file:///project/index.html", "workspace://session/index.html", "artifact://art_report/"]) {
     const failed = { ...tab(tabA, url), loadError: "ERR_FAILED" }
     const restored = entry(attached({tabs:[failed], focusedTabID:tabA})).tabs.get(tabA)!.tab
+
     for (const t of [failed, restored]) {
       const state = { tabs: [t], focusedTabID: tabA }
       expect(wireState(state)).toEqual(state)
       expect(wireOutcome({type:"success",result:{value:state,files:[]}}).type).toBe("success")
     }
   }
-  // SAFETY: simulate malformed runtime data from a browser operation, not a type-safe caller.
-  expect(wireOutcome({type:"success",result:{value:{missing:undefined},files:[]}} as unknown as Browser.Outcome)).toEqual(invalidReply)
+
+  const invalid = {}
+  Object.defineProperty(invalid, "missing", { value: undefined, enumerable: true })
+  expect(wireOutcome({ type: "success", result: { value: invalid, files: [] } })).toEqual(invalidReply)
 })
 
 test("an offline registration returns the saved inventory for retry without forgetting it", () => {
