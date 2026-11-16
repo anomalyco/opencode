@@ -420,6 +420,34 @@ permissions:
     }),
   )
 
+  it.live("keeps a managed Markdown agent's own rules above managed top-level rules", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const fs = yield* FSUtil.Service
+      yield* fs.makeDirectory(path.join(tmp.path, "agents"))
+      yield* fs.writeFileString(
+        path.join(tmp.path, "agents", "auditor.md"),
+        "---\npermissions:\n  - action: example_mcp_tool\n    resource: '*'\n    effect: allow\n---\nAudit.",
+      )
+      const agents = yield* Agent.Service
+      const entries = [
+        new ConfigManaged.Document({
+          type: "document",
+          info: decode({ permissions: [{ action: "example_mcp_tool", resource: "*", effect: "ask" }] }),
+        }),
+        new ConfigManaged.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
+      ]
+
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provide(Config.testLayer(entries)),
+      )
+
+      const auditor = yield* agents.get(Agent.ID.make("auditor"))
+      if (!auditor) throw new Error("expected managed Markdown agent")
+      expect(Permission.evaluate("example_mcp_tool", "run", auditor.permissions).effect).toBe("allow")
+    }),
+  )
+
   it.effect("maps configured agent fields and preserves an unspecified model variant", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service

@@ -45,9 +45,10 @@ export const Plugin = define({
       if (entry.type === "document") return [entry]
       if (entry.type !== "directory") return []
       const files = yield* discover(fs, entry.path)
+      const managed = entry instanceof ConfigManaged.Directory
       return yield* Effect.forEach(files, (file) =>
         fs.readFileStringSafe(file.filepath).pipe(
-          Effect.flatMap((content) => (content ? decode(file, content) : Effect.succeed(undefined))),
+          Effect.flatMap((content) => (content ? decode(file, content, managed) : Effect.succeed(undefined))),
           Effect.orElseSucceed(() => undefined),
         ),
       ).pipe(Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)))
@@ -160,6 +161,7 @@ function discover(fs: FSUtil.Interface, directory: string) {
 const decode = Effect.fnUntraced(function* (
   file: { directory: string; filepath: string; primary: boolean },
   content: string,
+  managed: boolean,
 ) {
   const markdown = ConfigMarkdown.parseOption(content)
   if (!markdown) {
@@ -204,5 +206,6 @@ const decode = Effect.fnUntraced(function* (
   const info = Info.make({
     agents: { [name]: file.primary ? ConfigAgent.Info.make({ ...agent, mode: "primary" }) : agent },
   })
-  return new Document({ type: "document", path: AbsolutePath.make(file.filepath), info })
+  const document = { type: "document" as const, path: AbsolutePath.make(file.filepath), info }
+  return managed ? new ConfigManaged.Document(document) : new Document(document)
 })
