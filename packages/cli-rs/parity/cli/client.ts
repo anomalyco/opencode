@@ -35,7 +35,8 @@ export function command(side: Side, args: string[]) {
 // OPENCODE_RS_BIN names a binary.
 export async function buildRust(sides: Side[]) {
   if (!sides.includes("rs") || process.env.OPENCODE_RS_BIN) return
-  const proc = Bun.spawn(["cargo", "build", "--quiet", "-p", "opencode-cli", "--bins"], {
+  // The package script `cargo` runs first: OpenTUI's native library for the pin, when it is missing.
+  const proc = Bun.spawn(["bun", "run", "--silent", "cargo", "build", "--quiet", "-p", "opencode-cli", "--bins"], {
     cwd: rs,
     stdout: "inherit",
     stderr: "inherit",

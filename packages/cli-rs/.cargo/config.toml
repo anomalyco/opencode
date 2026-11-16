@@ -1,5 +1,9 @@
-# Native OpenTUI artifacts whose opentui.h matches the bindings at the client's OpenTUI `rev`. Each pin has its own
-# directory, named by the short `rev`, so a re-pin does not swap the library under another branch's build. Fill it with
-# native-hardening's `abi-artifacts.py --client <Cargo.toml> --dest <that directory>`. A value set in the shell wins.
+# The host's native OpenTUI library for the pinned release (the `tag` of `opentui` in Cargo.toml), relative to this
+# package. script/opentui-native.ts fills it from the release zip, checked against its sha256 table, and
+# `bun run cargo` runs that first. The directory is keyed by the tag, git-ignored, and inside the worktree, so a
+# worktree on another pin keeps its own. Its name is the instruction: a cargo run without the package script (an
+# editor's) that finds it empty fails in opentui-sys with "missing native artifact <this directory>/opentui.h", whose
+# own advice is for OpenTUI's checkout; run `bun run --cwd packages/cli-rs opentui:native`. A value set in the shell
+# wins (CI, cross-target builds).
 [env]
-OPENTUI_LIB_DIR = { value = "/home/simon/.cache/opentui-native/cee1698ad/x86_64-linux", force = false }
+OPENTUI_LIB_DIR = { value = ".opentui/v0.9.1/host-fill-with-bun-run-opentui-native", relative = true, force = false }

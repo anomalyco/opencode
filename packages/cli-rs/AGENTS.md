@@ -10,16 +10,16 @@ The OpenCode native CLI (command `opencode-native`), on OpenTUI's Rust crates. R
   `cargo -C` is unstable. Without that config `opentui-sys` fails with "set OPENTUI_LIB_DIR". Run
   cargo through the package script, which runs in this directory:
   `bun run --cwd packages/cli-rs cargo check -p opencode-api`.
-- opentui comes from `packages/rust` of `anomalyco/opentui`, pinned by git `rev` in `Cargo.toml` and linked
-  statically. That checkout has no native library: `.cargo/config.toml` points `OPENTUI_LIB_DIR` at the pin's own
-  directory, `~/.cache/opentui-native/<short rev>/x86_64-linux`, which
-  `/home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py --client <Cargo.toml> --dest <that directory>`
-  fills with the artifacts whose `opentui.h` matches the bindings at that `rev`. When the build fails with the
-  header hash message, rerun it. A shell `OPENTUI_LIB_DIR` wins over the config.
-- A change to OpenTUI's Rust crates is a pull request into `packages/rust` of `anomalyco/opentui`. A re-pin fills the
-  new `rev`'s directory with `abi-artifacts.py` first, then commits the new `rev` with its `Cargo.lock` and the new
-  directory in `.cargo/config.toml`. Other pins' directories stay, so branches on them keep building. The `rev` may name the head of an
-  open pull request; re-pin to the merge commit on `main` once it merges.
+- opentui comes from `packages/rust` of `anomalyco/opentui`, pinned to a release by git `tag` in `Cargo.toml` and
+  linked statically. That checkout has no native library: `.cargo/config.toml` points `OPENTUI_LIB_DIR` at
+  `.opentui/<tag>/host-fill-with-bun-run-opentui-native` in this package (git-ignored), which
+  `script/opentui-native.ts` fills from the release zip, checked against the sha256 table in the script and the header
+  hash. `bun run cargo` runs it first, so nothing else is needed; `bun run opentui:native --target <target>` installs
+  another target's and prints its directory. A shell `OPENTUI_LIB_DIR` wins over the config.
+- A change to OpenTUI's Rust crates is a pull request into `packages/rust` of `anomalyco/opentui`. A re-pin to a new
+  release adds its rows to the script's table and changes the `tag`, `Cargo.lock` and the tag in `.cargo/config.toml`'s
+  directory together. A `rev` between releases has no zip: build its library from source (native-hardening's
+  `abi-artifacts.py`) and set `OPENTUI_LIB_DIR` to it.
 
 ## Checks
 
