@@ -99,6 +99,8 @@ export function createBrowserPane(input: {
   // Each page's download handler by its web contents ID. The profile guards its own session and owns this map; a remote
   // server's partition gets its own guard at registration, handing downloads to the same map.
   const downloads = input.profile.downloads
+  // Warnings about Electron internals a page relies on, each logged once for the pane.
+  const warned = new Set<string>()
 
   return {
     async register(window: number, binding: string, target: Target) {
@@ -609,6 +611,11 @@ export function createBrowserPane(input: {
       },
       focusPage: () => {
         if (focused() && win.isFocused() && page.view.getVisible()) page.contents.focus()
+      },
+      warn: (message) => {
+        if (warned.has(message)) return
+        warned.add(message)
+        void runtime.runFork(Effect.logWarning(message))
       },
       fail,
       refused: (notice) => {

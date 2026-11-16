@@ -245,6 +245,8 @@ export function createBrowserPage(
     closeTab?: () => void
     /** Gives the page keyboard focus back after a prompt, when its tab is in front. */
     focusPage?: () => void
+    /** Logs that an Electron internal is not what the page expects; the pane logs each message once. */
+    warn?: (message: string) => void
   },
 ) {
   const policy: Policy = {
@@ -488,7 +490,12 @@ export function createBrowserPage(
   }
 
   // Page dialogs, permission requests, sign-ins and "Leave site?" wait for the user in the pane; see page-prompts.ts.
-  const dialogs = takeDialogs(contents, () => selectSuppressed(dialogGate), () => !!selectOpenDialog(dialogGate))
+  const dialogs = takeDialogs(
+    contents,
+    () => selectSuppressed(dialogGate),
+    () => !!selectOpenDialog(dialogGate),
+    (message) => options.warn?.(message),
+  )
 
   const prompts = createPagePrompts({
     contents,
@@ -504,6 +511,7 @@ export function createBrowserPage(
       }),
     top: () => state().url,
     dialog: () => selectUserDialog(dialogGate),
+    dialogFrame: () => dialogs.frame(),
     answerDialog: (revision, answer) => answerDialog(revision, answer.accept, answer.text, answer.stop),
     redo: (action) => execute(action, [], new AbortController().signal).then(() => undefined, () => undefined),
     close: () => options.closeTab?.(),

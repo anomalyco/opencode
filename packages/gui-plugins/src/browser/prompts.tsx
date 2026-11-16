@@ -441,7 +441,9 @@ type Plugin = ReturnType<typeof usePlugin<typeof definition>>
 function siteSays(ctx: Plugin, site: PromptSite) {
   if (site.kind === "web") return ctx.t(site.embedded ? "prompt.site.embedded" : "prompt.site.web", { host: site.host })
 
-  return ctx.t(site.kind === "file" ? "prompt.site.file" : "prompt.site.page")
+  if (site.kind === "page") return ctx.t(site.embedded ? "prompt.site.embedded.page" : "prompt.site.page")
+
+  return ctx.t("prompt.site.file")
 }
 
 function permissionText(ctx: Plugin, ask: Ask<"permission">) {

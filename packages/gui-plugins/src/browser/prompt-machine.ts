@@ -4,7 +4,7 @@
 // it instead of queueing again. Every item ends with an answer: the user's, its deadline, or a navigation or close
 // that clears it, each settled exactly once.
 import { previewScheme } from "./scheme"
-import type { PermissionKind } from "./site-permissions"
+import { originOf, type PermissionKind } from "./site-permissions"
 
 export type Waiting =
   | {
@@ -104,23 +104,24 @@ export function promptHost(url: string) {
 }
 
 /**
- * Who asks, from the asking document's real address and the tab's: its host as the URL parser writes it (ASCII, so an
- * international name shows as punycode and cannot pass for another), a local file, or a page with no host.
+ * Who asks: the asking document's origin, from the live frame when it is known (`frame`), else from its
+ * address, whose origin a `blob:` URL carries. A web origin is named by its host (`promptHost`); a local file as a
+ * file; an opaque origin, as `data:` and sandboxed documents have, by no name. `embedded` is any document but the tab's
+ * page: a subframe when the live frame is known, else another origin, or for an opaque origin another address, so it\n * never speaks as the page.
  */
-export function promptSite(url: string, top: string) {
-  const origin = URL.canParse(url) ? new URL(url).origin : "null"
-  const embedded = origin !== (URL.canParse(top) ? new URL(top).origin : "null")
-
-  if (!URL.canParse(url)) return { kind: "page" as const, host: "", embedded }
-  const parsed = new URL(url)
+export function promptSite(url: string, top: string, frame?: { readonly origin: string; readonly main: boolean }) {
+  const origin = frame ? (frame.origin === "null" ? "null" : originOf(frame.origin)) : originOf(url)
+  const embedded = frame ? !frame.main : origin === "null" ? url !== top : origin !== originOf(top)
+  const protocol = URL.canParse(url) ? new URL(url).protocol : ""
 
   // A local preview is its workspace file to the user, wherever Chromium serves it from.
-  if (parsed.protocol === "file:" || parsed.protocol === `${previewScheme}:`) return { kind: "file" as const, host: "", embedded }
+  if (origin.startsWith(`${previewScheme}:`) || (origin === "null" && (protocol === "file:" || protocol === `${previewScheme}:`)))
+    return { kind: "file" as const, host: "", embedded }
 
-  if (!/^https?:$/.test(parsed.protocol) || !parsed.host) return { kind: "page" as const, host: "", embedded }
-  return { kind: "web" as const, host: promptHost(url), embedded }
+  if (origin === "null" || !/^https?:$/.test(new URL(origin).protocol)) return { kind: "page" as const, host: "", embedded }
+
+  return { kind: "web" as const, host: promptHost(origin), embedded }
 }
-
 /** Page-supplied text the pane shows as text: bounded, without controls that reorder or hide what follows. */
 export function promptText(text: string, max: number) {
   return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu, "").slice(0, max)

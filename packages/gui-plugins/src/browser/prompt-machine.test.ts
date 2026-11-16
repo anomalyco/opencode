@@ -102,8 +102,24 @@ describe("who asks", () => {
 
   test("marks a frame of another origin as embedded, and names files and pages without a host", () => {
     expect(promptSite("https://ads.example/frame", "https://news.example/").embedded).toBe(true)
+    expect(promptSite("https://bank.example/", "https://bank.example/", { origin: "null", main: true })).toEqual({ kind: "page", host: "", embedded: false })
     expect(promptSite("file:///C:/repo/page.html", "file:///C:/repo/page.html")).toEqual({ kind: "file", host: "", embedded: false })
     expect(promptSite("data:text/html,x", "https://news.example/")).toEqual({ kind: "page", host: "", embedded: true })
+  })
+
+  test("names a dialog's real origin: a blob's creator, or an embedded page when the origin is opaque", () => {
+    expect(promptSite("blob:https://evil.example/6d44", "https://bank.example/")).toEqual({
+      kind: "web",
+      host: "evil.example",
+      embedded: true,
+    })
+    expect(promptSite("blob:https://bank.example/6d44", "https://bank.example/")).toEqual({ kind: "web", host: "bank.example", embedded: false })
+    // An opaque frame inside a local preview is still another document than the page.
+    expect(promptSite("data:text/html,x", "file:///C:/repo/page.html")).toEqual({ kind: "page", host: "", embedded: true })
+    // The live frame's origin wins over its address: a sandboxed frame at the bank's address is not the bank.
+    expect(promptSite("https://bank.example/upload", "https://bank.example/", { origin: "null", main: false })).toEqual({ kind: "page", host: "", embedded: true })
+    expect(promptSite("https://bank.example/", "https://bank.example/", { origin: "null", main: true })).toEqual({ kind: "page", host: "", embedded: false })
+    expect(promptSite("file:///C:/repo/page.html", "file:///C:/repo/page.html")).toEqual({ kind: "file", host: "", embedded: false })
   })
 
   test("drops controls that reorder or hide page text, and bounds it", () => {

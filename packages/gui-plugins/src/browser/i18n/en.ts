@@ -201,6 +201,7 @@ export default {
   "prompt.site.embedded": "An embedded page at {{host}} says",
   "prompt.site.file": "This file says",
   "prompt.site.page": "This page says",
+  "prompt.site.embedded.page": "An embedded page says",
   "prompt.stop": "Stop this page from showing more dialogs",
   "prompt.leave.title": "Leave site?",
   "prompt.leave.description": "Changes you made may not be saved.",

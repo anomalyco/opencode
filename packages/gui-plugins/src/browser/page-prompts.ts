@@ -55,7 +55,7 @@ type Details = {
 }
 
 /** What Electron's `-run-dialog` event carries; the dialog's content comes from CDP instead. */
-type RunDialogInfo = { readonly dialogType: string }
+type RunDialogInfo = { readonly frame?: Electron.WebFrameMain | null; readonly dialogType?: string }
 
 /** What the session guard calls for a web page of a tab. */
 export type PagePermissions = {
@@ -79,6 +79,8 @@ export function createPagePrompts(input: {
   /** The tab's top-level address as the pane shows it, so a preview reads as its file. */
   readonly top: () => string
   readonly dialog: () => OpenDialog | null
+  /** The live frame of the open dialog, once Electron reported it; its origin names the dialog. */
+  readonly dialogFrame: () => { readonly origin: string; readonly main: boolean } | undefined
   readonly answerDialog: (revision: number, answer: Extract<PromptAnswer, { kind: "dialog" }>) => Promise<void>
   /** Runs a user navigation again after the user chose to leave. */
   readonly redo: (action: Browser.Action) => Promise<void>
@@ -170,7 +172,7 @@ export function createPagePrompts(input: {
         ask: {
           kind: "dialog",
           dialog: dialog.dialog.type === "confirm" || dialog.dialog.type === "prompt" ? dialog.dialog.type : "alert",
-          site: promptSite(dialog.url, input.top()),
+          site: promptSite(dialog.url, input.top(), input.dialogFrame()),
           message: promptText(dialog.dialog.message, PROMPT_TEXT_MAX),
           value: promptText(dialog.dialog.defaultValue, PROMPT_TEXT_MAX),
           stop: !!dialog.repeat,
@@ -478,22 +480,41 @@ export type PagePrompts = ReturnType<typeof createPagePrompts>
  * `confirm` and answers `prompt` with null at once. The pane shows them instead and answers them through CDP, as the
  * agent's browser.dialog does; Chromium runs the first answer and ignores the rest. This holds Chromium's callback
  * only to unblock the page when it closes, when Chromium cancels the page's dialogs, or when no CDP dialog follows,
- * and answers at once a dialog of a document whose dialogs the user stopped.
+ * and answers at once a dialog of a document whose dialogs the user stopped. It also records the asking frame, whose
+ * live origin names the dialog.
+ *
+ * Both events are Electron internals (lib/browser/api/web-contents.ts in 44.x: `-run-dialog` with `(info, callback)`).
+ * When they are not what this expects, it fails safe and says so once through `warn`: a listener that is not there
+ * means another Electron handles dialogs, and a call without a callback is left to CDP, which still shows and answers
+ * the dialog in the pane. `script/electron-dialogs.test.ts` in packages/desktop runs this against the pinned Electron.
  */
-export function takeDialogs(contents: WebContents, suppressed: () => boolean, opened: () => boolean) {
-  // SAFETY: `-run-dialog` and `-cancel-dialogs` are Electron's own events on every WebContents (lib/browser/api/
-  // web-contents.ts); its listener is the native message box this replaces. The listener's arguments are Electron's.
+export function takeDialogs(
+  contents: WebContents,
+  suppressed: () => boolean,
+  opened: () => boolean,
+  warn: (message: string) => void,
+) {
+  // SAFETY: `-run-dialog` and `-cancel-dialogs` are Electron's own events on every WebContents; its `-run-dialog`
+  // listener is the native message box this replaces. Each argument is checked before use below.
   const events: NodeJS.EventEmitter = contents
-  const held = new Set<(success: boolean, text: string) => void>()
+  const held = new Map<DialogCallback, { readonly origin: string; readonly main: boolean } | undefined>()
+
+  if (events.listenerCount("-run-dialog") === 0)
+    warn("Electron has no -run-dialog listener on a page; the pane's dialog takeover may not match this Electron.")
 
   const release = () => {
-    held.forEach((callback) => callback(false, ""))
+    held.forEach((_frame, callback) => callback(false, ""))
     held.clear()
   }
 
-  const run = (_info: RunDialogInfo, callback: (success: boolean, text: string) => void) => {
+  const run = (info?: RunDialogInfo | DialogCallback, last?: RunDialogInfo | DialogCallback) => {
+    const callback = [last, info].find(dialogCallback)
+
+    if (!callback) return warn("Electron's -run-dialog passed no callback; the dialog is left to CDP.")
+
     if (suppressed()) return callback(false, "")
-    held.add(callback)
+    const frame = info && typeof info === "object" && info.frame && !info.frame.isDestroyed() ? info.frame : undefined
+    held.set(callback, frame ? { origin: frame.origin, main: frame.parent === null } : undefined)
     // The page must never wait on a dialog nobody can see: one CDP never reported is dismissed.
     setTimeout(() => {
       if (held.has(callback) && !opened()) {
@@ -508,6 +529,8 @@ export function takeDialogs(contents: WebContents, suppressed: () => boolean, op
   events.on("-cancel-dialogs", release)
 
   return {
+    /** The frame of the dialog the page shows now, once Electron reported it. */
+    frame: () => [...held.values()].at(-1),
     /** Chromium closed the page's dialog; whoever answered, its callback already ran. */
     closed: () => held.clear(),
     dispose: () => {
@@ -520,6 +543,11 @@ export function takeDialogs(contents: WebContents, suppressed: () => boolean, op
   }
 }
 
+type DialogCallback = (success: boolean, text: string) => void
+
+function dialogCallback(value: RunDialogInfo | DialogCallback | undefined): value is DialogCallback {
+  return typeof value === "function"
+}
 /**
  * Gives a top-level document Chromium's own `prompt` back. Electron replaces it in every main frame with one that
  * throws ("prompt() is not supported"); a frame Electron does not set up keeps the original, and calling it for this
@@ -530,9 +558,12 @@ export const RESTORE_PROMPT = `(() => {
   let native
   const prompt = function prompt(message, value) {
     if (!native) {
+      const root = document.body ?? document.documentElement
+      // A document without a root cannot hold the frame; the page gets the cancel answer, as a dismissed prompt.
+      if (!root) return null
       const frame = document.createElement("iframe")
       frame.hidden = true
-      ;(document.body ?? document.documentElement).append(frame)
+      root.append(frame)
       native = frame.contentWindow.prompt
       frame.remove()
     }
