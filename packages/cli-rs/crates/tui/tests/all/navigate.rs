@@ -4,7 +4,7 @@ use crate::support::{self, Fake, Harness, WAIT, deref_harness};
 
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use opencode_local::cli_config::{Info, Session, Verbosity};
@@ -12,8 +12,9 @@ use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 /// Serves the same messages for every session, newest page first, `limit` at a time, with a cursor that
-/// counts the messages older than the page; `older` counts the reads of an older page.
-fn fake(messages: Vec<Value>, older: Arc<AtomicUsize>) -> Fake {
+/// counts the messages older than the page; `older` counts the reads of an older page. While `failing` is set, every
+/// message read fails.
+fn fake(messages: Vec<Value>, older: Arc<AtomicUsize>, failing: Arc<AtomicBool>) -> Fake {
     Fake::new(move |seen| {
         let path = seen.path.as_str();
         let id = path.strip_prefix("/api/session/").and_then(|rest| rest.split('/').next()).unwrap_or_default();
@@ -25,12 +26,13 @@ fn fake(messages: Vec<Value>, older: Arc<AtomicUsize>) -> Fake {
                 let limit = seen.param("limit");
                 let limit: usize = if limit.is_empty() { 20 } else { limit.parse().unwrap() };
                 let cursor = seen.param("cursor");
-                let end = if cursor.is_empty() {
-                    messages.len()
-                } else {
+                if !cursor.is_empty() {
                     older.fetch_add(1, Ordering::SeqCst);
-                    cursor.parse().unwrap()
-                };
+                }
+                if failing.load(Ordering::SeqCst) {
+                    return (500, json!({ "_tag": "UnknownError", "message": "the read failed", "ref": "err_1" }));
+                }
+                let end = if cursor.is_empty() { messages.len() } else { cursor.parse().unwrap() };
                 let start = end.saturating_sub(limit);
                 let page: Vec<_> = messages[start..end].iter().rev().cloned().collect();
                 let next = (start > 0).then(|| start.to_string());
@@ -92,6 +94,7 @@ fn turns(count: u64) -> Vec<Value> {
 struct Nav {
     harness: Harness,
     older: Arc<AtomicUsize>,
+    failing: Arc<AtomicBool>,
 }
 
 deref_harness!(Nav);
@@ -99,12 +102,13 @@ deref_harness!(Nav);
 fn open(messages: Vec<Value>, info: Info) -> Nav {
     let last = messages.len() / 2;
     let older = Arc::new(AtomicUsize::new(0));
-    let fake = fake(messages, older.clone());
+    let failing = Arc::new(AtomicBool::new(false));
+    let fake = fake(messages, older.clone(), failing.clone());
     let deps =
         Deps { config: support::config(info), route: support::session_route("ses_n"), ..support::deps(Arc::new(fake)) };
     // The transcript keeps the 15-row view these cases were written for (E.12 took the session header and
     // the column gaps out, so it grew by five rows at 80x30).
-    let h = Nav { harness: support::mount(80, 25, deps), older };
+    let h = Nav { harness: support::mount(80, 25, deps), older, failing };
     h.wait_for(&format!("Answer {last} three."));
     h
 }
@@ -310,6 +314,29 @@ fn message_navigation_aligns_messages_with_the_top() {
     assert_eq!(Nav::row(&screen, "Question 1"), Some(TOP + 1), "{screen}");
 }
 
+/// A failed transcript read shows the error's message alone as a toast, without its tag: a session's first page, and
+/// an older page whichever move asked for it (deviation `O89-transcript-read-toast` for all but `session.first`, which
+/// toasts in TS too).
+#[test]
+fn a_failed_transcript_read_toasts_its_message() {
+    for command in ["session open", "session.page.up", "session.message.user.previous", "session.first"] {
+        let h = open(turns(30), Info::default());
+        h.failing.store(true, Ordering::SeqCst);
+        if command == "session open" {
+            h.tui.navigate(support::session_route("ses_m"));
+            h.app.advance(Duration::from_millis(1));
+        }
+        for _ in 0..400 {
+            if command == "session open" || h.older.load(Ordering::SeqCst) > 0 {
+                break;
+            }
+            h.dispatch(command);
+        }
+        let screen = h.wait_for("the read failed");
+        assert!(!screen.contains("UnknownError"), "{command}:\n{screen}");
+    }
+}
+
 #[test]
 fn groups_open_on_click_and_follow_grouping_and_verbosity() {
     // Low, the default, folds a turn's calls into one activity summary.
@@ -485,7 +512,7 @@ fn home_and_end_navigate_a_subagent_transcript() {
         route: support::session_route("ses_sub"),
         ..support::deps(Arc::new(fake))
     };
-    let h = Nav { harness: support::mount(100, 30, deps), older: Arc::default() };
+    let h = Nav { harness: support::mount(100, 30, deps), older: Arc::default(), failing: Arc::default() };
     let screen = h.wait_for("Message 19");
     assert!(screen.contains("Subagents"), "{screen}");
     assert!(!screen.contains("Message 0\n") && !screen.contains("Message 0 "), "{screen}");

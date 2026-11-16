@@ -103,7 +103,8 @@ impl Inner {
                         let Some(tui) = inner.tui.upgrade() else { return };
                         match result {
                             Ok(()) => after_layout(&tui.app.clone(), move || inner.to_message(&tui, next, user_only)),
-                            Err(error) => tui.toasts.error(error.to_string()),
+                            // TS's `prependHistory` drops it (deviation `O89-transcript-read-toast`).
+                            Err(error) => tui.toasts.error(error.tui_message()),
                         }
                     }),
                 );

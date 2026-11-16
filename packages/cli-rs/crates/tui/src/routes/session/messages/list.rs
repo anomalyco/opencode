@@ -468,7 +468,7 @@ impl Transcript {
     }
 
     /// Loads every older page in one publication (`session.first`). The window stays until `done`
-    /// mounts the head.
+    /// mounts the head; a failure reaches it as the error's message alone (`toast.error`).
     pub fn load_all(&self, tui: &Tui, done: impl FnOnce(&Tui, Result<(), String>) + 'static) {
         let Some(session) = self.session() else { return };
         let data = tui.data.clone();
@@ -476,7 +476,7 @@ impl Transcript {
             async move { data.message_load_more(&session, LoadMore { all: true, ..LoadMore::default() }).await },
             bind!(self.0.this, |inner, _, result| {
                 let Some(tui) = inner.tui.upgrade() else { return };
-                done(&tui, result.map_err(|error| error.to_string()));
+                done(&tui, result.map_err(|error| error.tui_message()));
             }),
         );
     }
@@ -1024,7 +1024,8 @@ impl Inner {
         self.render(tui, |_| false);
     }
 
-    /// `prependHistory`: loads the next older page; the store's flush mounts it.
+    /// `prependHistory`: loads the next older page; the store's flush mounts it. A failure shows a toast, where TS
+    /// shows nothing (deviation `O89-transcript-read-toast`).
     fn load_older(&self, tui: &Tui) -> bool {
         let Some(session) = self.session.borrow().clone() else { return false };
         if self.loading.get() || !tui.data.read(|state| state.has_more_messages(&session)) {
@@ -1042,7 +1043,7 @@ impl Inner {
                 let Some(tui) = inner.tui.upgrade() else { return };
                 match result {
                     Ok(_) => inner.complete_group_boundary(&tui),
-                    Err(error) => tui.toasts.error(error.to_string()),
+                    Err(error) => tui.toasts.error(error.tui_message()),
                 }
             }),
         );
