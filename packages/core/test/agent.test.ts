@@ -237,4 +237,35 @@ describe("Agent", () => {
       )
     }),
   )
+
+  it.effect("asks or denies leaving the OS sandbox for every built-in agent", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      yield* AgentPlugin.Plugin.effect(
+        host({
+          agent: agentHost(agent),
+        }),
+      )
+
+      const expected = {
+        build: "ask",
+        general: "ask",
+        compaction: "ask",
+        explore: "deny",
+        title: "deny",
+        summary: "deny",
+      } as const
+      yield* Effect.forEach(Object.entries(expected), ([id, effect]) =>
+        Effect.gen(function* () {
+          const info = yield* agent.get(Agent.ID.make(id))
+          if (!info) throw new Error(`expected built-in agent: ${id}`)
+          expect(Permission.evaluate("shell_unsandboxed", "*", info.permissions).effect).toBe(effect)
+        }),
+      )
+      // Approving a sandboxed shell command never approves running it unsandboxed.
+      const build = yield* agent.get(Agent.defaultID)
+      expect(Permission.evaluate("shell", "make test", build?.permissions ?? []).effect).toBe("allow")
+      expect(Permission.evaluate("shell_unsandboxed", "make test", build?.permissions ?? []).effect).toBe("ask")
+    }),
+  )
 })

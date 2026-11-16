@@ -16,6 +16,7 @@ import { ConfigPlugin } from "@opencode/schema/config/plugin"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { ConfigReference } from "@opencode/schema/config/reference"
+import { ConfigSandbox } from "@opencode/schema/config/sandbox"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Permission } from "@opencode/schema/permission"
 import { ConfigAgentV1 } from "../v1/config/agent.js"
@@ -191,6 +192,7 @@ export function normalize(input: unknown): Result {
 
   normalizeSkills(input, encoded, diagnostics)
   normalizeMcp(input, encoded, diagnostics)
+  normalizeSandbox(input, encoded, diagnostics)
   normalizeCompaction(input, encoded, diagnostics)
   normalizePolicies(input, encoded, diagnostics)
   normalizeExperimental(input, encoded, diagnostics)
@@ -338,6 +340,22 @@ function normalizeMcpTimeout(
     if (leaf === undefined) return
     overlay(timeout, key, leaf, [...path, key], diagnostics)
   })
+}
+
+function normalizeSandbox(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
+  if (!own(input, "sandbox")) return
+  const sandbox = decodeEncoded(ConfigSandbox.Info, input.sandbox, ["sandbox"], diagnostics)
+  if (sandbox !== undefined) {
+    encoded.sandbox = sandbox
+    return
+  }
+  // A security control is never dropped: an invalid block resolves to the strictest policy instead of disabling it.
+  diagnostics.push({
+    kind: "invalid",
+    path: ["sandbox"],
+    message: "kept the strictest sandbox policy (enabled, read-only, network denied) for an invalid sandbox block",
+  })
+  encoded.sandbox = { enabled: true, mode: "read-only", network: "deny" }
 }
 
 function normalizeCompaction(

@@ -17,6 +17,7 @@ import { ConfigPlugin } from "./config/plugin.js"
 import { ConfigPolicy } from "./config/policy.js"
 import { ConfigProvider } from "./config/provider.js"
 import { ConfigReference } from "./config/reference.js"
+import { ConfigSandbox } from "./config/sandbox.js"
 import { ConfigWebSearch } from "./config/websearch.js"
 import { ConfigToolOutput } from "./config/tool-output.js"
 import { ConfigWatcher } from "./config/watcher.js"
@@ -66,6 +67,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   snapshots: Schema.Boolean.pipe(optional).annotate({
     description: "Enable snapshots used for undo and revert behavior",
+  }),
+  sandbox: ConfigSandbox.Info.pipe(optional).annotate({
+    description: "OS-level sandbox for agent shell commands, enforced by Microsoft MXC (default: off)",
   }),
   watcher: ConfigWatcher.Info.pipe(optional).annotate({
     description: "Filesystem watcher configuration",

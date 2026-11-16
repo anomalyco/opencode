@@ -35,6 +35,7 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
+import { Sandbox } from "@opencode/core/sandbox"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { ShellResult } from "@opencode/core/shell/result"
 import { ID } from "@opencode/schema/shell"
@@ -143,6 +144,7 @@ const shellPluginSupervisor = makeLocationNode({
     FileAccess.node,
     Flag.node,
     Permission.node,
+    Sandbox.node,
     Session.node,
     Job.node,
     Shell.node,
@@ -354,6 +356,111 @@ const runPermissionCommand = (
     expect(yield* Queue.size(queue)).toBe(0)
     return { exit, requests }
   }).pipe(Effect.scoped, Effect.timeout(Duration.seconds(15)))
+
+// A fake sandbox service: the active policy, execution results and recorded executions are set per test.
+let sandboxPolicy: Sandbox.Policy | undefined
+let sandboxResult: Partial<Sandbox.Result> = {}
+const sandboxExecutions: Sandbox.Execution[] = []
+const fakeSandbox = makeLocationNode({
+  service: Sandbox.Service,
+  layer: Layer.succeed(
+    Sandbox.Service,
+    Sandbox.Service.of({
+      policy: () => Effect.sync(() => sandboxPolicy),
+      execute: (input) =>
+        Effect.sync(() => {
+          sandboxExecutions.push(input)
+          return {
+            exitCode: 0,
+            stdout: `sandbox-ran:${input.command}`,
+            stderr: "",
+            timedOut: false,
+            ...sandboxResult,
+          }
+        }),
+    }),
+  ),
+  deps: [],
+})
+const sandboxIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    Sandbox.node.replace(fakeSandbox),
+  ]),
+)
+
+describe("ShellTool sandbox", () => {
+  const prepare = () => {
+    reset()
+    sandboxPolicy = undefined
+    sandboxResult = {}
+    sandboxExecutions.length = 0
+  }
+
+  sandboxIt.live("runs a command through the sandbox when a policy is active", () =>
+    withScanner((registry) =>
+      Effect.gen(function* () {
+        prepare()
+        sandboxPolicy = { mode: "workspace-write", network: "deny", writableRoots: [] }
+        const settled = yield* executeTool(registry, call({ command: "echo hi" }))
+        expect(sandboxExecutions.map((item) => item.command)).toEqual(["echo hi"])
+        expect(sandboxExecutions[0].environment.AGENT).toBe("1")
+        expect(settled.status).toBe("completed")
+        expect(settled.metadata).toMatchObject({ exit: 0, truncated: false, status: "completed" })
+        expect(settled.content).toEqual([{ type: "text", text: "sandbox-ran:echo hi" }])
+        expect(assertions.map((item) => item.action)).toEqual(["shell"])
+      }),
+    ),
+  )
+
+  sandboxIt.live("reports a sandbox timeout as a stopped command", () =>
+    withScanner((registry) =>
+      Effect.gen(function* () {
+        prepare()
+        sandboxPolicy = { mode: "read-only", network: "deny", writableRoots: [] }
+        sandboxResult = { timedOut: true, exitCode: -1, stdout: "" }
+        const settled = yield* executeTool(registry, call({ command: "sleep 999" }))
+        expect(settled.status).toBe("completed")
+        expect(settled.content?.at(-1)).toMatchObject({
+          type: "text",
+          text: expect.stringContaining("Command timed out"),
+        })
+      }),
+    ),
+  )
+
+  sandboxIt.live("asks a separate permission to leave the sandbox before the shell approval", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        prepare()
+        sandboxPolicy = { mode: "read-only", network: "deny", writableRoots: [] }
+        const marker = path.join(fixture.active, "unsandboxed-marker")
+        const settled = yield* executeTool(
+          registry,
+          call({ command: `printf unsandboxed > ${marker}`, sandbox: false }),
+        )
+        expect(sandboxExecutions).toEqual([])
+        expect(settled.status).toBe("completed")
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("unsandboxed")
+        expect(assertions.map((item) => item.action)).toEqual(["shell_unsandboxed", "shell"])
+        expect(assertions[0].resources).toEqual([`printf unsandboxed > ${marker}`])
+      }),
+    ),
+  )
+
+  sandboxIt.live("does not ask to leave a sandbox that is off", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        prepare()
+        const marker = path.join(fixture.active, "plain-marker")
+        yield* executeTool(registry, call({ command: `printf plain > ${marker}`, sandbox: false }))
+        expect(assertions.map((item) => item.action)).toEqual(["shell"])
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("plain")
+      }),
+    ),
+  )
+})
 
 describe("ShellTool scanner permissions", () => {
   const test = isWindows || !Bun.which("sh") ? permissionIt.live.skip : permissionIt.live
@@ -1245,6 +1352,7 @@ describe("ShellTool", () => {
             FileAccess.node,
             Flag.node,
             Permission.node,
+            Sandbox.node,
             Session.node,
             Job.node,
             Shell.node,

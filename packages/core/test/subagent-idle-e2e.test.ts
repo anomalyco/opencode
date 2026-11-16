@@ -28,6 +28,7 @@ import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { SubagentJob } from "@opencode/core/session/subagent-job"
 import { Shell } from "@opencode/core/shell"
+import { Sandbox } from "@opencode/core/sandbox"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { SubagentTool } from "@opencode/core/tool/plugin/subagent"
 import { Tool } from "@opencode/core/tool"
@@ -70,6 +71,7 @@ const pluginSupervisor = makeLocationNode({
     Model.node,
     Permission.node,
     PluginHooks.node,
+    Sandbox.node,
     Session.node,
     Shell.node,
     ShellSelect.node,
