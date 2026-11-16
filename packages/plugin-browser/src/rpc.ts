@@ -336,7 +336,7 @@ export const Operations = [
   ),
   operation(
     "click",
-    "Click a ref from this tab's latest snapshot. The point must hit a verifiable page document, not extension UI. Native context menus and Linux middle-click paste are unavailable.",
+    "Click a ref from this tab's latest snapshot. The point must hit a verifiable page document, not extension UI. Native file pickers, native context menus and Linux middle-click paste are unavailable. Use files.upload for file inputs.",
     {
       ...target,
       button: optional(Schema.Literals(["left", "right", "middle"])),

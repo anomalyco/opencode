@@ -17,6 +17,7 @@ test(
         outdir: out,
         target: "node",
         format: "cjs",
+        naming: "[name].cjs",
         external: ["electron"],
       })
 
@@ -25,9 +26,10 @@ test(
       const child = Bun.spawn(
         [
           String(electron),
+          `--user-data-dir=${path.join(out, "profile")}`,
           // CI's Linux runners have no display, and node_modules' chrome-sandbox is not set up as root.
           ...(process.platform === "linux" ? ["--ozone-platform=headless", "--no-sandbox", "--disable-gpu"] : []),
-          path.join(out, "electron-dialogs.fixture.js"),
+          path.join(out, "electron-dialogs.fixture.cjs"),
         ],
         { env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, ELECTRON_ENABLE_LOGGING: undefined }, stdout: "pipe", stderr: "pipe" },
       )
@@ -50,6 +52,7 @@ test(
       // prompt() answers as Chromium's own does, under a CSP that allows no frame.
       expect(result.answers).toEqual([null, true, "typed"])
       expect(result.unanswered).toBe(false)
+      expect(result.choosers).toEqual({ user: 0, picks: [1, 1, 1, 1], delayed: 1, returned: 0, intercepts: { backup: 7, product: 5 } })
     } finally {
       await rm(out, { recursive: true, force: true })
     }
