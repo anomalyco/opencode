@@ -57,6 +57,13 @@ Update the library README, current tool semantic overview, and an Unreleased cha
 - [docs] Use existing specs/v2 for current behavior and decision record, docs/plans for temporary execution plan — repository has no plans directory and forbids checklists in specs/v2 — cost if wrong: low, plan can be removed after work.
 - [verification] Baseline Code Mode focused tests 185 pass, Core Code Mode 3 pass; root bun run check exits 0 with existing lint warnings — cost if wrong: low, rerun after changes.
 - [delivery] Keep implementation local for review; no GitHub publication requested — cost if wrong: low, branch can be pushed later.
+- [generation] The experimental flag expands the existing public Config schema; ran the official client generator and retained its one-line optional flag type addition — cost if wrong: low, no endpoint or native tool-input change.
+
+## Verification so far
+
+- T1 RED: new library suite had 4 passes and 29 expected failures before implementation. GREEN: 33 passes; 10 repeats produced 330 passes. Coordinator independently ran the focused library/promise/suspend/call-timeout suites: 254 passes, 0 failures.
+- T2 RED: Core suite had 5 passes and 2 expected failures before wiring. GREEN: focused Core/flag/catalog/tool suites had 129 passes, 0 failures. Coordinator independently ran Code Mode and flag/catalog subset: 43 passes, 0 failures.
+- Baseline real SessionRunner and MCP suites: 366 passes, 0 failures. Full root check passed before changes, with existing lint warnings.
 
 ## Deferred
 

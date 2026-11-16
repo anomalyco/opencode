@@ -69,9 +69,10 @@ class Run extends Context.Service<
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
+  readonly toolTimeouts?: boolean
 }
 
-// Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
+// Shared model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
   "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
@@ -89,7 +90,14 @@ export const create = (
 ) => {
   return {
     name: "execute",
-    description,
+    description: inventory.toolTimeouts
+      ? [
+          description,
+          "Ordinary tool calls may opt into a per-call deadline with `tools.example(input, { timeoutMs: 120000 })`. `timeoutMs` must be a positive safe integer in milliseconds.",
+          "Omitting the deadline preserves existing limits. Earlier tool or interpreter deadlines still apply.",
+          "The clock includes waits inside the tool, including approval waits. A timeout rejects only that call and requests cancellation, but the remote operation may continue. Use `Promise.allSettled` to retain successful sibling results. Do not automatically replay timed-out operations.",
+        ].join("\n")
+      : description,
     input: CodeMode.Input,
     freeform: { type: "text" },
     output: ExecuteOutput,
@@ -278,6 +286,7 @@ function runtime(inventory: Inventory) {
   const tools = inventoryTools(inventory)
   const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
     tools,
+    toolTimeouts: inventory.toolTimeouts === true,
     extensions: [CodeModeFetch.extension],
     hooks: runHooks,
   })

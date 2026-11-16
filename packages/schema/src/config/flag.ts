@@ -10,6 +10,7 @@ export const wildcard = "all"
  */
 export const registry = {
   todo: "Enable the experimental todowrite tool.",
+  codemode_tool_timeouts: "Enable optional per-call Code Mode tool deadlines without adding default timeouts.",
   background_compaction:
     "Enable experimental background compaction: summarize the conversation in the background as it nears the compaction threshold, so automatic compaction does not wait for the summary. Background summaries that are never used still cost tokens.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
