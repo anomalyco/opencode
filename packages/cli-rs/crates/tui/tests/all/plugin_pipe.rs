@@ -1416,6 +1416,40 @@ fn the_fixed_typescript_approval_rows_pass() {
     }
 }
 
+// Expected (review jsnpm-5): of two answers given on one build before its hash ended, the later one is recorded and the
+// earlier one is dropped silently, however their hashes end. Approve then Decline ends declined, with nothing of it
+// run; Approve twice approves once and says nothing about a changed build.
+#[test]
+fn a_later_answer_supersedes_one_still_hashed() {
+    use opencode_plugin::loader::approval::Decision;
+    let Some(config) = config() else { return };
+    for (answers, listed, setups) in [
+        ([Decision::Approved, Decision::Declined], Status::Declined, 0),
+        ([Decision::Approved, Decision::Approved], Status::Active, 1),
+    ] {
+        let project = Project::open(config.clone());
+        let tui = &project.pipe.harness.tui;
+        let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(tui, &project.target()) else {
+            panic!("nothing is held")
+        };
+        let told = Rc::new(std::cell::RefCell::new(Vec::new()));
+        for decision in answers {
+            let told = told.clone();
+            opencode_tui::plugins::host::decide(tui, &project.target(), &artifact, decision, move |_, recorded| {
+                told.borrow_mut().push((decision, recorded));
+            });
+        }
+        project.pipe.harness.wait("the later answer was recorded", || {
+            turn(&project.pipe.harness);
+            !told.borrow().is_empty()
+        });
+        project.settle();
+        assert_eq!(*told.borrow(), [(answers[1], Ok(true))], "{answers:?}");
+        assert_eq!(project.listed(), Some(listed), "{answers:?}");
+        assert_eq!(project.log().0, setups, "{answers:?}");
+    }
+}
+
 // Expected (the manager's question for a TypeScript plugin, 3.9): the toast and the question name TypeScript code and
 // the JS host, the directory and the hash of its files, with Decline active; Enter declines, and approving runs it.
 #[test]
