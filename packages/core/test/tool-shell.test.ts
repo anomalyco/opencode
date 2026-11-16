@@ -52,7 +52,7 @@ import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { Expected } from "./lib/session-message"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { codeModeListings, toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_shell_tool_test")
 const sessionModel = Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") })
@@ -870,34 +870,38 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
-  it.live("returns both parallel CodeMode shell results", () =>
+  it.live("moves shell into Code Mode with full_codemode and returns both parallel results", () =>
     withTempDir((tmp) => {
       reset()
-      return withSession(tmp.path, (registry) =>
-        Effect.gen(function* () {
-          yield* registry.transform((editor) =>
-            editor.update("shell", (tool) => {
-              tool.options = { ...tool.options, codemode: true }
+      return Effect.promise(() =>
+        Bun.write(path.join(tmp.path, "opencode.json"), JSON.stringify({ experimental: { full_codemode: true } })),
+      ).pipe(
+        Effect.andThen(
+          withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const snapshot = yield* registry.snapshot()
+              expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+              expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).toEqual(["shell"])
+              const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
+              const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
+              const result = yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: {
+                  type: "tool-call",
+                  id: "call-parallel-shells",
+                  name: "execute",
+                  input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
+                },
+              }).pipe(Effect.timeout("3 seconds"))
+              expect(result.status).toBe("completed")
+              expect(JSON.parse(result.output.output)).toEqual([
+                { output: "one", exitCode: 0, wallTimeSeconds: expect.any(Number) },
+                { output: "two", exitCode: 0, wallTimeSeconds: expect.any(Number) },
+              ])
             }),
-          )
-          const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
-          const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
-          const result = yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: {
-              type: "tool-call",
-              id: "call-parallel-shells",
-              name: "execute",
-              input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
-            },
-          }).pipe(Effect.timeout("3 seconds"))
-          expect(result.status).toBe("completed")
-          expect(JSON.parse(result.output.output)).toEqual([
-            { output: "one", exitCode: 0, wallTimeSeconds: expect.any(Number) },
-            { output: "two", exitCode: 0, wallTimeSeconds: expect.any(Number) },
-          ])
-        }),
+          ),
+        ),
       )
     }),
   )
@@ -1241,6 +1245,7 @@ describe("ShellTool", () => {
             }),
           ),
           deps: [
+            Config.node,
             Environment.node,
             FileAccess.node,
             Flag.node,
