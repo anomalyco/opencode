@@ -55,12 +55,15 @@ function windowMatches(
 ): boolean {
   const start = parseTime(window.start)
   const end = parseTime(window.end)
+  // Equal endpoints denote the whole local calendar day.
+  if (start === end) return true
   const wraps = start > end
   // A window that wraps midnight also covers the early hours of the next day, so measure
   // minutes from the window's own start-of-day reference point.
   const offset = wraps && local.minutes < start ? local.minutes + MINUTES_PER_DAY : local.minutes
-  if (start <= end) return offset >= start && offset <= end
-  return offset >= start && offset <= end + MINUTES_PER_DAY
+  // Windows are half-open [start, end): the end minute itself is outside the window.
+  if (start < end) return offset >= start && offset < end
+  return offset >= start && offset < end + MINUTES_PER_DAY
 }
 
 function matchesDay(
@@ -105,15 +108,12 @@ export const check = Effect.fn("ModelAvailability.check")(function* (info: Model
   return availability.mode === "allow" ? within : !within
 })
 
-export class TimezoneError extends Schema.TaggedError<TimezoneError>()(
-  "ModelAvailability.TimezoneError",
-  {
-    timezone: Schema.String,
-    providerID: Schema.String,
-    modelID: Schema.String,
-    cause: Schema.String,
-  },
-) {
+export class TimezoneError extends Schema.TaggedError<TimezoneError>()("ModelAvailability.TimezoneError", {
+  timezone: Schema.String,
+  providerID: Schema.String,
+  modelID: Schema.String,
+  cause: Schema.String,
+}) {
   override get message() {
     return `Invalid timezone for ${this.providerID}/${this.modelID}: ${this.timezone}`
   }

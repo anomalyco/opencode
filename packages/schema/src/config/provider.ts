@@ -72,20 +72,20 @@ export const Reasoning = Schema.Union([
 ]).annotate({ identifier: "Config.Model.Reasoning" })
 export type Reasoning = typeof Reasoning.Type
 
-const HourMinute = Schema.String
-  .check(Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u))
-  .annotate({ description: "Local time of day as HH:mm, 00:00 to 23:59" })
+const HourMinute = Schema.String.check(Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)).annotate({
+  description: "Local time of day as HH:mm, 00:00 to 23:59",
+})
 
 /** Days of the week, Monday to Sunday, as accepted by `availability.windows[].days`. */
 export const DayOfWeek = Schema.Literals(["mon", "tue", "wed", "thu", "fri", "sat", "sun"])
 export type DayOfWeek = typeof DayOfWeek.Type
 
 class AvailabilityWindow extends Schema.Class<AvailabilityWindow>("Config.Model.Availability.Window")({
-  /** Days the window applies to; defaults to every day. */
+  /** Days the window starts on, `mon` to `sun`; every day when omitted. Overnight tails belong to the preceding day. */
   days: DayOfWeek.pipe(Schema.Array, optional),
-  /** Inclusive start of the window, HH:mm in the window's timezone. */
+  /** Inclusive start, HH:mm in the window's timezone. */
   start: HourMinute,
-  /** Inclusive end of the window, HH:mm. `end` earlier than `start` wraps past midnight. */
+  /** Exclusive end, HH:mm; earlier than `start` wraps past midnight. Equal endpoints cover the whole local calendar day. */
   end: HourMinute,
 }) {}
 
@@ -96,9 +96,9 @@ class Availability extends Schema.Class<Availability>("Config.Model.Availability
   /** IANA timezone for window times, for example `UTC` or `Europe/Berlin`. Defaults to `UTC`. */
   timezone: Schema.String.pipe(optional),
   /** Model used instead while a window blocks this one, as `provider/model` or `provider/model#variant`. */
-  fallback: Schema.String.check(
-    Schema.isPattern(/^[^/#]+\/[^#]+(?:#[^#]+)?$/u),
-  ).annotate({ description: "Fallback model reference like `anthropic/claude-sonnet-4-6`" }).pipe(optional),
+  fallback: Schema.String.check(Schema.isPattern(/^[^/#]+\/[^#]+(?:#[^#]+)?$/u))
+    .annotate({ description: "Fallback model reference like `anthropic/claude-sonnet-4-6`" })
+    .pipe(optional),
 }) {}
 
 class ModelConfig extends Schema.Class<ModelConfig>("Config.Model")({

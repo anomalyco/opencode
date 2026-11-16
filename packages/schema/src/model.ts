@@ -120,11 +120,11 @@ export const Availability = Schema.Struct({
   mode: Schema.Literals(["block", "allow"]).pipe(optional),
   windows: Schema.Array(
     Schema.Struct({
-      /** Days the window applies to, `mon` to `sun`; every day when omitted. */
+      /** Days the window starts on, `mon` to `sun`; every day when omitted. Overnight tails belong to the preceding day. */
       days: Schema.Literals(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]).pipe(Schema.Array, optional),
-      /** Inclusive start of the window, HH:mm in the window's timezone; mirrored validated by the config schema. */
+      /** Inclusive start, HH:mm in the window's timezone. */
       start: Schema.String.check(Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)),
-      /** Inclusive end; earlier than `start` wraps past midnight. */
+      /** Exclusive end, HH:mm; earlier than `start` wraps past midnight. Equal endpoints cover the whole local calendar day. */
       end: Schema.String.check(Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)),
     }),
   ),
