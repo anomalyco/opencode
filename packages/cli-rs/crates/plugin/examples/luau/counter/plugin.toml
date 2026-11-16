@@ -1,0 +1,6 @@
+# `examples/author` in Luau, with a dialog: storage, a command, a sidebar claim, an event, a fence, and a confirm.
+id = "example.luau-counter"
+name = "Counter"
+version = "0.1.0"
+contract = "2.0"
+description = "A counter in the sidebar that a command and a click raise, storage keeps and a confirm resets"

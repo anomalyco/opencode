@@ -50,6 +50,9 @@ opencode-util.workspace = true
 rustix = { workspace = true, features = ["termios", "event", "pty"] }
 libc.workspace = true
 
+[features]
+# Luau plugins (spike `luau-spike`), off by default.
+luau = ["opencode-tui/luau"]
 
 [dev-dependencies]
 serde_json.workspace = true

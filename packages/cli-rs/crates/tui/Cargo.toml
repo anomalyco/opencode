@@ -31,6 +31,10 @@ unicode-width.workspace = true
 url.workspace = true
 rand.workspace = true
 
+[features]
+# Luau plugins (spike `luau-spike`), off by default; `OPENCODE_PLUGIN_LUAU=1` turns them on in a build that has them.
+luau = ["opencode-plugin/luau"]
+
 [dev-dependencies]
 bytes.workspace = true
 # The pinned SHA-512 of the published packages the P8 rows unpack.

@@ -14,6 +14,8 @@ pub mod interact;
 pub mod limits;
 mod list;
 pub mod loader;
+#[cfg(feature = "luau")]
+pub mod luau;
 pub mod mailbox;
 pub mod node;
 pub mod pipe;
