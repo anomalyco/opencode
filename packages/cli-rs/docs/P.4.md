@@ -673,6 +673,10 @@ input has a slot surface's `slot` and no `changed`: the JS host views again when
 `release-keys` among them), `watch`/`unwatch`/`read` (snapshots, at most 128), `invalidate`, `fetch`.
 `OPENCODE_JS_HOST_TRACE=<file>` appends every frame the JS host reads and writes to the file.
 
+To debug a TypeScript plugin, read the log (`opencode.log` in the `log` directory that `opencode-native debug paths`
+prints): a failure that `/plugins` shows (`setup threw: …`, `run-command threw: …`, `cannot load …`) is logged with the
+stack of what the plugin threw, and the plugin's `console` output is logged too, each line as `js host: …`.
+
 A TypeScript plugin's files are read on a thread of their own, never on the UI thread, so no frame, the first
 included, waits on them (FT-2); the plugin is listed as starting until the first walk ended. A global plugin's build
 is its own files' bytes and its dependencies by version (each installed package's `package.json`, and the lockfiles),

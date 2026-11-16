@@ -569,6 +569,12 @@ fn a_plugin_that_throws_fails_alone_with_no_effects() {
     assert_eq!(shown.len(), 1, "{shown:?}");
     assert!(shown[0].starts_with("Plugin failed: example.probe"), "{shown:?}");
     assert!(failed(&pipe, PROBE).is_some_and(|error| error.contains("run-command threw: the probe threw")));
+    // The error shows the message; the log has the stack, down to the plugin's line (dx-fresh).
+    let stderr = pipe.scripts().stderr();
+    assert!(
+        stderr.iter().any(|line| line.trim_start().starts_with("at ") && line.contains("probe/tui.ts:")),
+        "{stderr:?}"
+    );
     pipe.harness.tui.keymap.dispatch("twin.bump", Some("1"));
     pipe.settle();
     assert!(pipe.harness.app.text().contains("twin 2"), "{}", pipe.harness.app.text());
