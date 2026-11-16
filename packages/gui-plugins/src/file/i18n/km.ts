@@ -47,7 +47,7 @@ export default {
   "view.table.truncated": "កំពុងបង្ហាញ {{shown}} ជួរដេកដំបូង ក្នុងចំណោម {{total}}។",
   "view.table.copyCell": "ចម្លងក្រឡា",
   "view.table.copyFailed": "មិនអាចចម្លងក្រឡានេះបានទេ។",
-  "view.fontSample": "ខ្ញុំចូលចិត្តសរសេរកូដជាភាសាខ្មែរ ០១២៣៤៥៦៧៨៩",
+  "view.fontSample": "កខគឃង ចឆជឈញ ដឋឌឍណ តថទធន បផពភម យរលវ សហឡអ ០១២៣៤៥៦៧៨៩",
   "view.properties": "លក្ខណៈសម្បត្តិ",
   "view.properties.showAll": "បង្ហាញលក្ខណៈសម្បត្តិទាំង {{count}}",
   "search.failed": "មិនអាចស្វែងរកឯកសារបានទេ",

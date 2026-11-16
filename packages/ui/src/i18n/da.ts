@@ -280,9 +280,9 @@ export const dict = {
     "Arbejdsområdets budget er nået · betalte modeller er sat på pause indtil {{time}} · gratis modeller virker stadig",
   "ui.sessionTurn.budgetLimit.allUntilReset":
     "Arbejdsområdets budget er nået · betalte modeller er sat på pause, indtil det nulstilles · gratis modeller virker stadig",
-  "ui.sessionTurn.budgetLimit.models": "Modelbudget nået · denne model er sat på pause indtil {{time}}",
+  "ui.sessionTurn.budgetLimit.models": "Modelbudgettet er nået · denne model er sat på pause indtil {{time}}",
   "ui.sessionTurn.budgetLimit.modelsUntilReset":
-    "Modelbudget nået · denne model er sat på pause, indtil det nulstilles",
+    "Modelbudgettet er nået · denne model er sat på pause, indtil det nulstilles",
   "ui.sessionTurn.budgetLimit.useFreeModel": "Brug en gratis model",
   "ui.sessionTurn.budgetLimit.switchModel": "Skift model",
   "ui.sessionTurn.goLimit.title": "Du har nået din forbrugsgrænse for OpenCode Go.",

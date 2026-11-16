@@ -35,7 +35,7 @@ export default {
   "move.recovery.keep": "Păstrează arborele de lucru",
   "move.recovery.remove": "Șterge arborele de lucru",
   "mcp.manage": "Gestionează serverele MCP",
-  timedOut: "Serverul a răspuns prea lent",
+  timedOut: "Serverul nu a răspuns suficient de rapid",
   "setup.mcp": "Adaugă un server cu OpenCode",
   "setup.mcp.prompt":
     "Ajută-mă să adaug un server MCP în configurația mea globală OpenCode. Întreabă-mă ce serviciu vreau să conectez, apoi configurează-l și verifică dacă se conectează.",
@@ -67,6 +67,6 @@ export default {
   "mcp.error.copy": "Copiază detaliile",
   "mcp.error.copyFailed": "Nu s-au putut copia detaliile erorii",
   "mcp.error.disable": "Dezactivează",
-  "mcp.timedOut": "{{name}} a răspuns prea lent",
+  "mcp.timedOut": "{{name}} nu a răspuns suficient de rapid",
   "mcp.error.details": "Server MCP: {{name}}\nStare: eșuat\nConfigurație: mcp.servers.{{name}}\nEroare: {{error}}",
 }

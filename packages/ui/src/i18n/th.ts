@@ -273,7 +273,7 @@ export const dict = {
   "ui.commentCard.quote": "อ้างอิง",
   "ui.commentCard.addComment": "เพิ่มความคิดเห็น",
   "ui.commentCard.editComment": "แก้ไขความคิดเห็น",
-  "ui.sessionTurn.diffs.failed": "ไม่มี diff",
+  "ui.sessionTurn.diffs.failed": "diff ไม่พร้อมใช้งาน",
   "ui.sessionTurn.diffs.retry": "ลองใหม่",
   "ui.sessionTurn.freeLimit.title": "คุณใช้ข้อความฟรีของวันนี้หมดแล้ว",
   "ui.sessionTurn.freeLimit.lineReset": "คุณใช้ข้อความฟรีของวันนี้หมดแล้ว จะรีเซ็ตเวลา {{time}}",

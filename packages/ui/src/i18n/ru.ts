@@ -402,7 +402,7 @@ export const dict = {
   "ui.timeline.event.shells.other": "{{count}} оболочки",
   "ui.timeline.event.failed": "С ошибкой: {{count}}",
   "ui.timeline.event.allFailed": "Ошибка",
-  "ui.timeline.notice.agentSwitched": "Переключено на {{agent}}",
+  "ui.timeline.notice.agentSwitched": "Агент переключён на {{agent}}",
   "ui.timeline.shell.exit": "Код выхода {{code}}",
   "ui.timeline.shell.timedOut": "Превышено время ожидания",
   "ui.timeline.shell.stopped": "Остановлено",

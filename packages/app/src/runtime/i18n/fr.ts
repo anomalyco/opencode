@@ -979,7 +979,7 @@ export const dict = {
   "provider.connect.console.expired":
     "Cette demande de connexion a expiré. Recommencez pour obtenir un nouveau code d’appareil.",
   "provider.connect.console.denied":
-    "L’accès a été refusé dans Console. Réessayez quand vous serez prêt à vous connecter.",
+    "L’accès a été refusé dans Console. Réessayez lorsque vous souhaitez vous connecter.",
   "provider.connect.console.statusFailed":
     "Impossible de vérifier l’autorisation. Vérifiez la connexion au serveur, puis réessayez.",
   "provider.connect.console.startFailed":
@@ -1415,7 +1415,7 @@ export const dict = {
   "settings.timeline.row.width.title": "Largeur de la chronologie",
   "settings.timeline.row.width.description":
     "Des lignes plus étroites se parcourent plus facilement. Des lignes plus larges en montrent davantage à la fois",
-  "settings.timeline.row.width.focused": "Concentrée",
+  "settings.timeline.row.width.focused": "Étroite",
   "settings.timeline.row.width.comfortable": "Confortable",
   "settings.timeline.row.width.wide": "Large",
   "settings.timeline.description.compact":
@@ -1436,7 +1436,7 @@ export const dict = {
   "settings.general.sounds.interface.title": "Interface",
   "settings.general.sounds.interface.description":
     "Jouer des sons discrets lorsque le logo apparaît et lorsque vous jouez avec",
-  "settings.shortcuts.unbind": "Dissocier",
+  "settings.shortcuts.unbind": "Supprimer le raccourci",
   "settings.providers.account.manage": "Gérer les comptes {{provider}}",
   "settings.providers.account.group": "Comptes",
   "settings.providers.account.add": "Ajouter un compte",
@@ -1500,8 +1500,8 @@ export const dict = {
   "usage.budget.modelsMore.many": "{{first}}, {{second}} et {{count}} autres",
   "usage.budget.modelsMore.other": "{{first}}, {{second}} et {{count}} autres",
   "usage.budget.modelsEach": "Chacun parmi {{models}}",
-  "usage.budget.you": "{{limit}} par mois, pour vous seul",
-  "usage.budget.youEach": "{{limit}} par mois et par modèle, pour vous seul",
+  "usage.budget.you": "{{limit}} par mois, pour vous uniquement",
+  "usage.budget.youEach": "{{limit}} par mois et par modèle, pour vous uniquement",
   "usage.budget.everyone": "{{limit}} par mois, partagé par tous les membres de {{workspace}}",
   "usage.budget.everyoneEach": "{{limit}} par mois et par modèle, partagé par tous les membres de {{workspace}}",
   "usage.budget.group": "{{limit}} par mois, partagé avec votre groupe",
@@ -1513,8 +1513,8 @@ export const dict = {
   "usage.note.runsOutFirst": "s’épuise en premier",
   "usage.note.paused": "{{label}} en pause",
   "usage.note.webSearch": "inclut la recherche Web",
-  "usage.note.pausedByWorkspace": "en pause par le budget de l’espace de travail",
-  "usage.note.pausedByBudget": "en pause par le budget mensuel",
+  "usage.note.pausedByWorkspace": "en pause en raison du budget de l’espace de travail",
+  "usage.note.pausedByBudget": "en pause en raison du budget mensuel",
   "usage.note.currentModel": "c’est {{model}}",
   "usage.callout.workspace.title": "Budget de l’espace de travail atteint",
   "usage.callout.workspace.body":

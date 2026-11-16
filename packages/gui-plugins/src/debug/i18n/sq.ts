@@ -15,9 +15,9 @@ export default {
   "direction.tip": "Forco drejtimin e plotë të paraqitjes së aplikacionit pa ndryshuar gjuhën e zgjedhur",
   "direction.ltr": "LTR",
   "direction.rtl": "RTL",
-  "close.label": "Fshih shiritin e korrigjimit",
+  "close.label": "Fshih shiritin e diagnostikimit",
   "close.tip":
-    "Fshih shiritin e korrigjimit. Riktheje nga paleta e komandave: Shfaq ose fshih shiritin e diagnostikimit.",
+    "Fshih shiritin e diagnostikimit. Riktheje nga paleta e komandave: Shfaq ose fshih shiritin e diagnostikimit.",
   "command.heap": "Kap pamjet e heap-it",
   "command.heap.description": "Ruan memorien e aplikacionit dhe të serverit të tij në një dosje",
   "heap.loading": "Po kapen pamjet e heap-it…",

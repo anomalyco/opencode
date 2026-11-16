@@ -37,5 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "সার্ভার যোগ করুন",
   "menu.delete": "মুছে দিন",
-  "error.unavailable": "SSH উপলভ্য নয়",
+  "error.unavailable": "SSH উপলব্ধ নয়",
 }

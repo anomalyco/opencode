@@ -53,9 +53,9 @@ export default {
   "mcp.error.action": "Detaļas",
   "mcp.error.status": "Savienojums neizdevās",
   "mcp.error.actionLabel": "{{name}} detaļas",
-  "mcp.signIn.open": "Pierakstīties {{name}}",
+  "mcp.signIn.open": "Pierakstīties pakalpojumā {{name}}",
   "mcp.signIn.description":
-    "Tiks atvērta pārlūkprogramma, lai jūs varētu pierakstīties {{name}}. Ja tā nevar sasniegt datoru, kurā darbojas OpenCode, ielīmējiet zemāk URL, uz kuru tā tika novirzīta.",
+    "Tiks atvērta pārlūkprogramma, lai jūs varētu pierakstīties pakalpojumā {{name}}. Ja tā nevar sasniegt datoru, kurā darbojas OpenCode, ielīmējiet zemāk URL, uz kuru tā tika novirzīta.",
   "mcp.signIn.waiting": "Gaida autorizāciju…",
   "mcp.signIn.failed": "Autorizācija neizdevās: {{error}}",
   "mcp.signIn.expired": "Autorizācijas termiņš beidzies",

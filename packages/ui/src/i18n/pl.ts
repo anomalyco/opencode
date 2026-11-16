@@ -404,7 +404,7 @@ export const dict = {
   "ui.timeline.event.failed": "Nieudane: {{count}}",
   "ui.timeline.event.allFailed": "Niepowodzenie",
   "ui.timeline.notice.agentSwitched": "Przełączono na {{agent}}",
-  "ui.timeline.shell.exit": "Kod {{code}}",
+  "ui.timeline.shell.exit": "Kod wyjścia {{code}}",
   "ui.timeline.shell.timedOut": "Przekroczono limit czasu",
   "ui.timeline.shell.stopped": "Zatrzymano",
   "ui.list.failed": "Nie udało się wczytać wyników",

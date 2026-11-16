@@ -58,7 +58,7 @@ export default {
   "zoom.in": "Yakınlaştır",
   "zoom.out": "Uzaklaştır",
   "zoom.reset": "Yakınlaştırmayı sıfırla",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "%{{percent}}",
   "link.copy": "Bağlantıyı kopyala",
   "history.clear": "Geçmişi temizle",
 }

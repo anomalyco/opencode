@@ -37,7 +37,7 @@ export default {
   "view.download": "Descarcă",
   "view.reveal": "Afișează în {{app}}",
   "view.openInBrowser": "Deschide în browser",
-  "view.fullscreen": "Ecran complet",
+  "view.fullscreen": "Intră în modul ecran complet",
   "view.binary": "Fișier binar · {{size}}",
   "view.loadFailed": "Acest fișier nu a putut fi încărcat.",
   "view.table.rows.one": "{{count}} rând",
@@ -53,6 +53,6 @@ export default {
   "view.properties": "Proprietăți",
   "view.properties.showAll": "Afișează toate cele {{count}} proprietăți",
   "search.failed": "Nu s-a putut căuta în fișiere",
-  "search.timeout": "Serverul a răspuns prea lent",
+  "search.timeout": "Serverul nu a răspuns suficient de rapid",
   "search.offline": "Serverul nu poate fi accesat",
 }

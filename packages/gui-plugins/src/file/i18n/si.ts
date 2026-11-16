@@ -35,7 +35,7 @@ export default {
   "view.copyContent": "අන්තර්ගතය පිටපත් කරන්න",
   "view.actions": "ගොනු ක්‍රියා",
   "view.download": "බාගන්න",
-  "view.reveal": "{{app}} තුළ හෙළි කරන්න",
+  "view.reveal": "{{app}} තුළ පෙන්වන්න",
   "view.openInBrowser": "බ්‍රවුසරයේ විවෘත කරන්න",
   "view.fullscreen": "සම්පූර්ණ තිරයට යන්න",
   "view.binary": "ද්විමය ගොනුව · {{size}}",

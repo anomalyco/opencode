@@ -16,7 +16,7 @@ export default {
   "command.close": "關閉瀏覽器分頁",
   "command.newTab": "新增瀏覽器分頁",
   "tab.new": "新增分頁",
-  "address.search": "搜尋或輸入 URL",
+  "address.search": "搜尋或輸入網址",
   "address.suggestions": "建議",
   "refused.web": "這裡只能開啟網頁。",
   "refused.workspace": "這裡只能開啟網頁和此工作階段工作區內的檔案。",

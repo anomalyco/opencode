@@ -45,7 +45,7 @@ export default {
   "components.label": "KOMPONENTY",
   "components.tip": "Otwórz laboratorium komponentów: każde story z kontrolkami na żywo i jego stanami",
   "speed.label": "SZYBKOŚĆ",
-  "speed.tip": "Globalna szybkość animacji. Kliknij, aby przełączać 0.5× i 0.25× z powrotem do 1×.",
+  "speed.tip": "Globalna szybkość animacji. Kliknij, aby przełączać kolejno 0,5×, 0,25× i z powrotem 1×.",
   "slow.label": "WOLNO",
   "slow.tip": "Odtwarzaj każdą dostrojoną animację z prędkością 1/4.",
 }

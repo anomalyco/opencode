@@ -853,10 +853,10 @@ export const dict = {
   "voice.you": "ཁྱོད:",
   "voice.assistant": "OpenCode:",
   "voice.failure.unavailable": "སྐད་འབོད་ཀྱི་དོན་ལུ་ སར་བར་འདི་གུ་ OpenAI API ལྡེ་མིག་དགོཔ་ཨིན།",
-  "voice.failure.microphone": "འབོད་ནིའི་དོན་ལུ་ སྐད་སྦྱང་འཛུལ་སྤྱོད་དགོཔ་ཨིན།",
+  "voice.failure.microphone": "འབོད་ནིའི་དོན་ལུ་ སྒྲ་དུང་འཛུལ་སྤྱོད་དགོཔ་ཨིན།",
   "voice.failure.dropped": "སྐད་འབོད་འདི་ མཐུད་ལམ་ཆད་སོང་།",
   "voice.failure.connection": "སྐད་འབོད་མཐུད་མ་ཚུགས།",
-  "desktop.microphoneUsage": "OpenCode གིས་ སྐད་འབོད་ཀྱི་དོན་ལུ་ ཁྱོད་ཀྱི་སྐད་སྦྱང་ལག་ལེན་འཐབ་ཨིན།",
+  "desktop.microphoneUsage": "OpenCode གིས་ སྐད་འབོད་ཀྱི་དོན་ལུ་ ཁྱོད་ཀྱི་སྒྲ་དུང་ལག་ལེན་འཐབ་ཨིན།",
   "desktop.documentsFolderUsage":
     "OpenCode གིས་ ཁྱོད་ཀྱིས་ཁ་ཕྱེ་མི་ལས་གཞི་དང་ དེ་ནང་གཡོག་བཀོལ་མི་བརྡ་བཀོད་ཚུ་གི་དོན་ལུ་ ཁྱོད་ཀྱི་ Documents སྣོད་འཛིན་ནང་གི་ཡིག་སྣོད་ཚུ་ལག་ལེན་འཐབ་ཨིན།",
   "desktop.desktopFolderUsage":
@@ -975,13 +975,13 @@ export const dict = {
   "provider.connect.chatgptUsageLimit.manage": "ལག་ལེན་འཛིན་སྐྱོང་།",
   "provider.connect.chatgptUsageLimit.close": "ཁ་བསྡམས།",
   "provider.connect.console.refreshFailed":
-    "ཁྱོད་ཀྱི་རྩིས་ཐོ་མཐུད་ཡོདཔ་ཨིན་རུང་ ཁྱོད་ཀྱི་དཔེ་ཚད་ཚུ་མངོན་གསལ་འབད་མ་ཚུགས། གསར་བསྐྲུན་འབད་ནིའི་དོན་ལུ་ ལོག་འབད་རྩོལ་བསྐྱེད།",
+    "ཁྱོད་ཀྱི་རྩིས་ཐོ་མཐུད་ཡོདཔ་ཨིན་རུང་ ཁྱོད་ཀྱི་དཔེ་ཚད་ཚུ་མངོན་གསལ་འབད་མ་ཚུགས། ཡང་སེལ་འབད་ནིའི་དོན་ལུ་ ལོག་འབད་རྩོལ་བསྐྱེད།",
   "provider.connect.console.connected": "OpenCode མཐུད་ཡོདཔ།",
   "provider.connect.console.noModels":
-    "ཁྱོད་ཀྱི་རྩིས་ཐོ་མཐུད་ཡོདཔ་ཨིན་རུང་ Console ལཱ་གི་ས་སྒོ་འདི་ནང་ འཐོབ་ཚུགས་པའི་དཔེ་ཚད་མེད། Console ནང་ དེ་གི་སྒྲིག་བཀོད་ཞིབ་དཔྱད་འབད་ཞིནམ་ལས་ གསར་བསྐྲུན་འབད།",
+    "ཁྱོད་ཀྱི་རྩིས་ཐོ་མཐུད་ཡོདཔ་ཨིན་རུང་ Console ལཱ་གི་ས་སྒོ་འདི་ནང་ འཐོབ་ཚུགས་པའི་དཔེ་ཚད་མེད། Console ནང་ དེ་གི་སྒྲིག་བཀོད་ཞིབ་དཔྱད་འབད་ཞིནམ་ལས་ ཡང་སེལ་འབད།",
   "provider.connect.console.modelsLoading":
-    "ཁྱོད་ཀྱི་དཔེ་ཚད་ཚུ་ ད་ལྟོ་ཡང་མངོན་གསལ་འབད་དོ། ལོག་ཞིབ་དཔྱད་འབད་ནིའི་དོན་ལུ་ གསར་བསྐྲུན་འབད།",
-  "provider.connect.console.refresh": "དཔེ་ཚད་ཚུ་གསར་བསྐྲུན།",
+    "ཁྱོད་ཀྱི་དཔེ་ཚད་ཚུ་ ད་ལྟོ་ཡང་མངོན་གསལ་འབད་དོ། ལོག་ཞིབ་དཔྱད་འབད་ནིའི་དོན་ལུ་ ཡང་སེལ་འབད།",
+  "provider.connect.console.refresh": "དཔེ་ཚད་ཚུ་ཡང་སེལ།",
   "provider.connect.console.openingBrowser": "བརའུ་ཟར་ཁ་ཕྱེ་དོ།",
   "provider.connect.remote.label": "{{server}} གུ།",
   "provider.connect.remote.description":
@@ -1035,7 +1035,7 @@ export const dict = {
   "model.details.left": "ལྷག་ལུས།",
   "model.details.resets": "སླར་སྒྲིག",
   "model.details.usage": "{{label}} · {{time}} ལུ་སླར་སྒྲིག",
-  "common.ok": "ལེགས་ཤོམ།",
+  "common.ok": "བཏུབ།",
   "common.retry": "ལོག་འབད་རྩོལ་བསྐྱེད།",
   "session.child.status.running": "གཡོག་བཀོལ་དོ།",
   "session.child.status.succeeded": "ཚར་ཡོདཔ།",
@@ -1057,7 +1057,7 @@ export const dict = {
   "dialog.mcp.signIn.open": "{{name}} ལུ་ནང་བསྐྱོད།",
   "dialog.mcp.signIn.description":
     "{{name}} ལུ་ནང་བསྐྱོད་འབད་ཚུགསཔ་སྦེ་ ཁྱོད་ཀྱི་བརའུ་ཟར་ཁ་ཕྱེཝ་ཨིན། དེ་གིས་ OpenCode གཡོག་བཀོལ་མི་འཕྲུལ་ཆས་ལུ་ལྷོད་མ་ཚུགས་པ་ཅིན་ ཁ་ཕྱོགས་སྒྱུར་ཡོད་པའི་ URL འདི་ འོག་ལུ་སྦྱར།",
-  "dialog.mcp.signIn.syncFailed": "ནང་བསྐྱོད་འབད་ཡོདཔ་ཨིན་རུང་ {{name}} གསར་བསྐྲུན་འབད་མ་ཚུགས: {{error}}",
+  "dialog.mcp.signIn.syncFailed": "ནང་བསྐྱོད་འབད་ཡོདཔ་ཨིན་རུང་ {{name}} ཡང་སེལ་འབད་མ་ཚུགས: {{error}}",
   "dialog.mcp.error.details":
     "MCP སར་བར: {{name}}\nགནས་སྟངས: འཐུས་ཤོར\nརིམ་སྒྲིག: mcp.servers.{{name}}\nའཛོལ་བ: {{error}}",
   "dialog.fork.search.empty": "འཕྲིན་དོན་འཚོལ་མ་ཐོབ།",
@@ -1148,7 +1148,7 @@ export const dict = {
     "རིན་མེད་ལག་ལེན་འདི་ {{time}} ལུ་སླར་སྒྲིག་འབདཝ་ཨིན། འཕྲོ་མཐུད་ནིའི་དོན་ལུ་ བྱིན་མི་ཅིག་མཐུད་ ཡང་ན་ Go ལུ་མཁོ་མངགས་འབད།",
   "session.freeLimit.noReset": "འཕྲོ་མཐུད་ནིའི་དོན་ལུ་ བྱིན་མི་ཅིག་མཐུད་ ཡང་ན་ Go ལུ་མཁོ་མངགས་འབད།",
   "session.freeLimit.connect": "བྱིན་མི་མཐུད།",
-  "session.freeLimit.subscribe": "Go ལུ་མཁོ་མངགས་འབད · $10/mo",
+  "session.freeLimit.subscribe": "Go ལུ་མཁོ་མངགས་འབད · ཟླཝ་རེ་ལུ་ $10",
   "session.goLimit.title": "Go ལག་ལེན་ཚད་ལུ་ལྷོད་ཡོདཔ།",
   "session.goLimit.titleNamed": "Go {{name}} ལག་ལེན་ཚད་ལུ་ལྷོད་ཡོདཔ།",
   "session.goLimit.reset": "དེ་ {{time}} ལུ་སླར་སྒྲིག་འབདཝ་ཨིན།",
@@ -1318,7 +1318,7 @@ export const dict = {
   "settings.plugins.part.server": "སར་བར།",
   "settings.plugins.part.tui": "TUI",
   "settings.plugins.parts.note":
-    'སོར་ལྡེ་ཚུ་གིས་ པ་ལག་ཨིན་གྱི་ desktop UI རྐྱངམ་ཅིག་ ཁ་བསྡམསཔ་ཨིན། དེ་གི་སར་བར་ཆ་ཤས་ཁ་བསྡམས་ནིའི་དོན་ལུ་ ཁྱོད་ཀྱི་ global opencode.json ནང་གི་ plugins ལུ་ "-<id>" ཁ་སྐོང་རྐྱབས། ཡང་ན་ དེ་གི་ TUI ཆ་ཤས་ཁ་བསྡམས་ནིའི་དོན་ལུ་ cli.json ནང་གི་ plugins ལུ་ "-" དང་ དེ་གི་ TUI པ་ལག་ཨིན་ ID ཁ་སྐོང་རྐྱབས།',
+    'སོར་ལྡེ་ཚུ་གིས་ པ་ལག་ཨིན་གྱི་ ཌེཀསི་ཊོཔ་ UI རྐྱངམ་ཅིག་ ཁ་བསྡམསཔ་ཨིན། དེ་གི་སར་བར་ཆ་ཤས་ཁ་བསྡམས་ནིའི་དོན་ལུ་ ཁྱོད་ཀྱི་ སྤྱི་ཁྱབ་ opencode.json ནང་གི་ plugins ལུ་ "-<id>" ཁ་སྐོང་རྐྱབས། ཡང་ན་ དེ་གི་ TUI ཆ་ཤས་ཁ་བསྡམས་ནིའི་དོན་ལུ་ cli.json ནང་གི་ plugins ལུ་ "-" དང་ དེ་གི་ TUI པ་ལག་ཨིན་ ID ཁ་སྐོང་རྐྱབས།',
   "settings.about.copyVersionFailed": "ཐོན་རིམ་འདྲ་བཤུས་འབད་མ་ཚུགས།",
   "settings.about.notices.title": "ཕྱོགས་གསུམ་པའི་བརྡ་དོན་ཚུ།",
   "settings.about.notices.description": "OpenCode ནང་ འོག་གི་ཐོན་ཁུངས་ཁ་ཕྱེ་ཡོད་པའི་མཉེན་ཆས་ཚུ་ཚུདཔ་ཨིན།",
@@ -1453,7 +1453,7 @@ export const dict = {
   "usage.duration.days": "{{days}}d {{hours}}h",
   "usage.duration.hours": "{{hours}}h {{minutes}}m",
   "usage.duration.minutes": "{{minutes}}m",
-  "usage.budget.all": "འཐུས་ཆ་མཉམ།",
+  "usage.budget.all": "འགྲོ་སོང་ཆ་མཉམ།",
   "usage.budget.each": "དཔེ་ཚད་རེ་རེ།",
   "usage.budget.vendors": "{{vendors}} དཔེ་ཚད་ཚུ།",
   "usage.budget.vendorsEach": "{{vendors}} དཔེ་ཚད་རེ་རེ།",
@@ -1486,9 +1486,9 @@ export const dict = {
   "usage.callout.personal.title": "ཟླཝ་རེའི་འཆར་དངུལ་ལུ་ལྷོད་ཡོདཔ།",
   "usage.callout.personal.body":
     "ཁྱོད་ཀྱི་དོན་ལུ་ གླ་ཆ་ཡོད་པའི་དཔེ་ཚད་དང་ ཝེབ་འཚོལ་ཞིབ་ཚུ་ {{time}} ཚུན་ བར་བཞག་ཡོདཔ། རིན་མེད་དཔེ་ཚད་ཚུ་ ད་ལྟོ་ཡང་ལཱ་འབདཝ་ཨིན།",
-  "usage.callout.credits.title": "{{workspace}} ལུ་ སྐྱིན་འགྲུལ་ཚར་ཡོདཔ།",
+  "usage.callout.credits.title": "{{workspace}} ལུ་ སྔོན་སྤྲོད་དངུལ་ཚར་ཡོདཔ།",
   "usage.callout.credits.body":
-    "འཛིན་སྐྱོང་པ་ཅིག་གིས་ Console ནང་ སྐྱིན་འགྲུལ་ཁ་སྐོང་མ་རྐྱབ་ཚུན་ མི་ག་རའི་དོན་ལུ་ གླ་ཆ་ཡོད་པའི་དཔེ་ཚད་ཚུ་ བར་བཞག་ཡོདཔ། ཁྱོད་ཀྱི་འཆར་དངུལ་ཚུ་ནང་ ད་ལྟོ་ཡང་ས་སྟོང་ཡོད། རིན་མེད་དཔེ་ཚད་ཚུ་ ད་ལྟོ་ཡང་ལཱ་འབདཝ་ཨིན།",
+    "འཛིན་སྐྱོང་པ་ཅིག་གིས་ Console ནང་ སྔོན་སྤྲོད་དངུལ་ཁ་སྐོང་མ་རྐྱབ་ཚུན་ མི་ག་རའི་དོན་ལུ་ གླ་ཆ་ཡོད་པའི་དཔེ་ཚད་ཚུ་ བར་བཞག་ཡོདཔ། ཁྱོད་ཀྱི་འཆར་དངུལ་ཚུ་ནང་ ད་ལྟོ་ཡང་ས་སྟོང་ཡོད། རིན་མེད་དཔེ་ཚད་ཚུ་ ད་ལྟོ་ཡང་ལཱ་འབདཝ་ཨིན།",
   "usage.action.otherModels.title": "དཔེ་ཚད་གཞན་ཚུ་ནང་ ད་ལྟོ་ཡང་ས་སྟོང་ཡོད།",
   "usage.action.otherModels.vendors":
     "{{vendors}} མེན་པའི་ དཔེ་ཚད་ཅིག་ལུ་སོར། ལཱ་གི་ས་སྒོའི་འཛིན་སྐྱོང་པ་རྐྱངམ་ཅིག་གིས་ འཆར་དངུལ་བསྒྱུར་བཅོས་འབད་ཚུགས།",
@@ -1500,10 +1500,10 @@ export const dict = {
   "usage.action.each.body": "དཔེ་ཚད་རེ་རེ་ལུ་ རང་སོའི་ {{limit}} ཡོད།",
   "usage.action.switch": "དཔེ་ཚད་སོར།",
   "usage.empty.title": "ཁྱོད་ལུ་ འཆར་དངུལ་ག་ནི་ཡང་མི་འཇུག",
-  "usage.empty.body": "{{workspace}} ལུ་ སྐྱིན་འགྲུལ་ཚར་བ་ཅིན་རྐྱངམ་ཅིག་ གླ་ཆ་ཡོད་པའི་དཔེ་ཚད་ཚུ་ བཀག་འོང་།",
+  "usage.empty.body": "{{workspace}} ལུ་ སྔོན་སྤྲོད་དངུལ་ཚར་བ་ཅིན་རྐྱངམ་ཅིག་ གླ་ཆ་ཡོད་པའི་དཔེ་ཚད་ཚུ་ བཀག་འོང་།",
   "usage.footer.resets": "{{time}} སླར་སྒྲིག་འབདཝ་ཨིན།",
   "usage.footer.budgetsReset": "འཆར་དངུལ་ཚུ་ {{time}} སླར་སྒྲིག་འབདཝ་ཨིན།",
-  "usage.footer.creditsOnly": "འཐུས་ཚུ་ {{workspace}} གི་ སྐྱིན་འགྲུལ་རྐྱངམ་ཅིག་གིས་ ཚད་འཛིན་འབདཝ་ཨིན།",
+  "usage.footer.creditsOnly": "འགྲོ་སོང་ཚུ་ {{workspace}} གི་ སྔོན་སྤྲོད་དངུལ་རྐྱངམ་ཅིག་གིས་ ཚད་འཛིན་འབདཝ་ཨིན།",
   "usage.footer.details": "ཁ་གསལ་བལྟ།",
   "usage.signedOut.title": "OpenCode Console ལུ་ ནང་བསྐྱོད་མ་འབད་བས།",
   "usage.signedOut.body": "ཁྱོད་ཀྱི་ལཱ་གི་ས་སྒོའི་འཆར་དངུལ་དང་ Go ལག་ལེན་ཚུ་ བལྟ་ནིའི་དོན་ལུ་ OpenCode Console མཐུད།",

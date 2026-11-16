@@ -332,7 +332,7 @@ export const dict = {
   "ui.promptInput.history.contextOnly": "Հուշում համատեքստով",
   "ui.redirectPaste.label": "Վերահղման URL",
   "ui.redirectPaste.placeholder": "http://127.0.0.1:…/callback?code=…",
-  "ui.redirectPaste.required": "Տեղադրեք URL-ը զննարկչի հասցեի տողից",
+  "ui.redirectPaste.required": "Տեղադրեք URL-ը դիտարկչի հասցեի տողից",
   "ui.imagePreview.zoomIn": "Խոշորացնել",
   "ui.imagePreview.zoomOut": "Փոքրացնել",
   "ui.imagePreview.zoomToFit": "Հարմարեցնել չափին",

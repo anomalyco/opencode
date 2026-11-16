@@ -21,6 +21,6 @@ export default {
   "folder.failed": "Nu s-au putut încărca modificările",
   "command.open": "Deschide revizuirea",
   "load.failed": "Nu s-au putut încărca modificările",
-  "load.timeout": "Serverul a răspuns prea lent",
+  "load.timeout": "Serverul nu a răspuns suficient de rapid",
   offline: "Serverul nu poate fi accesat",
 }

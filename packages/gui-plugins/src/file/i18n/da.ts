@@ -47,7 +47,7 @@ export default {
   "view.table.truncated": "Viser de første {{shown}} af {{total}} rækker.",
   "view.table.copyCell": "Kopier celle",
   "view.table.copyFailed": "Kunne ikke kopiere denne celle.",
-  "view.fontSample": "Høj bly gom vandt fræk sexquiz på wc.",
+  "view.fontSample": "Quizdeltagerne spiste jordbær med fløde, mens cirkusklovnen Walther spillede på xylofon.",
   "view.properties": "Egenskaber",
   "view.properties.showAll": "Vis alle {{count}} egenskaber",
   "search.failed": "Kunne ikke søge i filer",

@@ -47,7 +47,7 @@ export default {
   changesFailed: "Učitavanje promjena nije uspjelo",
   changesOffline: "Nije moguće pristupiti ovom serveru",
   "mcp.signIn": "Prijavi se",
-  "mcp.signingIn": "Prijava…",
+  "mcp.signingIn": "Prijavljivanje…",
   "mcp.connected": "Povezano",
   "mcp.disabled": "Onemogućeno",
   "mcp.error.action": "Detalji",

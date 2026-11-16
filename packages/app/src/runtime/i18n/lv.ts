@@ -879,7 +879,7 @@ export const dict = {
   "session.location.moveFailed": "Neizdevās pārvietot sesiju",
   "server.thisComputer": "Šis dators",
   "command.provider.connect.description":
-    "Pierakstieties OpenCode Go, OpenCode Console vai pie cita modeļu nodrošinātāja",
+    "Pierakstieties pakalpojumā OpenCode Go, OpenCode Console vai pie cita modeļu nodrošinātāja",
   "command.config.reload": "Pārlādēt konfigurāciju",
   "command.config.reload.description":
     "Pārlādēt aģentus, komandas, prasmes, MCP serverus un spraudņus no jūsu konfigurācijas",
@@ -910,14 +910,14 @@ export const dict = {
   "dialog.provider.title": "Integrācijas",
   "dialog.provider.description": "Pievienojiet pakalpojumus, lai OpenCode varētu tos izmantot.",
   "dialog.provider.group.services": "Pakalpojumi",
-  "dialog.provider.environmentOnly": "Tikai vide",
+  "dialog.provider.environmentOnly": "Tikai no vides",
   "dialog.provider.signInRequired": "Nepieciešama pierakstīšanās →",
   "dialog.provider.needsSignIn": "Jāpierakstās",
   "dialog.provider.connected": "Savienots",
   "dialog.provider.connections.count.zero": "{{count}} savienojumu",
   "dialog.provider.connections.count.one": "{{count}} savienojums",
   "dialog.provider.connections.count.other": "{{count}} savienojumi",
-  "dialog.provider.claudeAgent.note": "Izmantojiet savu Claude plānu vai citu Claude Code pieteikšanos",
+  "dialog.provider.claudeAgent.note": "Izmantojiet savu Claude plānu vai citu Claude Code pierakstīšanos",
   "dialog.model.unavailable": "{{model}} (nav pieejams)",
   "dialog.model.chatgptPlan": "Izmanto ChatGPT plānu",
   "dialog.model.chatgptManageUsage": "Pārvaldīt lietojumu",
@@ -955,7 +955,8 @@ export const dict = {
     "Neizdevās atvērt pārlūkprogrammu. Mēģiniet vēlreiz vai nokopējiet pierakstīšanās saiti, lai turpinātu.",
   "provider.connect.console.expired":
     "Šis pierakstīšanās pieprasījums ir beidzies. Sāciet no jauna, lai saņemtu jaunu ierīces kodu.",
-  "provider.connect.console.denied": "Piekļuve Console tika liegta. Mēģiniet vēlreiz, kad būsiet gatavs savienot.",
+  "provider.connect.console.denied":
+    "Piekļuve tika liegta pakalpojumā Console. Mēģiniet vēlreiz, kad būsiet gatavs savienot.",
   "provider.connect.console.statusFailed":
     "Neizdevās pārbaudīt autorizāciju. Pārbaudiet savienojumu ar serveri un mēģiniet vēlreiz.",
   "provider.connect.console.startFailed":
@@ -976,7 +977,7 @@ export const dict = {
     "Jūsu konts ir savienots, bet neizdevās ielādēt modeļus. Mēģiniet vēlreiz, lai tos atsvaidzinātu.",
   "provider.connect.console.connected": "OpenCode savienots",
   "provider.connect.console.noModels":
-    "Jūsu konts ir savienots, bet šajā Console darbvietā nav pieejamu modeļu. Pārbaudiet tās iestatījumus Console un pēc tam atsvaidziniet.",
+    "Jūsu konts ir savienots, bet šajā Console darbvietā nav pieejamu modeļu. Pārbaudiet tās iestatījumus pakalpojumā Console un pēc tam atsvaidziniet.",
   "provider.connect.console.modelsLoading":
     "Jūsu modeļi joprojām tiek ielādēti. Atsvaidziniet, lai pārbaudītu vēlreiz.",
   "provider.connect.console.refresh": "Atsvaidzināt modeļus",
@@ -985,7 +986,7 @@ export const dict = {
   "provider.connect.remote.description":
     "Jūsu OpenCode akreditācijas dati tiks glabāti šajā serverī. Modeļi būs pieejami caur šo serveri.",
   "provider.connect.claudeAgent.description":
-    "Izmantojiet savu Claude plānu vai citu Claude Code pieteikšanos. Vispirms instalējiet Claude Code un pierakstieties.",
+    "Izmantojiet savu Claude plānu vai citu Claude Code pierakstīšanos. Vispirms instalējiet Claude Code un pierakstieties.",
   "provider.connect.claudeAgent.install": "Instalēt Claude Code",
   "provider.connect.claudeAgent.signIn.command": "Pierakstīšanās komanda",
   "provider.connect.claudeAgent.connect": "Savienot",
@@ -1009,9 +1010,9 @@ export const dict = {
   "provider.connect.form.minItems": "Izvēlieties vismaz {{count}}",
   "provider.connect.form.maxItems": "Izvēlieties ne vairāk kā {{count}}",
   "provider.connect.oauth.auto.description":
-    "Tiks atvērta pārlūkprogramma, lai jūs varētu pierakstīties {{provider}}. Kad esat pabeidzis, atgriezieties šeit.",
+    "Tiks atvērta pārlūkprogramma, lai jūs varētu pierakstīties pakalpojumā {{provider}}. Kad esat pabeidzis, atgriezieties šeit.",
   "provider.connect.oauth.code.description":
-    "Tiks atvērta pārlūkprogramma, lai jūs varētu pierakstīties {{provider}}. Ielīmējiet zemāk saņemto autorizācijas kodu.",
+    "Tiks atvērta pārlūkprogramma, lai jūs varētu pierakstīties pakalpojumā {{provider}}. Ielīmējiet zemāk saņemto autorizācijas kodu.",
   "provider.connect.oauth.openBrowser": "Atvērt pārlūkprogrammu",
   "provider.connect.oauth.browserFailed":
     "Neizdevās atvērt pārlūkprogrammu. Izvēlieties “Atvērt pārlūkprogrammu”, lai mēģinātu vēlreiz.",
@@ -1052,9 +1053,9 @@ export const dict = {
   "dialog.mcp.error.viewLabel": "Skatīt {{name}} kļūdu",
   "dialog.mcp.error.disable": "Atspējot",
   "dialog.mcp.signIn": "Pierakstīties",
-  "dialog.mcp.signIn.open": "Pierakstīties {{name}}",
+  "dialog.mcp.signIn.open": "Pierakstīties pakalpojumā {{name}}",
   "dialog.mcp.signIn.description":
-    "Tiks atvērta pārlūkprogramma, lai jūs varētu pierakstīties {{name}}. Ja tā nevar sasniegt datoru, kurā darbojas OpenCode, ielīmējiet zemāk URL, uz kuru tā tika novirzīta.",
+    "Tiks atvērta pārlūkprogramma, lai jūs varētu pierakstīties pakalpojumā {{name}}. Ja tā nevar sasniegt datoru, kurā darbojas OpenCode, ielīmējiet zemāk URL, uz kuru tā tika novirzīta.",
   "dialog.mcp.signIn.syncFailed": "Pierakstīšanās izdevās, bet neizdevās atsvaidzināt {{name}}: {{error}}",
   "dialog.mcp.error.details":
     "MCP serveris: {{name}}\nStatuss: neizdevās\nKonfigurācija: mcp.servers.{{name}}\nKļūda: {{error}}",
@@ -1078,29 +1079,29 @@ export const dict = {
   "dialog.directory.recent": "Nesenie",
   "dialog.directory.recentProject": "{{name}} ({{path}})",
   "dialog.directory.gitRepo": "git repozitorijs",
-  "server.connect.description.pairing": "Ielīmējiet savienošanas pārī saiti no servera vai skenējiet tā QR kodu.",
-  "server.connect.link": "Savienošanas pārī saite",
+  "server.connect.description.pairing": "Ielīmējiet servera sniegto saiti savienošanai pārī vai skenējiet tā QR kodu.",
+  "server.connect.link": "Saite savienošanai pārī",
   "server.connect.link.placeholder": "http://192.168.1.2:4096/auth/connect/…",
   "server.connect.link.invalid":
-    "Ielīmējiet pilnu savienošanas pārī saiti no opencode pair vai no Iestatījumi → Savienošana pārī servera datorā.",
-  "server.connect.password.prompt": "Nav savienošanas pārī saites?",
+    "Ielīmējiet pilnu saiti savienošanai pārī no opencode pair vai no Iestatījumi → Savienošana pārī servera datorā.",
+  "server.connect.password.prompt": "Nav saites savienošanai pārī?",
   "server.connect.password.use": "Izmantot paroli",
   "server.connect.password.hint": "Lai to redzētu, servera datorā izpildiet opencode service get password.",
-  "server.connect.link.prompt": "Ir savienošanas pārī saite?",
-  "server.connect.link.use": "Izmantot savienošanas pārī saiti",
-  "server.connect.pair.link": "Izpildiet šo komandu servera datorā, lai iegūtu savienošanas pārī saiti un QR kodu.",
+  "server.connect.link.prompt": "Ir saite savienošanai pārī?",
+  "server.connect.link.use": "Izmantot saiti savienošanai pārī",
+  "server.connect.pair.link": "Izpildiet šo komandu servera datorā, lai iegūtu saiti savienošanai pārī un QR kodu.",
   "server.connect.scan.failed":
     "Šī pārlūkprogramma nevarēja nolasīt QR kodu. Ievadiet savienojuma informāciju manuāli.",
   "server.connect.link.expired":
-    "Šīs savienošanas pārī saites termiņš ir beidzies vai tā jau izmantota. Izpildiet opencode pair, lai iegūtu jaunu.",
+    "Šīs saites savienošanai pārī termiņš ir beidzies vai tā jau ir izmantota. Izpildiet opencode pair, lai iegūtu jaunu.",
   "server.connect.link.unreachable":
     "Nevarēja sasniegt {{url}}. Pārbaudiet, vai šī ierīce var sasniegt serveri, un mēģiniet vēlreiz.",
   "server.connect.link.legacy":
-    "Šis savienošanas pārī kods ir no vecākas OpenCode versijas. Atjauniniet OpenCode serverī un vēlreiz izpildiet opencode pair.",
+    "Šis kods savienošanai pārī ir no vecākas OpenCode versijas. Atjauniniet OpenCode serverī un vēlreiz izpildiet opencode pair.",
   "server.connect.camera.native":
-    "Šī lapa nevar izmantot kameru caur HTTP. Ielīmējiet savienošanas pārī saiti augstāk.",
+    "Šī lapa nevar izmantot kameru caur HTTP. Ielīmējiet saiti savienošanai pārī augstāk.",
   "dialog.server.signedOut":
-    "Jūsu pierakstīšanās šajā serverī vairs nav derīga. Ielīmējiet jaunu savienošanas pārī saiti vai ievadiet servera paroli.",
+    "Jūsu pierakstīšanās šajā serverī vairs nav derīga. Ielīmējiet jaunu saiti savienošanai pārī vai ievadiet servera paroli.",
   "toast.permissions.autoaccept.project.title": "Atļaujas šim projektam tiek automātiski pieņemtas",
   "toast.permissions.autoaccept.project.description":
     "Atļauju pieprasījumi šajā projektā tiks apstiprināti automātiski",
@@ -1119,7 +1120,7 @@ export const dict = {
   "home.sessions.load.timeout": "Serveris pārāk ilgi neatbildēja",
   "tips.browse.title": "Vadiet savu pārlūkprogrammu",
   "tips.browse.description":
-    "Ļaujiet OpenCode strādāt jūsu pārlūkprogrammā ar jūsu cilnēm, pieteikšanās datiem un paplašinājumiem.",
+    "Ļaujiet OpenCode strādāt jūsu pārlūkprogrammā ar jūsu cilnēm, pierakstīšanās datiem un paplašinājumiem.",
   "tips.browse.install": "Instalēt",
   "tips.hex.title": "Izmantojiet savu balsi",
   "tips.hex.description":
@@ -1152,7 +1153,7 @@ export const dict = {
   "session.goLimit.reset": "Tas atiestatās {{time}}.",
   "session.goLimit.extraUsage": "Ieslēgt papildu lietojumu",
   "session.goLimit.switchFree": "Pārslēgties uz bezmaksas modeli",
-  "session.queue.first": "Ievietot rindā pirmo",
+  "session.queue.first": "Ievietot rindas sākumā",
   "session.queue.undo": "Atsaukt",
   "session.queue.undoShell": "Pirms rindā ievietotas uzvednes atsaukšanas izejiet no čaulas režīma",
   "session.queue.reverted": "Pirms rindā ievietoto uzvedņu pārkārtošanas vai rediģēšanas atceliet atsaukšanu",
@@ -1331,13 +1332,13 @@ export const dict = {
     "Katra saime tiek izplatīta saskaņā ar SIL Open Font License 1.1 ar zemāk norādītajām autortiesību rindām.",
   "settings.about.notices.eigenpal": "Daļas no BetterOffice ir atvasinātas no tā.",
   "settings.about.notices.loadFailed": "Neizdevās ielādēt trešo pušu paziņojumus",
-  "settings.about.notices.crates.title": "Rust crates Office dzinējos",
+  "settings.about.notices.crates.title": "Rust pakotnes (crates) Office dzinējos",
   "settings.about.notices.crates.description":
-    "BetterOffice kompilē šīs crates savos Word, Excel un PowerPoint dzinējos. Ja crate piedāvā licenču izvēli, ir spēkā izceltā licence.",
+    "BetterOffice kompilē šīs pakotnes savos Word, Excel un PowerPoint dzinējos. Ja pakotnei var izvēlēties vienu no vairākām licencēm, ir spēkā izceltā licence.",
   "settings.about.notices.crates.licenses": "Licenču teksti",
-  "settings.about.notices.crates.count.zero": "{{count}} crates",
-  "settings.about.notices.crates.count.one": "{{count}} crate",
-  "settings.about.notices.crates.count.other": "{{count}} crates",
+  "settings.about.notices.crates.count.zero": "{{count}} pakotņu",
+  "settings.about.notices.crates.count.one": "{{count}} pakotne",
+  "settings.about.notices.crates.count.other": "{{count}} pakotnes",
   "settings.about.notices.crates.appliesTo": "Attiecas uz {{names}}",
   "settings.general.row.interfaceMode.title": "Saskarnes izkārtojums",
   "settings.general.row.interfaceMode.description":
@@ -1368,8 +1369,8 @@ export const dict = {
   "settings.extensions.console.temporary":
     "Slēdži īslaicīgi kontrolē MCP savienojumus pašreizējam projektam, nevis jūsu Console preferences. Servera konfigurācijas izmaiņas var tos atkal savienot.",
   "settings.extensions.console.replaced": "Aizstāj OpenCode Console",
-  "settings.extensions.console.connect": "Savienot {{name}} Console",
-  "settings.extensions.console.manage": "Pārvaldīt {{name}} Console",
+  "settings.extensions.console.connect": "Savienot {{name}} pakalpojumā Console",
+  "settings.extensions.console.manage": "Pārvaldīt {{name}} pakalpojumā Console",
   "project.settings.autoAccept.description": "Apstiprināt šī projekta atļauju pieprasījumus, nejautājot",
   "project.settings.autoAccept.default.on": "Izmantot noklusējumu (ieslēgts)",
   "project.settings.autoAccept.default.off": "Izmantot noklusējumu (izslēgts)",
@@ -1491,7 +1492,7 @@ export const dict = {
     "Maksas modeļi un tīmekļa meklēšana jums ir apturēti līdz {{time}}. Bezmaksas modeļi joprojām darbojas.",
   "usage.callout.credits.title": "{{workspace}} beigušies kredīti",
   "usage.callout.credits.body":
-    "Maksas modeļi ir apturēti visiem, līdz administrators pievienos kredītus Console. Jūsu budžetos vēl ir vieta. Bezmaksas modeļi joprojām darbojas.",
+    "Maksas modeļi ir apturēti visiem, līdz administrators pievienos kredītus pakalpojumā Console. Jūsu budžetos vēl ir vieta. Bezmaksas modeļi joprojām darbojas.",
   "usage.action.otherModels.title": "Citos modeļos vēl ir vieta",
   "usage.action.otherModels.vendors":
     "Pārslēdzieties uz modeli, kas nav {{vendors}}. Budžetus var mainīt tikai darbvietas administratori.",
@@ -1508,7 +1509,7 @@ export const dict = {
   "usage.footer.budgetsReset": "Budžeti atiestatās {{time}}",
   "usage.footer.creditsOnly": "Izdevumus ierobežo tikai {{workspace}} kredīti",
   "usage.footer.details": "Skatīt detaļas",
-  "usage.signedOut.title": "Nav pierakstīts OpenCode Console",
+  "usage.signedOut.title": "Neesat pierakstījies pakalpojumā OpenCode Console",
   "usage.signedOut.body": "Savienojiet OpenCode Console, lai redzētu savas darbvietas budžetus un Go lietojumu.",
   "usage.error": "Neizdevās ielādēt lietojuma limitus.",
   "usage.retry": "Mēģināt vēlreiz",

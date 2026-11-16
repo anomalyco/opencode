@@ -55,11 +55,11 @@ export default {
   "mcp.error.actionLabel": "Детаљи за {{name}}",
   "mcp.signIn.open": "Пријави се на {{name}}",
   "mcp.signIn.description":
-    "Отвориће се прегледник да бисте се пријавили на {{name}}. Ако не може да приступи рачунару на коме ради OpenCode, испод налепите URL на који је преусмерен.",
+    "Отвориће се прегледач да бисте се пријавили на {{name}}. Ако не може да приступи рачунару на коме ради OpenCode, испод налепите URL на који је преусмерен.",
   "mcp.signIn.waiting": "Чека се ауторизација…",
   "mcp.signIn.failed": "Ауторизација није успела: {{error}}",
   "mcp.signIn.expired": "Ауторизација је истекла",
-  "mcp.signIn.openBrowser": "Отвори прегледник",
+  "mcp.signIn.openBrowser": "Отвори прегледач",
   "mcp.signIn.syncFailed": "Пријављени сте, али освежавање {{name}} није успело: {{error}}",
   "mcp.error.open": "{{name}} није успео, прикажи грешку",
   "mcp.error.title": "MCP сервер: {{name}}",

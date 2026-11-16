@@ -58,7 +58,7 @@ export default {
   "zoom.in": "Zooma inn",
   "zoom.out": "Zooma út",
   "zoom.reset": "Nullstilla zoom",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Avrita leinki",
   "history.clear": "Rudda søgu",
 }

@@ -58,7 +58,7 @@ export default {
   "zoom.in": "Lähennä",
   "zoom.out": "Loitonna",
   "zoom.reset": "Palauta zoomaus",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Kopioi linkki",
   "history.clear": "Tyhjennä historia",
 }

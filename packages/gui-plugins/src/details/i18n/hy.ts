@@ -56,11 +56,11 @@ export default {
   "mcp.error.actionLabel": "{{name}}-ի մանրամասները",
   "mcp.signIn.open": "Մուտք գործել {{name}}",
   "mcp.signIn.description":
-    "Ձեր զննարկիչը կբացվի, որպեսզի կարողանաք մուտք գործել {{name}}։ Եթե այն չի կարողանում հասնել OpenCode-ն աշխատեցնող մեքենային, տեղադրեք ստորև այն URL-ը, որին այն վերահղվել է։",
+    "Ձեր դիտարկիչը կբացվի, որպեսզի կարողանաք մուտք գործել {{name}}։ Եթե այն չի կարողանում հասնել OpenCode-ն աշխատեցնող մեքենային, տեղադրեք ստորև այն URL-ը, որին այն վերահղվել է։",
   "mcp.signIn.waiting": "Սպասում է թույլտվության…",
   "mcp.signIn.failed": "Լիազորումը ձախողվեց՝ {{error}}",
   "mcp.signIn.expired": "Լիազորման ժամկետը սպառվեց",
-  "mcp.signIn.openBrowser": "Բացել զննարկիչը",
+  "mcp.signIn.openBrowser": "Բացել դիտարկիչը",
   "mcp.signIn.syncFailed": "Մուտքը կատարված է, բայց չհաջողվեց թարմացնել {{name}}-ը՝ {{error}}",
   "mcp.error.open": "{{name}}-ը ձախողվեց, դիտել սխալը",
   "mcp.error.title": "MCP սերվեր՝ {{name}}",

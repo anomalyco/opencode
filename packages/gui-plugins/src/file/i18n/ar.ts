@@ -52,7 +52,7 @@ export default {
   "view.table.columns.few": "{{count}} أعمدة",
   "view.table.columns.many": "{{count}} عمودًا",
   "view.table.columns.other": "{{count}} عمود",
-  "view.table.truncated": "يتم عرض أول {{shown}} من أصل {{total}} صف.",
+  "view.table.truncated": "يتم عرض أول {{shown}} من الصفوف البالغ عددها {{total}}.",
   "view.table.copyCell": "نسخ الخلية",
   "view.table.copyFailed": "تعذر نسخ هذه الخلية.",
   "view.fontSample": "صف خلق خود كمثل الشمس إذ بزغت يحظى الضجيع بها نجلاء معطار",

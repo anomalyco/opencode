@@ -856,7 +856,7 @@ export const dict = {
   "session.location.moveFailed": "Seansi teisaldamine ebaõnnestus",
   "server.thisComputer": "See arvuti",
   "command.provider.connect.description":
-    "Logi sisse teenusesse OpenCode Go, OpenCode Console või mõne teise mudelipakkuja juurde",
+    "Logi sisse teenusesse OpenCode Go, OpenCode Console või mõne muu mudelipakkuja teenusesse",
   "command.config.reload": "Laadi konfiguratsioon uuesti",
   "command.config.reload.description":
     "Laadi agendid, käsud, oskused, MCP-serverid ja pluginad konfiguratsioonist uuesti",
@@ -979,9 +979,9 @@ export const dict = {
   "provider.connect.form.minItems": "Vali vähemalt {{count}}",
   "provider.connect.form.maxItems": "Vali kõige rohkem {{count}}",
   "provider.connect.oauth.auto.description":
-    "Avaneb brauser, et saaksid pakkujasse {{provider}} sisse logida. Kui oled valmis, tule siia tagasi.",
+    "Avaneb brauser, et saaksid teenusesse {{provider}} sisse logida. Kui oled valmis, tule siia tagasi.",
   "provider.connect.oauth.code.description":
-    "Avaneb brauser, et saaksid pakkujasse {{provider}} sisse logida. Kleebi saadud autoriseerimiskood allpool.",
+    "Avaneb brauser, et saaksid teenusesse {{provider}} sisse logida. Kleebi saadud autoriseerimiskood allpool.",
   "provider.connect.oauth.openBrowser": "Ava brauser",
   "provider.connect.oauth.browserFailed": "Brauserit ei õnnestunud avada. Uuesti proovimiseks vali Ava brauser.",
   "provider.connect.oauth.paste.toggle": "Logid sisse teisest seadmest?",
@@ -1061,10 +1061,11 @@ export const dict = {
   "server.connect.scan.failed": "See brauser ei suutnud QR-koodi lugeda. Sisesta ühenduse üksikasjad käsitsi.",
   "server.connect.link.expired": "See sidumislink on aegunud või juba kasutatud. Uue saamiseks käivita opencode pair.",
   "server.connect.link.unreachable":
-    "Aadressi {{url}} ei õnnestunud tabada. Kontrolli, et see seade pääseb serverini, ja proovi uuesti.",
+    "Aadressiga {{url}} ei õnnestunud ühendust saada. Kontrolli, et see seade pääseb serverini, ja proovi uuesti.",
   "server.connect.link.legacy":
     "See sidumiskood on OpenCode'i vanemast versioonist. Uuenda serveris OpenCode ja käivita uuesti opencode pair.",
-  "server.connect.camera.native": "See leht ei saa HTTP kaudu kaamerat kasutada. Kleebi sidumislink ülal.",
+  "server.connect.camera.native":
+    "See leht ei saa HTTP kaudu kaamerat kasutada. Kleebi sidumislink ülalolevale väljale.",
   "dialog.server.signedOut":
     "Sinu sisselogimine selles serveris pole enam kehtiv. Kleebi uus sidumislink või sisesta serveri parool.",
   "toast.permissions.autoaccept.project.title": "Selle projekti load aktsepteeritakse automaatselt",
@@ -1128,7 +1129,7 @@ export const dict = {
   "session.timeline.status.waitingShell": "Ootab shelli",
   "session.timeline.status.working": "Töötab",
   "session.running.stop.subagent": "Katkesta alamagent",
-  "session.running.stop.shell": "Tapa shellikäsk",
+  "session.running.stop.shell": "Lõpeta shellikäsk",
   "session.activity.subagents.one": "{{count}} alamagent",
   "session.activity.subagents.other": "{{count}} alamagenti",
   "session.activity.shells.one": "{{count}} shell",
@@ -1287,12 +1288,12 @@ export const dict = {
     "Iga fondiperekonda levitatakse SIL Open Font License 1.1 alusel koos allolevate autoriõiguse ridadega.",
   "settings.about.notices.eigenpal": "Osa BetterOffice'ist põhineb sellel.",
   "settings.about.notices.loadFailed": "Kolmandate osapoolte teatisi ei õnnestunud laadida",
-  "settings.about.notices.crates.title": "Office'i mootorite Rusti kastid",
+  "settings.about.notices.crates.title": "Office'i mootorite Rusti crate'id",
   "settings.about.notices.crates.description":
-    "BetterOffice kompileerib need kastid oma Wordi, Exceli ja PowerPointi mootoritesse. Kui kast pakub litsentside valikut, kehtib esiletõstetud litsents.",
+    "BetterOffice kompileerib need crate'id oma Wordi, Exceli ja PowerPointi mootoritesse. Kui crate pakub litsentside valikut, kehtib esiletõstetud litsents.",
   "settings.about.notices.crates.licenses": "Litsentside tekstid",
-  "settings.about.notices.crates.count.one": "{{count}} kast",
-  "settings.about.notices.crates.count.other": "{{count}} kasti",
+  "settings.about.notices.crates.count.one": "{{count}} crate",
+  "settings.about.notices.crates.count.other": "{{count}} crate'i",
   "settings.about.notices.crates.appliesTo": "Kehtib: {{names}}",
   "settings.general.row.interfaceMode.title": "Liidese paigutus",
   "settings.general.row.interfaceMode.description": "Vali, kuidas seansside vahel liikuda ja jälgida, mis töötab",
@@ -1321,8 +1322,8 @@ export const dict = {
   "settings.extensions.console.temporary":
     "Lülitid juhivad ajutiselt praeguse projekti MCP-ühendusi, mitte sinu Console'i eelistusi. Serveri konfiguratsiooni muudatused võivad need uuesti ühendada.",
   "settings.extensions.console.replaced": "Asendab OpenCode Console'i",
-  "settings.extensions.console.connect": "Ühenda {{name}} Console'is",
-  "settings.extensions.console.manage": "Halda {{name}} Console'is",
+  "settings.extensions.console.connect": "Ühenda teenus {{name}} Console'is",
+  "settings.extensions.console.manage": "Halda teenust {{name}} Console'is",
   "project.settings.autoAccept.description": "Kinnita selle projekti loataotlused ilma küsimata",
   "project.settings.autoAccept.default.on": "Kasuta vaikeväärtust (sees)",
   "project.settings.autoAccept.default.off": "Kasuta vaikeväärtust (väljas)",
@@ -1347,7 +1348,7 @@ export const dict = {
   "settings.timeline.row.turnDiffs.description": "Loetle iga vooru lõpus selles muudetud failid",
   "settings.timeline.category.commentary": "Kommentaarid",
   "settings.general.row.spellcheck.title": "Õigekirjakontroll",
-  "settings.general.row.spellcheck.description": "Joonista kirjutamisel valesti kirjutatud sõnade alla joon",
+  "settings.general.row.spellcheck.description": "Kriipsuta kirjutamisel valesti kirjutatud sõnad alla",
   "settings.general.notifications.questions.title": "Küsimused",
   "settings.general.notifications.questions.description": "Kuva süsteemi teatis, kui agent esitab küsimuse",
   "settings.general.sounds.questions.title": "Küsimused",
@@ -1422,7 +1423,7 @@ export const dict = {
   "usage.budget.group": "{{limit}} kuus, jagatud sinu grupiga",
   "usage.budget.groupEach": "{{limit}} kuus mudeli kohta, jagatud sinu grupiga",
   "usage.budget.left": "{{amount}} alles",
-  "usage.budget.of": "{{limit}}-st",
+  "usage.budget.of": "kokku {{limit}}",
   "usage.budget.reached": "Eelarve on täis",
   "usage.budget.spentOf": "{{spent}} / {{limit}}",
   "usage.note.runsOutFirst": "saab esimesena otsa",
@@ -1456,7 +1457,7 @@ export const dict = {
   "usage.footer.budgetsReset": "Eelarved lähtestuvad {{time}}",
   "usage.footer.creditsOnly": "Kulusid piirab ainult tööruumi {{workspace}} krediit",
   "usage.footer.details": "Vaata üksikasju",
-  "usage.signedOut.title": "OpenCode Console'i pole sisse logitud",
+  "usage.signedOut.title": "Sa pole OpenCode Console'i sisse logitud",
   "usage.signedOut.body": "Ühenda OpenCode Console, et näha oma tööruumi eelarveid ja Go kasutust.",
   "usage.error": "Kasutuslimiite ei õnnestunud laadida.",
   "usage.retry": "Proovi uuesti",

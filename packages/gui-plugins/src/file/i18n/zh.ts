@@ -47,7 +47,7 @@ export default {
   "view.table.truncated": "显示前 {{shown}} 行，共 {{total}} 行。",
   "view.table.copyCell": "复制单元格",
   "view.table.copyFailed": "无法复制此单元格。",
-  "view.fontSample": "天地玄黄，宇宙洪荒。The quick brown fox jumps over the lazy dog.",
+  "view.fontSample": "天地玄黄，宇宙洪荒。Sphinx of black quartz, judge my vow.",
   "view.properties": "属性",
   "view.properties.showAll": "显示全部 {{count}} 个属性",
   "search.failed": "无法搜索文件",

@@ -12,7 +12,7 @@ export default {
   "action.reload": "Recharger",
   "model.timedOut": "Le navigateur a mis trop de temps à se charger",
   "command.inspect": "Sélectionner un élément dans la page du navigateur",
-  "command.address": "Activer la barre d’adresse du navigateur",
+  "command.address": "Placer le focus sur la barre d’adresse du navigateur",
   "command.close": "Fermer l’onglet du navigateur",
   "command.newTab": "Nouvel onglet de navigateur",
   "tab.new": "Nouvel onglet",
@@ -47,7 +47,7 @@ export default {
   "site.cookies.count.many": "{{count}} cookies utilisés",
   "site.cookies.count.other": "{{count}} cookies utilisés",
   "site.cookies.clear": "Effacer",
-  "site.permissions": "Les autorisations sont bloquées",
+  "site.permissions": "Les permissions sont bloquées",
   "site.permissions.description":
     "La caméra, le microphone, la localisation et les notifications ne fonctionnent pas dans ce navigateur.",
   "site.agent": "L’agent peut utiliser cette page",
@@ -61,7 +61,7 @@ export default {
   "zoom.in": "Zoom avant",
   "zoom.out": "Zoom arrière",
   "zoom.reset": "Réinitialiser le zoom",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Copier le lien",
   "history.clear": "Effacer l’historique",
 }

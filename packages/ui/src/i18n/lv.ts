@@ -413,7 +413,7 @@ export const dict = {
   "ui.sources.openFailed": "Neizdevās atvērt lapu",
   "ui.sessionTimeline.notice.variantSwitched": "Variants pārslēgts uz {{variant}}",
   "ui.sessionTimeline.notice.variantDefault": "Variants pārslēgts uz noklusējumu",
-  "ui.question.singleHint": "Izvēlies vienu atbildi",
-  "ui.question.classic.multiHint": "Izvēlies visas atbilstošās atbildes",
-  "ui.question.custom.answerPlaceholder": "Ieraksti savu atbildi…",
+  "ui.question.singleHint": "Izvēlieties vienu atbildi",
+  "ui.question.classic.multiHint": "Izvēlieties visas atbilstošās atbildes",
+  "ui.question.custom.answerPlaceholder": "Ierakstiet savu atbildi…",
 }

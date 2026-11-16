@@ -10,7 +10,7 @@ export default {
   "failed.title": "Adresa URL nu poate fi accesată",
   "failed.description": "Verifică adresa URL și conexiunea, apoi încearcă din nou.",
   "action.reload": "Reîncarcă",
-  "model.timedOut": "Browserul s-a încărcat prea lent",
+  "model.timedOut": "Browserul nu s-a încărcat suficient de rapid",
   "command.inspect": "Selectează un element din pagina browserului",
   "command.address": "Focalizează adresa browserului",
   "command.close": "Închide fila browserului",

@@ -19,7 +19,7 @@ export default {
   disconnected: "اتصال ترمینال قطع شد",
   connectionFailed: "اتصال ترمینال ناموفق بود",
   serverOutdated: "این سرور برای ترمینال بیش از حد قدیمی است؛ OpenCode را روی آن به‌روزرسانی کنید",
-  "quote.actions": "نقل‌قول انتخاب",
+  "quote.actions": "نقل‌قول از متن انتخاب‌شده",
   "quote.add": "نقل‌قول",
   "quote.addWithComment": "نقل‌قول و نظر",
   "quote.addWithoutComment": "نقل‌قول بدون نظر",

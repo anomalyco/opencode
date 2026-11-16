@@ -55,11 +55,11 @@ export default {
   "mcp.error.actionLabel": "{{name}}の詳細",
   "mcp.signIn.open": "{{name}}にサインイン",
   "mcp.signIn.description":
-    "ブラウザが開き、{{name}}にサインインできます。ブラウザからOpenCodeを実行しているマシンにアクセスできない場合は、リダイレクト先のURLを下に貼り付けてください。",
+    "ブラウザーが開き、{{name}}にサインインできます。ブラウザーからOpenCodeを実行しているマシンにアクセスできない場合は、リダイレクト先のURLを下に貼り付けてください。",
   "mcp.signIn.waiting": "認証を待機中…",
   "mcp.signIn.failed": "認証に失敗しました: {{error}}",
   "mcp.signIn.expired": "認証の有効期限が切れました",
-  "mcp.signIn.openBrowser": "ブラウザを開く",
+  "mcp.signIn.openBrowser": "ブラウザーを開く",
   "mcp.signIn.syncFailed": "サインインしましたが、{{name}}を更新できませんでした: {{error}}",
   "mcp.error.open": "{{name}}が失敗しました。エラーを表示",
   "mcp.error.title": "MCPサーバー: {{name}}",

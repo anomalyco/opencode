@@ -56,7 +56,7 @@ export default {
   "mcp.error.actionLabel": "Detalls de {{name}}",
   "mcp.signIn.open": "Inicia la sessió a {{name}}",
   "mcp.signIn.description":
-    "S'obrirà el navegador perquè inicieu la sessió a {{name}}. Si no pot accedir a la màquina on s'executa OpenCode, enganxeu a sota l'URL a la qual s'ha redirigit.",
+    "S'obrirà el navegador perquè inicieu la sessió a {{name}}. Si no pot accedir a la màquina on s'executa OpenCode, enganxeu a sota l'URL al qual s'ha redirigit.",
   "mcp.signIn.waiting": "S'està esperant l'autorització…",
   "mcp.signIn.failed": "L'autorització ha fallat: {{error}}",
   "mcp.signIn.expired": "L'autorització ha caducat",

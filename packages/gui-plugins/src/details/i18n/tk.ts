@@ -55,7 +55,7 @@ export default {
   "mcp.error.actionLabel": "{{name}} üçin jikme-jiklikler",
   "mcp.signIn.open": "{{name}} ulgamyna giriň",
   "mcp.signIn.description":
-    "{{name}} ulgamyna girmegiňiz üçin brauzeriňiz açylýar. Eger ol OpenCode işleýän kompýutere ýetip bilmese, gönükdirilen URL-i aşakda goýuň.",
+    "{{name}} ulgamyna girmegiňiz üçin brauzeriňiz açylýar. Eger ol OpenCode işleýän kompýutere ýetip bilmese, gönükdirilen URL-i aşakda ýelmäň.",
   "mcp.signIn.waiting": "Ygtyýarlandyrma garaşylýar…",
   "mcp.signIn.failed": "Ygtyýarlandyrma şowsuz: {{error}}",
   "mcp.signIn.expired": "Ygtyýarlandyrmanyň möhleti geçdi",

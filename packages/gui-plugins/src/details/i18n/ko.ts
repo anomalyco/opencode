@@ -43,7 +43,7 @@ export default {
     "전역 OpenCode 구성에 플러그인을 추가하도록 도와줘. 어떤 기능을 원하는지 물어보고, 플러그인을 추천한 다음 추가해 줘.",
   "setup.skills": "OpenCode로 새 스킬 만들기",
   "setup.skills.prompt":
-    "전역 구성에 새 OpenCode 스킬을 작성하도록 도와줘. 그 스킬이 무엇을 가르쳐야 하는지 물어본 다음 SKILL.md를 작성해 줘.",
+    "전역 구성에 새 OpenCode 스킬을 작성하도록 도와줘. 그 스킬이 너에게 무엇을 가르쳐야 하는지 물어본 다음 SKILL.md를 작성해 줘.",
   changesFailed: "변경 사항을 불러올 수 없습니다",
   changesOffline: "이 서버에 연결할 수 없습니다",
   "mcp.signIn": "로그인",

@@ -37,13 +37,13 @@ export default {
   timedOut: "Netþjónninn var of lengi að svara",
   "setup.mcp": "Bæta við netþjóni með OpenCode",
   "setup.mcp.prompt":
-    "Hjálpaðu mér að bæta MCP-netþjóni við alþjóðlegu OpenCode-stillingarnar mínar. Spurðu mig hvaða þjónustu ég vil tengja, settu hana svo upp og athugaðu hvort hún tengist.",
+    "Hjálpaðu mér að bæta MCP-netþjóni við víðværu OpenCode-stillingarnar mínar. Spurðu mig hvaða þjónustu ég vil tengja, settu hana svo upp og athugaðu hvort hún tengist.",
   "setup.plugins": "Bæta við viðbót með OpenCode",
   "setup.plugins.prompt":
-    "Hjálpaðu mér að bæta viðbót við alþjóðlegu OpenCode-stillingarnar mínar. Spurðu mig hvað hún á að gera, stingdu upp á viðbót og bættu henni svo við.",
+    "Hjálpaðu mér að bæta viðbót við víðværu OpenCode-stillingarnar mínar. Spurðu mig hvað hún á að gera, stingdu upp á viðbót og bættu henni svo við.",
   "setup.skills": "Ný færni með OpenCode",
   "setup.skills.prompt":
-    "Hjálpaðu mér að skrifa nýja OpenCode-færni í alþjóðlegu stillingunum mínum. Spurðu mig hvað hún á að kenna þér og skrifaðu svo SKILL.md fyrir hana.",
+    "Hjálpaðu mér að skrifa nýja OpenCode-færni í víðværu stillingunum mínum. Spurðu mig hvað hún á að kenna þér og skrifaðu svo SKILL.md fyrir hana.",
   changesFailed: "Ekki tókst að hlaða breytingum",
   changesOffline: "Ekki næst samband við þennan netþjón",
   "mcp.signIn": "Skrá inn",

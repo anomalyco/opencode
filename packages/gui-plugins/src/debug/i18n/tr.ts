@@ -44,7 +44,7 @@ export default {
   "components.label": "BİLEŞENLER",
   "components.tip": "Bileşen laboratuvarını açın: canlı kontroller ve durumlarıyla tüm story'ler",
   "speed.label": "HIZ",
-  "speed.tip": "Genel animasyon hızı. 0.5× ve 0.25× arasında geçip 1×'e dönmek için tıklayın.",
+  "speed.tip": "Genel animasyon hızı. 0,5× ve 0,25× hızlarından geçip 1×'e dönmek için tıklayın.",
   "slow.label": "YAVAŞ",
   "slow.tip": "Ayarlanmış tüm animasyonları çeyrek hızda çalıştır.",
 }

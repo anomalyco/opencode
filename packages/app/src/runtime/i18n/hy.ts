@@ -824,8 +824,8 @@ export const dict = {
   "prompt.toast.uploading.percent": "{{percent}}%",
   "experiment.voiceCalls": "Ձայնային զանգեր",
   "voice.call": "Զանգել",
-  "voice.mute": "Անջատել ձայնը",
-  "voice.unmute": "Միացնել ձայնը",
+  "voice.mute": "Անջատել խոսափողը",
+  "voice.unmute": "Միացնել խոսափողը",
   "voice.end": "Ավարտել",
   "voice.rejoin": "Կրկին միանալ",
   "voice.level": "Ձայնի մակարդակ",
@@ -923,7 +923,7 @@ export const dict = {
   "provider.connect.console.retry": "Կրկին փորձել",
   "provider.connect.console.serviceKeyDescription": "Միացեք OpenCode Console-ի ծառայողական հաշվի API բանալիով։",
   "provider.connect.console.instructions":
-    "Շարունակեք ձեր զննարկչում։ Հաստատեք, որ այնտեղ ցուցադրված կոդը համընկնում է ստորև նշվածի հետ։",
+    "Շարունակեք ձեր դիտարկչում։ Հաստատեք, որ այնտեղ ցուցադրված կոդը համընկնում է ստորև նշվածի հետ։",
   "provider.connect.console.deviceCode": "Սարքի կոդ",
   "provider.connect.console.deviceCode.label": "Սարքի կոդ՝ {{code}}",
   "provider.connect.console.waiting": "Սպասում է հաստատման",
@@ -932,7 +932,7 @@ export const dict = {
   "provider.connect.console.copyFailed": "Չհաջողվեց պատճենել մուտքի հղումը։ Շարունակելու համար կրկին բացեք Console-ը։",
   "provider.connect.console.openAgain": "Կրկին բացել Console-ը",
   "provider.connect.console.browserFailed":
-    "Չհաջողվեց բացել ձեր զննարկիչը։ Կրկին փորձեք կամ պատճենեք մուտքի հղումը՝ շարունակելու համար։",
+    "Չհաջողվեց բացել ձեր դիտարկիչը։ Կրկին փորձեք կամ պատճենեք մուտքի հղումը՝ շարունակելու համար։",
   "provider.connect.console.expired":
     "Մուտքի այս հարցման ժամկետը սպառվել է։ Սկսեք նորից՝ նոր սարքի կոդ ստանալու համար։",
   "provider.connect.console.denied": "Մուտքը մերժվեց Console-ում։ Կրկին փորձեք, երբ պատրաստ լինեք միանալու։",
@@ -959,7 +959,7 @@ export const dict = {
     "Ձեր հաշիվը միացված է, բայց Console-ի այս աշխատանքային տարածքում հասանելի մոդելներ չկան։ Ստուգեք դրա կարգավորումը Console-ում, ապա թարմացրեք։",
   "provider.connect.console.modelsLoading": "Ձեր մոդելները դեռ բեռնվում են։ Թարմացրեք՝ կրկին ստուգելու համար։",
   "provider.connect.console.refresh": "Թարմացնել մոդելները",
-  "provider.connect.console.openingBrowser": "Զննարկիչը բացվում է",
+  "provider.connect.console.openingBrowser": "Դիտարկիչը բացվում է",
   "provider.connect.remote.label": "{{server}}-ում",
   "provider.connect.remote.description":
     "Ձեր OpenCode հավատարմագրերը կպահվեն այս սերվերում։ Մոդելները հասանելի կլինեն այս սերվերի միջոցով։",
@@ -983,20 +983,20 @@ export const dict = {
   "provider.connect.form.open": "Բացել հղումը",
   "provider.connect.form.finished": "Ավարտեցի",
   "provider.connect.form.browserFailed":
-    "Չհաջողվեց բացել ձեր զննարկիչը։ Բացեք ստորև նշված հղումը, ապա ընտրեք «Ավարտեցի»։",
+    "Չհաջողվեց բացել ձեր դիտարկիչը։ Բացեք ստորև նշված հղումը, ապա ընտրեք «Ավարտեցի»։",
   "provider.connect.form.selectOne": "Ընտրեք առնվազն մեկ տարբերակ",
   "provider.connect.form.minItems": "Ընտրեք առնվազն {{count}}",
   "provider.connect.form.maxItems": "Ընտրեք առավելագույնը {{count}}",
   "provider.connect.oauth.auto.description":
-    "Ձեր զննարկիչը կբացվի, որպեսզի կարողանաք մուտք գործել {{provider}}։ Ավարտելուց հետո վերադարձեք այստեղ։",
+    "Ձեր դիտարկիչը կբացվի, որպեսզի կարողանաք մուտք գործել {{provider}}։ Ավարտելուց հետո վերադարձեք այստեղ։",
   "provider.connect.oauth.code.description":
-    "Ձեր զննարկիչը կբացվի, որպեսզի կարողանաք մուտք գործել {{provider}}։ Տեղադրեք ստորև այն լիազորման կոդը, որը կստանաք։",
-  "provider.connect.oauth.openBrowser": "Բացել զննարկիչը",
+    "Ձեր դիտարկիչը կբացվի, որպեսզի կարողանաք մուտք գործել {{provider}}։ Տեղադրեք ստորև այն լիազորման կոդը, որը կստանաք։",
+  "provider.connect.oauth.openBrowser": "Բացել դիտարկիչը",
   "provider.connect.oauth.browserFailed":
-    "Չհաջողվեց բացել ձեր զննարկիչը։ Ընտրեք «Բացել զննարկիչը»՝ կրկին փորձելու համար։",
+    "Չհաջողվեց բացել ձեր դիտարկիչը։ Ընտրեք «Բացել դիտարկիչը»՝ կրկին փորձելու համար։",
   "provider.connect.oauth.paste.toggle": "Մուտք եք գործում այլ սարքի՞ց",
   "provider.connect.oauth.paste.description":
-    "Եթե ձեր զննարկիչը չի կարողանում հասնել OpenCode-ն աշխատեցնող մեքենային, տեղադրեք այն URL-ը, որին այն վերահղվել է։",
+    "Եթե ձեր դիտարկիչը չի կարողանում հասնել OpenCode-ն աշխատեցնող մեքենային, տեղադրեք այն URL-ը, որին այն վերահղվել է։",
   "provider.connect.oauth.expired": "Լիազորման ժամկետը սպառվեց",
   "model.details.input.text": "Տեքստ",
   "model.details.input.image": "Պատկեր",
@@ -1033,7 +1033,7 @@ export const dict = {
   "dialog.mcp.signIn": "Մուտք գործել",
   "dialog.mcp.signIn.open": "Մուտք գործել {{name}}",
   "dialog.mcp.signIn.description":
-    "Ձեր զննարկիչը կբացվի, որպեսզի կարողանաք մուտք գործել {{name}}։ Եթե այն չի կարողանում հասնել OpenCode-ն աշխատեցնող մեքենային, տեղադրեք ստորև այն URL-ը, որին այն վերահղվել է։",
+    "Ձեր դիտարկիչը կբացվի, որպեսզի կարողանաք մուտք գործել {{name}}։ Եթե այն չի կարողանում հասնել OpenCode-ն աշխատեցնող մեքենային, տեղադրեք ստորև այն URL-ը, որին այն վերահղվել է։",
   "dialog.mcp.signIn.syncFailed": "Մուտքը կատարված է, բայց չհաջողվեց թարմացնել {{name}}-ը՝ {{error}}",
   "dialog.mcp.error.details":
     "MCP սերվեր՝ {{name}}\nԿարգավիճակ՝ ձախողված\nԿազմաձևում՝ mcp.servers.{{name}}\nՍխալ՝ {{error}}",
@@ -1068,7 +1068,7 @@ export const dict = {
   "server.connect.link.prompt": "Ունե՞ք զուգակցման հղում",
   "server.connect.link.use": "Օգտագործել զուգակցման հղում",
   "server.connect.pair.link": "Գործարկեք այս հրամանը սերվերի համակարգչում՝ զուգակցման հղում և QR կոդ ստանալու համար։",
-  "server.connect.scan.failed": "Այս զննարկիչը չկարողացավ կարդալ QR կոդը։ Մուտքագրեք կապի տվյալները ձեռքով։",
+  "server.connect.scan.failed": "Այս դիտարկիչը չկարողացավ կարդալ QR կոդը։ Մուտքագրեք կապի տվյալները ձեռքով։",
   "server.connect.link.expired":
     "Այս զուգակցման հղման ժամկետը սպառվել է կամ այն արդեն օգտագործվել է։ Գործարկեք opencode pair՝ նորը ստանալու համար։",
   "server.connect.link.unreachable":
@@ -1084,7 +1084,7 @@ export const dict = {
   "toast.session.import.pending": "Նիստը ներմուծվում է…",
   "toast.storage.writeFailed.title": "Որոշ փոփոխություններ չեն պահվում",
   "toast.storage.writeFailed.description":
-    "Զննարկչի պահոցը լիքն է կամ անհասանելի, ուստի կարգավորումների և դասավորության փոփոխությունները կարող են կորել վերբեռնելիս։",
+    "Դիտարկչի պահեստը լիքն է կամ անհասանելի, ուստի կարգավորումների և դասավորության փոփոխությունները կարող են կորել վերբեռնելիս։",
   "notification.question.title": "Հարցը պահանջում է պատասխան",
   "notification.elicitation.title": "Պահանջվում է մուտքագրում",
   "home.project.missing.title": "Նախագծի թղթապանակը չի գտնվել",
@@ -1093,9 +1093,9 @@ export const dict = {
   "session.tabs.closed.empty": "Վերջերս փակված նիստեր չկան",
   "home.sessions.load.failed": "Չհաջողվեց բեռնել նիստերը",
   "home.sessions.load.timeout": "Սերվերը չափազանց երկար էր պատասխանում",
-  "tips.browse.title": "Կառավարեք ձեր զննարկիչը",
+  "tips.browse.title": "Կառավարեք ձեր դիտարկիչը",
   "tips.browse.description":
-    "Թույլ տվեք OpenCode-ին աշխատել ձեր զննարկչում՝ ձեր ներդիրներով, մուտքերով և ընդլայնումներով։",
+    "Թույլ տվեք OpenCode-ին աշխատել ձեր դիտարկչում՝ ձեր ներդիրներով, մուտքերով և ընդլայնումներով։",
   "tips.browse.install": "Տեղադրել",
   "tips.hex.title": "Օգտագործեք ձեր ձայնը",
   "tips.hex.description":
@@ -1128,7 +1128,7 @@ export const dict = {
   "session.goLimit.reset": "Այն կվերակայվի {{time}}-ին։",
   "session.goLimit.extraUsage": "Միացնել լրացուցիչ օգտագործումը",
   "session.goLimit.switchFree": "Անցնել անվճար մոդելի",
-  "session.queue.first": "Հերթում առաջինը",
+  "session.queue.first": "Հերթագրել առաջինը",
   "session.queue.undo": "Հետարկել",
   "session.queue.undoShell": "Դուրս եկեք shell ռեժիմից՝ նախքան հերթագրված հուշումը հետարկելը",
   "session.queue.reverted": "Կրկնեք հետարկումը՝ նախքան հերթագրված հուշումների դասավորությունը փոխելը կամ խմբագրելը",
@@ -1218,9 +1218,9 @@ export const dict = {
   "sidebar.recent.section.recent": "Վերջինները",
   "sidebar.recent.empty": "Վերջին նիստեր չկան",
   "sidebar.recent.pin": "Ամրացնել",
-  "sidebar.recent.mute": "Խլացնել",
-  "sidebar.recent.muted": "Խլացված",
-  "sidebar.recent.unmute": "Ապախլացնել",
+  "sidebar.recent.mute": "Լռեցնել",
+  "sidebar.recent.muted": "Լռեցված",
+  "sidebar.recent.unmute": "Ապալռեցնել",
   "sidebar.recent.hide": "Թաքցնել",
   "sidebar.recent.unhide": "Ցուցադրել",
   "sidebar.recent.unpin": "Ապամրացնել",

@@ -58,7 +58,7 @@ export default {
   "zoom.in": "Zooma in",
   "zoom.out": "Zooma ut",
   "zoom.reset": "Återställ zoom",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Kopiera länk",
   "history.clear": "Rensa historik",
 }

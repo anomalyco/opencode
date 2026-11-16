@@ -14,8 +14,9 @@ export default {
   "direction.tip": "A teljes alkalmazáselrendezési irány kényszerítése a kiválasztott nyelv megváltoztatása nélkül",
   "direction.ltr": "LTR",
   "direction.rtl": "RTL",
-  "close.label": "Hibakereső sáv elrejtése",
-  "close.tip": "Hibakereső sáv elrejtése. A parancspalettáról hozható vissza: Hibakeresési sáv be- vagy kikapcsolása.",
+  "close.label": "Hibakeresési sáv elrejtése",
+  "close.tip":
+    "Hibakeresési sáv elrejtése. A parancspalettáról hozható vissza: Hibakeresési sáv be- vagy kikapcsolása.",
   "command.heap": "Heap-pillanatképek készítése",
   "command.heap.description": "Az alkalmazás és a szerver memóriáját egy mappába menti",
   "heap.loading": "Heap-pillanatképek készítése…",
@@ -45,7 +46,7 @@ export default {
   "components.label": "KOMPONENSEK",
   "components.tip": "A komponenslabor megnyitása: minden story élő vezérlőkkel és állapotokkal",
   "speed.label": "SEBESSÉG",
-  "speed.tip": "Globális animációsebesség. Kattintással lépkedhet: 0.5×, 0.25×, majd vissza 1×-re.",
+  "speed.tip": "Globális animációsebesség. Kattintással lépkedhet: 0,5×, 0,25×, majd vissza 1×-re.",
   "slow.label": "LASSÚ",
   "slow.tip": "Minden hangolt animáció negyed sebességgel fut.",
 }

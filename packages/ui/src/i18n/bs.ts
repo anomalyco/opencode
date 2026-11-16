@@ -315,7 +315,7 @@ export const dict = {
   "ui.timeline.activity.ran": "Pokrenuto",
   "ui.timeline.activity.used": "Korišteno",
   "ui.timeline.activity.worked": "Radilo se {{duration}}",
-  "ui.timeline.activity.workedUnknown": "Radio",
+  "ui.timeline.activity.workedUnknown": "Radilo se",
   "ui.timeline.activity.files.one": "{{count}} datoteka",
   "ui.timeline.activity.files.few": "{{count}} datoteke",
   "ui.timeline.activity.files.other": "{{count}} datoteka",

@@ -927,7 +927,7 @@ export const dict = {
   "dialog.provider.accounts.removeConfirm": "Уклонити {{account}}?",
   "dialog.provider.accounts.remove": "Уклони",
   "dialog.provider.accounts.options": "Опције за {{account}}",
-  "provider.connect.copyFailed": "Копирање у међуспремник није успело",
+  "provider.connect.copyFailed": "Копирање у оставу није успело",
   "provider.connect.breadcrumb.root": "Повезивање",
   "provider.connect.breadcrumb.label": "Кораци повезивања",
   "provider.connect.methods.description": "Изаберите начин повезивања за {{provider}}.",
@@ -937,7 +937,7 @@ export const dict = {
   "provider.connect.console.serviceKeyDescription":
     "Повежите се помоћу API кључа сервисног налога из OpenCode Console.",
   "provider.connect.console.instructions":
-    "Наставите у прегледнику. Потврдите да се код приказан тамо поклапа са кодом испод.",
+    "Наставите у прегледачу. Потврдите да се код приказан тамо поклапа са кодом испод.",
   "provider.connect.console.deviceCode": "Код уређаја",
   "provider.connect.console.deviceCode.label": "Код уређаја: {{code}}",
   "provider.connect.console.waiting": "Чека се потврда",
@@ -947,7 +947,7 @@ export const dict = {
     "Копирање везе за пријаву није успело. Поново отворите Console да бисте наставили.",
   "provider.connect.console.openAgain": "Поново отвори Console",
   "provider.connect.console.browserFailed":
-    "Нисмо успели да отворимо прегледник. Покушајте поново или копирајте везу за пријаву да бисте наставили.",
+    "Нисмо успели да отворимо прегледач. Покушајте поново или копирајте везу за пријаву да бисте наставили.",
   "provider.connect.console.expired":
     "Овај захтев за пријаву је истекао. Почните поново да бисте добили нови код уређаја.",
   "provider.connect.console.denied":
@@ -975,7 +975,7 @@ export const dict = {
     "Ваш налог је повезан, али овај Console радни простор нема доступних модела. Проверите његово подешавање у Console, па освежите.",
   "provider.connect.console.modelsLoading": "Модели се још учитавају. Освежите да бисте поново проверили.",
   "provider.connect.console.refresh": "Освежи моделе",
-  "provider.connect.console.openingBrowser": "Отварање прегледника",
+  "provider.connect.console.openingBrowser": "Отварање прегледача",
   "provider.connect.remote.label": "на {{server}}",
   "provider.connect.remote.description":
     "Ваши OpenCode акредитиви биће сачувани на овом серверу. Модели ће бити доступни преко овог сервера.",
@@ -999,20 +999,20 @@ export const dict = {
   "provider.connect.form.open": "Отвори везу",
   "provider.connect.form.finished": "Готово",
   "provider.connect.form.browserFailed":
-    "Нисмо успели да отворимо прегледник. Отворите везу испод, па изаберите Готово.",
+    "Нисмо успели да отворимо прегледач. Отворите везу испод, па изаберите Готово.",
   "provider.connect.form.selectOne": "Изаберите бар једну опцију",
   "provider.connect.form.minItems": "Изаберите најмање {{count}}",
   "provider.connect.form.maxItems": "Изаберите највише {{count}}",
   "provider.connect.oauth.auto.description":
-    "Отвориће се прегледник да бисте се пријавили на {{provider}}. Вратите се овде када завршите.",
+    "Отвориће се прегледач да бисте се пријавили на {{provider}}. Вратите се овде када завршите.",
   "provider.connect.oauth.code.description":
-    "Отвориће се прегледник да бисте се пријавили на {{provider}}. Испод налепите ауторизациони код који добијете.",
-  "provider.connect.oauth.openBrowser": "Отвори прегледник",
+    "Отвориће се прегледач да бисте се пријавили на {{provider}}. Испод налепите ауторизациони код који добијете.",
+  "provider.connect.oauth.openBrowser": "Отвори прегледач",
   "provider.connect.oauth.browserFailed":
-    "Нисмо успели да отворимо прегледник. Изаберите Отвори прегледник да бисте покушали поново.",
+    "Нисмо успели да отворимо прегледач. Изаберите Отвори прегледач да бисте покушали поново.",
   "provider.connect.oauth.paste.toggle": "Пријављујете се са другог уређаја?",
   "provider.connect.oauth.paste.description":
-    "Ако прегледник не може да приступи рачунару на коме ради OpenCode, налепите URL на који је преусмерен.",
+    "Ако прегледач не може да приступи рачунару на коме ради OpenCode, налепите URL на који је преусмерен.",
   "provider.connect.oauth.expired": "Ауторизација је истекла",
   "model.details.input.text": "Текст",
   "model.details.input.image": "Слика",
@@ -1049,7 +1049,7 @@ export const dict = {
   "dialog.mcp.signIn": "Пријави се",
   "dialog.mcp.signIn.open": "Пријави се на {{name}}",
   "dialog.mcp.signIn.description":
-    "Отвориће се прегледник да бисте се пријавили на {{name}}. Ако не може да приступи рачунару на коме ради OpenCode, испод налепите URL на који је преусмерен.",
+    "Отвориће се прегледач да бисте се пријавили на {{name}}. Ако не може да приступи рачунару на коме ради OpenCode, испод налепите URL на који је преусмерен.",
   "dialog.mcp.signIn.syncFailed": "Пријављени сте, али освежавање {{name}} није успело: {{error}}",
   "dialog.mcp.error.details":
     "MCP сервер: {{name}}\nСтатус: неуспешно\nКонфигурација: mcp.servers.{{name}}\nГрешка: {{error}}",
@@ -1084,7 +1084,7 @@ export const dict = {
   "server.connect.link.prompt": "Имате везу за упаривање?",
   "server.connect.link.use": "Користи везу за упаривање",
   "server.connect.pair.link": "Покрените ову команду на рачунару сервера да бисте добили везу за упаривање и QR код.",
-  "server.connect.scan.failed": "Овај прегледник није могао да прочита QR код. Ручно унесите податке за повезивање.",
+  "server.connect.scan.failed": "Овај прегледач није могао да прочита QR код. Ручно унесите податке за повезивање.",
   "server.connect.link.expired":
     "Ова веза за упаривање је истекла или је већ искоришћена. Покрените opencode pair да бисте добили нову.",
   "server.connect.link.unreachable":
@@ -1101,7 +1101,7 @@ export const dict = {
   "toast.session.import.pending": "Увоз сесије…",
   "toast.storage.writeFailed.title": "Неке промене се не чувају",
   "toast.storage.writeFailed.description":
-    "Складиште прегледника је пуно или недоступно, па се промене подешавања и распореда могу изгубити при поновном учитавању.",
+    "Складиште прегледача је пуно или недоступно, па се промене подешавања и распореда могу изгубити при поновном учитавању.",
   "notification.question.title": "Питање чека одговор",
   "notification.elicitation.title": "Потребан је унос",
   "home.project.missing.title": "Фасцикла пројекта није пронађена",
@@ -1110,9 +1110,9 @@ export const dict = {
   "session.tabs.closed.empty": "Нема недавно затворених сесија",
   "home.sessions.load.failed": "Учитавање сесија није успело",
   "home.sessions.load.timeout": "Сервер је предуго одговарао",
-  "tips.browse.title": "Управљајте прегледником",
+  "tips.browse.title": "Управљајте прегледачем",
   "tips.browse.description":
-    "Дозволите да OpenCode ради у вашем прегледнику, са вашим картицама, пријавама и екстензијама.",
+    "Дозволите да OpenCode ради у вашем прегледачу, са вашим картицама, пријавама и проширењима.",
   "tips.browse.install": "Инсталирај",
   "tips.hex.title": "Користите глас",
   "tips.hex.description":
@@ -1134,7 +1134,7 @@ export const dict = {
   "session.error.signedOut.description":
     "{{server}} више не прихвата пријаву ове апликације. Пријавите се поново да бисте наставили.",
   "session.error.signedOut.signIn": "Пријави се поново",
-  "session.freeLimit.title": "Достигнуто је бесплатно ограничење",
+  "session.freeLimit.title": "Достигнуто је ограничење бесплатне потрошње",
   "session.freeLimit.reset":
     "Бесплатна потрошња се ресетује у {{time}}. Повежите добављача или се претплатите на Go да бисте наставили.",
   "session.freeLimit.noReset": "Повежите добављача или се претплатите на Go да бисте наставили.",
@@ -1398,13 +1398,13 @@ export const dict = {
   "settings.general.sounds.interface.description":
     "Пуштај дискретне звукове када се појави логотип и када се играте њиме",
   "settings.shortcuts.unbind": "Уклони пречицу",
-  "settings.providers.account.manage": "Управљај {{provider}} налозима",
+  "settings.providers.account.manage": "Управљај налозима за {{provider}}",
   "settings.providers.account.group": "Налози",
   "settings.providers.account.add": "Додај налог",
   "settings.providers.account.name": "Назив налога",
-  "settings.providers.account.switched.title": "{{provider}} налог је промењен",
+  "settings.providers.account.switched.title": "Налог за {{provider}} је промењен",
   "settings.providers.account.switched.description": "Сада се користи {{account}}.",
-  "settings.providers.account.removed.title": "{{account}} је уклоњен",
+  "settings.providers.account.removed.title": "Налог {{account}} је уклоњен",
   "settings.providers.account.removed.description": "{{provider}} више неће користити овај налог.",
   "settings.providers.console.available.one": "{{count}} добављач доступан",
   "settings.providers.console.available.few": "{{count}} добављача доступна",
@@ -1483,7 +1483,7 @@ export const dict = {
   "usage.callout.personal.title": "Достигнут је месечни буџет",
   "usage.callout.personal.body":
     "Плаћени модели и веб претрага паузирани су за вас до {{time}}. Бесплатни модели и даље раде.",
-  "usage.callout.credits.title": "{{workspace}} је остао без кредита",
+  "usage.callout.credits.title": "Радни простор {{workspace}} је остао без кредита",
   "usage.callout.credits.body":
     "Плаћени модели су паузирани за све док администратор не дода кредите у Console. Ваши буџети још имају простора. Бесплатни модели и даље раде.",
   "usage.action.otherModels.title": "Други модели још имају простора",

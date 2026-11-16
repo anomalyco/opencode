@@ -36,7 +36,7 @@ export default {
   "view.actions": "Радње са датотеком",
   "view.download": "Преузми",
   "view.reveal": "Прикажи у {{app}}",
-  "view.openInBrowser": "Отвори у прегледнику",
+  "view.openInBrowser": "Отвори у прегледачу",
   "view.fullscreen": "Цео екран",
   "view.binary": "Бинарна датотека · {{size}}",
   "view.loadFailed": "Учитавање ове датотеке није успело.",

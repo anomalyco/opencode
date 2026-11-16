@@ -957,7 +957,7 @@ export const dict = {
   "dialog.provider.title": "Integrasi",
   "dialog.provider.description": "Hubungkan layanan agar OpenCode dapat menggunakannya.",
   "dialog.provider.group.services": "Layanan",
-  "dialog.provider.environmentOnly": "Hanya lingkungan",
+  "dialog.provider.environmentOnly": "Hanya variabel lingkungan",
   "dialog.provider.signInRequired": "Perlu masuk →",
   "dialog.provider.needsSignIn": "Perlu masuk",
   "dialog.provider.connected": "Terhubung",
@@ -1041,7 +1041,7 @@ export const dict = {
   "provider.connect.command.waiting": "Menunggu perintah selesai",
   "provider.connect.command.expired": "Autentikasi kedaluwarsa",
   "provider.connect.form.required": "Jawaban diperlukan",
-  "provider.connect.form.number": "Diharapkan berupa angka",
+  "provider.connect.form.number": "Harus berupa angka",
   "provider.connect.form.yes": "Ya",
   "provider.connect.form.no": "Tidak",
   "provider.connect.form.skip": "Lewati",
@@ -1145,7 +1145,7 @@ export const dict = {
   "server.connect.camera.native":
     "Halaman ini tidak dapat menggunakan kamera melalui HTTP. Tempel tautan pemasangan di atas.",
   "dialog.server.signedOut":
-    "Sesi masuk Anda untuk server ini tidak lagi valid. Tempel tautan pemasangan baru, atau masukkan kata sandi server.",
+    "Login Anda untuk server ini tidak lagi berlaku. Tempel tautan pemasangan baru, atau masukkan kata sandi server.",
   "toast.permissions.autoaccept.project.title": "Menerima izin otomatis untuk proyek ini",
   "toast.permissions.autoaccept.project.description": "Permintaan izin di proyek ini akan disetujui secara otomatis",
   "toast.language.loadFailed.title": "Gagal memuat {{language}}",
@@ -1180,7 +1180,7 @@ export const dict = {
   "session.error.unreachable": "Tidak dapat menjangkau server ini",
   "session.error.unreachable.description":
     "{{server}} tidak merespons, sehingga sesi ini tidak dapat dimuat. Sesi akan terbuka otomatis setelah server dapat dijangkau lagi.",
-  "session.error.signedOut": "Keluar dari server ini",
+  "session.error.signedOut": "Telah keluar dari server ini",
   "session.error.signedOut.description":
     "{{server}} tidak lagi menerima login aplikasi ini. Masuk lagi untuk melanjutkan.",
   "session.error.signedOut.signIn": "Masuk lagi",
@@ -1195,7 +1195,7 @@ export const dict = {
   "session.goLimit.reset": "Batas diatur ulang pada {{time}}.",
   "session.goLimit.extraUsage": "Aktifkan Penggunaan Ekstra",
   "session.goLimit.switchFree": "Beralih ke model gratis",
-  "session.queue.first": "Antrekan pertama",
+  "session.queue.first": "Antrekan paling depan",
   "session.queue.undo": "Urungkan",
   "session.queue.undoShell": "Keluar dari mode shell sebelum mengurungkan prompt dalam antrean",
   "session.queue.reverted": "Ulangi pengembalian sebelum mengatur ulang urutan atau menyunting prompt dalam antrean",
@@ -1215,7 +1215,7 @@ export const dict = {
   "session.activity.shell.back": "Kembali ke pekerjaan latar belakang",
   "session.activity.shell.stop": "Hentikan",
   "session.activity.shell.stopping": "Menghentikan…",
-  "session.activity.shell.exited": "Keluar",
+  "session.activity.shell.exited": "Telah keluar",
   "session.activity.shell.exitCode": "Keluar dengan kode {{code}}",
   "session.activity.shell.timeout": "Waktu habis",
   "session.activity.shell.killed": "Dihentikan",

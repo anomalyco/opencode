@@ -857,14 +857,14 @@ export const dict = {
   "desktop.downloadsFolderUsage":
     "OpenCode သည် သင်ဖွင့်သော ပရောဂျက်များနှင့် ထိုနေရာတွင် သင်လုပ်ဆောင်သော အမိန့်များအတွက် သင့် Downloads ဖိုင်တွဲရှိ ဖိုင်များကို အသုံးပြုသည်။",
   "desktop.networkVolumesUsage":
-    "OpenCode သည် သင်ဖွင့်သော ပရောဂျက်များနှင့် ထိုနေရာတွင် သင်လုပ်ဆောင်သော အမိန့်များအတွက် ကွန်ရက် volume များပေါ်ရှိ ဖိုင်များကို အသုံးပြုသည်။",
+    "OpenCode သည် သင်ဖွင့်သော ပရောဂျက်များနှင့် ထိုနေရာတွင် သင်လုပ်ဆောင်သော အမိန့်များအတွက် ကွန်ရက် သိုလှောင်ကိရိယာများပေါ်ရှိ ဖိုင်များကို အသုံးပြုသည်။",
   "desktop.removableVolumesUsage":
-    "OpenCode သည် သင်ဖွင့်သော ပရောဂျက်များနှင့် ထိုနေရာတွင် သင်လုပ်ဆောင်သော အမိန့်များအတွက် ဖြုတ်တပ်နိုင်သော volume များပေါ်ရှိ ဖိုင်များကို အသုံးပြုသည်။",
+    "OpenCode သည် သင်ဖွင့်သော ပရောဂျက်များနှင့် ထိုနေရာတွင် သင်လုပ်ဆောင်သော အမိန့်များအတွက် ဖြုတ်တပ်နိုင်သော သိုလှောင်ကိရိယာများပေါ်ရှိ ဖိုင်များကို အသုံးပြုသည်။",
   "desktop.contextMenu.spellcheck": "စာလုံးပေါင်း စစ်ဆေးခြင်း",
   "desktop.contextMenu.spellcheckLanguages": "စာလုံးပေါင်းစစ်ဆေးရန် ဘာသာစကားများ",
   "session.location.unavailable": "စက်ရှင်တည်နေရာ မရရှိနိုင်ပါ",
-  "session.location.description": "ဤစက်ရှင်ကို ဆက်လုပ်ရန် အခြားလမ်းညွှန်တစ်ခုကို ရွေးပါ။",
-  "session.location.choose": "လမ်းညွှန် ရွေးရန်",
+  "session.location.description": "ဤစက်ရှင်ကို ဆက်လုပ်ရန် အခြားဖိုင်တွဲတစ်ခုကို ရွေးပါ။",
+  "session.location.choose": "ဖိုင်တွဲ ရွေးရန်",
   "session.location.worktree": "Worktree ရွေးရန်",
   "session.location.worktreesFailed": "Worktree များကို ဖွင့်၍ မရပါ",
   "session.rewind.toast.title": "ပြန်ပြောင်းပြီးပါပြီ",
@@ -876,7 +876,7 @@ export const dict = {
     "OpenCode Go၊ OpenCode Console သို့မဟုတ် အခြားမော်ဒယ် ဝန်ဆောင်မှုပေးသူသို့ အကောင့်ဝင်ပါ",
   "command.config.reload": "ဖွဲ့စည်းမှုကို ပြန်တင်ရန်",
   "command.config.reload.description":
-    "သင့် config မှ အေးဂျင့်များ၊ အမိန့်များ၊ ကျွမ်းကျင်မှုများ၊ MCP ဆာဗာများနှင့် ပလပ်အင်များကို ပြန်တင်ပါ",
+    "သင့်ဖွဲ့စည်းမှုမှ အေးဂျင့်များ၊ အမိန့်များ၊ ကျွမ်းကျင်မှုများ၊ MCP ဆာဗာများနှင့် ပလပ်အင်များကို ပြန်တင်ပါ",
   "command.config.reload.pending": "ဖွဲ့စည်းမှုကို ပြန်တင်နေသည်…",
   "command.config.reload.done": "ဖွဲ့စည်းမှုကို ပြန်တင်ပြီးပါပြီ",
   "command.config.reload.failed": "ဖွဲ့စည်းမှုကို ပြန်တင်၍ မရပါ",
@@ -910,9 +910,9 @@ export const dict = {
   "dialog.provider.connected": "ချိတ်ဆက်ထားသည်",
   "dialog.provider.connections.count.one": "ချိတ်ဆက်မှု {{count}} ခု",
   "dialog.provider.connections.count.other": "ချိတ်ဆက်မှု {{count}} ခု",
-  "dialog.provider.claudeAgent.note": "သင်၏ Claude plan သို့မဟုတ် အခြား Claude Code login ကို အသုံးပြုပါ",
+  "dialog.provider.claudeAgent.note": "သင်၏ Claude အစီအစဉ် သို့မဟုတ် အခြား Claude Code အကောင့်ဝင်မှုကို အသုံးပြုပါ",
   "dialog.model.unavailable": "{{model}} (မရရှိနိုင်ပါ)",
-  "dialog.model.chatgptPlan": "ChatGPT plan ကို အသုံးပြုနေသည်",
+  "dialog.model.chatgptPlan": "ChatGPT အစီအစဉ်ကို အသုံးပြုနေသည်",
   "dialog.model.chatgptManageUsage": "အသုံးပြုမှုကို စီမံရန်",
   "dialog.model.favorites": "အကြိုက်ဆုံးများ",
   "dialog.model.recent": "လတ်တလော",
@@ -932,7 +932,7 @@ export const dict = {
   "provider.connect.opencode.name": "OpenCode Console",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "ထပ်ကြိုးစားပါ",
-  "provider.connect.console.serviceKeyDescription": "OpenCode Console မှ service-account API သော့ဖြင့် ချိတ်ဆက်ပါ။",
+  "provider.connect.console.serviceKeyDescription": "OpenCode Console မှ ဝန်ဆောင်မှုအကောင့် API သော့ဖြင့် ချိတ်ဆက်ပါ။",
   "provider.connect.console.instructions":
     "သင့်ဘရောက်ဇာတွင် ဆက်လုပ်ပါ။ ထိုနေရာတွင် ပြသထားသော ကုဒ်သည် အောက်ပါကုဒ်နှင့် ကိုက်ညီကြောင်း အတည်ပြုပါ။",
   "provider.connect.console.deviceCode": "စက်ကုဒ်",
@@ -954,7 +954,7 @@ export const dict = {
   "provider.connect.models.available": "ရရှိနိုင်သော မော်ဒယ်များ",
   "provider.connect.chatgptWelcome.title": "ChatGPT ချိတ်ဆက်ပြီးပါပြီ",
   "provider.connect.chatgptWelcome.description":
-    "OpenCode ရှိ သတ်မှတ်ချက်ပြည့်မီသော တောင်းဆိုမှုများသည် သင်၏ ChatGPT plan ကို အသုံးပြုနိုင်သည်။",
+    "OpenCode ရှိ သတ်မှတ်ချက်ပြည့်မီသော တောင်းဆိုမှုများသည် သင်၏ ChatGPT အစီအစဉ်ကို အသုံးပြုနိုင်သည်။",
   "provider.connect.chatgptWelcome.usage": "ChatGPT ဆက်တင်များတွင် အသုံးပြုမှုကို စီမံပါ",
   "provider.connect.chatgptWelcome.confirm": "နားလည်ပါပြီ",
   "provider.connect.models.list": "{{provider}} မှ ရရှိနိုင်သော မော်ဒယ်များ",
@@ -967,7 +967,7 @@ export const dict = {
     "သင့်အကောင့် ချိတ်ဆက်ပြီးပါပြီ၊ သို့သော် မော်ဒယ်များကို ဖွင့်၍ မရပါ။ ပြန်လည်ရယူရန် ထပ်ကြိုးစားပါ။",
   "provider.connect.console.connected": "OpenCode ချိတ်ဆက်ပြီးပါပြီ",
   "provider.connect.console.noModels":
-    "သင့်အကောင့် ချိတ်ဆက်ပြီးပါပြီ၊ သို့သော် ဤ Console အလုပ်နေရာတွင် ရရှိနိုင်သော မော်ဒယ်မရှိပါ။ Console တွင် ၎င်း၏ setup ကို စစ်ဆေးပြီးနောက် ပြန်လည်ရယူပါ။",
+    "သင့်အကောင့် ချိတ်ဆက်ပြီးပါပြီ၊ သို့သော် ဤ Console အလုပ်နေရာတွင် ရရှိနိုင်သော မော်ဒယ်မရှိပါ။ Console တွင် ၎င်း၏ သတ်မှတ်ချက်များကို စစ်ဆေးပြီးနောက် ပြန်လည်ရယူပါ။",
   "provider.connect.console.modelsLoading": "သင့်မော်ဒယ်များကို ဖွင့်နေဆဲဖြစ်သည်။ ထပ်စစ်ရန် ပြန်လည်ရယူပါ။",
   "provider.connect.console.refresh": "မော်ဒယ်များကို ပြန်လည်ရယူရန်",
   "provider.connect.console.openingBrowser": "ဘရောက်ဇာကို ဖွင့်နေသည်",
@@ -975,7 +975,7 @@ export const dict = {
   "provider.connect.remote.description":
     "သင်၏ OpenCode အထောက်အထားများကို ဤဆာဗာတွင် သိမ်းဆည်းမည်။ မော်ဒယ်များကို ဤဆာဗာမှတစ်ဆင့် အသုံးပြုနိုင်မည်။",
   "provider.connect.claudeAgent.description":
-    "သင်၏ Claude plan သို့မဟုတ် အခြား Claude Code login ကို အသုံးပြုပါ။ ဦးစွာ Claude Code ကို ထည့်သွင်းပြီး အကောင့်ဝင်ပါ။",
+    "သင်၏ Claude အစီအစဉ် သို့မဟုတ် အခြား Claude Code အကောင့်ဝင်မှုကို အသုံးပြုပါ။ ဦးစွာ Claude Code ကို ထည့်သွင်းပြီး အကောင့်ဝင်ပါ။",
   "provider.connect.claudeAgent.install": "Claude Code ထည့်သွင်းရန်",
   "provider.connect.claudeAgent.signIn.command": "အကောင့်ဝင် အမိန့်",
   "provider.connect.claudeAgent.connect": "ချိတ်ဆက်ရန်",
@@ -1006,7 +1006,7 @@ export const dict = {
   "provider.connect.oauth.browserFailed": "သင့်ဘရောက်ဇာကို ဖွင့်၍ မရပါ။ ထပ်ကြိုးစားရန် ဘရောက်ဇာ ဖွင့်ရန် ကို ရွေးပါ။",
   "provider.connect.oauth.paste.toggle": "အခြားစက်မှ အကောင့်ဝင်နေပါသလား။",
   "provider.connect.oauth.paste.description":
-    "သင့်ဘရောက်ဇာသည် OpenCode လုပ်ဆောင်နေသော စက်သို့ မရောက်နိုင်ပါက ၎င်း redirect လုပ်ခဲ့သော URL ကို ကူးထည့်ပါ။",
+    "သင့်ဘရောက်ဇာသည် OpenCode လုပ်ဆောင်နေသော စက်သို့ မရောက်နိုင်ပါက ၎င်း လမ်းလွှဲပေးခဲ့သော URL ကို ကူးထည့်ပါ။",
   "provider.connect.oauth.expired": "ခွင့်ပြုချက် သက်တမ်းကုန်သွားပါပြီ",
   "model.details.input.text": "စာသား",
   "model.details.input.image": "ပုံ",
@@ -1043,7 +1043,7 @@ export const dict = {
   "dialog.mcp.signIn": "အကောင့်ဝင်ရန်",
   "dialog.mcp.signIn.open": "{{name}} သို့ အကောင့်ဝင်ရန်",
   "dialog.mcp.signIn.description":
-    "{{name}} သို့ အကောင့်ဝင်နိုင်ရန် သင့်ဘရောက်ဇာ ပွင့်လာမည်။ OpenCode လုပ်ဆောင်နေသော စက်သို့ မရောက်နိုင်ပါက ၎င်း redirect လုပ်ခဲ့သော URL ကို အောက်တွင် ကူးထည့်ပါ။",
+    "{{name}} သို့ အကောင့်ဝင်နိုင်ရန် သင့်ဘရောက်ဇာ ပွင့်လာမည်။ OpenCode လုပ်ဆောင်နေသော စက်သို့ မရောက်နိုင်ပါက ၎င်း လမ်းလွှဲပေးခဲ့သော URL ကို အောက်တွင် ကူးထည့်ပါ။",
   "dialog.mcp.signIn.syncFailed": "အကောင့်ဝင်ပြီးပါပြီ၊ သို့သော် {{name}} ကို ပြန်လည်ရယူ၍ မရပါ: {{error}}",
   "dialog.mcp.error.details":
     "MCP ဆာဗာ: {{name}}\nအခြေအနေ: မအောင်မြင်ပါ\nဖွဲ့စည်းမှု: mcp.servers.{{name}}\nအမှား: {{error}}",
@@ -1074,17 +1074,17 @@ export const dict = {
     "opencode pair မှ သို့မဟုတ် ဆာဗာကွန်ပျူတာရှိ ဆက်တင်များ → Pairing မှ pairing လင့်ခ်အပြည့်အစုံကို ကူးထည့်ပါ။",
   "server.connect.password.prompt": "Pairing လင့်ခ် မရှိဘူးလား။",
   "server.connect.password.use": "စကားဝှက် အသုံးပြုရန်",
-  "server.connect.password.hint": "၎င်းကို ကြည့်ရန် ဆာဗာကွန်ပျူတာတွင် opencode service get password ကို run ပါ။",
+  "server.connect.password.hint": "၎င်းကို ကြည့်ရန် ဆာဗာကွန်ပျူတာတွင် opencode service get password ကို လုပ်ဆောင်ပါ။",
   "server.connect.link.prompt": "Pairing လင့်ခ် ရှိပါသလား။",
   "server.connect.link.use": "Pairing လင့်ခ် အသုံးပြုရန်",
-  "server.connect.pair.link": "Pairing လင့်ခ်နှင့် QR ကုဒ် ရယူရန် ဆာဗာကွန်ပျူတာတွင် ဤအမိန့်ကို run ပါ။",
+  "server.connect.pair.link": "Pairing လင့်ခ်နှင့် QR ကုဒ် ရယူရန် ဆာဗာကွန်ပျူတာတွင် ဤအမိန့်ကို လုပ်ဆောင်ပါ။",
   "server.connect.scan.failed": "ဤဘရောက်ဇာသည် QR ကုဒ်ကို ဖတ်၍ မရပါ။ ချိတ်ဆက်မှုအချက်အလက်များကို လက်ဖြင့် ထည့်ပါ။",
   "server.connect.link.expired":
-    "ဤ pairing လင့်ခ် သက်တမ်းကုန်သွားပြီ သို့မဟုတ် အသုံးပြုပြီးဖြစ်သည်။ အသစ်ရရန် opencode pair ကို run ပါ။",
+    "ဤ pairing လင့်ခ် သက်တမ်းကုန်သွားပြီ သို့မဟုတ် အသုံးပြုပြီးဖြစ်သည်။ အသစ်ရရန် opencode pair ကို လုပ်ဆောင်ပါ။",
   "server.connect.link.unreachable":
     "{{url}} သို့ မရောက်နိုင်ပါ။ ဤစက်မှ ဆာဗာသို့ ရောက်နိုင်ကြောင်း စစ်ဆေးပြီး ထပ်ကြိုးစားပါ။",
   "server.connect.link.legacy":
-    "ဤ pairing ကုဒ်သည် OpenCode ဗားရှင်းဟောင်းမှ ဖြစ်သည်။ ဆာဗာတွင် OpenCode ကို အပ်ဒိတ်လုပ်ပြီး opencode pair ကို ထပ် run ပါ။",
+    "ဤ pairing ကုဒ်သည် OpenCode ဗားရှင်းဟောင်းမှ ဖြစ်သည်။ ဆာဗာတွင် OpenCode ကို အပ်ဒိတ်လုပ်ပြီး opencode pair ကို ထပ်မံ လုပ်ဆောင်ပါ။",
   "server.connect.camera.native":
     "ဤစာမျက်နှာသည် HTTP ပေါ်တွင် ကင်မရာကို အသုံးပြု၍ မရပါ။ အထက်တွင် pairing လင့်ခ်ကို ကူးထည့်ပါ။",
   "dialog.server.signedOut":
@@ -1096,7 +1096,7 @@ export const dict = {
   "toast.session.import.pending": "စက်ရှင်ကို တင်သွင်းနေသည်…",
   "toast.storage.writeFailed.title": "အပြောင်းအလဲအချို့ကို သိမ်းဆည်းမနေပါ",
   "toast.storage.writeFailed.description":
-    "ဘရောက်ဇာ သိုလှောင်မှု ပြည့်နေသည် သို့မဟုတ် မရရှိနိုင်သောကြောင့် ပြန်တင်သောအခါ ဆက်တင်များနှင့် layout အပြောင်းအလဲများ ပျောက်သွားနိုင်သည်။",
+    "ဘရောက်ဇာ သိုလှောင်မှု ပြည့်နေသည် သို့မဟုတ် မရရှိနိုင်သောကြောင့် ပြန်တင်သောအခါ ဆက်တင်များနှင့် အပြင်အဆင် အပြောင်းအလဲများ ပျောက်သွားနိုင်သည်။",
   "notification.question.title": "မေးခွန်းကို ဖြေရန် လိုအပ်သည်",
   "notification.elicitation.title": "ထည့်သွင်းမှု တောင်းဆိုထားသည်",
   "home.project.missing.title": "ပရောဂျက်ဖိုင်တွဲ မတွေ့ပါ",
@@ -1107,7 +1107,7 @@ export const dict = {
   "home.sessions.load.timeout": "ဆာဗာ တုံ့ပြန်ရန် အချိန်ကြာလွန်းသည်",
   "tips.browse.title": "သင့်ဘရောက်ဇာကို ထိန်းချုပ်ပါ",
   "tips.browse.description":
-    "သင့်တက်ဘ်များ၊ login များနှင့် extension များဖြင့် OpenCode ကို သင့်ဘရောက်ဇာတွင် အလုပ်လုပ်ခွင့်ပေးပါ။",
+    "သင့်တက်ဘ်များ၊ အကောင့်ဝင်မှုများနှင့် တိုးချဲ့မှုများဖြင့် OpenCode ကို သင့်ဘရောက်ဇာတွင် အလုပ်လုပ်ခွင့်ပေးပါ။",
   "tips.browse.install": "ထည့်သွင်းရန်",
   "tips.hex.title": "သင့်အသံကို အသုံးပြုပါ",
   "tips.hex.description":
@@ -1143,7 +1143,7 @@ export const dict = {
   "session.queue.undo": "မလုပ်တော့ပါ",
   "session.queue.undoShell": "တန်းစီထားသော prompt ကို မလုပ်တော့မီ shell မုဒ်မှ ထွက်ပါ",
   "session.queue.reverted":
-    "တန်းစီထားသော prompt များကို ပြန်စီခြင်း သို့မဟုတ် တည်းဖြတ်ခြင်းမပြုမီ revert ကို ပြန်လုပ်ပါ",
+    "တန်းစီထားသော prompt များကို ပြန်စီခြင်း သို့မဟုတ် တည်းဖြတ်ခြင်းမပြုမီ ပြန်ပြောင်းထားမှုကို ပြန်လုပ်ပါ",
   "session.todo.moreInProgress": "+{{count}}",
   "session.todo.label.one": "လုပ်စရာ {{count}} ခုအနက် {{done}} ခု ပြီးပါပြီ",
   "session.todo.label.other": "လုပ်စရာ {{count}} ခုအနက် {{done}} ခု ပြီးပါပြီ",
@@ -1247,7 +1247,7 @@ export const dict = {
   "settings.experimental.row.newTimeline.description":
     "အေးဂျင့်လုပ်ဆောင်ခဲ့သည်များကို အုပ်စုဖွဲ့ပြီး အလှည့်အောက်တွင် အခြေအနေလိုင်းတစ်ကြောင်းပြသသော ပြန်လည်ဒီဇိုင်းထားသည့် စက်ရှင်အချိန်ဇယား",
   "settings.experimental.row.newQuestionUI.title": "မေးခွန်း UI အသစ်",
-  "settings.experimental.row.newQuestionUI.description": "ကီးဘုတ်ဦးစားပေး မေးခွန်း dock ကို အစမ်းကြည့်ပါ",
+  "settings.experimental.row.newQuestionUI.description": "ကီးဘုတ်ဦးစားပေး မေးခွန်းအကွက်ကို အစမ်းကြည့်ပါ",
   "settings.experimental.row.sidebarOrganize.title": "ဒေါင်လိုက် ဘေးဘားကို စီစဉ်ရန်",
   "settings.experimental.row.sidebarOrganize.description":
     "ဘေးဘားတွင် စက်ရှင်များ စာရင်းပြပုံကို ရွေးပါ။ ဘေးတက်ဘ်များတွင်သာ သက်ရောက်သည်။",
@@ -1312,9 +1312,9 @@ export const dict = {
     "ဖောင့်မိသားစုတစ်ခုစီကို SIL Open Font License 1.1 အောက်တွင် ဖြန့်ဝေထားပြီး မူပိုင်ခွင့်လိုင်းများကို အောက်တွင် ဖော်ပြထားသည်။",
   "settings.about.notices.eigenpal": "BetterOffice ၏ အစိတ်အပိုင်းအချို့သည် ၎င်းမှ ဆင်းသက်လာသည်။",
   "settings.about.notices.loadFailed": "ပြင်ပအဖွဲ့ အသိပေးချက်များကို ဖွင့်၍ မရပါ",
-  "settings.about.notices.crates.title": "Office engine များရှိ Rust crate များ",
+  "settings.about.notices.crates.title": "Office အင်ဂျင်များရှိ Rust crate များ",
   "settings.about.notices.crates.description":
-    "BetterOffice သည် ဤ crate များကို ၎င်း၏ Word၊ Excel နှင့် PowerPoint engine များအဖြစ် compile လုပ်သည်။ crate တစ်ခုက လိုင်စင်များကို ရွေးချယ်ခွင့်ပေးလျှင် highlight လုပ်ထားသော လိုင်စင်ကို အသုံးပြုသည်။",
+    "BetterOffice သည် ဤ crate များကို ၎င်း၏ Word၊ Excel နှင့် PowerPoint အင်ဂျင်များအဖြစ် compile လုပ်သည်။ crate တစ်ခုက လိုင်စင်များကို ရွေးချယ်ခွင့်ပေးလျှင် အသားပေးပြထားသော လိုင်စင်ကို အသုံးပြုသည်။",
   "settings.about.notices.crates.licenses": "လိုင်စင် စာသားများ",
   "settings.about.notices.crates.count.one": "crate {{count}} ခု",
   "settings.about.notices.crates.count.other": "crate {{count}} ခု",
@@ -1324,12 +1324,12 @@ export const dict = {
     "စက်ရှင်များအကြား ပြောင်းပုံနှင့် လုပ်ဆောင်နေသည်များကို ခြေရာခံပုံကို ရွေးပါ",
   "settings.general.row.interfaceMode.top": "အပေါ်တက်ဘ်များ",
   "settings.general.row.interfaceMode.side": "ဘေးတက်ဘ်များ",
-  "settings.general.row.interfaceMode.inbox": "Inbox",
+  "settings.general.row.interfaceMode.inbox": "ဝင်စာ",
   "settings.appearance.row.zoom.title": "ဇူးမ်",
   "settings.appearance.row.zoom.description": "အက်ပ်တစ်ခုလုံးရှိ စာသားနှင့် ထိန်းချုပ်မှုများကို ပိုကြီးစေပါ",
   "settings.appearance.row.reduceMotion.title": "လှုပ်ရှားမှု လျှော့ရန်",
   "settings.appearance.row.reduceMotion.description":
-    "ကာတွန်းလှုပ်ရှားမှုများကို လျှော့ပါ သို့မဟုတ် သင့်စနစ်အတိုင်း လိုက်ပါ",
+    "လှုပ်ရှားသက်ဝင်မှုများကို လျှော့ပါ သို့မဟုတ် သင့်စနစ်အတိုင်း လိုက်ပါ",
   "settings.appearance.row.reduceMotion.system": "စနစ်",
   "settings.appearance.row.reduceMotion.on": "ဖွင့်",
   "settings.appearance.row.reduceMotion.off": "ပိတ်",
@@ -1360,7 +1360,7 @@ export const dict = {
   "project.settings.folderMissing.description": "ဖိုင်တွဲကို ပြန်ထားပါ သို့မဟုတ် ဤပရောဂျက်ကို ပိတ်ပါ။",
   "settings.timeline.row.backgroundActivity.title": "နောက်ခံ လှုပ်ရှားမှု",
   "settings.timeline.row.backgroundActivity.description":
-    "လုပ်ဆောင်နေသော အေးဂျင့်ခွဲများနှင့် shell များကို composer အပေါ်တွင် ပြပါ",
+    "လုပ်ဆောင်နေသော အေးဂျင့်ခွဲများနှင့် shell များကို prompt အကွက်၏ အပေါ်တွင် ပြပါ",
   "settings.timeline.row.backgroundActivity.off": "ဖျောက်ထားသည်",
   "settings.timeline.row.backgroundActivity.left": "ဘယ်",
   "settings.timeline.row.backgroundActivity.center": "အလယ်",
@@ -1387,7 +1387,7 @@ export const dict = {
   "settings.general.sounds.questions.description": "အေးဂျင့်က မေးခွန်းမေးသောအခါ အသံဖွင့်ပါ",
   "settings.general.sounds.interface.title": "အင်တာဖေ့စ်",
   "settings.general.sounds.interface.description":
-    "Wordmark ပေါ်လာသောအခါနှင့် ၎င်းနှင့် ကစားသောအခါ နူးညံ့သော အသံများ ဖွင့်ပါ",
+    "စာလုံးလိုဂို ပေါ်လာသောအခါနှင့် ၎င်းနှင့် ကစားသောအခါ နူးညံ့သော အသံများ ဖွင့်ပါ",
   "settings.shortcuts.unbind": "ဖြုတ်ရန်",
   "settings.providers.account.manage": "{{provider}} အကောင့်များကို စီမံရန်",
   "settings.providers.account.group": "အကောင့်များ",
@@ -1430,7 +1430,7 @@ export const dict = {
   "usage.section.console": "OpenCode Console",
   "usage.workspace.fallback": "သင့်အလုပ်နေရာ",
   "usage.time": "{{date}} {{time}} ({{zone}})",
-  "usage.go.rolling": "လှိမ့်ဝင်",
+  "usage.go.rolling": "ရွေ့လျားကာလ",
   "usage.go.weekly": "အပတ်စဉ်",
   "usage.go.monthly": "လစဉ်",
   "usage.go.used": "{{percent}}% အသုံးပြုပြီး",
@@ -1442,10 +1442,10 @@ export const dict = {
   "usage.budget.each": "မော်ဒယ်တစ်ခုစီ",
   "usage.budget.vendors": "{{vendors}} မော်ဒယ်များ",
   "usage.budget.vendorsEach": "{{vendors}} မော်ဒယ်တစ်ခုစီ",
-  "usage.budget.vendorsPrice": "input 1M လျှင် {{price}} မှစသော {{vendors}} မော်ဒယ်များ",
-  "usage.budget.vendorsPriceEach": "input 1M လျှင် {{price}} မှစသော {{vendors}} မော်ဒယ်တစ်ခုစီ",
-  "usage.budget.price": "input 1M လျှင် {{price}} မှစသော မော်ဒယ်များ",
-  "usage.budget.priceEach": "input 1M လျှင် {{price}} မှစသော မော်ဒယ်တစ်ခုစီ",
+  "usage.budget.vendorsPrice": "ထည့်သွင်းမှု 1M လျှင် {{price}} မှစသော {{vendors}} မော်ဒယ်များ",
+  "usage.budget.vendorsPriceEach": "ထည့်သွင်းမှု 1M လျှင် {{price}} မှစသော {{vendors}} မော်ဒယ်တစ်ခုစီ",
+  "usage.budget.price": "ထည့်သွင်းမှု 1M လျှင် {{price}} မှစသော မော်ဒယ်များ",
+  "usage.budget.priceEach": "ထည့်သွင်းမှု 1M လျှင် {{price}} မှစသော မော်ဒယ်တစ်ခုစီ",
   "usage.budget.modelsMore.one": "{{first}}၊ {{second}} နှင့် နောက်ထပ် {{count}} ခု",
   "usage.budget.modelsMore.other": "{{first}}၊ {{second}} နှင့် နောက်ထပ် {{count}} ခု",
   "usage.budget.modelsEach": "{{models}} တစ်ခုစီ",

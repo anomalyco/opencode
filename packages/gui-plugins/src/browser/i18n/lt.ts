@@ -60,7 +60,7 @@ export default {
   "zoom.in": "Priartinti",
   "zoom.out": "Nutolinti",
   "zoom.reset": "Atkurti mastelį",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Kopijuoti nuorodą",
   "history.clear": "Išvalyti istoriją",
 }

@@ -30,7 +30,7 @@ export default {
   "move.running": "Sessionen körs. Försök igen när den är klar.",
   "move.removeFailed": "Det gick inte att ta bort worktree",
   "move.recovery.title": "Sessionen flyttades inte",
-  "move.recovery.description": "Den nya worktree {{name}} är klar, men sessionen finns kvar på sin nuvarande plats.",
+  "move.recovery.description": "Worktree {{name}} har skapats, men sessionen finns kvar på sin nuvarande plats.",
   "move.recovery.keep": "Behåll worktree",
   "move.recovery.remove": "Ta bort worktree",
   "mcp.manage": "Hantera MCP-servrar",

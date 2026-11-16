@@ -866,7 +866,7 @@ export const dict = {
   "session.location.moving": "Đang di chuyển phiên…",
   "session.location.moveFailed": "Không di chuyển được phiên",
   "server.thisComputer": "Máy tính này",
-  "command.provider.connect.description": "Đăng nhập OpenCode Go, OpenCode Console hoặc nhà cung cấp mô hình khác",
+  "command.provider.connect.description": "Đăng nhập vào OpenCode Go, OpenCode Console hoặc nhà cung cấp mô hình khác",
   "command.config.reload": "Tải lại cấu hình",
   "command.config.reload.description": "Tải lại tác nhân, lệnh, kỹ năng, máy chủ MCP và plugin từ cấu hình của bạn",
   "command.config.reload.pending": "Đang tải lại cấu hình…",
@@ -990,9 +990,9 @@ export const dict = {
   "provider.connect.form.minItems": "Chọn ít nhất {{count}}",
   "provider.connect.form.maxItems": "Chọn tối đa {{count}}",
   "provider.connect.oauth.auto.description":
-    "Trình duyệt sẽ mở để bạn đăng nhập {{provider}}. Quay lại đây khi hoàn tất.",
+    "Trình duyệt sẽ mở để bạn đăng nhập vào {{provider}}. Quay lại đây khi hoàn tất.",
   "provider.connect.oauth.code.description":
-    "Trình duyệt sẽ mở để bạn đăng nhập {{provider}}. Dán mã ủy quyền nhận được vào bên dưới.",
+    "Trình duyệt sẽ mở để bạn đăng nhập vào {{provider}}. Dán mã ủy quyền nhận được vào bên dưới.",
   "provider.connect.oauth.openBrowser": "Mở trình duyệt",
   "provider.connect.oauth.browserFailed": "Không thể mở trình duyệt của bạn. Chọn Mở trình duyệt để thử lại.",
   "provider.connect.oauth.paste.toggle": "Đăng nhập từ thiết bị khác?",
@@ -1032,9 +1032,9 @@ export const dict = {
   "dialog.mcp.error.viewLabel": "Xem lỗi của {{name}}",
   "dialog.mcp.error.disable": "Tắt",
   "dialog.mcp.signIn": "Đăng nhập",
-  "dialog.mcp.signIn.open": "Đăng nhập {{name}}",
+  "dialog.mcp.signIn.open": "Đăng nhập vào {{name}}",
   "dialog.mcp.signIn.description":
-    "Trình duyệt sẽ mở để bạn đăng nhập {{name}}. Nếu trình duyệt không thể kết nối tới máy đang chạy OpenCode, hãy dán URL mà nó được chuyển hướng đến vào bên dưới.",
+    "Trình duyệt sẽ mở để bạn đăng nhập vào {{name}}. Nếu trình duyệt không thể kết nối tới máy đang chạy OpenCode, hãy dán URL mà nó được chuyển hướng đến vào bên dưới.",
   "dialog.mcp.signIn.syncFailed": "Đã đăng nhập, nhưng không thể làm mới {{name}}: {{error}}",
   "dialog.mcp.error.details":
     "Máy chủ MCP: {{name}}\nTrạng thái: thất bại\nCấu hình: mcp.servers.{{name}}\nLỗi: {{error}}",
@@ -1474,7 +1474,7 @@ export const dict = {
   "usage.footer.budgetsReset": "Ngân sách đặt lại {{time}}",
   "usage.footer.creditsOnly": "Chi tiêu chỉ bị giới hạn bởi tín dụng của {{workspace}}",
   "usage.footer.details": "Xem chi tiết",
-  "usage.signedOut.title": "Chưa đăng nhập OpenCode Console",
+  "usage.signedOut.title": "Chưa đăng nhập vào OpenCode Console",
   "usage.signedOut.body": "Kết nối OpenCode Console để xem ngân sách không gian làm việc và mức sử dụng Go của bạn.",
   "usage.error": "Không thể tải giới hạn sử dụng.",
   "usage.retry": "Thử lại",

@@ -44,7 +44,7 @@ export default {
   "view.table.rows.other": "{{count}} riviä",
   "view.table.columns.one": "{{count}} sarake",
   "view.table.columns.other": "{{count}} saraketta",
-  "view.table.truncated": "Näytetään ensimmäiset {{shown}}/{{total}} riviä.",
+  "view.table.truncated": "Näytetään {{total}} rivistä ensimmäiset {{shown}}.",
   "view.table.copyCell": "Kopioi solu",
   "view.table.copyFailed": "Tätä solua ei voitu kopioida.",
   "view.fontSample": "Wieniläinen sioux'ta puhuva ökyzombie diggaa Åsan roquefort-tacoja.",

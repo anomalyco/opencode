@@ -59,7 +59,7 @@ export default {
   "zoom.in": "Ampliar",
   "zoom.out": "Reducir",
   "zoom.reset": "Restablecer zoom",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Copiar enlace",
   "history.clear": "Borrar historial",
   "site.cookies.count.many": "{{count}} cookies en uso",

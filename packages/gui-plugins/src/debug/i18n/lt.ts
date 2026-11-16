@@ -45,7 +45,7 @@ export default {
   "components.label": "COMPONENTS",
   "components.tip": "Atverti komponentų laboratoriją: visos istorijos su gyvais valdikliais ir jų būsenomis",
   "speed.label": "SPEED",
-  "speed.tip": "Bendras animacijų greitis. Spustelėkite, kad perjungtumėte 0.5× ir 0.25× ir grįžtumėte į 1×.",
+  "speed.tip": "Bendras animacijų greitis. Spustelėkite, kad perjungtumėte 0,5× ir 0,25× ir grįžtumėte į 1×.",
   "slow.label": "SLOW",
   "slow.tip": "Visas suderintas animacijas leisti ketvirčiu greičio.",
 }

@@ -62,7 +62,7 @@ export default {
   "mcp.signIn.expired": "Срок авторизации истёк",
   "mcp.signIn.openBrowser": "Открыть браузер",
   "mcp.signIn.syncFailed": "Вход выполнен, но не удалось обновить {{name}}: {{error}}",
-  "mcp.error.open": "Ошибка {{name}}, посмотреть",
+  "mcp.error.open": "{{name}}: ошибка, посмотреть подробности",
   "mcp.error.title": "Сервер MCP: {{name}}",
   "mcp.error.copy": "Копировать подробности",
   "mcp.error.copyFailed": "Не удалось скопировать подробности ошибки",

@@ -309,7 +309,7 @@ export const dict = {
   "ui.timeline.activity.stoppedSubagents.other": "peatas {{count}} alamagenti",
   "ui.timeline.event.started": "Alustatud",
   "ui.timeline.event.finished": "Lõpetatud",
-  "ui.timeline.subagent.name": "{{name}} Agent",
+  "ui.timeline.subagent.name": "Agent {{name}}",
   "ui.timeline.subagent.updated": "Uuendatud",
   "ui.timeline.subagent.completed": "Lõpetatud",
   "ui.timeline.event.stopped": "Peatatud",

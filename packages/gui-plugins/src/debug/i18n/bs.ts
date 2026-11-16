@@ -19,7 +19,7 @@ export default {
   "close.tip":
     "Sakrij traku za otklanjanje grešaka. Vratite je iz palete komandi: Uključi/isključi traku za otklanjanje grešaka.",
   "command.heap": "Snimi heap snapshotove",
-  "command.heap.description": "Sprema memoriju aplikacije i njenog servera u fasciklu",
+  "command.heap.description": "Čuva snimke memorije aplikacije i njenog servera u fasciklu",
   "heap.loading": "Snimanje heap snapshotova…",
   "heap.done": "Heap snapshotovi su sačuvani",
   "heap.partial": "Neki heap snapshotovi nisu uspjeli. Pogledajte manifest.json.",

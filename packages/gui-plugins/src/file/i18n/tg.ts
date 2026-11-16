@@ -37,7 +37,7 @@ export default {
   "view.download": "Боргирӣ",
   "view.reveal": "Нишон додан дар {{app}}",
   "view.openInBrowser": "Кушодан дар браузер",
-  "view.fullscreen": "Ба экрани пурра",
+  "view.fullscreen": "Фаъол кардани экрани пурра",
   "view.binary": "Файли дуӣ · {{size}}",
   "view.loadFailed": "Ин файлро бор карда натавонист.",
   "view.table.rows.one": "{{count}} сатр",

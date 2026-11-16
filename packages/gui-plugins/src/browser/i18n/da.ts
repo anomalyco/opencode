@@ -58,7 +58,7 @@ export default {
   "zoom.in": "Zoom ind",
   "zoom.out": "Zoom ud",
   "zoom.reset": "Nulstil zoom",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Kopier link",
   "history.clear": "Ryd historik",
 }

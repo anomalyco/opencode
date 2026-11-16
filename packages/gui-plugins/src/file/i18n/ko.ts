@@ -31,7 +31,7 @@ export default {
   "view.fit": "맞춤",
   "view.source": "소스",
   "view.viewSource": "소스 보기",
-  "view.viewPreview": "미리보기 보기",
+  "view.viewPreview": "미리보기로 보기",
   "view.copyContent": "내용 복사",
   "view.actions": "파일 작업",
   "view.download": "다운로드",

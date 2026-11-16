@@ -47,5 +47,5 @@ export default {
   "speed.label": "SPEED",
   "speed.tip": "Global animationshastighet. Klicka för att stega genom 0,5× och 0,25× tillbaka till 1×.",
   "slow.label": "SLOW",
-  "slow.tip": "Kör varje justerad animation i en fjärdedels hastighet.",
+  "slow.tip": "Kör varje justerad animation med en fjärdedels hastighet.",
 }

@@ -44,7 +44,7 @@ export default {
   "components.label": "COMPONENTS",
   "components.tip": "Opna íhlutaprófunarstofuna: allar sögur, með lifandi stýringum og stöðum þeirra",
   "speed.label": "SPEED",
-  "speed.tip": "Alþjóðlegur hreyfimyndahraði. Smelltu til að fara í gegnum 0.5× og 0.25× og aftur í 1×.",
+  "speed.tip": "Heildarhraði hreyfimynda. Smelltu til að fara í gegnum 0,5× og 0,25× og aftur í 1×.",
   "slow.label": "SLOW",
   "slow.tip": "Keyra allar stilltar hreyfimyndir á fjórðungshraða.",
 }

@@ -12,7 +12,7 @@ export default {
   "action.reload": "Znova načítať",
   "model.timedOut": "Prehliadač sa načítaval príliš dlho",
   "command.inspect": "Vybrať prvok na stránke prehliadača",
-  "command.address": "Zamerať adresu prehliadača",
+  "command.address": "Prejsť na panel s adresou prehliadača",
   "command.close": "Zavrieť kartu prehliadača",
   "command.newTab": "Nová karta prehliadača",
   "tab.new": "Nová karta",

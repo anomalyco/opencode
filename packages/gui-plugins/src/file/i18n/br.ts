@@ -37,7 +37,7 @@ export default {
   "view.download": "Baixar",
   "view.reveal": "Mostrar no {{app}}",
   "view.openInBrowser": "Abrir no navegador",
-  "view.fullscreen": "Entrar em tela cheia",
+  "view.fullscreen": "Entrar em tela inteira",
   "view.binary": "Arquivo binário · {{size}}",
   "view.loadFailed": "Não foi possível carregar este arquivo.",
   "view.table.rows.one": "{{count}} linha",

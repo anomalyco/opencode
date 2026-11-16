@@ -35,7 +35,7 @@ export default {
   "view.copyContent": "Kopírovať obsah",
   "view.actions": "Akcie súboru",
   "view.download": "Stiahnuť",
-  "view.reveal": "Zobraziť v {{app}}",
+  "view.reveal": "Zobraziť v aplikácii {{app}}",
   "view.openInBrowser": "Otvoriť v prehliadači",
   "view.fullscreen": "Zobraziť na celú obrazovku",
   "view.binary": "Binárny súbor · {{size}}",

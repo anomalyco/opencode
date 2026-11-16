@@ -356,7 +356,7 @@ export const dict = {
   "ui.timeline.event.failed": "{{count}} fallidos",
   "ui.timeline.event.allFailed": "Fallido",
   "ui.timeline.notice.agentSwitched": "Se cambió a {{agent}}",
-  "ui.timeline.shell.exit": "Salida {{code}}",
+  "ui.timeline.shell.exit": "Código de salida {{code}}",
   "ui.timeline.shell.timedOut": "Tiempo agotado",
   "ui.timeline.shell.stopped": "Detenido",
   "ui.list.failed": "No se pudieron cargar los resultados",

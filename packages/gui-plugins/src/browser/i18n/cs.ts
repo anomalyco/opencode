@@ -60,7 +60,7 @@ export default {
   "zoom.in": "Přiblížit",
   "zoom.out": "Oddálit",
   "zoom.reset": "Obnovit přiblížení",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Kopírovat odkaz",
   "history.clear": "Vymazat historii",
 }

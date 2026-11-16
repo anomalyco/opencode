@@ -42,7 +42,7 @@ export default {
   "motion.focus": "फ़ोकस",
   "motion.enabled": "सक्षम",
   "components.label": "COMPONENTS",
-  "components.tip": "कंपोनेंट लैब खोलें: हर स्टोरी, लाइव नियंत्रण और उसकी स्थितियों के साथ",
+  "components.tip": "घटक लैब खोलें: हर स्टोरी, लाइव नियंत्रण और उसकी स्थितियों के साथ",
   "speed.label": "SPEED",
   "speed.tip": "ग्लोबल एनिमेशन गति। 0.5× और 0.25× से होते हुए वापस 1× पर जाने के लिए क्लिक करें।",
   "slow.label": "SLOW",

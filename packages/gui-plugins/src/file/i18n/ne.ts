@@ -35,7 +35,7 @@ export default {
   "view.copyContent": "सामग्री प्रतिलिपि गर्नुहोस्",
   "view.actions": "फाइल कार्यहरू",
   "view.download": "डाउनलोड गर्नुहोस्",
-  "view.reveal": "{{app}} मा प्रकट गर्नुहोस्",
+  "view.reveal": "{{app}} मा देखाउनुहोस्",
   "view.openInBrowser": "ब्राउजरमा खोल्नुहोस्",
   "view.fullscreen": "पूर्ण स्क्रिनमा जानुहोस्",
   "view.binary": "बाइनरी फाइल · {{size}}",

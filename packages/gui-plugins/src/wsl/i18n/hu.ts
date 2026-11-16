@@ -54,5 +54,5 @@ export default {
   "error.commandTimeout": "A(z) {{command}} {{args}} parancs {{timeout}} ms után időtúllépés miatt megszakadt",
   "error.failedPort": "A port lekérése sikertelen",
   "menu.remove": "Eltávolítás",
-  "error.busy": "{{distro}} egy másik feladattal foglalt. Próbálja újra, ha végzett.",
+  "error.busy": "A(z) {{distro}} egy másik feladattal foglalt. Próbálja újra, ha végzett.",
 }

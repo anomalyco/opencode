@@ -321,7 +321,7 @@ export const dict = {
   "ui.timeline.event.failed": "{{count}} dështuan",
   "ui.timeline.event.allFailed": "Dështoi",
   "ui.timeline.notice.agentSwitched": "U kalua te {{agent}}",
-  "ui.timeline.shell.exit": "Dalja {{code}}",
+  "ui.timeline.shell.exit": "Kodi i daljes {{code}}",
   "ui.timeline.shell.timedOut": "I mbaroi koha",
   "ui.timeline.shell.stopped": "U ndal",
   "ui.list.failed": "Rezultatet nuk u ngarkuan",

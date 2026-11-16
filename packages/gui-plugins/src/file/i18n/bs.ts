@@ -37,7 +37,7 @@ export default {
   "view.download": "Preuzmi",
   "view.reveal": "Prikaži u {{app}}",
   "view.openInBrowser": "Otvori u pregledniku",
-  "view.fullscreen": "Prikaz preko cijelog ekrana",
+  "view.fullscreen": "Prikaži preko cijelog ekrana",
   "view.binary": "Binarna datoteka · {{size}}",
   "view.loadFailed": "Učitavanje ove datoteke nije uspjelo.",
   "view.table.rows.one": "{{count}} red",

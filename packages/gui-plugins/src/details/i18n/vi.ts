@@ -53,9 +53,9 @@ export default {
   "mcp.error.action": "Chi tiết",
   "mcp.error.status": "Kết nối thất bại",
   "mcp.error.actionLabel": "Chi tiết về {{name}}",
-  "mcp.signIn.open": "Đăng nhập {{name}}",
+  "mcp.signIn.open": "Đăng nhập vào {{name}}",
   "mcp.signIn.description":
-    "Trình duyệt sẽ mở để bạn đăng nhập {{name}}. Nếu trình duyệt không thể kết nối tới máy đang chạy OpenCode, hãy dán URL mà nó được chuyển hướng đến vào bên dưới.",
+    "Trình duyệt sẽ mở để bạn đăng nhập vào {{name}}. Nếu trình duyệt không thể kết nối tới máy đang chạy OpenCode, hãy dán URL mà nó được chuyển hướng đến vào bên dưới.",
   "mcp.signIn.waiting": "Đang chờ ủy quyền…",
   "mcp.signIn.failed": "Ủy quyền thất bại: {{error}}",
   "mcp.signIn.expired": "Ủy quyền đã hết hạn",

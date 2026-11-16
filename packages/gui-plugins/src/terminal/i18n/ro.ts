@@ -11,7 +11,7 @@ export default {
   "list.failed": "Nu s-au putut încărca terminalele",
   unavailable: "Terminalele nu sunt disponibile pe acest server",
   "close.failed": "Nu s-a putut închide terminalul",
-  "request.timedOut": "Serverul a răspuns prea lent",
+  "request.timedOut": "Serverul nu a răspuns suficient de rapid",
   "create.failed": "Nu s-a putut crea un terminal",
   "create.unsupported": "Acest server este prea vechi pentru terminale. Actualizează OpenCode pe acest server.",
   "rename.failed": "Nu s-a putut redenumi terminalul",

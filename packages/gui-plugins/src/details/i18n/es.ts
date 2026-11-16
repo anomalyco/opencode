@@ -34,7 +34,7 @@ export default {
     "El nuevo árbol de trabajo {{name}} está listo, pero la sesión sigue en su ubicación actual.",
   "move.recovery.keep": "Conservar árbol de trabajo",
   "move.recovery.remove": "Eliminar árbol de trabajo",
-  "mcp.manage": "Gestionar servidores MCP",
+  "mcp.manage": "Administrar servidores MCP",
   timedOut: "El servidor tardó demasiado en responder",
   "setup.mcp": "Añadir un servidor con OpenCode",
   "setup.mcp.prompt":

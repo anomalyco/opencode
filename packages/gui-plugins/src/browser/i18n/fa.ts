@@ -12,7 +12,7 @@ export default {
   "action.reload": "بارگیری مجدد",
   "model.timedOut": "بارگیری مرورگر بیش از حد طول کشید",
   "command.inspect": "انتخاب یک عنصر در صفحه مرورگر",
-  "command.address": "تمرکز روی نوار آدرس مرورگر",
+  "command.address": "تمرکز روی نوار نشانی مرورگر",
   "command.close": "بستن برگه مرورگر",
   "command.newTab": "برگه جدید مرورگر",
   "tab.new": "برگه جدید",
@@ -58,7 +58,7 @@ export default {
   "zoom.in": "بزرگ‌نمایی",
   "zoom.out": "کوچک‌نمایی",
   "zoom.reset": "بازنشانی بزرگ‌نمایی",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "⁨{{percent}}⁩٪",
   "link.copy": "کپی پیوند",
   "history.clear": "پاک کردن تاریخچه",
 }

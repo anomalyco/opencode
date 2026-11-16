@@ -60,7 +60,7 @@ export default {
   "zoom.in": "Povečaj",
   "zoom.out": "Pomanjšaj",
   "zoom.reset": "Ponastavi povečavo",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Kopiraj povezavo",
   "history.clear": "Počisti zgodovino",
 }

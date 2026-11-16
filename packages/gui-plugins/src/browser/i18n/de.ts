@@ -60,7 +60,7 @@ export default {
   "zoom.in": "Vergrößern",
   "zoom.out": "Verkleinern",
   "zoom.reset": "Zoom zurücksetzen",
-  "zoom.percent": "{{percent}}%",
+  "zoom.percent": "{{percent}} %",
   "link.copy": "Link kopieren",
   "history.clear": "Verlauf löschen",
 }

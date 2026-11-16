@@ -20,7 +20,7 @@ export default {
   disconnected: "Terminali u shkëput",
   connectionFailed: "Lidhja e terminalit dështoi",
   serverOutdated: "Ky server është shumë i vjetër për terminalet; përditësoni OpenCode në të",
-  "quote.actions": "Citoni përzgjedhjen",
+  "quote.actions": "Cito përzgjedhjen",
   "quote.add": "Cito",
   "quote.addWithComment": "Cito dhe komento",
   "quote.addWithoutComment": "Cito pa koment",

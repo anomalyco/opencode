@@ -934,7 +934,7 @@ export const dict = {
   "provider.connect.console.serviceKeyDescription":
     "OpenCode Consoleのサービスアカウント用APIキーを使用して接続します。",
   "provider.connect.console.instructions":
-    "ブラウザで続行してください。ブラウザに表示されたコードが下のコードと一致することを確認してください。",
+    "ブラウザーで続行してください。ブラウザーに表示されたコードが下のコードと一致することを確認してください。",
   "provider.connect.console.deviceCode": "デバイスコード",
   "provider.connect.console.deviceCode.label": "デバイスコード: {{code}}",
   "provider.connect.console.waiting": "確認を待機中",
@@ -944,7 +944,7 @@ export const dict = {
     "サインインリンクをコピーできませんでした。続行するにはConsoleをもう一度開いてください。",
   "provider.connect.console.openAgain": "Consoleをもう一度開く",
   "provider.connect.console.browserFailed":
-    "ブラウザを開けませんでした。再試行するか、サインインリンクをコピーして続行してください。",
+    "ブラウザーを開けませんでした。再試行するか、サインインリンクをコピーして続行してください。",
   "provider.connect.console.expired":
     "このサインインリクエストは期限切れです。新しいデバイスコードを取得するには、もう一度やり直してください。",
   "provider.connect.console.denied": "Consoleでアクセスが拒否されました。接続の準備ができたら再試行してください。",
@@ -960,8 +960,8 @@ export const dict = {
   "provider.connect.chatgptWelcome.usage": "ChatGPTの設定で使用量を管理",
   "provider.connect.chatgptWelcome.confirm": "OK",
   "provider.connect.models.list": "{{provider}}で利用可能なモデル",
-  "provider.connect.chatgptUsageLimit.title": "ChatGPTの使用制限に達しました",
-  "provider.connect.chatgptUsageLimit.description": "ChatGPTの設定で使用量と制限を確認してください。",
+  "provider.connect.chatgptUsageLimit.title": "ChatGPTの利用上限に達しました",
+  "provider.connect.chatgptUsageLimit.description": "ChatGPTの設定で使用量と上限を確認してください。",
   "provider.connect.chatgptUsageLimit.manage": "使用量を管理",
   "provider.connect.chatgptUsageLimit.close": "閉じる",
   "provider.connect.console.refreshFailed":
@@ -971,7 +971,7 @@ export const dict = {
     "アカウントは接続されましたが、このConsoleワークスペースには利用可能なモデルがありません。Consoleで設定を確認してから更新してください。",
   "provider.connect.console.modelsLoading": "モデルはまだ読み込み中です。更新してもう一度確認してください。",
   "provider.connect.console.refresh": "モデルを更新",
-  "provider.connect.console.openingBrowser": "ブラウザを開いています",
+  "provider.connect.console.openingBrowser": "ブラウザーを開いています",
   "provider.connect.remote.label": "{{server}}上",
   "provider.connect.remote.description":
     "OpenCodeの認証情報はこのサーバーに保存されます。モデルはこのサーバーを通じて利用可能になります。",
@@ -995,20 +995,20 @@ export const dict = {
   "provider.connect.form.open": "リンクを開く",
   "provider.connect.form.finished": "完了しました",
   "provider.connect.form.browserFailed":
-    "ブラウザを開けませんでした。下のリンクを開いてから、「完了しました」を選択してください。",
+    "ブラウザーを開けませんでした。下のリンクを開いてから、「完了しました」を選択してください。",
   "provider.connect.form.selectOne": "少なくとも1つのオプションを選択してください",
   "provider.connect.form.minItems": "{{count}}個以上選択してください",
   "provider.connect.form.maxItems": "{{count}}個まで選択してください",
   "provider.connect.oauth.auto.description":
-    "ブラウザが開き、{{provider}}にサインインできます。完了したらここに戻ってください。",
+    "ブラウザーが開き、{{provider}}にサインインできます。完了したらここに戻ってください。",
   "provider.connect.oauth.code.description":
-    "ブラウザが開き、{{provider}}にサインインできます。表示された認証コードを下に貼り付けてください。",
-  "provider.connect.oauth.openBrowser": "ブラウザを開く",
+    "ブラウザーが開き、{{provider}}にサインインできます。表示された認証コードを下に貼り付けてください。",
+  "provider.connect.oauth.openBrowser": "ブラウザーを開く",
   "provider.connect.oauth.browserFailed":
-    "ブラウザを開けませんでした。「ブラウザを開く」を選択して再試行してください。",
+    "ブラウザーを開けませんでした。「ブラウザーを開く」を選択して再試行してください。",
   "provider.connect.oauth.paste.toggle": "別のデバイスからサインインしますか？",
   "provider.connect.oauth.paste.description":
-    "ブラウザからOpenCodeを実行しているマシンにアクセスできない場合は、リダイレクト先のURLを貼り付けてください。",
+    "ブラウザーからOpenCodeを実行しているマシンにアクセスできない場合は、リダイレクト先のURLを貼り付けてください。",
   "provider.connect.oauth.expired": "認証の有効期限が切れました",
   "model.details.input.text": "テキスト",
   "model.details.input.image": "画像",
@@ -1045,7 +1045,7 @@ export const dict = {
   "dialog.mcp.signIn": "サインイン",
   "dialog.mcp.signIn.open": "{{name}}にサインイン",
   "dialog.mcp.signIn.description":
-    "ブラウザが開き、{{name}}にサインインできます。ブラウザからOpenCodeを実行しているマシンにアクセスできない場合は、リダイレクト先のURLを下に貼り付けてください。",
+    "ブラウザーが開き、{{name}}にサインインできます。ブラウザーからOpenCodeを実行しているマシンにアクセスできない場合は、リダイレクト先のURLを下に貼り付けてください。",
   "dialog.mcp.signIn.syncFailed": "サインインしましたが、{{name}}を更新できませんでした: {{error}}",
   "dialog.mcp.error.details": "MCPサーバー: {{name}}\nステータス: 失敗\n設定: mcp.servers.{{name}}\nエラー: {{error}}",
   "dialog.fork.search.empty": "メッセージが見つかりません",
@@ -1081,7 +1081,7 @@ export const dict = {
   "server.connect.link.use": "ペアリングリンクを使用",
   "server.connect.pair.link":
     "サーバーのコンピューターでこのコマンドを実行して、ペアリングリンクとQRコードを取得してください。",
-  "server.connect.scan.failed": "このブラウザではQRコードを読み取れませんでした。接続情報を手動で入力してください。",
+  "server.connect.scan.failed": "このブラウザーではQRコードを読み取れませんでした。接続情報を手動で入力してください。",
   "server.connect.link.expired":
     "このペアリングリンクは期限切れか、すでに使用されています。opencode pair を実行して新しいリンクを取得してください。",
   "server.connect.link.unreachable":
@@ -1098,7 +1098,7 @@ export const dict = {
   "toast.session.import.pending": "セッションをインポート中…",
   "toast.storage.writeFailed.title": "一部の変更が保存されていません",
   "toast.storage.writeFailed.description":
-    "ブラウザのストレージがいっぱいか利用できないため、再読み込みすると設定やレイアウトの変更が失われる可能性があります。",
+    "ブラウザーのストレージがいっぱいか利用できないため、再読み込みすると設定やレイアウトの変更が失われる可能性があります。",
   "notification.question.title": "質問への回答が必要です",
   "notification.elicitation.title": "入力が求められています",
   "home.project.missing.title": "プロジェクトフォルダが見つかりません",
@@ -1107,8 +1107,8 @@ export const dict = {
   "session.tabs.closed.empty": "最近閉じたセッションはありません",
   "home.sessions.load.failed": "セッションを読み込めませんでした",
   "home.sessions.load.timeout": "サーバーの応答に時間がかかりすぎました",
-  "tips.browse.title": "ブラウザを操作",
-  "tips.browse.description": "タブ、ログイン、拡張機能をそのまま使って、OpenCodeにブラウザで作業させましょう。",
+  "tips.browse.title": "ブラウザーを操作",
+  "tips.browse.description": "タブ、ログイン、拡張機能をそのまま使って、OpenCodeにブラウザーで作業させましょう。",
   "tips.browse.install": "インストール",
   "tips.hex.title": "声で入力",
   "tips.hex.description":
@@ -1130,14 +1130,14 @@ export const dict = {
   "session.error.signedOut.description":
     "{{server}}はこのアプリのサインインを受け付けなくなりました。続行するには再度サインインしてください。",
   "session.error.signedOut.signIn": "再度サインイン",
-  "session.freeLimit.title": "無料制限に達しました",
+  "session.freeLimit.title": "無料の利用上限に達しました",
   "session.freeLimit.reset":
-    "無料使用量は{{time}}にリセットされます。続行するには、プロバイダーを接続するかGoに登録してください。",
+    "無料の利用枠は{{time}}にリセットされます。続行するには、プロバイダーを接続するかGoに登録してください。",
   "session.freeLimit.noReset": "続行するには、プロバイダーを接続するかGoに登録してください。",
   "session.freeLimit.connect": "プロバイダーを接続",
   "session.freeLimit.subscribe": "Goに登録 · 月額$10",
-  "session.goLimit.title": "Goの使用制限に達しました。",
-  "session.goLimit.titleNamed": "Go {{name}}の使用制限に達しました。",
+  "session.goLimit.title": "Goの利用上限に達しました。",
+  "session.goLimit.titleNamed": "Go {{name}}の利用上限に達しました。",
   "session.goLimit.reset": "{{time}}にリセットされます。",
   "session.goLimit.extraUsage": "追加使用量を有効にする",
   "session.goLimit.switchFree": "無料モデルに切り替え",
@@ -1227,7 +1227,7 @@ export const dict = {
   "sidebar.inbox.elapsed.days.one": "{{count}}日",
   "sidebar.inbox.elapsed.days.other": "{{count}}日",
   "sidebar.inbox.time.now": "今",
-  "sidebar.recent.pinned": "ピン留め",
+  "sidebar.recent.pinned": "ピン留め済み",
   "sidebar.recent.section.recent": "最近",
   "sidebar.recent.empty": "最近のセッションはありません",
   "sidebar.recent.pin": "ピン留め",
@@ -1236,7 +1236,7 @@ export const dict = {
   "sidebar.recent.unmute": "ミュート解除",
   "sidebar.recent.hide": "非表示",
   "sidebar.recent.unhide": "再表示",
-  "sidebar.recent.unpin": "ピン留めを解除",
+  "sidebar.recent.unpin": "ピン留めを外す",
   "sidebar.recent.moveUp": "上へ移動",
   "sidebar.recent.moveDown": "下へ移動",
   "settings.experimental.row.newIcons.title": "新しいアイコン",
@@ -1305,14 +1305,14 @@ export const dict = {
   "settings.plugins.parts.note":
     'スイッチでオフになるのはプラグインのデスクトップUIのみです。サーバー部分をオフにするには、グローバルの opencode.json の plugins に "-<id>" を追加します。TUI部分をオフにするには、cli.json の plugins に "-" とそのTUIプラグインのIDを追加します。',
   "settings.about.copyVersionFailed": "バージョンをコピーできませんでした",
-  "settings.about.notices.title": "サードパーティの通知",
+  "settings.about.notices.title": "サードパーティに関する通知",
   "settings.about.notices.description": "OpenCodeには次のオープンソースソフトウェアが含まれています。",
   "settings.about.notices.license": "ライセンス本文",
   "settings.about.notices.fonts.title": "Officeプレビューのフォント",
   "settings.about.notices.fonts.description":
     "各ファミリーは、以下の著作権表示とともにSIL Open Font License 1.1の下で配布されています。",
   "settings.about.notices.eigenpal": "BetterOfficeの一部はこれに由来しています。",
-  "settings.about.notices.loadFailed": "サードパーティの通知を読み込めませんでした",
+  "settings.about.notices.loadFailed": "サードパーティに関する通知を読み込めませんでした",
   "settings.about.notices.crates.title": "OfficeエンジンのRustクレート",
   "settings.about.notices.crates.description":
     "BetterOfficeは、これらのクレートをWord、Excel、PowerPointの各エンジンにコンパイルしています。クレートが複数のライセンスから選択できる場合は、強調表示されたライセンスが適用されます。",
@@ -1320,14 +1320,14 @@ export const dict = {
   "settings.about.notices.crates.count.one": "{{count}}個のクレート",
   "settings.about.notices.crates.count.other": "{{count}}個のクレート",
   "settings.about.notices.crates.appliesTo": "{{names}}に適用",
-  "settings.general.row.interfaceMode.title": "インターフェースのレイアウト",
+  "settings.general.row.interfaceMode.title": "インターフェイスのレイアウト",
   "settings.general.row.interfaceMode.description": "セッションの切り替え方法と、実行中の作業の把握方法を選択します",
   "settings.general.row.interfaceMode.top": "上部タブ",
   "settings.general.row.interfaceMode.side": "サイドタブ",
   "settings.general.row.interfaceMode.inbox": "受信トレイ",
   "settings.appearance.row.zoom.title": "ズーム",
   "settings.appearance.row.zoom.description": "アプリ全体のテキストとコントロールを大きくします",
-  "settings.appearance.row.reduceMotion.title": "視差効果を減らす",
+  "settings.appearance.row.reduceMotion.title": "モーションを減らす",
   "settings.appearance.row.reduceMotion.description": "アニメーションを減らすか、システム設定に合わせます",
   "settings.appearance.row.reduceMotion.system": "システム",
   "settings.appearance.row.reduceMotion.on": "オン",
@@ -1381,7 +1381,7 @@ export const dict = {
   "settings.general.notifications.questions.description": "エージェントが質問したときにシステム通知を表示します",
   "settings.general.sounds.questions.title": "質問",
   "settings.general.sounds.questions.description": "エージェントが質問したときに音を再生します",
-  "settings.general.sounds.interface.title": "インターフェース",
+  "settings.general.sounds.interface.title": "インターフェイス",
   "settings.general.sounds.interface.description": "ワードマークの表示時や操作時に控えめな音を再生します",
   "settings.shortcuts.unbind": "割り当てを解除",
   "settings.providers.account.manage": "{{provider}}のアカウントを管理",
@@ -1487,6 +1487,6 @@ export const dict = {
   "usage.footer.details": "詳細を表示",
   "usage.signedOut.title": "OpenCode Consoleにサインインしていません",
   "usage.signedOut.body": "OpenCode Consoleを接続すると、ワークスペースの予算とGoの使用量を確認できます。",
-  "usage.error": "使用制限を読み込めませんでした。",
+  "usage.error": "利用上限を読み込めませんでした。",
   "usage.retry": "再試行",
 }
