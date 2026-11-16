@@ -3179,6 +3179,98 @@ fn fetch_across_a_reload_with_a_changed_view(slow: bool) {
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Ok 0\n");
 }
 
+// Expected (big-boi's catalog recheck): a new build that, right after its setup, registers a command and starts a fetch,
+// all of which the host reads before it registers the build: the command exists and the fetch settles once, with its
+// reply. They went to the build it replaces, as they named only the plugin: the command was refused as that build's,
+// and the fetch took its relay, whose reply reached nobody.
+#[test]
+fn a_new_builds_first_command_and_fetch_reach_it() {
+    new_build_registers_and_fetches(true);
+}
+
+// Expected (big-boi's catalog recheck, the control): the same once the host registered the new build.
+#[test]
+fn a_new_builds_command_and_fetch_after_its_adoption_reach_it() {
+    new_build_registers_and_fetches(false);
+}
+
+/// A plugin's second build registers a command and fetches, `early` right after its setup, its `Loaded`, manifest and
+/// effects held until all three came, so the host reads them before its deferred registration; else from a command
+/// once the host registered it.
+fn new_build_registers_and_fetches(early: bool) {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("built");
+    let plugin = root.path().join("config/plugins/build");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = |build: &str| {
+        format!(
+            "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.build\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"build.{build}\", title: \"build.{build}\" }}, () => {{}})\n  if ({build:?} === \"one\") return\n  const late = () => {{\n    carrier.command({{ name: \"build.late\", title: \"build.late\" }}, () => appendFileSync({log:?}, \"late\\n\"))\n    carrier.fetch({{ method: \"GET\", path: \"/api/build\" }}).then((result) => appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \" \" + carrier.pendingFetches() + \"\\n\"))\n  }}\n  if ({early}) setTimeout(late, 0)\n  else carrier.command({{ name: \"build.go\", title: \"build.go\" }}, late)\n}} }}\n"
+        )
+    };
+    std::fs::write(plugin.join("tui.ts"), module("one")).unwrap();
+    let server = support::Fake::new(|seen| match seen.path.as_str() {
+        "/api/build" => (200, serde_json::json!({ "built": true })),
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let requests = server.log();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.build");
+    let (h, scripts) = (&pipe.harness, pipe.scripts());
+    let runs = |name: &str| matches!(h.tui.keymap.dispatch(name, None), opentui::keymap::RunResult::Ok);
+    let held = |types: &[&str]| {
+        h.wait(&format!("{types:?} held"), || {
+            h.app.advance(Duration::from_millis(1));
+            let held = scripts.held_types();
+            types.iter().all(|kind| held.iter().any(|known| known == kind))
+        })
+    };
+    if early {
+        scripts.hold_answers(true);
+    }
+    std::fs::write(plugin.join("tui.ts"), module("two")).unwrap();
+    opencode_tui::plugins::host::reconcile(&h.tui);
+    if early {
+        // The loader sets the build up once it read what the load described: that goes on, what follows is held.
+        h.wait("the load described or set up", || {
+            h.app.advance(Duration::from_millis(1));
+            scripts.held_types().iter().any(|kind| kind == "described" || kind == "loaded")
+        });
+        if !scripts.held_types().iter().any(|kind| kind == "loaded") {
+            scripts.hold_answers(false);
+            scripts.hold_answers(true);
+        }
+        held(&["loaded", "manifest", "effects"]);
+        scripts.hold_answers(false);
+    } else {
+        h.wait("the new build is registered", || {
+            h.app.advance(Duration::from_millis(1));
+            runs("build.two")
+        });
+        assert!(runs("build.go"));
+    }
+    h.wait("the fetch ended", || {
+        h.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "Ok 0\n");
+    h.wait("the late command is registered", || {
+        h.app.advance(Duration::from_millis(1));
+        runs("build.late")
+    });
+    h.wait("the late command ran", || {
+        h.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with("late\n"))
+    });
+    let fetched = requests.lock().unwrap().iter().filter(|seen| seen.path == "/api/build").count();
+    assert_eq!(fetched, 1, "one request for the one fetch");
+    assert_eq!(pipe.status("example.build"), Some(opencode_plugin::Status::Active));
+}
+
 // Expected (bigboi's final pass): a TypeScript plugin's fetch that the host does not take, while another plugin's
 // fan-out fills the queue of effects, ends with an error, where its await never ended; once the queue drains, a fetch
 // gets its reply.

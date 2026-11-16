@@ -126,7 +126,15 @@ pub enum Down {
     },
     /// What the effects of a call (`c<seq>`), a setup (`setup`) or a batch of the plugin's (`b<seq>`) answered, one
     /// value each ([`HostRequest`]'s results).
-    Answered { id: String, key: String, results: Vec<serde_json::Value> },
+    Answered {
+        id: String,
+        /// The JS host's activation whose effects these answer: a candidate set up for a reload, which the JS host
+        /// knows by the plugin's ID before the host does, never takes the running one's (big-boi's catalog recheck).
+        #[serde(default)]
+        activation: u64,
+        key: String,
+        results: Vec<serde_json::Value>,
+    },
     /// The host cancelled `request` of activation `activation`, as the mount that owns it closed: no reply comes, and
     /// the fetch that waits for it rejects with an `AbortError`.
     Cancelled { activation: u64, request: opencode_plugin_abi::RequestId },
@@ -201,14 +209,10 @@ pub enum Up {
         pid: u32,
     },
     /// Every message with a sequence up to `seq` was received; their handlers may still run.
-    Ack {
-        seq: u64,
-    },
+    Ack { seq: u64 },
     /// The JS host starts the work of `seq`: a load's setup, a handler, a view. Work it did not start when it ended
     /// never ran.
-    Started {
-        seq: u64,
-    },
+    Started { seq: u64 },
     /// The setup of load or activation `seq` returned: the plugin's ID, what it registered, the command names whose
     /// keys hold (`hold`), and the effects setup asked for.
     Loaded {
@@ -227,10 +231,7 @@ pub enum Up {
         id: Option<String>,
     },
     /// Load `seq`, without setup, imported plugin `id`.
-    Described {
-        seq: u64,
-        id: String,
-    },
+    Described { seq: u64, id: String },
     /// The target of load `seq` has no TUI module: `reason` is what its resolution said.
     Unsupported {
         seq: u64,
@@ -250,6 +251,9 @@ pub enum Up {
     /// [`Down::Answered`] under `seq`, the plugin's own count.
     Effects {
         id: String,
+        /// The JS host's activation that sent it, by the load whose setup made it ([`Down::Load`]); 0 names none.
+        #[serde(default)]
+        activation: u64,
         seq: u64,
         effects: Vec<HostRequest>,
     },
@@ -258,30 +262,39 @@ pub enum Up {
     /// Plugin `id` reads `request` under `key`: the host pushes its value now and each time it changes.
     Watch {
         id: String,
+        /// The JS host's activation that sent it, by the load whose setup made it ([`Down::Load`]); 0 names none.
+        #[serde(default)]
+        activation: u64,
         key: String,
         request: HostRequest,
     },
     Unwatch {
         id: String,
+        /// The JS host's activation that sent it, by the load whose setup made it ([`Down::Load`]); 0 names none.
+        #[serde(default)]
+        activation: u64,
         key: String,
     },
     /// Plugin `id` failed outside a call: a promise rejected, a timer threw.
     Fail {
         id: String,
+        /// The JS host's activation that sent it, by the load whose setup made it ([`Down::Load`]); 0 names none.
+        #[serde(default)]
+        activation: u64,
         error: String,
     },
     /// Plugin `id` registered other commands or surfaces than its setup did: the host takes them as a reload.
     Manifest {
         id: String,
+        /// The JS host's activation that sent it, by the load whose setup made it ([`Down::Load`]); 0 names none.
+        #[serde(default)]
+        activation: u64,
         manifest: Manifest,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         holds: Vec<String>,
     },
     /// Everything before ping `seq` was handled; `waiting` when a tree waits for the host to adopt the last one.
-    Pong {
-        seq: u64,
-        waiting: bool,
-    },
+    Pong { seq: u64, waiting: bool },
     Log {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,

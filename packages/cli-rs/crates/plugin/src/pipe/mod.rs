@@ -449,6 +449,16 @@ struct Load {
 const RELOADS: usize = 64;
 const RELOAD_WINDOW: Duration = Duration::from_secs(5);
 
+/// What a reload of a plugin's registrations comes to ([`Scripts::admit_reload`]).
+pub(crate) enum Reload {
+    /// Its load runs as the sending activation: it is taken.
+    Take,
+    /// Its load is another build's, loaded or loading: it is ignored, and not counted.
+    Stale,
+    /// It is past [`RELOADS`] within [`RELOAD_WINDOW`]: the plugin fails.
+    Churning,
+}
+
 impl Load {
     /// Whether the JS host's activation that `loaded` set up, now `js`, runs as this load, so a manifest of it may change
     /// the load: the load holds `loaded` itself, or what a reload of that activation made of it, not yet registered. A
@@ -520,6 +530,18 @@ fn parted(message: &Down) -> Option<Down> {
     };
     let call = Request::Reply { id: *request, result: Ok(serde_json::Value::Null) };
     Some(Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone(), parted: true })
+}
+
+/// The plugin and the JS host's activation that sent `up`, a message of a plugin's own.
+fn sender(up: &Up) -> Option<(String, u64)> {
+    match up {
+        Up::Effects { id, activation, .. }
+        | Up::Watch { id, activation, .. }
+        | Up::Unwatch { id, activation, .. }
+        | Up::Fail { id, activation, .. }
+        | Up::Manifest { id, activation, .. } => Some((id.clone(), *activation)),
+        _ => None,
+    }
 }
 
 /// The bytes of `value`'s JSON, counted without keeping them.
@@ -782,6 +804,17 @@ impl Scripts {
     #[doc(hidden)]
     pub fn waiting(&self) -> usize {
         self.waiting.borrow().len()
+    }
+
+    /// The types of what the JS host sent while the tests hold it ([`Scripts::hold_answers`]), in order.
+    #[doc(hidden)]
+    pub fn held_types(&self) -> Vec<String> {
+        let held = self.held.borrow();
+        let types = held
+            .iter()
+            .flatten()
+            .map(|up| serde_json::to_value(up).ok().and_then(|value| value["type"].as_str().map(str::to_owned)));
+        types.map(Option::unwrap_or_default).collect()
     }
 
     /// Holds what the JS host sends, unhandled and in order, while `held`; then handles it. A test closes a mount
@@ -1096,8 +1129,9 @@ impl Scripts {
             }
             // A request's ID, a number, is kept: without it the JS host reads an accepted request as refused, which
             // then runs while its caller retries (bigboi's verification). A read's value goes, as a failed read.
-            Down::Answered { id, key, results } if !self.sendable(message) => Down::Answered {
+            Down::Answered { id, activation, key, results } if !self.sendable(message) => Down::Answered {
                 id: id.clone(),
+                activation: *activation,
                 key: key.clone(),
                 results: results
                     .iter()
@@ -1494,32 +1528,11 @@ impl Scripts {
                     Some(Waiting::View(_) | Waiting::Ping) | None => {}
                 }
             }
-            Up::Effects { ref id, .. } | Up::Watch { ref id, .. } if self.guest(id).is_none() => self.keep(up),
-            Up::Effects { id, seq, effects } => {
-                if let Some(guest) = self.guest(&id) {
-                    guest.effects(&format!("b{seq}"), effects, false, "update");
-                }
-            }
-            Up::Watch { id, key, request } => {
-                if let Some(guest) = self.guest(&id) {
-                    guest.watch(key, request);
-                }
-            }
-            Up::Unwatch { id, key } => {
-                if let Some(guest) = self.guest(&id) {
-                    guest.unwatch(&key);
-                }
-            }
-            Up::Fail { id, error } => {
-                if let Some(guest) = self.guest(&id) {
-                    guest.fail(error);
-                }
-            }
-            Up::Manifest { id, manifest, holds } => {
-                if let Some(guest) = self.guest(&id) {
-                    guest.activated(manifest, holds, Vec::new());
-                }
-            }
+            up @ (Up::Effects { .. }
+            | Up::Watch { .. }
+            | Up::Unwatch { .. }
+            | Up::Fail { .. }
+            | Up::Manifest { .. }) => self.from_plugin(up),
             Up::Pong { seq, waiting } => {
                 self.take_waiting(seq);
                 self.pong.set(Some((seq, waiting)));
@@ -1540,10 +1553,45 @@ impl Scripts {
         }
     }
 
+    /// A message of a plugin's own (effects, a watch, a failure, a manifest), routed by the JS host's activation that
+    /// sent it, not by the plugin's ID alone (big-boi's catalog recheck): to the guest that runs that activation; kept
+    /// for the guest it becomes while it is a load the loader has not registered yet; else dropped, as a version the host
+    /// replaced or never took sent it. A new build's first fetch took the replaced guest's relay and never settled, and
+    /// its manifest was refused as the old guest's, and charged to its reloads.
+    fn from_plugin(self: &Rc<Self>, up: Up) {
+        let Some((id, activation)) = sender(&up) else { return };
+        let guest = self.guest(&id).filter(|guest| activation == 0 || guest.activation() == activation);
+        let Some(guest) = guest else {
+            if self.candidate(&id, activation) {
+                return self.keep(up);
+            }
+            log::debug!("plugin {id}: a message of its activation {activation}, which the host does not run; dropped");
+            return;
+        };
+        match up {
+            Up::Effects { seq, effects, .. } => guest.effects(&format!("b{seq}"), effects, false, "update"),
+            Up::Watch { key, request, .. } => guest.watch(key, request),
+            Up::Unwatch { key, .. } => guest.unwatch(&key),
+            Up::Fail { error, .. } => guest.fail(error),
+            Up::Manifest { manifest, holds, .. } => guest.activated(manifest, holds, Vec::new()),
+            _ => {}
+        }
+    }
+
+    /// Whether `activation` of plugin `id` is a load answered and not registered yet, whose messages wait for its guest:
+    /// one that names no activation waits for any.
+    fn candidate(&self, id: &str, activation: u64) -> bool {
+        activation == 0
+            || self.loads.borrow().values().any(|load| {
+                !load.registered
+                    && matches!(&load.state, Loading::Loaded(loaded) if loaded.id == id && loaded.seq == activation)
+            })
+    }
+
     /// Keeps `up` of a plugin the loader has not registered yet, for its activation.
     fn keep(&self, up: Up) {
         const EARLY: usize = 256;
-        let (Up::Effects { id, .. } | Up::Watch { id, .. }) = &up else { return };
+        let Some((id, _)) = sender(&up) else { return };
         let mut early = self.early.borrow_mut();
         let kept = early.entry(id.clone()).or_default();
         match kept.len() < EARLY {
@@ -1574,6 +1622,18 @@ impl Scripts {
         (load.state, load.registered) = (state, false);
         drop(loads);
         self.reconcile();
+    }
+
+    /// Whether a reload of the registrations of the activation that `loaded` set up, now `js`, is taken at `now`: only
+    /// while its load runs as that activation ([`Load::runs`]), and only then charged to the plugin's reloads, so a
+    /// refused one never counts against the build that replaced it (big-boi's catalog recheck).
+    pub(crate) fn admit_reload(&self, loaded: &Rc<guest::Loaded>, js: u64, now: Instant) -> Reload {
+        let current = self.loads.borrow().get(&loaded.target).is_some_and(|load| load.runs(loaded, js));
+        match (current, current && self.reloaded(&loaded.id, now)) {
+            (false, _) => Reload::Stale,
+            (true, true) => Reload::Churning,
+            (true, false) => Reload::Take,
+        }
     }
 
     /// Notes a reload of plugin `id`'s registrations at `now`: whether it is past [`RELOADS`] within [`RELOAD_WINDOW`].
@@ -2018,32 +2078,51 @@ mod tests {
     // Expected (big-boi's catalog review, CT-1): a manifest changes its target's load only while that load is the one
     // the sending activation runs as: its own, what a reload of it made and the loader has not taken yet, or its own
     // after a restart gave the activation another sequence; not another build's, loaded or still loading.
-    #[test]
-    fn a_manifest_changes_only_the_load_its_activation_runs_as() {
-        let loaded = |seq: u64| {
-            Rc::new(guest::Loaded {
-                id: "p".into(),
-                target: "t".into(),
-                dir: PathBuf::new(),
-                confined: false,
-                options: None,
-                seq,
-                manifest: opencode_plugin_abi::Manifest { id: "p".into(), ..Default::default() },
-                holds: Vec::new(),
-                effects: RefCell::new(None),
-                watches: RefCell::default(),
-                continues: None,
-                relay: RefCell::default(),
-            })
-        };
-        let load = |state: Loading| Load {
+    /// What load `seq` of plugin `p` at target `t` answered.
+    fn loaded(seq: u64) -> Rc<guest::Loaded> {
+        Rc::new(guest::Loaded {
+            id: "p".into(),
+            target: "t".into(),
             dir: PathBuf::new(),
             confined: false,
             options: None,
-            digest: 1,
-            state,
-            registered: true,
-        };
+            seq,
+            manifest: opencode_plugin_abi::Manifest { id: "p".into(), ..Default::default() },
+            holds: Vec::new(),
+            effects: RefCell::new(None),
+            watches: RefCell::default(),
+            continues: None,
+            relay: RefCell::default(),
+        })
+    }
+
+    /// A load in `state`, registered.
+    fn load(state: Loading) -> Load {
+        Load { dir: PathBuf::new(), confined: false, options: None, digest: 1, state, registered: true }
+    }
+
+    // Expected (big-boi's catalog recheck): a reload the load guard refuses, from a build its load replaced, is not
+    // charged to the plugin's reloads: a hundred of them leave the count at nothing, and the build that runs still takes
+    // its 64 before it churns.
+    #[test]
+    fn a_refused_reload_is_not_charged() {
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(Config::new("bun".into()), &host);
+        let (old, current) = (loaded(3), loaded(5));
+        scripts.loads.borrow_mut().insert("t".into(), load(Loading::Loaded(current.clone())));
+        let now = Instant::now();
+        for _ in 0..100 {
+            assert!(matches!(scripts.admit_reload(&old, 3, now), Reload::Stale));
+        }
+        assert!(scripts.reloads.borrow().is_empty(), "a refused reload was charged");
+        for index in 0..RELOADS {
+            assert!(matches!(scripts.admit_reload(&current, 5, now), Reload::Take), "reload {index}");
+        }
+        assert!(matches!(scripts.admit_reload(&current, 5, now), Reload::Churning));
+    }
+
+    #[test]
+    fn a_manifest_changes_only_the_load_its_activation_runs_as() {
         let own = loaded(3);
         assert!(load(Loading::Loaded(own.clone())).runs(&own, 3), "its own");
         assert!(load(Loading::Loaded(loaded(3))).runs(&own, 3), "what its reload made");
@@ -2113,9 +2192,10 @@ mod tests {
         let held = Down::Ping { seq: 1 };
         scripts.overflowed(held.clone(), 512);
         let cancelled = Down::Cancelled { activation: 1, request: opencode_plugin_abi::RequestId(5) };
-        let answered = Down::Answered { id: "p".into(), key: "c1".into(), results: vec![serde_json::json!(7)] };
+        let answered =
+            Down::Answered { id: "p".into(), activation: 1, key: "c1".into(), results: vec![serde_json::json!(7)] };
         let big = serde_json::json!("x".repeat(wire::CONTROL_CAP));
-        let huge = Down::Answered { id: "p".into(), key: "c2".into(), results: vec![big.clone(), big] };
+        let huge = Down::Answered { id: "p".into(), activation: 1, key: "c2".into(), results: vec![big.clone(), big] };
         let call = Down::Call {
             seq: 2,
             id: "p".into(),
@@ -2129,7 +2209,12 @@ mod tests {
         scripts.overflowed(Down::Forget { target: "t".into() }, 64);
         scripts.overflowed(call, 64);
         scripts.refuse(&huge, wire::CONTROL_CAP + 1);
-        let failed = Down::Answered { id: "p".into(), key: "c2".into(), results: vec![serde_json::Value::Null; 2] };
+        let failed = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c2".into(),
+            results: vec![serde_json::Value::Null; 2],
+        };
         let skipped = Down::Skipped { seq: 2 };
         let kept: Vec<Down> = scripts.overflow.borrow().0.iter().map(|(message, _)| message.clone()).collect();
         let expected = [held, cancelled, answered, skipped, failed];
@@ -2168,9 +2253,10 @@ mod tests {
         let _dir = quiet(&scripts, &host);
         let read = serde_json::json!("x".repeat(8 << 10));
         let results = vec![serde_json::json!(7), read, serde_json::json!(true), serde_json::Value::Null];
-        let answered = Down::Answered { id: "p".into(), key: "c1".into(), results };
+        let answered = Down::Answered { id: "p".into(), activation: 1, key: "c1".into(), results };
         let reduced = Down::Answered {
             id: "p".into(),
+            activation: 1,
             key: "c1".into(),
             results: vec![
                 serde_json::json!(7),
@@ -2191,7 +2277,12 @@ mod tests {
         assert!(scripts.overflow.borrow().0.is_empty());
         assert!(scripts.sendable(&reduced), "the reduced answer goes as one frame");
         // Scalars past any frame: nothing goes, nothing loops, and the JS host ends once.
-        let ids = Down::Answered { id: "p".into(), key: "c2".into(), results: vec![serde_json::json!(1); 4 << 10] };
+        let ids = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c2".into(),
+            results: vec![serde_json::json!(1); 4 << 10],
+        };
         let ends = scripts.ends.borrow().len();
         scripts.send(ids.clone(), None);
         scripts.send(ids, None);
@@ -2257,6 +2348,7 @@ mod tests {
         let read = |bytes: usize| serde_json::json!("r".repeat(bytes));
         let answered = |key: &str, id: u64, bytes: usize| Down::Answered {
             id: "p".into(),
+            activation: 1,
             key: key.into(),
             results: vec![serde_json::json!(id), read(bytes), serde_json::json!(true)],
         };
@@ -2327,8 +2419,9 @@ mod tests {
                 .iter()
                 .flat_map(|message| match message {
                     _ if fits(message) => vec![message.clone()],
-                    Down::Answered { id, key, results } => vec![Down::Answered {
+                    Down::Answered { id, activation, key, results } => vec![Down::Answered {
                         id: id.clone(),
+                        activation: *activation,
                         key: key.clone(),
                         results: results
                             .iter()

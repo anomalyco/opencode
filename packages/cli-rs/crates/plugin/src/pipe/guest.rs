@@ -334,18 +334,19 @@ impl Guest {
             return;
         }
         let Some(scripts) = self.scripts.upgrade() else { return };
-        if scripts.reloaded(self.id(), std::time::Instant::now()) {
-            let (count, window) = (super::RELOADS, super::RELOAD_WINDOW.as_secs());
-            self.fail(format!("it changed its registrations more than {count} times in {window} s, and never settled"));
-            return;
-        }
-        // Only the load this activation runs as is changed: a version that load replaced, still running, does not
-        // overwrite it (big-boi's catalog review).
-        let current =
-            scripts.loads.borrow().get(&self.loaded.target).is_some_and(|load| load.runs(&self.loaded, self.js.get()));
-        if !current {
-            log::warn!("plugin {}: a reload of registrations its load no longer runs; ignored", self.id());
-            return;
+        match scripts.admit_reload(&self.loaded, self.js.get(), std::time::Instant::now()) {
+            super::Reload::Take => {}
+            super::Reload::Stale => {
+                log::warn!("plugin {}: a reload of registrations its load no longer runs; ignored", self.id());
+                return;
+            }
+            super::Reload::Churning => {
+                let (count, window) = (super::RELOADS, super::RELOAD_WINDOW.as_secs());
+                self.fail(format!(
+                    "it changed its registrations more than {count} times in {window} s, and never settled"
+                ));
+                return;
+            }
         }
         // The replacement adopts this activation of the JS host: this guest's end must not deactivate it (review
         // carbon-2). Its mounts still end on the JS host, which keeps them for the activation (P8).
@@ -439,7 +440,8 @@ impl Guest {
                 guest.refresh();
             }
         });
-        self.send(Down::Answered { id: self.id().to_owned(), key: key.to_owned(), results }, None);
+        let activation = self.js.get();
+        self.send(Down::Answered { id: self.id().to_owned(), activation, key: key.to_owned(), results }, None);
     }
 
     /// Fails the plugin with `error`: it is not called again, and the host says so once.
