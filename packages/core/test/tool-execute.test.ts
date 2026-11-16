@@ -418,6 +418,34 @@ test("execute supports callable namespace tools", async () => {
   expect(result.content).toEqual([{ type: "text", text: '["admin","created"]' }])
 })
 
+test("each call in a program gets its own ID and asks permission under the execute call", async () => {
+  const ids: string[] = []
+  const parents: Array<string | undefined> = []
+  const input = Schema.Struct({})
+  const record = {
+    name: "record",
+    description: "Record the call",
+    input,
+    execute: (_, context) =>
+      Permission.Parent.pipe(
+        Effect.map((parent) => {
+          ids.push(context.id)
+          parents.push(parent)
+          return { content: "ok" }
+        }),
+      ),
+  } satisfies Info<typeof input>
+  await Effect.runPromise(
+    createCodeMode(new Map<string, Info>([["record", record]])).execute(
+      { code: "await Promise.all([tools.record({}), tools.record({})])" },
+      context,
+    ),
+  )
+  expect(new Set(ids).size).toBe(2)
+  expect(ids).not.toContain(context.id)
+  expect(parents).toEqual([context.id, context.id])
+})
+
 test("executions share the prepared runtime of an inventory while keeping per-call state", async () => {
   let conversions = 0
   const echo: Info = {
@@ -437,7 +465,8 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
         },
       },
     },
-    execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
+    execute: (input) =>
+      Permission.Parent.pipe(Effect.map((parent) => ({ content: `${parent}:${(input as { value: string }).value}` }))),
   }
   const inventory = { tools: new Map([["echo", echo]]) }
   const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)

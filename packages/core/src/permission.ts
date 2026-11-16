@@ -64,6 +64,14 @@ export const Unattended = Context.Reference<Permission.Ruleset | undefined>("@op
   defaultValue: () => undefined,
 })
 
+/**
+ * The tool call that requests made in this scope show under. A Code Mode program sets it for the calls it makes,
+ * which have IDs of their own but no row.
+ */
+export const Parent = Context.Reference<Tool.CallID | undefined>("@opencode/Permission/Parent", {
+  defaultValue: () => undefined,
+})
+
 export class DeclinedError extends Schema.TaggedError<DeclinedError>()("Permission.DeclinedError", {}) {}
 
 export class CorrectedError extends Schema.TaggedError<CorrectedError>()("Permission.CorrectedError", {
@@ -181,6 +189,13 @@ const layer = Layer.effect(
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
+    // Every entry point reads it, so the `evaluate` hook and the request name the same call.
+    const attributed = Effect.fnUntraced(function* (input: AssertInput) {
+      const parent = yield* Parent
+      if (parent === undefined || input.source?.type !== "tool") return input
+      return { ...input, source: { ...input.source, id: parent } }
+    })
+
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
@@ -245,7 +260,8 @@ const layer = Layer.effect(
         }),
       )
 
-    const ask = Effect.fn("Permission.ask")(function* (input: AssertInput) {
+    const ask = Effect.fn("Permission.ask")(function* (raw: AssertInput) {
+      const input = yield* attributed(raw)
       if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
       const result = yield* evaluateInput(input)
       const value = request(input, result.message)
@@ -253,8 +269,9 @@ const layer = Layer.effect(
       return { id: value.id, effect: result.effect }
     })
 
-    const assert = Effect.fn("Permission.assert")((input: AssertInput) =>
+    const assert = Effect.fn("Permission.assert")((raw: AssertInput) =>
       Effect.gen(function* () {
+        const input = yield* attributed(raw)
         if (closed) return yield* Effect.die(new DeclinedError())
         const result = yield* evaluateInput(input)
         return yield* Effect.uninterruptibleMask((restore) =>
@@ -287,7 +304,8 @@ const layer = Layer.effect(
       }),
     )
 
-    const assertNotDenied = Effect.fn("Permission.assertNotDenied")(function* (input: AssertInput) {
+    const assertNotDenied = Effect.fn("Permission.assertNotDenied")(function* (raw: AssertInput) {
+      const input = yield* attributed(raw)
       const result = yield* evaluateInput(input)
       if (result.effect !== "deny") return
       return yield* new BlockedError({
@@ -298,7 +316,8 @@ const layer = Layer.effect(
       })
     })
 
-    const allows = Effect.fn("Permission.allows")(function* (input: AssertInput) {
+    const allows = Effect.fn("Permission.allows")(function* (raw: AssertInput) {
+      const input = yield* attributed(raw)
       if (closed) return false
       return (yield* evaluateInput(input)).effect === "allow"
     })
