@@ -872,7 +872,6 @@ export function createBrowserPane(input: {
       handle?.activity.set(id, activity)
 
       if (changed && current?.previewUsed()) dispatchBinding(binding, {type:"tab.restricted", tabID:id, url:current.state().url})
-      else if (changed && current) current.contents.setBackgroundThrottling(false)
 
       return load(binding, id, identity)
     }

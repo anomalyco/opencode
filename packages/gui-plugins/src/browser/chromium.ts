@@ -1,6 +1,7 @@
 import { homedir } from "node:os"
 import { navigationTurn, replacementNavigation } from "./navigation-turn"
 import { accessibilitySnapshot } from "./snapshot"
+import { agentRendering } from "./agent-rendering"
 import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
@@ -316,7 +317,8 @@ export function createBrowserPage(
   constructing.defer(() => pageLifetime.abort())
   constructing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })
 
-  if (agentDriven(options.activity)) contents.setBackgroundThrottling(false)
+  const rendering = agentRendering(pageLifetime.signal, enabled => contents.setBackgroundThrottling(enabled))
+  const opening = agentDriven(options.activity) ? rendering.hold() : undefined
   constructing.defer(() => options.workspace?.dispose())
   constructing.defer(() => options.artifacts?.dispose())
   const preview = (url: string) => options.artifacts?.display(url) ?? options.workspace?.display(url)
@@ -649,8 +651,6 @@ export function createBrowserPage(
   contents.on("did-navigate", (_event, url, status, statusText) =>
     dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: pageTitle(displayURL(url)) }),
   )
-  // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
-  // we woke on the first agent command, so wake its replacement too.
   contents.on("did-navigate", () => {
     const url = contents.getURL()
 
@@ -658,7 +658,7 @@ export function createBrowserPage(
     notices.clear()
     popupReport = undefined
 
-    if (agentDriven(activity)) contents.setBackgroundThrottling(false)
+    rendering.committed()
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
     dispatch({ type: "navigation.failed", code, description: options.previewFailure?.(url) ?? (options.artifacts?.display(url) ? "browser.artifact.missing" : options.remote?.needsUpdate?.() && preview(url)?.startsWith("workspace:") ? "browser.preview.unsupported" : description), url, preview: preview(url), isMainFrame }),
@@ -1060,7 +1060,7 @@ export function createBrowserPage(
     cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
     attachFrames(),
-  ])).then(() => undefined)
+  ])).then(() => undefined).finally(() => opening?.[Symbol.dispose]())
 
   constructing.move()
 
@@ -1147,6 +1147,9 @@ export function createBrowserPage(
      * would run with that extension's privileges; every agent operation reaches the page through here.
      */
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
+      using active = new DisposableStack()
+
+      if (origin === "agent") active.use(rendering.hold())
       const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined)
       await ready
       const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
@@ -1169,10 +1172,7 @@ export function createBrowserPage(
 
       if (origin === "user") activity.userInputAt = Date.now()
 
-      if (origin === "agent") {
-        if (!agentDriven(activity)) contents.setBackgroundThrottling(false)
-        activity.agentRuns++
-      }
+      if (origin === "agent") activity.agentRuns++
 
       // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
       if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
