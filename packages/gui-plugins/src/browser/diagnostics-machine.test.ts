@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Schema } from "effect"
 import type { Protocol } from "devtools-protocol"
 import {
   evictHop,
@@ -80,6 +81,12 @@ const upgraded: ChainEvent = {
 }
 
 const hops = (chain: Chain | undefined) => chain?.hops.map(networkRequest) ?? []
+
+test("a failed request with no HTTP response is valid tool-result JSON", () => {
+  const requests = hops(replay([sent("h1", "workspace://session/file.html", 1), {type:"failed", timestamp:2, errorText:"net::ERR_FAILED"}]))
+  expect(Schema.decodeUnknownSync(Schema.Json)(requests)).toMatchObject([{state:"failed",failure:"net::ERR_FAILED"}])
+  expect(requests[0]).not.toHaveProperty("statusCode")
+})
 
 describe("redirect chains", () => {
   test("give each hop its own ExtraInfo when the network service runs ahead of the renderer", () => {
