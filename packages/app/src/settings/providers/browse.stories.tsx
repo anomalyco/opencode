@@ -35,29 +35,40 @@ const states = {
 
 type StateName = keyof typeof states
 
-const STATE_NAMES: StateName[] = [
-  "absent",
-  "installing",
-  "waiting",
-  "extension",
-  "config",
-  "timedOut",
-  "download",
-  "installed",
-  "connected",
+// "installed" and "connected" show only after an install on this page: a browse already set up isn't offered.
+const STATE_NAMES: StateName[][] = [
+  ["absent"],
+  ["installing"],
+  ["waiting"],
+  ["extension"],
+  ["config"],
+  ["timedOut"],
+  ["download"],
+  ["waiting", "installed"],
+  ["waiting", "connected"],
 ]
 
-const bridge = (status: BrowseStatus): BrowseBridge => ({
-  status: () => Promise.resolve(status),
-  install: () => new Promise(() => {}),
-})
+/** Answers each read with the next status, then keeps the last one. */
+const bridge = (names: StateName[]): BrowseBridge => {
+  const reads = { count: 0 }
 
-function BrowseStory(props: { names: StateName[]; width?: number }) {
+  return {
+    status: () => Promise.resolve(states[names[Math.min(reads.count++, names.length - 1)]]),
+    install: () => new Promise(() => {}),
+  }
+}
+
+function BrowseStory(props: { names: StateName[][]; width?: number }) {
   return (
     <DialogStoryRuntime>
-      <div class="settings-feature-grid bg-v2-background-bg-base p-6" style={{ width: `${props.width ?? 720}px` }}>
+      <div class="flex flex-col bg-v2-background-bg-base p-6" style={{ width: `${props.width ?? 720}px` }}>
         <For each={props.names}>
-          {(name) => <SettingsBrowse bridge={bridge(states[name])} onInstalled={() => {}} />}
+          {(names) => {
+            // Made once: the prop is read on every status read, and each bridge counts its own reads.
+            const story = bridge(names)
+
+            return <SettingsBrowse bridge={story} onInstalled={() => {}} />
+          }}
         </For>
       </div>
     </DialogStoryRuntime>
@@ -71,4 +82,4 @@ export default {
 
 export const States = { render: () => <BrowseStory names={STATE_NAMES} /> }
 
-export const Narrow = { render: () => <BrowseStory names={["waiting", "timedOut", "extension"]} width={360} /> }
+export const Narrow = { render: () => <BrowseStory names={[["waiting"], ["timedOut"], ["extension"]]} width={360} /> }

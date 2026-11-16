@@ -1,4 +1,5 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type Component } from "solid-js"
+import type { ConfigEntry } from "@opencode/client/promise"
 import { Button } from "@opencode/ui/button"
 import { Loader } from "@opencode/ui/loader"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -33,6 +34,18 @@ const incompleteLabels = {
   pairing: "settings.extensions.browse.incomplete.pairing",
   update: "settings.extensions.browse.incomplete.update",
 } as const satisfies Record<BrowseIncomplete, string>
+
+/**
+ * Whether the `browse_setup` flag is on. Matches the server: the highest-priority document that sets `experimental`
+ * decides.
+ */
+export function browseSetupEnabled(entries: readonly ConfigEntry[] | undefined) {
+  return (
+    entries
+      ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
+      .at(-1)?.browse_setup === true
+  )
+}
 
 /** Installs and connects browse on this computer. Only the desktop's own server runs agents here. */
 export const SettingsBrowse: Component<{ bridge: BrowseBridge; onInstalled: () => void }> = (props) => {
@@ -81,6 +94,16 @@ export const SettingsBrowse: Component<{ bridge: BrowseBridge; onInstalled: () =
   onCleanup(() => window.removeEventListener("focus", onFocus))
 
   const view = createMemo(() => browseCardView(state()))
+
+  // Offered until set up: a browse already set up when the page opened is listed with the MCPs instead, while one set up
+  // here stays so the row shows it worked.
+  const [offered, setOffered] = createSignal<boolean>()
+
+  createEffect(() => {
+    const phase = view().phase
+
+    if (offered() === undefined && phase !== "checking") setOffered(phase !== "ready")
+  })
 
   const install = () => dispatch({ type: "install.requested" })
 
@@ -133,59 +156,64 @@ export const SettingsBrowse: Component<{ bridge: BrowseBridge; onInstalled: () =
   }
 
   return (
-    <div class="settings-feature-card" data-phase={view().phase}>
-      <div class="settings-feature-card-text">
-        <span class="settings-feature-card-name">
-          <span class="settings-extension-name">{language.t("settings.extensions.browse.name")}</span>
-          <Show when={connected()}>
-            <span class="mcp-status-dot" data-status="connected" aria-hidden="true" />
+    <Show when={offered()}>
+      <div class="settings-section settings-extensions-featured">
+        <span class="settings-extension-heading text-13-medium">{language.t("settings.extensions.featured")}</span>
+        <div class="settings-feature-card" data-phase={view().phase}>
+          <div class="settings-feature-card-text">
+            <span class="settings-feature-card-name">
+              <span class="settings-extension-name">{language.t("settings.extensions.browse.name")}</span>
+              <Show when={connected()}>
+                <span class="mcp-status-dot" data-status="connected" aria-hidden="true" />
+              </Show>
+            </span>
+            <span
+              class="settings-feature-card-detail text-13-regular"
+              data-error={error() ? "" : undefined}
+              role={error() ? "alert" : undefined}
+            >
+              {detail()}
+            </span>
+          </div>
+          <Show when={view().phase !== "ready"}>
+            <div class="settings-feature-card-actions">
+              <Switch>
+                <Match when={view().phase === "checking"}>
+                  <Loader aria-label={language.t("common.loading")} />
+                </Match>
+                <Match when={view().phase === "unavailable"}>
+                  <Button size="small" variant="ghost-muted" onClick={() => dispatch({ type: "refresh.requested" })}>
+                    {language.t("common.retry")}
+                  </Button>
+                </Match>
+                <Match when={view().phase === "absent"}>
+                  <Button size="small" variant="neutral" onClick={install}>
+                    {language.t(error() ? "common.retry" : "settings.extensions.browse.install")}
+                  </Button>
+                </Match>
+                <Match when={view().phase === "installing"}>
+                  <Show when={showStore()}>
+                    <Button size="small" variant="neutral" onClick={store}>
+                      {language.t("settings.extensions.browse.openStore")}
+                    </Button>
+                  </Show>
+                  <Loader aria-label={language.t("settings.extensions.browse.installing")} />
+                </Match>
+                <Match when={view().phase === "incomplete"}>
+                  <Button size="small" variant="neutral" onClick={install}>
+                    {language.t("settings.extensions.browse.finish")}
+                  </Button>
+                  <Show when={showStore()}>
+                    <Button size="small" variant="ghost-muted" onClick={store}>
+                      {language.t("settings.extensions.browse.openStore")}
+                    </Button>
+                  </Show>
+                </Match>
+              </Switch>
+            </div>
           </Show>
-        </span>
-        <span
-          class="settings-feature-card-detail text-13-regular"
-          data-error={error() ? "" : undefined}
-          role={error() ? "alert" : undefined}
-        >
-          {detail()}
-        </span>
-      </div>
-      <Show when={view().phase !== "ready"}>
-        <div class="settings-feature-card-actions">
-          <Switch>
-            <Match when={view().phase === "checking"}>
-              <Loader aria-label={language.t("common.loading")} />
-            </Match>
-            <Match when={view().phase === "unavailable"}>
-              <Button size="small" variant="ghost-muted" onClick={() => dispatch({ type: "refresh.requested" })}>
-                {language.t("common.retry")}
-              </Button>
-            </Match>
-            <Match when={view().phase === "absent"}>
-              <Button size="small" variant="neutral" onClick={install}>
-                {language.t(error() ? "common.retry" : "settings.extensions.browse.install")}
-              </Button>
-            </Match>
-            <Match when={view().phase === "installing"}>
-              <Show when={showStore()}>
-                <Button size="small" variant="neutral" onClick={store}>
-                  {language.t("settings.extensions.browse.openStore")}
-                </Button>
-              </Show>
-              <Loader aria-label={language.t("settings.extensions.browse.installing")} />
-            </Match>
-            <Match when={view().phase === "incomplete"}>
-              <Button size="small" variant="neutral" onClick={install}>
-                {language.t("settings.extensions.browse.finish")}
-              </Button>
-              <Show when={showStore()}>
-                <Button size="small" variant="ghost-muted" onClick={store}>
-                  {language.t("settings.extensions.browse.openStore")}
-                </Button>
-              </Show>
-            </Match>
-          </Switch>
         </div>
-      </Show>
-    </div>
+      </div>
+    </Show>
   )
 }

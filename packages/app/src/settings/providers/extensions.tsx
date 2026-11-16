@@ -19,7 +19,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
 import { createExtensionLoad, ExtensionLoadFailed } from "@/settings/extension-load"
 import type { SettingsView } from "@/settings/surface"
-import { SettingsBrowse } from "./browse"
+import { browseSetupEnabled, SettingsBrowse } from "./browse"
 import { ConsoleName, ConsoleReplaced, createConsoleSources } from "./console-link"
 import "@/settings/settings.css"
 import "@/shell/search-list.css"
@@ -95,21 +95,26 @@ export const SettingsExtensions: Component<{
   })
   const skills = createMemo(() => (data.location.skill.list() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
 
-  // Matches the server: the highest-priority document that sets `experimental` decides.
-  const browseSetup = () =>
-    data.location.config
-      .list(location())
-      ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
-      .at(-1)?.browse_setup === true
-
   // browse installs into this computer's agent config, so it is offered only for the desktop's own server.
-  const browse = () => (browseSetup() && ServerConnection.builtin(serverSdk.server) ? platform.browse : undefined)
+  const browse = () =>
+    browseSetupEnabled(data.location.config.list(location())) && ServerConnection.builtin(serverSdk.server)
+      ? platform.browse
+      : undefined
 
   const syncMcps = () => {
     void data.location.mcp.server.sync(data.location.default()).catch(() => undefined)
 
     if (props.directory) void data.location.mcp.server.sync(location()).catch(() => undefined)
   }
+
+  // An MCP added to the config, such as browse's installer adding itself, lists once the server has reloaded it.
+  onCleanup(
+    serverSdk.event.on("config.updated", (event) => {
+      if (event.location && event.location.directory !== location().directory) return
+      syncMcps()
+      void data.location.config.sync(location()).catch(() => undefined)
+    }),
+  )
 
   return (
     <>
@@ -124,18 +129,7 @@ export const SettingsExtensions: Component<{
       </div>
 
       <div class="settings-tab-body">
-        <Show when={browse()}>
-          {(bridge) => (
-            <div class="settings-section settings-extensions-featured">
-              <span class="settings-extension-heading text-13-medium">
-                {language.t("settings.extensions.featured")}
-              </span>
-              <div class="settings-feature-grid">
-                <SettingsBrowse bridge={bridge()} onInstalled={syncMcps} />
-              </div>
-            </div>
-          )}
-        </Show>
+        <Show when={browse()}>{(bridge) => <SettingsBrowse bridge={bridge()} onInstalled={syncMcps} />}</Show>
         <Tabs
           variant="pill"
           value={props.subtab ?? "mcps"}

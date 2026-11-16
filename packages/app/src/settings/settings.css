@@ -2295,22 +2295,18 @@
   gap: 16px;
 }
 
-/* Featured extensions sit above the subtabs as cards; each fills a column and wraps on narrow widths. */
+/* Featured extensions sit above the subtabs while they still need setting up. */
 .settings-extensions-featured {
   margin-bottom: 32px;
 }
 
-.settings-feature-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-}
-
+/* One row as wide as the lists below: the text first, the actions after it, wrapping under it when narrow. */
 .settings-feature-card {
   display: flex;
-  min-height: 128px;
-  flex-direction: column;
-  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
   padding: 16px;
   border-radius: 8px;
   background: var(--v2-background-bg-layer-01);
@@ -2320,6 +2316,7 @@
 .settings-feature-card-text {
   display: flex;
   min-width: 0;
+  flex: 1 1 280px;
   flex-direction: column;
   gap: 4px;
 }
@@ -2340,13 +2337,11 @@
   color: var(--v2-state-fg-danger);
 }
 
-/* Actions sit at the bottom so cards of different text lengths line up. */
 .settings-feature-card-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: auto;
 }
 
 /* The name keeps its own width so the source sits right after it, not against the actions. */

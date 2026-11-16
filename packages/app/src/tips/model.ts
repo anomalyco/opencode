@@ -7,6 +7,8 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
+import { BROWSE_STORE_URL, browseSetupEnabled } from "@/settings/providers/browse"
+import { useSettingsSurface } from "@/settings/surface"
 import { FIRST_TIP_DELAY_MS, selectTip, TIP_INTERVAL_MS, type Tip } from "./queue"
 
 const STARTUP_DELAY = 2 * 60 * 1000
@@ -24,9 +26,12 @@ export function createTipToasts() {
   const servers = useServers()
   const language = useLanguage()
   const platform = usePlatform()
+  const settings = useSettingsSurface()
+
+  const connection = createMemo(() => servers.visible.find(servers.current) ?? servers.visible[0])
 
   const server = createMemo(() => {
-    const conn = servers.visible.find(servers.current) ?? servers.visible[0]
+    const conn = connection()
 
     return conn && global.serverCtx(ServerConnection.key(conn))
   })
@@ -50,9 +55,24 @@ export function createTipToasts() {
     const location = ctx.data.location
     void location
       .syncInfo()
-      .then(() => location.mcp.server.sync())
+      .then(() => Promise.all([location.mcp.server.sync(), location.config.sync(location.default())]))
       .catch(() => undefined)
   })
+
+  // Where the browse tip's Install goes: Settings sets up browse itself (installs it, adds it to the config, pairs the
+  // extension) on this computer's own server, where the Chrome Web Store would only add the extension.
+  const browseSetup = () => {
+    const conn = connection()
+    const current = location()
+
+    return (
+      !!platform.browse &&
+      !!conn &&
+      ServerConnection.builtin(conn) &&
+      !!current &&
+      browseSetupEnabled(current.config.list(current.default()))
+    )
+  }
 
   const tips: Tip[] = [
     {
@@ -65,9 +85,18 @@ export function createTipToasts() {
           ?.some((item) => item.name === "browse"),
       action: {
         label: "tips.browse.install",
-        run: () => platform.openExternal(
-            "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg?utm_source=opencode-desktop&utm_campaign=tip-browse",
-          ),
+        run: () => {
+          const conn = connection()
+
+          if (conn && browseSetup())
+            return settings.replace({
+              type: "root",
+              tab: "extensions",
+              subtab: "mcps",
+              server: ServerConnection.key(conn),
+            })
+          platform.openExternal(`${BROWSE_STORE_URL}?utm_source=opencode-desktop&utm_campaign=tip-browse`)
+        },
       },
     },
     {
@@ -78,8 +107,7 @@ export function createTipToasts() {
       action: {
         label: "tips.hex.install",
         // anoma.ly/hex 404s with a query string; the trailing slash is required.
-        run: () =>
-          platform.openExternal("https://anoma.ly/hex/?utm_source=opencode-desktop&utm_campaign=tip-hex"),
+        run: () => platform.openExternal("https://anoma.ly/hex/?utm_source=opencode-desktop&utm_campaign=tip-hex"),
       },
     },
   ]
