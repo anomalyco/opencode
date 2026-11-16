@@ -1504,6 +1504,12 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
     let entries = configured(tui, tui.plugins.skipped());
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries);
+    // Luau plugins (spike `luau-spike`): in a build with them, `OPENCODE_PLUGIN_LUAU=1` turns them on.
+    #[cfg(feature = "luau")]
+    let loader = match opencode_plugin::luau::enabled() {
+        true => loader.with_luau(),
+        false => loader,
+    };
     // A plugin named by npm package loads from the cache TS installs into, as TS resolves it (js-npm).
     let loader = match tui.cache_dir() {
         Some(cache) => loader.with_npm(cache),

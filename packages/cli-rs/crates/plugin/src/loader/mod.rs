@@ -165,6 +165,9 @@ pub struct Loader {
     /// The package each npm spec resolved to, kept while the spec is a target: TS resolves a loaded package's entry
     /// once a session (`context.tsx:663-665`), so a later install does not move it.
     packages: RefCell<HashMap<String, npm::Package>>,
+    /// A directory with a `plugin.toml` and no native build runs as a Luau plugin ([`crate::luau`]).
+    #[cfg(feature = "luau")]
+    luau: bool,
 }
 
 /// The path `realpath` gives (carbon recheck-3): `canonicalize`, without the verbatim prefix it gives on Windows
@@ -220,7 +223,28 @@ impl Loader {
             npm: None,
             server: RefCell::default(),
             packages: RefCell::default(),
+            #[cfg(feature = "luau")]
+            luau: false,
         }
+    }
+
+    /// Runs the directories with a `plugin.toml` and no native build as Luau plugins.
+    #[cfg(feature = "luau")]
+    pub fn with_luau(self) -> Self {
+        Self { luau: true, ..self }
+    }
+
+    /// Whether `target` runs as a Luau plugin: it is a directory with a `plugin.toml` and no native build.
+    #[cfg(feature = "luau")]
+    fn luau_target(&self, target: &Target) -> bool {
+        self.luau
+            && target.library().is_none()
+            && target.local.as_deref().is_some_and(|dir| dir.is_dir() && crate::luau::is_plugin(dir))
+    }
+
+    #[cfg(not(feature = "luau"))]
+    fn luau_target(&self, _: &Target) -> bool {
+        false
     }
 
     /// Finds a target named by npm package in the package cache under `cache`, as the TS client does.
@@ -325,7 +349,10 @@ impl Loader {
 
     /// Whether `target` runs on the JS host: it has no native build, and it is a directory.
     fn scripted(&self, target: &Target) -> bool {
-        self.scripts.is_some() && target.library().is_none() && target.local.as_ref().is_some_and(|dir| dir.is_dir())
+        self.scripts.is_some()
+            && target.library().is_none()
+            && target.local.as_ref().is_some_and(|dir| dir.is_dir())
+            && !self.luau_target(target)
     }
 
     /// Keeps the decisions on project plugins in `approvals` rather than in memory.
@@ -476,8 +503,8 @@ impl Loader {
                 continue;
             }
             // A TypeScript plugin's modules may sit in its subdirectories, whose saves reload it too (review carbon-2);
-            // its dependencies change by an install, which touches the directory itself.
-            if self.scripted(&target)
+            // its dependencies change by an install, which touches the directory itself. So may a Luau plugin's.
+            if (self.scripted(&target) || self.luau_target(&target))
                 && let Some(local) = &target.local
             {
                 let mut found = Vec::new();
@@ -507,9 +534,10 @@ impl Loader {
             .borrow()
             .keys()
             .filter(|target| {
-                !targets
-                    .iter()
-                    .any(|known| known.target == **target && (known.library().is_some() || self.scripted(known)))
+                !targets.iter().any(|known| {
+                    known.target == **target
+                        && (known.library().is_some() || self.scripted(known) || self.luau_target(known))
+                })
             })
             .cloned()
             .collect();
@@ -582,6 +610,12 @@ impl Loader {
             registry.set_unloaded(name, status);
             changed
         };
+        #[cfg(feature = "luau")]
+        if self.luau_target(target)
+            && let Some(dir) = &target.local
+        {
+            return self.luau(host, registry, target, dir, &listed);
+        }
         if self.scripted(target)
             && let (Some(scripts), Some(dir)) = (&self.scripts, &target.local)
         {
@@ -795,6 +829,67 @@ impl Loader {
         }
     }
 
+    /// Brings the Luau plugin of `target`, the directory `dir`, in line with its files: loaded when new or changed,
+    /// in process ([`crate::luau`]). A running build keeps running while the next fails to compile or set up. A
+    /// project's plugin runs only once the user approved its directory, by the artifact a TypeScript plugin has
+    /// ([`Artifact::tree`]), and from the staged copy of the approved bytes ([`Artifact::stage`]). Safe mode holds it
+    /// as it holds a TypeScript plugin; a client no parent guards runs it, as Luau writes no memory it does not own.
+    #[cfg(feature = "luau")]
+    fn luau(
+        &self,
+        host: &Rc<dyn Host>,
+        registry: &Registry,
+        target: &Target,
+        dir: &Path,
+        listed: &Option<Status>,
+    ) -> bool {
+        let name = target.target.as_str();
+        let dir = match target.project {
+            true => {
+                let artifact = match self.approved(host, registry, name, Artifact::tree(dir)) {
+                    Ok(artifact) => artifact,
+                    Err(changed) => return changed,
+                };
+                match self.approvals.staging().and_then(|root| artifact.stage(&root)) {
+                    Ok(staged) => staged,
+                    Err(error) => return self.hold(host, registry, name, Err(error), None),
+                }
+            }
+            false => dir.to_path_buf(),
+        };
+        let was_held = registry.held(name);
+        if !registry.admit_script(name) {
+            if self.seen.borrow_mut().remove(name).is_some() {
+                registry.unload(host, name);
+                return true;
+            }
+            return !was_held;
+        }
+        let sources = match crate::luau::Sources::read(&dir) {
+            Ok(sources) => sources,
+            Err(error) => return self.fail(&**host, registry, listed, name, 0, error),
+        };
+        let digest = sources.digest(target.options.as_deref());
+        if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) {
+            return false;
+        }
+        self.waiting.borrow_mut().remove(name);
+        let loaded = crate::luau::define(&sources, target.options.as_deref()).and_then(|loaded| {
+            if !registry.id_taken(&loaded.0.id, name) {
+                return Ok(loaded);
+            }
+            self.waiting.borrow_mut().insert(name.to_owned(), loaded.0.id.clone());
+            Err(format!("plugin ID {} is already registered", loaded.0.id))
+        });
+        match loaded {
+            Ok((definition, error)) => {
+                log::info!("plugin {} loaded as Luau from {}", definition.id, dir.display());
+                self.register(host, registry, listed, name, definition, error, digest)
+            }
+            Err(error) => self.fail(&**host, registry, listed, name, digest, error),
+        }
+    }
+
     /// Records that the build of `target` failed: the running previous version, if any, keeps running and
     /// reports the failure; otherwise the target is listed as failed. A new failure tells the host.
     fn fail(
@@ -868,7 +963,7 @@ impl Loader {
     /// TypeScript tree to hash ([`Found::identify`]). `None` when it is no target.
     pub fn found(&self, target: &str) -> Option<Found> {
         let known = self.targets().into_iter().find(|known| known.target == target)?;
-        if let (true, Some(dir)) = (self.scripted(&known), &known.local) {
+        if let (true, Some(dir)) = (self.scripted(&known) || self.luau_target(&known), &known.local) {
             return Some(Found::Tree(dir.clone()));
         }
         let identified = known.library().ok_or_else(|| format!("{}: no build", known.target)).and_then(|file| {

@@ -1,0 +1,6 @@
+# The port of `@mynameistito/opencode-force-input` (`examples/force-input`) in Luau.
+id = "mynameistito.opencode-force-input-luau"
+name = "Force input"
+version = "0.1.0"
+contract = "2.0"
+description = "ctrl+enter interrupts the running session and sends the prompt; a hint in the prompt footer says so"

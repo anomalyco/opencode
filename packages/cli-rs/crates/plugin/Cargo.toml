@@ -25,6 +25,12 @@ url.workspace = true
 # The hash an approval of a project plugin names (rich-plugins 3.9).
 ring.workspace = true
 
+# Luau plugins (spike `luau-spike`): a fourth carrier of contract 2.0, off by default.
+mlua = { workspace = true, optional = true }
+
+[features]
+luau = ["dep:mlua"]
+
 [target.'cfg(unix)'.dependencies]
 # Who owns the approvals file, and opening it without following a link.
 libc.workspace = true

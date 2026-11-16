@@ -54,6 +54,8 @@ indexmap = { version = "2", features = ["serde"] }
 libc = "0.2"
 log = { version = "0.4", features = ["std"] }
 memchr = "2"
+# Luau plugins, behind opencode-plugin's `luau` feature (spike `luau-spike`): Luau's VM and compiler, with serde.
+mlua = { version = "0.12", features = ["luau", "serde"] }
 notify = "8"
 percent-encoding = "2"
 rand = "0.10"

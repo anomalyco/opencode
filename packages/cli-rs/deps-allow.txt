@@ -156,4 +156,24 @@ zmij build
 
 [optional]
 # Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
-# with --all-features. The same rules apply. Empty: every feature's crates ship by default.
+# with --all-features. The same rules apply. opencode-plugin's `luau` feature (spike `luau-spike`, Luau plugins) brings
+# all of these in; it awaits its O-58 decision.
+
+autocfg
+bstr
+either
+erased-serde build
+jobserver
+lock_api
+luau0-src
+mlua
+mlua-sys build cc
+num-traits build
+ordered-float
+parking_lot
+parking_lot_core build
+pkg-config
+rustc-hash
+scopeguard
+serde-value
+typeid build
