@@ -1,4 +1,5 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { uuid } from "@opencode/util/uuid"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import {
@@ -485,7 +486,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       notice: async () => undefined,
       reviewLink: async ({ url }) => {
         const tabID = tabs[0].id
-        emit(store.session, { type: "refusal", tabID, token: "fixture", notice: navigationNotice(url, {}) })
+        emit(store.session, { type: "refusal", tabID, token: uuid(), notice: navigationNotice(url, {}, "conversation") })
 
         return tabID
       },

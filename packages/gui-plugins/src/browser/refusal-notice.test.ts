@@ -4,6 +4,7 @@ import { externalTarget, navigationNotice, popupActivated } from "./refusal-noti
 test("refusals describe the actual destination without displaying private, misleading or unbounded targets", () => {
   expect(navigationNotice("mailto:fixture@example.invalid", {})).toEqual({
     reason: "external",
+    source: "page",
     action: "open",
     target: "mailto:fixture@example.invalid",
   })
@@ -29,7 +30,7 @@ test("external app launches need a known scheme and a non-agent request; unsafe 
   for (const scheme of ["obsidian", "tel", "vscode-insiders", "cursor", "slack", "zoomus", "whatsapp", "github-mac", "jetbrains"]) {
     const url = `${scheme}:fixture`
     expect(externalTarget(url)).toBe("open")
-    expect(navigationNotice(url, {}, "agent")).toEqual({ reason: "external", target: url, action: "copy" })
+    expect(navigationNotice(url, {}, "agent")).toEqual({ reason: "external", target: url, source: "page", action: "copy" })
   }
 
   expect(externalTarget("unknown:fixture")).toBe("copy")
@@ -59,6 +60,16 @@ test("a popup needs Chromium's activation report for that same target", () => {
   expect(popupActivated({ url, userGesture: false }, url)).toBe(false)
   expect(popupActivated({ url, userGesture: true }, `${url}other`)).toBe(false)
   expect(popupActivated(undefined, url)).toBe(false)
+})
+
+test("conversation links use only the conversation subset of the page policy", () => {
+  for (const scheme of ["vscode", "vscode-insiders", "cursor", "zed", "jetbrains"]) {
+    expect(externalTarget(`${scheme}:fixture`, "conversation")).toBe("copy")
+    expect(externalTarget(`${scheme}:fixture`, "page")).toBe("open")
+  }
+  for (const scheme of ["obsidian", "mailto", "zoommtg", "zoomus"]) {
+    expect(navigationNotice(`${scheme}:fixture`, {}, "conversation")).toMatchObject({ source: "conversation", action: "open" })
+  }
 })
 
 test("only a short, wholly visible ASCII target can launch an app", () => {

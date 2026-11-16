@@ -27,7 +27,7 @@ export function noticeActions(
       if (notice.reason === "popup" && notice.action === "tab") return open(notice.target)
 
       if (notice.reason !== "external") return
-      const safe = externalTarget(notice.target)
+      const safe = externalTarget(notice.target, notice.source)
 
       if (safe && notice.action === "copy") return electron.clipboard.writeText(notice.target)
 

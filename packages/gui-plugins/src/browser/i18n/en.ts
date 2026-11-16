@@ -23,6 +23,7 @@ export default {
   "refused.web": "Only web pages can open here.",
   "refused.external": "This link opens another app.",
   "refused.scheme": "Application link ({{scheme}}):",
+  "refused.conversation": "Link from the conversation ({{scheme}}):",
   "link.unavailable": "The browser pane is unavailable. This link was not opened.",
   "refused.dismiss": "Dismiss notice",
   "refused.workspace": "Only web pages and files inside this session's workspace can open here.",
