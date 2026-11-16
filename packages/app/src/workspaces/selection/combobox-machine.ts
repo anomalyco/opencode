@@ -244,7 +244,7 @@ function commit(state: LiveCombobox, context: PickerComboboxContext, submit: boo
 
   return result(close(state, displayInputDirectory(value, context.home)), [
     ...cancel(state),
-    { type: "choose.directory", path: state.input, ...(submit ? { submit: true as const } : {}) },
+    chosenDirectory(state.input, submit),
   ])
 }
 
@@ -252,7 +252,9 @@ function choose(state: LiveCombobox, item: PickerSuggestion, context: PickerComb
   if (item.type === "file") {
     return result(close(state, displayPickerPath(item.absolute, state.input, context.home)), [
       ...cancel(state),
-      { type: "choose.file", absolute: item.absolute, ...(submit ? { submit: true as const } : {}) },
+      submit
+        ? { type: "choose.file", absolute: item.absolute, submit }
+        : { type: "choose.file", absolute: item.absolute },
     ])
   }
 
@@ -262,8 +264,12 @@ function choose(state: LiveCombobox, item: PickerSuggestion, context: PickerComb
 
   return result(close(state, displayInputDirectory(value, context.home)), [
     ...cancel(state),
-    { type: "choose.directory", path: item.absolute, ...(submit ? { submit: true as const } : {}) },
+    chosenDirectory(item.absolute, submit),
   ])
+}
+
+function chosenDirectory(path: string, submit: boolean): PickerComboboxEffect {
+  return submit ? { type: "choose.directory", path, submit } : { type: "choose.directory", path }
 }
 
 function withInput(

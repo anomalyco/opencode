@@ -262,6 +262,7 @@ test("a draft never clears the selection, survives a selection that settles whil
 test("confirming submits the selection, or commits a draft first and submits once it is selected", () => {
   const synced = run([{ type: "synced" }], createPickerComboboxState(), selected).state
   const typed = run([{ type: "input.changed", value: "/projects/billing" }], synced, selected).state
+
   const listed = run(
     [{ type: "search.resolved", attempt: attempt(typed), items: [directory("/projects/billing-service")] }],
     typed,

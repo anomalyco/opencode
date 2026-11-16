@@ -257,6 +257,7 @@ test("disposing drops queued work and ignores later results", () => {
 
 test("a confirmed choice submits once it is selected, and never when it fails or a newer choice wins", () => {
   const state = ready(HOME, [folder("work")])
+
   const submit = (path: string): PickerTreeEvent => ({
     type: "directory.chosen",
     path,
@@ -266,12 +267,14 @@ test("a confirmed choice submits once it is selected, and never when it fails or
     fromInput: true,
     submit: true,
   })
+
   const inside = run([submit(`${HOME}/work/repo`)], state)
   const listed = run([{ type: "dir.loaded", dir: "work", attempt: 2, nodes: [folder("repo")] }], inside.state)
   const outside = run([submit("/srv/infra")], state)
   const root = outside.state.status === "loading" ? outside.state.attempt : -1
   const opened = run([{ type: "dir.loaded", dir: "", attempt: root, nodes: [] }], outside.state)
   const failed = run([{ type: "dir.failed", dir: "", attempt: root }], outside.state)
+
   const superseded = run(
     [
       { type: "tree.selected", path: undefined },

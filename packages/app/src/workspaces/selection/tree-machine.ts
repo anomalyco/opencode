@@ -434,6 +434,7 @@ function finishReveal(
   if (!state.entries[entry]) {
     return open({ ...state, reveal: undefined }, { root: reveal.target, submit: reveal.submit }, true)
   }
+
   const selected = { ...state, reveal: undefined, selected: policy.selection(state.root, entry) ?? "" }
   const selecting = [...effects, { type: "tree.select" as const, entry }, ...submitted(reveal.submit)]
 
