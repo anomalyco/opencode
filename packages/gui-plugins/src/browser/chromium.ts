@@ -272,8 +272,13 @@ export function createBrowserPage(
   const preview = (url: string) => options.artifacts?.display(url) ?? previewFile(url, options.previewHost, policy.fileRoots ?? [], policy.remote)
   const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
+  let nativeMenu = true
   contents.on("before-mouse-event", (_event, mouse) => {
-    if (mouse.type === "mouseDown" && hardwareInput(mouse)) activity.userInputAt = Date.now()
+    // Unlike keyboard events, Electron 44 does not expose the Blink modifiers on mouse events.
+    if (mouse.type === "mouseDown" && activity.agentRuns === 0) {
+      nativeMenu = true
+      activity.userInputAt = Date.now()
+    }
   })
   contents.on("before-input-event", (event, input) => {
     const hardware = hardwareInput(input)
@@ -281,6 +286,7 @@ export function createBrowserPage(
 
     if (!hardware || input.type !== "keyDown") return
 
+    nativeMenu = true
     activity.userInputAt = Date.now()
 
     if (pageReload(input, process.platform === "darwin")) {
@@ -728,7 +734,7 @@ export function createBrowserPage(
     },
     cdp,
     sessions: () => sessions.values(),
-    available: () => !closed() && view.getVisible() && activity.agentRuns === 0,
+    available: () => nativeMenu && !closed() && view.getVisible() && activity.agentRuns === 0,
     failed: () => publish("browser.menu.failed"),
   })
 
@@ -1724,6 +1730,11 @@ export function createBrowserPage(
       params: Protocol.Input.DispatchMouseEventRequest | Protocol.Input.DispatchDragEventRequest | Protocol.Input.DispatchKeyEventRequest | Protocol.Input.InsertTextRequest,
     ) => {
       if (origin === "user") return cdp.send(method, params)
+      // Context-menu delivery can follow the CDP reply. A later user input, not the end of the command, re-arms it.
+      nativeMenu = false
+
+      if (process.platform === "linux" && "button" in params && params.button === "middle")
+        throw new Error("Middle-click can paste the system selection. Use fill/type to enter text and evaluate to read page text.")
       const changed = "Input target changed or could not be verified. Take a fresh snapshot and use the page outside extension UI."
 
       if ("x" in params) {
