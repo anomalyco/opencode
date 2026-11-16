@@ -98,7 +98,7 @@ export const make = (deps: Deps) => {
       report,
     ).pipe(
       Effect.as(true),
-      // Retain the formatted outbox row: the conflict proves the notification ID is already
+      // Retain the outbox row: the conflict proves the notification ID is already
       // owned elsewhere, so deleting it would lose the report without admitting anything.
       Effect.catchTag("SessionInbox.LifecycleConflict", (conflict) =>
         Effect.logWarning("Subagent report notification ID conflicted in parent inbox", {
@@ -164,7 +164,6 @@ export const make = (deps: Deps) => {
         }
         const resolved = yield* resolveBody(sessionID, outcome, period?.startedSeq, jobState.mode)
         if (!resolved) return
-        const formatted = SubagentCompletion.formatBody(resolved.body, child.id, running)
         const recovery =
           jobState.mode === "background"
             ? jobState.recovery
@@ -177,9 +176,9 @@ export const make = (deps: Deps) => {
               }
         const report: Job.SubagentOutboxReport = {
           notificationID: jobState.mode === "background" ? jobState.notificationID : SessionMessage.ID.create(),
-          recovery,
+          recovery: { ...recovery, outstanding: running },
           status: resolved.status,
-          ...(resolved.status === "completed" ? { output: formatted } : { error: formatted }),
+          ...(resolved.status === "completed" ? { output: resolved.body } : { error: resolved.body }),
           ...(jobState.mode === "background" ? { startedAt: jobState.startedAt } : {}),
         }
         yield* deps.jobs.recordSubagentReport(report)

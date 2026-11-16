@@ -3,6 +3,7 @@ export * as ReadToolFileSystem from "./read-filesystem.js"
 import path from "path"
 import { pathToFileURL } from "url"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { Context, Effect, Layer, Schema } from "effect"
 import { lookup } from "mime-types"
 import { Environment } from "../environment/index.js"
@@ -374,12 +375,8 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep =
   })
 }
 
-const clampLine = (line: string) => {
-  if (line.length <= MAX_LINE_LENGTH) return line
-  const code = line.charCodeAt(MAX_LINE_LENGTH - 1)
-  const end = code >= 0xd800 && code <= 0xdbff ? MAX_LINE_LENGTH - 1 : MAX_LINE_LENGTH
-  return line.slice(0, end) + MAX_LINE_SUFFIX
-}
+const clampLine = (line: string) =>
+  line.length <= MAX_LINE_LENGTH ? line : TextBoundary.head(line, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX
 
 const layer = Layer.effect(
   Service,

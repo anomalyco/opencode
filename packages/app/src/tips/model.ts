@@ -33,7 +33,15 @@ export function createTipToasts() {
 
   const location = () => server()?.data.location
   const [awake, setAwake] = createSignal(false)
-  const startup = setTimeout(() => setAwake(true), STARTUP_DELAY)
+  const [hexInstalled, setHexInstalled] = createSignal<boolean>()
+
+  const startup = setTimeout(() => {
+    setAwake(true)
+
+    if (!platform.checkAppExists) return setHexInstalled(false)
+    void platform.checkAppExists("hex").then(setHexInstalled, () => setHexInstalled(false))
+  }, STARTUP_DELAY)
+
   onCleanup(() => clearTimeout(startup))
   createEffect(() => {
     const ctx = server()
@@ -66,6 +74,7 @@ export function createTipToasts() {
       id: "hex",
       title: "tips.hex.title",
       description: "tips.hex.description",
+      when: () => hexInstalled() === false,
       action: {
         label: "tips.hex.install",
         // anoma.ly/hex 404s with a query string; the trailing slash is required.
