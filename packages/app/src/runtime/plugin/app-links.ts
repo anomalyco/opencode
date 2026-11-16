@@ -3,13 +3,13 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 function target(event: Event) {
   const anchor = event.target instanceof Element ? event.target.closest("a") : null
 
-  if (!(anchor instanceof HTMLAnchorElement) || !anchor.closest("[data-pane-row]")) return
-  const href = anchor.dataset.appLink ?? anchor.getAttribute("href")
+  if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("download") || !anchor.closest("[data-pane-row]")) return
+  const href = anchor.dataset.appLink
 
   if (!href || /^[a-z]:[\\/]/i.test(href)) return
   const protocol = URL.parse(href)?.protocol
 
-  if (!protocol || /^https?:$/.test(protocol)) return
+  if (!protocol || /^(https?|file):$/.test(protocol)) return
 
   return { anchor, href }
 }

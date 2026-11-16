@@ -91,6 +91,26 @@ story("limits authored presentation to text and keeps application link hit areas
   expect(result).toEqual({ style: "color: teal; text-align: center;", active: 0, links: [["obsidian:fixture", false, false, "Label"], [undefined, false, false, "Block label"]] })
 })
 
+story("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    return [
+      '<a href="file:///C:/workspace/a.ts">file</a>', '<a href="src/a.ts">relative</a>',
+      '<a download href="obsidian:fixture">download</a>', '<a href="opencode:fixture">deep link</a>',
+      '<a data-app-link="forged">text</a>', '<a href="DaTa:text/plain,test">data</a>',
+      `<a href="obsidian:${"a".repeat(2048)}">long</a>`, '<a href="obsidian:a&lt;b">angle</a>',
+    ].map(html => {
+      const parent = document.createElement("div")
+      parent.innerHTML = sanitizeMarkdown(html)
+      const a = parent.querySelector("a")!
+      return [a.dataset.localLink, a.dataset.appLink, a.hasAttribute("href")]
+    })
+  }, fixture)
+  expect(result).toEqual([["C:/workspace/a.ts", undefined, false], ["src/a.ts", undefined, false],
+    [undefined, undefined, false], [undefined, "opencode:fixture", false], [undefined, undefined, false],
+    [undefined, "DaTa:text/plain,test", false], [undefined, undefined, false], [undefined, undefined, false]])
+})
+
 story("keeps Markdown sanitization and link protections after Mermaid renders", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { renderMermaidSvg, sanitizeMarkdown } = await import(fixture)

@@ -75,7 +75,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
 
       const protocol = URL.parse(href)?.protocol
 
-      if (protocol && (!path || protocol === "file:") && !/^https?:$/.test(protocol)) {
+      if (protocol && !path && !/^(https?|file):$/.test(protocol) && !node.hasAttribute("download")) {
         if (href.length > 2048 || /[<>\x00-\x1f\x7f-\x9f]/.test(href)) return node.removeAttribute("href")
         node.removeAttribute("style")
         node.removeAttribute("class")
