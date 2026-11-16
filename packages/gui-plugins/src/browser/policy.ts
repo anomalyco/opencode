@@ -41,9 +41,21 @@ function filePath(url: URL) {
     }
   })()
 
-  if (decoded === undefined || decoded.includes("\0") || decoded.split(/[\\/]/).some((part) => part === "." || part === "..")) return undefined
+  if (
+    decoded === undefined ||
+    decoded.includes("\0") ||
+    decoded.split(/[\\/]/).some((part) => part === "." || part === "..")
+  )
+    return undefined
 
-  if (process.platform === "win32" && !decoded.replace(/^\/[a-z]:\//i, "").split("/").every(windowsPreviewSegment)) return undefined
+  if (
+    process.platform === "win32" &&
+    !decoded
+      .replace(/^\/[a-z]:\//i, "")
+      .split("/")
+      .every(windowsPreviewSegment)
+  )
+    return undefined
 
   return canonicalPath(decoded)
 }
@@ -108,16 +120,24 @@ export const DOWNLOAD_GRACE_MS = 30_000
 
 export type TabActivity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number }
 
-/** True from a tab's first agent command (including one inherited from its opener) until the tab closes.
- * Omit `now` for site permissions. For downloads and external links, pass the event time to use the
- * shorter running/recent-command window, which ends on subsequent user input in this tab. */
+/**
+ * Whether the agent drives a tab: the one rule for every "did the agent cause this". Without `now` it is sticky: true
+ * from the tab's first agent command, or one inherited from its opener (`childActivity`), until the tab closes; site
+ * permissions, clipboard writes and where a prompt puts focus ask this way. With the event's time it is the
+ * running-or-recent window: true while an agent command runs, and within `DOWNLOAD_GRACE_MS` after one ended unless the
+ * user clicked or typed in the tab since; downloads and opening external apps ask this way (`activityOwner`).
+ */
 export function agentDriven(activity: Readonly<TabActivity>, now?: number): boolean {
   if (activity.agentRuns > 0) return true
 
   if (activity.agentEndedAt === undefined) return false
 
-  return now === undefined || (now - activity.agentEndedAt <= DOWNLOAD_GRACE_MS &&
-    (activity.userInputAt === undefined || activity.userInputAt < activity.agentEndedAt))
+  if (now === undefined) return true
+
+  return (
+    now - activity.agentEndedAt <= DOWNLOAD_GRACE_MS &&
+    (activity.userInputAt === undefined || activity.userInputAt < activity.agentEndedAt)
+  )
 }
 
 /** A child inherits provenance, not its opener's in-flight run counter. */
@@ -125,7 +145,7 @@ export function childActivity(activity: Readonly<TabActivity>): TabActivity {
   return activity.agentRuns ? { agentRuns: 0, agentEndedAt: Date.now() } : { ...activity }
 }
 
-/** Who may have caused what happens in a tab now: an agent command running, when the last ended, the user's last input. */
+/** What a tab's activity was when something happened in it, at `now`. */
 export type AgentActivity = {
   readonly now: number
   readonly agentRunning: boolean
@@ -134,36 +154,27 @@ export type AgentActivity = {
 }
 
 /**
- * Whether the agent caused what happens in a tab now: one rule for downloads, clipboard writes, permission requests
- * and where focus goes. True while an agent command runs, and within `DOWNLOAD_GRACE_MS` after one ended unless the
- * user clicked or typed in the tab since.
+ * Whose a download in a tab is. Only one the agent caused (`activityOwner`) is the agent's, and never one where the
+ * page or any address it came through is an extension's. Every other download is the user's and takes the system's
+ * save flow, which the agent cannot read.
  */
-export function agentCaused(activity: AgentActivity) {
-  if (activity.agentRunning) return true
-
-  if (activity.agentEndedAt === undefined || activity.now - activity.agentEndedAt > DOWNLOAD_GRACE_MS) return false
-
-  return activity.userInputAt === undefined || activity.userInputAt < activity.agentEndedAt
-}
-
-/**
- * Whose a download in a tab is. Only one the agent caused (`agentCaused`) is the agent's, and never one where the page
- * or any address it came through is an extension's. Every other download is the user's and takes the system's save
- * flow, which the agent cannot read.
- */
-export function downloadOwner(download: AgentActivity & {
-  readonly page: ReadonlyArray<string>
-  readonly chain: ReadonlyArray<string>
-}): "agent" | "user" {
+export function downloadOwner(
+  download: AgentActivity & { readonly page: ReadonlyArray<string>; readonly chain: ReadonlyArray<string> },
+): "agent" | "user" {
   if ([...download.page, ...download.chain].some(Browser.extensionOrigin)) return "user"
 
   return activityOwner(download)
 }
 
-/** The same running-command and user-input boundary for downloads and opening external apps. */
-export function activityOwner(download: { readonly now: number; readonly agentRunning: boolean; readonly agentEndedAt?: number; readonly userInputAt?: number }): "agent" | "user" {
+/** Who caused what happened at `now`: `agentDriven` with the event's time, as downloads and external apps ask it. */
+export function activityOwner(event: AgentActivity): "agent" | "user" {
+  const activity = {
+    agentRuns: Number(event.agentRunning),
+    agentEndedAt: event.agentEndedAt,
+    userInputAt: event.userInputAt,
+  }
 
-  return agentDriven({ agentRuns: Number(download.agentRunning), agentEndedAt: download.agentEndedAt, userInputAt: download.userInputAt }, download.now) ? "agent" : "user"
+  return agentDriven(activity, event.now) ? "agent" : "user"
 }
 
 /** Actions that only take a tab away from its document, which the agent may run on an extension page to leave it. */
@@ -206,7 +217,9 @@ type FrameTree = {
 export function inputDocument(url: string, origin: string) {
   if (Browser.extensionOrigin(origin) || Browser.extensionOrigin(url)) return false
 
-  return /^(?:https?:\/\/|oc-preview:\/\/|file:\/\/|about:(?:blank|srcdoc)(?:[?#]|$)|data:|blob:(?:https?:\/\/|null\/|oc-preview:\/\/))/.test(url)
+  return /^(?:https?:\/\/|oc-preview:\/\/|file:\/\/|about:(?:blank|srcdoc)(?:[?#]|$)|data:|blob:(?:https?:\/\/|null\/|oc-preview:\/\/))/.test(
+    url,
+  )
 }
 
 type FrameTrees = {
@@ -255,7 +268,8 @@ function frameIndex(trees: FrameTrees) {
         usable: inputDocument(tree.frame.url, tree.frame.securityOrigin ?? ""),
         extension:
           trees.extensions.has(id) ||
-          Browser.extensionOrigin(tree.frame.url) || Browser.extensionOrigin(tree.frame.securityOrigin ?? ""),
+          Browser.extensionOrigin(tree.frame.url) ||
+          Browser.extensionOrigin(tree.frame.securityOrigin ?? ""),
       })
     tree.childFrames?.forEach((child) => walk(child, id))
   }
@@ -322,7 +336,13 @@ export function agentFrame(trees: FrameTrees, frameID: string): AgentFrameAccess
   }
 }
 
-export type Policy = { readonly fileRoots?: ReadonlyArray<string>; readonly extensions?: ReadonlyArray<string>; readonly home?: string; readonly remote?: string; readonly artifacts?: boolean }
+export type Policy = {
+  readonly fileRoots?: ReadonlyArray<string>
+  readonly extensions?: ReadonlyArray<string>
+  readonly home?: string
+  readonly remote?: string
+  readonly artifacts?: boolean
+}
 
 export function allowedDestination(input: string, policy?: Policy) {
   return (
@@ -358,7 +378,13 @@ export function normalizeURL(input: string, policy?: Policy) {
 export function refusal(input: string, policy?: Policy) {
   const url = withScheme(input, policy)
 
-  if (url === "about:blank" || allowedDestination(url, policy) || (policy?.artifacts && artifactAddress(url)) || (policy?.remote && remotePath(url, policy.remote))) return
+  if (
+    url === "about:blank" ||
+    allowedDestination(url, policy) ||
+    (policy?.artifacts && artifactAddress(url)) ||
+    (policy?.remote && remotePath(url, policy.remote))
+  )
+    return
 
   // A web page is refused only for its credentials.
   if (URL.canParse(url) && /^https?:$/.test(new URL(url).protocol)) return "browser.address.credentials"

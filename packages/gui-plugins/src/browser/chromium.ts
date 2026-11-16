@@ -420,9 +420,6 @@ export function createBrowserPage(
   const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
-  // SEAM(agentDriven): whether the agent drives this tab, from its first command in the tab (or in the tab that opened
-  // it, or the command that opened it) until the tab closes. Site permissions, clipboard writes and prompt focus read it.
-  const agentDrivenTab = () => activity.agentRuns > 0 || activity.agentEndedAt !== undefined
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
   const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
@@ -538,7 +535,8 @@ export function createBrowserPage(
     contents,
     scope: options.serverPartition ? { kind: "server", partition: options.partition } : { kind: "profile" },
     sites: options.sites,
-    agentDriven: agentDrivenTab,
+    // Sticky: site permissions, clipboard writes and where a prompt puts focus.
+    agentDriven: () => agentDriven(activity),
     top: () => state().url,
     dialog: () => selectUserDialog(dialogGate),
     dialogFrame: () => dialogs.frame(),

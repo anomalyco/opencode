@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import {
-  agentCaused,
   agentFrame,
   agentDriven,
   childActivity,
@@ -19,14 +18,19 @@ import {
   normalizeURL,
   pagePermission,
   refusal,
+  type TabActivity,
 } from "./policy"
 
 test("input requires a page document at each step of the route", () => {
   for (const [url, origin, permitted] of [
-    ["https://example.com/", "https://example.com", true], ["about:blank", "null", true],
-    ["about:srcdoc", "chrome-extension://pw", false], ["blob:chrome-extension://pw/id", "null", false],
-    ["devtools://devtools/bundled/", "devtools://devtools", false], ["", "", false],
-  ] as const) expect(inputDocument(url, origin)).toBe(permitted)
+    ["https://example.com/", "https://example.com", true],
+    ["about:blank", "null", true],
+    ["about:srcdoc", "chrome-extension://pw", false],
+    ["blob:chrome-extension://pw/id", "null", false],
+    ["devtools://devtools/bundled/", "devtools://devtools", false],
+    ["", "", false],
+  ] as const)
+    expect(inputDocument(url, origin)).toBe(permitted)
 })
 
 test("allows cross-origin HTTP navigation but rejects unsafe destinations and embedded credentials", () => {
@@ -221,14 +225,19 @@ test("a frameID the agent passes resolves only to a frame it may use, and names 
   const children = [{ parentID: "main", tree: { frame: { id: "cross", url: "https://other.example/" } } }]
 
   // Neither the extension's target nor a web target below it contributes frames to the agent's visible trees.
-  const extensions = excludedFrames(["overlay", "cross-now-extension"], [
-    { frame: { id: "overlay", url: "chrome-extension://abc/menu.html" }, childFrames: [
-      { frame: { id: "nested-extension", url: "chrome-extension://abc/nested.html" } },
-    ] },
-    { frame: { id: "nested-web", url: "https://example.com/nested" }, childFrames: [
-      { frame: { id: "grandchild", url: "about:blank" } },
-    ] },
-  ])
+  const extensions = excludedFrames(
+    ["overlay", "cross-now-extension"],
+    [
+      {
+        frame: { id: "overlay", url: "chrome-extension://abc/menu.html" },
+        childFrames: [{ frame: { id: "nested-extension", url: "chrome-extension://abc/nested.html" } }],
+      },
+      {
+        frame: { id: "nested-web", url: "https://example.com/nested" },
+        childFrames: [{ frame: { id: "grandchild", url: "about:blank" } }],
+      },
+    ],
+  )
 
   const access = (frameID: string, known = extensions) =>
     agentFrame({ root, children, extensions: known }, frameID).type
@@ -360,9 +369,9 @@ test("sticky agent provenance is inherited without inheriting a running command"
 })
 
 test("what happens in a tab is the agent's while its command runs and for a grace period after, until the user acts", () => {
-  const at = (input: Partial<Parameters<typeof agentCaused>[0]>) => agentCaused({ now: 100_000, agentRunning: false, ...input })
+  const at = (input: Partial<TabActivity>) => agentDriven({ agentRuns: 0, ...input }, 100_000)
 
-  expect(at({ agentRunning: true })).toBe(true)
+  expect(at({ agentRuns: 1 })).toBe(true)
   // A script the command started, such as a timer that writes the clipboard a moment after it returned.
   expect(at({ agentEndedAt: 99_950 })).toBe(true)
   expect(at({ agentEndedAt: 100_000 - DOWNLOAD_GRACE_MS })).toBe(true)

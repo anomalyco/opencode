@@ -70,7 +70,7 @@ export function createPagePrompts(input: {
   /** Where the tab's decisions are made and apply: the local profile or one remote server's partition. */
   readonly scope: DecisionScope
   readonly sites: SitePermissions
-  /** The agent drives the tab: it ran a command in it, or opened it (see `agentDrivenTab` in chromium.ts). */
+  /** The agent drives the tab: it ran a command in it, or the tab that opened it did (policy.ts `agentDriven`, sticky). */
   readonly agentDriven: () => boolean
   /** The tab's top-level address as the pane shows it, so a preview reads as its file. */
   readonly top: () => string
