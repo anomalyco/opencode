@@ -502,7 +502,10 @@ fn a_project_v2_plugin_waits_for_approval() {
 
 // Expected (bigboi P8-1): what runs is what was approved. A save between the approval and the JS host's import (here
 // while the JS host is busy with another plugin's command) runs neither the saved module nor its setup: the approved
-// files run, and the saved ones wait for a decision of their own.
+// files run, and the saved ones wait for a decision of their own. The approval stages the approved copy off the UI
+// thread and only then sends its load (js-followups), so the save waits for that load: one that came before it would
+// change the files before they were copied, and the approved build would never load (the saved one is held instead).
+// Without this wait the race lost 7 of 40 runs under load with jsnpm-3 and 6 of 40 without it.
 #[test]
 fn a_save_after_approval_runs_nothing_unapproved() {
     let Some(config) = config() else { return };
@@ -511,6 +514,13 @@ fn a_save_after_approval_runs_nothing_unapproved() {
     let tui = &pipe.harness.tui;
     tui.keymap.dispatch("probe.hold", Some("1500"));
     approve(&pipe, &dir);
+    let target = dir.to_string_lossy().into_owned();
+    // Turns of the UI only, not the JS host's settle: the host is in the hold, which the save is to come before. On a
+    // machine slow enough for the hold to end first, the approved module may have run already.
+    pipe.harness.wait("the approved copy's load is sent", || {
+        crate::plugin_pipe::turn(&pipe.harness);
+        pipe.scripts().loading(&target) || marker.exists()
+    });
     let file = dir.join("tui.tsx");
     let source = std::fs::read_to_string(&file).unwrap();
     std::fs::write(&file, source.replace("const MODULE = true", "const MODULE = \"saved\"")).unwrap();
@@ -518,7 +528,9 @@ fn a_save_after_approval_runs_nothing_unapproved() {
     opencode_tui::plugins::host::reconcile(tui);
     pipe.settle();
     let ran = std::fs::read_to_string(&marker).unwrap_or_default();
-    assert_eq!(ran.lines().collect::<Vec<_>>(), [r#"{"module":true}"#], "an unapproved module ran");
+    let ran: Vec<&str> = ran.lines().collect();
+    assert!(!ran.iter().any(|line| line.contains("saved")), "an unapproved module ran: {ran:?}");
+    assert_eq!(ran, [r#"{"module":true}"#], "the approved module did not run once");
     assert_eq!(listed(&pipe, &dir, PROBE), Some(Status::Pending));
 }
 
