@@ -862,7 +862,7 @@ function ComposerAttachments(props: {
               const missing = () => url.state === "errored" || (url.state === "ready" && !url())
 
               return (
-                <div class="relative group shrink-0">
+                <div class="relative group shrink-0 self-start">
                   <Tooltip
                     value={attachment.type === "path" ? attachment.path : attachment.filename}
                     placement="top"
@@ -876,12 +876,12 @@ function ComposerAttachments(props: {
                         </AttachmentCard>
                       }
                     >
-                      <Show when={src()} fallback={<div class="w-[58px] h-[46px]" />}>
+                      <Show when={src()} fallback={<div class="w-[78px] h-[52px]" />}>
                         {(value) => (
                           <img
                             src={value()}
                             alt={attachment.filename}
-                            class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                            class="w-[78px] h-[52px] rounded-[6px] object-cover"
                             onClick={(event) => props.onAttachmentClick?.(attachment, event.currentTarget)}
                           />
                         )}
