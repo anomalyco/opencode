@@ -66,14 +66,19 @@ pub fn open(tabs: &[Tab], tab: Tab) -> Option<Vec<Tab>> {
     Some(next)
 }
 
-/// `closeSessionTab`: the tabs without `session`, and the tab to select next (right, then left).
-pub fn close(tabs: &[Tab], session: &str) -> Option<(Vec<Tab>, Option<String>)> {
-    let index = tabs.iter().position(|tab| tab.session_id == session)?;
+/// `closeSessionTab`: the tabs without `session` (`None` when it is not open), and the tab to select next (right,
+/// then left). Another TUI sharing the tab list may already have closed the tab, so its last known index still
+/// picks the neighbour that took its place.
+pub fn close(tabs: &[Tab], session: &str, last_index: Option<usize>) -> (Option<Vec<Tab>>, Option<String>) {
+    let Some(index) = tabs.iter().position(|tab| tab.session_id == session) else {
+        let next = last_index.and_then(|index| tabs.get(index.min(tabs.len().saturating_sub(1))));
+        return (None, next.map(|tab| tab.session_id.clone()));
+    };
     let next = tabs
         .get(index + 1)
         .or_else(|| index.checked_sub(1).and_then(|before| tabs.get(before)))
         .map(|tab| tab.session_id.clone());
-    Some((tabs.iter().filter(|tab| tab.session_id != session).cloned().collect(), next))
+    (Some(tabs.iter().filter(|tab| tab.session_id != session).cloned().collect()), next)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -316,10 +321,19 @@ mod tests {
 
     #[test]
     fn close_selects_right_then_left() {
-        assert_eq!(close(&tabs(&["a", "b", "c"]), "b"), Some((tabs(&["a", "c"]), Some("c".into()))));
-        assert_eq!(close(&tabs(&["a", "b"]), "b").unwrap().1, Some("a".into()));
-        assert_eq!(close(&tabs(&["a"]), "a").unwrap().1, None);
-        assert_eq!(close(&tabs(&["a", "b"]), "missing"), None);
+        assert_eq!(close(&tabs(&["a", "b", "c"]), "b", None), (Some(tabs(&["a", "c"])), Some("c".into())));
+        assert_eq!(close(&tabs(&["a", "b"]), "b", None).1, Some("a".into()));
+        assert_eq!(close(&tabs(&["a"]), "a", None).1, None);
+        assert_eq!(close(&tabs(&["a", "b"]), "missing", None), (None, None));
+    }
+
+    #[test]
+    fn closing_an_already_removed_tab_picks_the_neighbour_at_its_last_index() {
+        let all = tabs(&["a", "c"]);
+        assert_eq!(close(&all, "b", Some(1)), (None, Some("c".into())));
+        assert_eq!(close(&all, "d", Some(2)).1, Some("c".into()));
+        assert_eq!(close(&all, "b", None).1, None);
+        assert_eq!(close(&[], "b", Some(0)).1, None);
     }
 
     #[test]
@@ -396,7 +410,7 @@ mod tests {
     #[test]
     fn history_returns_to_the_previous_tab_after_a_close() {
         let mut history = history(&["a", "c"]);
-        let (rest, _) = close(&tabs(&["a", "b", "c"]), "b").unwrap();
+        let rest = close(&tabs(&["a", "b", "c"]), "b", None).0.unwrap();
         history.record("b");
         assert_eq!(history.step(&rest, Some("b"), false), Some("c".into()));
     }

@@ -214,6 +214,49 @@ fn a_background_tab_reads_its_pending_permission() {
     assert!(waiting, "{}", h.app.text());
 }
 
+// #64261: another TUI closes the viewed session's tab. This one keeps showing the session; closing it then selects
+// the neighbour that took its place, not home (TS `session-tabs.test.tsx`, "closing a session whose tab another TUI
+// closed selects its former neighbour").
+#[test]
+fn closing_a_session_whose_tab_another_tui_closed_selects_its_former_neighbour() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    let storage = paths.state.join(CHANNEL).join("tui");
+    std::fs::create_dir_all(&storage).unwrap();
+    let file = |ids: &[&str]| {
+        let mut tabs = json!({ "cwd": {} });
+        tabs["cwd"][cwd()] = json!({ "tabs": ids.iter().map(|id| json!({ "sessionID": id })).collect::<Vec<_>>() });
+        tabs.to_string()
+    };
+    std::fs::write(storage.join("tabs.json"), file(&["ses_a", "ses_b", "ses_c"])).unwrap();
+    let mut routes = routes();
+    routes.splice(0..0, support::session_routes(&support::test_session("ses_c", "Ship the release")));
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        roots: support::roots(paths, CHANNEL),
+        route: support::session_route("ses_b"),
+        events: true,
+        ..support::deps(Arc::new(Memory::new(routes)))
+    };
+    let h = support::mount(100, 30, deps);
+    h.wait_for("Write the docs");
+    let ids = || h.tui.tabs.tabs(&h.tui).into_iter().map(|tab| tab.session_id).collect::<Vec<_>>();
+
+    h.tui
+        .storage()
+        .unwrap()
+        .update("tabs", &json!({}), |value| *value = serde_json::from_str(&file(&["ses_a", "ses_c"])).unwrap())
+        .unwrap();
+    assert!(h.app.wait_until(WAIT, || ids() == ["ses_a", "ses_c"]), "{:?}", ids());
+    // The other client's close leaves this view in place rather than switching sessions under the user.
+    assert_eq!(h.tui.route(), support::session_route("ses_b"));
+
+    opencode_tui::tabs::close(&h.tui, None);
+    let moved = h.app.wait_until(WAIT, || h.tui.route() == support::session_route("ses_c"));
+    assert!(moved, "{:?}", h.tui.route());
+    assert_eq!(ids(), ["ses_a", "ses_c"]);
+}
+
 // Another client holding `tabs.json`'s lock delays the writes, not the UI thread that queues them
 // (`context/storage.tsx` returns a pending promise).
 #[test]
