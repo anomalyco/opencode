@@ -544,6 +544,22 @@ export const dict = {
     "S'exécute après la création d'un nouvel espace de travail (arbre de travail).",
   "dialog.project.edit.worktree.startup.placeholder": "p. ex. bun install",
   "dialog.usageExceeded.dontShowAgain": "Ne plus afficher",
+  "dialog.update.major.title": "OpenCode 2.0 est prêt",
+  "dialog.update.major.lead":
+    "La prochaine version majeure est téléchargée. Redémarrez pour terminer la mise à niveau.",
+  "dialog.update.major.new.browser": "Navigateur intégré",
+  "dialog.update.major.new.background": "Sous-agents et commandes en arrière-plan",
+  "dialog.update.major.new.plugins": "Plugins de bureau pour une application à votre image (expérimentaux)",
+  "dialog.update.major.new.sessions": "Un serveur partagé synchronise l'application, le terminal et le Web",
+  "dialog.update.major.new.pair": "Associez un téléphone ou un autre ordinateur",
+  "dialog.update.major.keeps.data": "Conserve vos sessions, projets et paramètres",
+  "dialog.update.major.plugins": "Les plugins conçus pour OpenCode 1 doivent être mis à jour",
+  "dialog.update.major.scheduled": "OpenCode 2.0 s'installera quand vous quitterez l'application.",
+  "dialog.update.major.failed": "Impossible d'installer OpenCode 2.0.",
+  "dialog.update.major.manual": "Pour installer OpenCode 2.0 manuellement, consultez {{url}}",
+  "dialog.update.major.action.quit": "Mettre à niveau en quittant",
+  "dialog.update.major.action.restart": "Redémarrer pour mettre à niveau",
+  "dialog.update.major.action.restartNow": "Redémarrer maintenant",
 
   "context.breakdown.title": "Répartition du contexte",
   "context.breakdown.note":

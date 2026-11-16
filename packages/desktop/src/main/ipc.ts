@@ -82,18 +82,23 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
   ipcMain.handle("updater-subscribe", (event) => {
     const id = event.sender.id
-    updaterSubscriptions.set(
-      id,
-      deps.updater.subscribe((state) => {
-        if (event.sender.isDestroyed()) return updaterSubscriptions.delete(id)
-        event.sender.send("updater-state", state)
-      }),
-    )
+    const send = (channel: string) => (state: unknown) => {
+      if (event.sender.isDestroyed()) return updaterSubscriptions.delete(id)
+      event.sender.send(channel, state)
+    }
+    const unsubscribe = [
+      deps.updater.subscribe(send("updater-state")),
+      deps.updater.major.subscribe(send("updater-major-state")),
+    ]
+    updaterSubscriptions.set(id, () => unsubscribe.forEach((stop) => stop()))
     event.sender.once("destroyed", () => updaterSubscriptions.delete(id))
   })
   ipcMain.handle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
-  ipcMain.handle("updater-check", () => deps.updater.check())
+  ipcMain.handle("updater-check", () => deps.updater.checkNow())
   ipcMain.handle("updater-install", () => deps.updater.install())
+  ipcMain.handle("updater-major-prompt", () => deps.updater.major.prompt())
+  ipcMain.handle("updater-major-restart", () => deps.updater.major.restart())
+  ipcMain.handle("updater-major-schedule", () => deps.updater.major.schedule())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>

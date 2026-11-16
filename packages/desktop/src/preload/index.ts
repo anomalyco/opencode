@@ -1,13 +1,34 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type { ElectronAPI, WslServersEvent } from "./types"
-import type { UpdaterState } from "@opencode-ai/app/updater"
+import type { MajorUpdateState, UpdaterState } from "@opencode-ai/app/updater"
 
 const updaterCallbacks = new Set<(state: UpdaterState) => void>()
+const majorCallbacks = new Set<(state: MajorUpdateState) => void>()
 let updaterState: UpdaterState | undefined
+let majorState: MajorUpdateState | undefined
 let updaterSubscription: Promise<void> | undefined
 const updaterHandler = (_: unknown, state: UpdaterState) => {
   updaterState = state
   updaterCallbacks.forEach((callback) => callback(state))
+}
+const majorHandler = (_: unknown, state: MajorUpdateState) => {
+  majorState = state
+  majorCallbacks.forEach((callback) => callback(state))
+}
+// One main-process subscription feeds both the OpenCode 1 updater and the OpenCode 2 offer.
+const subscribeUpdater = () => {
+  if (updaterSubscription) return updaterSubscription
+  ipcRenderer.on("updater-state", updaterHandler)
+  ipcRenderer.on("updater-major-state", majorHandler)
+  updaterSubscription = ipcRenderer.invoke("updater-subscribe")
+  return updaterSubscription
+}
+const unsubscribeUpdater = () => {
+  if (updaterCallbacks.size > 0 || majorCallbacks.size > 0) return
+  ipcRenderer.removeListener("updater-state", updaterHandler)
+  ipcRenderer.removeListener("updater-major-state", majorHandler)
+  updaterSubscription = undefined
+  void ipcRenderer.invoke("updater-unsubscribe")
 }
 
 const api: ElectronAPI = {
@@ -40,21 +61,28 @@ const api: ElectronAPI = {
     subscribe: async (cb) => {
       updaterCallbacks.add(cb)
       if (updaterState) cb(updaterState)
-      if (!updaterSubscription) {
-        ipcRenderer.on("updater-state", updaterHandler)
-        updaterSubscription = ipcRenderer.invoke("updater-subscribe")
-      }
-      await updaterSubscription
+      await subscribeUpdater()
       return () => {
         updaterCallbacks.delete(cb)
-        if (updaterCallbacks.size > 0) return
-        ipcRenderer.removeListener("updater-state", updaterHandler)
-        updaterSubscription = undefined
-        void ipcRenderer.invoke("updater-unsubscribe")
+        unsubscribeUpdater()
       }
     },
     check: () => ipcRenderer.invoke("updater-check"),
     install: () => ipcRenderer.invoke("updater-install"),
+    major: {
+      subscribe: async (cb) => {
+        majorCallbacks.add(cb)
+        if (majorState) cb(majorState)
+        await subscribeUpdater()
+        return () => {
+          majorCallbacks.delete(cb)
+          unsubscribeUpdater()
+        }
+      },
+      prompt: () => ipcRenderer.invoke("updater-major-prompt"),
+      restart: () => ipcRenderer.invoke("updater-major-restart"),
+      schedule: () => ipcRenderer.invoke("updater-major-schedule"),
+    },
   },
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),

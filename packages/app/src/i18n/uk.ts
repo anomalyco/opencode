@@ -582,6 +582,21 @@ export const dict = {
   "dialog.releaseNotes.media.alt": "Попередній перегляд релізу",
 
   "dialog.usageExceeded.dontShowAgain": "Більше не показувати",
+  "dialog.update.major.title": "OpenCode 2.0 готовий до встановлення",
+  "dialog.update.major.lead": "Наступний великий реліз уже завантажено. Перезапустіть, щоб завершити оновлення.",
+  "dialog.update.major.new.browser": "Вбудований браузер",
+  "dialog.update.major.new.background": "Фонові підагенти та команди",
+  "dialog.update.major.new.plugins": "Десктопні плагіни, щоб налаштувати застосунок під себе (експериментальні)",
+  "dialog.update.major.new.sessions": "Один спільний сервер синхронізує застосунок, термінал і браузер",
+  "dialog.update.major.new.pair": "Сполучення з телефоном або іншим комп'ютером",
+  "dialog.update.major.keeps.data": "Зберігає ваші сесії, проєкти та налаштування",
+  "dialog.update.major.plugins": "Плагіни, створені для OpenCode 1, потребують оновлення",
+  "dialog.update.major.scheduled": "OpenCode 2.0 буде встановлено під час виходу.",
+  "dialog.update.major.failed": "Не вдалося встановити OpenCode 2.0.",
+  "dialog.update.major.manual": "Щоб встановити OpenCode 2.0 вручну, перейдіть за адресою {{url}}",
+  "dialog.update.major.action.quit": "Оновити під час виходу",
+  "dialog.update.major.action.restart": "Перезапустити й оновити",
+  "dialog.update.major.action.restartNow": "Перезапустити зараз",
 
   "context.breakdown.title": "Розподіл контексту",
   "context.breakdown.note":
