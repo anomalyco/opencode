@@ -49,10 +49,9 @@ const it = testEffect(
   ),
 )
 
-const grant = [
-  { action: "browser", resource: "*", effect: "allow" },
-  { action: "skill", resource: "browser", effect: "allow" },
-] as const
+const grant = [{ action: "browser", resource: "*", effect: "allow" }] as const
+// What versions before this one granted; a revoke or the startup sweep must still remove it.
+const legacyGrant = [...grant, { action: "skill", resource: "browser", effect: "allow" }] as const
 
 const tab = {
   id: Browser.TabID.make(`tab_${crypto.randomUUID()}`),
@@ -259,7 +258,7 @@ it.live("startup revokes a grant whose server no longer runs", () =>
     // What a server killed while attached leaves behind: the grant and the record of the process that wrote it.
     yield* storage.set(`grant:${sessionID}`, owner(ref.directory, exited))
     const sessions = yield* Session.Service
-    yield* sessions.create({ id: sessionID, location: ref, permissions: [...grant] })
+    yield* sessions.create({ id: sessionID, location: ref, permissions: [...legacyGrant] })
     const locations = yield* LocationServiceMap.Service
     yield* Plugin.awaitActivation.pipe(Effect.provideContext(yield* locations.contextEffect(ref).pipe(Effect.scoped)))
 
@@ -833,6 +832,36 @@ it.live("with the browser plugin removed, a grant left in a session lists and re
   }),
 )
 
+it.live("with the browser plugin removed, a person's deny on their own browser skill outranks a grant left behind", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(dir.path, ".opencode/skills/browser/SKILL.md"),
+        "---\nname: browser\ndescription: Drive Playwright against the staging site.\n---\n# Playwright\n",
+      ),
+    )
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(dir.path, "opencode.json"),
+        JSON.stringify({ plugins: ["-opencode.browser"], permissions: [rule("browser", "deny", "skill")] }),
+      ),
+    )
+    const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+    const locations = yield* LocationServiceMap.Service
+    const context = yield* locations.contextEffect(ref).pipe(Effect.scoped)
+    yield* Plugin.awaitActivation.pipe(Effect.provideContext(context))
+    const sessions = yield* Session.Service
+    const contexts = Context.get(context, SessionContext.Service)
+    // A grant allows no skill, so the person's deny decides.
+    const current = yield* sessions.create({ location: ref, permissions: [...grant] })
+    expect((yield* listing(contexts, current.id)).skill).toBe(false)
+    // An earlier version's grant also allowed the skill. Nothing sweeps it once the plugin is removed, so it still
+    // outranks the deny; with the plugin loaded, a revoke or the startup sweep removes it.
+    const legacy = yield* sessions.create({ location: ref, permissions: [...legacyGrant] })
+    expect((yield* listing(contexts, legacy.id)).skill).toBe(true)
+  }),
+)
 // Loads the browser skill as the model would, through the read tool.
 const readSkill = (browser: Effect.Success<ReturnType<typeof setup>>, agent: string, sessionID = browser.session.id) =>
   Effect.gen(function* () {

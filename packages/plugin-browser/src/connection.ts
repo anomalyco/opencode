@@ -93,25 +93,15 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     ...(configured.get(agent ?? session.agent ?? "") ?? [{ action: "*", resource: "*", effect: "deny" as const }]),
     ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
   ]
-  // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call and
-  // every load of the `browser` skill to allow. The rules from config, the agent's definition and the session itself
-  // decide instead: a deny refuses the call, and an ask makes the permission check prompt as it would without the
-  // grant, unless the user already saved "always" for it. No matching rule leaves it allowed. The skill's denies come
-  // from the `experimental.rules` hook below, so core refuses those before this hook runs.
+  // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call to
+  // allow. The rules from config, the agent's definition and the session itself decide instead: a deny refuses the
+  // call, and an ask makes the permission check prompt as it would without the grant, unless the user already saved
+  // "always" for it. No matching rule leaves it allowed.
   yield* ctx.permission.hook("evaluate", (event) => {
-    const skill = event.action === "skill" && event.resources.includes(BrowserSkill.id)
-    if ((event.action !== "browser" && !skill) || event.effect === "deny") return Effect.void
+    if (event.action !== "browser" || event.effect === "deny") return Effect.void
     return ctx.session.get({ sessionID: event.sessionID }).pipe(
       Effect.map((session) => {
         const rules = rulesFor(session, event.agent)
-        if (skill) {
-          if (
-            !event.experimental?.approvedSave &&
-            BrowserMachine.selectRule(rules, "skill", BrowserSkill.id)?.effect === "ask"
-          )
-            event.effect = "ask"
-          return
-        }
         const denied = denial(rules, event.resources)
         if (denied) {
           event.effect = "deny"
@@ -137,12 +127,13 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       ),
     )
   })
-  // The grant comes last, so without these denies core would list the browser tools and skill to an agent whose own
-  // rules deny them, and only the hook above would refuse their calls. A deny added here is evaluated after the grant:
-  // it hides them from that agent's steps and Code Mode catalog, and core refuses their calls before any hook runs. An
-  // ask or a narrower deny keeps them listed, for the hook above to decide each call. The skill is denied while no
-  // desktop is attached, or when the agent is denied the whole browser, only while the registered `browser` skill is
-  // the built-in one: a person's own skill of that name follows their rules alone.
+  // The grant comes last, so without this deny core would list the browser tools to an agent whose own rules deny the
+  // whole browser, and only the hook above would refuse their calls. A deny added here is evaluated after the grant: it
+  // hides them from that agent's steps and Code Mode catalog, and core refuses their calls before any hook runs. An ask
+  // or a narrower deny keeps them listed, for the hook above to decide each call. The grant allows no skill, so the
+  // person's rules decide every skill; this hook only hides the built-in `browser` skill while the session holds no
+  // grant or its agent is denied the browser. A person's own skill of that name replaces the built-in one and follows
+  // their rules alone.
   yield* ctx.permission.hook("experimental.rules", (event) =>
     ctx.skill.list().pipe(
       Effect.map((skills) => skills.data.some((skill) => skill.id === BrowserSkill.id && skill.path === BrowserSkill.info.path)),
@@ -151,12 +142,9 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       Effect.map((builtin) => {
         const rules = rulesFor({ permissions: event.session }, event.agent)
         const browser = BrowserMachine.deniesBrowser(rules)
-        if (browser) event.deny.push({ action: "browser", resource: "*" })
-        if (
-          BrowserMachine.selectRule(rules, "skill", BrowserSkill.id)?.effect === "deny" ||
-          (builtin && (browser || !event.session.some(BrowserMachine.isGrant)))
-        )
-          event.deny.push({ action: "skill", resource: BrowserSkill.id })
+        if (browser) event.deny({ action: "browser", resource: "*" })
+        if (builtin && (browser || !BrowserMachine.holdsGrant(event.session)))
+          event.deny({ action: "skill", resource: BrowserSkill.id })
       }),
     ),
   )
