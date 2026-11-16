@@ -4,8 +4,23 @@ import { randomUUID } from "node:crypto"
 import os from "node:os"
 import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
-import { and, asc, eq, gt, isNull, lte, min, ne, or, sql } from "drizzle-orm"
-import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule, Schema } from "effect"
+import { and, asc, eq, gt, isNotNull, isNull, lte, min, ne, or, sql } from "drizzle-orm"
+import {
+  Cause,
+  Clock,
+  Context,
+  Cron,
+  DateTime,
+  Effect,
+  FiberMap,
+  Latch,
+  Layer,
+  Option,
+  Result,
+  Schedule,
+  Schema,
+  Stream,
+} from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import {
@@ -28,6 +43,7 @@ import type { ProjectID } from "@opencode/schema/project-id"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Agent } from "./agent.js"
 import { AutomationCode } from "./automation/code.js"
+import { AutomationEvent } from "./automation/event.js"
 import { AutomationTable } from "./automation/sql.js"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
@@ -79,6 +95,7 @@ export interface ListInput {
 export interface Interface {
   readonly create: (
     input: CreateInput,
+    invocation?: ReturnType<typeof Permission.invocation>,
   ) => Effect.Effect<Info, InvalidError | DisabledError | Session.NotFoundError | Permission.Error>
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly get: (id: ID) => Effect.Effect<Info, NotFoundError>
@@ -222,6 +239,7 @@ const layer = Layer.effect(
     const instances = yield* Instance.Service
     const execution = yield* SessionExecution.Service
     const doorbell = yield* Latch.make()
+    const watches = yield* FiberMap.make<ID>()
 
     /**
      * The agent a run's child Session starts with, if `owner` could start it with the subagent tool: not hidden, not
@@ -278,8 +296,10 @@ const layer = Layer.effect(
         const config = yield* Config.Service
         const flags = yield* Flag.Service
         const entries = yield* config.entries()
+        const resolved = flags.resolve(entries)
         return {
-          enabled: flags.resolve(entries).automations.enabled,
+          enabled: resolved.automations.enabled,
+          events: resolved.mcp_events.enabled,
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(inDirectory(directory))
@@ -337,7 +357,16 @@ const layer = Layer.effect(
       sessions.get(sessionID).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.undefined))
 
     /** A finished run's next slot, after the time it finished so a slow run doesn't trigger a burst, or done. */
-    const advance = Effect.fnUntraced(function* (row: Row, done = false) {
+    const advance = Effect.fnUntraced(function* (row: Row, done = false, event?: AutomationEvent.Message) {
+      if (event && row.event_position)
+        return {
+          ...(done ? { status: "done" as const } : {}),
+          event_position: {
+            ...row.event_position,
+            cursor: event.cursor,
+            id: event.eventId,
+          },
+        }
       const next = following(row, yield* Clock.currentTimeMillis)
       const ended = done || finished(row, next)
       return { ...(ended ? { status: "done" as const } : {}), next_due_at: ended ? null : next }
@@ -393,9 +422,14 @@ const layer = Layer.effect(
     }
 
     const runPrompt = Effect.fnUntraced(
-      function* (row: Row, action: PromptAction, due: number, now: number) {
+      function* (row: Row, action: PromptAction, due: number, now: number, event?: AutomationEvent.Message) {
         const target = yield* promptTarget(row, action.to)
-        if (action.to.session !== undefined && row.last_message_id !== null && (yield* pending(row.last_message_id))) {
+        if (
+          !event &&
+          action.to.session !== undefined &&
+          row.last_message_id !== null &&
+          (yield* pending(row.last_message_id))
+        ) {
           // The wake that followed admission may have been lost; waking again is harmless.
           yield* execution.wake(target)
           return yield* settle(row, {
@@ -405,7 +439,12 @@ const layer = Layer.effect(
             time_updated: now,
           })
         }
-        const item = yield* admit(row, target, action.prompt, due, now)
+        const text = event ? AutomationEvent.prompt(action.prompt, event) : action.prompt
+        if (event && Buffer.byteLength(text) > 32_768)
+          return yield* new InvalidError({
+            reason: "Event prompt exceeds 32 KiB",
+          })
+        const item = yield* admit(row, target, text, due, now)
         yield* settle(
           row,
           {
@@ -415,13 +454,13 @@ const layer = Layer.effect(
             last_outcome: now - due >= LATE_AFTER ? "late" : "fired",
             last_output: deliverySummary(item.sessionID, action.to.subagent),
             retry_at: null,
-            ...(yield* advance(row)),
+            ...(yield* advance(row, false, event)),
             time_updated: now,
           },
           { evenIfPaused: true },
         )
       },
-      (effect, row, _action, _due, now) =>
+      (effect, row, _action, _due, now, _event?: AutomationEvent.Message) =>
         effect.pipe(Effect.catchTag("Automation.InvalidError", (error) => pauseWith(row, now, error.reason))),
     )
 
@@ -433,6 +472,7 @@ const layer = Layer.effect(
       const ended = yield* Clock.currentTimeMillis
       const strikes = row.failures + 1
       const output = outcome.output === undefined ? outcome.error : `${outcome.output}\n${outcome.error}`
+      if (row.trigger.type === "event") return yield* pauseWith(row, now, output)
       if (!outcome.invalid && strikes < MAX_CODE_FAILURES) {
         return yield* settle(row, {
           failures: strikes,
@@ -457,7 +497,13 @@ const layer = Layer.effect(
       )
     })
 
-    const runCode = Effect.fnUntraced(function* (row: Row, action: CodeAction, due: number, now: number) {
+    const runCode = Effect.fnUntraced(function* (
+      row: Row,
+      action: CodeAction,
+      due: number,
+      now: number,
+      event?: AutomationEvent.Message,
+    ) {
       // The tools were authorized for the creating Session's agent and permissions, so a run needs that Session.
       const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
       if (!owner)
@@ -474,6 +520,7 @@ const layer = Layer.effect(
         state: row.state,
         now,
         runs: row.run_count,
+        ...(event && { event: AutomationEvent.input(event) }),
       }).pipe(inDirectory(row.directory))
       if (!outcome.ok) return yield* codeFailed(row, now, outcome)
 
@@ -506,12 +553,17 @@ const layer = Layer.effect(
             ? AutomationCode.handoffOutput(deliverySummary(sent.success.sessionID, send?.to?.subagent), outcome.output)
             : (outcome.output ?? null),
           retry_at: null,
-          ...(yield* advance(row, outcome.done)),
+          ...(yield* advance(row, outcome.done, event)),
           time_updated: yield* Clock.currentTimeMillis,
         },
         { evenIfPaused: true },
       )
     })
+
+    const runAction = (row: Row, due: number, now: number, event?: AutomationEvent.Message) =>
+      row.action.type === "prompt"
+        ? runPrompt(row, row.action, due, now, event)
+        : runCode(row, row.action, due, now, event)
 
     /** Runs one due automation, after the checks both kinds of action share: leadership, expiry and the flag. */
     const runDue = Effect.fnUntraced(function* (row: Row, now: number) {
@@ -535,12 +587,7 @@ const layer = Layer.effect(
         yield* settle(row, { last_outcome: "disabled", retry_at: now + DISABLED_RETRY, time_updated: now })
         return
       }
-      switch (row.action.type) {
-        case "prompt":
-          return yield* runPrompt(row, row.action, due, now)
-        case "code":
-          return yield* runCode(row, row.action, due, now)
-      }
+      return yield* runAction(row, due, now)
     })
 
     const tickAt = Effect.fnUntraced(function* (now: number) {
@@ -663,6 +710,164 @@ const layer = Layer.effect(
       Effect.schedule(Schedule.spaced(LEADER_TTL / 3)),
     )
 
+    // Re-check the original placement and the resource-specific grant before opening a stream or running an action.
+    const checkWatch = Effect.fnUntraced(function* (row: Row, server: string) {
+      const config = yield* settings(row.directory)
+      if (!config.enabled || !config.events)
+        return yield* new InvalidError({
+          reason: "Event automations are disabled",
+        })
+      const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
+      if (
+        !owner ||
+        owner.projectID !== row.project_id ||
+        owner.location.directory !== row.directory ||
+        owner.location.workspaceID !== undefined
+      )
+        return yield* new InvalidError({
+          reason: "The session that authorized this watch moved or was deleted",
+        })
+      const action = "opencode_watch_mcp_event"
+      yield* Effect.gen(function* () {
+        yield* Plugin.awaitActivation
+        const agents = yield* Agent.Service
+        const agent = yield* agents.select(owner.agent)
+        if (!agent.info || agent.id !== row.event_position?.agent)
+          return yield* new InvalidError({
+            reason: "The session agent that authorized this watch changed",
+          })
+        const permission = yield* Permission.Service
+        yield* permission
+          .assert({
+            action,
+            resources: [server],
+            sessionID: owner.id,
+            agent: agent.id,
+          })
+          .pipe(Effect.provideService(Permission.Unattended, [{ action, resource: server, effect: "allow" }]))
+      }).pipe(inDirectory(row.directory))
+    })
+
+    const expireWatch = (row: Row, now: number) =>
+      settle(row, {
+        status: "done",
+        last_outcome: "expired",
+        time_updated: now,
+      })
+
+    const watch = Effect.fnUntraced(function* (initial: Row) {
+      const id = initial.id
+      const trigger = initial.trigger
+      if (trigger.type !== "event") return
+      const open = Effect.gen(function* () {
+        const row = yield* find(id)
+        if (row.status !== "active") return
+        const now = yield* Clock.currentTimeMillis
+        if (row.expires_at !== null && now >= row.expires_at) return yield* expireWatch(row, now)
+        yield* checkWatch(row, trigger.server)
+        const position = row.event_position
+        if (!position)
+          return yield* new InvalidError({
+            reason: "No authorized event watch",
+          })
+        if (position.cursor === null)
+          return yield* new InvalidError({
+            reason: "No replay cursor; recreate the watch to start from now",
+          })
+        const stream = yield* AutomationEvent.resolve(trigger).pipe(inDirectory(row.directory))
+        // Even a crash before the first heartbeat must not silently turn a restart into a fresh watch.
+        if (position.cursor === undefined) yield* settle(row, { event_position: { ...position, cursor: null } })
+        yield* stream(position.cursor).pipe(
+          Stream.runForEachWhile(
+            Effect.fnUntraced(function* (message) {
+              const current = yield* find(id)
+              const at = yield* Clock.currentTimeMillis
+              if (current.status !== "active" || !(yield* claimLeader(at))) return false
+              if (current.expires_at !== null && at >= current.expires_at) {
+                yield* expireWatch(current, at)
+                return false
+              }
+              yield* checkWatch(current, trigger.server)
+              if (message.type !== "event") {
+                yield* settle(current, {
+                  event_position: {
+                    ...position,
+                    ...current.event_position,
+                    cursor: message.cursor,
+                  },
+                })
+                return true
+              }
+              if (current.event_position?.id === message.eventId) return true
+              yield* runAction(current, at, at, message)
+              return (yield* find(id)).status === "active"
+            }),
+          ),
+        )
+      }).pipe(
+        Effect.catchIf(
+          (error) => error instanceof AutomationEvent.Disconnected,
+          (error) =>
+            Effect.gen(function* () {
+              if ((yield* find(id)).event_position?.cursor == null)
+                return yield* new InvalidError({
+                  reason: "No replay cursor; recreate the watch to start from now",
+                })
+              return yield* Effect.fail(error)
+            }),
+        ),
+        Effect.retry({
+          while: (error) => error instanceof AutomationEvent.Disconnected,
+          times: 3,
+          schedule: Schedule.exponential("1 second"),
+        }),
+      )
+      const expires = initial.expires_at
+      const run =
+        expires === null
+          ? open
+          : Effect.raceFirst(
+              open,
+              Effect.gen(function* () {
+                yield* Effect.sleep(Math.max(0, expires - (yield* Clock.currentTimeMillis)))
+                yield* expireWatch(yield* find(id), yield* Clock.currentTimeMillis)
+              }),
+            )
+      yield* run.pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.interrupt
+            : Effect.gen(function* () {
+                const reason = Cause.squash(cause)
+                const row = yield* find(id)
+                if (row.status === "active")
+                  yield* pauseWith(
+                    row,
+                    yield* Clock.currentTimeMillis,
+                    (reason instanceof Error ? reason.message : String(reason)).slice(0, 1024),
+                  )
+              }),
+        ),
+        Effect.catchTag("Automation.NotFoundError", () => Effect.void),
+      )
+    })
+
+    // The lease/doorbell loop also sees changes from other processes. It never polls a producer for events.
+    const reconcileWatches = Effect.gen(function* () {
+      const active = yield* db
+        .select()
+        .from(AutomationTable)
+        .where(and(eq(AutomationTable.status, "active"), isNull(AutomationTable.next_due_at)))
+        .all()
+        .pipe(Effect.orDie)
+      const ids = new Set(active.map((row) => row.id))
+      for (const [id] of Array.from(watches)) if (!ids.has(id)) yield* FiberMap.remove(watches, id)
+      for (const row of active)
+        yield* FiberMap.run(watches, row.id, watch(row), {
+          onlyIfMissing: true,
+        })
+    })
+
     /** Sleeps until the doorbell rings (an automation was created or resumed) or MAX_SLEEP passes. */
     const idle = doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
 
@@ -670,6 +875,7 @@ const layer = Layer.effect(
       yield* doorbell.close
       const active = yield* hasActiveRows
       if (!active && bootChecked) {
+        yield* FiberMap.clear(watches)
         if (leading) yield* releaseLeader
         yield* idle
         return
@@ -677,6 +883,7 @@ const layer = Layer.effect(
       const now = yield* Clock.currentTimeMillis
       const isLeader = yield* claimLeader(now)
       if (!isLeader) {
+        yield* FiberMap.clear(watches)
         leading = false
         bootChecked = true
         yield* idle
@@ -692,6 +899,16 @@ const layer = Layer.effect(
         yield* idle
         return
       }
+      yield* reconcileWatches
+      // No timer tick (or next-slot query) for an event-only database. Keep the shared database lease alive.
+      const timer = yield* db
+        .select({ id: AutomationTable.id })
+        .from(AutomationTable)
+        .where(and(eq(AutomationTable.status, "active"), isNotNull(AutomationTable.next_due_at)))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      if (!timer) return yield* idle
       yield* Effect.scoped(
         Effect.forkScoped(heartbeat).pipe(
           Effect.andThen(
@@ -708,7 +925,7 @@ const layer = Layer.effect(
       if (wait > 0) yield* doorbell.await.pipe(Effect.timeoutOption(wait))
     })
 
-    const run = Effect.forever(loop).pipe(Effect.ensuring(releaseLeader))
+    const run = Effect.forever(loop).pipe(Effect.ensuring(FiberMap.clear(watches).pipe(Effect.andThen(releaseLeader))))
 
     const resolveZone = (tz: string | undefined) => {
       if (tz === undefined) return Effect.succeed(DateTime.zoneMakeLocal())
@@ -726,6 +943,8 @@ const layer = Layer.effect(
       now: number,
     ) {
       switch (trigger.type) {
+        case "event":
+          return { trigger, due: null }
         case "at": {
           const at = parseTime(trigger.at, zone, now)
           if (Option.isNone(at)) return yield* new InvalidError({ reason: `Invalid time: ${trigger.at}` })
@@ -792,7 +1011,7 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      create: Effect.fn("Automation.create")(function* (input) {
+      create: Effect.fn("Automation.create")(function* (input, invocation) {
         const owner = input.sessionID === undefined ? undefined : yield* sessions.get(input.sessionID)
         const directory = owner?.location.directory ?? input.directory ?? os.homedir()
         if (!path.isAbsolute(directory))
@@ -803,7 +1022,38 @@ const layer = Layer.effect(
           Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
         )
         if (!config.enabled) return yield* new DisabledError()
-        const zone = yield* resolveZone(input.trigger.tz ?? config.timezone)
+        if (input.trigger.type === "event") {
+          const trigger = input.trigger
+          if (!config.events)
+            return yield* new InvalidError({
+              reason: "Event automations require experimental.mcp_events",
+            })
+          if (!owner || !invocation || invocation.sessionID !== owner.id || owner.location.workspaceID !== undefined)
+            return yield* new InvalidError({
+              reason: "Create an event automation from a tool call in a local session",
+            })
+          yield* Effect.gen(function* () {
+            const agents = yield* Agent.Service
+            const agent = yield* agents.select(owner.agent)
+            if (!agent.info || agent.id !== invocation.agent)
+              return yield* new InvalidError({
+                reason: "Create the watch with the session's current agent",
+              })
+            const permission = yield* Permission.Service
+            yield* permission.assert({
+              ...invocation,
+              action: "opencode_watch_mcp_event",
+              resources: [trigger.server],
+              metadata: { automation: input.name, trigger },
+            })
+            yield* AutomationEvent.resolve(trigger).pipe(
+              Effect.mapError((error) => new InvalidError({ reason: error.message })),
+            )
+          }).pipe(inDirectory(directory), Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory))
+        }
+        const zone = yield* resolveZone(
+          (input.trigger.type === "event" ? undefined : input.trigger.tz) ?? config.timezone,
+        )
         const now = yield* Clock.currentTimeMillis
         const first = yield* firstDue(input.trigger, input.action, zone, now)
         const expiresAt =
@@ -813,8 +1063,10 @@ const layer = Layer.effect(
                 onNone: () => Effect.fail(new InvalidError({ reason: `Invalid time: ${input.expires}` })),
                 onSome: Effect.succeed,
               })
-        if (expiresAt !== null && first.due > expiresAt)
-          return yield* new InvalidError({ reason: "The automation expires before it first runs" })
+        if (expiresAt !== null && (first.due ?? now) > expiresAt)
+          return yield* new InvalidError({
+            reason: "The automation expires before it first runs",
+          })
         const projectID = owner?.projectID ?? (yield* projects.resolve(AbsolutePath.make(directory))).id
         const action = yield* resolveAction(input, owner, first.trigger, directory, projectID).pipe(
           Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
@@ -829,6 +1081,7 @@ const layer = Layer.effect(
             directory,
             name: input.name,
             trigger: first.trigger,
+            event_position: first.trigger.type === "event" && invocation ? { agent: invocation.agent } : null,
             tz: DateTime.zoneToString(zone),
             action,
             next_due_at: first.due,
@@ -869,6 +1122,7 @@ const layer = Layer.effect(
           .where(and(eq(AutomationTable.id, id), eq(AutomationTable.status, "active")))
           .run()
           .pipe(Effect.orDie)
+        if (row.trigger.type === "event") yield* FiberMap.remove(watches, id)
         return toInfo(yield* find(id))
       }),
       resume: Effect.fn("Automation.resume")(function* (id) {
@@ -879,7 +1133,7 @@ const layer = Layer.effect(
         // its next slot.
         const next =
           row.next_due_at === null || row.next_due_at > now ? row.next_due_at : (following(row, now) ?? row.next_due_at)
-        const done = next === null || finished(row, next) || expired(row, now)
+        const done = (row.trigger.type !== "event" && (next === null || finished(row, next))) || expired(row, now)
         yield* db
           .update(AutomationTable)
           .set({
@@ -898,6 +1152,7 @@ const layer = Layer.effect(
       remove: Effect.fn("Automation.remove")(function* (id) {
         yield* find(id)
         yield* db.delete(AutomationTable).where(eq(AutomationTable.id, id)).run().pipe(Effect.orDie)
+        yield* FiberMap.remove(watches, id)
       }),
       enabled: (directory) => settings(directory).pipe(Effect.map((value) => value.enabled)),
       tick,

@@ -8,6 +8,7 @@ import { Automation } from "../../automation.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
+import { Permission } from "../../permission.js"
 import PROMPT_AUTOMATION from "../../plugin/command/automation.txt"
 import { Session } from "../../session.js"
 import type { SessionSchema } from "../../session/schema.js"
@@ -89,7 +90,7 @@ export const Plugin = {
           options: { namespace: "opencode", codemode: true },
           execute: (input, context) =>
             automations
-              .create({ ...input, sessionID: context.sessionID })
+              .create({ ...input, sessionID: context.sessionID }, Permission.invocation(context))
               .pipe(Effect.map(changed("Created")), Effect.mapError(failure)),
         })
         editor.add({
@@ -186,7 +187,9 @@ function summary(view: View) {
       ? `at ${view.trigger.at}`
       : view.trigger.type === "every"
         ? `every ${view.trigger.every}`
-        : `cron "${view.trigger.cron}"`
+        : view.trigger.type === "cron"
+          ? `cron "${view.trigger.cron}"`
+          : `on ${view.trigger.server} ${view.trigger.event}`
   const action =
     view.action.type === "prompt"
       ? `prompt ${view.action.to.session ?? `subagent ${view.action.to.subagent}`}: ${JSON.stringify(clip(view.action.prompt))}`

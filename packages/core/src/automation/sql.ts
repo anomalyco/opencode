@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm"
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import type { Schema } from "effect"
 import type { Automation } from "@opencode/schema/automation"
+import type { Agent } from "@opencode/schema/agent"
 import type { ProjectID } from "@opencode/schema/project-id"
 import { Timestamps } from "../database/schema.sql.js"
 import type { SessionMessage } from "../session/message.js"
@@ -33,6 +34,12 @@ export const AutomationTable = sqliteTable(
     retry_at: integer(),
     /** Code action state persisted across runs. */
     state: text({ mode: "json" }).$type<Schema.Json>(),
+    /** The authorizing agent and resume point. No cursor before the first open; null means no replay. */
+    event_position: text({ mode: "json" }).$type<{
+      agent: Agent.ID
+      cursor?: string | null
+      id?: string
+    }>(),
     ...Timestamps,
   },
   (table) => [

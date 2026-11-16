@@ -12,6 +12,7 @@ import type { SessionSchema } from "../session/schema.js"
 import { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
 import { Wildcard } from "../util/wildcard.js"
+import type { AutomationEvent } from "./event.js"
 
 export const TIMEOUT_MS = 30_000
 const MAX_OUTPUT_BYTES = 32 * 1024
@@ -48,6 +49,7 @@ export interface RunInput {
   readonly state: Schema.Json
   readonly now: number
   readonly runs: number
+  readonly event?: ReturnType<typeof AutomationEvent.input>
 }
 
 export type Outcome =
@@ -168,7 +170,13 @@ export const run = Effect.fnUntraced(
     ).pipe(Effect.provideService(Permission.Unattended, unattended), Effect.result)
     if (Result.isFailure(notDenied)) return { ok: false as const, error: notDenied.failure.message }
 
-    const bindings = { state: input.state, now: input.now, runs: input.runs, args: action.args ?? null }
+    const bindings = {
+      state: input.state,
+      now: input.now,
+      runs: input.runs,
+      args: action.args ?? null,
+      ...(input.event && { event: input.event }),
+    }
     const result = yield* resolved.success.tools
       .check({
         code: action.code,

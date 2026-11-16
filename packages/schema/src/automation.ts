@@ -48,7 +48,15 @@ export const Cron = Schema.Struct({ type: Schema.tag("cron"), cron: Schema.Strin
   identifier: "Automation.Trigger.Cron",
 })
 
-export const Trigger = Schema.Union([At, Every, Cron]).pipe(
+export const Event = Schema.Struct({
+  type: Schema.tag("event"),
+  server: Schema.NonEmptyString,
+  event: Schema.NonEmptyString,
+  args: Schema.Record(Schema.String, Schema.Json).pipe(optional),
+}).annotate({ identifier: "Automation.Trigger.Event" })
+export interface Event extends Schema.Schema.Type<typeof Event> {}
+
+export const Trigger = Schema.Union([At, Every, Cron, Event]).pipe(
   Schema.toTaggedUnion("type"),
   Schema.annotate({ identifier: "Automation.Trigger" }),
 )
@@ -91,7 +99,7 @@ export const decodeCodeResult = Schema.decodeUnknownResult(Schema.NullOr(CodeRes
 /**
  * Runs `code` in a confined Code Mode runtime with no model call and no `fetch`. Tools called statically as
  * `tools.<path>(...)` are extracted from the AST and authorized at creation. The program receives
- * `input = { state, now, runs, args }` (also bound as globals) and returns nothing or a `CodeResult`.
+ * `input = { state, now, runs, args, event? }` and returns nothing or a `CodeResult`.
  */
 export const CodeAction = Schema.Struct({
   type: Schema.tag("code"),
@@ -154,6 +162,7 @@ export const CodeActionInput = Schema.Struct({
       "Code Mode JavaScript run on each trigger with no model (no fetch; 30s, 20 tool calls, 32 KB output cap).",
       'Call tools statically as tools.<ns>.<tool>(...) or tools["ns-name"].tool(...); each is authorized once at creation to run unattended.',
       "Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs.",
+      "Event triggers also receive input.event = { id, timestamp, data }; data follows the event type's payloadSchema.",
       "Return nothing, or { state?, done?, send? }. JSON state is kept for the next run; done: true stops. lastOutput shows the delivery target and any logs.",
       "Return at most one send per run. { send: { prompt } } steers the creating session; { send: { prompt, to: { subagent } } } starts a permitted child that does not report back. No session IDs. Omit send to stay quiet. A rejected send commits neither state nor done.",
       'Example code string: if (runs < 2) return; return { done: true, send: { prompt: "Three checks elapsed. Review the build." } }',
@@ -173,7 +182,7 @@ export const Request = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1)).annotate({ description: "A short label shown in lists." }),
   trigger: Trigger.annotate({
     description:
-      'When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz.',
+      'When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz. Or { type: "event", server, event, args? } for a connected MCP server advertising push delivery (requires mcp_events).',
   }),
   action: ActionInput.annotate({
     description:

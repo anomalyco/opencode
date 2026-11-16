@@ -17,6 +17,8 @@ const EventType = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
   inputSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  payloadSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  delivery: Schema.optional(Schema.Array(Schema.String)),
 })
 
 // A stream that broke, fell silent or closed reopens from the last cursor 1, 2 and 4 seconds later. Any message

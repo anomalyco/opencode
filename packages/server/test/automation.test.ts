@@ -29,7 +29,12 @@ it.live(
       const ask = path.join(dir, "ask")
       yield* Effect.promise(async () => {
         await Promise.all([global, enabled, ask].map((item) => fs.mkdir(item, { recursive: true })))
-        await fs.writeFile(path.join(enabled, "opencode.json"), JSON.stringify({ experimental: { automations: true } }))
+        await fs.writeFile(
+          path.join(enabled, "opencode.json"),
+          JSON.stringify({
+            experimental: { automations: true, mcp_events: true },
+          }),
+        )
         await fs.writeFile(
           path.join(ask, "opencode.json"),
           JSON.stringify({ experimental: { automations: true }, permission: { execute: "ask" } }),
@@ -53,7 +58,20 @@ it.live(
         )
 
       yield* Effect.promise(async () => {
-        const session = await api.session.create({ location: { directory: enabled } })
+        const session = await api.session.create({
+          location: { directory: enabled },
+        })
+        await expect(
+          api.experimental.automation.create({
+            sessionID: session.id,
+            name: "build watch",
+            trigger: { type: "event", server: "ci", event: "build.changed" },
+            action: { type: "prompt", prompt: "Check the build" },
+          }),
+        ).rejects.toMatchObject({
+          _tag: "InvalidRequestError",
+          message: expect.stringContaining("tool call"),
+        })
         const created = await api.experimental.automation.create({
           sessionID: session.id,
           name: "build",
@@ -93,9 +111,16 @@ it.live(
           name: "standalone",
           directory: enabled,
           trigger: hourly,
-          action: { type: "prompt", prompt: "hello", to: { session: session.id } },
+          action: {
+            type: "prompt",
+            prompt: "hello",
+            to: { session: session.id },
+          },
         })
-        expect(standalone).toMatchObject({ directory: enabled, action: { to: { session: session.id } } })
+        expect(standalone).toMatchObject({
+          directory: enabled,
+          action: { to: { session: session.id } },
+        })
         expect(standalone.sessionID).toBeUndefined()
         // A subagent target needs a creating Session to be the parent of each run's child.
         await expect(
@@ -110,9 +135,16 @@ it.live(
           sessionID: session.id,
           name: "triage",
           trigger: hourly,
-          action: { type: "prompt", prompt: "triage", to: { subagent: "general" } },
+          action: {
+            type: "prompt",
+            prompt: "triage",
+            to: { subagent: "general" },
+          },
         })
-        expect(triage).toMatchObject({ sessionID: session.id, action: { to: { subagent: "general" } } })
+        expect(triage).toMatchObject({
+          sessionID: session.id,
+          action: { to: { subagent: "general" } },
+        })
         await api.experimental.automation.delete({ automationID: triage.id })
 
         await expect(

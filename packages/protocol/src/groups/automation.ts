@@ -47,7 +47,7 @@ export const AutomationEndpoints = [
     annotations(
       "create",
       "Create automation",
-      "Create an automation that sends a prompt or runs a Code Mode program at a time, every interval, or on a cron.",
+      "Create an automation that sends a prompt or runs a Code Mode program at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization.",
     ),
   ),
   HttpApiEndpoint.get("automation.list", "/api/experimental/automation", {

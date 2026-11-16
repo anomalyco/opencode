@@ -58,6 +58,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`last_output\` text,
           \`retry_at\` integer,
           \`state\` text,
+          \`event_position\` text,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL
         );

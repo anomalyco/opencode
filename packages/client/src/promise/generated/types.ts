@@ -335,6 +335,8 @@ export type AutomationDuration = string
 
 export type AutomationTriggerCron = { type: "cron"; cron: string; tz?: string }
 
+export type AutomationTriggerEvent = { type: "event"; server: string; event: string; args?: { [x: string]: JsonValue } }
+
 export type AutomationActionCode = { type: "code"; code: string; args?: JsonValue }
 
 export type AutomationStatus = "active" | "paused" | "done"
@@ -2284,7 +2286,11 @@ export type FormReplied = {
   data: { id: FormID; sessionID: string; answer: FormAnswer1 }
 }
 
-export type AutomationTrigger = AutomationTriggerAt | AutomationTriggerEvery | AutomationTriggerCron
+export type AutomationTrigger =
+  | AutomationTriggerAt
+  | AutomationTriggerEvery
+  | AutomationTriggerCron
+  | AutomationTriggerEvent
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
@@ -4669,6 +4675,12 @@ export type ExperimentalAutomationCreateInput = {
     | { readonly type: "at"; readonly at: string; readonly tz?: string }
     | { readonly type: "every"; readonly every: string; readonly tz?: string }
     | { readonly type: "cron"; readonly cron: string; readonly tz?: string }
+    | {
+        readonly type: "event"
+        readonly server: string
+        readonly event: string
+        readonly args?: { readonly [x: string]: JsonValue }
+      }
   readonly action:
     | {
         readonly type: "prompt"

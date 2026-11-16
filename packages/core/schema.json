@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "a7b378df-5406-4eca-bdd4-045cffdddf08",
-  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
+  "id": "0709c7fb-3e7c-4bec-a6c5-0dd42ae64919",
+  "prevIds": ["a7b378df-5406-4eca-bdd4-045cffdddf08"],
   "ddl": [
     {
       "name": "account_state",
@@ -473,6 +473,16 @@
       "default": null,
       "generated": null,
       "name": "state",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "event_position",
       "entityType": "columns",
       "table": "automation"
     },
