@@ -313,16 +313,23 @@ it.live("browser file reads require the file's own permission before reading or 
     const browser = yield* setup({ permissions: [rule("blocked.txt", "deny", "read"), rule("*", "deny", "external_directory")] })
     // A non-existent file distinguishes a permission refusal from an attempted open, without transferring any data.
     for (const operation of ["files.upload", "files.drop"]) {
-      for (const [path, action] of [["blocked.txt", "read"], ["../outside.txt", "external_directory"]]) {
+      for (const [path, action] of [["blocked.txt", "read"], [pathForExternalTest(browser.ref.directory), "external_directory"]]) {
         const error = yield* refusal(browser, operation, { tabID: tab.id, ref: "e1", paths: [path] })
         expect(error).toContain(`Permission denied: ${action}`)
       }
     }
+    const missing = yield* refusal(browser, "preview", { path: "./blocked.txt#L1" })
+    expect(missing).toBe("Permission denied: read")
     yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "blocked.txt"), "fixture"))
-    expect(yield* refusal(browser, "preview", { path: "blocked.txt" })).toContain("Permission denied: read")
+    expect(yield* refusal(browser, "preview", { path: "./blocked.txt#L1" })).toBe(missing)
     expect(browser.commands.count).toBe(0)
   }),
 )
+
+// Outside both the Location and its worktree, even when the runner's temp directory is itself in a checkout.
+function pathForExternalTest(directory: string) {
+  return path.join(path.parse(directory).root, "browser-permission-test", "absent.txt")
+}
 
 // What `operation` fails with in `sessionID`.
 const refusal = (

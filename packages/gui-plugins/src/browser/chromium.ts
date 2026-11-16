@@ -9,6 +9,7 @@ import { CAPTURE_DEADLINE_MS, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { CodedError } from "./errors"
 import { createBrowserFiles } from "./files"
+import { guardFileChoosers } from "./file-choosers"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
 import { agentKeyRefusal, hardwareInput, pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
@@ -300,6 +301,7 @@ export function createBrowserPage(
     if (mouse.type === "mouseDown" && activity.agentRuns === 0) {
       nativeMenu = true
       activity.userInputAt = Date.now()
+      void choosers.update().catch(() => undefined)
     }
   })
   contents.on("before-input-event", (event, input) => {
@@ -310,6 +312,7 @@ export function createBrowserPage(
 
     nativeMenu = true
     activity.userInputAt = Date.now()
+    void choosers.update().catch(() => undefined)
 
     if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
@@ -409,7 +412,7 @@ export function createBrowserPage(
   const attachFrames = (sessionID?: string) =>
     cdp.send("Target.setAutoAttach", {
       autoAttach: true,
-      waitForDebuggerOnStart: false,
+      waitForDebuggerOnStart: true,
       flatten: true,
       filter: [{ type: "iframe", exclude: false }, { exclude: true }],
     }, sessionID)
@@ -422,7 +425,27 @@ export function createBrowserPage(
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
-  const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
+  const runs = new Map<number, { controller: AbortController; interrupted: Interrupted; origin: "user" | "agent" }>()
+
+  const choosers = guardFileChoosers(cdp, activity, message => {
+    for (const run of runs.values()) {
+      if (run.origin !== "agent") continue
+      run.interrupted.reject(new Error(message))
+      run.controller.abort()
+    }
+  })
+
+  // Set the nested auto-attach policy before the new renderer can create its own children.
+  const prepareFrame = async (sessionID: string) => {
+    try {
+      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID)])
+      await cdp.send("Runtime.runIfWaitingForDebugger", {}, sessionID)
+    } catch {
+      // A detached target needs no resumption. A live one must not run unguarded or remain invisibly paused.
+      if (!closed() && (extensionTargets.has(sessionID) || Array.from(sessions.values()).includes(sessionID))) options.fail()
+    }
+  }
+
   let revision = 0
   cdp.on("Page.frameNavigated", ({ frame }) => {
     documents.set(frame.id, displayURL(frame.url))
@@ -784,7 +807,7 @@ export function createBrowserPage(
       extensionTargets.set(sessionId, targetInfo.targetId)
       contexts.delete(targetInfo.targetId)
       // Descendant iframe targets are excluded even if their own document is a web page. Do not enable diagnostics.
-      void attachFrames(sessionId).catch(() => undefined)
+      void prepareFrame(sessionId)
 
       return
     }
@@ -796,7 +819,7 @@ export function createBrowserPage(
     void Promise.all([
       diagnostics.enable(sessionId),
       cdp.send("Page.enable", {}, sessionId),
-      attachFrames(sessionId),
+      prepareFrame(sessionId),
     ]).catch(() => undefined)
     void dispatchPicker({ type: "frame.attached", sessionID: sessionId })
   })
@@ -806,6 +829,7 @@ export function createBrowserPage(
     ({ backendNodeId }, sessionID) => void dispatchPicker({ type: "node.picked", backendID: backendNodeId, sessionID }),
   )
   cdp.on("Target.detachedFromTarget", ({ sessionId }) => {
+    choosers.detach(sessionId)
     // Only the session that showed the extension's document clears it: the frame keeps its target ID across a swap, and
     // the web session it replaced may detach after the extension's attached.
     extensionTargets.delete(sessionId)
@@ -930,6 +954,7 @@ export function createBrowserPage(
           }),
         ]),
     diagnostics.enable(),
+    choosers.attach(),
     cdp.send("Page.enable"),
     cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
@@ -1020,7 +1045,7 @@ export function createBrowserPage(
       const runID = reply.runID
       // The action underneath the race keeps running after an interruption wins it; it checks this
       // signal before each further step.
-      const run = { controller: new AbortController(), interrupted: Promise.withResolvers<never>() }
+      const run = { controller: new AbortController(), interrupted: Promise.withResolvers<never>(), origin }
       runs.set(runID, run)
       const cancel = () => dispatchDialog({ type: "run.cancelled", runID })
       signal.addEventListener("abort", cancel, { once: true })
@@ -1040,7 +1065,11 @@ export function createBrowserPage(
 
       try {
         return await Promise.race([
-          perform(command, run.controller.signal, origin),
+          choosers.update().then(() => {
+            abortError(run.controller.signal)
+
+            return perform(command, run.controller.signal, origin)
+          }),
           run.interrupted.promise,
           ...(signIn ? [signIn.promise] : []),
         ])
@@ -1053,6 +1082,7 @@ export function createBrowserPage(
         if (origin === "agent") {
           activity.agentRuns--
           activity.agentEndedAt = Date.now()
+          void choosers.update().catch(() => undefined)
         }
       }
     },
@@ -1060,6 +1090,7 @@ export function createBrowserPage(
       if (closed()) return
       dispatch({ type: "disposed" })
       menu.dispose()
+      choosers.dispose()
       options.artifacts?.dispose()
       options.workspace?.dispose()
       dispatchDialog({ type: "disposed" })

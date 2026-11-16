@@ -115,14 +115,12 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     )
   })
 
-  // Send the exact workspace entry we checked, not the unverified input (which might be a suffix or line link).
-  const previewable = Effect.fn("BrowserTools.previewable")(function* (path: string) {
-    const located = yield* BrowserFiles.locate(path, ctx.location.directory)
-    if (located?.invalid) return yield* new Tool.Error({ metadata: { code: "invalid_path" }, message: "This path is not a valid workspace filename on the server." })
-    if (!located || located.outside)
+  // Send the exact workspace entry we checked, not the unverified input (which might be a line link).
+  const previewable = Effect.fn("BrowserTools.previewable")(function* (path: string, tool: Tool.Context) {
+    const located = yield* BrowserFiles.locate(path, ctx.location.directory, absolute => BrowserFiles.authorize(ctx, tool, "read", [absolute]))
+    if (located && "invalid" in located) return yield* new Tool.Error({ metadata: { code: "invalid_path" }, message: "This path is not a valid workspace filename on the server." })
+    if (!located || "outside" in located)
       return yield* new Tool.Error({ metadata: { code: "outside_workspace" }, message: "browser.preview cannot show a file outside this session's workspace. Choose a file inside the workspace." })
-    if (located.found === undefined)
-      return yield* new Tool.Error({ metadata: { code: "unresolved_path" }, message: "browser.preview could not verify the file. Pass its exact workspace-relative path." })
     if (located.directory)
       return yield* new Tool.Error({
         metadata: { code: "is_directory" },
@@ -163,14 +161,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     const paths = "paths" in action ? action.paths.map((path) => BrowserFiles.uploadPath(ctx.location.directory, path)) : undefined
     const approved = yield* connection.authorize(tool, action, paths ?? (action.type === "preview" ? [action.path] : undefined))
     if (action.type === "preview" && ctx.location.workspaceID) return yield* new Tool.Error({ message: "Browser preview requires a server-local workspace." })
-    const checked = action.type === "preview" ? { ...action, path: yield* previewable(action.path) } : action
-    if (checked.type === "preview") {
-      const path = resolve(ctx.location.directory, checked.path)
-      yield* BrowserFiles.authorize(ctx, tool, "read", [path])
-      const physical = yield* BrowserFiles.physical([path])
-      if (physical[0] !== path) yield* BrowserFiles.authorize(ctx, tool, "read", physical)
-      checked.path = relative(ctx.location.directory, physical[0]!).split(sep).join("/")
-    }
+    const checked = action.type === "preview" ? { ...action, path: yield* previewable(action.path, tool) } : action
     const target = yield* connection.target(tool.sessionID, checked, approved)
     const uploads = paths ? yield* Effect.gen(function* () {
       yield* BrowserFiles.authorize(ctx, tool, "read", paths)

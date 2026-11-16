@@ -12,6 +12,7 @@ import { previewPath } from "./preview-path.js"
 import { realpath, stat } from "node:fs/promises"
 import { basename, dirname, extname, join, parse, relative, resolve } from "node:path"
 import { createHash } from "node:crypto"
+import { fileURLToPath } from "node:url"
 
 // Match core FileAccess's lexical resources; the plugin SDK exposes permission.assert, not FileAccess.Service.
 export const authorize = Effect.fn("BrowserFiles.authorize")(function* (
@@ -72,81 +73,35 @@ export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], na
   }),
 )
 
-/**
- * Where a preview path points on this server, and whether a file is there. The Review pane resolves a relative path
- * against the workspace, or failing that to the one workspace file whose path ends with it, and it accepts file://
- * URLs and line suffixes (`:12`, `#L12`). `found` is undefined when that suffix search was too large to finish here,
- * and the whole result is undefined for addresses that are not server files, such as https: or skill: links.
- */
-export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, directory: string) {
+/** Resolve and authorize the exact entry. A missing agent path must not trigger a search of unapproved directories. */
+export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, directory: string, approve: (absolute: string) => Effect.Effect<void, Tool.Error>) {
   const value = path.trim()
   if (address(value) && !/^file:/i.test(value)) return undefined
-  return yield* Effect.tryPromise(async (): Promise<Located> => {
-    const { isAbsolute, relative } = await import("node:path")
-    const { fileURLToPath } = await import("node:url")
-    const url = /^file:/i.test(value) ? new URL(value) : undefined
-    if (url?.hostname) return { absolute: value, found: false, directory: false, outside: true }
-    const local = (url ? fileURLToPath(url) : value).replaceAll("\\", "/")
-    const plain = local.replace(/(?:#L\d+(?:C\d+)?(?:-L?\d+(?:C\d+)?)?|:\d+(?::\d+)?(?:-\d+(?::\d+)?)?:?)$/i, "")
-    const check = async (candidate: string): Promise<Located | undefined> => {
-      const absolute = resolve(directory, candidate)
-      const path = relative(directory, absolute).replaceAll("\\", "/")
-      if (isAbsolute(path) || path === ".." || path.startsWith("../")) return { absolute, found: false, directory: false, outside: true }
-      if (path && !previewPath(path, process.platform === "win32")) return { absolute, found: false, directory: false, invalid: true }
-      try {
-        const target = await workspaceTarget(absolute, [directory])
-        if (!target) return { absolute, found: false, directory: false, outside: true }
-        const info = await stat(target)
-        return { absolute, found: info.isFile(), directory: info.isDirectory() }
-      } catch (cause) {
-        if (cause instanceof Error && "code" in cause && (cause.code === "ENOENT" || cause.code === "ENOTDIR")) return
-        throw cause
-      }
-    }
-    const exact = await check(plain)
-    if (exact) return exact
-    const absolute = resolve(directory, plain)
-    if (isAbsolute(plain)) return { absolute, found: false, directory: false }
-    const match = await findBySuffix(directory, plain)
-    if (typeof match !== "string") return { absolute, found: match, directory: false }
-    return await check(match) ?? { absolute, found: false, directory: false }
-  }).pipe(
-    Effect.mapError(() => new Tool.Error({ metadata: { code: "unresolved_path" }, message: "browser.preview could not resolve this file inside the workspace." })),
+  const invalid = () => new Tool.Error({ metadata: { code: "unresolved_path" }, message: "browser.preview could not resolve this file inside the workspace." })
+  const url = yield* Effect.try({ try: () => /^file:/i.test(value) ? new URL(value) : undefined, catch: invalid })
+  if (url?.hostname) return { absolute: value, found: false, directory: false, outside: true }
+  const local = yield* Effect.try({ try: () => (url ? fileURLToPath(url) : value).replaceAll("\\", "/"), catch: invalid })
+  const plain = local.replace(/(?:#L\d+(?:C\d+)?(?:-L?\d+(?:C\d+)?)?|:\d+(?::\d+)?(?:-\d+(?::\d+)?)?:?)$/i, "")
+  const absolute = resolve(directory, plain)
+  const missing = { absolute, found: false, directory: false }
+  // Outside and invalid names can be refused lexically, without querying the filesystem or prompting to read them.
+  if (!FSUtil.contains(directory, absolute)) return { ...missing, outside: true }
+  const entry = relative(directory, absolute).replaceAll("\\", "/")
+  if (entry && !previewPath(entry, process.platform === "win32")) return { ...missing, invalid: true }
+  yield* approve(absolute)
+  const target = yield* Effect.tryPromise({ try: () => workspaceTarget(absolute, [directory]), catch: cause => cause instanceof Error && "code" in cause && (cause.code === "ENOENT" || cause.code === "ENOTDIR") ? "missing" as const : invalid() }).pipe(
+    Effect.catchIf(error => error === "missing", () => Effect.succeed(null)),
   )
+  if (target === null) return missing
+  if (!target) return { ...missing, outside: true }
+  if (target !== absolute) yield* approve(target)
+  const info = yield* Effect.tryPromise({ try: () => stat(target), catch: invalid })
+  return { absolute: target, found: info.isFile(), directory: info.isDirectory() }
 })
 
 /** Whether a preview path is an address with a scheme, such as https:, skill: or file:. A drive letter is no scheme. */
 export function address(path: string) {
   return /^[a-z][a-z\d+.-]+:/i.test(path.trim())
-}
-
-type Located = { readonly absolute: string; readonly found: boolean | undefined; readonly directory: boolean; readonly outside?: true; readonly invalid?: true }
-
-// The pane's search index skips ignored files; skipping dependency and VCS folders keeps this walk small too.
-async function findBySuffix(directory: string, relative: string) {
-  const { readdir } = await import("node:fs/promises")
-  const { join } = await import("node:path")
-  const target = relative.replaceAll("\\", "/").replace(/^(?:\.\/)+/, "")
-  const queue = [""]
-  const matches: string[] = []
-  const budget = { entries: 20_000 }
-  while (queue.length > 0) {
-    const folder = queue.shift() ?? ""
-    const entries = await readdir(join(directory, folder), { withFileTypes: true }).catch(() => [])
-    budget.entries -= entries.length
-    if (budget.entries < 0) return undefined
-    const files = entries.map((entry) => ({ entry, path: folder ? `${folder}/${entry.name}` : entry.name }))
-    matches.push(...files.filter((file) => file.entry.isFile() && file.path.endsWith(`/${target}`)).map((file) => file.path))
-    if (matches.length > 1) return undefined
-    queue.push(
-      ...files
-        .filter(
-          (file) => file.entry.isDirectory() && !file.entry.name.startsWith(".") && file.entry.name !== "node_modules",
-        )
-        .map((file) => file.path),
-    )
-  }
-  return matches[0] ?? false
 }
 
 const types: Record<string, string> = {

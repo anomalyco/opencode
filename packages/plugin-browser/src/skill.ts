@@ -75,6 +75,8 @@ export const info = Skill.Info.make({
     "",
     "### Files",
     "",
+    "Agent-caused file pickers are cancelled. For a file input use browser.files.upload({ tabID, ref, paths }) instead of clicking it.",
+    "Preview takes the exact workspace-relative path (or absolute path). Use glob to find an entry if you only know its name.",
     "Server exports belong to this session and are removed when it is deleted; copy an export you need to keep.",
     "Preview and uploads need read permission. Uploading or dropping files outside the workspace also needs external_directory permission. Exporting a capture or download needs edit permission for its generated server path and external_directory permission outside the workspace.",
     "`files.upload` and `files.drop` send server-local files into the page, 5 MiB in total. Captures, and downloads your own browser actions start, stay in the desktop app until `files.get` copies one to the server. Downloads the user starts go where the user saves them, and you never see them.",
