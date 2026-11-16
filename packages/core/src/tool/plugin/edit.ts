@@ -63,6 +63,14 @@ const findLineOccurrences = (content: string, search: string) => {
   const trailingNewline = search.endsWith("\n")
   const expected = search.split("\n")
   if (trailingNewline) expected.pop()
+  const keys = expected.map((line) => normalizeForMatch(line.trimEnd()))
+  const prefix = new Array<number>(keys.length).fill(0)
+  for (let i = 1, j = 0; i < keys.length; i++) {
+    while (j > 0 && keys[i] !== keys[j]) j = prefix[j - 1]
+    if (keys[i] === keys[j]) j++
+    prefix[i] = j
+  }
+
   const lines = [...content.matchAll(/[^\n]*(?:\n|$)/g)]
     .filter((match) => match[0] !== "")
     .map((match) => {
@@ -76,25 +84,22 @@ const findLineOccurrences = (content: string, search: string) => {
         newline,
       }
     })
-  const candidates = lines.flatMap((line, index) => {
-    const actual = lines.slice(index, index + expected.length)
-    if (actual.length !== expected.length) return []
-    if (
-      !actual.every(
-        (item, lineIndex) =>
-          normalizeForMatch(item.text.trimEnd()) === normalizeForMatch(expected[lineIndex].trimEnd()),
-      )
-    )
-      return []
-    const last = actual.at(-1)!
-    if (trailingNewline && !last.newline) return []
-    return [{ start: line.start, end: trailingNewline ? last.end : last.contentEnd }]
-  })
-  return candidates.reduce<Match[]>((result, candidate) => {
-    if (result.some((match) => match.end > candidate.start && match.start < candidate.end)) return result
-    result.push(candidate)
-    return result
-  }, [])
+
+  const result: Match[] = []
+  let matched = 0
+  for (let index = 0; index < lines.length; index++) {
+    const value = normalizeForMatch(lines[index].text.trimEnd())
+    while (matched > 0 && keys[matched] !== value) matched = prefix[matched - 1]
+    if (keys[matched] === value) matched++
+    if (matched !== keys.length) continue
+    const first = lines[index - keys.length + 1]
+    const last = lines[index]
+    if (!trailingNewline || last.newline)
+      result.push({ start: first.start, end: trailingNewline ? last.end : last.contentEnd })
+    // Match the same non-overlapping ranges as the original greedy scan.
+    matched = 0
+  }
+  return result
 }
 
 /** The dominant line ending in text, or fallback when there is none. */
