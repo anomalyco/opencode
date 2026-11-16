@@ -13,6 +13,23 @@ import { it } from "./lib/effect"
 // The node:sqlite driver is covered by sqlite-node.test.ts, which runs under Node.
 const large = "x".repeat(60_000)
 
+it.live("a transaction SQLite rolled back itself fails with the storage failure, not the rollback", () =>
+  Effect.gen(function* () {
+    const client = yield* SqlClient.SqlClient
+    const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+    yield* client`CREATE TABLE probe (value TEXT)`
+    yield* client`PRAGMA max_page_count = 1`
+
+    const cause = yield* db
+      .transaction(() => db.run(sql`INSERT INTO probe VALUES (${large})`), { behavior: "immediate" })
+      .pipe(Effect.sandbox, Effect.flip)
+    expect(StorageFailure.message(cause)).toBe("Storage is full")
+    // Nothing was left open: the connection takes the next transaction.
+    yield* client`PRAGMA max_page_count = 1073741823`
+    yield* db.transaction(() => db.run(sql`INSERT INTO probe VALUES ('ok')`))
+  }).pipe(Effect.provide(sqliteLayer({ filename: ":memory:" }))),
+)
+
 it.live("a full database is a storage failure for a statement and for a query", () =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient
