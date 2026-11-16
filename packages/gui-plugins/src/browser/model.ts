@@ -141,6 +141,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (error === "browser.preview.restricted") return ctx.t("preview.restricted")
 
+    if (error === "browser.preview.agentRestricted") return ctx.t("preview.agentRestricted")
+
     if (error === "browser.artifact.missing") return ctx.t("artifact.missing")
 
     if (error === "browser.address.web") return ctx.t("refused.web")

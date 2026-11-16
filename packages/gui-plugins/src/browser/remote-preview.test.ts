@@ -66,6 +66,10 @@ test("the authenticated read under a server base path names exactly the file val
 
   const identity = await source.pin("index.html", controller.signal)
 
+  const restricted = remotePreview({id:"test",url:`${server.url}sub`,sameMachine:false,headers:{authorization:"fixture"}}, "ses_x", {directory:"/work"}, controller.signal, {})
+  expect(await restricted.pin("index.html", controller.signal)).toBeUndefined()
+  expect(restricted.needsUpdate?.()).toBe(true)
+
   if (!identity) throw new Error("expected root identity")
   const grants = new Map<string, PreviewSource>([["grant", {...source, identity, document:"index.html", takeEntry:()=>false, denied:()=>{}}]])
   const names = ["dir/50% off.html", "#?.txt", "a%2fb", "%252e%252e/[slug]", "日本語.txt"]
