@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type SessionInboxCompaction, type SessionInboxInfo } from "../src/promise"
+import { OpenCode, type OpenCodeEvent, type SessionInboxCompaction, type SessionInboxMediaInfo } from "../src/promise"
 
 test("admits compaction before model setup and serializes the following prompt", async () => {
   using fixture = setup()
@@ -204,7 +204,7 @@ test.each(["compaction", "canonical compaction", "user"])(
         : fixture.data.session.compact({ sessionID })
     const result = request.catch((error: unknown) => error)
     const id = type === "canonical compaction" ? "msg_canonical" : fixture.data.session.pending.list(sessionID)[0].id
-    const durable: SessionInboxInfo =
+    const durable: SessionInboxMediaInfo =
       type === "user" ? { ...item(id, 20), type: "user", payload: { text: "Follow up" } } : item(id, 20)
     fixture.pending.push(durable)
     await fixture.data.session.pending.sync(sessionID)
@@ -344,7 +344,7 @@ function setup(override?: (request: Request) => Promise<Response | undefined>) {
   const response = Promise.withResolvers<Response>()
   const calls: string[] = []
   const proposals: string[] = []
-  const pending: SessionInboxInfo[] = []
+  const pending: SessionInboxMediaInfo[] = []
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",

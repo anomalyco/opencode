@@ -10,7 +10,7 @@ import {
   type PermissionRequest,
   type SessionMessageAssistantTool,
   type SessionMessageIdle,
-  type SessionMessageInfo,
+  type SessionMessageMediaInfo,
 } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { EOL } from "node:os"
@@ -308,7 +308,7 @@ export async function runNonInteractivePrompt(input: Input) {
 
 /** The run's exit code comes from here alone: the first stored idle marker after this run's prompt. */
 function finalError(
-  run: { found: boolean; messages: SessionMessageInfo[]; background: boolean },
+  run: { found: boolean; messages: SessionMessageMediaInfo[]; background: boolean },
   state: { failure?: RunError; outcomes: Outcome[] },
 ) {
   if (state.failure) return state.failure
@@ -338,7 +338,7 @@ function terminalOutcome(event: Event): Outcome | undefined {
 }
 
 async function projectedMessages(client: OpenCodeClient, sessionID: string, messageID: string) {
-  const messages: SessionMessageInfo[] = []
+  const messages: SessionMessageMediaInfo[] = []
   let cursor: string | undefined
   while (true) {
     const page = await client.message.list(
@@ -593,7 +593,7 @@ function renderer(input: Input) {
       return tool(current.id, event.data.assistantMessageID, { ...item, state }, metadata, time)
     },
 
-    reconcile: async (messages: SessionMessageInfo[]) => {
+    reconcile: async (messages: SessionMessageMediaInfo[]) => {
       for (const message of messages) {
         if (message.type !== "assistant") continue
         const timestamp = message.time.completed ?? message.time.created

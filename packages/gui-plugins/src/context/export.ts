@@ -1,8 +1,8 @@
-import type { OpenCodeClient, SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeClient, SessionInfo, SessionMessageMediaInfo } from "@opencode/client/promise"
 
 export type SessionExportData = {
   info: SessionInfo
-  messages: SessionMessageInfo[]
+  messages: SessionMessageMediaInfo[]
 }
 
 /** Bounds each request rather than the whole export, so a long history still exports. */

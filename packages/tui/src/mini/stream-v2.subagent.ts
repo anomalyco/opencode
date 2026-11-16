@@ -18,8 +18,8 @@ import type {
   OpenCodeClient,
   PermissionRequest,
   SessionMessageAssistantTool,
-  SessionMessageInfo,
-  SessionMessageUser,
+  SessionMessageMediaInfo,
+  SessionMessageMediaUser,
 } from "@opencode/client/promise"
 import { Locale } from "../util/locale"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
@@ -114,7 +114,7 @@ type ChildState = {
   permissions: MiniPermissionRequest[]
   forms: MiniFormRequest[]
   messageIDs: Set<string>
-  prompts: Map<string, Pick<SessionMessageUser, "text" | "files">>
+  prompts: Map<string, Pick<SessionMessageMediaUser, "text" | "files">>
   hydrated: boolean
   detailStale: boolean
   blockersHydrated: boolean
@@ -133,7 +133,7 @@ export type SubagentTracker = {
   foreign(sdk: OpenCodeClient, sessionID: string, event: V2Event, signal?: AbortSignal): void
   hydrate(next: {
     sdk: OpenCodeClient
-    messages: SessionMessageInfo[]
+    messages: SessionMessageMediaInfo[]
     active: Record<string, unknown>
     signal?: AbortSignal
     reconnect?: boolean
@@ -283,7 +283,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     if (description) child.description = description
   }
 
-  const userFrame = (child: ChildState, messageID: string, prompt: Pick<SessionMessageUser, "text" | "files">) => {
+  const userFrame = (child: ChildState, messageID: string, prompt: Pick<SessionMessageMediaUser, "text" | "files">) => {
     if (child.messageIDs.has(messageID)) return false
     child.messageIDs.add(messageID)
     if (prompt.text.trim())
@@ -334,7 +334,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     for (const commit of toolImageCommits(part, messageID)) setFrame(child, sourceKey(messageID, commit.partID), commit)
   }
 
-  const rebuild = (child: ChildState, messages: SessionMessageInfo[]) => {
+  const rebuild = (child: ChildState, messages: SessionMessageMediaInfo[]) => {
     child.frames = []
     child.fragments.clear()
     child.finishedTools.clear()
@@ -419,7 +419,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         for (const [id, prompt] of pendingPrompts) {
           if (!child.prompts.has(id)) child.prompts.set(id, prompt)
         }
-        rebuild(child, structuredClone(response.data).toReversed() as SessionMessageInfo[])
+        rebuild(child, structuredClone(response.data).toReversed() as SessionMessageMediaInfo[])
         child.permissions = child.permissions.map((request) => permissionTool(request, child.toolSources))
         for (const [id, tool] of pendingTools) {
           if (!child.finishedTools.has(id) && !child.tools.has(id)) child.tools.set(id, tool)

@@ -40,14 +40,19 @@ export function history(
   )
 }
 
-export function updates(message: SessionMessage.Info, cwd: string, capabilities: Capabilities): SessionUpdate[] {
+export function updates(message: SessionMessage.MediaInfo, cwd: string, capabilities: Capabilities): SessionUpdate[] {
   if (message.type === "user")
     return [
       { sessionUpdate: "user_message_chunk", messageId: message.id, content: { type: "text", text: message.text } },
       ...partsToContentChunks(
         (message.files ?? []).map((file) => ({
           type: "file",
-          url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
+          url:
+            file.source.type === "uri"
+              ? file.source.uri
+              : "uri" in file
+                ? file.uri
+                : `data:${file.mime};base64,${file.data}`,
           filename: file.name,
           mime: file.mime,
         })),
@@ -128,7 +133,7 @@ export function updates(message: SessionMessage.Info, cwd: string, capabilities:
   })
 }
 
-function completedSource(message: SessionMessage.Info, update: SessionUpdate) {
+function completedSource(message: SessionMessage.MediaInfo, update: SessionUpdate) {
   if (message.type !== "assistant" || update.sessionUpdate !== "tool_call_update") return undefined
   const part = message.content.find((item) => item.type === "tool" && item.id === update.toolCallId)
   if (part?.type !== "tool" || part.state.status !== "completed") return undefined

@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageMediaInfo } from "@opencode/client/promise"
 
 export type SentPrompt = { sessionID: string; promptID: string; title: string; instruction: string }
 
@@ -29,7 +29,7 @@ export class ReplyWatch {
   // History is in delivery order, not admission-ID order. Only an idle boundary
   // settles a reply. A later user's request must never donate its answer to an
   // earlier voice prompt, even when both were queued before either ran.
-  reconcile(sessionID: string, messages: readonly SessionMessageInfo[]): VoiceReply[] {
+  reconcile(sessionID: string, messages: readonly SessionMessageMediaInfo[]): VoiceReply[] {
     const state: { prompt?: SentPrompt; reply?: VoiceReply } = {}
     const replies: VoiceReply[] = []
     messages.forEach((message) => {

@@ -1,4 +1,4 @@
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageMediaUser } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { readPromptPresentation } from "@/composer/comment-note"
@@ -18,7 +18,7 @@ import {
   type JumpToMessageEvent,
 } from "./jump-to-message-machine"
 
-function prompt(message: SessionMessageUser, attachment: string): JumpPrompt {
+function prompt(message: SessionMessageMediaUser, attachment: string): JumpPrompt {
   const presentation = readPromptPresentation(message.metadata)
 
   const text = presentation?.displayText ?? message.text

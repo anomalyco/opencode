@@ -1,8 +1,8 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageMediaInfo } from "@opencode/client/promise"
 
 // Responses keeps tool outputs in subsequent rounds. Only conversational text
 // belongs in its history preview, never reasoning, attachments or tool output.
-export function messageExcerpts(messages: readonly SessionMessageInfo[]) {
+export function messageExcerpts(messages: readonly SessionMessageMediaInfo[]) {
   return messages.flatMap((message) => {
     if (message.type !== "assistant" && message.type !== "user" && message.type !== "synthetic") return []
     const text =

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionInboxMediaInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
 import { applyTimelineMessageHandoff, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
@@ -27,7 +27,7 @@ describe("visibleTimelineMessages", () => {
     type: "user",
     delivery: "steer",
     payload: { text: "queued" },
-  } satisfies SessionInboxInfo
+  } satisfies SessionInboxMediaInfo
 
   const work = {
     id: "msg_5",
@@ -137,7 +137,7 @@ describe("visibleTimelineMessages", () => {
       type: "synthetic",
       delivery: "steer",
       payload: { text: "", description: "Task finished" },
-    } satisfies SessionInboxInfo
+    } satisfies SessionInboxMediaInfo
 
     const noticeMessage = {
       id: notice.id,
@@ -167,7 +167,7 @@ describe("visibleTimelineMessages", () => {
         delivery: "queue",
         payload: { text: "queued" },
       },
-    ] satisfies SessionInboxInfo[]
+    ] satisfies SessionInboxMediaInfo[]
 
     expect(visibleTimelineMessages(messages, pending).map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_4"])
   })

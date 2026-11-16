@@ -1,4 +1,5 @@
 import type { OpenCode } from "./client.js"
+import type { SessionInboxMediaInfo } from "./generated/types.js"
 
 export * from "./generated/index.js"
 export { OpenCode } from "./client.js"
@@ -22,8 +23,6 @@ export type {
   SkillApi,
 } from "./api.js"
 export type { EventSubscribeOutput as OpenCodeEvent } from "./generated/types.js"
-export type {
-  MediaFileAttachment as PromptMediaFileAttachment,
-  Attachment as PromptAttachment,
-} from "@opencode/schema/prompt"
+/** @deprecated Use `SessionInboxMediaInfo`. Removed in the next minor. */
+export type SessionInboxInfo = SessionInboxMediaInfo
 export type OpenCodeClient = ReturnType<typeof OpenCode.make>

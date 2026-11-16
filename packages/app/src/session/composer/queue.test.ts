@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInboxInfo } from "@opencode/client/promise"
+import type { SessionInboxMediaInfo } from "@opencode/client/promise"
 import { extractPromptFromMessage } from "@/composer/prompt"
 import { blobDataUrl, setMediaBlobLoader } from "@/runtime/persistence/drafts"
 import { undoQueuedPrompt } from "./queue"
@@ -22,7 +22,7 @@ const queued = [
     delivery: "queue",
     payload: { text: "edited" },
   },
-] satisfies SessionInboxInfo[]
+] satisfies SessionInboxMediaInfo[]
 
 const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
 
@@ -127,7 +127,7 @@ describe("queuedPromptRows", () => {
         files: [...files],
         metadata: { displayText, comments: [...comments] },
       },
-    } satisfies SessionInboxInfo
+    } satisfies SessionInboxMediaInfo
 
     expect(queuedPromptRows([item], pending ? [sent()] : [])).toStrictEqual([
       { id: item.id, pending: pending || undefined, ...visible },
@@ -197,7 +197,7 @@ describe("queuedPromptAttachments", () => {
           { data: "aGk=", mime: "application/pdf", source: { type: "inline" as const } },
         ],
       },
-    } satisfies SessionInboxInfo
+    } satisfies SessionInboxMediaInfo
 
     expect(queuedPromptAttachments(item)).toEqual([
       {

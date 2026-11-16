@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect"
-import type { PromptAttachment, SessionInboxInfo } from "@opencode/client/promise"
+import type { PromptAttachment, SessionInboxMediaInfo } from "@opencode/client/promise"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
@@ -7,7 +7,7 @@ import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/compose
 import { readPromptPresentation } from "@/composer/comment-note"
 import { type BlobReference, createLegacyBlobReference } from "@/runtime/persistence/drafts"
 
-export type QueuedPrompt = Extract<SessionInboxInfo, { type: "user" }>
+export type QueuedPrompt = Extract<SessionInboxMediaInfo, { type: "user" }>
 
 export type EditStash = {
   readonly prompt: Prompt
@@ -897,9 +897,7 @@ export function queuedPromptText(item: QueuedPrompt) {
 // return as path parts. Mentions and `file://` context stay in the payload; see
 // editedPromptInput.
 export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPart | PathAttachmentPart)[] {
-  // Opted-in reads leave stored files as `media:` refs, which the generated inbox type does not describe.
-  const files: readonly PromptAttachment[] = item.payload.files ?? []
-  const inline = files.filter((file) => isComposerAttachment(file))
+  const inline = (item.payload.files ?? []).filter((file) => isComposerAttachment(file))
 
   return [
     ...inline.map(

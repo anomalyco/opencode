@@ -1,12 +1,10 @@
 import { SessionMessage } from "@opencode/core/session/message"
 import { Session } from "@opencode/core/session"
 import { Effect, Option, Schema } from "effect"
-import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { wantsMediaRefs } from "../media-uri"
 import { InvalidCursorError } from "@opencode/protocol/errors"
-import { SessionMediaMessagesResponse } from "@opencode/protocol/groups/message"
 import { failedMessageDecode, missingSession } from "./session-error"
 
 const DefaultMessagesLimit = 50
@@ -49,33 +47,21 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
           type: ctx.query.type,
           cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
         }
-        const page = <Message extends { readonly id: SessionMessage.ID }>(messages: ReadonlyArray<Message>) => {
-          const first = messages[0]
-          const last = messages.at(-1)
-          return {
-            data: messages,
-            cursor: {
-              previous: first ? cursor.encode(first, order, "previous") : undefined,
-              next: last ? cursor.encode(last, order, "next") : undefined,
-            },
-          }
+        const messages = yield* (
+          wantsMediaRefs(ctx.request) ? session.messagesWithRefs(input) : session.messages(input)
+        ).pipe(
+          Effect.catchTag("Session.NotFoundError", missingSession),
+          Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
+        )
+        const first = messages[0]
+        const last = messages.at(-1)
+        return {
+          data: messages,
+          cursor: {
+            previous: first ? cursor.encode(first, order, "previous") : undefined,
+            next: last ? cursor.encode(last, order, "next") : undefined,
+          },
         }
-        if (wantsMediaRefs(ctx.request)) {
-          const messages = yield* session
-            .messagesWithRefs(input)
-            .pipe(
-              Effect.catchTag("Session.NotFoundError", missingSession),
-              Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
-            )
-          return yield* HttpServerResponse.schemaJson(SessionMediaMessagesResponse)(page(messages)).pipe(Effect.orDie)
-        }
-        const messages = yield* session
-          .messages(input)
-          .pipe(
-            Effect.catchTag("Session.NotFoundError", missingSession),
-            Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
-          )
-        return page(messages)
       }),
     )
   }),

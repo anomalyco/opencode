@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionInboxInfo, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInboxMediaInfo, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -32,8 +32,8 @@ type InboxRow = {
   payload: {
     text: string
     metadata?: typeof PromptBody.Type.metadata
-    files?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["files"]
-    agents?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["agents"]
+    files?: Extract<SessionInboxMediaInfo, { type: "user" }>["payload"]["files"]
+    agents?: Extract<SessionInboxMediaInfo, { type: "user" }>["payload"]["agents"]
   }
   delivery: SessionInbox.Delivery
 }
@@ -65,7 +65,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
 
   const events: OpenCodeEvent[] = []
   const prompts: (typeof PromptBody.Type)[] = []
-  const compactions: SessionInboxInfo[] = []
+  const compactions: SessionInboxMediaInfo[] = []
   const changes: { inboxID: string; action: "cancel" | "steer" | "queue" }[] = []
   const log: string[] = []
   // Live background shell commands (`GET /api/shell`).

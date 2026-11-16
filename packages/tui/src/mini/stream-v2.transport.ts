@@ -5,9 +5,9 @@ import type {
   OpenCodeClient,
   PermissionRequest,
   SessionMessageAssistantTool,
-  SessionMessageInfo,
-  SessionMessageUser,
-  SessionInboxInfo,
+  SessionMessageMediaInfo,
+  SessionMessageMediaUser,
+  SessionInboxMediaInfo,
 } from "@opencode/client/promise"
 import { ClientError } from "@opencode/client/promise"
 import { Event } from "@opencode/schema/event"
@@ -128,7 +128,7 @@ type ToolState = {
   started: boolean
 }
 
-type PendingPrompt = FooterQueuedPrompt & { files: SessionMessageUser["files"] }
+type PendingPrompt = FooterQueuedPrompt & { files: SessionMessageMediaUser["files"] }
 
 type State = {
   permissions: MiniPermissionRequest[]
@@ -194,7 +194,7 @@ function errorMessage(error: { message?: string; _tag?: string }) {
   return error.message || error._tag || "Session execution failed"
 }
 
-function pendingPrompt(item: SessionInboxInfo): PendingPrompt | undefined {
+function pendingPrompt(item: SessionInboxMediaInfo): PendingPrompt | undefined {
   if (item.type !== "user") return undefined
   return {
     messageID: item.id,
@@ -601,7 +601,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   const renderUser = (
     messageID: string,
     text: string,
-    files: SessionMessageUser["files"],
+    files: SessionMessageMediaUser["files"],
     skills: FooterQueuedPrompt["skills"],
     render = true,
   ) => {
@@ -618,7 +618,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     ])
   }
 
-  const mergePending = (item: SessionInboxInfo) => {
+  const mergePending = (item: SessionInboxMediaInfo) => {
     const prompt = pendingPrompt(item)
     if (!prompt) return
     if (state.promotedMessages.has(prompt.messageID)) {
@@ -767,7 +767,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     ])
   }
 
-  const renderMessage = (message: SessionMessageInfo, render: boolean) => {
+  const renderMessage = (message: SessionMessageMediaInfo, render: boolean) => {
     if (message.type === "user") {
       const waiting = state.wait?.messageID === message.id
       const admitted = state.admitted.delete(message.id)
@@ -1619,7 +1619,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     next: SessionTurnInput,
     messageID: string,
     client: OpenCodeClient,
-    send: () => Promise<SessionInboxInfo | void>,
+    send: () => Promise<SessionInboxMediaInfo | void>,
     onAdmitted?: () => void,
   ) => {
     const active: Wait = {

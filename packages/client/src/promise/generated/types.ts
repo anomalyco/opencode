@@ -123,6 +123,8 @@ export type SessionStructuredError = {
   retryAfterMs?: number
 }
 
+export type PromptMediaRef = string
+
 export type SessionInterruptResponse = { interrupted: boolean }
 
 export type FormID = string
@@ -591,6 +593,18 @@ export type SessionMessageIdle = {
   type: "idle"
   outcome: "succeeded" | "failed" | "interrupted"
   error?: SessionStructuredError
+}
+
+export type PromptMediaFileAttachment = {
+  mime: string
+  source: PromptFileSource
+  name?: string
+  description?: string
+  mention?: PromptMention
+  uri: PromptMediaRef
+  bytes?: number
+  width?: number
+  height?: number
 }
 
 export type FormNumberField = {
@@ -1163,6 +1177,8 @@ export type SessionMessageToolStateError = {
   content?: [ToolContent, ...Array<ToolContent>]
   metadata?: { [x: string]: JsonValue }
 }
+
+export type PromptAttachment = PromptFileAttachment | PromptMediaFileAttachment
 
 export type FormField =
   | FormStringField
@@ -2648,6 +2664,25 @@ export type SessionMessageAssistantTool = {
   time: { created: number; ran?: number; completed?: number }
 }
 
+export type SessionInboxMediaUserPayload = {
+  text: string
+  files?: Array<PromptAttachment>
+  agents?: Array<PromptAgentAttachment>
+  skills?: Array<PromptSkillAttachment>
+  metadata?: { [x: string]: JsonValue }
+}
+
+export type SessionMessageMediaUser = {
+  id: SessionMessageID
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  text: string
+  files?: Array<PromptAttachment>
+  agents?: Array<PromptAgentAttachment>
+  skills?: Array<PromptSkillAttachment>
+  type: "user"
+}
+
 export type FormFields = [FormField, ...Array<FormField>]
 
 export type SessionInboxItem =
@@ -2726,8 +2761,6 @@ export type SessionsResponse = {
   cursor: { previous?: SessionsCursor | null; next?: SessionsCursor | null }
 }
 
-export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove
-
 export type SessionMessageAssistant = {
   id: SessionMessageID
   metadata?: { [x: string]: JsonValue }
@@ -2744,6 +2777,15 @@ export type SessionMessageAssistant = {
   tokens?: TokenUsageInfo
   error?: SessionStructuredError
   retry?: SessionMessageAssistantRetry
+}
+
+export type SessionInboxMediaUser = {
+  id: SessionMessageID
+  sessionID: SessionID
+  time: { created: number }
+  type: "user"
+  payload: SessionInboxMediaUserPayload
+  delivery: SessionInboxDelivery
 }
 
 export type FormInfo = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
@@ -2795,6 +2837,25 @@ export type SessionMessageInfo =
   | SessionMessageCompaction
   | SessionMessageIdle
 
+export type SessionMessageMediaInfo =
+  | SessionMessageAgentSelected
+  | SessionMessageModelSelected
+  | SessionMessageLocationSwitched
+  | SessionMessageMediaUser
+  | SessionMessageSynthetic
+  | SessionMessageSystem
+  | SessionMessageSkill
+  | SessionMessageShell
+  | SessionMessageAssistant
+  | SessionMessageCompaction
+  | SessionMessageIdle
+
+export type SessionInboxMediaInfo =
+  | SessionInboxMediaUser
+  | SessionInboxSynthetic
+  | SessionInboxCompaction
+  | SessionInboxMove
+
 export type IntegrationMethod =
   | IntegrationOAuthMethod
   | IntegrationCommandMethod
@@ -2824,7 +2885,7 @@ export type FormCreated = {
 export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMessageInfo> }
 
 export type SessionMessagesResponse = {
-  data: Array<SessionMessageInfo>
+  data: Array<SessionMessageMediaInfo>
   cursor: { previous?: string | null; next?: string | null }
 }
 
@@ -3552,7 +3613,7 @@ export type SessionDiffOutput = { data: Array<FileDiffInfo> }["data"]
 
 export type SessionInboxListInput = { readonly sessionID: string }
 
-export type SessionInboxListOutput = { data: Array<SessionInboxInfo> }["data"]
+export type SessionInboxListOutput = { data: Array<SessionInboxMediaInfo> }["data"]
 
 export type SessionInboxCancelInput = { readonly sessionID: string; readonly inboxID: string }
 
@@ -3580,7 +3641,7 @@ export type SessionBackgroundOutput = void
 
 export type SessionMessageGetInput = { readonly sessionID: string; readonly messageID: string }
 
-export type SessionMessageGetOutput = { data: SessionMessageInfo }["data"]
+export type SessionMessageGetOutput = { data: SessionMessageMediaInfo }["data"]
 
 export type SessionFormListInput = { readonly sessionID: string }
 

@@ -24,13 +24,14 @@ import type {
   ProviderInfo,
   ReferenceInfo,
   SessionMessageInfo,
+  SessionMessageMediaInfo,
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
   SessionInfo,
   SessionListInput,
-  SessionInboxInfo,
+  SessionInboxMediaInfo,
   SessionInboxCompaction,
   ShellInfo,
   SkillInfo,
@@ -134,7 +135,7 @@ type Store = {
     message: Record<string, SessionMessageInfo[]>
     messageCursor: Record<string, string | undefined>
     messageLoading: Record<string, boolean>
-    pending: Record<string, SessionInboxInfo[]>
+    pending: Record<string, SessionInboxMediaInfo[]>
     permission: Record<string, PermissionRequest[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormWithLocation[]>
@@ -162,7 +163,7 @@ function optimisticFiles(files: SessionPromptInput["files"]) {
     const header = file.uri.slice(5, comma)
     const parts = header.split(";")
     if (!parts.slice(1).some((part) => part.toLowerCase() === "base64")) return []
-    const item: NonNullable<Extract<SessionInboxInfo, { type: "user" }>["payload"]["files"]>[number] = {
+    const item: NonNullable<Extract<SessionInboxMediaInfo, { type: "user" }>["payload"]["files"]>[number] = {
       data: file.uri.slice(comma + 1),
       mime: parts[0] || "application/octet-stream",
       source: { type: "inline" },
@@ -196,6 +197,10 @@ const hasDroppedFileData = (message: SessionMessageInfo) =>
   message.content.some(
     (part) => part.type === "tool" && "content" in part.state && !!part.state.content?.some(isDroppedFile),
   )
+
+// Reads through `withMediaRefs` may return user files as `media:` refs. The store keeps the inline message type until
+// its readers take `SessionMessageMediaInfo`; the ones that show user files already handle refs.
+const inline = (message: SessionMessageMediaInfo) => message as SessionMessageInfo
 
 // Returns the same message when there is nothing to drop, so the store keeps its objects.
 function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
@@ -356,10 +361,13 @@ export function createData(config: CreateDataInput) {
   const messageIndex = new Map<string, Map<string, number>>()
   const omitFiles = () =>
     typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
-  const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
+  const stored = (message: SessionMessageMediaInfo) => {
+    const item = inline(message)
+    return omitFiles() ? omitMessageFileData(item) : item
+  }
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
-  const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+  const pendingUpdates = new Map<string, Map<string, SessionInboxMediaInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -479,7 +487,7 @@ export function createData(config: CreateDataInput) {
   // handler and by optimistic admission; the upsert is what reconciles
   // the durable echo with an optimistic placeholder — the durable payload and
   // times replace the client's guess.
-  function admitLocal(item: SessionInboxInfo) {
+  function admitLocal(item: SessionInboxMediaInfo) {
     batch(() => {
       const pending = store.session.pending[item.sessionID] ?? []
       const at = pending.findIndex((entry) => entry.id === item.id)
@@ -494,13 +502,14 @@ export function createData(config: CreateDataInput) {
     })
   }
 
-  function materializeInboxMessage(item: SessionInboxInfo) {
+  function materializeInboxMessage(item: SessionInboxMediaInfo) {
     if (item.type !== "user" && item.type !== "synthetic") return
     message.update(item.sessionID, (draft, index) => {
-      const row =
+      const row = inline(
         item.type === "user"
           ? { id: item.id, type: "user" as const, ...item.payload, time: { created: item.time.created } }
-          : { id: item.id, type: "synthetic" as const, ...item.payload, time: { created: item.time.created } }
+          : { id: item.id, type: "synthetic" as const, ...item.payload, time: { created: item.time.created } },
+      )
       const position = index.get(item.id)
       if (position === undefined) return message.append(draft, index, row)
       draft[position] = row
@@ -831,7 +840,8 @@ export function createData(config: CreateDataInput) {
         refresh(() =>
           api()
             .session.message.get({ sessionID: event.data.sessionID, messageID: SessionMessage.ID.fromEvent(event.id) })
-            .then((item) => {
+            .then((response) => {
+              const item = inline(response)
               message.update(event.data.sessionID, (draft, index) => {
                 const position = index.get(item.id)
                 if (position === undefined) return message.append(draft, index, item)
@@ -1633,7 +1643,7 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
             const started = deletionEpoch
-            const updates = new Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>()
+            const updates = new Map<string, SessionInboxMediaInfo | SessionInbox.Delivery | undefined>()
             pendingUpdates.set(sessionID, updates)
             try {
               const snapshot = await api().session.inbox.list({ sessionID }).catch(evictMissing)
@@ -1790,7 +1800,7 @@ export function createData(config: CreateDataInput) {
           !store.session.pending[request.sessionID]?.some((item) => item.id === id)
         if (fresh) {
           const files = optimisticFiles(request.files)
-          const payload: Extract<SessionInboxInfo, { type: "user" }>["payload"] = {
+          const payload: Extract<SessionInboxMediaInfo, { type: "user" }>["payload"] = {
             text: request.text,
             agents: request.agents?.map((agent) => ({ ...agent })),
             metadata: request.metadata,
