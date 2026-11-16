@@ -15,8 +15,15 @@ const href = String(
 )
 
 if (href.startsWith("chrome-extension://")) {
-  const receiver = { dispatch: undefined }
-  ipcRenderer.on("browser-extension:event", (_event, name, args) => receiver.dispatch?.(name, args))
+  const receiver = { dispatch: undefined, last: undefined }
+  ipcRenderer.on("browser-extension:event", (_event, name, args, token) => {
+    const dispatched = (token && token === receiver.last) || receiver.dispatch?.(name, args)
+
+    if (!token) return
+
+    if (dispatched) receiver.last = token
+    ipcRenderer.send(`browser-extension:received:${token}`, !!dispatched)
+  })
 
   // Main attaches a worker's handlers as it starts, which can land just after the worker's first calls. Each retry
   // waits a round trip to main; a worker's preload has no timers.
@@ -29,7 +36,7 @@ if (href.startsWith("chrome-extension://")) {
 
   const bridge = {
     invoke: (name, args) => request("browser-extension:call", [name, args]),
-    subscribe: (name) => void request("browser-extension:subscribe", [name]).then((install) => {
+    subscribe: (name, listen) => void request("browser-extension:subscribe", [name, listen]).then((install) => {
       // The reply works while a worker is still starting; a pushed event can be dropped before it is running.
       if (name === "runtime.onInstalled" && install) receiver.dispatch?.(name, [install])
     }).catch(() => undefined),
@@ -53,31 +60,40 @@ function install(namespaces, bridge) {
   const listeners = new Map()
 
   bridge.listen((name, args) => {
-    for (const listener of [...(listeners.get(name) ?? [])]) {
+    const registered = [...(listeners.get(name) ?? [])]
+
+    for (const listener of registered) {
       try {
         listener(...args)
       } catch (error) {
         console.error(error)
       }
     }
+
+    return registered.length > 0
   })
 
-  const event = (name) => ({
-    addListener(listener) {
+  const event = (name, native) => ({
+    addListener(listener, ...filters) {
       const set = listeners.get(name) ?? new Set()
 
-      if (set.size === 0) bridge.subscribe(name)
+      native?.addListener(listener, ...filters)
+
+      if (set.size === 0) bridge.subscribe(name, true)
       set.add(listener)
       listeners.set(name, set)
     },
     removeListener(listener) {
-      listeners.get(name)?.delete(listener)
+      native?.removeListener(listener)
+      const set = listeners.get(name)
+
+      if (set?.delete(listener) && set.size === 0) bridge.subscribe(name, false)
     },
     hasListener(listener) {
-      return listeners.get(name)?.has(listener) ?? false
+      return !!listeners.get(name)?.has(listener) || !!native?.hasListener(listener)
     },
     hasListeners() {
-      return (listeners.get(name)?.size ?? 0) > 0
+      return (listeners.get(name)?.size ?? 0) > 0 || !!native?.hasListeners()
     },
   })
 
@@ -147,18 +163,23 @@ function install(namespaces, bridge) {
 
     const members = Object.fromEntries([
       ...namespace.methods.map((name) => [name, call(`${namespace.path}.${name}`, namespace.sync?.includes(name))]),
-      ...(namespace.events ?? []).map((name) => [name, event(`${namespace.path}.${name}`)]),
       ...Object.entries(namespace.constants ?? {}),
     ])
 
-    for (const root of roots) {
-      const target = namespace.path.split(".").reduce((parent, key) => {
+    const targets = roots.map((root) => namespace.path.split(".").reduce((parent, key) => {
         if (!parent[key]) define(parent, key, {})
 
         return parent[key]
-      }, root)
+      }, root))
 
+    for (const target of new Set(targets)) {
       for (const [name, value] of Object.entries(members)) define(target, name, value)
+
+      for (const name of namespace.events ?? []) {
+        // The sync area is ours; native local/session changes must keep their Chromium listener and wake semantics.
+        const native = namespace.path === "storage" && name === "onChanged" ? target[name] : undefined
+        define(target, name, event(`${namespace.path}.${name}`, native))
+      }
     }
   }
 }

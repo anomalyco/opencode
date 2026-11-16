@@ -11,6 +11,7 @@ const Command = Schema.Struct({ description: Schema.optional(Schema.String) })
 // Lists keep any entry, so an unusual value never makes the rest of a manifest unreadable.
 const Fields = Schema.Struct({
   manifest_version: Schema.optional(Schema.Number),
+  background: Schema.optional(Schema.Struct({ persistent: Schema.optional(Schema.Boolean) })),
   permissions: Schema.optional(Schema.Array(Schema.Unknown)),
   host_permissions: Schema.optional(Schema.Array(Schema.Unknown)),
   action: Schema.optional(ManifestAction),
@@ -29,6 +30,7 @@ const decode = Schema.decodeUnknownOption(Fields)
  */
 export type ApiManifest = {
   readonly version: number | undefined
+  readonly eventPage?: boolean
   readonly permissions: readonly string[]
   readonly hosts: readonly string[]
   readonly action: typeof ManifestAction.Type | undefined
@@ -43,6 +45,7 @@ export function apiManifest(extension: Pick<Extension, "manifest">): ApiManifest
 
   return {
     version: fields?.manifest_version,
+    eventPage: fields?.manifest_version === 2 && fields.background?.persistent === false,
     permissions,
     hosts: [...hosts, ...permissions.filter((item) => item.includes("://") || item === "<all_urls>")],
     action: fields?.action ?? fields?.browser_action ?? fields?.page_action,
