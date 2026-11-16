@@ -604,11 +604,13 @@ fn a_save_before_the_approved_copy_runs_nothing() {
     assert_eq!(ran.lines().collect::<Vec<_>>(), [r#"{"module":"saved"}"#]);
 }
 
-/// The status of the project plugin `dir`: listed by its directory until it loads, then by `id`.
+/// The status of the project plugin `dir`: its entry by its directory until it loads (named by its package, if it has
+/// one, CT-6), then by `id`.
 fn listed(pipe: &Pipe, dir: &Path, id: &str) -> Option<Status> {
     let target = dir.to_string_lossy();
     let entries = pipe.harness.tui.plugins.entries().into_iter();
-    entries.filter(|entry| entry.id == target || entry.id == id).map(|entry| entry.status).next()
+    let unloaded = |entry: &opencode_plugin::Entry| entry.key == format!("target:{target}");
+    entries.filter(|entry| entry.id == target || unloaded(entry) || entry.id == id).map(|entry| entry.status).next()
 }
 
 // Expected (bigboi P8-1): a project plugin's approved files import only from among themselves, the layer's modules and
@@ -894,6 +896,32 @@ fn a_plugin_imports_runtime_modules_and_calls_its_own_rpc() {
     let called = requests.lock().unwrap().iter().find(|seen| seen.path == "/api/rpc/echo/say").cloned().unwrap();
     assert_eq!((called.method.as_str(), called.body), ("POST", json!({ "input": { "text": "hi" } })));
     pipe.harness.wait_for("rpc hi");
+}
+
+// Expected (CT-6): a local TypeScript plugin that fails to load is listed by its package's name, as a skipped one is
+// (FT-15), not by its directory's path.
+#[test]
+fn a_local_plugin_that_fails_is_listed_by_its_package() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().join("config/plugins/broken");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("package.json"), r#"{ "name": "opencode-broken-thing" }"#).unwrap();
+    std::fs::write(dir.join("tui.ts"), "throw new Error(\"boom\")\n").unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    let entry = || {
+        let entries = pipe.harness.tui.plugins.entries();
+        entries.into_iter().find(|entry| entry.target.as_deref().is_some_and(|target| target.ends_with("broken")))
+    };
+    pipe.harness.wait("the load failed", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        entry().is_some_and(|entry| matches!(entry.status, Status::Failed(_)))
+    });
+    let entry = entry().unwrap();
+    assert_eq!(entry.id, "opencode-broken-thing", "{entry:?}");
 }
 
 // Expected (FT-9): a plugin that makes a store for each of 80 keys in its setup, as opencode-tokscope does for its

@@ -775,7 +775,13 @@ impl Loader {
                 changed
             }
             Step::Failed(_, digest) if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) => false,
-            Step::Failed(error, digest) => self.fail(&**host, registry, listed, name, digest, error),
+            Step::Failed(error, digest) => {
+                // Named by its package, as a skipped one is, not by its path (CT-6, FT-15).
+                if let Some(package) = package_name(dir) {
+                    registry.set_label(name, package);
+                }
+                self.fail(&**host, registry, listed, name, digest, error)
+            }
             Step::Ready(definition, error, digest) => {
                 if registry.id_taken(&definition.id, name) {
                     // What the JS host set up of it goes (review carbon-2).
