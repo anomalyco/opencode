@@ -14,13 +14,17 @@ function target(event: Event) {
   return { anchor, href }
 }
 
+function modified(event: MouseEvent | KeyboardEvent) {
+  return event.metaKey || event.shiftKey || event.ctrlKey || event.altKey
+}
+
 export function createAppLinks(review: (href: string) => void) {
   let pressed: ReturnType<typeof target>
   makeEventListener(
     document,
     "pointerdown",
     (event) => {
-      pressed = event.isTrusted && event.button === 0 ? target(event) : undefined
+      pressed = event.isTrusted && event.button === 0 && !modified(event) ? target(event) : undefined
     },
     true,
   )
@@ -43,7 +47,7 @@ export function createAppLinks(review: (href: string) => void) {
       event.preventDefault()
       event.stopImmediatePropagation()
 
-      if (event.isTrusted && !event.repeat && link.anchor === document.activeElement) review(link.href)
+      if (event.isTrusted && !modified(event) && !event.repeat && link.anchor === document.activeElement) review(link.href)
     },
     true,
   )
@@ -58,8 +62,11 @@ export function createAppLinks(review: (href: string) => void) {
     event.stopImmediatePropagation()
 
     // A stream can replace the anchor or change its target between press and release.
-    if (event.type === "click" && event.isTrusted && start?.anchor === link.anchor && start.href === link.href)
-      review(link.href)
+    if (event.type !== "click" || !event.isTrusted || modified(event) || event.button !== 0) return
+    const paired = start?.anchor === link.anchor && start.href === link.href
+    const assistive = !start && event.detail === 0 && link.anchor === document.activeElement
+
+    if (paired || assistive) review(link.href)
   }
 
   makeEventListener(document, "click", click, true)
