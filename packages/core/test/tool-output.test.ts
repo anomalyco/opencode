@@ -40,8 +40,9 @@ describe("ToolOutput", () => {
           if (typeof outputPath !== "string") return
           expect(yield* fs.readFileString(outputPath)).toBe("one\ntwo\nthree")
           expect(result.content).toEqual([
-            { type: "text", text: "one\ntwo" },
-            { type: "text", text: `[showing lines 1-2 of 3; full output saved to ${outputPath}]` },
+            { type: "text", text: "one" },
+            { type: "text", text: `[showing lines 1-1 and 3-3 of 3; full output saved to ${outputPath}]` },
+            { type: "text", text: "three" },
           ])
         }),
       { maxLines: 2, maxBytes: 1_000 },
@@ -56,13 +57,14 @@ describe("ToolOutput", () => {
           const result = yield* service.truncate({ content: [{ type: "text", text: "one\ntwo\nthree" }] })
           expect(result.metadata).toEqual({ truncated: true })
           expect(result.content).toEqual([
-            { type: "text", text: "one\ntwo" },
+            { type: "text", text: "one" },
             {
               type: "text",
               text: expect.stringMatching(
-                /^\[showing lines 1-2 of 3; full output could not be saved: E[A-Z]+: [^\n]+\]$/,
+                /^\[showing lines 1-1 and 3-3 of 3; full output could not be saved: E[A-Z]+: [^\n]+\]$/,
               ),
             },
+            { type: "text", text: "three" },
           ])
         }),
       { maxLines: 2, maxBytes: 1_000 },
@@ -75,14 +77,126 @@ describe("ToolOutput", () => {
         Effect.gen(function* () {
           const result = yield* output.truncate({ content: [{ type: "text", text: "one\ntwo" }] })
           expect(result.content).toEqual([
-            { type: "text", text: "one\nt" },
+            { type: "text", text: "on" },
             {
               type: "text",
-              text: expect.stringMatching(/^\[showing lines 1-2 of 2 \(last line cut\); full output saved to .+\]$/),
+              text: expect.stringMatching(
+                /^\[showing lines 1-1 and 2-2 of 2 \(head line cut\); full output saved to .+\]$/,
+              ),
             },
+            { type: "text", text: "two" },
           ])
         }),
       { maxLines: 100, maxBytes: 5 },
+    ),
+  )
+
+  it.live("keeps the head and tail within the line limit", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const lines = Array.from({ length: 100 }, (_, index) => `l${index + 1}`)
+          const result = yield* output.truncate({ content: [{ type: "text", text: lines.join("\n") }] })
+          expect(result.content).toEqual([
+            { type: "text", text: lines.slice(0, 5).join("\n") },
+            {
+              type: "text",
+              text: expect.stringMatching(/^\[showing lines 1-5 and 96-100 of 100; full output saved to /),
+            },
+            { type: "text", text: lines.slice(-5).join("\n") },
+          ])
+        }),
+      { maxLines: 10, maxBytes: 1_000_000 },
+    ),
+  )
+
+  it.live("gives unused tail budget back to the head", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const text = `${Array.from({ length: 30 }, (_, index) => `s${index + 1}`).join("\n")}\n${"x".repeat(2_000)}`
+          const result = yield* output.truncate({ content: [{ type: "text", text }] })
+          const preview = result.content[0]?.type === "text" ? result.content[0].text : ""
+          expect(result.content).toEqual([
+            { type: "text", text: preview },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-10 of 31; full output saved to /) },
+          ])
+          expect(preview.split("\n").filter((line) => line.startsWith("s"))).toHaveLength(10)
+        }),
+      { maxLines: 10, maxBytes: 1_000 },
+    ),
+  )
+
+  it.live("keeps the preview within the byte limit", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const text = Array.from({ length: 100 }, () => "x".repeat(30)).join("\n")
+          const result = yield* output.truncate({ content: [{ type: "text", text }] })
+          const preview = result.content.flatMap((item) =>
+            item.type === "text" && !item.text.startsWith("[showing ") ? [item.text] : [],
+          )
+          expect(preview.length).toBe(2)
+          expect(preview[0]?.startsWith("x")).toBe(true)
+          expect(preview[1]?.endsWith("x")).toBe(true)
+          expect(preview.reduce((bytes, part) => bytes + Buffer.byteLength(part, "utf-8"), 0)).toBeLessThanOrEqual(400)
+          expect(result.content.some((item) => item.type === "text" && item.text.includes(" and "))).toBe(true)
+        }),
+      { maxLines: 1_000, maxBytes: 400 },
+    ),
+  )
+
+  it.live("keeps multibyte tails intact", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const result = yield* output.truncate({ content: [{ type: "text", text: "开头\n中间\n结尾🚀" }] })
+          expect(result.content).toEqual([
+            { type: "text", text: "开头" },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 and 3-3 of 3;/) },
+            { type: "text", text: "结尾🚀" },
+          ])
+          expect(JSON.stringify(result.content)).not.toContain("\uFFFD")
+        }),
+      { maxLines: 2, maxBytes: 1_000 },
+    ),
+  )
+
+  it.live("keeps text lines on the same side of an attachment", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const file = { type: "file" as const, uri: "file:///image.png", mime: "image/png" }
+          const result = yield* output.truncate({
+            content: [{ type: "text", text: "a1\na2\na3\na4\na5\na6" }, file, { type: "text", text: "b1" }],
+          })
+          expect(result.content).toEqual([
+            { type: "text", text: "a1\na2" },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-2 and 6-7 of 7;/) },
+            { type: "text", text: "a6" },
+            file,
+            { type: "text", text: "b1" },
+          ])
+        }),
+      { maxLines: 4, maxBytes: 1_000 },
+    ),
+  )
+
+  it.live("keeps content when the byte limit is smaller than the marker", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const text = Array.from({ length: 20 }, () => "x".repeat(20)).join("\n")
+          const result = yield* output.truncate({ content: [{ type: "text", text }] })
+          const preview = result.content.flatMap((item) =>
+            item.type === "text" && !item.text.startsWith("[showing ") ? [item.text] : [],
+          )
+          expect(preview.length).toBe(2)
+          expect(preview[0]?.startsWith("x")).toBe(true)
+          expect(preview[1]?.endsWith("x")).toBe(true)
+          expect(result.content.some((item) => item.type === "text" && item.text.includes("and 19-20"))).toBe(true)
+        }),
+      { maxLines: 10, maxBytes: 100 },
     ),
   )
 
@@ -171,8 +285,9 @@ describe("ToolOutput", () => {
             ],
           })
           expect(between.content).toEqual([
-            { type: "text", text: "abcde" },
-            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 2;/) },
+            { type: "text", text: "abc" },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 and 2-2 of 2 \(head line cut\);/) },
+            { type: "text", text: "fgh" },
           ])
         }),
       { maxLines: 100, maxBytes: 6 },
@@ -201,8 +316,9 @@ describe("ToolOutput", () => {
         Effect.gen(function* () {
           const result = yield* output.truncate({ content: [{ type: "text", text: "a\n\n\nb" }] })
           expect(result.content).toEqual([
-            { type: "text", text: "a\n" },
-            { type: "text", text: expect.stringMatching(/^\[showing lines 1-2 of 4;/) },
+            { type: "text", text: "a" },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 and 4-4 of 4;/) },
+            { type: "text", text: "b" },
           ])
         }),
       { maxLines: 2, maxBytes: 1_000 },
@@ -236,9 +352,9 @@ describe("ToolOutput", () => {
           if (typeof outputPath !== "string") return
           expect(yield* fs.readFileString(outputPath)).toBe("one\ntwo\nthree")
           expect(result.content).toEqual([
-            { type: "text", text: "one\n" },
-            { type: "text", text: "two" },
-            { type: "text", text: expect.stringMatching(/^\[showing lines 1-2 of 3;/) },
+            { type: "text", text: "one" },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 and 3-3 of 3;/) },
+            { type: "text", text: "three" },
           ])
         }),
       { maxLines: 2, maxBytes: 1_000 },
@@ -256,8 +372,8 @@ describe("ToolOutput", () => {
           expect(result.content).toEqual([
             { type: "text", text: "before" },
             file,
-            { type: "text", text: "after" },
-            { type: "text", text: expect.stringMatching(/^\[showing lines 1-2 of 3; full output saved to /) },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 and 3-3 of 3; full output saved to /) },
+            { type: "text", text: "omitted" },
           ])
         }),
       { maxLines: 2, maxBytes: 1_000 },

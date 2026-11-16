@@ -75,25 +75,69 @@ const layer = Layer.effect(
     const truncate = Effect.fnUntraced(function* (result: Result) {
       if (result.metadata?.truncated !== undefined) return result
       const content = result.content
-      // A line break joins text parts unless the text before already ends in one.
-      const text = content.reduce(
-        (joined, item) =>
-          item.type !== "text"
-            ? joined
-            : joined === "" || joined.endsWith("\n")
-              ? joined + item.text
-              : `${joined}\n${item.text}`,
-        "",
-      )
+      // A line break joins text parts unless the text before already ends in one. Keep each part's character range so
+      // the preview can cut inside a part and still put the marker next to the text it replaces.
+      const ranges: { index: number; start: number; end: number }[] = []
+      let text = ""
+      content.forEach((item, index) => {
+        if (item.type !== "text") return
+        const separator = text === "" || text.endsWith("\n") ? "" : "\n"
+        const start = text.length + separator.length
+        text += separator + item.text
+        ranges.push({ index, start, end: text.length })
+      })
       const limits = state.get()
       const totalLines = countLines(text)
-      if (totalLines <= limits.maxLines && Buffer.byteLength(text, "utf-8") <= limits.maxBytes)
+      const totalBytes = Buffer.byteLength(text, "utf-8")
+      if (totalLines <= limits.maxLines && totalBytes <= limits.maxBytes)
         return { ...result, metadata: { ...result.metadata, truncated: false } }
 
-      // Cut once, at the line or byte limit, whichever comes first, so a line too long for the space left shows its
-      // start. The preview never ends on a line break.
-      const end = Math.min(afterLines(text, limits.maxLines), byteBoundary(text, limits.maxBytes))
-      const shown = text.slice(0, text.endsWith("\r\n", end) ? end - 2 : text.endsWith("\n", end) ? end - 1 : end)
+      // Keep both ends: the head carries setup/context, the tail carries the result (often an error) that matters most.
+      // Head takes at most half of each limit first so the tail is guaranteed a share; the head gets the rest back.
+      const headEnd = Math.min(
+        afterLines(text, Math.ceil(limits.maxLines / 2)),
+        byteBoundary(text, Math.floor(limits.maxBytes / 2)),
+      )
+      const head = withoutTrailingLineBreak(text.slice(0, headEnd))
+      const headLines = countLines(text.slice(0, headEnd))
+      const headBytes = Buffer.byteLength(head, "utf-8")
+      const tailLimit = text.endsWith("\r\n") ? text.length - 2 : text.endsWith("\n") ? text.length - 1 : text.length
+      const tailStartAt = (count: number) => afterLines(text, totalLines - count)
+      const tailFits = (count: number) => {
+        const start = tailStartAt(count)
+        return (
+          start >= headEnd &&
+          start < tailLimit &&
+          Buffer.byteLength(text.slice(start, tailLimit), "utf-8") <= limits.maxBytes - headBytes
+        )
+      }
+      let low = 0
+      let high = Math.max(0, Math.min(limits.maxLines - headLines, totalLines - headLines))
+      while (low < high) {
+        const middle = Math.ceil((low + high) / 2)
+        if (tailFits(middle)) low = middle
+        else high = middle - 1
+      }
+      const tailLines = low
+      const tailStart = tailLines > 0 ? tailStartAt(tailLines) : text.length
+      const tailBytes =
+        tailLines > 0 ? Buffer.byteLength(text.slice(tailStart, tailLimit), "utf-8") : 0
+
+      // Give the head the rest of the byte and line budget once the tail is fixed, but never past the tail.
+      const end = Math.min(
+        afterLines(text, limits.maxLines - tailLines),
+        byteBoundary(text, Math.max(0, limits.maxBytes - tailBytes)),
+        tailStart,
+      )
+      const shown = withoutTrailingLineBreak(text.slice(0, end))
+      // Counted before the final line break is stripped, so a blank last line still counts.
+      const shownLines = countLines(text.slice(0, end))
+      const headLineCut =
+        shownLines > 0 &&
+        shown.length < text.length &&
+        !text.startsWith("\n", shown.length) &&
+        !text.startsWith("\r\n", shown.length)
+
       const file = path.join(directory, fileName())
       const failure = yield* fs.ensureDir(directory).pipe(
         Effect.andThen(fs.writeFileString(file, text)),
@@ -102,38 +146,36 @@ const layer = Layer.effect(
           Effect.logWarning("failed to save full tool output", { file, cause: error }).pipe(Effect.as(describe(error))),
         ),
       )
-      // Counted before the final line break is stripped, so a blank last line still counts.
-      const shownLines = countLines(text.slice(0, end))
-      const lastLineCut =
-        shownLines > 0 &&
-        shown.length < text.length &&
-        !text.startsWith("\n", shown.length) &&
-        !text.startsWith("\r\n", shown.length)
-      const range = shownLines === 0 ? "0 lines" : `lines 1-${shownLines}`
-      const marker = `[showing ${range} of ${totalLines}${lastLineCut ? " (last line cut)" : ""}; ${
+      const headRange = shownLines > 0 ? `1-${shownLines}` : ""
+      const tailRange = tailLines > 0 ? `${totalLines - tailLines + 1}-${totalLines}` : ""
+      const kept = [headRange, tailRange].filter(Boolean)
+      const lineRange = kept.length > 0 ? `lines ${kept.join(" and ")}` : "0 lines"
+      const cut = headLineCut ? (tailLines > 0 ? " (head line cut)" : " (last line cut)") : ""
+      const marker = `[showing ${lineRange} of ${totalLines}${cut}; ${
         failure === undefined ? `full output saved to ${file}` : `full output could not be saved: ${failure}`
       }]`
       const bounded: Tool.Content[] = []
-      let remaining = shown.length
-      let separator = false
       let marked = false
-      for (const item of content) {
+      content.forEach((item, index) => {
         if (item.type === "file") {
           bounded.push(item)
-          continue
+          return
         }
-        if (separator && remaining > 0) remaining--
-        separator = item.text !== "" && !item.text.endsWith("\n")
-        if (!marked && remaining >= item.text.length) {
-          bounded.push(item)
-          remaining -= item.text.length
-          continue
+        const span = ranges.find((candidate) => candidate.index === index)
+        if (!span) return
+        const headPart = text.slice(span.start, Math.min(span.end, shown.length))
+        // Keep empty parts that sit inside the preview, the way the whole parts were kept before.
+        if (headPart || (span.end <= shown.length && item.text === "")) bounded.push({ ...item, text: headPart })
+        // Mark the first text item after the head; an empty item at the boundary needs the explicit start check.
+        if (!marked && (shown.length < span.end || shown.length <= span.start)) {
+          bounded.push({ type: "text", text: marker })
+          marked = true
         }
-        if (remaining > 0) bounded.push({ ...item, text: item.text.slice(0, remaining) })
-        if (!marked) bounded.push({ type: "text", text: marker })
-        remaining = 0
-        marked = true
-      }
+        if (tailLines > 0) {
+          const tailPart = text.slice(Math.max(span.start, tailStart), span.end)
+          if (tailPart) bounded.push({ ...item, text: tailPart })
+        }
+      })
       if (!marked) bounded.push({ type: "text", text: marker })
       return {
         ...result,
@@ -188,6 +230,11 @@ function countLines(text: string) {
   for (let index = text.indexOf("\n"); index !== -1 && index < text.length - 1; index = text.indexOf("\n", index + 1))
     count++
   return count
+}
+
+/** `text` without a final line break, so a preview never ends on one. */
+function withoutTrailingLineBreak(text: string) {
+  return text.endsWith("\r\n") ? text.slice(0, -2) : text.endsWith("\n") ? text.slice(0, -1) : text
 }
 
 /** Where the line after the first `count` lines starts, or the end of `text`. */
