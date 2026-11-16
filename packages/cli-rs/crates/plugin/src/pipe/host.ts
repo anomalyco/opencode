@@ -52,14 +52,21 @@ const confined = new Set<string>()
 // and resolving from those fails a relative import (FT-3): the call made inside answers Bun's own resolution.
 let resolving = false
 const OUTSIDE = "is outside the plugin's approved files"
+const RUNTIME = "opentui:runtime-module:"
 
 runtime({
   name: "opencode-compat",
   setup(build) {
-    for (const [name, exports] of Object.entries(modules)) build.module(name, () => ({ exports, loader: "object" }))
+    // Each also as OpenTUI's runtime registry names it, `opentui:runtime-module:<encoded specifier>`, which TS's runtime
+    // serves and a plugin may import or probe (CT-3), and with the specifier left as it is.
+    for (const [name, exports] of Object.entries(modules)) {
+      const ids = new Set([name, RUNTIME + encodeURIComponent(name), RUNTIME + name])
+      for (const id of ids) build.module(id, () => ({ exports, loader: "object" }))
+    }
     build.onResolve({ filter: /.*/ }, (args) => {
       const importer = args.importer?.split("?")[0]
-      if (!importer || resolving || confined.size === 0 || args.path in modules || builtin(args.path)) return undefined
+      const layer = args.path in modules || args.path.startsWith(RUNTIME)
+      if (!importer || resolving || confined.size === 0 || layer || builtin(args.path)) return undefined
       // The root itself is an importer too, as `resolveEntry` resolves from it (carbon jsnpm-3), and resolves from
       // itself rather than from its parent.
       const within = (file: string) => [...confined].find((root) => inside(root, file))
