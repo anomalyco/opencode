@@ -1,6 +1,7 @@
 import type { ServerEndpoint } from "@opencode/plugin/gui/main"
 import type { WorkspaceSource } from "./workspace-file"
 import { workspacePrefix } from "./remote-address"
+import { FileVerificationError } from "@opencode/util/file-verification"
 
 /** The endpoint's marker distinguishes a missing file on a capable server from an older server's router 404. */
 export function remotePreview(
@@ -48,7 +49,7 @@ export function remotePreview(
       if (response.headers.get("x-opencode-preview") === "3" && (!policy || response.headers.get("x-opencode-preview-policy") === "agent")) {
         outdated = false
 
-        return response
+        return FileVerificationError.check(response)
       }
 
       outdated = [200, 404, 405, 501].includes(response.status)
@@ -77,7 +78,7 @@ export function remotePreview(
       const id = identity ?? await pin(document,signal)
 
       if (!id) return null
-      const response = await request(path, "HEAD", undefined, signal, document, entry, id).catch(() => undefined)
+      const response = await request(path, "HEAD", undefined, signal, document, entry, id).catch(FileVerificationError.orMissing)
 
       if (response?.headers.get("x-opencode-preview-denied") === "1") return "denied"
       const length = response?.headers.get("content-length")

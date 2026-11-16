@@ -1,6 +1,7 @@
 import { realpath } from "node:fs/promises"
 import { relative } from "node:path"
 import { openContained } from "@opencode/util/contained-file"
+import { FileVerificationError } from "@opencode/util/file-verification"
 import { openPreviewFile, previewAllowed } from "@opencode/util/preview-scope"
 import { fileURLToPath } from "node:url"
 import { fileURLWithin } from "./policy"
@@ -114,7 +115,7 @@ export async function resolvePreviewRequest(
   if (!root) return
   const path = relative(root, fileURLToPath(file)).replaceAll("\\", "/")
   const entry = path === grant.document && initiator === undefined && grant.takeEntry()
-  const target = await openPreviewFile(root, grant.document, path, entry, grant.identity).catch(() => undefined)
+  const target = await openPreviewFile(root, grant.document, path, entry, grant.identity).catch(FileVerificationError.orMissing)
 
   if (target === "denied") {
     grant.denied()
@@ -145,8 +146,8 @@ async function openWorkspaceFile(file: string, roots: readonly string[]) {
 
   try {
     return await openContained(await realpath(root), relative(root, fileURLToPath(file)))
-  } catch {
+  } catch (error) {
     // Missing, unreadable, malformed or replaced between lookups: no file grant.
-    return undefined
+    return FileVerificationError.orMissing(error)
   }
 }

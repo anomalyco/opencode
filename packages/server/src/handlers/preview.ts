@@ -5,6 +5,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Agent } from "@opencode/schema/agent"
 import { openPreviewFile, previewRoot } from "@opencode/util/preview-scope"
+import { FileVerificationError } from "@opencode/util/file-verification"
 import { Effect, Stream } from "effect"
 import path from "node:path"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -43,13 +44,15 @@ export const makePreviewRead = Effect.gen(function* () {
     const opened = yield* Effect.acquireRelease(
       Effect.promise(() =>
         openPreviewFile(session.location.directory, query.document, query.path, query.entry === "1", query.root)
-          .catch(() => undefined),
+          .catch((cause) => cause instanceof FileVerificationError ? cause : undefined),
       ),
       (opened) =>
         Effect.promise(async () => {
-          if (opened && opened !== "denied") await opened.file.close()
+          if (opened && opened !== "denied" && !(opened instanceof FileVerificationError)) await opened.file.close()
         }),
     )
+    if (opened instanceof FileVerificationError)
+      return HttpServerResponse.empty({ status: 503, headers: { ...headers, [FileVerificationError.header]: opened._tag } })
     if (opened === "denied") return HttpServerResponse.empty({ status: 404, headers: {...headers,"x-opencode-preview-denied":"1"} })
     if (!opened) return HttpServerResponse.empty({ status: 404, headers })
     if (guarded) {

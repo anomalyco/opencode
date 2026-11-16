@@ -1,10 +1,11 @@
 import { readlink } from "node:fs/promises"
+import { verificationUnavailable } from "./file-verification.js"
 
 export async function handlePath(fd: number) {
-  if (process.platform === "linux") return readlink(`/proc/self/fd/${fd}`)
-  if (process.platform !== "darwin" && process.platform !== "win32") return
+  if (process.platform === "linux") return readlink(`/proc/self/fd/${fd}`).catch(verificationUnavailable)
+  if (process.platform !== "darwin" && process.platform !== "win32") return verificationUnavailable()
   native ??= handleResolver()
-  return (await native)(fd)
+  return native.then((resolve) => resolve(fd)).catch(verificationUnavailable)
 }
 
 let native: ReturnType<typeof handleResolver> | undefined

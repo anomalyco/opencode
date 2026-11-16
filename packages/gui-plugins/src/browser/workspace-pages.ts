@@ -7,6 +7,7 @@ import type { WorkspaceSource } from "./workspace-file"
 import { fileURLWithin } from "./policy"
 import { previewAddress, previewFile } from "./preview"
 import { remotePath } from "./remote-address"
+import { FileVerificationError } from "@opencode/util/file-verification"
 
 /** Only main's explicit load mints an origin. Page navigation and history can use but never enlarge its grant. */
 export function workspacePages(
@@ -123,7 +124,7 @@ export function workspacePages(
       const doc = grant.document
 
       if (grant.reader.type === "remote") return Number.isSafeInteger(await grant.reader.stat(file, signal, doc, file === doc, grant.identity))
-      const opened = await openPreviewFile(root, doc, file, file === doc, grant.identity).catch(() => undefined)
+      const opened = await openPreviewFile(root, doc, file, file === doc, grant.identity).catch(FileVerificationError.orMissing)
 
       if (!opened || opened === "denied") return false
       await opened.file.close()

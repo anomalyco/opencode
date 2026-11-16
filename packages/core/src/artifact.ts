@@ -18,6 +18,7 @@ import {
 import type { SessionID } from "@opencode/schema/session-id"
 import { Global } from "@opencode/util/global"
 import { openContained } from "@opencode/util/contained-file"
+import { FileVerificationError } from "@opencode/util/file-verification"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Bus } from "./bus.js"
@@ -175,7 +176,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly readLocalFile: (
     id: ID,
     subpath?: string,
-  ) => Effect.Effect<LocalFile, DisabledError | NotFoundError | FileMissingError | InvalidError>
+  ) => Effect.Effect<LocalFile, DisabledError | NotFoundError | FileMissingError | FileVerificationError | InvalidError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Artifact") {}
@@ -446,7 +447,7 @@ const layer = Layer.effect(
               await opened.file.close()
             }
           },
-          catch: () => new FileMissingError({ artifactID: id, path: requested }),
+          catch: (error) => error instanceof FileVerificationError ? error : new FileMissingError({ artifactID: id, path: requested }),
         })
         return { bytes, mime: detectFileMime(requested, bytes) }
       }),

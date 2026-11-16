@@ -1,3 +1,4 @@
+import { FileVerificationError } from "@opencode/util/file-verification"
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -144,6 +145,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (error === "browser.preview.agentRestricted") return ctx.t("preview.agentRestricted")
 
     if (error === "browser.artifact.missing") return ctx.t("artifact.missing")
+
+    if (error === FileVerificationError.code) return ctx.t("preview.verificationUnavailable")
 
     if (error === "browser.address.web") return ctx.t("refused.web")
 
@@ -360,7 +363,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       (cause: unknown) => {
         const error = cause instanceof Error && cause.message ? cause.message : "browser.command.failed"
 
-        if (error === "browser.artifact.missing" && !ctx.signal.aborted) ctx.toast.show({ title: describe(error), variant: "error" })
+        if ((error === "browser.artifact.missing" || error === FileVerificationError.code) && !ctx.signal.aborted) ctx.toast.show({ title: describe(error), variant: "error" })
         dispatch({
           type: "command.failed",
           sessionKey,

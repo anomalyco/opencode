@@ -1,3 +1,4 @@
+import { FileVerificationError } from "@opencode/util/file-verification"
 import { Popover } from "@kobalte/core/popover"
 import { Button } from "@opencode/ui/button"
 import { Icon, newIcons } from "@opencode/ui/icon"
@@ -98,6 +99,8 @@ export default function SessionBrowserPane(props: {
     if (error === "browser.restore.refused") return "restore.refused"
 
     if (error === "browser.artifact.missing") return "artifact.missing"
+
+    if (error === FileVerificationError.code) return "preview.verificationUnavailable"
 
     if (error === "browser.preview.unsupported") return "preview.upgrade"
 

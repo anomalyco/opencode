@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { FileVerificationError } from "@opencode/util/file-verification"
 import { undrawableMessage } from "./capture"
 import { browserFailure, CodedError, missingArtifact, protocolError } from "./errors"
 
@@ -9,6 +10,9 @@ test("an unavailable artifact reports a preview failure, not a stale frame", () 
   const failure = browserFailure({ type: "snapshot", tabID }, missingArtifact())
   expect(failure.code).toBe("preview_unavailable")
   expect(failure.message).toContain("artifact is no longer available")
+  const verifier = browserFailure({ type: "snapshot", tabID }, new FileVerificationError())
+  expect(verifier.code).toBe("file_verification_unavailable")
+  expect(verifier.message).toContain("file verification could not be loaded")
 })
 
 test("native preview failures never export the private loader address", () => {

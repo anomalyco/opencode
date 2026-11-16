@@ -1,3 +1,5 @@
+import { FileVerificationError } from "@opencode/util/file-verification"
+
 export default {
   "external.reveal": "Show file in folder",
   "model.timedOut": "The browser took too long to load",
@@ -212,6 +214,7 @@ export default {
   "refused.popup": "Pop-up blocked",
   "refused.open": "Open",
   "preview.source": "View source",
+  "preview.verificationUnavailable": FileVerificationError.description,
   "preview.workspace": "Server workspace file",
   "preview.offline": "The workspace server is disconnected. Reconnect to load this preview.",
   "artifact.unavailable": "The artifact cannot be opened right now. Check the server connection and try again.",

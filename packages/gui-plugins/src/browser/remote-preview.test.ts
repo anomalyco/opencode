@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { remotePreview } from "./remote-preview"
+import { FileVerificationError } from "@opencode/util/file-verification"
 import { workspaceFileURL } from "./link"
 import { previewAddress } from "./preview"
 import { resolvePreviewRequest, type PreviewSource } from "./workspace-file"
@@ -48,6 +49,9 @@ test("the authenticated read under a server base path names exactly the file val
       if (url.searchParams.get("root") === "bind") return new Response(null, {headers:{"x-opencode-preview":"3","x-opencode-preview-root":pin}})
       expect(url.searchParams.get("root")).toBe(pin)
 
+      if (url.searchParams.get("path") === "unverified.html")
+        return new Response(null, { status: 503, headers: { "x-opencode-preview": "3", "x-opencode-file-error": "file_verification_unavailable" } })
+
       if (req.method === "HEAD") checked.push(url.searchParams.get("path") ?? "")
       else reads.push(url.searchParams.get("path") ?? "")
 
@@ -87,6 +91,7 @@ test("the authenticated read under a server base path names exactly the file val
 
     expect(checked).toEqual(names)
     expect(reads).toEqual(names)
+    await expect(source.stat("unverified.html", controller.signal)).rejects.toBeInstanceOf(FileVerificationError)
   } finally {
     controller.abort()
     await server.stop(true)

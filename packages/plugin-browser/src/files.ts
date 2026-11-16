@@ -5,6 +5,7 @@ import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { openContained } from "@opencode/util/contained-file"
+import { FileVerificationError } from "@opencode/util/file-verification"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { workspaceTarget } from "./workspace.js"
@@ -167,6 +168,8 @@ export function captureName(name: string) {
 }
 
 function failure(operation: "read" | "save", error: unknown) {
+  if (error instanceof FileVerificationError)
+    return new Tool.Error({ message: error.message, metadata: { code: error._tag } })
   const detail = error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400)
   const code =
     error instanceof Error && "code" in error && typeof error.code === "string" && !detail.startsWith(error.code)

@@ -72,6 +72,7 @@ import { navigationNotice, popupActivated } from "./refusal-notice"
 import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { reloadAddress } from "./preview"
+import { FileVerificationError } from "@opencode/util/file-verification"
 import type { workspacePages } from "./workspace-pages"
 import { artifactLinks } from "./artifact-links"
 import { createPagePrompts, RESTORE_PROMPT, takeDialogs } from "./page-prompts"
@@ -242,6 +243,8 @@ export function createBrowserPage(
     fileRoots?: () => ReadonlyArray<string>
     /** This binding's isolated origin for workspace previews. */
     workspace?: ReturnType<typeof workspacePages>
+    /** Failure retained by the protocol handler; Chromium only reports ERR_FAILED for a rejected request. */
+    previewFailure?: (url: string) => typeof FileVerificationError.code | undefined
     artifacts?: ReturnType<typeof artifactPages>
     remote?: Extract<WorkspaceSource, { type: "remote" }>
     /** The server runs on this machine, so its loopback addresses are this machine's and the system browser reaches them. */
@@ -638,7 +641,7 @@ export function createBrowserPage(
     if (agentDriven(activity)) contents.setBackgroundThrottling(false)
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
-    dispatch({ type: "navigation.failed", code, description: options.artifacts?.display(url) ? "browser.artifact.missing" : options.remote?.needsUpdate?.() && preview(url)?.startsWith("workspace:") ? "browser.preview.unsupported" : description, url, preview: preview(url), isMainFrame }),
+    dispatch({ type: "navigation.failed", code, description: options.previewFailure?.(url) ?? (options.artifacts?.display(url) ? "browser.artifact.missing" : options.remote?.needsUpdate?.() && preview(url)?.startsWith("workspace:") ? "browser.preview.unsupported" : description), url, preview: preview(url), isMainFrame }),
   )
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame) return
@@ -651,7 +654,7 @@ export function createBrowserPage(
     // History API routes never pass the protocol handler. Keep the last validated address for virtual routes.
     const exists = file.startsWith("artifact:") ? options.artifacts?.exists(file) : options.workspace?.exists(url, options.signal)
 
-    void Promise.resolve(exists).then((target) => {
+    void Promise.resolve(exists).catch(() => false).then((target) => {
       if (target && !closed() && !contents.isDestroyed() && contents.getURL() === url) report(file)
     })
   })
@@ -965,7 +968,9 @@ export function createBrowserPage(
 
     return navigationDeadline(contents.loadURL(destination))
       .catch((error: Error) => {
-        if (committedLoad(error, committed)) return
+          if (committedLoad(error, committed)) return
+
+          if (options.previewFailure?.(destination)) throw new FileVerificationError()
 
         if (destination.startsWith(`${previewScheme}://`))
           throw new CodedError(Browser.FailureCode.previewUnavailable, `The preview could not be loaded: ${url}`)
@@ -1166,6 +1171,8 @@ export function createBrowserPage(
     if (origin === "user") return attempt(command, signal, origin)
 
     // An error document has no inspectable frame. Report the artifact failure before querying Chromium.
+    if (state().loadError === FileVerificationError.code && !leavable.includes(command.action.type)) throw new FileVerificationError()
+
     if (state().loadError === "browser.artifact.missing" && !leavable.includes(command.action.type)) throw missingArtifact()
     const refused = agentRefusal(command.action, mainDocument())
 

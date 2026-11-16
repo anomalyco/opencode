@@ -1,5 +1,6 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { CAPTURE_DEADLINE_MS } from "./capture"
+import { FileVerificationError } from "@opencode/util/file-verification"
 
 /** A failure the server acts on by its code, such as a wait whose condition never held. */
 export class CodedError extends Error {
@@ -56,6 +57,7 @@ export function protocolError(method: string, cause: unknown) {
 }
 
 export function browserFailure(action: Browser.Action, cause: unknown): Extract<Browser.Outcome, { type: "failure" }> {
+  if (cause instanceof FileVerificationError) return { type: "failure", code: cause._tag, message: cause.message }
   const detail = message(cause, 1_700)
 
   // Native and CDP errors may quote more than one internal URL. Never relay the raw error as recovery detail.

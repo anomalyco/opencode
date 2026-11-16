@@ -45,6 +45,7 @@ import type { SitePermissions } from "./site-permissions"
 import type { SystemMedia } from "./system-media"
 import { workspaceFile, type WorkspaceSource } from "./workspace-file"
 import { workspacePages } from "./workspace-pages"
+import { FileVerificationError } from "@opencode/util/file-verification"
 import { artifactKind } from "@opencode/util/artifact"
 import { reusableFile, workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
@@ -62,6 +63,7 @@ type Handle = {
   /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
   shared: boolean
   workspace?: (activity: TabActivity, identity?: string) => ReturnType<typeof workspacePages>
+  previewFailure: ReturnType<typeof createPreviews>["failure"]
   artifacts?: () => ReturnType<typeof artifactPages>
   source?: WorkspaceSource
   abort: AbortController
@@ -155,6 +157,7 @@ export function createBrowserPane(input: {
       win.webContents.on("did-start-navigation", navigate)
 
       const handle: Handle = {
+        previewFailure: previews.failure,
         window,
         win,
         partition,
@@ -440,6 +443,8 @@ export function createBrowserPane(input: {
       // the tab goes on loading. It is not a failed request; a page that fails to load reports its own error.
       await execute(binding, { action: command, files: [] }, new AbortController().signal, "user", "present").catch(
         (error: Error) => {
+          if (error instanceof FileVerificationError) throw new Error(error._tag)
+
           if (!("code" in error) || error.code !== "ERR_ABORTED") throw error
         },
       )
@@ -668,6 +673,7 @@ export function createBrowserPane(input: {
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
       workspace: handle.workspace?.(activity, options.identity),
+      previewFailure: handle.previewFailure,
       artifacts: handle.artifacts?.(),
       remote: remoteSource(binding),
       local: handle.shared,

@@ -57,16 +57,18 @@ test("a runtime that cannot name an open handle refuses the read instead of trus
         "--conditions=workerd",
         "-e",
         `const { openContained } = await import(${JSON.stringify(join(import.meta.dir, "../src/contained-file.ts"))})
-const opened = await openContained(${JSON.stringify(root)}, "page")
-await opened?.file.close()
-console.log(JSON.stringify({ opened: opened !== undefined }))`,
+for (const path of ["page", "page", "missing"]) {
+  try { await openContained(${JSON.stringify(root)}, path); process.exit(1) }
+  catch (error) { console.log(error._tag ?? error.code) }
+}`,
       ],
       { stdout: "pipe", stderr: "pipe" },
     )
     const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
 
-    expect(stderr).toBe("")
-    expect(JSON.parse(stdout)).toEqual({ opened: false })
+    expect(stderr.trim().split(/\r?\n/)).toEqual([expect.stringContaining("file_verification_unavailable")])
+    expect(stdout.trim().split(/\r?\n/)).toEqual(["file_verification_unavailable", "file_verification_unavailable", "ENOENT"])
+    expect(await child.exited).toBe(0)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
