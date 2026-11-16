@@ -844,6 +844,58 @@ fn a_plugin_importing_opentuis_classes_links_and_sets_up() {
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("resize"));
 }
 
+// Expected (CT-3, CT-4): a server plugin's TUI part as delayed-message's is written loads and calls its server's RPC,
+// as in TS: it imports Solid and OpenTUI's JSX runtime by OpenTUI's runtime registry names, the encoded and the plain
+// spelling, defines its RPC with `@opencode/plugin/rpc`, and `client.rpc` calls `/api/rpc/<id>/<method>`. It failed
+// with "Cannot find package 'opentui:runtime-module:solid-js'", and `client.rpc` was not a function.
+#[test]
+fn a_plugin_imports_runtime_modules_and_calls_its_own_rpc() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().join("config/plugins/rpc");
+    std::fs::create_dir_all(&dir).unwrap();
+    let log = root.path().join("rpc.log");
+    let module = format!(
+        "import {{ createSignal }} from \"opentui:runtime-module:solid-js\"\n\
+         import {{ jsx }} from \"opentui:runtime-module:%40opentui%2Fsolid%2Fjsx-runtime\"\n\
+         import {{ Rpc }} from \"opentui:runtime-module:@opencode/plugin/rpc\"\n\
+         import {{ Plugin }} from \"@opencode/plugin/tui\"\n\
+         import {{ appendFileSync }} from \"node:fs\"\n\
+         const Echo = Rpc.define({{ id: \"echo\", methods: {{ say: {{ input: {{}}, output: {{}} }} }}, events: {{}} }})\n\
+         export default Plugin.define({{ id: \"example.rpc\", setup(context) {{\n\
+         const [said, setSaid] = createSignal(\"\")\n\
+         const echo = context.client.rpc(Echo)\n\
+         context.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"rpc.say\", run: async () => {{\n\
+           const output = await echo.say({{ text: \"hi\" }})\n\
+           setSaid(output.said)\n\
+           appendFileSync({log:?}, JSON.stringify(output) + \"\\n\")\n\
+         }} }}] }}))\n\
+         context.ui.slot({{ append: \"home.footer\", render: () => jsx(\"text\", {{ get children() {{ return `rpc ${{said()}}` }} }}) }})\n\
+         }} }})\n"
+    );
+    std::fs::write(dir.join("tui.ts"), module).unwrap();
+    let server = support::Fake::new(|seen| match seen.path.as_str() {
+        "/api/rpc/echo/say" => (200, json!({ "output": { "said": seen.body["input"]["text"] } })),
+        "/api/session" => (200, json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let requests = server.log();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.rpc");
+    pipe.harness.tui.keymap.dispatch("rpc.say", None);
+    pipe.harness.wait("the RPC answered", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "{\"said\":\"hi\"}\n");
+    let called = requests.lock().unwrap().iter().find(|seen| seen.path == "/api/rpc/echo/say").cloned().unwrap();
+    assert_eq!((called.method.as_str(), called.body), ("POST", json!({ "input": { "text": "hi" } })));
+    pipe.harness.wait_for("rpc hi");
+}
+
 // Expected (FT-9): a plugin that makes a store for each of 80 keys in its setup, as opencode-tokscope does for its
 // history shards, loads and stays active, and each store holds and follows what the host stored for it, as in TS: no
 // key or read bound is hit, and with the UI thread busy as the setup runs, its messages stay under the pipe's 256.

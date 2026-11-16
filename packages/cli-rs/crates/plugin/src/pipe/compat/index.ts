@@ -1,6 +1,7 @@
 // The V2 compatibility layer of the JS host (P8), bundled into `compat.js` by `script/gen/js-host.ts`: the modules a
 // V2 plugin imports, which the JS host serves in place of the TS client's (`runtime-plugin-support.bun.ts` gives
 // `@opencode/plugin/tui`, Solid and `@opentui/solid` the same way), and the context its setup gets.
+import { Rpc } from "../../../../../../schema/src/rpc"
 import * as solid from "solid-js"
 import * as store from "solid-js/store"
 import { createComponent, splitProps } from "solid-js"
@@ -79,6 +80,8 @@ export const modules: Record<string, Record<string, unknown>> = {
   "react/jsx-dev-runtime": jsx,
   "@opentui/core": exports("core", core),
   "@opencode/plugin/tui": plugin,
+  // The definition of a plugin's own server RPC, which its TUI part calls through `client.rpc` (CT-4).
+  "@opencode/plugin/rpc": { Rpc },
 }
 
 export { context, reported }

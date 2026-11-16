@@ -581,7 +581,7 @@ export function context(base: Base, carrier: Carrier) {
   let panelName = ""
   const panels: string[] = []
 
-  const client = OpenCode.make({
+  const raw = OpenCode.make({
     baseUrl: "http://opencode.internal/",
     fetch: (async (url: URL, init?: RequestInit) => {
       const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined
@@ -604,6 +604,62 @@ export function context(base: Base, carrier: Carrier) {
       })
     }) as typeof fetch,
   })
+  // `client.rpc(definition)`, a plugin's own server RPC (CT-4), as TS's client makes it (`client/src/promise/rpc.ts`):
+  // each method calls `/api/rpc/<id>/<method>` and answers its output; an event `name` is the host's event of type
+  // `rpc.<id>.<name>`, which `data.on` hears. An error the server gives an RPC is not typed here: the host's fetch
+  // answers it as text, so the plugin gets the client's error, not `{ type, message, data }`.
+  const rpc = Object.assign(
+    (definition: Json) => {
+      const on = (name: string, handler: (event: Json) => unknown, options?: { signal?: AbortSignal }) => {
+        if (!Object.hasOwn(definition.events ?? {}, name)) throw new Error(`Unknown RPC event: ${definition.id}.${name}`)
+        const off = base.data.on(`rpc.${definition.id}.${name}`, handler)
+        options?.signal?.addEventListener("abort", off)
+        return off
+      }
+      // The events as they come, from when it is iterated.
+      const subscribe = (name: string, options?: { signal?: AbortSignal }) => ({
+        [Symbol.asyncIterator]() {
+          const queue: Json[] = []
+          let wake: (() => void) | undefined
+          const off = on(name, (event) => {
+            queue.push(event)
+            wake?.()
+          })
+          let done = false
+          const end = () => {
+            done = true
+            off()
+            wake?.()
+          }
+          options?.signal?.addEventListener("abort", end)
+          return {
+            async next(): Promise<IteratorResult<Json>> {
+              while (!queue.length && !done) await new Promise<void>((resolve) => (wake = resolve))
+              if (queue.length) return { value: queue.shift(), done: false }
+              return { value: undefined, done: true }
+            },
+            async return(): Promise<IteratorResult<Json>> {
+              end()
+              return { value: undefined, done: true }
+            },
+          }
+        },
+      })
+      const methods = Object.keys(definition.methods ?? {}).map((method) => [
+        method,
+        async (input: Json, options?: Json) =>
+          (
+            await raw.rpc.call(
+              { rpcID: definition.id, method, input, location: options?.location },
+              { signal: options?.signal, headers: options?.headers },
+            )
+          ).output,
+      ])
+      return { ...Object.fromEntries(methods), events: { on, subscribe } }
+    },
+    raw.rpc,
+  )
+  const client = { ...raw, rpc }
 
   // Each command name runs the newest live registration of it that is enabled: a layer of a component that ended, or a
   // command whose `enabled` says no, runs nothing.

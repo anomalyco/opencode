@@ -219,6 +219,52 @@ test("a layer's commands without an id keep their names when it mounts again", (
   expect(ran).toEqual(["back 2", "j 2", "j again 2"])
 })
 
+// CT-4: a plugin's TUI part calls its own server plugin's RPC as TS's client does: `@opencode/plugin/rpc` defines it,
+// `client.rpc(definition)` calls `/api/rpc/<id>/<method>` with the input and answers the output, `client.rpc.call` is
+// the raw call, and an event of it is the host's event `rpc.<id>.<name>`, heard until it is let go.
+test("client.rpc calls a plugin's own server RPC and hears its events", async () => {
+  const fake = host()
+  const fetched: Json[] = []
+  fake.fetch = async (request: Json) => {
+    fetched.push(request)
+    return { Ok: { output: { echoed: request.body.input } } }
+  }
+  const listeners = new Map<string, Array<(event: Json) => void>>()
+  const base = {
+    id: "t.rpc",
+    options: {},
+    app: { version: "", channel: "" },
+    themeMode: "dark",
+    data: {
+      on(type: string, handler: (event: Json) => void) {
+        listeners.set(type, [...(listeners.get(type) ?? []), handler])
+        return () => listeners.set(type, (listeners.get(type) ?? []).filter((at) => at !== handler))
+      },
+    },
+  }
+  const ctx = context(base, fake) as Json
+  const Rpc = (modules["@opencode/plugin/rpc"] as Json).Rpc
+  const Echo = Rpc.define({ id: "echo", methods: { say: { input: {}, output: {} } }, events: { said: { schema: {} } } })
+  const echo = ctx.client.rpc(Echo)
+  expect(await echo.say({ text: "hi" }, { location: { directory: "/d" } })).toEqual({ echoed: { text: "hi" } })
+  expect(fetched.map((request) => [request.method, request.path, request.body])).toEqual([
+    ["POST", "/api/rpc/echo/say", { input: { text: "hi" } }],
+  ])
+  expect(fetched[0].query).toEqual([["location[directory]", "/d"]])
+  expect(typeof ctx.client.rpc.call).toBe("function")
+  const heard: Json[] = []
+  const off = echo.events.on("said", (event: Json) => heard.push(event.data))
+  const events = echo.events.subscribe("said")[Symbol.asyncIterator]()
+  const next = events.next()
+  for (const listener of listeners.get("rpc.echo.said") ?? []) listener({ type: "rpc.echo.said", data: 1 })
+  expect((await next).value.data).toBe(1)
+  off()
+  await events.return()
+  for (const listener of listeners.get("rpc.echo.said") ?? []) listener({ type: "rpc.echo.said", data: 2 })
+  expect(heard).toEqual([1])
+  expect(() => echo.events.on("unknown", () => {})).toThrow("Unknown RPC event: echo.unknown")
+})
+
 // Bigboi P8-7: a dialog the host closes without an answer settles at once with nothing, also with no dialog after it;
 // `clear()` closes an asked dialog on the host too; a new `show` starts from the default size and place.
 test("each dialog settles once, and clear closes it", async () => {
