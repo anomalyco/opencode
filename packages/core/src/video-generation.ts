@@ -9,6 +9,10 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Context, Deferred, Duration, Effect, Exit, FiberMap, Layer, Option, Schedule, Schema, Stream } from "effect"
 import { FileRetention } from "./file-retention.js"
+import { Job } from "./job.js"
+import { Session } from "./session.js"
+import { SessionMessage } from "./session/message.js"
+import { SessionSchema } from "./session/schema.js"
 import { Generate } from "./generate.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
@@ -33,9 +37,19 @@ export interface Content {
   readonly expiresAt: number
 }
 
+/** A session-linked job a restarted server takes back from its `job` row. */
+export interface Resume {
+  readonly id: VideoID
+  readonly sessionID: SessionSchema.ID
+  readonly notificationID: SessionMessage.ID
+  readonly model: Model.Ref
+  readonly providerJobID: string
+}
+
 export interface Interface {
   /** Returns once the provider accepted the job; the server then polls it and stores the video under `objects/`. */
-  readonly start: (input: VideoRequest) => Effect.Effect<VideoRunning, Generate.Error>
+  readonly start: (input: VideoRequest) => Effect.Effect<VideoRunning, Generate.Error | Session.NotFoundError>
+  readonly resume: (input: Resume) => Effect.Effect<void>
   readonly get: (id: VideoID) => Effect.Effect<VideoJob, NotFoundError>
   readonly content: (id: VideoID) => Effect.Effect<Content, NotFoundError>
 }
@@ -44,8 +58,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Vi
 
 /**
  * Jobs without a session live in memory only: a restart forgets the running ones, and their videos are never
- * collected. A finished video stays readable by its ID until it expires. Jobs linked to a session (added with the
- * agent tool) run on the `job` table instead and survive a restart.
+ * collected. A finished video stays readable by its ID until it expires. Jobs linked to a session run on the `job`
+ * table instead: a restarted server polls them again (`resume`), and the session gets a notice when they end.
  *
  * TODO: make the `job` table's session link optional, so jobs without a session can be recorded there too.
  */
@@ -53,6 +67,8 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
+    const background = yield* Job.Service
+    const sessions = yield* Session.Service
     const global = yield* Global.Service
     const locations = yield* LocationServiceMap.Service
     const directory = path.join(global.data, DIRECTORY)
@@ -159,7 +175,71 @@ const layer = Layer.effect(
       )
     })
 
+    // Forgotten with its video, so the map holds at most one retention's worth of jobs.
+    const forget = (id: VideoID) => Effect.sleep(RETENTION).pipe(Effect.andThen(Effect.sync(() => jobs.delete(id))))
+
+    // Settles on the `job` table, so a restart resumes polling, then tells the session how it ended without waking its
+    // agent. `get` still answers from memory while this process runs.
+    const track = Effect.fnUntraced(function* (input: Resume) {
+      jobs.set(input.id, { id: input.id, status: "running" })
+      const model = `${input.model.providerID}/${input.model.id}`
+      yield* background.start({
+        id: input.id,
+        notificationID: input.notificationID,
+        type: "video",
+        title: input.id,
+        metadata: { sessionID: input.sessionID, model },
+        recovery: {
+          kind: "video",
+          sessionID: input.sessionID,
+          videoID: input.id,
+          model,
+          providerJobID: input.providerJobID,
+        },
+        background: true,
+        run: settle(input.id, input.model, input.providerJobID).pipe(
+          Effect.tap((job) => Effect.sync(() => jobs.set(input.id, job))),
+          Effect.flatMap((job) =>
+            job.status === "completed"
+              ? Effect.succeed(`Video ${input.id} is ready (${job.mime}, ${job.bytes} bytes).`)
+              : Effect.fail(new Error(job.error)),
+          ),
+        ),
+      })
+      const info = (yield* background.wait({ id: input.id })).info
+      if (!info || info.status === "running") return
+      const delivered = yield* sessions
+        .synthetic({
+          id: input.notificationID,
+          sessionID: input.sessionID,
+          description: "Video generation",
+          text: notice({
+            id: input.id,
+            state: info.status,
+            body:
+              info.status === "completed" ? (info.output ?? "") : (info.error ?? `Video ${input.id} was cancelled.`),
+          }),
+          metadata: { source: "video_generate", jobID: input.id, state: info.status },
+          resume: false,
+        })
+        .pipe(
+          Effect.as(true),
+          // A deleted session is owed nothing. Any other failure keeps the job row, so a restart delivers it.
+          Effect.catchTag("Session.NotFoundError", () => Effect.succeed(true)),
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Could not deliver a video notice", { id: input.id, cause }).pipe(Effect.as(false)),
+          ),
+        )
+      if (delivered) yield* background.completeBackground(input.notificationID)
+    })
+
+    const resume = (input: Resume) =>
+      FiberMap.run(fibers, input.id, track(input).pipe(Effect.andThen(forget(input.id))), { onlyIfMissing: true }).pipe(
+        Effect.asVoid,
+      )
+
     const start = Effect.fn("VideoGeneration.start")(function* (input: VideoRequest) {
+      if (input.sessionID !== undefined) yield* sessions.get(input.sessionID)
       const id = VideoID.create()
       const submitted = yield* Deferred.make<VideoRunning, Generate.Error>()
       // Runs in the server's fibers, so a client that disconnects can't interrupt a paid submission midway.
@@ -179,9 +259,16 @@ const layer = Layer.effect(
           jobs.set(id, running)
           yield* Deferred.succeed(submitted, running)
           // Once settled, `get` reads the stored object, or the error until the job is forgotten.
-          jobs.set(id, yield* settle(id, input.model, started.id))
-          yield* Effect.sleep(RETENTION)
-          jobs.delete(id)
+          if (input.sessionID !== undefined)
+            yield* track({
+              id,
+              sessionID: input.sessionID,
+              notificationID: SessionMessage.ID.create(),
+              model: input.model,
+              providerJobID: started.id,
+            })
+          else jobs.set(id, yield* settle(id, input.model, started.id))
+          yield* forget(id)
         }).pipe(
           // Once the submission succeeded, this does nothing.
           Effect.onExit((exit) => (Exit.isFailure(exit) ? Deferred.failCause(submitted, exit.cause) : Effect.void)),
@@ -223,9 +310,14 @@ const layer = Layer.effect(
       Effect.forkScoped,
     )
 
-    return Service.of({ start, get, content })
+    return Service.of({ start, resume, get, content })
   }),
 )
+
+/** The notice a session gets when its video job ends, tagged with the video's ID like `<image id=…>` notices. */
+export function notice(input: { id: string; state: string; body: string }) {
+  return `<video id="${input.id}" state="${input.state}">\n${input.body}\n</video>`
+}
 
 /** Videos need a local disk for `objects/`, which Durable Objects don't have. */
 export const unsupportedLayer = Layer.succeed(
@@ -233,6 +325,7 @@ export const unsupportedLayer = Layer.succeed(
   Service.of({
     start: () =>
       Effect.fail(new Generate.UnavailableError({ message: "Video generation is not supported in this runtime" })),
+    resume: () => Effect.void,
     get: (id) => Effect.fail(new NotFoundError({ id, message: `Video not found: ${id}` })),
     content: (id) => Effect.fail(new NotFoundError({ id, message: `Video not found: ${id}` })),
   }),
@@ -241,5 +334,5 @@ export const unsupportedLayer = Layer.succeed(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [FSUtil.node, Global.node, LocationServiceMap.node],
+  deps: [FSUtil.node, Global.node, LocationServiceMap.node, Job.node, Session.node],
 })

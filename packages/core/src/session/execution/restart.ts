@@ -17,6 +17,9 @@ import { SessionHistory } from "../history.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { ImageNotice } from "../../image/notice.js"
+import { VideoGeneration } from "../../video-generation.js"
+import { Model } from "../../model.js"
+import { VideoID } from "@opencode/schema/generate"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
 import { SubagentJob } from "../subagent-job.js"
@@ -82,6 +85,8 @@ export const layer = (options?: Options) =>
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
+      // Optional so hosts without video generation (and tests of other recovery) don't need it.
+      const videos = Option.getOrUndefined(yield* Effect.serviceOption(VideoGeneration.Service))
       const instances = yield* Instance.Service
       const db = (yield* Database.Service).db
       const scope = yield* Effect.scope
@@ -138,6 +143,21 @@ export const layer = (options?: Options) =>
             }),
           }
         }
+        if (recovery.kind === "video")
+          return {
+            description: "Video generation",
+            text: VideoGeneration.notice({
+              id: recovery.videoID,
+              state,
+              body:
+                state === "completed"
+                  ? (background.output ?? "")
+                  : state === "error"
+                    ? (background.error ?? `Video ${recovery.videoID} failed.`)
+                    : `Video ${recovery.videoID} was cancelled.`,
+            }),
+            metadata: { source: "video_generate", jobID: background.id, state },
+          }
         const body =
           background.status === "running"
             ? `Image request for ${recovery.path} was cancelled because the server restarted.`
@@ -424,6 +444,15 @@ export const layer = (options?: Options) =>
               const recovery = background.recovery
               if (recovery.kind === "subagent" || !(yield* recoverable(background))) return
               if (recovery.kind === "shell") return yield* recoverShellJob(background, recovery, notices, reattached)
+              // The provider keeps working on a video while the server is down, so a running one is polled again.
+              if (recovery.kind === "video" && background.status === "running" && videos)
+                return yield* videos.resume({
+                  id: VideoID.make(recovery.videoID),
+                  sessionID: recovery.sessionID,
+                  notificationID: background.notificationID,
+                  model: Model.Ref.parse(recovery.model),
+                  providerJobID: recovery.providerJobID,
+                })
               yield* recoverToolJob(background, recovery)
             }),
             { discard: true },
@@ -493,5 +522,6 @@ export const node = makeGlobalNode({
     Instance.node,
     Database.node,
     Shell.daemonNode,
+    VideoGeneration.node,
   ],
 })

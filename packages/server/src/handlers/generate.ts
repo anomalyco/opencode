@@ -11,6 +11,7 @@ import {
   ModelNotFoundError,
   ProviderRequestError,
   ServiceUnavailableError,
+  SessionNotFoundError,
   UnsupportedModelError,
 } from "@opencode/protocol/errors"
 import type { DecisionRequest, VideoID, ImageRequest, VideoRequest } from "@opencode/schema/generate"
@@ -74,7 +75,19 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       function* (request: { readonly payload: VideoRequest }) {
         yield* videoEnabled
         yield* awaitPlugins
-        return { data: yield* videos.start(request.payload).pipe(Effect.mapError(generateError)) }
+        return {
+          data: yield* videos.start(request.payload).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.mapError((error) => (error._tag === "SessionNotFoundError" ? error : generateError(error))),
+          ),
+        }
       },
       Effect.provide(services),
       locationErrors,

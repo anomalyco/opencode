@@ -196,6 +196,7 @@ function recoveryTitle(job: Active, recovery: Recovery): string | null {
   if (job.info.title !== undefined) return job.info.title
   if (recovery.kind === "shell") return recovery.command
   if (recovery.kind === "subagent") return recovery.description
+  if (recovery.kind === "video") return recovery.videoID
   return recovery.path
 }
 

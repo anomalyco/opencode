@@ -5,6 +5,7 @@ import { descending } from "./identifier.js"
 import { Model } from "./model.js"
 import { Money } from "./money.js"
 import { Base64 } from "./prompt.js"
+import { SessionID } from "./session-id.js"
 import { PositiveInt, optional, statics } from "./schema.js"
 
 const description = (text: string) => ({ description: text })
@@ -124,6 +125,11 @@ export const VideoRequest = Schema.Struct({
   resolution: VideoResolution.pipe(optional),
   sound: Schema.Boolean.pipe(optional).annotate(
     description("Whether the video has a generated soundtrack; unset leaves the model's default"),
+  ),
+  sessionID: SessionID.pipe(optional).annotate(
+    description(
+      "Links the video to a session: the job survives a server restart, shows in the session's background jobs, and a notice in the session reports how it ended. It doesn't wake the session's agent",
+    ),
   ),
 }).annotate({ identifier: "Generate.VideoRequest" })
 

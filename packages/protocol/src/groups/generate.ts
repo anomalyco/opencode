@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import {
   ForbiddenError,
+  SessionNotFoundError,
   VideoNotFoundError,
   InvalidRequestError,
   LocationNotFoundError,
@@ -75,13 +76,13 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
     HttpApiEndpoint.post("generate.video.create", "/api/experimental/generate/video", {
       payload: Generate.VideoRequest,
       success: Schema.Struct({ data: Generate.VideoRunning }).annotate({ identifier: "GenerateVideoCreateResponse" }),
-      error: [...errors, ForbiddenError],
+      error: [...errors, ForbiddenError, SessionNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "experimental.generate.video.create",
         summary: "Create a video generation",
         description:
-          "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the video for 7 days; read its state with GET /api/experimental/generate/video/:id and its bytes with GET /api/experimental/generate/video/:id/content. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+          "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. With sessionID, the job is recorded with that session, survives a server restart, and ends with a notice in the session that does not wake its agent; without it, the job is kept in memory only. The server polls the job and stores the video for 7 days; read its state with GET /api/experimental/generate/video/:id and its bytes with GET /api/experimental/generate/video/:id/content. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )

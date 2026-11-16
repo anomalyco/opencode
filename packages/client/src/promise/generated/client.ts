@@ -1227,6 +1227,7 @@ export function make(options: ClientOptions) {
                   aspect: input["aspect"],
                   resolution: input["resolution"],
                   sound: input["sound"],
+                  sessionID: input["sessionID"],
                 },
                 successStatus: 200,
                 declaredStatuses: [400, 401, 403, 404, 422, 502, 503],

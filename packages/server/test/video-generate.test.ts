@@ -8,12 +8,15 @@ import { Effect, Layer, Stream } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { eventually } from "../../core/test/lib/eventually"
+import { OpenCode } from "@opencode/client"
 import { ServerFetch } from "../src/fetch"
 
 // An MP4 `ftyp` box, so the type is read from the bytes: "0123456789" are the first ten bytes.
 const video = Uint8Array.from([0, 0, 0, 0x14, ...new TextEncoder().encode("ftypmp42"), 0, 0, 0, 0, 1, 2, 3, 4])
 
-// A provider whose jobs finish on the first status read.
+// What the fake provider reports for every job; jobs finish on the first read by default.
+const provider = { status: "completed" as "running" | "completed" }
+
 const generate = makeLocationNode({
   service: Generate.Service,
   layer: Layer.succeed(
@@ -24,7 +27,7 @@ const generate = makeLocationNode({
       decisions: () => Effect.die("unused"),
       video: {
         start: () => Effect.succeed({ id: "provider_1" }),
-        status: () => Effect.succeed({ status: "completed" }),
+        status: () => Effect.sync(() => ({ status: provider.status })),
         result: () => Effect.succeed({ mime: "video/mp4", stream: Stream.make(video) }),
       },
     }),
@@ -133,5 +136,56 @@ it.live("rejects video routes while experimental.video_generate is off", () =>
     )
     expect(start.status).toBe(403)
     expect((yield* Effect.promise(() => handler(new Request(`${base}/generate/video/${unknown}`)))).status).toBe(403)
+  }).pipe(Effect.scoped),
+)
+
+const client = (handler: (request: Request) => Promise<Response>) =>
+  OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: Object.assign((input: string | URL | Request, init?: RequestInit) => handler(new Request(input, init)), {
+      preconnect: fetch.preconnect,
+    }),
+  })
+
+it.live("links a video to a session: the job survives a restart and ends with a notice in the session", () =>
+  Effect.gen(function* () {
+    const dir = (yield* tmpdirScoped("opencode-video-session-")).path
+    const create = (handler: (request: Request) => Promise<Response>, body: object) =>
+      Effect.promise(() =>
+        handler(
+          new Request(`${base}/generate/video`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ model: { providerID: "test", id: "video" }, prompt: "a cat", ...body }),
+          }),
+        ),
+      )
+    provider.status = "running"
+    const { sessionID, id } = yield* Effect.gen(function* () {
+      const handler = yield* serve(dir, true)
+      const session = yield* Effect.promise(() => client(handler).session.create({ location: { directory: dir } }))
+      expect((yield* create(handler, { sessionID: `ses_${"0".repeat(12)}${"A".repeat(14)}` })).status).toBe(404)
+      const started = yield* create(handler, { sessionID: session.id })
+      expect(started.status).toBe(200)
+      const { data } = (yield* Effect.promise(() => started.json())) as { data: { id: string } }
+      return { sessionID: session.id, id: data.id }
+    }).pipe(Effect.scoped)
+
+    // A new server finds the running job in the job table and polls the provider again.
+    provider.status = "completed"
+    const handler = yield* serve(dir, true)
+    const job = yield* eventually(
+      Effect.promise(() => handler(new Request(`${base}/generate/video/${id}`)).then((response) => response.json())),
+      (body: { data: { status: string } }) => body.data.status === "completed",
+    )
+    expect(job.data).toMatchObject({ id, status: "completed", mime: "video/mp4" })
+    // The notice waits in the session's inbox for its next turn instead of waking the agent.
+    const inbox = yield* eventually(
+      Effect.promise(() => client(handler).session.inbox.list({ sessionID })),
+      (items) => JSON.stringify(items).includes(`<video id=\\"${id}\\" state=\\"completed\\">`),
+    )
+    expect(JSON.stringify(inbox)).toContain(`Video ${id} is ready`)
+    expect(yield* Effect.promise(() => client(handler).session.context({ sessionID }))).toEqual([])
+    provider.status = "completed"
   }).pipe(Effect.scoped),
 )
