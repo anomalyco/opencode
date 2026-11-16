@@ -7,6 +7,8 @@
 
 mod bind;
 mod current;
+mod inputs;
+mod json;
 mod vm;
 
 #[cfg(test)]

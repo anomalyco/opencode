@@ -162,18 +162,14 @@ zmij build
 autocfg
 bstr
 either
-erased-serde build
 jobserver
 lock_api
 luau0-src
 mlua
 mlua-sys build cc
 num-traits build
-ordered-float
 parking_lot
 parking_lot_core build
 pkg-config
 rustc-hash
 scopeguard
-serde-value
-typeid build
