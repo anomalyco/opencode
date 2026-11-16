@@ -65,7 +65,7 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
     "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
     '<img data-local-image="safe.png"><a data-app-link="javascript:alert(3)">unsafe</a>',
     '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer" class="external-link">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
-    '<form id="user-content-location" data-markdown-contain=""><input disabled=""></form>',
+    '',
     '<math data-markdown-contain=""><mrow data-markdown-contain=""><mi data-markdown-contain="">x</mi><mo data-markdown-contain="">+</mo><mn data-markdown-contain="">1</mn></mrow></math>',
     '<svg viewBox="0 0 10 10" data-markdown-contain=""><path d="M0 0L10 10" data-markdown-contain=""></path></svg>',
   ])
@@ -82,7 +82,7 @@ story("authored HTML cannot supply application behavior attributes", async ({ pa
     return { retained: names.filter(n => a.hasAttribute(n)), id: a.id, name: a.name, labelFor: box.querySelector("label")?.htmlFor, custom: sanitizeMarkdown('<a is="fixture-link">custom label</a>') }
   }, fixture)
 
-  expect(result).toEqual({ retained: [], id: "user-content-sample", name: "user-content-legacy", labelFor: "", custom: "custom label" })
+  expect(result).toEqual({ retained: [], id: "user-content-sample", name: "user-content-legacy", labelFor: undefined, custom: "custom label" })
 })
 
 story("limits authored presentation to text and keeps application link hit areas inline", async ({ page }) => {
@@ -119,6 +119,20 @@ story("restores layout from the math renderer, never from markup claiming to be 
   await expect(authored).not.toHaveAttribute("style")
   await expect(authored).not.toHaveAttribute("data-markdown-renderer")
   await expect(authored).toHaveAttribute("data-markdown-contain", "")
+})
+
+story("renders task-list boxes but never authored form controls or embedded documents", async ({ page }) => {
+  await page.evaluate(async url => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({ text: '- [x] Complete\n- [ ] Pending\n\n<form><button>Sample label</button><input type="checkbox" checked disabled></form>\n\n<figure><figcaption>Caption</figcaption></figure>' })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.getByText("Sample label")).toBeVisible()
+  await expect(md.locator("form,button")).toHaveCount(0)
+  await expect(md.locator("input")).toHaveCount(2)
+  await expect(md.locator('li input[disabled][checked]')).toHaveCount(1)
+  await expect(md.locator('li input[disabled]:not([checked])')).toHaveCount(1)
+  await expect(md.locator("figcaption")).toHaveText("Caption")
 })
 
 story("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {

@@ -1,6 +1,6 @@
 import { codeToHtml, isSupportedLanguage } from "@pierre/highlights"
 import katex from "katex"
-import type { MarkedExtension, Tokens } from "marked"
+import { Renderer, type MarkedExtension, type Tokens } from "marked"
 import { createMarkdownBase } from "./marked-base"
 import { OpenCodeTheme } from "./highlight-theme"
 
@@ -15,8 +15,12 @@ const decoder = new TextDecoder()
 
 // The class keeps the fence's own language, even one without a lexer, so the viewer can label it and render Mermaid.
 function codeExtension(render: (html: string, block: boolean) => string): MarkedExtension {
+  const base = new Renderer()
   return {
     renderer: {
+      checkbox(token) {
+        return render(base.checkbox(token), false)
+      },
       code(token) {
         const language = (token.lang?.match(/^\S*/)?.[0] ?? "").toLowerCase().replace(/[^\w#+.-]/g, "") || "text"
 

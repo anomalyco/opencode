@@ -50,7 +50,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
   const images = new WeakMap<HTMLImageElement, string>()
 
   const prose = new Set(
-    "a b blockquote br center code col colgroup dd del details div dl dt em h1 h2 h3 h4 h5 h6 hr i img input kbd li mark ol p pre s small span strong sub summary sup table tbody td th thead tr ul".split(
+    "a abbr b blockquote br caption center code col colgroup dd del details div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img kbd li mark ol p pre s small span strong sub summary sup table tbody td tfoot th thead tr ul".split(
       " ",
     ),
   )
@@ -60,7 +60,6 @@ if (typeof window !== "undefined" && purifier.isSupported) {
 
   // A config passed to sanitize() rebuilds every allow-list on each call; set once, every call reuses them.
   const config = {
-    USE_PROFILES: { html: true, mathMl: true },
     SANITIZE_NAMED_PROPS: true,
     FORBID_TAGS: ["style", "dialog"],
     FORBID_ATTR: [
@@ -77,9 +76,11 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
   }
 
-  purifier.setConfig({ ...config, ALLOW_DATA_ATTR: false, ALLOW_ARIA_ATTR: false })
+  purifier.setConfig({ ...config, ALLOW_DATA_ATTR: false, ALLOW_ARIA_ATTR: false,
+    ALLOWED_TAGS: [...prose, ..."math mrow mi mn mo ms mtext mspace mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mmultiscripts mprescripts none menclose merror mfenced mpadded mphantom mstyle semantics annotation".split(" ")],
+  })
   // These fragments still pass DOMPurify's structural/URI checks, but their renderer owns their inline geometry.
-  rendered.setConfig({ ...config, RETURN_DOM_FRAGMENT: true })
+  rendered.setConfig({ ...config, USE_PROFILES: { html: true, mathMl: true }, RETURN_DOM_FRAGMENT: true })
   purifier.addHook("uponSanitizeAttribute", (node, attr) => {
     // Never import identifiers from the app's styling, focus, shortcut, form or plugin protocols. This allowlist
     // is for document content only. DOMPurify still validates every value and namespaces id and name.
@@ -99,8 +100,6 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       (tag === "ol" && /^(start|reversed|type)$/.test(name)) ||
       (tag === "li" && name === "value") ||
       (tag === "details" && name === "open") ||
-      (tag === "input" &&
-        (name === "disabled" || name === "checked" || (name === "type" && attr.attrValue === "checkbox"))) ||
       (tag === "svg" && /^(viewbox|preserveaspectratio|xmlns)$/.test(name)) ||
       (tag === "path" && name === "d")
 
@@ -189,8 +188,6 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       (!prose.has(node.localName) || node.hasAttribute("id") || node.hasAttribute("name"))
     )
       node.setAttribute("data-markdown-contain", "")
-
-    if (node instanceof HTMLInputElement) node.disabled = true
 
     if (node instanceof HTMLImageElement) {
       const path = images.get(node)
