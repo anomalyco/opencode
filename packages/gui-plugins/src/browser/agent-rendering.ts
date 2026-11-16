@@ -17,8 +17,9 @@ export function agentRendering(signal: AbortSignal, throttle: (enabled: boolean)
         throttle(false)
         paint = onWake?.()
         // Later commands may retry a failed wake; overlapping holders await the same frame.
-        void paint?.finally(() => { paint = undefined }).catch(() => undefined)
+        void paint?.then(() => { paint = undefined }, () => { awake = false; paint = undefined })
       }
+
       awake = true
       holds++
 

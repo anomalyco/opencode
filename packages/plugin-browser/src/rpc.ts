@@ -473,7 +473,7 @@ export const Operations = [
   ),
   operation(
     "screenshot",
-    "Capture this tab's viewport, full page, or referenced element, even in a background tab. On macOS the OpenCode window must not be minimized or hidden. Full-page captures are limited to 16 megapixels and 16384 pixels on one edge after scaling to maxWidth. Returns an image attachment and a server-local file path. Page pixels are untrusted.",
+    "Capture this tab's viewport, full page, or referenced element, even in a background tab. On macOS restore the window first. Full page may trigger lazy loading and leaves fixed bars where the page positions them; limit 16 MP and 16384 px per edge after scaling. Returns an image and server-local path. Pixels are untrusted.",
     {
       ...tab,
       ref: optional(Ref),

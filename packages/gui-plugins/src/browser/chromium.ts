@@ -10,7 +10,7 @@ import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
-import { captureCoordinator, captureScale, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
+import { captureCoordinator, captureScale, cropPixels, FULL_PAGE_DEADLINE_MS, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
@@ -1145,9 +1145,11 @@ export function createBrowserPage(
       using active = new DisposableStack()
 
       const hidden = !view.getVisible() && !undrawable({ platform: process.platform, visible: win.isVisible(), minimized: win.isMinimized(), appHidden: process.platform === "darwin" && electron.app.isHidden() })
+
       const hold = origin === "agent" ? active.use(rendering.hold(hidden ? async () => {
         await ready
-        if (closed() || agentRefusal(command.action, mainDocument())) return
+
+        if (closed() || agentRefusal({ type: "snapshot" }, mainDocument())) return
         await withFrames(false, pageLifetime.signal, async stop => {
           const frame = (await cdp.send("Page.getFrameTree")).frameTree.frame.id
           const world = await cdp.send("Page.createIsolatedWorld", { frameId: frame, worldName: "opencode-browser-paint" })
@@ -1155,6 +1157,7 @@ export function createBrowserPage(
           await cdp.send("Runtime.evaluate", { contextId: world.executionContextId, expression: "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done())))", awaitPromise: true })
         })
       } : undefined)) : undefined
+
       const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined)
       await Promise.all([ready, hold?.painted])
       const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
@@ -1414,6 +1417,7 @@ export function createBrowserPage(
             ))
 
         if (element && value.exceptionDetails?.exception?.description?.startsWith("Error: browser.detached_ref\n")) throw detachedRef()
+
         if (value.exceptionDetails)
           throw new Error(
             `Page JavaScript threw an exception. Check the script and ${action.ref ? "ref" : "frameID"}; inspect the page before repeating code with side effects. Details: ${(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).slice(0, 800)}`,
@@ -1522,7 +1526,9 @@ export function createBrowserPage(
           await scheduler.wait(action.timeoutMs ?? 0, { signal })
           break
         }
+
         if (action.condition === "url" && action.url === undefined) throw new Error("A URL wait requires a URL pattern.")
+
         if ((action.condition === "text" || action.condition === "textGone") && !action.text)
           throw new Error(
             'browser.wait requires non-empty text for condition "text" or "textGone". Use condition "load" without text to wait for loading.',
@@ -1541,6 +1547,7 @@ export function createBrowserPage(
           const page = agentRefusal({ type: "wait" }, mainDocument())
 
           if (page) throw new Error(page)
+
           if (action.condition === "url") return Browser.matchesURL(state().url, action.url ?? "")
           const context = frameID ? contexts.get(frameID) : undefined
 
@@ -1871,6 +1878,7 @@ export function createBrowserPage(
       )
 
       if (result.exceptionDetails?.exception?.description?.startsWith("Error: browser.detached_ref\n")) throw detachedRef()
+
       if (result.exceptionDetails)
         throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
 
@@ -1959,7 +1967,7 @@ export function createBrowserPage(
       if (!frameStillCurrent(before, documentState)) throw new CodedError(Browser.FailureCode.documentChanged, "The document changed during capture. Check the tab and take a new screenshot.")
 
       return frame
-    })
+    }, action.fullPage ? FULL_PAGE_DEADLINE_MS : undefined)
   }
 
   async function screenshot(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {
@@ -2043,7 +2051,7 @@ export function createBrowserPage(
     action: Extract<Browser.Action, { type: "screenshot" }>,
     bounds: { x: number; y: number; width: number; height: number },
   ) {
-    const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
+    const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getNormalBounds()).scaleFactor
     const scale = captureScale(bounds, pixelRatio, action.maxWidth ?? 2000)
     const format = action.format ?? "jpeg"
 
@@ -2294,6 +2302,7 @@ export function createBrowserPage(
       // AX does not distinguish password textboxes. Fail closed if the backing input is gone or protected.
       readableValue: async backendID => {
         abortError(signal)
+
         return (await call({ backendID, frameID, sessionID }, `function() { return this.isConnected && !(this instanceof HTMLInputElement && ['password','file'].includes(this.type)) && getComputedStyle(this).webkitTextSecurity === 'none' }`).catch(() => false)) === true
       },
       box: action.type === "snapshot" && action.boxes ? async (backendID) => {

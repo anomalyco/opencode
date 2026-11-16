@@ -43,6 +43,16 @@ function coordinator() {
   return { capture, advance, events, jobs }
 }
 
+test("a full-page redraw keeps its subscription beyond the viewport deadline", async () => {
+  const c = coordinator()
+  const shot = c.capture(false, new AbortController().signal, () => new Promise<void>(() => {}), 6000)
+  c.advance(2500)
+  expect(c.events).toEqual(["begin"])
+  c.advance(3500)
+  await expect(shot).rejects.toThrow("6 seconds")
+  expect(c.events).toEqual(["begin", "end"])
+})
+
 test("overlapping hidden and stalled visible captures share a subscription until the last release", async () => {
   const c = coordinator()
   const one = Promise.withResolvers<void>()

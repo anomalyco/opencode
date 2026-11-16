@@ -4,6 +4,9 @@ export type Undrawable = "minimized" | "hidden" | "stalled"
 /** How long a viewport or element capture may wait for the tab's frame before it gives up. */
 export const CAPTURE_DEADLINE_MS = 2_500
 
+/** A full document may rasterize and encode up to 16 MP before a fresh frame is delivered. */
+export const FULL_PAGE_DEADLINE_MS = 6_000
+
 type Size = { width: number; height: number }
 
 type Rect = Size & { x: number; y: number }
@@ -45,7 +48,7 @@ const schedule: Schedule = (ms, run) => {
 export function captureCoordinator(begin: () => void, end: () => void, after: Schedule = schedule) {
   let holders = 0
 
-  return async <T>(presented: boolean, signal: AbortSignal, redraw: (stop: AbortSignal) => Promise<T>) => {
+  return async <T>(presented: boolean, signal: AbortSignal, redraw: (stop: AbortSignal) => Promise<T>, deadline = CAPTURE_DEADLINE_MS) => {
     const cancel = () => new Error("Browser capture was cancelled.")
 
     if (signal.aborted) throw cancel()
@@ -75,7 +78,7 @@ export function captureCoordinator(begin: () => void, end: () => void, after: Sc
       }
     }) : undefined
 
-    const timeout = after(CAPTURE_DEADLINE_MS, () => interrupt(new Error(undrawableMessage("stalled"))))
+    const timeout = after(deadline, () => interrupt(new Error(undrawableMessage("stalled", deadline))))
     signal.addEventListener("abort", aborted, { once: true })
 
     try {
@@ -139,14 +142,13 @@ export function undrawable(window: {
   return undefined
 }
 
-const causes: Record<Undrawable, string> = {
+const causes: Record<Exclude<Undrawable, "stalled">, string> = {
   minimized: "The OpenCode window is minimized, so the system does not draw this tab.",
   hidden: "OpenCode is hidden, so the system does not draw this tab.",
-  stalled: `No fresh frame of this tab arrived within ${CAPTURE_DEADLINE_MS / 1000} seconds. No cached screenshot was returned.`,
 }
 
-export function undrawableMessage(reason: Undrawable) {
-  if (reason === "stalled") return `${causes.stalled} Check that the page has finished navigating and is responsive before retrying.`
+export function undrawableMessage(reason: Undrawable, deadline = CAPTURE_DEADLINE_MS) {
+  if (reason === "stalled") return `No fresh frame of this tab arrived within ${deadline / 1000} seconds. No cached screenshot was returned. Check that the page has finished navigating and is responsive before retrying.`
 
   return `${causes[reason]} A screenshot needs the window restored. Ask the user to restore the OpenCode window, then take the screenshot again; do not repeat it before then. Clicks, typing and other browser actions still work.`
 }
