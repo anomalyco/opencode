@@ -113,7 +113,9 @@ While you work on it, `opencode-native plugin dev <crate dir>` does the build, t
 runs the TUI with the plugin and builds it again on each change. `opencode-native plugin test <crate dir or library>
 [--route NAME] [--command NAME[=INPUT]] [--wait TEXT]...` prints the screen as text, with no server, for a test or a
 quick look, and fails when the plugin fails, the route is not its own, or a command does not run.
-A plugin in C uses `include/opencode_plugin.h` instead of this crate.
+A plugin in C uses `include/opencode_plugin.h` instead of this crate; `crates/plugin/examples/c/plugin.c` is one. On
+Linux and macOS build it with `cc -shared -fPIC -I<checkout>/packages/cli-rs/crates/plugin-abi/include plugin.c -o
+plugin.so` (`plugin.dylib` on macOS) and install the library as above.
 
 Open `/plugins` to see the plugin's state. External plugins are listed under TUI, built-ins only after `ctrl+a`.
 Enter disables or enables the selected plugin. A plugin that failed has an `x`, `failed` in its row, and a toast
