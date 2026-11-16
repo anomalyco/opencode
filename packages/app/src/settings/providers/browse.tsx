@@ -1,5 +1,4 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type Component } from "solid-js"
-import type { ConfigEntry } from "@opencode/client/promise"
 import { Button } from "@opencode/ui/button"
 import { Loader } from "@opencode/ui/loader"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -34,18 +33,6 @@ const incompleteLabels = {
   pairing: "settings.extensions.browse.incomplete.pairing",
   update: "settings.extensions.browse.incomplete.update",
 } as const satisfies Record<BrowseIncomplete, string>
-
-/**
- * Whether the `browse_setup` flag is on. Matches the server: the highest-priority document that sets `experimental`
- * decides.
- */
-export function browseSetupEnabled(entries: readonly ConfigEntry[] | undefined) {
-  return (
-    entries
-      ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
-      .at(-1)?.browse_setup === true
-  )
-}
 
 /** Installs and connects browse on this computer. Only the desktop's own server runs agents here. */
 export const SettingsBrowse: Component<{ bridge: BrowseBridge; onInstalled: () => void }> = (props) => {

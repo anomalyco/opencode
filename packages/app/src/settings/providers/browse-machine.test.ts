@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import type { ConfigEntry } from "@opencode/client/promise"
 import type { BrowseStatus } from "@/runtime/platform/platform"
 import {
   browseCardPolling,
   browseCardView,
+  browseSetupEnabled,
   createBrowseCardState,
   transitionBrowseCard,
   type BrowseCardEffect,
@@ -145,5 +147,37 @@ describe("browse card machine", () => {
     expect(transitionBrowseCard(disposed, { type: "read.succeeded", attempt: 1, browse: status() }).state).toBe(
       disposed,
     )
+  })
+})
+
+describe("browse_setup flag", () => {
+  const doc = (experimental?: { browse_setup?: boolean; all_flags?: boolean }): ConfigEntry => ({
+    type: "document",
+    path: "/config/opencode.json",
+    info: experimental ? { experimental } : {},
+  })
+
+  test.each([
+    { name: "config not loaded", entries: undefined, channel: "dev", enabled: false },
+    { name: "dev build by default", entries: [doc()], channel: "dev", enabled: true },
+    { name: "local build by default", entries: [doc()], channel: "local", enabled: true },
+    { name: "release by default", entries: [doc()], channel: "prod", enabled: false },
+    { name: "turned off on a dev build", entries: [doc({ browse_setup: false })], channel: "dev", enabled: false },
+    { name: "turned on in a release", entries: [doc({ browse_setup: true })], channel: "prod", enabled: true },
+    { name: "all_flags in a release", entries: [doc({ all_flags: true })], channel: "prod", enabled: true },
+    {
+      name: "the highest-priority experimental block decides",
+      entries: [doc({ browse_setup: true }), doc({ browse_setup: false })],
+      channel: "prod",
+      enabled: false,
+    },
+    {
+      name: "all_flags survives a later block that doesn't set it",
+      entries: [doc({ all_flags: true }), doc({})],
+      channel: "prod",
+      enabled: true,
+    },
+  ])("$name", ({ entries, channel, enabled }) => {
+    expect(browseSetupEnabled(entries, channel)).toBe(enabled)
   })
 })

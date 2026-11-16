@@ -1,3 +1,4 @@
+import type { ConfigEntry } from "@opencode/client/promise"
 import type { BrowseInstallFailure, BrowseStatus } from "@/runtime/platform/platform"
 
 /**
@@ -43,6 +44,30 @@ export type BrowseCardView =
   | { readonly phase: "ready"; readonly connected: boolean }
 
 export type BrowseIncomplete = "config" | "extension" | "pairing" | "update"
+
+/**
+ * Whether the `browse_setup` flag is on, resolved as the server resolves flags: `experimental.browse_setup` from the
+ * highest-priority document that sets `experimental`, then `all_flags: true` from the highest-priority document that sets
+ * it, then on for local and dev builds. `OPENCODE_FLAGS` reaches only the server, so it doesn't apply here. Off until the
+ * config has loaded, so a config that turns it off never shows the row.
+ */
+export function browseSetupEnabled(
+  entries: readonly ConfigEntry[] | undefined,
+  channel = import.meta.env.VITE_OPENCODE_CHANNEL ?? "local",
+) {
+  if (!entries) return false
+
+  const experimental = entries.flatMap((entry) =>
+    entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : [],
+  )
+  const configured = experimental.at(-1)?.browse_setup
+
+  if (configured !== undefined) return configured
+
+  if (experimental.findLast((item) => item.all_flags !== undefined)?.all_flags === true) return true
+
+  return channel === "local" || channel === "dev"
+}
 
 export function createBrowseCardState(): BrowseCardTransition {
   return { state: { status: "checking", attempt: 1 }, effects: [{ type: "read", attempt: 1 }] }
