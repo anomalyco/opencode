@@ -439,6 +439,17 @@ export function useRichMedia() {
     })
 }
 
+/**
+ * Whether the transcript shows the files tools return: with rich media unless `session.image_preview` is false, and
+ * otherwise only when it is true.
+ */
+export function useTranscriptMedia() {
+  const config = useConfig()
+  const richMedia = useRichMedia()
+  return () =>
+    richMedia() ? config.data.session?.image_preview !== false : config.data.session?.image_preview === true
+}
+
 /** Reactive accessor for the temporary "client-mcp" experiment. */
 export function useClientMcpExperiment() {
   const config = useConfig()

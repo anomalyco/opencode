@@ -133,6 +133,8 @@ async function openSession(config: Config.Info, options: { state: string; localS
       if (url.pathname === "/api/model")
         return json({ location, data: [{ id: "model", providerID: "demo", name: "Demo", variants: [] }] })
       if (rest === "/message") return json({ data: messages, cursor: {} })
+      // Showing tool files again reads back the ones the store dropped while they were hidden.
+      if (rest.startsWith("/message/")) return json({ data: messages.find((item) => `/message/${item.id}` === rest) })
       if (rest === "") return json({ data: session })
       if (rest === "/inbox") return json({ data: [queued] })
       if (rest === "/permission") return json({ data: [] })

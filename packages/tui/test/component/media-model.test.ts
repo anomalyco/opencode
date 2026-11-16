@@ -65,6 +65,8 @@ test("collects session media in transcript order with stable ids", () => {
     { type: "file", uri: `media:${"a".repeat(64)}`, mime: "video/mp4", name: "out.mp4" },
     { type: "file", uri: "https://example.com/x.png", mime: "image/png" },
     { type: "file", uri: "data:image/gif;base64,AAAA", mime: "image/gif" },
+    // A payload the store dropped while the transcript hid tool files.
+    { type: "file", uri: "data:image/png;base64,", mime: "image/png" },
   ]
   const state = { status: "completed" as const, input: {}, content }
   const tool = { type: "tool" as const, id: "read", name: "read", time, state }

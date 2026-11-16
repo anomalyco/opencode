@@ -8,6 +8,7 @@ import type {
 } from "@opencode/client"
 import { viewerMedia, type MediaItem } from "../../component/media/model"
 import { MediaStrip } from "../../component/media/strip"
+import { useTranscriptMedia } from "../../config"
 import { Spinner } from "../../component/spinner"
 import { useMedia } from "../../context/media"
 import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
@@ -246,13 +247,14 @@ export function TextPart(props: {
   )
 }
 
-// The gallery items `match` selects. A tile opens the viewer over the whole session's gallery at that item. Transcript
-// previews are on by default, but an explicit `session.image_preview: false` turns them off.
+// The gallery items `match` selects. A tile opens the viewer over the whole session's gallery at that item, while the
+// transcript shows media.
 export function SessionMedia(props: { match: (item: MediaItem) => boolean; paddingLeft?: number }) {
   const ctx = use()
   const media = useMedia()
   const gallery = () => ctx.media?.() ?? []
-  const items = createMemo(() => (ctx.config.session?.image_preview === false ? [] : gallery().filter(props.match)))
+  const transcriptMedia = useTranscriptMedia()
+  const items = createMemo(() => (transcriptMedia() ? gallery().filter(props.match) : []))
   const paddingLeft = () => props.paddingLeft ?? 3
 
   return (

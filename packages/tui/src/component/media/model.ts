@@ -108,7 +108,9 @@ export function collectSessionMedia(
         }
         if (part.type !== "tool") return []
         return toolDisplayContent(part.state).flatMap((content, index) =>
-          content.type === "file" && (content.uri.startsWith("data:") || mediaHashFromUri(content.uri))
+          // An emptied `data:` URI is a payload the store dropped while the transcript hid tool files.
+          content.type === "file" &&
+          ((content.uri.startsWith("data:") && !content.uri.endsWith(",")) || mediaHashFromUri(content.uri))
             ? item(`${message.id}:tool:${part.id}:${index}`, content.mime, content.uri, content.name ?? undefined)
             : [],
         )
