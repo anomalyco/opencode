@@ -30,6 +30,7 @@ import {
   pickerMode,
   createPriorityTaskQueue,
   createDirectorySearch,
+  displayInputDirectory,
   displayPickerPath,
   shortenPickerRecentPath,
   pickerBreadcrumbs,
@@ -172,6 +173,12 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     return [...crumbs.slice(0, lead), { label: "…", path: crumbs[crumbs.length - 3].path }, ...crumbs.slice(-2)]
   })
 
+  const committed = createMemo(() => {
+    const selected = treeView().selected
+
+    return selected ? displayInputDirectory(selected, home()) : ""
+  })
+
   function choose(directory: string) {
     dispatchCombobox({ type: "dismissed" })
     dispatchTree({ type: "directory.chosen", ...navigation(directory), fromInput: false })
@@ -203,6 +210,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         root: treeView().root,
         fallback: start() || home(),
         locationDirectory: location()?.directory,
+        committed: committed(),
       })
 
       if (next.state !== previous) setMachines((current) => ({ ...current, combobox: next.state }))
@@ -317,6 +325,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       return
     }
 
+    if (effect.type === "submit") return resolve()
+
     if (effect.type === "tree.focus-initial") {
       if (!tree?.getFocusedPath()) tree?.focusNearestPath(null)
 
@@ -351,13 +361,20 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
     if (effect.type === "search.cancel") return stopSearch()
 
-    if (effect.type === "selection.clear") return dispatchTree({ type: "selection.cleared" })
+    if (effect.type === "submit") return resolve()
 
     if (effect.type === "choose.directory") {
-      return dispatchTree({ type: "directory.chosen", ...navigation(effect.path), fromInput: true })
+      return dispatchTree({
+        type: "directory.chosen",
+        ...navigation(effect.path),
+        fromInput: true,
+        submit: effect.submit,
+      })
     }
 
     dispatchTree({ type: "file.chosen", absolute: effect.absolute, home: home() })
+
+    if (effect.submit) resolve()
   }
 
   function stopSearch() {
@@ -489,6 +506,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         }
         button[data-type="item"]:focus-visible {
           outline: none !important;
+          box-shadow: inset 0 0 0 1px var(--v2-border-border-focus) !important;
         }
         [data-item-type="folder"] > [data-item-section="icon"] {
           width: auto !important;
@@ -556,8 +574,10 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         [data-item-section="git"] {
           display: none;
         }
+        /* The tree keeps a scrollbar gutter on the right; one on the left too keeps the rows centred. */
         [data-file-tree-virtualized-scroll] {
           overscroll-behavior: contain;
+          scrollbar-gutter: stable both-edges;
         }
       `,
       onExpansionChange(change) {
@@ -582,6 +602,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
     if (path) dispatchTree({ type: "navigate", ...navigation(path) })
   })
+
+  createEffect(on(committed, () => dispatchCombobox({ type: "synced" }), { defer: true }))
 
   // Suggestions search against the root and location, so a search started before either arrived runs again.
   createEffect(
@@ -804,7 +826,11 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         <Button variant="neutral" onClick={() => dialog.close()}>
           {language.t("common.cancel")}
         </Button>
-        <Button variant="contrast" disabled={!treeView().result} onClick={resolve}>
+        <Button
+          variant="contrast"
+          disabled={!treeView().result && !comboboxView().input}
+          onClick={() => dispatchCombobox({ type: "submitted" })}
+        >
           {action[policy.action]}
         </Button>
       </DialogFooter>

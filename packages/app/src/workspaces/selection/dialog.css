@@ -192,7 +192,7 @@
   min-height: 0;
   flex: 1 1 280px;
   overflow: hidden;
-  padding: 4px;
+  padding: 4px 0;
 }
 
 .directory-picker-tree {
