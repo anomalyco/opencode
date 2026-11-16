@@ -1,6 +1,5 @@
-import type { SessionInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
 import { ServerConnection } from "@/runtime/server/registry"
-import { mergeHomeSessionIndex } from "@/home/sessions/index"
 
 const separator = "\u0000"
 
@@ -8,6 +7,9 @@ export const RECENT_PAGE_LIMIT = 50
 
 /** Bounds a hanging server request; matches the Home session list's fetch deadline. */
 export const RECENT_PAGE_TIMEOUT_MS = 30_000
+
+/** Coalesces the events that reload a server's first page, like the iOS app's session list. */
+export const RECENT_RELOAD_DELAY_MS = 250
 
 export type RecentSession = {
   /** `${server}\u0000${sessionID}`, the same key the pin order stores. */
@@ -132,19 +134,26 @@ type RecentPageBase = {
   readonly olderLoaded: boolean
 }
 
+/**
+ * How a load joins the rows already held. `refresh` is a reconnect snapshot, which also re-reads pins it does not
+ * cover; `reload` is the same snapshot taken while connected (run end, new session, focus, archive).
+ */
+type RecentPageKind = "first" | "next" | "refresh" | "reload"
+
 /** One server's fetched pages. `loading.kind` decides how a response joins the rows already held. */
 export type RecentPageState =
   | ({ readonly status: "idle" } & RecentPageBase)
   | ({
       readonly status: "loading"
-      readonly kind: "first" | "next" | "refresh"
+      readonly kind: RecentPageKind
       readonly attempt: number
     } & RecentPageBase)
   | ({ readonly status: "ready" } & RecentPageBase)
-  | ({ readonly status: "failed"; readonly kind: "first" | "next" | "refresh" } & RecentPageBase)
+  | ({ readonly status: "failed"; readonly kind: RecentPageKind } & RecentPageBase)
 
 export type RecentPageEvent =
   | { readonly type: "load"; readonly kind: "first" | "next" | "refresh"; readonly attempt: number }
+  | { readonly type: "reload"; readonly attempt: number }
   | { readonly type: "retry"; readonly attempt: number }
   | {
       readonly type: "succeeded"
@@ -190,7 +199,7 @@ function mergeSessions(current: readonly SessionInfo[], next: readonly SessionIn
   return [...new Map([...current, ...next].map((session) => [session.id, session] as const)).values()]
 }
 
-function startLoading(state: RecentPageState, kind: "first" | "next" | "refresh", attempt: number) {
+function startLoading(state: RecentPageState, kind: RecentPageKind, attempt: number) {
   const requestCursor = kind === "next" ? state.cursor : undefined
   const cursor = kind === "first" ? undefined : state.cursor
 
@@ -278,6 +287,29 @@ function finishLoading(
   }
 }
 
+/**
+ * Whether an event changes which root sessions page one holds or their order, so Recent reloads it: a run that ended
+ * (except a shutdown, which leaves the server's times alone), a new root session, archive and unarchive. A run end
+ * from a known subagent session does not; an unknown session may be a root, so it does.
+ */
+export function recentReloadsOn(event: OpenCodeEvent, session: (sessionID: string) => SessionInfo | undefined) {
+  if (event.type === "session.created") return !event.data.parentID
+
+  if (event.type === "session.archived" || event.type === "session.unarchived") return true
+
+  if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return false
+
+  if (
+    event.type !== "session.execution.succeeded" &&
+    event.type !== "session.execution.failed" &&
+    event.type !== "session.execution.interrupted"
+  ) {
+    return false
+  }
+
+  return !session(event.data.sessionID)?.parentID
+}
+
 /** One server's page lifecycle. I/O lives in the driver; this only says what to fetch and what the rows become. */
 export function transitionRecentPage(
   state: RecentPageState,
@@ -295,6 +327,16 @@ export function transitionRecentPage(
     }
 
     return startLoading(state, event.kind, event.attempt)
+  }
+
+  // A reload supersedes whatever is in flight, so an older response cannot land after it. Before the first page
+  // there is nothing to reload, and a pending first page or reconnect refresh keeps its own kind.
+  if (event.type === "reload") {
+    if (state.status === "idle") return unchanged(state)
+
+    const pending = state.status !== "ready" && (state.kind === "first" || state.kind === "refresh")
+
+    return startLoading(state, pending ? state.kind : "reload", event.attempt)
   }
 
   if (event.type === "retry") {
@@ -332,18 +374,45 @@ export function recentPageFailed(state: RecentPageState | undefined) {
   return state?.status === "failed"
 }
 
-export function recentPageHasMore(state: RecentPageState | undefined) {
-  return !!state && (state.status === "ready" || state.status === "failed") && !state.exhausted && !!state.cursor
+/** Only Show more's page shows a loader; snapshot reloads replace rows in place. */
+export function recentPageLoadingMore(state: RecentPageState | undefined) {
+  return state?.status === "loading" && state.kind === "next"
 }
 
-/** One server's sessions plus the live store, keeping root, unarchived sessions. Live entries win. */
+export function recentPageHasMore(state: RecentPageState | undefined) {
+  if (!state || state.exhausted || !state.cursor) return false
+
+  // A snapshot reload keeps the pages and cursor it started with, so Show more stays while it runs.
+  return state.status !== "idle" && (state.status !== "loading" || state.kind === "reload" || state.kind === "refresh")
+}
+
+/**
+ * One server's fetched pages plus the live store, keeping root, unarchived sessions. Live entries supply every field
+ * except `time.updated`: a fetched row keeps the time from its page until the next reload, so steps, renames and
+ * model or agent changes never reorder it. A session created since the last reload uses its live time. One that
+ * existed then but is outside the loaded pages was older than all of them, so it never ranks above them before a
+ * reload includes it, even when the live store loaded it with a newer time (a rename from another client).
+ * `apply` adds the local send bump.
+ */
 export function mergeRecentSessions(
   server: string,
   fetched: readonly SessionInfo[],
   known: readonly SessionInfo[],
   apply: (rows: SessionInfo[]) => SessionInfo[] = (rows) => rows,
 ) {
-  const sessions = apply(mergeHomeSessionIndex(fetched, known))
+  const snapshot = new Map(fetched.map((info) => [info.id, info.time.updated]))
+  const rows = new Map(fetched.map((info) => [info.id, info]))
+  const newest = fetched.reduce((value, info) => Math.max(value, info.time.updated), -Infinity)
+  const oldest = fetched.reduce((value, info) => Math.min(value, info.time.updated), Infinity)
+
+  for (const info of known) {
+    const updated =
+      snapshot.get(info.id) ?? (info.time.created <= newest ? Math.min(info.time.updated, oldest) : info.time.updated)
+
+    rows.set(info.id, updated === info.time.updated ? info : { ...info, time: { ...info.time, updated } })
+  }
+
+  const sessions = apply([...rows.values()].filter((info) => !info.parentID && info.time.archived === undefined))
 
   return sortRecentSessions(sessions.map((session) => ({ key: recentSessionKey(server, session.id), server, session })))
 }

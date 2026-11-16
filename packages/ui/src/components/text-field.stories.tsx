@@ -1,6 +1,5 @@
-// @ts-nocheck
-import * as mod from "./text-field"
-import { create } from "../storybook/scaffold"
+import { createEffect, createSignal } from "solid-js"
+import { TextField, type TextFieldProps } from "./text-field"
 
 const docs = `### Overview
 Text input with label, description, and optional copy-to-clipboard action.
@@ -26,20 +25,40 @@ Pair with \`Tooltip\` and \`IconButton\` for copy affordance (built in).
 
 `
 
-const story = create({
-  title: "UI/TextField",
-  mod,
-  args: {
-    label: "Label",
-    placeholder: "Type here...",
-    defaultValue: "Hello",
-  },
-})
+function Sample(props: TextFieldProps) {
+  const [value, setValue] = createSignal("")
+
+  createEffect(() => setValue(props.defaultValue ?? ""))
+
+  return <TextField {...props} value={value()} onChange={setValue} />
+}
 
 export default {
   title: "UI/TextField",
   id: "components-text-field",
-  component: story.meta.component,
+  component: TextField,
+  render: Sample,
+  args: {
+    label: "Label",
+    description: "",
+    error: "",
+    placeholder: "",
+    defaultValue: "",
+    variant: "normal",
+    hideLabel: false,
+    multiline: false,
+    copyable: false,
+    copyKind: "clipboard",
+    validationState: "valid",
+    required: false,
+    disabled: false,
+    readOnly: false,
+  } satisfies TextFieldProps,
+  argTypes: {
+    variant: { options: ["normal", "ghost"] },
+    copyKind: { options: ["clipboard", "link"] },
+    validationState: { options: ["valid", "invalid"] },
+  },
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -50,13 +69,14 @@ export default {
   },
 }
 
-export const Basic = story.Basic
+export const Basic = { args: { placeholder: "Type here...", defaultValue: "Hello" } }
 
 export const Variants = {
-  render: () => (
+  args: { label: "Normal", placeholder: "Type here...", defaultValue: "Value" },
+  render: (args: TextFieldProps) => (
     <div style={{ display: "grid", gap: "12px", width: "320px" }}>
-      <mod.TextField label="Normal" placeholder="Type here..." defaultValue="Value" />
-      <mod.TextField label="Ghost" variant="ghost" placeholder="Type here..." defaultValue="Value" />
+      <Sample {...args} />
+      <TextField label="Ghost" variant="ghost" placeholder="Type here..." defaultValue="Value" />
     </div>
   ),
 }
@@ -83,6 +103,7 @@ export const Error = {
     label: "Email",
     defaultValue: "invalid@",
     error: "Enter a valid email address",
+    validationState: "invalid",
   },
 }
 

@@ -246,7 +246,7 @@ Every value crossing in either direction is converted, never shared: arguments c
 copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
 extension throws at `CodeMode.make`.
 
-Functions inside a result have no data form, so a suspended VM run loses them by default: after a resume, calling one
+Functions inside a result have no data form, so a suspended run loses them by default: after a resume, calling one
 throws a `TypeError`. An extension can preserve them across suspend and resume with `snapshot` hooks. `encode` receives
 a value one of the extension's functions returned, as the host function returned it, and returns plain data (JSON
 values and `Uint8Array`s); on resume, `decode` receives that data once per value and returns a host value of the same

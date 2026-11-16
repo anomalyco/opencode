@@ -466,7 +466,7 @@ export const content = {
     },
     colors: {
       title: "Couleurs",
-      body: "Le logo et le logotype utilisent une seule encre à trois opacités, avec une encre plus claire pour les fonds sombres. Les valeurs ci-dessous sont cette encre sur du blanc ou du #0B0B0B, comme dans les fichiers standards. Cliquez sur une valeur pour la copier.",
+      body: "Le logo et le logotype utilisent une seule encre à trois opacités, avec une encre plus claire pour les fonds sombres. Les valeurs ci-dessous sont les couleurs des fichiers standards. Utilisez-les uniquement pour le logo et le logotype, pas pour d’autres textes ou arrière-plans. Cliquez sur une valeur pour la copier.",
       palettes: {
         light: {
           name: "Clair",

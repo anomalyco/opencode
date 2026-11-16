@@ -59,7 +59,7 @@ describe("SubagentCompletion", () => {
     }),
   )
 
-  it.effect("delivers completed, failed, and cancelled reports with pending background work", () =>
+  it.effect("labels a completed report with pending background work as running, only in the model text", () =>
     Effect.gen(function* () {
       const notificationID = SessionMessage.ID.create()
       const sent: SyntheticInput[] = []
@@ -80,25 +80,35 @@ describe("SubagentCompletion", () => {
 
       yield* SubagentCompletion.deliver(sessions, jobs, {
         status: "completed",
-        output: "All green\n\nBackground work still running:\n- shell (shell_1): bun test",
+        output: "All green",
         notificationID,
-        recovery,
+        recovery: {
+          ...recovery,
+          outstanding: [{ kind: "shell", sessionID: recovery.childSessionID, shellID: "shell_1", command: "bun test" }],
+        },
       })
       yield* SubagentCompletion.deliver(sessions, jobs, { status: "error", error: "boom", recovery })
       yield* SubagentCompletion.deliver(sessions, jobs, { status: "cancelled", recovery })
       // A running job has nothing to report and must not be acknowledged.
       yield* SubagentCompletion.deliver(sessions, jobs, { status: "running", recovery })
+      yield* SubagentCompletion.deliver(sessions, jobs, { status: "completed", output: "All done", recovery })
 
-      expect(sent).toHaveLength(3)
+      expect(sent).toHaveLength(4)
       expect(sent[0]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="completed" description="Deliver report">',
+          '<subagent sessionID="ses_deliver_child" state="running" description="Deliver report">',
           "All green",
           "",
           "Background work still running:",
           "- shell (shell_1): bun test",
           "</subagent>",
         ].join("\n"),
+      )
+      expect(sent[0]?.metadata?.state).toBe("completed")
+      expect(sent[3]?.text).toBe(
+        ['<subagent sessionID="ses_deliver_child" state="completed" description="Deliver report">', "All done", "</subagent>"].join(
+          "\n",
+        ),
       )
       expect(sent[1]?.text).toBe(
         [

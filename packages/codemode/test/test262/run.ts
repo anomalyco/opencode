@@ -1,15 +1,15 @@
-// Runs one vendored test262 file verbatim on the bytecode VM. The harness (assert, Test262Error, compareArray, $DONE,
+// Runs one vendored test262 file verbatim. The harness (assert, Test262Error, compareArray, $DONE,
 // $DONOTEVALUATE) is host-provided, except `assert` itself: a program function made by the prelude, so that
 // `assert.throws` can call the function it tests and catch what it throws as plain program code. Its checks and
 // failure messages are the host's (`$assert`).
 import path from "node:path"
 import { Effect } from "effect"
-import { executeProgram } from "../../src/vm/runtime/execute.js"
-import type { Interpreter } from "../../src/vm/runtime/interpreter.js"
-import { Throw } from "../../src/vm/runtime/model.js"
-import { createErrorValue } from "../../src/vm/runtime/intrinsics.js"
-import { constructor, fn, methods } from "../../src/vm/runtime/native.js"
-import { Callable, define, get, hidden, Arr, Fn, Obj, type Value } from "../../src/vm/runtime/objects.js"
+import { finishExecution, startProgram } from "../../src/runtime/execute.js"
+import type { Interpreter } from "../../src/runtime/interpreter.js"
+import { Throw } from "../../src/runtime/model.js"
+import { createErrorValue } from "../../src/runtime/intrinsics.js"
+import { constructor, fn, methods } from "../../src/runtime/native.js"
+import { Callable, define, get, hidden, Arr, Fn, Obj, type Value } from "../../src/runtime/objects.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
 
 export const root = import.meta.dir
@@ -29,8 +29,11 @@ type Frontmatter = {
   negative?: { phase: "parse" | "resolution" | "runtime"; type: string }
 }
 
-const limits = { timeoutMs: 5000, maxToolCalls: undefined, maxOutputBytes: undefined }
-const prepared = ToolRuntime.prepare<never>({})
+const setup = {
+  prepared: ToolRuntime.prepare<never>({}),
+  limits: { timeoutMs: 5000, maxToolCalls: undefined, maxOutputBytes: undefined },
+  hooks: {},
+}
 
 // One line, on the line of the "use strict" directive, so the test's own line numbers stay as they are.
 const prelude = [
@@ -52,10 +55,17 @@ export const run = async (file: string): Promise<Outcome> => {
   // work instead, so drain explicitly.
   const drain = meta.flags?.includes("async") ? "\nfor (let i = 0; i < 100; i++) await null" : ""
   const result = await Effect.runPromise(
-    executeProgram(`"use strict"; ${prelude}\n${source}${drain}`, prepared, limits, {}, (ctx) =>
-      harness(ctx, (error) => {
-        done ??= { error }
-      }),
+    finishExecution(
+      startProgram(
+        {
+          ...setup,
+          globals: (ctx) =>
+            harness(ctx, (error) => {
+              done ??= { error }
+            }),
+        },
+        `"use strict"; ${prelude}\n${source}${drain}`,
+      ).run(),
     ),
   )
   if (meta.negative !== undefined) {

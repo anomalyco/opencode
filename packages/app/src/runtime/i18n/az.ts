@@ -150,7 +150,7 @@ export const dict = {
   "provider.connect.title": "{{provider}} provayderini qoş",
   "provider.connect.method.apiKey": "API açarı",
   "provider.connect.status.inProgress": "Avtorizasiya davam edir…",
-  "provider.connect.status.waiting": "Avtorizasiya gözlənilir…",
+  "provider.connect.status.waiting": "Avtorizasiya gözlənilir",
   "provider.connect.status.failed": "Avtorizasiya uğursuz oldu: {{error}}",
   "provider.connect.apiKey.description":
     "Hesabınızı qoşmaq və OpenCode-da {{provider}} modellərindən istifadə etmək üçün {{provider}} API açarınızı daxil edin.",
@@ -826,7 +826,6 @@ export const dict = {
   "workspace.delete.location": "Yer",
   "command.session.location.cycle": "Sessiyanın yerini dəyiş",
   "dialog.provider.anthropic.note": "API açarı ilə Claude modellərinə birbaşa giriş",
-  "provider.connect.title.anthropicProMax": "Anthropic ilə daxil olun",
   "prompt.toast.uploading.cancelFile": "{{filename}} faylının yüklənməsini ləğv et",
   "prompt.toast.uploadFailed.title": "Yükləmə alınmadı",
   "prompt.toast.uploading.percent": "{{percent}}%",

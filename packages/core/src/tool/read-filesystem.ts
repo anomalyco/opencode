@@ -3,6 +3,7 @@ export * as ReadToolFileSystem from "./read-filesystem.js"
 import path from "path"
 import { pathToFileURL } from "url"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { Context, Effect, Layer, Schema } from "effect"
 import { lookup } from "mime-types"
 import { Environment } from "../environment/index.js"
@@ -82,6 +83,7 @@ export type FileContent = typeof FileContent.Type
 export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   type: Schema.Literal("text-page"),
   content: Schema.String,
+  lineCount: NonNegativeInt,
   mime: Schema.String,
   offset: PositiveInt,
   truncated: Schema.Boolean,
@@ -137,8 +139,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
   )
   if (first instanceof ListPage) return first
 
-  const media = Mime.detect(first.bytes)
-  if (MEDIA_MIMES.has(media)) {
+  const media = Mime.detectMedia(first.bytes)
+  if (media && MEDIA_MIMES.has(media)) {
     if (first.info.size > MAX_MEDIA_INGEST_BYTES)
       return yield* new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES })
     const whole = yield* readFile(files, input, resource)
@@ -155,13 +157,20 @@ export const read = Effect.fn("ReadTool.read")(function* (
   const paged = first.info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
   if (!paged) {
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
-    return {
-      type: "file" as const,
-      uri: virtual ? resource : pathToFileURL(input).href,
-      name: virtual ? path.posix.basename(input) : path.basename(input),
-      content: new TextDecoder().decode(first.bytes).split("\n").map(clampLine).join("\n"),
-      encoding: "utf8" as const,
-      mime: mimeType(input),
+    const lines = new TextDecoder().decode(first.bytes).split("\n")
+    // A final separator ends the last physical line; keep it in whole-file content.
+    const count = lines.at(-1) === "" ? lines.length - 1 : lines.length
+    if (count <= MAX_READ_LINES) {
+      const content = lines.map(clampLine).join("\n")
+      if (Buffer.byteLength(content) <= MAX_READ_BYTES)
+        return {
+          type: "file" as const,
+          uri: virtual ? resource : pathToFileURL(input).href,
+          name: virtual ? path.posix.basename(input) : path.basename(input),
+          content,
+          encoding: "utf8" as const,
+          mime: mimeType(input),
+        }
     }
   }
 
@@ -325,6 +334,7 @@ const textPage = Effect.fnUntraced(function* (
   return new TextPage({
     type: "text-page",
     content: entries.join("\n"),
+    lineCount: entries.length,
     mime: mimeType(input),
     offset: from,
     truncated: next !== undefined,
@@ -365,12 +375,8 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep =
   })
 }
 
-const clampLine = (line: string) => {
-  if (line.length <= MAX_LINE_LENGTH) return line
-  const code = line.charCodeAt(MAX_LINE_LENGTH - 1)
-  const end = code >= 0xd800 && code <= 0xdbff ? MAX_LINE_LENGTH - 1 : MAX_LINE_LENGTH
-  return line.slice(0, end) + MAX_LINE_SUFFIX
-}
+const clampLine = (line: string) =>
+  line.length <= MAX_LINE_LENGTH ? line : TextBoundary.head(line, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX
 
 const layer = Layer.effect(
   Service,

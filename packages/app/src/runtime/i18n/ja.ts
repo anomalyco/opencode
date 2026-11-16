@@ -153,10 +153,9 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "その他70以上のプロバイダーを見る",
   "dialog.provider.viewAll": "さらにプロバイダーを表示",
   "provider.connect.title": "{{provider}}を接続",
-  "provider.connect.title.anthropicProMax": "Anthropicにログイン",
   "provider.connect.method.apiKey": "APIキー",
   "provider.connect.status.inProgress": "認証中…",
-  "provider.connect.status.waiting": "認証を待機中…",
+  "provider.connect.status.waiting": "認証を待機中",
   "provider.connect.status.failed": "認証に失敗しました: {{error}}",
   "provider.connect.apiKey.description":
     "{{provider}}のAPIキーを入力してアカウントを接続し、OpenCodeで{{provider}}モデルを使用します。",
