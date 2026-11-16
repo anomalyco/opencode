@@ -45,6 +45,7 @@ import {
 } from "./dialog-machine"
 import type { BrowserNetwork } from "./network"
 import {
+  agentCaused,
   agentFrame,
   agentFrames,
   agentRefusal,
@@ -493,7 +494,14 @@ export function createBrowserPage(
     contents,
     remote: !!options.remote,
     sites: options.sites,
-    agentRunning: () => activity.agentRuns > 0,
+    // The same rule that decides whose a download is.
+    agentCaused: () =>
+      agentCaused({
+        now: Date.now(),
+        agentRunning: activity.agentRuns > 0,
+        agentEndedAt: activity.agentEndedAt,
+        userInputAt: activity.userInputAt,
+      }),
     top: () => state().url,
     dialog: () => selectUserDialog(dialogGate),
     answerDialog: (revision, answer) => answerDialog(revision, answer.accept, answer.text, answer.stop),

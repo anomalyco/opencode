@@ -111,11 +111,12 @@ export function siteAnswer(request: SiteRequest, decided: (kind: PermissionKind)
 }
 
 /**
- * Clipboard writes follow Chrome, which lets a secure page write without asking, here only while no agent command
- * runs in the tab, so the agent never fills the user's clipboard through a page.
+ * Clipboard writes follow Chrome, which lets a secure page write without asking, here only when the agent did not cause
+ * the write (gentCaused in policy.ts), so the agent never fills the user's clipboard through a page, even from a
+ * timer its script set.
  */
-export function clipboardWrite(request: Omit<SiteRequest, "kinds">, agentRunning: boolean) {
-  return !agentRunning && sameSite(request) && trustworthy(request.origin)
+export function clipboardWrite(request: Omit<SiteRequest, "kinds">, agentCaused: boolean) {
+  return !agentCaused && sameSite(request) && trustworthy(request.origin)
 }
 
 /**

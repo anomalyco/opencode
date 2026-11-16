@@ -72,7 +72,8 @@ export function createPagePrompts(input: {
   /** The page browses in a remote server's partition. */
   readonly remote: boolean
   readonly sites: SitePermissions
-  readonly agentRunning: () => boolean
+  /** The agent caused what happens in the tab now (gentCaused in policy.ts). */
+  readonly agentCaused: () => boolean
   /** The tab's top-level address as the pane shows it, so a preview reads as its file. */
   readonly top: () => string
   readonly dialog: () => OpenDialog | null
@@ -156,7 +157,8 @@ export function createPagePrompts(input: {
     const dialog = input.dialog()
     const head = selectPrompt(state)
     const waiting = state.items.length + (dialog ? 1 : 0) - 1
-    const focus = !contents.isDestroyed() && contents.isFocused()
+    // What the agent caused never takes the user's focus.
+    const focus = !contents.isDestroyed() && contents.isFocused() && !input.agentCaused()
 
     if (dialog)
       return {
@@ -322,7 +324,7 @@ export function createPagePrompts(input: {
       const origin = requestOrigin(details, contents)
       const request = { origin, top: contents.mainFrame.origin, mainFrame: details.isMainFrame }
 
-      if (permission === "clipboard-sanitized-write") return once(clipboardWrite(request, input.agentRunning()))
+      if (permission === "clipboard-sanitized-write") return once(clipboardWrite(request, input.agentCaused()))
       const kinds = permissionKinds(permission, details.mediaTypes)
       const answer = siteAnswer({ ...request, kinds }, decided(origin))
 
@@ -340,8 +342,8 @@ export function createPagePrompts(input: {
 
       permissionCallbacks.set(id, [...(permissionCallbacks.get(id) ?? []), (granted) => (granted ? grant(kinds, once) : once(false))])
 
-      // The agent's script that asked waits for this; it gets "no" in time rather than its own timeout.
-      if (input.agentRunning() && !deadlines.has(id))
+      // A script the agent caused waits for this; it gets "no" in time rather than at its own timeout.
+      if (input.agentCaused() && !deadlines.has(id))
         deadlines.set(
           id,
           setTimeout(() => {
@@ -357,7 +359,7 @@ export function createPagePrompts(input: {
       const origin = originOf(requesting)
       const request = { origin, top: contents.mainFrame.origin, mainFrame: details.isMainFrame }
 
-      if (permission === "clipboard-sanitized-write") return clipboardWrite(request, input.agentRunning())
+      if (permission === "clipboard-sanitized-write") return clipboardWrite(request, input.agentCaused())
       const kinds = permissionKinds(permission, details.mediaType ? [details.mediaType] : [])
 
       return siteAnswer({ ...request, kinds }, decided(origin)) === "allow"
