@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} vypršalo po {{timeout}} ms",
   "error.failedPort": "Nepodarilo sa získať port",
   "menu.remove": "Odstrániť",
+  "error.busy": "{{distro}} vykonáva inú úlohu. Skúste to znova, keď ju dokončí.",
 }

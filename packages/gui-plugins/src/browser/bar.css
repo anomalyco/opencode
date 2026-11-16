@@ -141,7 +141,7 @@
     display: none;
     flex: none;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
   }
 
   &:is(:hover, :focus-within) [data-slot="browser-address-actions"] {
@@ -159,7 +159,7 @@
     &::before {
       content: "";
       position: absolute;
-      inset: -4px -2px;
+      inset: -4px -3px;
     }
   }
 }

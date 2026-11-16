@@ -12,4 +12,12 @@ export default {
   noChanges: "වෙනස්කම් නොමැත",
   "settings.wrapLines.title": "පේළි එතීම",
   "settings.wrapLines.description": "ජංගම ඩිෆ්වල තිරස්ව අනුචලනය කිරීම වෙනුවට දිගු පේළි ඔතන්න",
+  "menu.count.one": "ගොනු {{count}} ක් වෙනස් විය",
+  "menu.count.other": "ගොනු {{count}} ක් වෙනස් විය",
+  "folder.more": "{{count}} · තවත් පෙන්වා නැත",
+  "folder.failed": "වෙනස්කම් පූරණය කළ නොහැකි විය",
+  "command.open": "සමාලෝචනය විවෘත කරන්න",
+  "load.failed": "වෙනස්කම් පූරණය කළ නොහැකි විය",
+  "load.timeout": "සේවාදායකය පිළිතුරු දීමට වැඩි කාලයක් ගත්තේය",
+  offline: "මෙම සේවාදායකය වෙත ළඟා විය නොහැක",
 }
