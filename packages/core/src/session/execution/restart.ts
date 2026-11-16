@@ -2,6 +2,7 @@ export * as SessionRestart from "./restart.js"
 
 import { Cause, Context, Effect, Layer, Option, Schema } from "effect"
 import { isReadonlyArrayNonEmpty } from "effect/Array"
+import { eq } from "drizzle-orm"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Shell as ShellSchema } from "@opencode/schema/shell"
 import { Bus } from "../../bus.js"
@@ -16,6 +17,7 @@ import { SessionExecution } from "../execution.js"
 import { SessionHistory } from "../history.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { SessionInboxTable } from "../sql.js"
 import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
@@ -103,7 +105,7 @@ export const layer = (options?: Options) =>
           yield* bus.publish(
             SessionEvent.Execution.Failed,
             { sessionID, error: RESUME_EXHAUSTED },
-            { commit: () => store.release(sessionID) },
+            { commit: (seq) => store.release(sessionID, seq) },
           )
           return false
         }
@@ -390,7 +392,13 @@ export const layer = (options?: Options) =>
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
           const state = { defer: true }
-          const wakes = new Set<SessionSchema.ID>()
+          const marked = yield* db
+            .selectDistinct({ sessionID: SessionInboxTable.session_id })
+            .from(SessionInboxTable)
+            .where(eq(SessionInboxTable.wake_on_restart, true))
+            .all()
+            .pipe(Effect.orDie)
+          const wakes = new Set(marked.map((row) => row.sessionID).filter((id) => !suspended.has(id)))
           yield* Effect.addFinalizer(() =>
             Effect.gen(function* () {
               state.defer = false

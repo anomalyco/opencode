@@ -1,6 +1,6 @@
 export * as Job from "./job.js"
 
-import { asc, eq, or } from "drizzle-orm"
+import { and, asc, eq, exists, isNull, or } from "drizzle-orm"
 import {
   Array,
   Cause,
@@ -21,6 +21,7 @@ import { JobList } from "./job/list.js"
 import { type Recovery, RecoverySchema } from "./job/recovery.js"
 import { JobTable } from "./job/sql.js"
 import { SessionMessage } from "./session/message.js"
+import { SessionInboxTable, SessionTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
 
 export type { Recovery }
@@ -168,7 +169,7 @@ export interface Interface {
   readonly pendingBackground: Effect.Effect<readonly Background[]>
   readonly runningBackground: Effect.Effect<readonly Recovery[]>
   readonly backgroundJobs: Effect.Effect<readonly JobList.Item[]>
-  readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
+  readonly completeBackground: (notificationID: SessionMessage.ID, wakeParent?: SessionSchema.ID) => Effect.Effect<void>
   /** Whether an explicit caller cancellation stopped this job (not shutdown teardown). */
   readonly isCancelled: (id: string) => Effect.Effect<boolean>
   readonly currentGeneration: (
@@ -607,19 +608,49 @@ export const make = Effect.gen(function* () {
     Effect.withSpan("Job.runningBackground"),
   )
 
-  const completeBackground: Interface["completeBackground"] = Effect.fn("Job.completeBackground")((notificationID) =>
-    SynchronizedRef.updateEffect(state.jobs, (jobs) =>
-      Effect.gen(function* () {
-        yield* db.delete(JobTable).where(eq(JobTable.notification_id, notificationID)).run().pipe(Effect.orDie)
-        const entry = [...jobs].find(([, job]) => job.info.notificationID === notificationID)
-        if (!entry) return jobs
-        // Still-running work keeps its entry, but must not persist its row again when it settles.
-        if (entry[1].info.status === "running") return new Map(jobs).set(entry[0], { ...entry[1], consumed: true })
-        const next = new Map(jobs)
-        next.delete(entry[0])
-        return next
-      }),
-    ),
+  const acknowledge = (notificationID: SessionMessage.ID, wakeParent?: SessionSchema.ID) => {
+    const remove = db.delete(JobTable).where(eq(JobTable.notification_id, notificationID)).run()
+    if (!wakeParent) return remove.pipe(Effect.orDie)
+
+    // Transfer the wake to the admitted row before losing the outbox. Promotion and
+    // inbox cancellation both consume the row, so neither can leave a stale wake.
+    const parent = db
+      .select({ id: SessionTable.id })
+      .from(SessionTable)
+      .where(and(eq(SessionTable.id, wakeParent), isNull(SessionTable.revert)))
+    return db
+      .transaction((tx) =>
+        tx
+          .update(SessionInboxTable)
+          .set({ wake_on_restart: true })
+          .where(
+            and(
+              eq(SessionInboxTable.id, notificationID),
+              eq(SessionInboxTable.session_id, wakeParent),
+              eq(SessionInboxTable.type, "synthetic"),
+              exists(parent),
+            ),
+          )
+          .run()
+          .pipe(Effect.andThen(remove)),
+      )
+      .pipe(Effect.orDie)
+  }
+
+  const completeBackground: Interface["completeBackground"] = Effect.fn("Job.completeBackground")(
+    (notificationID, wakeParent) =>
+      SynchronizedRef.updateEffect(state.jobs, (jobs) =>
+        Effect.gen(function* () {
+          yield* acknowledge(notificationID, wakeParent)
+          const entry = [...jobs].find(([, job]) => job.info.notificationID === notificationID)
+          if (!entry) return jobs
+          // Still-running work keeps its entry, but must not persist its row again when it settles.
+          if (entry[1].info.status === "running") return new Map(jobs).set(entry[0], { ...entry[1], consumed: true })
+          const next = new Map(jobs)
+          next.delete(entry[0])
+          return next
+        }),
+      ),
   )
 
   const currentGeneration: Interface["currentGeneration"] = Effect.fn("Job.currentGeneration")(function* (id) {

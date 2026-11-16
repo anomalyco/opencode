@@ -140,6 +140,7 @@ export const SessionInboxTable = sqliteTable(
       .$type<SessionStored.UserPayload | SyntheticPayload | CompactionPayload | MovePayload>()
       .notNull(),
     delivery: text().$type<SessionInbox.Delivery>().notNull(),
+    wake_on_restart: integer({ mode: "boolean" }).notNull().default(false),
     enqueued_seq: integer().notNull(),
     time_created: integer()
       .notNull()
