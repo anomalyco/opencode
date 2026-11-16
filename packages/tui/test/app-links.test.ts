@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test"
 import childProcess from "node:child_process"
+import os from "node:os"
 import path from "node:path"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"
@@ -97,7 +98,8 @@ test.each(["loaded", "pending"])(
 )
 
 function expectLaunch(launch: { command: string; args: readonly string[] }, target: string) {
-  if (process.platform === "win32") {
+  // `open` launches Windows PowerShell on both Windows and WSL; only the path conversion differs.
+  if (process.platform === "win32" || isWsl()) {
     expect(path.basename(launch.command).toLowerCase()).toBe("powershell.exe")
     expect(launch.args.slice(0, -1)).toEqual([
       "-NoProfile",
@@ -106,11 +108,19 @@ function expectLaunch(launch: { command: string; args: readonly string[] }, targ
       "Bypass",
       "-EncodedCommand",
     ])
+    const converted =
+      isWsl() && !/^https?:\/\//.test(target)
+        ? childProcess.execFileSync("wslpath", ["-aw", target], { encoding: "utf8" }).trim()
+        : target
     expect(Buffer.from(launch.args.at(-1)!, "base64").toString("utf16le")).toBe(
-      `$ProgressPreference = 'SilentlyContinue'; Start '${target.replaceAll("'", "''")}'`,
+      `$ProgressPreference = 'SilentlyContinue'; Start '${converted.replaceAll("'", "''")}'`,
     )
     return
   }
   expect(path.basename(launch.command)).toBe(process.platform === "darwin" ? "open" : "xdg-open")
   expect(launch.args).toEqual([target])
+}
+
+function isWsl() {
+  return process.platform === "linux" && os.release().toLowerCase().includes("microsoft")
 }
