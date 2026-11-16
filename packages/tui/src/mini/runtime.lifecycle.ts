@@ -17,6 +17,7 @@ import {
   type ScrollbackWriter,
 } from "@opentui/core"
 import { isFallbackTitle } from "@opencode/util/session-title-fallback"
+import { I18n } from "../i18n"
 import { setTerminalTitle } from "../util/renderer"
 import { monoSnapshot } from "./mono"
 import { entrySplash, exitSplash } from "./splash"
@@ -155,6 +156,7 @@ function queueSplash(
 export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lifecycle> {
   const footerTask = import("./footer")
   const tuiConfig = await input.tuiConfig
+  I18n.setLocale(tuiConfig.language)
   const miniSettings = resolveMiniSettings(tuiConfig)
   const mono = miniSettings.mono
   const renderer = await createCliRenderer({

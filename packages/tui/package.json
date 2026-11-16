@@ -16,6 +16,7 @@
     "./config/keybind": "./src/config/keybind.ts",
     "./config/v1": "./src/config/v1/index.tsx",
     "./config/v1/keybind": "./src/config/v1/keybind.ts",
+    "./i18n": "./src/i18n/index.ts",
     "./plugin/discovery": "./src/plugin/discovery.ts",
     "./editor": "./src/editor.ts",
     "./mini": "./src/mini/index.ts",
