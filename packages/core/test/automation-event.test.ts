@@ -639,6 +639,25 @@ it.effect("plain prompt events stay distinct and quote untrusted fields; oversiz
   }),
 )
 
+it.effect("rejects an oversized rendered event prompt before creating a child", () =>
+  Effect.gen(function* () {
+    const f = yield* setup()
+    const watch = yield* f.create({
+      action: { type: "prompt", prompt: "p".repeat(24 * 1024), to: { subagent: Agent.ID.make("helper") } },
+    })
+    yield* f.start
+    const stream = yield* f.opened
+    yield* f.event(stream.id, "large", "x".repeat(12 * 1024))
+    expect(yield* f.settled(watch.id, (row) => row.status === "paused")).toMatchObject({
+      runCount: 0,
+      lastOutput: "Event prompt exceeds 32 KiB",
+    })
+    const { db } = yield* Database.Service
+    expect((yield* db.select().from(SessionTable).all()).filter((row) => row.parent_id === sessionID)).toHaveLength(0)
+    expect(wakes).toEqual([])
+  }),
+)
+
 for (const stop of ["malformed", "truncated", "terminated", "no replay", "permission revoked", "expired"]) {
   it.effect(`stops the stream without a wake: ${stop}`, () =>
     Effect.gen(function* () {

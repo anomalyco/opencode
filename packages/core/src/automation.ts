@@ -489,6 +489,9 @@ const layer = Layer.effect(
         }
 
         if (action.type === "prompt") {
+          const text = event ? AutomationEvent.prompt(action.prompt, event) : action.prompt
+          if (event && Buffer.byteLength(text) > 32_768)
+            return yield* new InvalidError({ reason: "Event prompt exceeds 32 KiB" })
           const target = yield* promptTarget(row, action.to)
           // Only an unchanging timer prompt can be coalesced. Re-wake it in case the first wake was lost.
           if (!event && action.to.session && row.last_message_id && (yield* pending(row.last_message_id))) {
@@ -500,9 +503,6 @@ const layer = Layer.effect(
               time_updated: now,
             })
           }
-          const text = event ? AutomationEvent.prompt(action.prompt, event) : action.prompt
-          if (event && Buffer.byteLength(text) > 32_768)
-            return yield* new InvalidError({ reason: "Event prompt exceeds 32 KiB" })
           return yield* admit(target, text, { last_output: deliverySummary(target, action.to.subagent) })
         }
 
