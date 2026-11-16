@@ -105,6 +105,8 @@ pub struct Tabs {
     new_tab: Cell<bool>,
     /// The routed session the last [`route_changed`] admitted, so a remount does not record it twice.
     routed: RefCell<Option<String>>,
+    /// Where the viewed session's tab last sat (`currentTab`), kept by [`track`].
+    viewed: RefCell<Option<(String, usize)>>,
     focused: Cell<Option<bool>>,
     acknowledged: RefCell<HashMap<String, f64>>,
     retry: Cell<Option<opentui::prelude::TimerId>>,
@@ -316,6 +318,7 @@ fn enabled(weak: &std::rc::Weak<Tui>) -> Condition {
 
 /// After a route change: admit the routed session as a tab and record it in the history.
 pub fn route_changed(tui: &Tui) {
+    track(tui);
     retain(tui);
     let tabs = &tui.tabs;
     let routed = match tui.route() {
@@ -362,6 +365,7 @@ pub fn route_changed(tui: &Tui) {
 /// After the store changed: refresh titles and roots of open tabs (`normalize`), count prompt pulses, and
 /// acknowledge what the user sees.
 pub fn sync(tui: &Tui, changes: &Changes) {
+    track(tui);
     prefetch(tui, changes);
     if changes.sessions() {
         retain(tui);
@@ -558,12 +562,13 @@ fn remove(tui: &Tui, session: &str, navigate: bool) {
         tabs.anchors.borrow_mut().remove(id);
     }
     let open = tabs.tabs(tui);
-    let closed = model::close(&open, &target);
+    let known = tabs.viewed.borrow().clone().filter(|(session, _)| *session == target).map(|(_, index)| index);
+    let (closed, neighbour) = model::close(&open, &target, known);
     let selected = navigate && tabs.current(tui).as_ref() == Some(&target);
     if closed.is_none() && !selected {
         return;
     }
-    let (rest, neighbour) = closed.unwrap_or((open, None));
+    let rest = closed.unwrap_or(open);
     let next = if selected {
         let mut history = tabs.history.borrow_mut();
         history.record(&target);
@@ -573,7 +578,7 @@ fn remove(tui: &Tui, session: &str, navigate: bool) {
     };
     let removed = target.clone();
     update(tui, move |scope| {
-        if let Some((tabs, _)) = model::close(&scope.tabs, &removed) {
+        if let Some(tabs) = model::close(&scope.tabs, &removed, None).0 {
             scope.tabs = tabs;
         }
     });
@@ -744,8 +749,24 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     });
 }
 
+/// `currentTab`: where the viewed session's tab last sat. Another TUI sharing the tab list can close it while this
+/// one keeps showing the session; closing it here then still moves to a neighbour. Runs whenever the route, the
+/// roots or the tabs change, as the memo does.
+fn track(tui: &Tui) {
+    let current = tui.tabs.current(tui);
+    let index =
+        current.as_ref().and_then(|session| tui.tabs.tabs(tui).iter().position(|tab| tab.session_id == *session));
+    let mut viewed = tui.tabs.viewed.borrow_mut();
+    *viewed = match (current, index) {
+        (Some(session), Some(index)) => Some((session, index)),
+        (Some(session), None) => viewed.take().filter(|(previous, _)| *previous == session),
+        (None, _) => None,
+    };
+}
+
 /// Repaints what shows the tabs.
 fn changed(tui: &Tui) {
+    track(tui);
     crate::frame::refresh(tui);
     crate::features::attention::program_status::sync(tui);
     // The plugins read the tabs (`ui.tabs.list`), also after another client's write; and a tab opened without being
