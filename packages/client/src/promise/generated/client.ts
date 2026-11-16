@@ -117,8 +117,6 @@ import type {
   ExperimentalGenerateVideoCreateOutput,
   ExperimentalGenerateVideoGetInput,
   ExperimentalGenerateVideoGetOutput,
-  ExperimentalGenerateVideoContentInput,
-  ExperimentalGenerateVideoContentOutput,
   ExperimentalGenerateDecisionsInput,
   ExperimentalGenerateDecisionsOutput,
   ExperimentalVoiceModelsOutput,
@@ -249,6 +247,8 @@ import type {
   ExperimentalPersistentPtyConnectTokenOutput,
   ExperimentalMediaGetInput,
   ExperimentalMediaGetOutput,
+  ExperimentalBlobGetInput,
+  ExperimentalBlobGetOutput,
   ExperimentalScheduleCreateInput,
   ExperimentalScheduleCreateOutput,
   ExperimentalScheduleListInput,
@@ -1245,18 +1245,6 @@ export function make(options: ClientOptions) {
               },
               requestOptions,
             ).then((value) => value.data),
-          content: (input: ExperimentalGenerateVideoContentInput, requestOptions?: RequestOptions) =>
-            request<ExperimentalGenerateVideoContentOutput>(
-              {
-                method: "GET",
-                path: `/api/experimental/generate/video/${encodeURIComponent(input.id)}/content`,
-                successStatus: 200,
-                declaredStatuses: [400, 401, 403, 404],
-                empty: false,
-                binary: true,
-              },
-              requestOptions,
-            ),
         },
         decisions: (input: ExperimentalGenerateDecisionsInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalGenerateDecisionsOutput }>(
@@ -1550,6 +1538,20 @@ export function make(options: ClientOptions) {
             {
               method: "GET",
               path: `/api/experimental/media/${encodeURIComponent(input.hash)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+      },
+      blob: {
+        get: (input: ExperimentalBlobGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalBlobGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/blob/${encodeURIComponent(input.id)}`,
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
               empty: false,

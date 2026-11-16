@@ -57,7 +57,7 @@ const serve = (dir: string, enabled: boolean) =>
 const base = "http://opencode.local/api/experimental"
 const unknown = `video_${"0".repeat(12)}${"A".repeat(14)}`
 
-it.live("generates a video in the background and serves it by ID with Range and ETag support", () =>
+it.live("generates a video in the background and serves its blob with Range and ETag support", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-video-route-")).path
     const handler = yield* serve(dir, true)
@@ -77,16 +77,18 @@ it.live("generates a video in the background and serves it by ID with Range and 
       call(`${base}/generate/video/${data.id}`).pipe(
         Effect.flatMap((response) => Effect.promise(() => response.json())),
       ),
-      (body: { data: { status: string } }) => body.data.status !== "running",
+      (body: { data: { status: string; blob?: { id: string } } }) => body.data.status !== "running",
     )
-    expect(completed.data).toMatchObject({ id: data.id, status: "completed", mime: "video/mp4", bytes: 20 })
-    const route = `${base}/generate/video/${data.id}/content`
+    expect(completed.data).toMatchObject({ id: data.id, status: "completed", blob: { mime: "video/mp4", bytes: 20 } })
+    const blob = completed.data.blob?.id ?? ""
+    expect(blob.startsWith("blob_")).toBe(true)
+    const route = `${base}/blob/${blob}`
 
     const full = yield* call(route)
     expect(full.status).toBe(200)
     expect(full.headers.get("content-type")).toBe("video/mp4")
     expect(full.headers.get("accept-ranges")).toBe("bytes")
-    expect(full.headers.get("etag")).toBe(`"${data.id}"`)
+    expect(full.headers.get("etag")).toBe(`"${blob}"`)
     expect(full.headers.get("content-disposition")).toBe("attachment")
     expect(new Uint8Array(yield* Effect.promise(() => full.arrayBuffer()))).toEqual(video)
 
@@ -103,18 +105,17 @@ it.live("generates a video in the background and serves it by ID with Range and 
     const stale = yield* call(route, { headers: { range: "bytes=2-5", "if-range": '"other"' } })
     expect(stale.status).toBe(200)
 
-    const cached = yield* call(route, { headers: { "if-none-match": `"${data.id}"` } })
+    const cached = yield* call(route, { headers: { "if-none-match": `"${blob}"` } })
     expect(cached.status).toBe(304)
     expect((yield* Effect.promise(() => cached.arrayBuffer())).byteLength).toBe(0)
 
-    // Once its file is gone, the video is gone.
-    yield* Effect.promise(() => fs.rm(path.join(dir, "data", "objects", data.id)))
+    // Once its file is gone, the blob is gone.
+    yield* Effect.promise(() => fs.rm(path.join(dir, "data", "blobs", blob)))
     expect((yield* call(route)).status).toBe(404)
-    expect((yield* call(`${base}/generate/video/${data.id}`)).status).toBe(404)
 
     expect((yield* call(`${base}/generate/video/${unknown}`)).status).toBe(404)
     // An ID that isn't one never reaches the disk.
-    expect((yield* call(`${base}/generate/video/video_..%2F..%2Fsecret/content`)).status).toBe(400)
+    expect((yield* call(`${base}/blob/blob_..%2F..%2Fsecret`)).status).toBe(400)
   }).pipe(Effect.scoped),
 )
 

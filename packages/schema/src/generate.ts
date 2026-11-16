@@ -1,6 +1,7 @@
 export * as Generate from "./generate.js"
 
 import { Schema } from "effect"
+import { BlobStore } from "./blob-store.js"
 import { descending } from "./identifier.js"
 import { Model } from "./model.js"
 import { Money } from "./money.js"
@@ -144,13 +145,7 @@ export interface VideoCompleted extends Schema.Schema.Type<typeof VideoCompleted
 export const VideoCompleted = Schema.Struct({
   id: VideoID,
   status: Schema.Literal("completed"),
-  mime: Schema.String,
-  bytes: Schema.Finite,
-  expiresAt: Schema.Finite.annotate(
-    description(
-      "Epoch milliseconds after which the video may be deleted. Read it with GET /api/experimental/generate/video/:id/content",
-    ),
-  ),
+  blob: BlobStore.Info.annotate(description("The finished video. Read it with GET /api/experimental/blob/:id")),
 }).annotate({ identifier: "Generate.VideoCompleted" })
 
 export interface VideoError extends Schema.Schema.Type<typeof VideoError> {}

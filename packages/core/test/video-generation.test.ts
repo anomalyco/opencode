@@ -8,6 +8,7 @@ import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Generate } from "@opencode/core/generate"
+import { BlobStore } from "@opencode/core/blob-store"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { VideoID, VideoJob } from "@opencode/schema/generate"
@@ -39,34 +40,37 @@ const provider = () => ({
 type State = ReturnType<typeof provider>
 
 const app = (dir: string, state: State) =>
-  AppNodeBuilder.build(LayerNode.group([VideoGeneration.node, Database.node, LocationServiceMap.node]), [
-    Global.node.replace(Global.layerWith({ data: path.join(dir, "data"), config: path.join(dir, "config") })),
-    Database.node.replace(Database.configured({ path: "opencode.db" })),
-    offlineModels,
-    Watcher.node.replace(Watcher.configured({ enabled: false })),
-    Generate.node.replace(
-      makeLocationNode({
-        service: Generate.Service,
-        layer: Layer.succeed(
-          Generate.Service,
-          Generate.Service.of({
-            text: () => Effect.die("unused"),
-            image: () => Effect.die("unused"),
-            decisions: () => Effect.die("unused"),
-            video: {
-              start: () => Effect.suspend(() => state.start),
-              status: () =>
-                Effect.suspend(() =>
-                  state.failReads-- > 0 ? Effect.fail(providerError("reset")) : Effect.succeed(state.status),
-                ),
-              result: () => Effect.sync(() => ({ mime: "video/mp4", stream: state.result })),
-            },
-          }),
-        ),
-        deps: [],
-      }),
-    ),
-  ])
+  AppNodeBuilder.build(
+    LayerNode.group([VideoGeneration.node, BlobStore.node, Database.node, LocationServiceMap.node]),
+    [
+      Global.node.replace(Global.layerWith({ data: path.join(dir, "data"), config: path.join(dir, "config") })),
+      Database.node.replace(Database.configured({ path: "opencode.db" })),
+      offlineModels,
+      Watcher.node.replace(Watcher.configured({ enabled: false })),
+      Generate.node.replace(
+        makeLocationNode({
+          service: Generate.Service,
+          layer: Layer.succeed(
+            Generate.Service,
+            Generate.Service.of({
+              text: () => Effect.die("unused"),
+              image: () => Effect.die("unused"),
+              decisions: () => Effect.die("unused"),
+              video: {
+                start: () => Effect.suspend(() => state.start),
+                status: () =>
+                  Effect.suspend(() =>
+                    state.failReads-- > 0 ? Effect.fail(providerError("reset")) : Effect.succeed(state.status),
+                  ),
+                result: () => Effect.sync(() => ({ mime: "video/mp4", stream: state.result })),
+              },
+            }),
+          ),
+          deps: [],
+        }),
+      ),
+    ],
+  )
 
 const settled = (id: VideoID, step: Duration.Input = "5 seconds") =>
   eventually(
@@ -77,20 +81,14 @@ const settled = (id: VideoID, step: Duration.Input = "5 seconds") =>
     (job: VideoJob) => job.status !== "running",
   )
 
-const exists = (file: string) =>
-  Effect.promise(() =>
-    fs.stat(file).then(
-      () => true,
-      () => false,
-    ),
-  )
-const object = (dir: string, id: string) => path.join(dir, "data", "objects", id)
+const blobs = (dir: string) => path.join(dir, "data", "blobs")
+const listed = (dir: string) => Effect.promise(() => fs.readdir(blobs(dir)).catch(() => [] as string[]))
 
-it.effect("stores a finished video under objects/, reads it after a restart and deletes it after 7 days", () =>
+it.effect("stores a finished video as a blob, which outlives a restart until it's 7 days old", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-generation-")).path
     const state = provider()
-    const id = yield* Effect.gen(function* () {
+    const { id, blob } = yield* Effect.gen(function* () {
       const generations = yield* VideoGeneration.Service
       const started = yield* generations.start({ model, prompt: "a cat" })
       expect(yield* generations.get(started.id)).toEqual({ id: started.id, status: "running" })
@@ -99,22 +97,25 @@ it.effect("stores a finished video under objects/, reads it after a restart and 
       // A failed status read is retried at the next interval.
       state.failReads = 1
       const job = yield* settled(started.id)
-      expect(job).toMatchObject({ id: started.id, status: "completed", mime: "video/mp4", bytes: mp4.length })
-      if (job.status === "completed") expect(job.expiresAt).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000)
-      expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(object(dir, started.id))))).toEqual(mp4)
-      expect(yield* exists(`${object(dir, started.id)}.part`)).toBe(false)
-      return started.id
+      if (job.status !== "completed") throw new Error(`expected completed, got ${job.status}`)
+      expect(job.blob).toMatchObject({ mime: "video/mp4", bytes: mp4.length })
+      expect(job.blob.expiresAt).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000)
+      expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(path.join(blobs(dir), job.blob.id))))).toEqual(mp4)
+      expect(yield* listed(dir)).toEqual([job.blob.id])
+      return { id: started.id, blob: job.blob.id }
     }).pipe(Effect.provide(app(dir, state)))
 
     yield* Effect.gen(function* () {
       const generations = yield* VideoGeneration.Service
-      // A new process knows nothing of the job, but the object is the record.
-      expect(yield* generations.get(id)).toMatchObject({ status: "completed", mime: "video/mp4" })
-      const old = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
-      yield* Effect.promise(() => fs.utimes(object(dir, id), old, old))
-      yield* TestClock.adjust("1 hour")
-      yield* eventually(exists(object(dir, id)), (found) => !found)
+      const store = yield* BlobStore.Service
+      // A new process forgets the job, but the blob stays.
       expect(yield* generations.get(id).pipe(Effect.flip)).toMatchObject({ _tag: "VideoGeneration.NotFoundError" })
+      expect(yield* store.read(blob)).toMatchObject({ id: blob, mime: "video/mp4", bytes: mp4.length })
+      const old = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+      yield* Effect.promise(() => fs.utimes(path.join(blobs(dir), blob), old, old))
+      yield* TestClock.adjust("1 hour")
+      yield* eventually(listed(dir), (files) => files.length === 0)
+      expect(yield* store.read(blob).pipe(Effect.flip)).toMatchObject({ _tag: "BlobStore.NotFoundError" })
     }).pipe(Effect.provide(app(dir, state)))
   }),
 )
@@ -134,8 +135,7 @@ it.effect("deletes the partial file and reports an error when the download keeps
         reason: "failed",
         error: "connection reset",
       })
-      expect(yield* exists(`${object(dir, started.id)}.part`)).toBe(false)
-      expect(yield* exists(object(dir, started.id))).toBe(false)
+      expect(yield* listed(dir)).toEqual([])
     }).pipe(Effect.provide(app(dir, state)))
   }),
 )

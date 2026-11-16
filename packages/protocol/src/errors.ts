@@ -352,6 +352,15 @@ export class VideoNotFoundError extends Schema.TaggedError<VideoNotFoundError>()
   { httpApiStatus: 404 },
 ) {}
 
+export class BlobNotFoundError extends Schema.TaggedError<BlobNotFoundError>()(
+  "BlobNotFoundError",
+  {
+    blobID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
 export class ArtifactNotFoundError extends Schema.TaggedError<ArtifactNotFoundError>()(
   "ArtifactNotFoundError",
   {

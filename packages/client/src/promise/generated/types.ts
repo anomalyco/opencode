@@ -200,6 +200,8 @@ export type GenerateNative = { [x: string]: JsonValue }
 
 export type GenerateVideoID = string
 
+export type BlobID = string
+
 export type GenerateVideoErrorReason = "failed" | "cancelled" | "expired" | "unknown"
 
 export type GeneratePredicateAnswer = { type: "predicate"; name: string; probability: number }
@@ -736,13 +738,7 @@ export type ModelCost = {
 
 export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
 
-export type GenerateVideoCompleted = {
-  id: GenerateVideoID
-  status: "completed"
-  mime: string
-  bytes: number
-  expiresAt: number
-}
+export type BlobInfo = { id: BlobID; mime: string; bytes: number; expiresAt: number }
 
 export type GenerateVideoError = {
   id: GenerateVideoID
@@ -2218,7 +2214,7 @@ export type SessionMessageToolStateError1 = {
 
 export type GenerateVideoCreateResponse = { data: GenerateVideoRunning }
 
-export type GenerateVideoJob = GenerateVideoRunning | GenerateVideoCompleted | GenerateVideoError
+export type GenerateVideoCompleted = { id: GenerateVideoID; status: "completed"; blob: BlobInfo }
 
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer
@@ -2701,7 +2697,7 @@ export type SessionMessageAssistantTool1 = {
   time: { created: number; ran?: number; completed?: number }
 }
 
-export type GenerateVideoGetResponse = { data: GenerateVideoJob }
+export type GenerateVideoJob = GenerateVideoRunning | GenerateVideoCompleted | GenerateVideoError
 
 export type GenerateDecisionResult = {
   answers: Array<GenerateDecisionAnswer>
@@ -2810,6 +2806,8 @@ export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantText1
   | SessionMessageAssistantReasoning1
   | SessionMessageAssistantTool1
+
+export type GenerateVideoGetResponse = { data: GenerateVideoJob }
 
 export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
@@ -3310,6 +3308,14 @@ export type PtyFeatureUnsupportedError = {
 }
 export const isPtyFeatureUnsupportedError = (value: unknown): value is PtyFeatureUnsupportedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyFeatureUnsupportedError"
+
+export type BlobNotFoundError = {
+  readonly _tag: "BlobNotFoundError"
+  readonly blobID: string
+  readonly message: string
+}
+export const isBlobNotFoundError = (value: unknown): value is BlobNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "BlobNotFoundError"
 
 export type ScheduleNotFoundError = {
   readonly _tag: "ScheduleNotFoundError"
@@ -4052,10 +4058,6 @@ export type ExperimentalGenerateVideoGetInput = { readonly id: string }
 
 export type ExperimentalGenerateVideoGetOutput = GenerateVideoGetResponse["data"]
 
-export type ExperimentalGenerateVideoContentInput = { readonly id: string }
-
-export type ExperimentalGenerateVideoContentOutput = globalThis.Uint8Array
-
 export type ExperimentalGenerateDecisionsInput = {
   readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
   readonly input: ReadonlyArray<
@@ -4657,6 +4659,10 @@ export type ExperimentalPersistentPtyConnectTokenOutput = { data: PtyTicketConne
 export type ExperimentalMediaGetInput = { readonly hash: string }
 
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
+
+export type ExperimentalBlobGetInput = { readonly id: string }
+
+export type ExperimentalBlobGetOutput = globalThis.Uint8Array
 
 export type ExperimentalScheduleCreateInput = {
   readonly sessionID: string

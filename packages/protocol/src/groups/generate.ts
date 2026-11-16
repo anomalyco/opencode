@@ -1,7 +1,7 @@
 import { Generate } from "@opencode/schema/generate"
 import { Model } from "@opencode/schema/model"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import {
   ForbiddenError,
   VideoNotFoundError,
@@ -81,7 +81,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         identifier: "experimental.generate.video.create",
         summary: "Create a video generation",
         description:
-          "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the video for 7 days; read its state with GET /api/experimental/generate/video/:id and its bytes with GET /api/experimental/generate/video/:id/content. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+          "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished video as a blob for 7 days; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )
@@ -95,21 +95,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         identifier: "experimental.generate.video.get",
         summary: "Read a video generation",
         description:
-          "Read a video job: running, completed with the video's type, size and expiry, or error with a reason. A finished video stays readable after a server restart; a running job does not. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
-      }),
-    ),
-  )
-  .add(
-    HttpApiEndpoint.get("generate.video.content", "/api/experimental/generate/video/:id/content", {
-      params: { id: Generate.VideoID },
-      success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
-      error: [VideoNotFoundError, ForbiddenError, LocationNotFoundError],
-    }).annotateMerge(
-      OpenApi.annotations({
-        identifier: "experimental.generate.video.content",
-        summary: "Read a generated video",
-        description:
-          "Stream a finished video's bytes, with single byte Range, ETag and 304 Not Modified support. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+          "Read a video job: running, completed with the video's blob, or error with a reason. Jobs are kept in memory, so a server restart forgets them; a finished video's blob stays readable. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )
