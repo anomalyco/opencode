@@ -5,6 +5,7 @@ import { choiceLabel, choiceValue, Glyph, profileChoices } from "./choices"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
 import type { ExtensionAccess, ExtensionCompatibility, ProfileExtension, ProfileSource } from "./profile/ipc"
+import { promptHost } from "./prompt-machine"
 import { BrowserSites } from "./site-permissions"
 import { showToast } from "@opencode/ui/toast"
 
@@ -231,7 +232,8 @@ function SitePermissionsSection() {
   }
 
   const decisions = () => client()?.state()?.decisions ?? []
-  const site = (origin: string) => (URL.canParse(origin) ? new URL(origin).host || origin : origin)
+  // The end of a long host is the site's own domain: shown whole, wrapping, never cut off at the end.
+  const site = (origin: string) => promptHost(origin) || origin
   const failed = () => showToast({ title: ctx.t("common.requestFailed") })
 
   return (
@@ -250,7 +252,13 @@ function SitePermissionsSection() {
             <ui.SettingsRow
               id={index() === 0 ? "settings-browser-sites" : undefined}
               title={
-                <Identity fallback="outline-globe" name={site(decision.origin)} detail={names().permission} />
+                <span class="flex min-w-0 items-center gap-3">
+                  <Glyph fallback="outline-globe" />
+                  <span class="flex min-w-0 flex-col gap-1">
+                    <span dir="ltr" class="[overflow-wrap:anywhere]">{site(decision.origin)}</span>
+                    <Muted>{names().permission}</Muted>
+                  </span>
+                </span>
               }
             >
               <div class="flex items-center gap-2">

@@ -5,6 +5,7 @@ import type { DialogInfo } from "./dialog-machine"
 import { PROMPT_TEXT_MAX, type PromptAnswer, type PromptView } from "./ipc"
 import {
   initialPrompts,
+  promptHost,
   promptSite,
   promptText,
   selectPrompt,
@@ -247,7 +248,7 @@ export function createPagePrompts(input: {
     const id = enqueue({
       kind: "auth",
       key: answer.key,
-      host: new URL(details.url).host,
+      host: promptHost(details.url),
       realm: promptText(auth.realm, 256),
       failed: answer.attempt > 1,
     })

@@ -313,7 +313,7 @@ function Frame(props: {
     >
       <div data-slot="dialog-header" data-hide-close>
         <div data-slot="dialog-title-group">
-          <h2 id={props.title} data-slot="dialog-title" class="max-w-full truncate" dir="auto">
+          <h2 id={props.title} data-slot="dialog-title" class="max-w-full [overflow-wrap:anywhere]" dir="auto">
             {props.heading}
           </h2>
           <Show when={props.detail}>

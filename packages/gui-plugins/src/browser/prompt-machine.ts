@@ -92,6 +92,18 @@ export function selectPrompted(state: PromptState, id: number) {
 const HOST_MAX = 64
 
 /**
+ * The host of a URL or origin as every prompt and list of the pane names it: ASCII, so an international name shows as
+ * punycode, and at most HOST_MAX characters, keeping the end, where the registrable domain is. Show it whole and let
+ * it wrap; never truncate it with CSS, which would hide that end.
+ */
+export function promptHost(url: string) {
+  if (!URL.canParse(url)) return ""
+  const host = new URL(url).host
+
+  return host.length > HOST_MAX ? `…${host.slice(1 - HOST_MAX)}` : host
+}
+
+/**
  * Who asks, from the asking document's real address and the tab's: its host as the URL parser writes it (ASCII, so an
  * international name shows as punycode and cannot pass for another), a local file, or a page with no host.
  */
@@ -106,9 +118,7 @@ export function promptSite(url: string, top: string) {
   if (parsed.protocol === "file:" || parsed.protocol === `${previewScheme}:`) return { kind: "file" as const, host: "", embedded }
 
   if (!/^https?:$/.test(parsed.protocol) || !parsed.host) return { kind: "page" as const, host: "", embedded }
-  const host = parsed.host
-
-  return { kind: "web" as const, host: host.length > HOST_MAX ? `…${host.slice(1 - HOST_MAX)}` : host, embedded }
+  return { kind: "web" as const, host: promptHost(url), embedded }
 }
 
 /** Page-supplied text the pane shows as text: bounded, without controls that reorder or hide what follows. */

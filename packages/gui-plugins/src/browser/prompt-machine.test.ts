@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   initialPrompts,
+  promptHost,
   promptSite,
   promptText,
   selectPrompt,
@@ -76,6 +77,18 @@ describe("who asks", () => {
       host: "xn--bcher-kva.example",
       embedded: false,
     })
+  })
+
+  test("shows the end of every host it names, where the registrable domain is, in one formatter", () => {
+    const phish = "https://sso.corp.example.com.auth-portal-session-verify.account-security-check.evil.test:8443/auth"
+    const host = promptHost(phish)
+
+    expect(host.length).toBeLessThanOrEqual(64)
+    expect(host.endsWith(".evil.test:8443")).toBe(true)
+    expect(host.startsWith("…")).toBe(true)
+    expect(promptHost("https://bücher.example/")).toBe("xn--bcher-kva.example")
+    expect(promptHost("http://127.0.0.1:7821")).toBe("127.0.0.1:7821")
+    expect(promptHost("not a url")).toBe("")
   })
 
   test("keeps the end of a long host, where its own domain is", () => {

@@ -92,7 +92,7 @@ export const PromptView = Schema.Struct({
       permissions: Schema.Array(Schema.Literals(["camera", "microphone", "location", "notifications", "clipboard-read"])),
       remember: Schema.Boolean,
     }),
-    Schema.Struct({ kind: Schema.Literal("auth"), host: text(300), realm: detail(256), failed: Schema.Boolean }),
+    Schema.Struct({ kind: Schema.Literal("auth"), host: text(80), realm: detail(256), failed: Schema.Boolean }),
     Schema.Struct({
       kind: Schema.Literal("system"),
       device: Schema.Literals(["camera", "microphone"]),
