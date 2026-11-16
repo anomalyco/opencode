@@ -37,7 +37,7 @@ test("standalone server exits when its owner is killed", async () => {
   }
 })
 
-test("standalone server reconnects after its child exits without leaking the replacement", async () => {
+test("standalone reconnect reuses live children, replaces exited children, and honors explicit restart", async () => {
   await using root = await tmpdir("opencode-cli-standalone-recovery-")
   const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "fixture/standalone-recovery-owner.ts")], {
     cwd: path.join(import.meta.dir, ".."),
@@ -48,18 +48,24 @@ test("standalone server reconnects after its child exits without leaking the rep
   })
   const line = await Promise.race([
     readLine(owner.stdout, "STANDALONE_RECOVERED "),
-    Bun.sleep(20_000).then(() => undefined),
+    Bun.sleep(30_000).then(() => undefined),
   ])
-  const [, previous, replacement, status] = line?.split(" ") ?? []
+  const [, previous, live, replacement, reused, restarted, status] = line?.split(" ") ?? []
   const oldPID = Number(previous)
-  const pid = Number(replacement)
+  const nextPID = Number(replacement)
+  const pid = Number(restarted)
 
   try {
     expect(oldPID).toBeGreaterThan(0)
+    expect(Number(live)).toBe(oldPID)
+    expect(nextPID).toBeGreaterThan(0)
+    expect(nextPID).not.toBe(oldPID)
+    expect(Number(reused)).toBe(nextPID)
     expect(pid).toBeGreaterThan(0)
-    expect(pid).not.toBe(oldPID)
+    expect(pid).not.toBe(nextPID)
     expect(status).toBe("200")
     expect(running(oldPID)).toBe(false)
+    expect(running(nextPID)).toBe(false)
     expect(running(pid)).toBe(true)
 
     owner.kill("SIGKILL")

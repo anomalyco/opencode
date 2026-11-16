@@ -71,17 +71,29 @@ export const recoverable = Effect.fn("cli.standalone.recoverable")(function* (op
       Scope.provide(child),
       Effect.onError((cause) => Scope.close(child, Exit.failCause(cause))),
     )
-  const endpoint = yield* launch(scope)
+  let endpoint = yield* launch(scope)
+  let lastLaunch = Date.now()
+  const replace = Effect.gen(function* () {
+    // A crashing child must not cause an unbounded restart loop.
+    const delay = 1_000 - (Date.now() - lastLaunch)
+    if (delay > 0) yield* Effect.sleep(delay)
+    // A replacement must not overlap the old server: both use the same local data.
+    yield* Scope.close(scope, Exit.void)
+    scope = yield* Scope.fork(owner)
+    endpoint = yield* launch(scope)
+    lastLaunch = Date.now()
+    return endpoint
+  })
   const reconnect = () =>
     lock.withPermits(1)(
       Effect.gen(function* () {
-        // A replacement must not overlap the old server: both use the same local data.
-        yield* Scope.close(scope, Exit.void)
-        scope = yield* Scope.fork(owner)
-        return yield* launch(scope)
+        // Stream disconnects also occur while the server is healthy (idle timeout, resync).
+        const exited = yield* endpoint.exited.pipe(Effect.exit, Effect.timeoutOption("20 millis"))
+        if (exited._tag === "None") return endpoint
+        return yield* replace
       }),
     )
-  return { endpoint, reconnect, restart: () => reconnect().pipe(Effect.asVoid) }
+  return { endpoint, reconnect, restart: () => lock.withPermits(1)(replace.pipe(Effect.asVoid)) }
 })
 
 export * as Standalone from "./standalone"

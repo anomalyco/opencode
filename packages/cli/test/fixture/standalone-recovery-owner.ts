@@ -12,14 +12,20 @@ await Effect.runPromise(
         command: [process.execPath, path.join(import.meta.dir, "../../src/index.ts"), "serve"],
       })
       const previous = instance.endpoint
+      const live = yield* instance.reconnect()
       process.kill(previous.pid, "SIGKILL")
       yield* Effect.exit(previous.exited)
 
       const next = yield* instance.reconnect()
+      const reused = yield* instance.reconnect()
+      yield* instance.restart()
+      const restarted = yield* instance.reconnect()
       const response = yield* Effect.promise(() =>
-        fetch(new URL("/api/info", next.url), { headers: Service.headers(next) }),
+        fetch(new URL("/api/info", restarted.url), { headers: Service.headers(restarted) }),
       )
-      console.log(`STANDALONE_RECOVERED ${previous.pid} ${next.pid} ${response.status}`)
+      console.log(
+        `STANDALONE_RECOVERED ${previous.pid} ${live.pid} ${next.pid} ${reused.pid} ${restarted.pid} ${response.status}`,
+      )
       return yield* Effect.never
     }),
   ),
