@@ -1705,6 +1705,32 @@ test("ignores activity snapshots from an older connection", async () => {
   }
 })
 
+test("removes only the rejected permission prompt", () => {
+  const setup = activityFixture(() => Response.json({ data: {} }))
+  const requests = ["per_expired", "per_sibling"]
+  try {
+    requests.forEach((id) =>
+      setup.emit({
+        type: "permission.asked",
+        location: { directory: "/project" },
+        data: { id, sessionID: "ses_refresh", action: "shell", resources: ["pwd"] },
+      }),
+    )
+    expect(setup.data.session.permission.list("ses_refresh")?.map((request) => request.id)).toEqual(requests)
+
+    setup.emit({
+      type: "permission.replied",
+      location: { directory: "/project" },
+      data: { sessionID: "ses_refresh", requestID: "per_expired", reply: "reject" },
+    })
+    expect(setup.data.session.permission.list("ses_refresh")).toEqual([
+      { id: "per_sibling", sessionID: "ses_refresh", action: "shell", resources: ["pwd"] },
+    ])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("projects background user shell metadata from durable shell data", () => {
   const setup = activityFixture(() => Response.json({ data: {} }))
   try {
