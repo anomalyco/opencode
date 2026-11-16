@@ -4,7 +4,7 @@
 
 use std::path::Path;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use opencode_local::cli_config::{CliConfig, Info};
 use opencode_tui::Tui;
@@ -39,25 +39,44 @@ fn a_settings_write_reaches_the_tabs_and_the_leader_timeout_at_once() {
     settings::update(&tui, set(&["tabs", "mode"], json!("off")));
     assert!(!Tabs::enabled(&tui), "tabs.mode stayed at its startup value");
 
-    // `leader.timeout` shortens the next leader. The leader's deadline is in real time, not the test clock, so
-    // the expiry is checked at instants past the press.
+    // `leader.timeout` shortens the next leader.
     settings::update(&tui, set(&["leader", "timeout"], json!(250)));
     app.press("ctrl+x");
-    let pressed = Instant::now();
     assert!(tui.keymap.leader_active());
-    assert!(
-        tui.keymap.expire_leader(pressed + Duration::from_millis(300)),
-        "the leader waited for the startup timeout"
-    );
-    assert!(!tui.keymap.leader_active());
+    app.advance(Duration::from_millis(250));
+    assert!(!tui.keymap.leader_active(), "the leader waited for the startup timeout");
     // And lengthens it.
     settings::update(&tui, set(&["leader", "timeout"], json!(5000)));
     app.press("ctrl+x");
-    let pressed = Instant::now();
-    assert!(!tui.keymap.expire_leader(pressed + Duration::from_millis(2500)));
     assert!(tui.keymap.leader_active());
-    assert!(tui.keymap.expire_leader(pressed + Duration::from_millis(5100)));
+    app.advance(Duration::from_millis(2500));
+    assert!(tui.keymap.leader_active());
+    app.advance(Duration::from_millis(2500));
     assert!(!tui.keymap.leader_active());
+}
+
+/// The leader sequence expires `leader.timeout` after the leader on the app's clock, though the keymap stops the
+/// key before `App::on_key`. A key just before then completes the sequence; one at it is typed into the prompt.
+#[test]
+fn the_leader_sequence_expires_on_the_app_clock() {
+    for (config, wait, completes) in [
+        ("{}", 1999, true),
+        ("{}", 2000, false),
+        (r#"{ "leader": { "timeout": 250 } }"#, 249, true),
+        (r#"{ "leader": { "timeout": 250 } }"#, 250, false),
+    ] {
+        let app = TestApp::new(100, 30);
+        let tui = support::mount_empty(&app, opencode_local::cli_config::decode_text(config).unwrap(), None);
+        app.press("ctrl+x");
+        // The first read prunes the sequence's captures, which restarts the timer as in TS; a frame reads it at once.
+        assert!(tui.keymap.leader_active());
+        app.advance(Duration::from_millis(wait));
+        assert_eq!(tui.keymap.leader_active(), completes, "{config} after {wait} ms");
+        // `session.list` is `<leader>l`.
+        app.press("l");
+        let typed = tui.textarea.borrow().as_ref().map(|textarea| textarea.text()).unwrap_or_default();
+        assert_eq!((tui.dialogs.is_open(), typed.as_str()), (completes, if completes { "" } else { "l" }), "{config}");
+    }
 }
 
 #[test]

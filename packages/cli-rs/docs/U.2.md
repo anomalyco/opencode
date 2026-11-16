@@ -37,8 +37,9 @@ pending sequence, the managed textarea layer with the configured bindings of the
 - Focus: the app calls `set_focus(path)` on the inner `Keymap`. The managed textarea layer is enabled by
   `options.textarea_enabled`, and its commands call `options.textarea_run(EditorAction)`. While the condition
   holds, the app must not let the focused textarea handle keys itself (TS suspends it).
-- Leader: the keymap has no clock. `leader_deadline()` says when to schedule a timer; the timer calls
-  `expire_leader(now)`.
+- Leader: the keymap has no clock. When the pending sequence changes, `leader_armed()` gives the generation to
+  schedule a timer for, `leader_timeout()` later; the timer calls `expire_leader(generation)`.
+  `dialog::expire_leader` does this on the app's clock.
 - Layers: `layer(KeymapLayer)` is `Keymap.createLayer`: a mode (`base` by default, `global` for none), an
   `enabled` condition, an optional target and priority, commands, and `bindings` (names whose configured keys
   join the layer). A named command binds its configured keys, else its `bind` string, unless `bind` is

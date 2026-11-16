@@ -23,7 +23,7 @@ pub mod queue;
 pub mod status;
 
 use opencode_api::generated::{SessionInboxDelivery, SessionInboxItem, SessionInboxUser};
-use opencode_ui::dialog::{DialogKeymap, route_keys};
+use opencode_ui::dialog::{DialogKeymap, expire_leader, route_keys};
 use opencode_ui::keymap::{Keybinds, KeymapLayer, TuiCommand};
 use opencode_ui::prompt_input::editor::{Mention, normalize, realign_mentions};
 use opencode_ui::prompt_input::parse;
@@ -248,19 +248,7 @@ impl Prompt {
     pub fn install(&self) {
         let app = &self.0.app;
         route_keys(app, self.0.keymap.clone());
-        let timer = Rc::new(Cell::new(None::<TimerId>));
-        app.on_key(bind!(self.0.keymap, |keys, cx, _| {
-            if let Some(previous) = timer.take() {
-                cx.cancel_timer(previous);
-            }
-            let Some(deadline) = keys.leader_deadline() else { return };
-            timer.set(Some(cx.set_timeout(
-                deadline.saturating_duration_since(cx.now()),
-                bind!(keys, |keys, cx| {
-                    keys.expire_leader(cx.now());
-                }),
-            )));
-        }));
+        self.0.layers.borrow_mut().push(expire_leader(app, &self.0.keymap));
     }
 
     pub fn set_hooks(&self, hooks: Hooks) {
@@ -1646,6 +1634,41 @@ mod tests {
         // Previews take four rows when they fit.
         assert_eq!(layout(30, 1, 0, 1, true).images, 4);
         assert_eq!(layout(5, 1, 0, 1, true).images, 0);
+    }
+
+    /// The leader sequence expires `leader.timeout` after the leader on the app's clock, though `route_keys` stops
+    /// the key before `App::on_key`. A key just before then completes the sequence; one at it is typed.
+    #[test]
+    fn the_leader_sequence_expires_on_the_app_clock() {
+        let theme = crate::theme::resolve(&crate::theme::ThemeInput::default());
+        for (config, wait, completes) in [
+            ("{}", 1999, true),
+            ("{}", 2000, false),
+            (r#"{ "leader": { "timeout": 250 } }"#, 249, true),
+            (r#"{ "leader": { "timeout": 250 } }"#, 250, false),
+        ] {
+            let app = opentui::testing::TestApp::new(40, 12);
+            let info = opencode_local::cli_config::decode_text(config).unwrap();
+            let prompt = Prompt::new(&app, &theme, false, &info);
+            app.root().add(prompt.root());
+            prompt.install();
+            prompt.focus();
+            let ran = Rc::new(Cell::new(false));
+            let command = TuiCommand::inline(
+                "<leader>z",
+                bind!(ran, |ran, _: Option<&str>, _: Option<&KeyEvent>| {
+                    ran.set(true);
+                }),
+            );
+            let _layer = prompt.keymap().layer(KeymapLayer::new(vec![command])).unwrap();
+            app.press("ctrl+x");
+            assert!(prompt.keymap().leader_active());
+            app.advance(Duration::from_millis(wait));
+            assert_eq!(prompt.keymap().leader_active(), completes, "{config} after {wait} ms");
+            app.press("z");
+            let typed = if completes { "" } else { "z" };
+            assert_eq!((ran.get(), prompt.value().as_str()), (completes, typed), "{config} after {wait} ms");
+        }
     }
 
     #[test]
