@@ -58,6 +58,7 @@ import {
 } from "./policy"
 import type { PaneElement, RefusalNotice } from "./ipc"
 import { navigationNotice } from "./refusal-notice"
+import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { previewAddress, previewFile, reloadAddress } from "./preview"
 import { previewScheme } from "./scheme"
 import { workspaceFile } from "./workspace-file"
@@ -226,6 +227,7 @@ export function createBrowserPage(
     /** Extensions whose `chrome-extension://` pages may open, such as their popups and options. */
     extensions?: () => ReadonlyArray<string>
     shared: Shared
+    menu: PageMenuHost
     embeds: Embeds
   },
 ) {
@@ -674,10 +676,26 @@ export function createBrowserPage(
   // Hidden tabs keep a desktop-sized viewport until the renderer lays the embed out.
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   const embed = options.embeds.create(view, win)
+
+  const menu = attachPageMenu(win, contents, {
+    ...options.menu,
+    policy: {
+      get fileRoots() { return policy.fileRoots },
+      get extensions() { return policy.extensions },
+      previewHost: options.previewHost,
+      local: !!options.previewHost,
+    },
+    cdp,
+    sessions: () => sessions.values(),
+    available: () => !closed() && view.getVisible() && activity.agentRuns === 0,
+    failed: () => publish("browser.menu.failed"),
+  })
+
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
     if (visible) return
+    menu.close()
     void dispatchPicker({ type: "embed.hidden" })
 
     if (!closed()) options.hidden?.()
@@ -825,6 +843,7 @@ export function createBrowserPage(
     async dispose() {
       if (closed()) return
       dispatch({ type: "disposed" })
+      menu.dispose()
       dispatchDialog({ type: "disposed" })
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)

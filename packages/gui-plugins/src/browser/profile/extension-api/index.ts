@@ -37,6 +37,7 @@ export async function createExtensionApis(input: {
   const extensions = () => input.session.extensions.getAllExtensions()
   const manifest = createManifests()
   const tabs = createExtensionTabs({ emit, extensions, manifest })
+  const menus = createContextMenus({ tabs, emit, extensions, manifest })
   const popups = createPopups({ partition: input.partition, tabs })
 
   const actions = createActions({
@@ -59,7 +60,7 @@ export async function createExtensionApis(input: {
       tabs.module,
       actions.module,
       createWebNavigation({ tabs, emit }),
-      createContextMenus({ tabs, emit, extensions, manifest }),
+      menus.module,
       createCookies({ session: input.session, tabs, emit, extensions, manifest }),
       createPermissions({ manifest }),
       createNotifications({ emit, manifest }),
@@ -72,6 +73,7 @@ export async function createExtensionApis(input: {
 
   return {
     tabs,
+    menu: menus.template,
     /** The toolbar button state the extensions menu shows, for extensions that have a button. */
     action: actions.view,
     /**

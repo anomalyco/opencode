@@ -71,6 +71,7 @@ export type Pane = ReturnType<typeof createBrowserPane>
 
 export function createBrowserPane(input: {
   readonly windows: Windows
+  readonly t: (key: string) => string
   readonly serverEndpoints: ServerEndpoints
   readonly storage: BuiltinMainStorage
   /** The declared store of reserved element refs. */
@@ -582,6 +583,12 @@ export function createBrowserPane(input: {
       previewHost: handle.previewHost,
       extensions: () => extensions(binding),
       shared,
+      menu: {
+        t: input.t,
+        extensions: (contents, params) => handle.shared ? input.profile.extensionMenu(contents, params) : [],
+        navigate: async (type) => { if (current()) await execute(binding, { action: { type, tabID: id }, files: [] }, handle.abort.signal, "user") },
+        open: async (url) => { if (current()) await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user") },
+      },
       embeds: input.embeds,
       fail,
       refused: (notice) => {

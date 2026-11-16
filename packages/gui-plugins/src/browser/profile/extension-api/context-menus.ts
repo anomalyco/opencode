@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import electron, { type ContextMenuParams, type Extension, type MenuItemConstructorOptions } from "electron"
+import type { ContextMenuParams, Extension, MenuItemConstructorOptions } from "electron"
 import { method, none, optional, type ApiModule, type Emit } from "./api"
 import { matchesHost } from "./match-pattern"
 import type { Manifests } from "./manifest"
@@ -174,15 +174,15 @@ export function menuTarget(
 }
 
 /**
- * `chrome.contextMenus`. Items live in main and show in a tab's right-click menu, which the pane has none of
- * otherwise; each extension's items sit under its name when it has more than one.
+ * `chrome.contextMenus` contributes to the pane's native menu. Each extension's items sit under its name when
+ * it has more than one; the extension API never sees built-in items or a local preview's context.
  */
 export function createContextMenus(input: {
   tabs: ExtensionTabs
   emit: Emit
   extensions: () => readonly Extension[]
   manifest: Manifests
-}): ApiModule {
+}) {
   const menus = new Map<string, readonly MenuItem[]>()
 
   const change = (extension: string, next: (items: readonly MenuItem[]) => readonly MenuItem[]) => {
@@ -217,12 +217,13 @@ export function createContextMenus(input: {
     )
   }
 
-  const release = input.tabs.watch((tab) => {
-    const shown = (_event: Electron.Event, params: ContextMenuParams) => {
-      if ([params.pageURL, params.frameURL, params.linkURL, params.srcURL].some(privateFile)) return
+  const template = (id: number, params: ContextMenuParams) => {
+      const tab = input.tabs.get(id)
+
+      if (!tab || [params.pageURL, params.frameURL, params.linkURL, params.srcURL].some(privateFile)) return []
       const target = menuTarget(params)
 
-      const template = input.extensions().flatMap((extension): MenuItemConstructorOptions[] => {
+      return input.extensions().flatMap((extension): MenuItemConstructorOptions[] => {
         const items = menus.get(extension.id) ?? []
 
         const build = (item: MenuItem): MenuItemConstructorOptions => {
@@ -247,17 +248,9 @@ export function createContextMenus(input: {
         return top.length <= 1 ? top : [{ label: extension.name, submenu: top }]
       })
 
-      if (template.length > 0) electron.Menu.buildFromTemplate(template).popup({ window: tab.window })
-    }
+  }
 
-    tab.contents.on("context-menu", shown)
-
-    return () => {
-      if (!tab.contents.isDestroyed()) tab.contents.off("context-menu", shown)
-    }
-  })
-
-  return {
+  const module: ApiModule = {
     namespaces: [
       {
         path: "contextMenus",
@@ -300,6 +293,7 @@ export function createContextMenus(input: {
     },
     // An extension turned off and on again creates its items again at start.
     forget: (extension) => void menus.delete(extension),
-    dispose: release,
   }
+
+  return { module, template }
 }

@@ -320,6 +320,7 @@ export async function createBrowserProfile(input: {
     previews,
     /** The pane's tabs and windows as extensions see them; the pane registers each tab of the profile. */
     extensionTabs: apis.tabs,
+    extensionMenu: apis.menu,
     /** Extensions loaded now, whose pages may open in a tab. */
     extensionIDs: () => session.extensions.getAllExtensions().map((extension) => extension.id),
     extensions: () =>

@@ -78,6 +78,7 @@ const setup: Plugin.MainSetup = (ctx) => {
                 attempt: effect.attempt,
                 pane: module.createBrowserPane({
                   windows: ctx.windows,
+                  t: ctx.t,
                   serverEndpoints: ctx.serverEndpoints,
                   storage: builtinMainContext(ctx).storage,
                   refs,
