@@ -52,6 +52,7 @@ import {
   destinationOrigin,
   downloadOwner,
   excludedFrames,
+  inputDocument,
   extensionURL,
   localFileURL,
   normalizeURL,
@@ -905,7 +906,7 @@ export function createBrowserPage(
   }
 
   async function perform(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user") {
-    if (origin === "user") return attempt(command, signal)
+    if (origin === "user") return attempt(command, signal, origin)
     const refused = agentRefusal(command.action, mainDocument())
 
     if (refused) throw new Error(refused)
@@ -913,7 +914,7 @@ export function createBrowserPage(
     const framed = await extensionFrameRefusal(used)
 
     if (framed) throw new Error(framed)
-    const result = await attempt(command, signal)
+    const result = await attempt(command, signal, origin)
     // A redirect, or a navigation while it ran, may have brought an extension page in, in the tab or in a frame the
     // action used; its result stays here.
     const moved = agentRefusal({ type: "snapshot" }, mainDocument()) ?? (await extensionFrameRefusal(used))
@@ -939,7 +940,7 @@ export function createBrowserPage(
     return context
   }
 
-  async function attempt(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
+  async function attempt(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
     if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
       await dispatchPicker({ type: "pointer.command" })
 
@@ -961,17 +962,19 @@ export function createBrowserPage(
       )
     abortError(signal)
 
-    return execute(command.action, command.files, signal, command.target)
+    return execute(command.action, command.files, signal, origin, command.target)
   }
 
   async function execute(
     action: Browser.Action,
     transfers: readonly Browser.File[],
     signal: AbortSignal,
+    origin: "agent" | "user",
     approved?: Browser.Target,
   ): Promise<Browser.Result> {
     const captureSources = sourceURLs()
     const transfer = (id: Browser.FileID) => files.transfer(id, approved?.resources)
+    const input = dispatchInput(origin, signal)
 
     const result = <T>(value: T, attached: Browser.File[] = []): Browser.Result => {
       const json = Schema.decodeUnknownSync(Schema.Json)(value)
@@ -1074,10 +1077,10 @@ export function createBrowserPage(
       }
 
       case "click":
-        await click(target(action.ref), action.button ?? "left", action.count ?? 1, action.modifiers)
+        await click(input, target(action.ref), action.button ?? "left", action.count ?? 1, action.modifiers)
         break
       case "hover":
-        await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...(await point(target(action.ref))) })
+        await input("Input.dispatchMouseEvent", { type: "mouseMoved", ...(await point(target(action.ref))) })
         break
       case "drag": {
         const source = target(action.from)
@@ -1094,8 +1097,9 @@ export function createBrowserPage(
         })
 
         await cdp.send("Input.setInterceptDrags", { enabled: true })
-        await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...from })
-        await cdp.send("Input.dispatchMouseEvent", {
+        try {
+        await input("Input.dispatchMouseEvent", { type: "mouseMoved", ...from })
+        await input("Input.dispatchMouseEvent", {
           type: "mousePressed",
           ...from,
           button: "left",
@@ -1103,10 +1107,9 @@ export function createBrowserPage(
           clickCount: 1,
         })
 
-        try {
           for (let i = 1; i <= 10; i++) {
             abortError(signal)
-            await cdp.send("Input.dispatchMouseEvent", {
+            await input("Input.dispatchMouseEvent", {
               type: "mouseMoved",
               x: from.x + ((to.x - from.x) * i) / 10,
               y: from.y + ((to.y - from.y) * i) / 10,
@@ -1118,30 +1121,30 @@ export function createBrowserPage(
           if (html5) await waitFor(() => data !== undefined, signal, 2_000)
 
           if (data) {
-            for (const type of ["dragEnter", "dragOver", "drop"])
-              await cdp.send("Input.dispatchDragEvent", { type, ...to, data })
+            for (const type of ["dragEnter", "dragOver", "drop"] as const)
+              await input("Input.dispatchDragEvent", { type, ...to, data })
           }
         } finally {
           off()
           await cdp.send("Input.setInterceptDrags", { enabled: false })
-          await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...to, button: "left", clickCount: 1 })
+          await input("Input.dispatchMouseEvent", { type: "mouseReleased", ...to, button: "left", clickCount: 1 })
         }
 
         break
       }
 
       case "fill":
-        await fill(target(action.ref), action.text, signal)
+        await fill(input, target(action.ref), action.text, signal)
         break
       case "fill_form":
         for (const field of action.fields) {
           abortError(signal)
 
-          if (field.type === "text") await fill(target(field.ref), field.value, signal)
+          if (field.type === "text") await fill(input, target(field.ref), field.value, signal)
 
           if (field.type === "select") await select(target(field.ref), field.values)
 
-          if (field.type === "check") await check(target(field.ref), field.checked)
+          if (field.type === "check") await check(input, target(field.ref), field.checked)
         }
 
         break
@@ -1149,14 +1152,14 @@ export function createBrowserPage(
         await select(target(action.ref), action.values)
         break
       case "check":
-        await check(target(action.ref), action.checked)
+        await check(input, target(action.ref), action.checked)
         break
       case "press":
-        await key(action.key)
+        await key(input, action.key)
         break
       case "scroll": {
         const bounds = view.getBounds()
-        await cdp.send("Input.dispatchMouseEvent", {
+        await input("Input.dispatchMouseEvent", {
           type: "mouseWheel",
           x: bounds.width / 2,
           y: bounds.height / 2,
@@ -1291,8 +1294,8 @@ export function createBrowserPage(
         if (action.type === "files.drop") {
           const position = await point(element)
 
-          for (const type of ["dragEnter", "dragOver", "drop"])
-            await cdp.send("Input.dispatchDragEvent", {
+          for (const type of ["dragEnter", "dragOver", "drop"] as const)
+            await input("Input.dispatchDragEvent", {
               type,
               ...position,
               data: { items: [], files: local, dragOperationsMask: 1 },
@@ -1489,7 +1492,7 @@ export function createBrowserPage(
     if (!frameIDs.length) return undefined
     const trees = await frameTrees()
 
-    return frameIDs.map((frameID) => agentFrame(trees, frameID)).find((access) => access.type === "extension")?.message
+    return frameIDs.map((frameID) => agentFrame(trees, frameID)).find((access) => access.type !== "frame")?.message
   }
 
   /** The frames an action reaches: its frameID, or the frames of the element refs it names. */
@@ -1706,20 +1709,68 @@ export function createBrowserPage(
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
   }
 
-  async function click(element: Element, button = "left", count = 1, modifiers: readonly string[] = []) {
+  // CDP can't condition a native input event on a hit test. Check the compositor's actual hit after scrolling,
+  // and check again after resolving the node. Do not dispatch into a frame owner whose inner hit is unknown.
+  function dispatchInput(origin: "agent" | "user", signal: AbortSignal) {
+    return async (
+      method: "Input.dispatchMouseEvent" | "Input.dispatchDragEvent" | "Input.dispatchKeyEvent" | "Input.insertText",
+      params: Protocol.Input.DispatchMouseEventRequest | Protocol.Input.DispatchDragEventRequest | Protocol.Input.DispatchKeyEventRequest | Protocol.Input.InsertTextRequest,
+    ) => {
+      if (origin === "user") return cdp.send(method, params)
+      const changed = "Input target changed or could not be verified. Take a fresh snapshot and use the page outside extension UI."
+
+      if ("x" in params) {
+        const version = revision
+        const trees = await frameTrees()
+        const position = { x: Math.round(params.x), y: Math.round(params.y) }
+        const hitTest = () => cdp.send("DOM.getNodeForLocation", { ...position, ignorePointerEventsNone: false })
+        const hit = await hitTest()
+        const access = agentFrame(trees, hit.frameId)
+
+        if (access.type !== "frame") throw new Error(access.message)
+        const sessionID = sessionFor(hit.frameId, agentFrames(trees))
+        const { node } = await cdp.send("DOM.describeNode", { backendNodeId: hit.backendNodeId }, sessionID)
+
+        if (/^(?:iframe|frame|object|embed)$/i.test(node.nodeName)) throw new Error(changed)
+        const last = await hitTest()
+
+        if (version !== revision || last.backendNodeId !== hit.backendNodeId || last.frameId !== hit.frameId || extensionFrames().has(hit.frameId)) throw new Error(changed)
+
+        if (!inputDocument(contents.mainFrame.url, contents.mainFrame.origin)) throw new Error(changed)
+        abortError(signal)
+
+        return cdp.send(method, { ...params, ...position })
+      }
+
+      const focused = contents.focusedFrame
+
+      if (!focused) throw new Error(changed)
+
+      for (let frame: Electron.WebFrameMain | null = focused; frame; frame = frame.parent) {
+        if (frame.detached || !inputDocument(frame.url, frame.origin)) throw new Error(changed)
+
+        if (!frame.parent && frame.frameTreeNodeId !== contents.mainFrame.frameTreeNodeId) throw new Error(changed)
+      }
+      abortError(signal)
+
+      return cdp.send(method, params)
+    }
+  }
+
+  async function click(input: ReturnType<typeof dispatchInput>, element: Element, button: Protocol.Input.MouseButton = "left", count = 1, modifiers: readonly string[] = []) {
     const position = await point(element)
     const flags = modifiers.reduce((mask, key) => mask | ({ Alt: 1, Control: 2, Meta: 4, Shift: 8 }[key] ?? 0), 0)
-    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...position, modifiers: flags })
+    await input("Input.dispatchMouseEvent", { type: "mouseMoved", ...position, modifiers: flags })
 
     for (let clickCount = 1; clickCount <= count; clickCount++) {
-      await cdp.send("Input.dispatchMouseEvent", {
+      await input("Input.dispatchMouseEvent", {
         type: "mousePressed",
         ...position,
         button,
         clickCount,
         modifiers: flags,
       })
-      await cdp.send("Input.dispatchMouseEvent", {
+      await input("Input.dispatchMouseEvent", {
         type: "mouseReleased",
         ...position,
         button,
@@ -1729,7 +1780,7 @@ export function createBrowserPage(
     }
   }
 
-  async function fill(element: Element, value: string, signal: AbortSignal) {
+  async function fill(input: ReturnType<typeof dispatchInput>, element: Element, value: string, signal: AbortSignal) {
     const kind = await call(
       element,
       "function() { if (this.disabled || this.readOnly) return; if (this instanceof HTMLTextAreaElement || this.isContentEditable) return 'text'; if (!(this instanceof HTMLInputElement)) return; if (['date','time','datetime-local','month','week'].includes(this.type)) return 'structured'; if (!['file','checkbox','radio','button','submit','reset','image','hidden','range','color'].includes(this.type)) return 'text'; }",
@@ -1754,10 +1805,10 @@ export function createBrowserPage(
     await cdp.send("DOM.focus", { backendNodeId: element.backendID }, element.sessionID)
     // Focusing this field blurs the previous one; a validation dialog from that blur must stop here.
     abortError(signal)
-    await key(process.platform === "darwin" ? "Meta+A" : "Control+A")
-    await key("Backspace")
+    await key(input, process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await key(input, "Backspace")
     abortError(signal)
-    await cdp.send("Input.insertText", { text: value })
+    await input("Input.insertText", { text: value })
   }
 
   async function select(element: Element, values: readonly string[]) {
@@ -1768,14 +1819,14 @@ export function createBrowserPage(
     )
   }
 
-  async function check(element: Element, checked: boolean) {
+  async function check(input: ReturnType<typeof dispatchInput>, element: Element, checked: boolean) {
     const current = await call(
       element,
       "function(checked) { if (!(this instanceof HTMLInputElement) || !['checkbox','radio'].includes(this.type) || this.disabled) throw new Error('Target is not an enabled checkbox or radio. Take a fresh snapshot and choose the correct ref.'); if (this.type === 'radio' && this.checked && !checked) throw new Error('A selected radio cannot be cleared by clicking it. Select a different radio in its group instead.'); return this.checked; }",
       [checked],
     )
 
-    if (current !== checked) await click(element)
+    if (current !== checked) await click(input, element)
 
     if ((await call(element, "function() { return this.checked; }")) !== checked)
       throw new Error(
@@ -1783,7 +1834,7 @@ export function createBrowserPage(
       )
   }
 
-  async function key(chord: string) {
+  async function key(input: ReturnType<typeof dispatchInput>, chord: string) {
     if (!chord)
       throw new Error(
         "A key is required. Use a named key such as Enter or ArrowDown, a single character, or a chord such as Control+A.",
@@ -1841,8 +1892,8 @@ export function createBrowserPage(
     const event = { key: key === "Space" ? " " : key, windowsVirtualKeyCode: code, modifiers }
     const params = text !== undefined && !(modifiers & 6) ? { ...event, text } : event
 
-    await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...params })
-    await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...params })
+    await input("Input.dispatchKeyEvent", { type: "keyDown", ...params })
+    await input("Input.dispatchKeyEvent", { type: "keyUp", ...params })
   }
 
   async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>) {

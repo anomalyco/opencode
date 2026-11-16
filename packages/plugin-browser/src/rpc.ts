@@ -334,7 +334,7 @@ export const Operations = [
   ),
   operation(
     "click",
-    "Click a ref from this tab's latest snapshot. Supports double/right/middle clicks and modifier keys.",
+    "Click a ref from this tab's latest snapshot. The point must hit a verifiable page document, not extension UI. Supports double clicks and modifier keys.",
     {
       ...target,
       button: optional(Schema.Literals(["left", "right", "middle"])),

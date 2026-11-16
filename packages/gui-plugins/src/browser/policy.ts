@@ -168,6 +168,13 @@ type FrameTree = {
   readonly childFrames?: ReadonlyArray<FrameTree>
 }
 
+/** Documents which may receive agent input. Opaque web documents still need an allowed ancestry. */
+export function inputDocument(url: string, origin: string) {
+  if (Browser.extensionOrigin(origin) || Browser.extensionOrigin(url)) return false
+
+  return /^(?:https?:\/\/|oc-preview:\/\/|file:\/\/|about:(?:blank|srcdoc)(?:[?#]|$)|data:|blob:(?:https?:\/\/|null\/|oc-preview:\/\/))/.test(url)
+}
+
 type FrameTrees = {
   /** The main frame's tree. */
   readonly root: FrameTree
@@ -200,7 +207,7 @@ type AgentFrameInfo = { id: string; parentID?: string; url: string; name: string
  * or one of its ancestors shows an extension's document, or because it hangs under no frame the trees name.
  */
 function frameIndex(trees: FrameTrees) {
-  const frames = new Map<string, { info: AgentFrameInfo; extension: boolean }>()
+  const frames = new Map<string, { info: AgentFrameInfo; extension: boolean; usable: boolean }>()
 
   const walk = (tree: FrameTree, parentID?: string) => {
     const parent = tree.frame.parentId || parentID
@@ -211,11 +218,10 @@ function frameIndex(trees: FrameTrees) {
         info: parent
           ? { id, parentID: parent, url: tree.frame.url, name: tree.frame.name ?? "" }
           : { id, url: tree.frame.url, name: tree.frame.name ?? "" },
-        // The main frame's own document is the page's, which `agentRefusal` judges.
+        usable: inputDocument(tree.frame.url, tree.frame.securityOrigin ?? ""),
         extension:
           trees.extensions.has(id) ||
-          (!!parent &&
-            (Browser.extensionOrigin(tree.frame.url) || Browser.extensionOrigin(tree.frame.securityOrigin ?? ""))),
+          Browser.extensionOrigin(tree.frame.url) || Browser.extensionOrigin(tree.frame.securityOrigin ?? ""),
       })
     tree.childFrames?.forEach((child) => walk(child, id))
   }
@@ -230,7 +236,7 @@ function frameIndex(trees: FrameTrees) {
 
       if (trees.extensions.has(id) || entry?.extension) return "extension"
 
-      if (!entry) return "unavailable"
+      if (!entry?.usable) return "unavailable"
 
       if (entry.info.parentID === undefined) return "frame"
       id = entry.info.parentID

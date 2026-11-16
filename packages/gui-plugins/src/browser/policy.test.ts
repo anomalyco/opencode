@@ -4,6 +4,7 @@ import {
   agentFrame,
   agentFrames,
   agentRefusal,
+  inputDocument,
   allowedDestination,
   committedLoad,
   destinationOrigin,
@@ -16,6 +17,14 @@ import {
   pagePermission,
   refusal,
 } from "./policy"
+
+test("input requires a page document at each step of the route", () => {
+  for (const [url, origin, permitted] of [
+    ["https://example.com/", "https://example.com", true], ["about:blank", "null", true],
+    ["about:srcdoc", "chrome-extension://pw", false], ["blob:chrome-extension://pw/id", "null", false],
+    ["devtools://devtools/bundled/", "devtools://devtools", false], ["", "", false],
+  ] as const) expect(inputDocument(url, origin)).toBe(permitted)
+})
 
 test("allows cross-origin HTTP navigation but rejects unsafe destinations and embedded credentials", () => {
   expect(destinationOrigin("https://other.example/path")).toBe("https://other.example")
