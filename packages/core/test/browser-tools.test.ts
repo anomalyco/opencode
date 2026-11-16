@@ -274,6 +274,18 @@ it.live("an element wait reads the desktop's codes, and ends on time when the pa
   }),
 )
 
+it.live("HTML preview passes the checked relative path and requires a usable tab from the desktop", () =>
+  Effect.gen(function* () {
+    const url = "workspace://ses_fixture/page.html"
+    const browser = yield* setup((action) => success(action.type === "preview" && action.path === "page.html"
+      ? {path: action.path, tabID, url} : {path:"older.html"}))
+    yield* Effect.promise(() => Promise.all(["page.html", "older.html"].map(path => Bun.write(join(browser.directory, path), "<!doctype html>"))))
+    expect(JSON.parse(yield* browser.run(`return await tools.browser.preview({path:"page.html#L2"})`))).toEqual({path:"page.html#L2",tabID,url})
+    expect(browser.commands).toEqual([{type:"preview",path:"page.html"}])
+    expect(yield* browser.run(`return await tools.browser.preview({path:"older.html"}).catch(error => error.message)`)).toContain("did not return its tab")
+  }),
+)
+
 it.live("preview fails for a missing file, and without a desktop names the file to tell the user", () =>
   Effect.gen(function* () {
     const browser = yield* setup((action) => success(action.type === "preview" ? { path: action.path } : tab))
