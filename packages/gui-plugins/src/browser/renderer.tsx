@@ -188,9 +188,14 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     if (!pane) return
 
     return {
-      id: "hardReload", title: ctx.t("menu.hardReload"), group: ctx.t("command.category.view"),
-      bind: mac ? "mod+alt+r" : "ctrl+f5", scope: "#browser-panel", editable: true,
-      enabled: pane.visible() && !!pane.address(), run: () => pane.reload(true),
+      id: "hardReload",
+      title: ctx.t("menu.hardReload"),
+      group: ctx.t("command.category.view"),
+      bind: mac ? "mod+alt+r" : "ctrl+f5",
+      scope: "#browser-panel",
+      editable: true,
+      enabled: pane.visible() && !!pane.address(),
+      run: () => pane.reload(true),
     }
   })
 
