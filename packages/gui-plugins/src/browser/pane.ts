@@ -40,6 +40,7 @@ import {
 } from "./pane-machine"
 import { createBrowserRestoreStore } from "./restore"
 import { guardSession } from "./session-guard"
+import { extensionResource } from "./profile/extension-api/resource"
 import type { SitePermissions } from "./site-permissions"
 import { workspaceFile, type WorkspaceSource } from "./workspace-file"
 import { workspacePages } from "./workspace-pages"
@@ -737,7 +738,10 @@ export function createBrowserPane(input: {
     win: BrowserWindow,
     focused: () => boolean,
   ) {
-    const guarded = (url: string) => {
+    const guarded = (url: string, caller: string) => {
+      if (URL.parse(url)?.protocol === "chrome-extension:" && !extensionResource(url, `chrome-extension://${caller}`, (id) => page.contents.session.extensions.getExtension(id)))
+        throw new Error("Extensions can open only their own extension pages.")
+
       if (/^file:/i.test(url)) throw new Error("Extensions do not have file access.")
       const reason = refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding) })
 
@@ -750,10 +754,10 @@ export function createBrowserPane(input: {
       contents: page.contents,
       window: win,
       focused,
-      open: async (url: string, active: boolean) => {
+      open: async (url: string, active: boolean, caller: string) => {
         const opened = await execute(
           binding,
-          { action: { type: "tabs.open", url: guarded(url), focus: active }, files: [] },
+          { action: { type: "tabs.open", url: guarded(url, caller), focus: active }, files: [] },
           new AbortController().signal,
           "user",
           page.childActivity(),
@@ -768,10 +772,10 @@ export function createBrowserPane(input: {
       },
       focus: () => dispatchBinding(binding, { type: "tab.focused", tabID }),
       close: () => dispatchBinding(binding, { type: "tab.closed", tabID }),
-      navigate: async (url: string) => {
+      navigate: async (url: string, caller: string) => {
         await execute(
           binding,
-          { action: { type: "navigate", tabID, url: guarded(url) }, files: [] },
+          { action: { type: "navigate", tabID, url: guarded(url, caller) }, files: [] },
           new AbortController().signal,
           "user",
         )

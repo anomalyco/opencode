@@ -63,13 +63,21 @@ export const ExtensionAccess = Schema.Literals(["allSites", "someSites", "cookie
 
 export type ExtensionAccess = typeof ExtensionAccess.Type
 
+export const ReviewedGrants = Schema.Struct({
+  access: Schema.Array(ExtensionAccess),
+  hosts: Schema.Array(Schema.String),
+  permissions: Schema.Array(Schema.String),
+})
+
+export type ReviewedGrants = typeof ReviewedGrants.Type
+
 /** An extension the desktop browser installed, as the window lists it. */
 export const ProfileExtension = Schema.Struct({
   id: text(64),
   name: Schema.String,
   version: Schema.String,
   enabled: Schema.Boolean,
-  /** `folder`: loaded in place from a directory the user picked. `store`: from a store listing. `browser`: copied from another browser's profile. */
+  /** `folder`: from a directory the user picked. `store`: from a store listing. `browser`: from another browser's profile. */
   source: Schema.Literals(["folder", "store", "browser"]),
   icon: Schema.optional(DataImage),
   /** The `chrome-extension://` page its toolbar button opens. */
@@ -78,6 +86,7 @@ export const ProfileExtension = Schema.Struct({
   options: Schema.optional(Schema.String),
   /** Why an enabled extension did not load. */
   error: Schema.optional(Schema.String),
+  changed: Schema.optional(Schema.Boolean),
   compatibility: ExtensionCompatibility,
   access: Schema.Array(ExtensionAccess),
   /**
@@ -142,20 +151,26 @@ export type ImportResult = typeof ImportResult.Type
  * - `load`: Chromium refused the extension; `message` says why.
  *
  * `unsupported`: nothing was installed, because the extension will not work here; `review`: nothing was installed yet,
- * because the extension asks for `access` the user has not seen. Installing again with `force` adds it.
+ * because the extension asks for access. Approving its one-use token installs only the reviewed copy.
  */
 export const InstallResult = Schema.Union([
   Schema.Struct({ type: Schema.Literal("installed"), extension: ProfileExtension }),
   Schema.Struct({
     type: Schema.Literals(["unsupported", "review"]),
+    token: text(64),
+    id: text(64),
+    store: Schema.optional(Schema.Literals(["chrome", "edge"])),
+    ...ReviewedGrants.fields,
+    sites: Schema.Array(Schema.String),
+    added: Schema.optional(ReviewedGrants),
+    replaces: Schema.optional(Schema.String),
     name: Schema.String,
     icon: Schema.optional(DataImage),
     compatibility: ExtensionCompatibility,
-    access: Schema.Array(ExtensionAccess),
   }),
   Schema.Struct({
     type: Schema.Literal("failed"),
-    reason: Schema.Literals(["manifest", "download", "load"]),
+    reason: Schema.Literals(["manifest", "download", "load", "collision", "expired"]),
     message: Schema.optionalKey(Schema.String),
   }),
 ])
@@ -208,16 +223,16 @@ export const BrowserProfile = Ipc.define({
         }),
       ),
     },
-    /** Adds an extension. One that will not work here is added only with `force`. */
+    /** Stages a package for review or approves the staged copy named by a review token. */
     install: {
       input: Schema.Union([
-        Schema.Struct({ kind: Schema.Literal("folder"), path: text(4096), force: Schema.optional(Schema.Boolean) }),
-        Schema.Struct({ kind: Schema.Literal("store"), url: text(2048), force: Schema.optional(Schema.Boolean) }),
+        Schema.Struct({ kind: Schema.Literal("approve"), token: text(64) }),
+        Schema.Struct({ kind: Schema.Literal("folder"), path: text(4096) }),
+        Schema.Struct({ kind: Schema.Literal("store"), url: text(2048) }),
         Schema.Struct({
           kind: Schema.Literal("browser"),
           ...SourceProfile,
           id: text(64),
-          force: Schema.optional(Schema.Boolean),
         }),
       ]),
       output: InstallResult,

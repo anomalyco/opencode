@@ -36,6 +36,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     const pending = import("./profile")
       .then((module) =>
         module.createBrowserProfile({
+          notificationTitle: (name) => ctx.t("extensions.notification.title", { name }),
           signal: ctx.signal,
           storage: ctx.storage,
           log: ctx.log,

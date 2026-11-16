@@ -1,4 +1,5 @@
 import { cp, lstat, readFile, realpath, rename, rm, stat } from "node:fs/promises"
+import { generateKeyPairSync } from "node:crypto"
 import path from "node:path"
 import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
@@ -11,24 +12,24 @@ import { createExtensionApis } from "./extension-api"
 import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
 import { cookiesPersist } from "./probe"
+import { extensionDigest } from "./integrity"
 import { createPreviews } from "./previews"
 import {
   displayName,
-  extensionIcon,
   extensionID,
+  extensionIcon,
   extensionFiles,
   extensionPage,
   extensionPages,
   parseCrx,
   pinKey,
   readManifest,
-  storeDownloadURL,
   storeTarget,
   unzip,
   type ExtensionFiles,
   type Manifest,
 } from "./extensions"
-import type { ImportResult, InstallResult, ProfileExtension } from "./ipc"
+import { ReviewedGrants, type ImportResult, type InstallResult, type ProfileExtension } from "./ipc"
 import { chromiumProfileDirectory, listSources, profileExtensions, readSource, windowsIcons } from "./sources"
 
 /** The partition every page of the desktop browser shares, on disk under the app's user data. */
@@ -39,6 +40,11 @@ const StoredExtension = Schema.Struct({
   directory: Schema.String,
   enabled: Schema.Boolean,
   source: Schema.Literals(["folder", "store", "browser"]),
+  origin: Schema.optional(Schema.String),
+  localKey: Schema.optional(Schema.String),
+  digest: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
+  grants: Schema.optional(ReviewedGrants),
 })
 
 type StoredExtension = typeof StoredExtension.Type
@@ -52,6 +58,7 @@ export type Profile = Awaited<ReturnType<typeof createBrowserProfile>>
  * partition's cookies in step with the profile's only while the user shares sign-ins with remote servers.
  */
 export async function createBrowserProfile(input: {
+  notificationTitle: (name: string) => string
   signal: AbortSignal
   storage: Storage
   log: Log
@@ -103,6 +110,7 @@ export async function createBrowserProfile(input: {
   }
 
   const errors = new Map<string, string>()
+  const changed = new Set<string>()
   const details = new Map<string, ProfileExtension>()
   // Browser icons by application path, read once; undefined for an application without one.
   const icons = new Map<string, string | undefined>()
@@ -120,6 +128,10 @@ export async function createBrowserProfile(input: {
   }
 
   const describe = async (record: StoredExtension): Promise<ProfileExtension | undefined> => {
+    if (changed.has(record.id) || !record.digest) return {
+      id: record.id, name: record.name ?? record.id, version: "", enabled: false, source: record.source,
+      changed: true, access: [], compatibility: { level: "partial", missing: [] },
+    }
     const manifest = await readManifest(record.directory)
 
     if (!manifest) return undefined
@@ -160,6 +172,7 @@ export async function createBrowserProfile(input: {
   }
 
   const apis = await createExtensionApis({
+    notificationTitle: input.notificationTitle,
     session,
     partition: PARTITION,
     directory,
@@ -173,6 +186,21 @@ export async function createBrowserProfile(input: {
 
   const load = async (record: StoredExtension) => {
     if (session.extensions.getExtension(record.id)) return
+
+    const managed = /^[a-p]{32}$/.test(record.id) && record.directory === path.join(directory, record.id) &&
+      await realpath(record.directory).catch(() => undefined) === path.join(await realpath(directory), record.id)
+
+    // Chromium writes compiled DNR rules into this reserved directory after a load. Never trust or load an on-disk
+    // rules cache: regenerate it from the approved rules. A failure to clear it must fail the digest comparison.
+    if (managed && record.digest) await rm(path.join(record.directory, "_metadata"), { recursive: true, force: true }).catch(() => undefined)
+
+    if (!managed || !record.digest || await extensionDigest(record.directory) !== record.digest) {
+      changed.add(record.id)
+
+      return
+    }
+
+    changed.delete(record.id)
 
     const loaded = await session.extensions.loadExtension(record.directory, { allowFileAccess: false }).then(
       (extension) => extension,
@@ -189,7 +217,10 @@ export async function createBrowserProfile(input: {
     session.extensions.getAllExtensions().forEach((extension) => session.extensions.removeExtension(extension.id))
 
   await clearStaging(directory)
-    .then(() => Promise.all(stored.value.filter((record) => record.enabled).map(load)))
+    .then(async () => {
+      // Bound open handles and read buffers across the profile, not just inside each extension.
+      for (const record of stored.value) if (record.enabled) await load(record)
+    })
     .then(refresh)
     .catch((cause: unknown) => {
       apis.dispose()
@@ -198,41 +229,22 @@ export async function createBrowserProfile(input: {
       throw cause
     })
 
-  /**
-   * Loads a directory as a new extension and remembers it, or reports why it is not one. One that will not work here,
-   * or that asks for access the user has not seen, loads only with `force`; until then a copy this app made is
-   * deleted again.
-   */
-  const add = async (folder: string, source: StoredExtension["source"], force = false): Promise<InstallResult> => {
-    const manifest = await readManifest(folder)
-
-    if (!manifest || manifest.theme !== undefined) return { type: "failed", reason: "manifest" }
-    const compatibility = await compatibilityOf(folder, manifest)
-    const access = extensionAccess(manifest)
-    // Installing one again, such as an update, keeps it, as the user added it before.
-    const known = stored.value.find((record) => record.directory === folder)
-    const review = compatibility.level === "unsupported" ? "unsupported" : access.length > 0 ? "review" : undefined
-
-    // Chromium keeps the loaded copy's files open; the new one loads in its place.
-    if (known && session.extensions.getExtension(known.id)) session.extensions.removeExtension(known.id)
-
-    if (review && !force && !known) {
-      const name = await displayName(folder, manifest)
-      const icon = await extensionIcon(folder, manifest)
-
-      if (source !== "folder") await rm(folder, { recursive: true, force: true }).catch(() => undefined)
-
-      return { type: review, name, icon, compatibility, access }
-    }
-
-    const extension = await session.extensions.loadExtension(folder, { allowFileAccess: false }).then(
+  const add = async (record: StoredExtension): Promise<InstallResult> => {
+    const extension = await session.extensions.loadExtension(record.directory, { allowFileAccess: false }).then(
       (value) => value,
       (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause))),
     )
 
     if (extension instanceof Error) return { type: "failed", reason: "load", message: extension.message }
-    const record = { id: extension.id, directory: folder, enabled: true, source }
+
+    if (extension.id !== record.id) {
+      session.extensions.removeExtension(extension.id)
+
+      return { type: "failed", reason: "manifest" }
+    }
+
     stored.set([...stored.value.filter((item) => item.id !== record.id), record])
+    changed.delete(record.id)
     errors.delete(record.id)
     await refresh()
     const described = details.get(record.id)
@@ -240,25 +252,75 @@ export async function createBrowserProfile(input: {
     return described ? { type: "installed", extension: described } : { type: "failed", reason: "manifest" }
   }
 
-  /**
-   * Puts a new copy of an extension at `folder` and adds it. `fill` writes the copy into a staging directory, and only
-   * a copy with a manifest takes the old one's place. A failure at any step removes what it wrote and leaves the
-   * previous copy in place, loaded as it was.
-   */
-  const replace = async (
-    folder: string,
-    source: "store" | "browser",
-    force: boolean | undefined,
+  // One outstanding review across windows. The next install, removal of the extension, or shutdown invalidates it.
+  let pending: { token: string; record: StoredExtension; staging: string } | undefined
+
+  const discard = () => {
+    const current = pending
+    pending = undefined
+
+    if (current) return rm(current.staging, { recursive: true, force: true }).catch(() => undefined)
+  }
+
+  const review = async (
+    record: StoredExtension,
     fill: (staging: string) => Promise<boolean>,
+    store?: "chrome" | "edge",
   ): Promise<InstallResult> => {
-    const failed: InstallResult = { type: "failed", reason: source === "store" ? "download" : "manifest" }
+    const folder = record.directory
+    const failed: InstallResult = { type: "failed", reason: record.source === "store" ? "download" : "manifest" }
+    const previous = stored.value.find((item) => item.directory === folder || item.id === record.id)
+
+    if (previous && (previous.source !== record.source || previous.directory !== folder || previous.id !== record.id || previous.origin !== record.origin))
+      return { type: "failed", reason: "collision" }
     const staging = await stageExtension(directory, fill)
 
     if (!staging) return failed
-    const previous = stored.value.find((record) => record.directory === folder)
+    const digest = await extensionDigest(staging)
+    const manifest = digest && await readManifest(staging)
+
+    if (!digest || !manifest || manifest.theme !== undefined) {
+      await rm(staging, { recursive: true, force: true })
+
+      return failed
+    }
+
+    const name = await displayName(staging, manifest)
+    const token = crypto.randomUUID()
+    const compatibility = extensionCompatibility(manifest, await extensionFiles(staging, manifest))
+    // The public-suffix list is needed only while preparing a review, not to start the browser profile.
+    const { reviewAccess } = await import("./review")
+    const summary = reviewAccess(manifest, previous?.grants)
+    pending = { token, staging, record: { ...record, name, digest, grants: summary.grants } }
+
+    return { type: compatibility.level === "unsupported" ? "unsupported" : "review", token, name, id: record.id, store,
+      icon: await extensionIcon(staging, manifest), replaces: previous?.name ?? previous?.id, compatibility,
+      ...summary.grants, sites: summary.sites, added: summary.added,
+    }
+  }
+
+  const approve = async (token: string): Promise<InstallResult> => {
+    if (!pending || pending.token !== token) return { type: "failed", reason: "expired" }
+    const { staging, record } = pending
+    pending = undefined
+
+    if (await extensionDigest(staging) !== record.digest) {
+      await rm(staging, { recursive: true, force: true })
+
+      return { type: "failed", reason: "expired" }
+    }
+
+    const folder = record.directory
+    const previous = stored.value.find((item) => item.id === record.id)
+    const previousVersion = previous && details.get(previous.id)?.version
 
     // Chromium keeps the loaded copy's files open, and Windows moves no open file.
-    if (previous && session.extensions.getExtension(previous.id)) session.extensions.removeExtension(previous.id)
+    if (previous) {
+      apis.forget(previous.id)
+
+      if (session.extensions.getExtension(previous.id)) session.extensions.removeExtension(previous.id)
+    }
+
     const swapped = await swapIn(staging, folder)
 
     if (!swapped) {
@@ -266,18 +328,28 @@ export async function createBrowserProfile(input: {
 
       if (previous?.enabled) await load(previous)
 
-      return failed
+      return { type: "failed", reason: "manifest" }
     }
 
-    const result = await add(folder, source, force)
+    const restoreMenus = previous && apis.resetMenus(previous.id)
+    const finishInstall = apis.prepareInstall(record.id, previousVersion)
 
-    if (result.type === "installed" || (result.type !== "failed" && !swapped.backup)) {
+    const result = await add(record).catch((cause: unknown) => {
+      finishInstall(false)
+      throw cause
+    })
+
+    finishInstall(result.type === "installed")
+
+    if (result.type === "installed") {
+
       if (swapped.backup) void rm(swapped.backup, { recursive: true, force: true }).catch(() => undefined)
 
       return result
     }
 
     // The new copy did not load: it goes, and the previous one, if any, comes back as it was.
+    restoreMenus?.()
     await rm(folder, { recursive: true, force: true }).catch(() => undefined)
 
     if (swapped.backup) await rename(swapped.backup, folder).catch(() => undefined)
@@ -412,7 +484,7 @@ export async function createBrowserProfile(input: {
               name: await displayName(item.directory, manifest),
               version: manifest.version,
               icon: await extensionIcon(item.directory, manifest),
-              installed: stored.value.some((record) => record.id === item.id),
+              installed: stored.value.some((record) => !changed.has(record.id) && record.source === "browser" && record.origin === path.dirname(item.directory)),
               compatibility: await compatibilityOf(item.directory, manifest),
               access: extensionAccess(manifest),
             },
@@ -424,48 +496,59 @@ export async function createBrowserProfile(input: {
     },
     async install(
       request:
-        | { kind: "folder"; path: string; force?: boolean }
-        | { kind: "store"; url: string; force?: boolean }
-        | { kind: "browser"; source: string; profile: string; id: string; force?: boolean },
+        | { kind: "approve"; token: string }
+        | { kind: "folder"; path: string }
+        | { kind: "store"; url: string }
+        | { kind: "browser"; source: string; profile: string; id: string },
     ): Promise<InstallResult> {
-      if (request.kind === "folder") return add(request.path, "folder", request.force)
+      if (request.kind === "approve") return approve(request.token)
+      await discard()
 
-      if (request.kind === "browser") {
-        const folder = await chromiumProfileDirectory(request.source, request.profile)
-        const found = folder ? (await profileExtensions(folder)).find((item) => item.id === request.id) : undefined
+      if (request.kind !== "store") {
+        const profile = request.kind === "browser" && await chromiumProfileDirectory(request.source, request.profile)
 
-        if (!found) return { type: "failed", reason: "manifest" }
+        const folder = request.kind === "folder" ? await realpath(request.path).catch(() => undefined) :
+          profile && (await profileExtensions(profile)).find((item) => item.id === request.id)?.directory
 
-        // A copy, so the other browser updating or removing it leaves this one working. Links are left out, so the
-        // copy holds only the package's own files.
-        return replace(path.join(directory, request.id), "browser", request.force, (staging) =>
-          cp(found.directory, staging, {
+        if (!folder) return { type: "failed", reason: "manifest" }
+        // An unpacked manifest cannot authenticate its key. Give each local source a private profile identity, stable
+        // across updates from that source; neither the source nor a claimed store ID chooses which storage it sees.
+        const origin = request.kind === "browser" ? path.dirname(folder) : folder
+        const previous = stored.value.find((record) => record.source === request.kind && record.origin === origin)
+
+        const key = previous?.localKey ? Buffer.from(previous.localKey, "base64") :
+          generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey.export({ format: "der", type: "spki" })
+
+        const id = extensionID(key)
+
+        return review({ id, enabled: true, source: request.kind, origin, localKey: key.toString("base64"), directory: path.join(directory, id) }, async (staging) => {
+          await cp(folder, staging, {
             recursive: true,
             filter: async (item) => path.basename(item) !== "_metadata" && !(await lstat(item)).isSymbolicLink(),
-          }).then(() => true),
-        )
+          })
+
+          return pinKey(staging, key)
+        })
       }
 
       const target = storeTarget(request.url)
 
-      const crx = target
-        ? await download(session, storeDownloadURL(target, process.versions.chrome ?? "140.0.0.0"))
-        : undefined
+      if (!target) return { type: "failed", reason: "download" }
+      const crx = await download(session, target)
+      const parsed = crx && parseCrx(crx, target.id)
 
-      const parsed = crx ? parseCrx(crx) : undefined
+      if (!parsed) return { type: "failed", reason: "download" }
 
-      // The developer's key names the package: one that names another extension is not the one the user asked for.
-      if (!target || !parsed || (parsed.key && extensionID(parsed.key) !== target.id))
-        return { type: "failed", reason: "download" }
-      const key = parsed.key
-
-      return replace(path.join(directory, target.id), "store", request.force, async (staging) => {
+      return review({ id: target.id, directory: path.join(directory, target.id), enabled: true, source: "store" }, async (staging) => {
         await unzip(parsed.zip, staging)
+        // Electron discards store metadata on unpacked loads. Remove it before approval, not from the digest check.
+        await rm(path.join(staging, "_metadata"), { recursive: true, force: true })
 
-        return !key || pinKey(staging, key)
-      })
+        return pinKey(staging, parsed.key)
+      }, target.store)
     },
     async remove(id: string) {
+      if (pending?.record.id === id) await discard()
       const record = stored.value.find((item) => item.id === id)
 
       if (session.extensions.getExtension(id)) session.extensions.removeExtension(id)
@@ -475,7 +558,7 @@ export async function createBrowserProfile(input: {
       errors.delete(id)
 
       // Only copies this app made are deleted; a folder the user loaded stays where it is.
-      if (record && record.source !== "folder" && path.dirname(record.directory) === directory)
+      if (record && (record.source !== "folder" || record.localKey) && record.directory === path.join(directory, id))
         await rm(record.directory, { recursive: true, force: true }).catch(() => undefined)
       await refresh()
     },
@@ -523,6 +606,7 @@ export async function createBrowserProfile(input: {
       }
     },
     dispose() {
+      void discard()
       links.forEach((_mirror, other) => void unmirror(other, false))
       links.clear()
       apis.dispose()

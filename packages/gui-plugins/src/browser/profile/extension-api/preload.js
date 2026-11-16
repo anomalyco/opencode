@@ -29,7 +29,10 @@ if (href.startsWith("chrome-extension://")) {
 
   const bridge = {
     invoke: (name, args) => request("browser-extension:call", [name, args]),
-    subscribe: (name) => void request("browser-extension:subscribe", [name]).catch(() => undefined),
+    subscribe: (name) => void request("browser-extension:subscribe", [name]).then((install) => {
+      // The reply works while a worker is still starting; a pushed event can be dropped before it is running.
+      if (name === "runtime.onInstalled" && install) receiver.dispatch?.(name, [install])
+    }).catch(() => undefined),
     listen: (dispatch) => {
       receiver.dispatch = dispatch
     },

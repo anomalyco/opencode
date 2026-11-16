@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { remoteDebuggingPort } from "./options"
+import { debuggingSwitches, remoteDebuggingPort } from "./options"
 
 const builds = {
   dev: { packaged: false, channel: "dev" },
@@ -7,6 +7,12 @@ const builds = {
   stable: { packaged: true, channel: "prod" },
   packagedDev: { packaged: true, channel: "dev" },
 }
+
+test.each([
+  ["dev", "9222", true], ["beta", "0", true], ["packagedDev", undefined, false], ["stable", undefined, false],
+] as const)("%s applies its policy to explicit Chromium launch switches too", (build, port, pipe) => {
+  expect(debuggingSwitches(builds[build], undefined, "0", true)).toEqual({ port, pipe })
+})
 
 test.each([
   ["dev", undefined, "9222"],

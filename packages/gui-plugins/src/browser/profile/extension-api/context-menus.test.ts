@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { addItem, chooseItem, menuTarget, removeItem, shownItems, updateItem, type MenuItem } from "./context-menus"
+import { Schema } from "effect"
+import { addItem, chooseItem, MenuArchive, menuTarget, removeItem, restoredMenus, shownItems, updateItem, type MenuItem } from "./context-menus"
 
 const params = {
   linkURL: "",
@@ -10,6 +11,13 @@ const params = {
   pageURL: "https://example.com/",
   frameURL: "",
 }
+
+test("menu definitions and choices survive a cold start, but do not carry into a new version", () => {
+  const created = addItem([], { id: "selected", type: "checkbox", contexts: ["selection"], checked: true })
+  const saved = Schema.decodeUnknownSync(Schema.fromJsonString(MenuArchive))(JSON.stringify({ version: "1", items: created }))
+  expect(restoredMenus(saved, "1")).toMatchObject([{ id: "selected", checked: true, contexts: ["selection"] }])
+  expect(restoredMenus(saved, "2")).toEqual([])
+})
 
 test("items keep their tree, reject duplicate ids and unknown parents, and go with their parent", () => {
   const items = [

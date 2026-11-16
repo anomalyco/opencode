@@ -5,6 +5,7 @@ import type { Cdp } from "./cdp"
 import { externalAction } from "./address"
 import { pageMenu, menuAddress, type MenuAction, type MenuPolicy } from "./page-menu"
 import { workspaceFile } from "./workspace-file"
+import { extensionResource } from "./profile/extension-api/resource"
 
 export type PageMenuHost = {
   t: (key: string) => string
@@ -37,6 +38,7 @@ export function attachPageMenu(
     if (!input.available()) return
     const frame = params.frame
     const frameURL = params.frameURL || params.pageURL
+    const policy = { ...input.policy, resource: (url: string) => extensionResource(url, frame?.origin ?? "", (id) => session.extensions.getExtension(id)) }
 
     const current = () =>
       !contents.isDestroyed() &&
@@ -89,7 +91,7 @@ export function attachPageMenu(
         }
       }
 
-      const url = menuAddress(action.raw, frameURL, input.policy)
+      const url = menuAddress(action.raw, frameURL, policy)
 
       if (!url) return input.failed()
 
@@ -135,7 +137,7 @@ export function attachPageMenu(
     }
 
     const template = pageMenu(params, {
-      policy: input.policy,
+      policy,
       t: input.t,
       back: contents.navigationHistory.canGoBack(),
       forward: contents.navigationHistory.canGoForward(),

@@ -1,5 +1,7 @@
 import { Schema } from "effect"
+import { extensionLabel } from "./label"
 import type { ContextMenuParams, Extension, MenuItemConstructorOptions } from "electron"
+import type { Storage } from "@opencode/plugin/gui/main"
 import { method, none, optional, type ApiModule, type Emit } from "./api"
 import { matchesHost } from "./match-pattern"
 import type { Manifests } from "./manifest"
@@ -23,17 +25,20 @@ const Properties = Schema.Struct({
 type Properties = typeof Properties.Type
 
 /** One item an extension added, by its id. Patterns limit it to pages and links that match them. */
-export type MenuItem = {
-  readonly id: string | number
-  readonly title: string
-  readonly type: "normal" | "checkbox" | "radio" | "separator"
-  readonly contexts: readonly string[]
-  readonly parentId: string | number | undefined
-  readonly checked: boolean
-  readonly enabled: boolean
-  readonly visible: boolean
-  readonly documentUrlPatterns: readonly string[] | undefined
-  readonly targetUrlPatterns: readonly string[] | undefined
+const MenuItem = Schema.Struct({
+  id: Id, title: Schema.String, type: Schema.Literals(["normal", "checkbox", "radio", "separator"]),
+  contexts: Schema.Array(Schema.String), parentId: Schema.optional(Id), checked: Schema.Boolean,
+  enabled: Schema.Boolean, visible: Schema.Boolean, documentUrlPatterns: Schema.optional(Schema.Array(Schema.String)),
+  targetUrlPatterns: Schema.optional(Schema.Array(Schema.String)),
+})
+
+export type MenuItem = typeof MenuItem.Type
+
+export const MenuArchive = Schema.Struct({ version: Schema.String, items: Schema.Array(MenuItem).check(Schema.isMaxLength(256)) })
+
+/** A worker may stop between any two events. Its definitions belong to the installed version, not the worker. */
+export function restoredMenus(archive: typeof MenuArchive.Type, version: string) {
+  return archive.version === version ? archive.items : []
 }
 
 /** What was right-clicked, as the context names `contextMenus` items match. */
@@ -182,11 +187,19 @@ export function createContextMenus(input: {
   emit: Emit
   extensions: () => readonly Extension[]
   manifest: Manifests
+  storage: Storage
 }) {
-  const menus = new Map<string, readonly MenuItem[]>()
+  const store = (id: string) => input.storage.store(`extension-menus.${id}`, { schema: MenuArchive, initial: { version: "", items: [] } })
 
-  const change = (extension: string, next: (items: readonly MenuItem[]) => readonly MenuItem[]) => {
-    menus.set(extension, next(menus.get(extension) ?? []))
+  const change = (extension: Extension, next: (items: readonly MenuItem[]) => readonly MenuItem[]) => {
+    const saved = store(extension.id)
+    const current = restoredMenus(saved.value, extension.version)
+    const items = next(current)
+
+    if (current === items) return
+
+    if (items.length > 256 || Buffer.byteLength(JSON.stringify(items)) > 256 * 1024) throw new Error("Context menu storage limit exceeded.")
+    saved.set({ version: extension.version, items })
   }
 
   const clicked = (extension: Extension, tab: PaneTab, item: MenuItem, params: ContextMenuParams) => {
@@ -194,7 +207,7 @@ export function createContextMenus(input: {
     const choice = item.type === "checkbox" || item.type === "radio"
     // The tab that was right-clicked, with its address only for an extension that may read it.
     const snapshot = input.tabs.snapshot(tab.contents.id)
-    change(extension.id, (items) => chooseItem(items, item))
+    change(extension, (items) => chooseItem(items, item))
 
     const info = {
       menuItemId: item.id,
@@ -224,18 +237,20 @@ export function createContextMenus(input: {
       const target = menuTarget(params)
 
       return input.extensions().flatMap((extension): MenuItemConstructorOptions[] => {
-        const items = menus.get(extension.id) ?? []
+        if (!input.manifest(extension).permissions.includes("contextMenus")) return []
+        const items = restoredMenus(store(extension.id).value, extension.version)
 
         const build = (item: MenuItem): MenuItemConstructorOptions => {
           const children = shownItems(items, target, item.id)
 
           if (item.type === "separator") return { type: "separator" }
+          const label = extensionLabel(extensionLabel(item.title).replaceAll("%s", () => extensionLabel(target.selectionText ?? ""))).replaceAll("&", "&&")
 
           if (children.length > 0)
-            return { label: item.title.replaceAll("%s", target.selectionText ?? ""), submenu: children.map(build) }
+            return { label, submenu: children.map(build) }
 
           return {
-            label: item.title.replaceAll("%s", target.selectionText ?? ""),
+            label,
             type: item.type,
             checked: item.checked,
             enabled: item.enabled,
@@ -245,7 +260,7 @@ export function createContextMenus(input: {
 
         const top = shownItems(items, target).map(build)
 
-        return top.length <= 1 ? top : [{ label: extension.name, submenu: top }]
+        return top.length ? [{ label: extensionLabel(extension.name).replaceAll("&", "&&") || extension.id, submenu: top }] : []
       })
 
   }
@@ -281,19 +296,30 @@ export function createContextMenus(input: {
     ],
     methods: {
       "contextMenus.create": method(Schema.Tuple([Properties]), (context, [properties]) =>
-        change(context.extension.id, (items) => addItem(items, properties)),
+        change(context.extension, (items) => addItem(items, properties)),
       ),
       "contextMenus.update": method(Schema.Tuple([Id, Properties]), (context, [id, properties]) =>
-        change(context.extension.id, (items) => updateItem(items, id, properties)),
+        change(context.extension, (items) => updateItem(items, id, properties)),
       ),
       "contextMenus.remove": method(Schema.Tuple([Id]), (context, [id]) =>
-        change(context.extension.id, (items) => removeItem(items, id)),
+        change(context.extension, (items) => removeItem(items, id)),
       ),
-      "contextMenus.removeAll": method(none, (context) => void menus.delete(context.extension.id)),
+      "contextMenus.removeAll": method(none, (context) => change(context.extension, () => [])),
     },
-    // An extension turned off and on again creates its items again at start.
-    forget: (extension) => void menus.delete(extension),
   }
 
-  return { module, template }
+  return {
+    module,
+    template,
+    remove: (id: string) => input.storage.remove(`extension-menus.${id}`),
+    // Reinstalling even the same version runs onInstalled again. Let it register the same IDs; a failed swap
+    // must return the previous extension's approved menu tree along with its files.
+    reset(id: string) {
+      const saved = store(id)
+      const previous = saved.value
+      saved.set({ version: "", items: [] })
+
+      return () => saved.set(previous)
+    },
+  }
 }

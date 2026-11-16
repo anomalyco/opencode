@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { extensionLabel } from "./label"
 import electron, { type BrowserWindow, type Extension } from "electron"
 import { closestIcon, extensionPage, readIcon } from "../extensions"
 import { method, none, optional, type ApiModule, type ApiNamespace, type Emit, type ExtensionContext } from "./api"
@@ -231,9 +232,9 @@ export function createActions(input: {
       const values = actionFor(stateOf(extension), window ? input.tabs.activeTab(window)?.id : undefined)
 
       return {
-        title: values.title,
+        title: values.title && extensionLabel(values.title),
         icon: values.icon,
-        badge: values.badgeText || undefined,
+        badge: values.badgeText ? extensionLabel(values.badgeText) : undefined,
         badgeColor: values.badgeColor,
         badgeTextColor: values.badgeTextColor,
         enabled: values.enabled !== false,

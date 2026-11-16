@@ -12,10 +12,10 @@ export type PaneTab = {
   /** Whether it is the focused tab of its pane. */
   readonly focused: () => boolean
   /** Opens a tab in the same pane, which the pane's address policy may refuse. */
-  readonly open: (url: string, active: boolean) => Promise<WebContents>
+  readonly open: (url: string, active: boolean, extension: string) => Promise<WebContents>
   readonly focus: () => void
   readonly close: () => void
-  readonly navigate: (url: string) => Promise<void>
+  readonly navigate: (url: string, extension: string) => Promise<void>
 }
 
 /** A tab as `chrome.tabs` describes it, before what the extension may not see is taken out. */
@@ -309,7 +309,7 @@ export function createExtensionTabs(input: {
 
     if (!anchor) throw new Error("No browser pane is open in this window.")
     const url = new URL(options.url ?? "about:blank", `chrome-extension://${context.extension.id}/`).href
-    const contents = await anchor.open(url, options.active ?? true)
+    const contents = await anchor.open(url, options.active ?? true, context.extension.id)
     const tab = tabs.get(contents.id)
 
     return tab ? infoFor(context.extension, tab) : undefined
@@ -358,7 +358,7 @@ export function createExtensionTabs(input: {
           if (change.muted != null) tab.contents.setAudioMuted(change.muted)
 
           if (change.url != null)
-            await tab.navigate(new URL(change.url, `chrome-extension://${context.extension.id}/`).href)
+            await tab.navigate(new URL(change.url, `chrome-extension://${context.extension.id}/`).href, context.extension.id)
 
           if (change.active || change.highlighted) tab.focus()
 

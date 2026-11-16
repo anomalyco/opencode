@@ -1,14 +1,18 @@
 import { expect, test } from "bun:test"
-import { createHash, generateKeyPairSync } from "node:crypto"
+import { createHash, generateKeyPairSync, sign } from "node:crypto"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { deflateRawSync } from "node:zlib"
+import { storeRedirect } from "./install"
 import {
   displayName,
   entryPath,
   extensionFiles,
+  extensionID,
   parseCrx,
+  pinKey,
+  readManifest,
   readZip,
   storeTarget,
   unzip,
@@ -36,54 +40,44 @@ function varint(value: number) {
   return Buffer.from(bytes)
 }
 
-const publicKey = () => generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "der" })
+test.each([2, 3])("CRX3 proof type %i authenticates the requested listing and the whole archive", (algorithm) => {
+  const ec = () => generateKeyPairSync("ec", { namedCurve: "prime256v1" })
+  const publisher = ec()
+  const developer = algorithm === 3 ? ec() : generateKeyPairSync("rsa", { modulusLength: 2048 })
+  const key = developer.publicKey.export({ format: "der", type: "spki" })
+  const id = extensionID(key)
+  const signed = field(1, createHash("sha256").update(key).digest().subarray(0, 16))
+  const length = Buffer.alloc(4)
+  length.writeUInt32LE(signed.length)
+  const zip = archive([{ name: "manifest.json", text: '{"name":"Test","version":"1","manifest_version":3}' }])
+  const message = Buffer.concat([Buffer.from("CRX3 SignedData\0"), length, signed, zip])
 
-test("unpacks a CRX3 package with the developer's key, which the store's own key does not replace", () => {
-  const store = publicKey()
-  const developer = publicKey()
-  const crxID = createHash("sha256").update(developer).digest().subarray(0, 16)
+  const proof = (type: number, pair: typeof developer, signature = sign("sha256", message, pair.privateKey)) =>
+    field(type, Buffer.concat([field(1, pair.publicKey.export({ format: "der", type: "spki" })), field(2, signature)]))
 
-  // The store's proof is listed first; the signed header data names the developer key's id.
-  const header = Buffer.concat([
-    field(2, field(1, store)),
-    field(3, field(1, developer)),
-    field(10000, field(1, crxID)),
-  ])
+  const pack = (...fields: Buffer[]) => {
+    const header = Buffer.concat(fields)
+    const prefix = Buffer.from("Cr24\x03\0\0\0\0\0\0\0")
+    prefix.writeUInt32LE(header.length, 8)
 
-  const zip = Buffer.from("PK\x03\x04zip")
-  const prefix = Buffer.alloc(12)
-  prefix.write("Cr24", 0, "latin1")
-  prefix.writeUInt32LE(3, 4)
-  prefix.writeUInt32LE(header.length, 8)
+    return Buffer.concat([prefix, header, zip])
+  }
 
-  const crx = Buffer.concat([prefix, header, zip])
-  const parsed = parseCrx(crx)
+  const metadata = field(10000, signed)
+  const good = pack(proof(3, publisher), proof(algorithm, developer), metadata)
+  expect(Buffer.from(parseCrx(good, id)?.key ?? [])).toEqual(key)
+  expect(parseCrx(good, "a".repeat(32))).toBeUndefined()
+  const flipped = Buffer.from(good)
+  flipped[flipped.length - 4] ^= 1
+  const old = Buffer.from(good)
+  old.writeUInt32LE(2, 4)
 
-  expect(Buffer.from(parsed?.key ?? []).equals(developer)).toBe(true)
-  expect(Buffer.from(parsed?.zip ?? []).equals(zip)).toBe(true)
-
-  // Without a signed id, no key is guessed: the store's would give every such package the same id.
-  const unsigned = Buffer.concat([field(2, field(1, store))])
-  const bare = Buffer.from(prefix)
-  bare.writeUInt32LE(unsigned.length, 8)
-  expect(parseCrx(Buffer.concat([bare, unsigned, zip]))?.key).toBeUndefined()
-
-  // A header that claims more bytes than the file has, a field that runs off its message, another format.
-  const long = Buffer.from(crx)
-  long.writeUInt32LE(crx.length, 8)
-  const runaway = Buffer.from(crx)
-  runaway[12 + 1] = 0x7f
-  const crx2 = Buffer.alloc(16)
-  crx2.write("Cr24", 0, "latin1")
-  crx2.writeUInt32LE(2, 4)
-  crx2.writeUInt32LE(0xffffffff, 8)
-  expect([long, runaway, crx2, Buffer.from("PK\x03\x04 not a crx"), Buffer.from("Cr24")].map(parseCrx)).toEqual([
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-  ])
+  for (const invalid of [flipped, old, good.subarray(0, 18), Buffer.concat([good, Buffer.from([0])]),
+    pack(proof(3, publisher), metadata), pack(proof(algorithm, developer, sign("sha256", message, publisher.privateKey)), metadata),
+    pack(proof(algorithm, developer), proof(3, publisher, Buffer.from([0])), metadata),
+    pack(proof(algorithm, developer), field(10000, field(1, Buffer.alloc(16)))),
+    pack(proof(algorithm, developer), metadata, Buffer.from([0x80])), pack(metadata, metadata),
+  ]) expect(parseCrx(invalid, id)).toBeUndefined()
 })
 
 test("names a store listing by its id, from a bare id or either store's link", () => {
@@ -106,6 +100,33 @@ test("names a store listing by its id, from a bare id or either store's link", (
     undefined,
     undefined,
   ])
+})
+
+test("the installer's key replaces any ID requested by the unpacked manifest", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "extension-key-"))
+
+  try {
+    await writeFile(path.join(directory, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Test", version: "1", key: "previous" }))
+    const key = generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey.export({ type: "spki", format: "der" })
+    expect(await pinKey(directory, key)).toBe(true)
+    expect((await readManifest(directory))?.key).toBe(key.toString("base64"))
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("a store redirect never sends an HTTP request or leaves that store's delivery hosts", () => {
+  const http = "http://msedgeextensions.f.tlu.dl.delivery.mp.microsoft.com/file?sig=x"
+  const secure = "https://msedgeextensions.sf.tlu.dl.delivery.mp.microsoft.com/file?sig=x"
+  expect(storeRedirect("edge", http)).toBe(secure)
+  expect(storeRedirect("edge", secure)).toBe(secure)
+
+  for (const refused of [http, secure, "http://clients2.googleusercontent.com/a", "https://clients2.google.com.other.test/a",
+    "https://clients2.google.com:8443/a", "https://clients2.google.com@other.test/a"]) {
+    expect(storeRedirect("chrome", refused)).toBeUndefined()
+  }
+
+  expect(storeRedirect("chrome", "https://clients2.googleusercontent.com/x")).toBe("https://clients2.googleusercontent.com/x")
 })
 
 /**

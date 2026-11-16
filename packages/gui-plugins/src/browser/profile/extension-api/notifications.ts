@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { extensionLabel } from "./label"
 import electron from "electron"
 import { closestIcon, readIcon } from "../extensions"
 import { method, none, optional, type ApiModule, type Emit, type ExtensionContext } from "./api"
@@ -17,7 +18,7 @@ const Options = Schema.Struct({
  * shown with its icon, with the extension's own title as the first line. Clicking one tells the extension through
  * `onClicked`; closing it, `onClosed`. Buttons, images and progress are not shown.
  */
-export function createNotifications(input: { emit: Emit; manifest: Manifests }): ApiModule {
+export function createNotifications(input: { emit: Emit; manifest: Manifests; title: (name: string) => string }): ApiModule {
   // Shown notifications by extension, then by id.
   const shown = new Map<string, Map<string, Electron.Notification>>()
 
@@ -32,7 +33,7 @@ export function createNotifications(input: { emit: Emit; manifest: Manifests }):
 
     // Titled with the extension's name and shown with its icon, so it never passes for one of the app's own.
     const notification = new electron.Notification({
-      title: context.extension.name,
+      title: input.title(extensionLabel(context.extension.name) || extension),
       body: [options.title, options.message, options.contextMessage].filter(Boolean).join("\n"),
       icon: icon ? electron.nativeImage.createFromBuffer(icon) : undefined,
       silent: options.silent ?? false,

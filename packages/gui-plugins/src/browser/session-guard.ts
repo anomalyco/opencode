@@ -36,6 +36,16 @@ export function guardSession(
 
   app.on("web-contents-created", created)
 
+  // Electron would send the first matching identity. A future chooser must bind its decision to this request, its
+  // requesting origin and live WebContents; dismissal or destruction must still answer with no certificate.
+  const choose = (event: Electron.Event, contents: WebContents | null, _url: string, _list: Electron.Certificate[], answer: (certificate?: Electron.Certificate) => void) => {
+    if (contents?.session !== session) return
+    event.preventDefault()
+    answer()
+  }
+
+  app.on("select-client-certificate", choose)
+
   const declared = (id: string) =>
     Schema.decodeUnknownOption(ManifestPermissions)(session.extensions.getExtension(id)?.manifest).pipe(
       Option.flatMap((manifest) => Option.fromNullishOr(manifest.permissions)),
@@ -69,6 +79,7 @@ export function guardSession(
 
   return () => {
     app.off("web-contents-created", created)
+    app.off("select-client-certificate", choose)
     session.off("will-download", download)
   }
 }

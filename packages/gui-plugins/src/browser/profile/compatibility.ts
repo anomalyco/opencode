@@ -127,16 +127,23 @@ const ContentScript = Schema.Struct({ matches: Schema.optional(Schema.Array(Sche
  * `cookies` reads and changes sign-ins there, `tabs` and `webNavigation` see every address the user visits, and
  * `clipboardRead` reads what the user copies.
  */
-export function extensionAccess(manifest: Manifest): ExtensionAccess[] {
-  const permissions = (manifest.permissions ?? []).filter(Schema.is(Schema.String))
-
-  const sites = [
+export function reviewHosts(manifest: Manifest) {
+  const sites = [...new Set([
     ...(manifest.host_permissions ?? []),
-    ...permissions,
+    ...(manifest.permissions ?? []),
     ...(manifest.content_scripts ?? []).filter(Schema.is(ContentScript)).flatMap((script) => script.matches ?? []),
   ].filter(
     (item): item is string => Schema.is(Schema.String)(item) && (item === "<all_urls>" || item.includes("://")),
-  )
+  ))]
+
+  const breadth = (pattern: string) => pattern === "<all_urls>" || /^[^:]+:\/\/\*\//.test(pattern) ? 0 : pattern.includes("://*.") ? 1 : 2
+
+  return sites.sort((a, b) => breadth(a) - breadth(b) || a.localeCompare(b))
+}
+
+export function extensionAccess(manifest: Manifest): ExtensionAccess[] {
+  const permissions = (manifest.permissions ?? []).filter(Schema.is(Schema.String))
+  const sites = reviewHosts(manifest)
 
   // A pattern whose host is `*` covers every site, whatever its scheme and path.
   const all = sites.some((pattern) => pattern === "<all_urls>" || /^[^:]+:\/\/\*(?:\/|$)/.test(pattern))
