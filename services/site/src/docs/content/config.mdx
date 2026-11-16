@@ -690,8 +690,8 @@ last matching rule wins, and rules do not accumulate. An empty rule resets to th
 in the same scope must not contain the same tool, or configuration decoding fails.
 
 `result_style` controls the `patch` success message. `summary` lists the files, `counts` adds `+N -M`, and `diff`
-includes the applied diff. A rule may set its own style. Otherwise the top-level value applies, and the default is
-`counts`.
+includes the applied diff without file headers and caps very large output. A rule may set its own style. Otherwise the
+top-level value applies, and the default is `summary`, so existing behavior is unchanged when this config is absent.
 
 ```jsonc
 {

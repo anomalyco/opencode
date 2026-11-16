@@ -22,7 +22,8 @@ const EditingDeltaFields = {
     description: "Editing tools to remove from the model's built-in editing set",
   }),
   result_style: EditingResult.pipe(optional).annotate({
-    description: "How patch results are reported to the model: file list, line counts, or the applied diff",
+    description:
+      "How patch results are reported to the model: file list, line counts, or the applied diff. Defaults to the file list.",
   }),
 }
 
