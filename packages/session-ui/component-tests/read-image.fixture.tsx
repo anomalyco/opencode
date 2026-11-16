@@ -1,15 +1,16 @@
-import { createMemo, Show } from "solid-js"
+import { createMemo, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { OpenCode } from "@opencode/client/promise"
 import { readLocalImage } from "../../app/src/runtime/server/image"
+import { createMediaCache } from "../../app/src/runtime/server/media"
 import { MarkdownProvider } from "../src/context/markdown"
 import { CurrentSessionProviders } from "../src/storybook/current-session-story"
 import { storyDocument, storyTool } from "../src/storybook/current-session-scenarios"
 import { CurrentContextToolGroup, ToolDisplay } from "../src/tools/tool-renderer"
 
-export function mountReadImage(options: { path: string; grouped: boolean; running?: boolean }) {
+export function mountReadImage(options: { path: string; grouped: boolean; running?: boolean; captured?: string }) {
   const host = document.createElement("div")
   host.dataset.testid = "read-image-fixture"
   document.body.appendChild(host)
@@ -19,14 +20,31 @@ export function mountReadImage(options: { path: string; grouped: boolean; runnin
       headers: { Authorization: `Basic ${btoa("opencode:fixture")}` },
     })
 
-    const [state, setState] = createStore({ open: true, visible: true, running: !!options.running, appended: false })
+    const media = createMediaCache(() => api)
+    onCleanup(media.dispose)
+    const [state, setState] = createStore({
+      open: !options.captured,
+      visible: true,
+      running: !!options.running,
+      appended: false,
+    })
     const status = () => (state.running ? "running" : "completed")
 
-    const tools = createMemo(() => [
-      storyTool("read_image", "read", status(), { path: options.path }),
-      storyTool("read_text", "read", "completed", { path: "src/example.ts", limit: 20 }),
-      ...(state.appended ? [storyTool("read_next", "read", "completed", { path: "src/next.ts" })] : []),
-    ])
+    const tools = createMemo(() => {
+      const image = storyTool("read_image", "read", status(), { path: options.path })
+      if (image.state.status === "completed" && options.captured)
+        image.state.content.push({
+          type: "file",
+          mime: "image/png",
+          uri: options.captured,
+          name: "chart.png",
+        })
+      return [
+        image,
+        storyTool("read_text", "read", "completed", { path: "src/example.ts", limit: 20 }),
+        ...(state.appended ? [storyTool("read_next", "read", "completed", { path: "src/next.ts" })] : []),
+      ]
+    })
 
     return (
       <DialogProvider>
@@ -35,7 +53,7 @@ export function mountReadImage(options: { path: string; grouped: boolean; runnin
           <button onClick={() => setState("appended", true)}>Append read</button>
           <button onClick={() => setState("visible", false)}>Unmount tools</button>
           <MarkdownProvider readImage={(path, signal) => readLocalImage(api, "C:/project", path, signal)}>
-            <CurrentSessionProviders document={storyDocument(tools())}>
+            <CurrentSessionProviders document={storyDocument(tools())} readMedia={media.load}>
               <Show when={state.visible}>
                 <Show
                   when={options.grouped}

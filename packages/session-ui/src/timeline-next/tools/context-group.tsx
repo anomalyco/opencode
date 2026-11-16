@@ -8,6 +8,7 @@ import { Option, Schema } from "effect"
 import { createMemo, For, Index, Match, Show, Switch } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
 import {
+  capturedReadImage,
   currentToolError,
   currentToolGroupedRead,
   currentToolInput,
@@ -16,6 +17,7 @@ import {
 } from "../../message/current-tool-state"
 import { AssistantReasoningContent } from "../../message/message-content"
 import {
+  CapturedReadImages,
   CurrentReadToolGroup,
   currentSkillName,
   displayDirectory,
@@ -311,6 +313,10 @@ export function ContextGroup(props: {
               </Index>
             </div>
           </BasicTool>
+          <CapturedReadImages
+            files={tools().flatMap((tool) => capturedReadImage(tool) ?? [])}
+            onLoad={props.onSizeChange}
+          />
         </div>
       </Show>
     </Show>
@@ -340,6 +346,7 @@ function GroupItem(props: {
           input={currentToolInput(tool())}
           metadata={currentToolMetadata(tool())}
           output={currentToolOutput(tool())}
+          imageShownInline={!!capturedReadImage(tool())}
           error={currentToolError(tool())}
           stopped={toolStopped(tool())}
           status={tool().state.status}
