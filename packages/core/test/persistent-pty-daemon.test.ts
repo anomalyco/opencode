@@ -235,7 +235,7 @@ it.live("rejects incompatible daemons without replacing or killing them", () =>
     const optional = yield* Effect.flip(daemon.requestIfRunning({ op: "list" }))
     expect(optional).toMatchObject({
       kind: "protocol",
-      message: "opencode-pty protocol mismatch: daemon=7, client=8",
+      message: "opencode-pty protocol mismatch: daemon=7, client=9",
       pid: existing.pid,
     })
 
@@ -265,7 +265,28 @@ it.live("starts fresh instead of failing when an inherited registration is gone 
   }),
 )
 
-it.live("stops a discovered inherited daemon when adoption fails", () =>
+it.live("retires a live v8 sibling and runs requests on its own v9 daemon", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const legacy = path.join(root, "legacy")
+    yield* Effect.promise(() => mkdir(legacy))
+    const ops: string[] = []
+    const oldSocket = path.join(legacy, "old.sock")
+    yield* listen(oldSocket, (_socket, request) => {
+      ops.push(String(request.op))
+      return request.op === "ping" ? { ...pong, protocol: 8 } : { type: "ok" }
+    })
+    yield* Effect.promise(() => writeRegistration(legacy, oldSocket, "test", "test", 8))
+    const socket = path.join(directory, "new.sock")
+    yield* listen(socket, () => pong)
+    yield* Effect.promise(() => writeRegistration(directory, socket))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+    expect(yield* daemon.request({ op: "ping" }, true)).toMatchObject({ type: "pong", protocol: 9 })
+    expect(ops).toEqual(["ping", "shutdown"])
+  }),
+)
+
+it.live("spares a current-protocol runtime that replaced the inherited instance", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
     const socketPath = path.join(directory, "daemon.sock")
@@ -282,7 +303,7 @@ it.live("stops a discovered inherited daemon when adoption fails", () =>
       ticket: "ticket",
       expiresAt: Date.now() + 60_000,
     })
-    expect(shutdowns).toBe(1)
+    expect(shutdowns).toBe(0)
   }),
 )
 

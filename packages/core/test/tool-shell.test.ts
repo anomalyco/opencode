@@ -232,18 +232,6 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 
 const isWindows = process.platform === "win32"
 
-// The process daemon keeps a finished command's zombie until the command is forgotten.
-const running = (pid: number) => {
-  try {
-    process.kill(pid, 0)
-  } catch {
-    return false
-  }
-  return !Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
-    .stdout.toString()
-    .trim()
-    .startsWith("Z")
-}
 const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
 const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
 const stderrCommand = isWindows
@@ -2044,7 +2032,7 @@ describe("ShellTool", () => {
                   })
                   const pid = info.pid
                   if (pid === undefined) throw new Error("Expected shell PID")
-                  expect(running(pid)).toBe(false)
+                  expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: "ESRCH" }))
                 }),
               (info) =>
                 Effect.try(() => {
