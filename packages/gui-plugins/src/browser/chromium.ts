@@ -1060,7 +1060,7 @@ export function createBrowserPage(
     previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
     previewIdentity: () => options.workspace?.identity(),
     answerNotice: notices.answer,
-    reviewLink: (url: string) => notices.show(navigationNotice(url, {}, "conversation")),
+    reviewLink: (url: string) => notices.show(navigationNotice(url, policy, "conversation")),
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,

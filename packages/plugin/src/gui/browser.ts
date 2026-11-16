@@ -19,7 +19,7 @@ export interface Browser {
    */
   canOpen(session: SessionRef, path?: string): boolean
   /**
-   * Opens an HTTP(S) page in the session's side panel. A file:// URL inside the built-in server's workspace opens as a scoped preview; file:// URLs outside that workspace or on remote sessions are refused.
+   * Opens an HTTP(S) page without embedded credentials. A file:// URL opens as a scoped preview only on the built-in local server and inside the session's workspace. Other file:// URLs are refused; use `openFile` for workspace files on non-built-in servers.
    *
    * @param session - The session whose pane opens it.
    * @param url - The URL to open.

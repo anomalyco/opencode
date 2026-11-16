@@ -45,7 +45,7 @@ export function RefusalBar(props: {
                 <Show
                   when={web()}
                   fallback={
-                    <span class="min-w-0 whitespace-pre-wrap break-all select-text" classList={{ "max-h-32 overflow-y-auto": !props.notice.opensApp }}>{target()}</span>
+                    <span data-scrollable class="min-w-0 whitespace-pre-wrap break-all select-text" classList={{ "max-h-32 overflow-y-auto": !props.notice.opensApp }}>{target()}</span>
                   }
                 >
                   {(parts) => (
