@@ -151,8 +151,9 @@ export const layer = (options: Options = {}) =>
       })
 
       // A status read that fails is retried until the deadline; the provider or a plugin may be briefly unavailable.
-      const check = (job: Job) =>
+      const check = (job: Job, retries = 0) =>
         generate((service) => service.video.status(job.model, job.providerJobID)).pipe(
+          Effect.retry({ times: retries, schedule: Schedule.exponential(interval) }),
           Effect.map((status) => (status.status === "running" ? undefined : status)),
           Effect.catch((error) =>
             Effect.logWarning("video status read failed", { id: job.id, error: error.message }).pipe(
@@ -162,8 +163,9 @@ export const layer = (options: Options = {}) =>
         )
 
       const poll = Effect.fnUntraced(function* (job: Job) {
-        // The first read runs whatever the deadline: a job resumed after a long restart may have finished, and paid.
-        const first = yield* check(job)
+        // The first read runs whatever the deadline, retried through a brief failure: a job resumed after a long
+        // restart may have finished, and been paid for.
+        const first = yield* check(job, 3)
         const remaining = job.created + deadline - (yield* Clock.currentTimeMillis)
         const settled =
           first === undefined

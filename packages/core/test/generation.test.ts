@@ -37,6 +37,8 @@ interface Provider {
   reads: number
   /** Holds status reads until it opens. */
   gate?: Deferred.Deferred<void>
+  /** How many status reads fail before one succeeds. */
+  failReads?: number
 }
 
 const provider = (): Provider => ({ starts: 0, reads: 0, status: { status: "running" }, result: Stream.make(video) })
@@ -59,6 +61,10 @@ const generateNode = (state: Provider) =>
           status: () =>
             Effect.suspend(() => {
               state.reads++
+              if (state.failReads !== undefined && state.failReads-- > 0)
+                return Effect.fail(
+                  new Generate.ProviderRequestError({ providerID: "test", reason: "provider", message: "reset" }),
+                )
               return state.gate === undefined ? Effect.void : Deferred.await(state.gate)
             }).pipe(Effect.map(() => state.status)),
           result: () => Effect.sync(() => ({ mime: "video/mp4", stream: state.result })),
@@ -197,6 +203,8 @@ it.effect("reads a resumed job's status once even when the server was down past 
     // time passes while it is in flight, and a deadline would win.
     yield* TestClock.adjust("3 hours")
     state.status = { status: "completed" }
+    // The first read also hits a brief network failure.
+    state.failReads = 1
     const gate = yield* Deferred.make<void>()
     state.gate = gate
     yield* Effect.gen(function* () {
