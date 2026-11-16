@@ -97,6 +97,8 @@ export type ComposerSession = {
     session: {
       prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => ReturnType<Data["session"]["prompt"]>
       setStatus: Data["session"]["setStatus"]
+      // Records an accepted user send so the desktop list promotes the session immediately.
+      acceptSend: (sessionID: string) => void
     }
   }
   current: Accessor<

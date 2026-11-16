@@ -1,4 +1,4 @@
-import { appendFileSync, writeFileSync } from "node:fs"
+import { appendFileSync, rmSync, writeFileSync } from "node:fs"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
@@ -16,7 +16,11 @@ export function temporaryDirectory() {
 
 export function listen(
   socketPath: string,
-  handle: (socket: net.Socket, request: Record<string, unknown>, token: string) => object | undefined,
+  handle: (
+    socket: net.Socket,
+    request: Record<string, unknown>,
+    token: string,
+  ) => object | undefined | Promise<object | undefined>,
 ) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
@@ -33,8 +37,10 @@ export function listen(
             const owning = envelope.request.op === "own"
             if (owning) owner = true
             const response = owning ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
-            if (response) socket.write(frame(response))
-            if (owner) return serve()
+            return Promise.resolve(response).then((response) => {
+              if (response) socket.write(frame(response))
+              if (owner) return serve()
+            })
           })
         void serve().catch(() => socket.destroy())
       })
@@ -132,6 +138,12 @@ export const fakeDaemon = Effect.fn(function* () {
   const failTerminate = new Set<string>()
   const trap = new Set<number>()
   const failCreate = { message: undefined as string | undefined }
+  // How long a prepared handoff's ticket stays valid.
+  const handoffTTL = { ms: 60_000 }
+  // While set, `create_pipe` answers only once it resolves, like a daemon slow to start a command.
+  const holdCreate: { until?: Promise<void> } = {}
+  // While set, `list` answers only once it resolves, like a busy daemon.
+  const holdList: { until?: Promise<void> } = {}
   const ops: string[] = []
   const requests: Record<string, unknown>[] = []
   let nextID = 1
@@ -171,8 +183,10 @@ export const fakeDaemon = Effect.fn(function* () {
     ops.push(String(request.op))
     requests.push(request)
     if (request.op === "ping") return pong
-    if (request.op === "list")
-      return { type: "processes", processes: processes.filter((item) => item.mode === request.mode) }
+    if (request.op === "list") {
+      const list = () => ({ type: "processes", processes: processes.filter((item) => item.mode === request.mode) })
+      return holdList.until ? holdList.until.then(list) : list()
+    }
     if (request.op === "get") {
       const found = find(request.id)
       if (!found) return { type: "error", message: `terminal ${String(request.id)} not found` }
@@ -187,13 +201,22 @@ export const fakeDaemon = Effect.fn(function* () {
       if (typeof request.cwd !== "string" || !path.isAbsolute(request.cwd))
         return { type: "error", message: "cwd must be absolute" }
       if (failCreate.message !== undefined) return { type: "error", message: failCreate.message }
-      const created = pipe(nextID++, request)
-      writeFileSync(String(request.output_path), "")
-      processes.push(created)
-      return { type: "created", process: created }
+      const create = () => {
+        const created = pipe(nextID++, request)
+        writeFileSync(String(request.output_path), "")
+        processes.push(created)
+        return { type: "created", process: created }
+      }
+      return holdCreate.until ? holdCreate.until.then(create) : create()
     }
     if (request.op === "control") return { type: "ok" }
-    if (request.op === "prepare_handoff") return { type: "handoff", ticket: "next", expires_at: Date.now() + 60_000 }
+    // Unregisters, so the server sees it stopped; it keeps serving connections already open.
+    if (request.op === "shutdown") {
+      rmSync(path.join(directory, "service.json"), { force: true })
+      return { type: "ok" }
+    }
+    if (request.op === "prepare_handoff")
+      return { type: "handoff", ticket: "next", expires_at: Date.now() + handoffTTL.ms }
     if (request.op === "rename") {
       const found = find(request.id)
       if (!found?.pty) return { type: "error", message: "terminal not found" }
@@ -245,6 +268,9 @@ export const fakeDaemon = Effect.fn(function* () {
   return {
     failTerminate,
     failCreate,
+    holdCreate,
+    holdList,
+    handoffTTL,
     trap,
     ops,
     requests,

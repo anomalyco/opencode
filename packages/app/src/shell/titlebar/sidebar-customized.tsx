@@ -117,7 +117,7 @@ export function SidebarCustomized(props: {
 
   const actions = createProjectSessionActions()
 
-  const activity = createSidebarActivityListener()
+  createSidebarActivityListener()
 
   const [view, setView] = persisted(Persist.global("sidebar.view"), ViewState, {
     grouping: "project",
@@ -248,10 +248,7 @@ export function SidebarCustomized(props: {
       const recent = recentQueries[index]?.data?.() ?? []
 
       // `apply` drops sessions being deleted or already deleted, which the fetched lists still hold until they refetch.
-      const indexed = ctx.data.session.apply(
-        mergeSidebarSessions(recent, ctx.data.session.list(), (id) => activity.get(server, id)),
-        { activity: false },
-      )
+      const indexed = ctx.data.session.apply(mergeSidebarSessions(recent, ctx.data.session.known()))
 
       const children = view.show.subagents
         ? ctx.data.session.list().filter((session) => !!session.parentID && session.time.archived === undefined)

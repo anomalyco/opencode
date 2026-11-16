@@ -22,22 +22,23 @@ import { $ } from "bun"
 
 type Edit = {
   readonly name: string
-  // Bundled chunk the code lives in: `public-<hash>` (client) or `src-<hash>` (bundled core schemas).
-  readonly chunk: "public" | "src"
+  // Bundled chunk the code lives in: `public-<hash>` (client), `src-<hash>` (bundled core) or `index-<hash>` (types).
+  readonly chunk: "public" | "src" | "index"
   readonly find: (format: Format) => string
   readonly replace: (format: Format) => string
 }
 
 type Format = {
   readonly extension: "mjs" | "cjs"
+  readonly types: "d.mts" | "d.cts"
   // How the chunk refers to core helpers and zod in each build.
   readonly core: string
   readonly zod: string
 }
 
 const formats: ReadonlyArray<Format> = [
-  { extension: "mjs", core: "", zod: "z" },
-  { extension: "cjs", core: "require_src.", zod: "zod_v4" },
+  { extension: "mjs", types: "d.mts", core: "", zod: "z" },
+  { extension: "cjs", types: "d.cts", core: "require_src.", zod: "zod_v4" },
 ]
 
 const edits: ReadonlyArray<Edit> = [
@@ -123,6 +124,55 @@ const edits: ReadonlyArray<Edit> = [
     chunk: "src",
     find: ({ zod }) => `\t\t\ttools: ${zod}.array(ToolSchema$1),\n\t\t\tnextCursor`,
     replace: ({ zod }) => `\t\t\ttools: ${zod}.array(${zod}.unknown()),\n\t\t\tnextCursor`,
+  },
+  {
+    // #63254: send `Mcp-Name` from `params.name` on the MCP Events (SEP-3415) requests that name an event.
+    name: "events Mcp-Name",
+    chunk: "src",
+    find: () => '\t"tasks/cancel": "taskId"\n};\n',
+    replace: () =>
+      [
+        '\t"tasks/cancel": "taskId",',
+        '\t"events/poll": "name",',
+        '\t"events/stream": "name",',
+        '\t"events/subscribe": "name",',
+        '\t"events/unsubscribe": "name"',
+        "};",
+        "",
+      ].join("\n"),
+  },
+  {
+    // #63254: report a request's JSON-RPC id before it is sent, so `events/stream` notifications can be routed.
+    name: "request id",
+    chunk: "src",
+    find: () => "\t\t\tconst messageId = this._requestMessageId++;\n\t\t\tcleanupMessageId = messageId;\n",
+    replace: () =>
+      "\t\t\tconst messageId = this._requestMessageId++;\n\t\t\toptions?.onRequestId?.(messageId);\n\t\t\tcleanupMessageId = messageId;\n",
+  },
+  {
+    // #63254: `timeout: Infinity` sets no timer (setTimeout fires at once past 2^31 - 1 ms), for streams kept by heartbeats.
+    name: "no request timeout",
+    chunk: "src",
+    find: () => "resetTimeoutOnProgress = false) {\n\t\tthis._timeoutInfo.set(messageId, {\n",
+    replace: () =>
+      "resetTimeoutOnProgress = false) {\n\t\tif (timeout === Infinity) return;\n\t\tthis._timeoutInfo.set(messageId, {\n",
+  },
+  {
+    // #63254: the types of the two options above.
+    name: "request id and timeout types",
+    chunk: "index",
+    find: () => "  allowInputRequired?: boolean;\n} & TransportSendOptions;\n",
+    replace: () =>
+      [
+        "  allowInputRequired?: boolean;",
+        "  /**",
+        "   * Called with the request's JSON-RPC id right before it is sent.",
+        "   * A `timeout` of `Infinity` disables the request timeout.",
+        "   */",
+        "  onRequestId?: (id: number) => void;",
+        "} & TransportSendOptions;",
+        "",
+      ].join("\n"),
   },
 ]
 
@@ -229,18 +279,19 @@ async function apply(dir: string) {
   return edited
 }
 
-// The one `public-*` and `src-*` chunk per build under `dir`.
+// The one `public-*` and `src-*` chunk and `index-*` type chunk per build under `dir`.
 async function chunks(dir: string) {
   return Promise.all(
     formats.map(async (format) => {
       const find = async (chunk: Edit["chunk"]) => {
-        const matches = await Array.fromAsync(new Bun.Glob(`dist/${chunk}-*.${format.extension}`).scan({ cwd: dir }))
+        const pattern = `dist/${chunk}-*.${chunk === "index" ? format.types : format.extension}`
+        const matches = await Array.fromAsync(new Bun.Glob(pattern).scan({ cwd: dir }))
         const [match] = matches
         if (match === undefined || matches.length !== 1)
-          throw new Error(`expected one dist/${chunk}-*.${format.extension} in ${dir}, found ${matches.length}`)
+          throw new Error(`expected one ${pattern} in ${dir}, found ${matches.length}`)
         return path.join(dir, match)
       }
-      return [format, { public: await find("public"), src: await find("src") }] as const
+      return [format, { public: await find("public"), src: await find("src"), index: await find("index") }] as const
     }),
   )
 }

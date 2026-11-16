@@ -197,6 +197,7 @@ export const dict = {
   "ui.common.dismiss": "Avfärda",
   "ui.common.close": "Stäng",
   "ui.common.next": "Nästa",
+  "ui.common.continue": "Fortsätt",
   "ui.common.submit": "Skicka",
   "ui.common.showMore": "Visa mer",
   "ui.permission.deny": "Neka",

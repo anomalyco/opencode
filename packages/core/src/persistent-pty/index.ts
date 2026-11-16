@@ -171,6 +171,11 @@ export interface Interface {
   readonly remove: (id: Pty.ID) => Effect.Effect<void, NotFoundError | UnavailableError>
   readonly shutdown: () => Effect.Effect<void, UnavailableError>
   readonly handoff: () => Effect.Effect<Handoff | null, UnavailableError>
+  /**
+   * Whether a handoff to the next server is prepared and its ticket still valid: this server is being replaced, so
+   * the daemon's processes should be left running for the next one. A shutdown clears it.
+   */
+  readonly handoffPrepared: () => boolean
   readonly attach: (id: Pty.ID, input: SubscribeInput) => Effect.Effect<Attachment, NotFoundError | UnavailableError>
   /** Starts the daemon if needed. Fall back to another spawner only on `UnavailableError`. */
   readonly createPipe: (input: CreatePipeInput) => Effect.Effect<PipeInfo, UnavailableError | RequestError>
@@ -361,14 +366,22 @@ const makeLayer = (options: Options = {}) =>
         return undefined
       })
 
+      // When the prepared handoff's ticket expires; 0 when none is prepared.
+      let handoffExpiresAt = 0
+
       const shutdown = Effect.fn("PersistentPty.shutdown")(function* () {
+        handoffExpiresAt = 0
         const response = yield* daemon.shutdown.pipe(Effect.mapError(unavailable))
         current.clear()
         if (!response) return
         if (response.type !== "ok") return yield* unexpected(response)
       })
 
-      const handoff = Effect.fn("PersistentPty.handoff")(() => daemon.handoff.pipe(Effect.mapError(unavailable)))
+      const handoff = Effect.fn("PersistentPty.handoff")(function* () {
+        const prepared = yield* daemon.handoff.pipe(Effect.mapError(unavailable))
+        if (prepared) handoffExpiresAt = prepared.expiresAt
+        return prepared
+      })
 
       const removeVisibleExit = (id: Pty.ID) => {
         if (removing.has(id)) return
@@ -512,6 +525,7 @@ const makeLayer = (options: Options = {}) =>
         remove,
         shutdown,
         handoff,
+        handoffPrepared: () => Date.now() < handoffExpiresAt,
         attach,
         createPipe,
         waitPipe,
