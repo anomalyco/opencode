@@ -534,6 +534,36 @@ fn a_save_after_approval_runs_nothing_unapproved() {
     assert_eq!(listed(&pipe, &dir, PROBE), Some(Status::Pending));
 }
 
+// Expected (bigboi P8-1, js-followups): a save after the approval but before the approved files are copied, which
+// happens off the UI thread, runs nothing: the copy is refused as the files changed since they were approved, the
+// approved module never runs, and the saved build waits for a decision of its own; approved, it runs. This is the race
+// `a_save_after_approval_runs_nothing_unapproved` lost under load before it waited for the load, made certain by
+// holding the copy until the save is made.
+#[test]
+fn a_save_before_the_approved_copy_runs_nothing() {
+    let Some(config) = config() else { return };
+    let (pipe, dir, marker) = project(&[], config);
+    let tui = &pipe.harness.tui;
+    let target = dir.to_string_lossy().into_owned();
+    let Some((Ok(shown), _)) = opencode_tui::plugins::host::held(tui, &target) else { panic!("nothing is held") };
+    pipe.scripts().pause_stages(true);
+    assert_eq!(crate::plugin_pipe::decide(&pipe.harness, &target, &shown, Decision::Approved), Ok(true));
+    let file = dir.join("tui.tsx");
+    let source = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(&file, source.replace("const MODULE = true", "const MODULE = \"saved\"")).unwrap();
+    pipe.scripts().pause_stages(false);
+    pipe.harness.wait("the saved build is held", || {
+        pipe.settle();
+        matches!(opencode_tui::plugins::host::held(tui, &target), Some((Ok(held), _)) if held.sha256 != shown.sha256)
+    });
+    assert_eq!(std::fs::read_to_string(&marker).unwrap_or_default(), "", "a module ran before its approval");
+    assert_eq!(listed(&pipe, &dir, PROBE), Some(Status::Pending));
+    approve(&pipe, &dir);
+    pipe.active(PROBE);
+    let ran = std::fs::read_to_string(&marker).unwrap();
+    assert_eq!(ran.lines().collect::<Vec<_>>(), [r#"{"module":"saved"}"#]);
+}
+
 /// The status of the project plugin `dir`: listed by its directory until it loads, then by `id`.
 fn listed(pipe: &Pipe, dir: &Path, id: &str) -> Option<Status> {
     let target = dir.to_string_lossy();
