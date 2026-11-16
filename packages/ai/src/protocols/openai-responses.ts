@@ -159,6 +159,8 @@ const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
+  lowerAdditionalTools: (tools: ReadonlyArray<ToolEntry>, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) =>
+    Effect.forEach(tools, (tool) => lowerToolEntry(tool, custom)),
 } satisfies OpenResponses.ProviderAdapter
 
 // GPT-6 and later default to `configuration_update` support, except in `reasoning.mode: "pro"`
@@ -172,6 +174,10 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   const match = /(?:^|\/)gpt-(\d+)(?:\.\d+)?(?:-|$)/i.exec(request.model.id)
   return match !== null && Number(match[1]) >= 6
 }
+
+// Without starting tools there is no cached tool list to preserve.
+const supportsToolUpdates = (request: LLMRequest) =>
+  request.model.capabilities?.tools?.updates === true && request.tools.length > 0
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
   const native = tool.native?.openai
@@ -334,6 +340,7 @@ export const protocol = Protocol.make({
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
   }),
   supportsEffortUpdates,
+  supportsToolUpdates,
 })
 
 const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL })

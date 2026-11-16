@@ -23,11 +23,13 @@ import {
   type ProviderOptions,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolChanges,
   type ToolResultPart,
 } from "../schema/index.js"
 import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared, withUntypedFrames } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
+import { foldTools, removalNotice, toolsUpdate } from "../tool-updates.js"
 import * as Cache from "./utils/cache.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -253,17 +255,6 @@ const AnthropicAssistantBlock = Schema.Union([
 type AnthropicAssistantBlock = Schema.Schema.Type<typeof AnthropicAssistantBlock>
 type AnthropicToolResultBlock = Schema.Schema.Type<typeof AnthropicToolResultBlock>
 
-const AnthropicMessage = Schema.Union([
-  Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(AnthropicUserBlock) }),
-  Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(AnthropicAssistantBlock) }),
-  Schema.Struct({
-    role: Schema.Literal("system"),
-    content: Schema.Array(AnthropicTextBlock),
-    output_config: Schema.optional(Schema.Struct({ effort: Schema.String })),
-  }),
-]).pipe(Schema.toTaggedUnion("role"))
-type AnthropicMessage = Schema.Schema.Type<typeof AnthropicMessage>
-
 const AnthropicTool = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
@@ -271,6 +262,26 @@ const AnthropicTool = Schema.Struct({
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 type AnthropicTool = Schema.Schema.Type<typeof AnthropicTool>
+
+const AnthropicToolAdditionBlock = Schema.Struct({
+  type: Schema.tag("tool_addition"),
+  tool: Schema.Struct({ type: Schema.tag("tool_definition"), definition: AnthropicTool }),
+})
+const AnthropicToolRemovalBlock = Schema.Struct({
+  type: Schema.tag("tool_removal"),
+  tool: Schema.Struct({ type: Schema.tag("tool_reference"), name: Schema.String }),
+})
+
+const AnthropicMessage = Schema.Union([
+  Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(AnthropicUserBlock) }),
+  Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(AnthropicAssistantBlock) }),
+  Schema.Struct({
+    role: Schema.Literal("system"),
+    content: Schema.Array(Schema.Union([AnthropicTextBlock, AnthropicToolAdditionBlock, AnthropicToolRemovalBlock])),
+    output_config: Schema.optional(Schema.Struct({ effort: Schema.String })),
+  }),
+]).pipe(Schema.toTaggedUnion("role"))
+type AnthropicMessage = Schema.Schema.Type<typeof AnthropicMessage>
 
 const AnthropicToolChoice = Schema.Union([
   Schema.Struct({
@@ -792,6 +803,45 @@ const lowerWrappedSystemUpdate = Effect.fnUntraced(function* (
   return { type: "text" as const, text: part.text, cache_control: cacheControl(breakpoints, part.cache) }
 })
 
+const lowerToolsUpdate = Effect.fnUntraced(function* (
+  message: LLMRequest["messages"][number],
+  update: ToolChanges,
+  removed: ReadonlyArray<string>,
+  breakpoints: Cache.Breakpoints,
+) {
+  const text = message.content.length === 0 ? [] : (yield* lowerNativeSystemUpdate(message, breakpoints)).content
+  return {
+    role: "system" as const,
+    content: [
+      ...ProviderShared.flattenTools(update.add).map((tool) => ({
+        type: "tool_addition" as const,
+        tool: { type: "tool_definition" as const, definition: lowerTool(breakpoints, tool) },
+      })),
+      ...removed.map((name) => ({ type: "tool_removal" as const, tool: { type: "tool_reference" as const, name } })),
+      ...(removed.length === 0 ? [] : [{ type: "text" as const, text: removalNotice(removed) }]),
+      ...text,
+    ],
+  }
+})
+
+// Removing a namespace removes every flattened tool inside it.
+const toolRemovals = (request: LLMRequest) => {
+  const removals = new Map<ToolChanges, ReadonlyArray<string>>()
+  request.messages.reduce((tools, message) => {
+    const update = toolsUpdate(message)
+    if (update === undefined) return tools
+    removals.set(
+      update,
+      update.remove.flatMap((name) => {
+        const entries = tools.filter((tool) => tool.name === name)
+        return entries.length === 0 ? [name] : ProviderShared.flattenTools(entries).map((tool) => tool.name)
+      }),
+    )
+    return foldTools(tools, update.add, update.remove)
+  }, request.tools)
+  return removals
+}
+
 const appendToUserTurn = (messages: AnthropicMessage[], block: AnthropicUserBlock) => {
   const last = messages.at(-1)
   if (last?.role === "user") messages[messages.length - 1] = { role: "user", content: [...last.content, block] }
@@ -805,9 +855,17 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   // user turn, the nearest spot where Anthropic accepts a native system message.
   const holdUpdates = supportsNativeSystemUpdates(request)
   const held: Array<LLMRequest["messages"][number]> = []
+  const removals = toolRemovals(request)
   const releaseHeld = Effect.fnUntraced(function* () {
     const native = acceptsNativeSystemAfter(messages.findLast((message) => message.role !== "system"))
     for (const update of held.splice(0)) {
+      const tools = toolsUpdate(update)
+      if (tools !== undefined) {
+        if (!native) return yield* invalid("Anthropic Messages tool updates must follow a user message or tool result")
+        const lowered = yield* lowerToolsUpdate(update, tools, removals.get(tools) ?? [], breakpoints)
+        if (lowered.content.length > 0) messages.push(lowered)
+        continue
+      }
       if (native) messages.push(yield* lowerNativeSystemUpdate(update, breakpoints))
       else appendToUserTurn(messages, yield* lowerWrappedSystemUpdate(update, breakpoints))
     }
@@ -819,6 +877,11 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
       if (update) {
         // Accepted at any position, so the text-update placement rules do not apply.
         messages.push({ role: "system", content: [], output_config: { effort: update.effort ?? DEFAULT_EFFORT } })
+        continue
+      }
+      // Held like text updates, so one between a tool call and its result lands after the result.
+      if (holdUpdates && toolsUpdate(message) !== undefined) {
+        held.push(message)
         continue
       }
       if (splitsLocalToolResults(request.messages, index))
@@ -929,6 +992,13 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   if (version.family === "opus" && version.major >= 5) return true
   return version.major > 5 || (version.major === 5 && version.minor >= 1)
 }
+
+// Without starting tools the inline list would miss the cache once anyway, and the API rejects a tool list
+// that only exists through mid-conversation additions.
+const supportsToolUpdates = (request: LLMRequest) =>
+  request.model.capabilities?.tools?.updates === true &&
+  supportsNativeSystemUpdates(request) &&
+  request.tools.length > 0
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
   if (isThinkingOff(thinking)) return thinking
@@ -1528,6 +1598,7 @@ export const protocol = Protocol.make({
     step,
   },
   supportsEffortUpdates,
+  supportsToolUpdates,
 })
 
 export const transport = <
@@ -1568,6 +1639,14 @@ function requiredBetaHeaders(
 
   if (body.messages.some((message) => message.role === "system" && message.output_config !== undefined))
     betas.push("mid-conversation-output-config-2026-07-01")
+  if (
+    body.messages.some(
+      (message) =>
+        message.role === "system" &&
+        message.content.some((block) => block.type === "tool_addition" || block.type === "tool_removal"),
+    )
+  )
+    betas.push("inline-tools-2026-09-15")
 
   // Opus 5.5 accepts `speed` without this header; earlier fast-mode models reject `speed` without it.
   if (body.speed !== undefined) betas.push("fast-mode-2026-02-01")

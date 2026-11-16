@@ -64,6 +64,7 @@ export function gatewayProtocol<Body, Event, State>(
       }),
     },
     supportsEffortUpdates: protocol.supportsEffortUpdates,
+    supportsToolUpdates: protocol.supportsToolUpdates,
     sanitizer: protocol.sanitizer,
     stream: {
       event: protocol.stream.event,
