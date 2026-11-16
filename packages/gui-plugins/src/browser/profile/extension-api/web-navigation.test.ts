@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test"
-import { fragmentOnly, frameIds } from "./web-navigation"
+import { EventEmitter } from "node:events"
+import type { Wire } from "./api"
+import type { ExtensionTabs } from "./tabs"
+import { createWebNavigation, fragmentOnly, frameIds } from "./web-navigation"
 
 test("frames get Chrome's ids: 0 for the top frame, their tree node id below it", () => {
   const top = { frameTreeNodeId: 1, parent: null }
@@ -15,4 +18,39 @@ test("an in-page navigation is a fragment change only when nothing but the fragm
   expect(fragmentOnly("https://a.com/x#one", "https://a.com/x#two")).toBe(true)
   expect(fragmentOnly("https://a.com/x", "https://a.com/y")).toBe(false)
   expect(fragmentOnly(undefined, "https://a.com/x#two")).toBe(false)
+})
+
+test("a load the page's beforeunload kept reports its error for the top frame instead of throwing", () => {
+  // Electron's loadURL emits did-fail-load with no frame process or routing id when the page holds its unload.
+  const contents = Object.assign(new EventEmitter(), {
+    id: 7,
+    isDestroyed: () => false,
+    getURL: () => "https://a.example/form",
+  })
+  const emitted: [string, readonly Wire[]][] = []
+  // SAFETY: web navigation reads only `watch` and `get` of the tabs, and only the members above of a tab's contents.
+  const tabs = {
+    watch: (watch: (tab: { contents: typeof contents }) => (() => void) | void) => watch({ contents }) ?? (() => {}),
+    get: () => undefined,
+  } as unknown as ExtensionTabs
+  createWebNavigation({ tabs, emit: (event, args) => emitted.push([event, args]) })
+
+  contents.emit("did-fail-load", {}, -3, "ERR_ABORTED", "https://b.example/", true)
+
+  expect(emitted).toEqual([
+    [
+      "webNavigation.onErrorOccurred",
+      [
+        {
+          tabId: 7,
+          processId: -1,
+          timeStamp: expect.any(Number),
+          frameId: 0,
+          parentFrameId: -1,
+          url: "https://b.example/",
+          error: "ERR_ABORTED",
+        },
+      ],
+    ],
+  ])
 })
