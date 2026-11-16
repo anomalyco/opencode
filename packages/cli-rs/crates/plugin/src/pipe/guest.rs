@@ -333,6 +333,16 @@ impl Guest {
             return;
         }
         let Some(scripts) = self.scripts.upgrade() else { return };
+        let churning = scripts
+            .loads
+            .borrow_mut()
+            .get_mut(&self.loaded.target)
+            .is_some_and(|load| load.reloaded(std::time::Instant::now()));
+        if churning {
+            let (count, window) = (super::RELOADS, super::RELOAD_WINDOW.as_secs());
+            self.fail(format!("it changed its registrations more than {count} times in {window} s, and never settled"));
+            return;
+        }
         // The replacement adopts this activation of the JS host: this guest's end must not deactivate it (review
         // carbon-2). Its mounts still end on the JS host, which keeps them for the activation (P8).
         let handed = self.js.get();

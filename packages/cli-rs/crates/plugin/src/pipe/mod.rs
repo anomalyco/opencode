@@ -441,6 +441,23 @@ struct Load {
     digest: u64,
     state: Loading,
     registered: bool,
+    /// When its registrations changed after setup, within the last [`RELOAD_WINDOW`] ([`Load::reloaded`]).
+    reloads: VecDeque<Instant>,
+}
+
+/// The reloads of a plugin's registrations within [`RELOAD_WINDOW`] past which it fails. Each reload sets up its surfaces
+/// again, which mounts its components again: one whose mount changes the registrations reloads without end (CT-1:
+/// tokscope's page, about 1,000 reloads a second, until the user left it).
+const RELOADS: usize = 64;
+const RELOAD_WINDOW: Duration = Duration::from_secs(5);
+
+impl Load {
+    /// Notes a reload of its registrations at `now`: whether it is past [`RELOADS`] within [`RELOAD_WINDOW`].
+    fn reloaded(&mut self, now: Instant) -> bool {
+        self.reloads.retain(|at| now.duration_since(*at) < RELOAD_WINDOW);
+        self.reloads.push_back(now);
+        self.reloads.len() > RELOADS
+    }
 }
 
 enum Loading {
@@ -828,6 +845,7 @@ impl Scripts {
                 digest,
                 state: Loading::Waiting(seq),
                 registered: false,
+                reloads: VecDeque::new(),
             },
         );
         drop(loads);
