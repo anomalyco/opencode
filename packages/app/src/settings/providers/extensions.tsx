@@ -51,6 +51,7 @@ export const SettingsExtensions: Component<{
   createEffect(() => {
     if (serverSdk.connection.status() !== "connected") return
     void data.location.mcp.server.sync(data.location.default()).catch(() => undefined)
+    void data.location.config.sync(location()).catch(() => undefined)
 
     if (props.directory) void data.location.mcp.server.sync(location()).catch(() => undefined)
   })
@@ -94,8 +95,15 @@ export const SettingsExtensions: Component<{
   })
   const skills = createMemo(() => (data.location.skill.list() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
 
+  // Matches the server: the highest-priority document that sets `experimental` decides.
+  const browseSetup = () =>
+    data.location.config
+      .list(location())
+      ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
+      .at(-1)?.browse_setup === true
+
   // browse installs into this computer's agent config, so it is offered only for the desktop's own server.
-  const browse = () => (ServerConnection.builtin(serverSdk.server) ? platform.browse : undefined)
+  const browse = () => (browseSetup() && ServerConnection.builtin(serverSdk.server) ? platform.browse : undefined)
 
   const syncMcps = () => {
     void data.location.mcp.server.sync(data.location.default()).catch(() => undefined)
