@@ -94,6 +94,9 @@ fn main() -> ExitCode {
         args = logged.as_str();
         "cli starting"
     );
+    if let Some(server) = opencode_util::bundle::server() {
+        log::info!(path = server.display().to_string().as_str(); "bundled server");
+    }
     let context =
         commands::Context { server: invocation.server.clone(), args, dev: dev.as_ref().map(|dev| dev.library.clone()) };
     let result = commands::run(&context, cli);

@@ -78,14 +78,21 @@ impl Env {
     }
 
     fn ts(&self) -> TsCommand {
-        self.ts_with(|name| std::env::var_os(name), cfg!(windows))
+        self.ts_with(|name| std::env::var_os(name), cfg!(windows), opencode_util::bundle::server())
     }
 
-    /// `ts_bin` stands in for `OPENCODE_TS_BIN`; `PATH` and `PATHEXT` come from `var`.
-    fn ts_with(&self, var: impl Fn(&str) -> Option<std::ffi::OsString>, windows: bool) -> TsCommand {
+    /// `ts_bin` stands in for `OPENCODE_TS_BIN`; `PATH` and `PATHEXT` come from `var`; `bundled` is the binary
+    /// beside this executable.
+    fn ts_with(
+        &self,
+        var: impl Fn(&str) -> Option<std::ffi::OsString>,
+        windows: bool,
+        bundled: Option<PathBuf>,
+    ) -> TsCommand {
         TsCommand::resolve(
             |name| if name == TsCommand::VAR { self.ts_bin.clone().map(Into::into) } else { var(name) },
             windows,
+            bundled,
         )
     }
 }
@@ -466,12 +473,16 @@ mod tests {
             "PATHEXT" => Some(".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.CPL".into()),
             _ => None,
         };
-        let ts = |env: &Env| env.ts_with(var, true).program;
+        let ts = |env: &Env| env.ts_with(var, true, None).program;
         assert_eq!(ts(&Env::default()), exe.as_os_str());
         std::fs::remove_file(&exe).unwrap();
         assert_eq!(ts(&Env::default()), prefix.join("opencode.cmd").as_os_str());
         assert_eq!(ts(&missing_ts()), "/nonexistent/opencode-ts");
-        assert_eq!(Env::default().ts_with(var, false).program, "opencode");
+        assert_eq!(Env::default().ts_with(var, false, None).program, "opencode");
+        // Expected (bundle-server): the binary beside the client wins over the shim on `PATH`, not over the variable.
+        let bundled = || Some(PathBuf::from("C:\\oc\\opencode.exe"));
+        assert_eq!(Env::default().ts_with(var, true, bundled()).program, "C:\\oc\\opencode.exe");
+        assert_eq!(missing_ts().ts_with(var, true, bundled()).program, "/nonexistent/opencode-ts");
     }
 
     const OTHER: &str = "http://127.0.0.1:4097/api/info";
