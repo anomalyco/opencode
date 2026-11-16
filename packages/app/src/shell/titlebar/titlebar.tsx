@@ -13,7 +13,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
-import { useProjectsSidebar } from "@/shell/projects-sidebar"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { useProjectBrowser } from "@/home/projects/browse"
 import { useProjectStart } from "@/home/projects/start"
 import { WindowsAppMenu } from "./windows-menu"
@@ -235,7 +235,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             const layout = useLayout()
             const global = useGlobal()
 
-            const projectsSidebar = useProjectsSidebar()
+            const projectNavigation = useProjectNavigation()
 
             const browseProjects = useProjectBrowser()
 
@@ -273,7 +273,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             const openDraft = (draftID: string) => {
               const route = layout.route()
 
-              if (projectsSidebar() && (route.type === "home" || route.type === "settings"))
+              if (projectNavigation() && (route.type === "home" || route.type === "settings"))
                 return projectStart.start(draftID)
 
               switch (route.type) {
@@ -473,7 +473,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             }
 
             const firstSidebarAction = () => (
-              <Show when={projectsSidebar()} fallback={homeButton(true)}>
+              <Show when={projectNavigation()} fallback={homeButton(true)}>
                 {newSessionButton()}
               </Show>
             )
@@ -481,12 +481,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
-                title: language.t(projectsSidebar() ? "project.browse.title" : "home.title"),
+                title: language.t(projectNavigation() ? "project.browse.title" : "home.title"),
                 category: language.t("command.category.view"),
                 keybind: windows() ? "alt+home" : "mod+b",
                 hidden: true,
                 onSelect: () => {
-                  if (projectsSidebar()) return browseProjects()
+                  if (projectNavigation()) return browseProjects()
 
                   if (layout.route().type !== "home") layout.home.searchFocus.request()
                   toggleHome()
@@ -854,7 +854,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                             <div class="flex w-full shrink-0 flex-col gap-[3px]">
                               <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
                               {searchButton(true)}
-                              <Show when={projectsSidebar()} fallback={newSessionButton()}>
+                              <Show when={projectNavigation()} fallback={newSessionButton()}>
                                 {settingsButton()}
                               </Show>
                             </div>

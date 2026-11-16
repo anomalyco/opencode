@@ -890,7 +890,7 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
-    "Choose how to organize sessions in side tabs. On desktop, Projects replaces Home and lists projects by server.",
+    "Choose how to organize sessions in side tabs. On desktop, Projects and Customize replace Home with Settings in the sidebar.",
   "settings.experimental.sidebarOrganize.recent": "Recent",
   "settings.experimental.sidebarOrganize.projects": "Projects",
   "settings.experimental.sidebarOrganize.list": "One list",

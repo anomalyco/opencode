@@ -3,7 +3,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { onMount, Show } from "solid-js"
 import { useLayout } from "@/shell/state/layout"
 import { useSettings } from "@/settings/model"
-import { useProjectsSidebar } from "@/shell/projects-sidebar"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { ProjectLanding } from "./projects/landing"
 import { createHomeController } from "./model"
 import { createHomeProjectsController } from "./projects/controller"
@@ -17,11 +17,11 @@ import { HomeSessions } from "./sessions/region"
 export function Home() {
   const settings = useSettings()
 
-  const projects = useProjectsSidebar()
+  const projectNavigation = useProjectNavigation()
 
   return (
     <Show when={settings.ready()}>
-      <Show when={projects()} fallback={<HomeOverview />}>
+      <Show when={projectNavigation()} fallback={<HomeOverview />}>
         <ProjectLanding />
       </Show>
     </Show>

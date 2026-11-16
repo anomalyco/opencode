@@ -33,7 +33,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useLayout, type LocalProject } from "@/shell/state/layout"
-import { useProjectsSidebar } from "@/shell/projects-sidebar"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useSettingsSurface } from "@/settings/surface"
 import { pathKey } from "@/workspaces/path-key"
@@ -114,7 +114,7 @@ export function SessionLocation(props: {
   const platform = usePlatform()
   const layout = useLayout()
   const settingsSurface = useSettingsSurface()
-  const projectsSidebar = useProjectsSidebar()
+  const projectNavigation = useProjectNavigation()
   const browse = useProjectBrowser()
   const navigate = useNavigate()
   const collapse = useContext(SessionHeaderCollapse)
@@ -190,7 +190,7 @@ export function SessionLocation(props: {
 
     if (!project) return
 
-    if (projectsSidebar()) return browse({ server: server.key, directory: project.worktree })
+    if (projectNavigation()) return browse({ server: server.key, directory: project.worktree })
 
     server.ctx.projects.touch(project.worktree)
     layout.home.setSelection({ server: server.key, directory: project.worktree })
