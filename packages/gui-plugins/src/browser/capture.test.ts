@@ -1,7 +1,17 @@
 import { expect, test } from "bun:test"
-import { pngFits, undrawable, undrawableMessage } from "./capture"
+import { cropPixels, pngFits, undrawable, undrawableMessage } from "./capture"
 
 const shown = { minimized: false, visible: true, appHidden: false }
+
+test("crop uses the returned pixels, including fractional edge overlaps at non-default zoom", () => {
+  // A 200 DIP view rendered at 150% DPI, at page zoom 2: one CSS pixel covers three bitmap pixels.
+  const crop = (x: number, y: number, width: number, height: number) => cropPixels({ x, y, width, height }, { width: 300, height: 240 }, 200, 2)
+  expect(crop(10, 20, 4, 5)).toEqual({ x: 30, y: 60, width: 12, height: 15 })
+  expect(crop(99.95, 79.95, 2, 2)).toEqual({ x: 299, y: 239, width: 1, height: 1 })
+  expect(crop(-2, -2, 2.05, 2.05)).toEqual({ x: 0, y: 0, width: 1, height: 1 })
+  expect(crop(100, 0, 1, 1)).toBeUndefined()
+  expect(crop(0, 80, 1, 1)).toBeUndefined()
+})
 
 test("reuse the redraw's PNG only when its actual dimensions and transfer size fit", () => {
   const png = Buffer.alloc(32)

@@ -5,7 +5,7 @@ import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
-import { CAPTURE_DEADLINE_MS, pngFits, undrawable, undrawableMessage } from "./capture"
+import { CAPTURE_DEADLINE_MS, cropPixels, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
@@ -84,6 +84,8 @@ import type { WorkspaceSource } from "./workspace-file"
 import type { artifactPages } from "./artifact-preview"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
+
+const noVisibleArea = "Element has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport."
 
 /** State every page of the pane shares: the element ref allocator and the owner of the app-wide trace. */
 export type Shared = { ref: () => string; trace?: SharedTrace }
@@ -1958,21 +1960,18 @@ export function createBrowserPage(
       height: Math.min(viewport.clientHeight, element.y + element.height) - Math.max(0, element.y),
     }
 
-    if (clip && (clip.width <= 0 || clip.height <= 0))
-      throw new Error(
-        "Element has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
-      )
+    if (clip && (clip.width <= 0 || clip.height <= 0)) throw new Error(noVisibleArea)
 
     return captureViewport(action, signal, clip)
   }
 
   async function captureViewport(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal, clip?: Electron.Rectangle) {
-    const displayScale = electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-    const ratio = contents.getZoomFactor() * displayScale
+    const viewWidth = view.getBounds().width
+    const zoom = contents.getZoomFactor()
     const maxWidth = action.maxWidth ?? 2000
     const format = action.format === "png" ? "png" : "jpeg"
     // Request the final encoding when the viewport fits. Use a lossless intermediate for cropping or resizing.
-    const encoding = !clip && view.getBounds().width * displayScale <= maxWidth ? format : "png"
+    const encoding = !clip && viewWidth * electron.screen.getDisplayMatching(win.getNormalBounds()).scaleFactor <= maxWidth ? format : "png"
 
     const shot = await cdp.send("Page.captureScreenshot", {
       format: encoding,
@@ -1989,16 +1988,13 @@ export function createBrowserPage(
 
     const viewportImage = electron.nativeImage.createFromBuffer(bytes)
 
-    const image = clip
-      ? viewportImage.crop({
-          x: Math.round(clip.x * ratio),
-          y: Math.round(clip.y * ratio),
-          width: Math.max(1, Math.round(clip.width * ratio)),
-          height: Math.max(1, Math.round(clip.height * ratio)),
-        })
-      : viewportImage
+    if (viewportImage.isEmpty()) throw new Error(undrawableMessage("stalled"))
+    const area = clip && cropPixels(clip, viewportImage.getSize(), viewWidth, zoom)
 
-    if (image.isEmpty()) throw new Error(undrawableMessage("stalled"))
+    if (clip && !area) throw new Error(noVisibleArea)
+    const image = area ? viewportImage.crop(area) : viewportImage
+
+    if (image.isEmpty()) throw new Error(noVisibleArea)
 
     if (!clip && encoding === format && image.getSize().width <= maxWidth && bytes.length <= Browser.MAX_FILE_BYTES)
       return { format, data: bytes }

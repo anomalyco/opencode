@@ -4,6 +4,22 @@ export type Undrawable = "minimized" | "hidden" | "stalled"
 /** How long a viewport or element capture may wait for the tab's frame before it gives up. */
 export const CAPTURE_DEADLINE_MS = 2_500
 
+type Size = { width: number; height: number }
+
+type Rect = Size & { x: number; y: number }
+
+/** Intersect in actual bitmap pixels. Round outward so a fractional overlap includes the pixel it touches. */
+export function cropPixels(clip: Rect, image: Size, viewWidth: number, zoom: number) {
+  if (viewWidth <= 0 || clip.width <= 0 || clip.height <= 0) return
+  const ratio = image.width / viewWidth * zoom
+  const x = Math.max(0, Math.floor(clip.x * ratio))
+  const y = Math.max(0, Math.floor(clip.y * ratio))
+  const right = Math.min(image.width, Math.ceil((clip.x + clip.width) * ratio))
+  const bottom = Math.min(image.height, Math.ceil((clip.y + clip.height) * ratio))
+
+  if (right > x && bottom > y) return { x, y, width: right - x, height: bottom - y }
+}
+
 /** CDP produced a PNG. Read its IHDR dimensions before deciding whether decoding and resizing are necessary. */
 export function pngFits(png: Buffer, maxWidth: number, maxBytes: number) {
   if (png.length < 24 || png.length > maxBytes) return false
