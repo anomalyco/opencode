@@ -3,7 +3,8 @@ import { Schema } from "effect"
 import type { BuiltinMainStorage, MainStoreFrom } from "@opencode/plugin/gui/builtin"
 
 const Stored = Schema.Struct({
-  tabs: Schema.Array(Schema.Struct({ id: Browser.TabID, url: Browser.Tab.fields.url })),
+  // `agent`: the agent drove the tab, which keeps every agent-driven limit when it comes back.
+  tabs: Schema.Array(Schema.Struct({ id: Browser.TabID, url: Browser.Tab.fields.url, agent: Schema.optional(Schema.Literal(true)) })),
   focusedTabID: Schema.NullOr(Browser.TabID),
 })
 
@@ -30,9 +31,13 @@ export function createBrowserRestoreStore(storage: BuiltinMainStorage) {
 
   return {
     load: (key: string) => store(key).value,
-    save(key: string, state: Stored) {
+    save(key: string, state: Stored, agent: (tabID: Browser.TabID) => boolean) {
       const target = store(key)
-      const value = { tabs: state.tabs.map((tab) => ({ id: tab.id, url: tab.url })), focusedTabID: state.focusedTabID }
+
+      const value = {
+        tabs: state.tabs.map((tab) => (agent(tab.id) ? { id: tab.id, url: tab.url, agent: true as const } : { id: tab.id, url: tab.url })),
+        focusedTabID: state.focusedTabID,
+      }
 
       if (JSON.stringify(target.value) !== JSON.stringify(value)) target.set(value)
     },
