@@ -216,4 +216,5 @@ export default {
   "artifact.unavailable": "The artifact cannot be opened right now. Check the server connection and try again.",
   "preview.upgrade": "Update this session's server to open workspace previews, then reload this tab.",
   "preview.restricted": "This page tried to load files it is not allowed to read.",
+  "artifact.missing": "This artifact is not available on this session’s server.",
 }

@@ -130,6 +130,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (error === "browser.preview.restricted") return ctx.t("preview.restricted")
 
+    if (error === "browser.artifact.missing") return ctx.t("artifact.missing")
+
     if (error === "browser.address.web") return ctx.t("refused.web")
 
     return ctx.t("common.requestFailed")
@@ -328,15 +330,19 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     void current.registration.command(effect.action).then(
       () => dispatch({ type: "command.settled", sessionKey, request: effect.request }),
-      (cause: unknown) =>
+      (cause: unknown) => {
+        const error = cause instanceof Error && cause.message ? cause.message : "browser.command.failed"
+
+        if (error === "browser.artifact.missing" && !ctx.signal.aborted) ctx.toast.show({ title: describe(error), variant: "error" })
         dispatch({
           type: "command.failed",
           sessionKey,
           attempt: effect.attempt,
           request: effect.request,
-          error: cause instanceof Error && cause.message ? cause.message : "browser.command.failed",
+          error,
           unavailable: unavailable(cause),
-        }),
+        })
+      },
     )
   }
 

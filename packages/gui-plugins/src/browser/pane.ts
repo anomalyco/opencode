@@ -785,6 +785,14 @@ export function createBrowserPane(input: {
       const refused = origin === "agent" ? agentRefusal(action, { url: "about:blank", origin: "null" }) : undefined
 
       if (refused) throw new Error(refused)
+
+      if (action.url?.startsWith("artifact:")) {
+        const available = await handles.get(binding)?.artifacts?.().exists(action.url)
+        signal.throwIfAborted()
+
+        if (!available) throw new Error("browser.artifact.missing")
+      }
+
       const file = reusableFile(action.url, intent)
 
       if (file) {

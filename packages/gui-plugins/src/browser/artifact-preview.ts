@@ -45,7 +45,8 @@ export function artifactPages(
     async exists(url: string) {
       const item = artifactAddress(url)
 
-      if (!item || !grants.has(item.id)) return false
+      // Before opening a tab this also checks a link received in chat, without issuing a grant.
+      if (!item) return false
 
       return read(artifactViewPath(item), "HEAD", AbortSignal.timeout(15_000)).then(
         (r) => r.status === 200,
