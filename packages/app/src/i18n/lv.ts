@@ -1163,7 +1163,7 @@ export const dict = {
   "dialog.update.major.lead": "Nākamā lielā versija ir lejupielādēta. Restartējiet, lai pabeigtu jaunināšanu.",
   "dialog.update.major.new.browser": "Iebūvēts pārlūks",
   "dialog.update.major.new.background": "Apakšaģenti un komandas fonā",
-  "dialog.update.major.new.plugins": "Darbvirsmas spraudņi lietotnes pielāgošanai sev",
+  "dialog.update.major.new.plugins": "Darbvirsmas spraudņi lietotnes pielāgošanai sev (eksperimentāli)",
   "dialog.update.major.new.sessions": "Tās pašas sesijas lietotnē, terminālī un tīmeklī",
   "dialog.update.major.new.pair": "Savienojiet pārī tālruni vai citu datoru",
   "dialog.update.major.keeps.data": "Saglabā jūsu sesijas, projektus un iestatījumus",

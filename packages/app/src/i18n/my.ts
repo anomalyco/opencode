@@ -1178,7 +1178,7 @@ export const dict = {
     "နောက်ထပ် အဓိကဗားရှင်းကို ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ။ အဆင့်မြှင့်တင်မှု အပြီးသတ်ရန် ပြန်လည်စတင်ပါ။",
   "dialog.update.major.new.browser": "အက်ပ်တွင်း ဘရောက်ဆာ",
   "dialog.update.major.new.background": "နောက်ခံတွင် အလုပ်လုပ်သော Subagent နှင့် အမိန့်များ",
-  "dialog.update.major.new.plugins": "အက်ပ်ကို သင့်စိတ်ကြိုက်ဖြစ်စေသော ဒက်စ်တော့ ပလပ်အင်များ",
+  "dialog.update.major.new.plugins": "အက်ပ်ကို သင့်စိတ်ကြိုက်ဖြစ်စေသော ဒက်စ်တော့ ပလပ်အင်များ (စမ်းသပ်ဆဲ)",
   "dialog.update.major.new.sessions": "အက်ပ်၊ Terminal နှင့် ဝဘ်တွင် တူညီသော စက်ရှင်များ",
   "dialog.update.major.new.pair": "ဖုန်း သို့မဟုတ် အခြားကွန်ပျူတာကို တွဲချိတ်ပါ",
   "dialog.update.major.keeps.data": "သင့်စက်ရှင်များ၊ ပရောဂျက်များနှင့် ဆက်တင်များကို ဆက်လက်ထိန်းသိမ်းထားသည်",

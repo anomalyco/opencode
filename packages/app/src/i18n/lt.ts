@@ -1175,7 +1175,7 @@ export const dict = {
     "Kita pagrindinė versija jau atsisiųsta. Paleiskite programą iš naujo, kad užbaigtumėte atnaujinimą.",
   "dialog.update.major.new.browser": "Integruota naršyklė",
   "dialog.update.major.new.background": "Foniniai poagenčiai ir komandos",
-  "dialog.update.major.new.plugins": "Darbalaukio papildiniai, pritaikantys programą jums",
+  "dialog.update.major.new.plugins": "Darbalaukio papildiniai, pritaikantys programą jums (eksperimentiniai)",
   "dialog.update.major.new.sessions": "Tie patys seansai programoje, terminale ir žiniatinklyje",
   "dialog.update.major.new.pair": "Susiekite telefoną ar kitą kompiuterį",
   "dialog.update.major.keeps.data": "Išsaugo jūsų seansus, projektus ir nustatymus",

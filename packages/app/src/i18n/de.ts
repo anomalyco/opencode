@@ -434,7 +434,7 @@ export const dict = {
     "Die nächste Hauptversion wurde heruntergeladen. Starten Sie neu, um das Upgrade abzuschließen.",
   "dialog.update.major.new.browser": "Integrierter Browser",
   "dialog.update.major.new.background": "Unteragenten und Befehle im Hintergrund",
-  "dialog.update.major.new.plugins": "Desktop-Plugins, die die App zu Ihrer eigenen machen",
+  "dialog.update.major.new.plugins": "Desktop-Plugins, die die App zu Ihrer eigenen machen (experimentell)",
   "dialog.update.major.new.sessions": "Dieselben Sitzungen in der App, im Terminal und im Web",
   "dialog.update.major.new.pair": "Smartphone oder anderen Computer koppeln",
   "dialog.update.major.keeps.data": "Ihre Sitzungen, Projekte und Einstellungen bleiben erhalten",

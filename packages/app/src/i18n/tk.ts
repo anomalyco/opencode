@@ -1160,7 +1160,7 @@ export const dict = {
   "dialog.update.major.lead": "Indiki esasy wersiýa ýüklenip alyndy. Täzelenmäni tamamlamak üçin täzeden açyň.",
   "dialog.update.major.new.browser": "Programmanyň içindäki brauzer",
   "dialog.update.major.new.background": "Fon režiminde işleýän subagentler we buýruklar",
-  "dialog.update.major.new.plugins": "Programmany özüňiziňki edýän iş stoly pluginleri",
+  "dialog.update.major.new.plugins": "Programmany özüňiziňki edýän iş stoly pluginleri (synag)",
   "dialog.update.major.new.sessions": "Programmada, terminalda we webde şol bir sessiýalar",
   "dialog.update.major.new.pair": "Telefony ýa-da başga kompýuteri birikdiriň",
   "dialog.update.major.keeps.data": "Sessiýalaryňyzy, taslamalaryňyzy we sazlamalaryňyzy saklaýar",

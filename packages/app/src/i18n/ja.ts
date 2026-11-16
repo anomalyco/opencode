@@ -541,7 +541,7 @@ export const dict = {
   "dialog.update.major.lead": "次のメジャーリリースをダウンロードしました。再起動するとアップグレードが完了します。",
   "dialog.update.major.new.browser": "アプリ内ブラウザ",
   "dialog.update.major.new.background": "サブエージェントとコマンドのバックグラウンド実行",
-  "dialog.update.major.new.plugins": "アプリを自分好みにできるデスクトッププラグイン",
+  "dialog.update.major.new.plugins": "アプリを自分好みにできるデスクトッププラグイン (実験的)",
   "dialog.update.major.new.sessions": "アプリ、ターミナル、Webで同じセッションを共有",
   "dialog.update.major.new.pair": "スマートフォンや別のコンピューターとペアリング",
   "dialog.update.major.keeps.data": "セッション、プロジェクト、設定を引き継ぎます",

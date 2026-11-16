@@ -554,7 +554,7 @@ export const dict = {
   "dialog.update.major.lead": "اگلی بڑی ریلیز ڈاؤن لوڈ ہو گئی ہے۔ اپ گریڈ مکمل کرنے کے لیے دوبارہ شروع کریں۔",
   "dialog.update.major.new.browser": "ایپ کے اندر براؤزر",
   "dialog.update.major.new.background": "پس منظر میں چلنے والے ذیلی ایجنٹس اور کمانڈز",
-  "dialog.update.major.new.plugins": "ڈیسک ٹاپ پلگ انز جو ایپ کو آپ کی مرضی کے مطابق بنائیں",
+  "dialog.update.major.new.plugins": "ڈیسک ٹاپ پلگ انز جو ایپ کو آپ کی مرضی کے مطابق بنائیں (تجرباتی)",
   "dialog.update.major.new.sessions": "ایپ، ٹرمینل اور ویب پر وہی سیشنز",
   "dialog.update.major.new.pair": "فون یا کوئی دوسرا کمپیوٹر جوڑیں",
   "dialog.update.major.keeps.data": "آپ کے سیشنز، پروجیکٹس اور ترتیبات برقرار رکھتا ہے",

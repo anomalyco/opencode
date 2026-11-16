@@ -1169,7 +1169,7 @@ export const dict = {
   "dialog.update.major.lead": "Дараагийн үндсэн хувилбарыг татаж авсан. Шинэчлэлтийг дуусгахын тулд дахин эхлүүлнэ үү.",
   "dialog.update.major.new.browser": "Апп доторх хөтөч",
   "dialog.update.major.new.background": "Арын горимд ажиллах subagent ба тушаалууд",
-  "dialog.update.major.new.plugins": "Аппыг өөрийн болгох ширээний залгаасууд",
+  "dialog.update.major.new.plugins": "Аппыг өөрийн болгох ширээний залгаасууд (туршилтын)",
   "dialog.update.major.new.sessions": "Апп, терминал, вэб дээр нэг ижил сессүүд",
   "dialog.update.major.new.pair": "Утас эсвэл өөр компьютер хослуулах",
   "dialog.update.major.keeps.data": "Таны сесс, төсөл, тохиргоог хэвээр хадгална",

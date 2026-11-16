@@ -1153,7 +1153,7 @@ export const dict: Record<string, string> = {
   "dialog.update.major.lead": "পরবর্তী প্রধান রিলিজ ডাউনলোড করা হয়েছে। আপগ্রেড সম্পন্ন করতে রিস্টার্ট করুন।",
   "dialog.update.major.new.browser": "ইন-অ্যাপ ব্রাউজার",
   "dialog.update.major.new.background": "ব্যাকগ্রাউন্ডে চলা সাব-এজেন্ট এবং কমান্ড",
-  "dialog.update.major.new.plugins": "ডেস্কটপ প্লাগইন, যা অ্যাপটিকে আপনার নিজের করে তোলে",
+  "dialog.update.major.new.plugins": "ডেস্কটপ প্লাগইন, যা অ্যাপটিকে আপনার নিজের করে তোলে (পরীক্ষামূলক)",
   "dialog.update.major.new.sessions": "অ্যাপ, টার্মিনাল এবং ওয়েবে একই সেশন",
   "dialog.update.major.new.pair": "ফোন বা অন্য কম্পিউটার পেয়ার করুন",
   "dialog.update.major.keeps.data": "আপনার সেশন, প্রকল্প এবং সেটিংস বজায় থাকে",

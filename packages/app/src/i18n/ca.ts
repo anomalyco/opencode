@@ -1174,7 +1174,7 @@ export const dict = {
   "dialog.update.major.lead": "La propera versió principal ja s'ha baixat. Reinicieu per completar l'actualització.",
   "dialog.update.major.new.browser": "Navegador integrat",
   "dialog.update.major.new.background": "Subagents i ordres en segon pla",
-  "dialog.update.major.new.plugins": "Connectors d'escriptori per fer vostra l'aplicació",
+  "dialog.update.major.new.plugins": "Connectors d'escriptori per fer vostra l'aplicació (experimentals)",
   "dialog.update.major.new.sessions": "Les mateixes sessions a l'aplicació, al terminal i al web",
   "dialog.update.major.new.pair": "Vinculeu un telèfon o un altre ordinador",
   "dialog.update.major.keeps.data": "Conserva les vostres sessions, projectes i configuració",

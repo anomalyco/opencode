@@ -544,7 +544,7 @@ export const dict = {
     "Kolejna główna wersja została pobrana. Uruchom aplikację ponownie, aby dokończyć aktualizację.",
   "dialog.update.major.new.browser": "Wbudowana przeglądarka",
   "dialog.update.major.new.background": "Podagenci i polecenia w tle",
-  "dialog.update.major.new.plugins": "Wtyczki do aplikacji komputerowej, by dostosować ją do siebie",
+  "dialog.update.major.new.plugins": "Wtyczki do aplikacji komputerowej, by dostosować ją do siebie (eksperymentalne)",
   "dialog.update.major.new.sessions": "Te same sesje w aplikacji, terminalu i przeglądarce",
   "dialog.update.major.new.pair": "Sparuj telefon lub inny komputer",
   "dialog.update.major.keeps.data": "Zachowuje sesje, projekty i ustawienia",

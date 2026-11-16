@@ -586,7 +586,7 @@ export const dict = {
   "dialog.update.major.lead": "Наступний великий реліз уже завантажено. Перезапустіть, щоб завершити оновлення.",
   "dialog.update.major.new.browser": "Вбудований браузер",
   "dialog.update.major.new.background": "Фонові підагенти та команди",
-  "dialog.update.major.new.plugins": "Десктопні плагіни, щоб налаштувати застосунок під себе",
+  "dialog.update.major.new.plugins": "Десктопні плагіни, щоб налаштувати застосунок під себе (експериментальні)",
   "dialog.update.major.new.sessions": "Ті самі сесії в застосунку, терміналі та браузері",
   "dialog.update.major.new.pair": "Сполучення з телефоном або іншим комп'ютером",
   "dialog.update.major.keeps.data": "Зберігає ваші сесії, проєкти та налаштування",

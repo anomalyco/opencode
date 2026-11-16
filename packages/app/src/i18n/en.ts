@@ -485,7 +485,7 @@ export const dict = {
   "dialog.update.major.lead": "The next major release is downloaded. Restart to finish the upgrade.",
   "dialog.update.major.new.browser": "In-app browser",
   "dialog.update.major.new.background": "Background subagents and commands",
-  "dialog.update.major.new.plugins": "Desktop plugins that make the app your own",
+  "dialog.update.major.new.plugins": "Desktop plugins that make the app your own (experimental)",
   "dialog.update.major.new.sessions": "The same sessions in the app, the terminal, and the web",
   "dialog.update.major.new.pair": "Pair a phone or another computer",
   "dialog.update.major.keeps.data": "Keeps your sessions, projects, and settings",

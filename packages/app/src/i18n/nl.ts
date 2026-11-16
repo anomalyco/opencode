@@ -547,7 +547,7 @@ export const dict = {
   "dialog.update.major.lead": "De volgende hoofdversie is gedownload. Start opnieuw op om de upgrade te voltooien.",
   "dialog.update.major.new.browser": "Ingebouwde browser",
   "dialog.update.major.new.background": "Subagenten en commando's op de achtergrond",
-  "dialog.update.major.new.plugins": "Desktop-plug-ins die de app helemaal van jou maken",
+  "dialog.update.major.new.plugins": "Desktop-plug-ins die de app helemaal van jou maken (experimenteel)",
   "dialog.update.major.new.sessions": "Dezelfde sessies in de app, de terminal en op het web",
   "dialog.update.major.new.pair": "Een telefoon of andere computer koppelen",
   "dialog.update.major.keeps.data": "Behoudt je sessies, projecten en instellingen",

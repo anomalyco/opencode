@@ -1160,7 +1160,7 @@ export const dict = {
   "dialog.update.major.lead": "Ďalšia hlavná verzia je stiahnutá. Aktualizáciu dokončíte reštartovaním aplikácie.",
   "dialog.update.major.new.browser": "Vstavaný prehliadač",
   "dialog.update.major.new.background": "Podagenti a príkazy na pozadí",
-  "dialog.update.major.new.plugins": "Desktopové pluginy, vďaka ktorým si aplikáciu prispôsobíte",
+  "dialog.update.major.new.plugins": "Desktopové pluginy, vďaka ktorým si aplikáciu prispôsobíte (experimentálne)",
   "dialog.update.major.new.sessions": "Rovnaké relácie v aplikácii, termináli aj na webe",
   "dialog.update.major.new.pair": "Spárujte telefón alebo iný počítač",
   "dialog.update.major.keeps.data": "Zachová vaše relácie, projekty a nastavenia",

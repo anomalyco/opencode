@@ -549,7 +549,7 @@ export const dict = {
   "dialog.update.major.lead": "Növbəti əsas versiya endirilib. Yeniləməni tamamlamaq üçün yenidən başladın.",
   "dialog.update.major.new.browser": "Tətbiqdaxili brauzer",
   "dialog.update.major.new.background": "Arxa fonda işləyən alt agentlər və əmrlər",
-  "dialog.update.major.new.plugins": "Tətbiqi özünüzə uyğunlaşdıran masaüstü plaginlər",
+  "dialog.update.major.new.plugins": "Tətbiqi özünüzə uyğunlaşdıran masaüstü plaginlər (eksperimental)",
   "dialog.update.major.new.sessions": "Eyni sessiyalar tətbiqdə, terminalda və vebdə",
   "dialog.update.major.new.pair": "Telefon və ya başqa kompüter qoşun",
   "dialog.update.major.keeps.data": "Sessiyalarınızı, layihələrinizi və tənzimləmələrinizi saxlayır",

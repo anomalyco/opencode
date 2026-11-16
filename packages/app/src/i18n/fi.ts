@@ -437,7 +437,7 @@ export const dict = {
   "dialog.update.major.lead": "Seuraava pääversio on ladattu. Viimeistele päivitys käynnistämällä sovellus uudelleen.",
   "dialog.update.major.new.browser": "Sisäänrakennettu selain",
   "dialog.update.major.new.background": "Taustalla toimivat aliagentit ja komennot",
-  "dialog.update.major.new.plugins": "Työpöytälaajennukset, joilla teet sovelluksesta omasi",
+  "dialog.update.major.new.plugins": "Työpöytälaajennukset, joilla teet sovelluksesta omasi (kokeellinen)",
   "dialog.update.major.new.sessions": "Samat istunnot sovelluksessa, terminaalissa ja verkossa",
   "dialog.update.major.new.pair": "Yhdistä puhelin tai toinen tietokone",
   "dialog.update.major.keeps.data": "Säilyttää istuntosi, projektisi ja asetuksesi",

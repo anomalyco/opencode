@@ -456,7 +456,7 @@ export const dict = {
     "La prossima versione principale è stata scaricata. Riavvia per completare l'aggiornamento.",
   "dialog.update.major.new.browser": "Browser integrato",
   "dialog.update.major.new.background": "Subagenti e comandi in background",
-  "dialog.update.major.new.plugins": "Plugin desktop per rendere tua l'app",
+  "dialog.update.major.new.plugins": "Plugin desktop per rendere tua l'app (sperimentali)",
   "dialog.update.major.new.sessions": "Le stesse sessioni nell'app, nel terminale e sul web",
   "dialog.update.major.new.pair": "Associa un telefono o un altro computer",
   "dialog.update.major.keeps.data": "Mantiene le tue sessioni, i progetti e le impostazioni",

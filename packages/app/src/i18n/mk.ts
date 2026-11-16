@@ -1167,7 +1167,7 @@ export const dict = {
   "dialog.update.major.lead": "Следната главна верзија е преземена. Рестартирајте за да ја завршите надградбата.",
   "dialog.update.major.new.browser": "Вграден прелистувач",
   "dialog.update.major.new.background": "Субагенти и команди во заднина",
-  "dialog.update.major.new.plugins": "Десктоп приклучоци со кои апликацијата станува ваша",
+  "dialog.update.major.new.plugins": "Десктоп приклучоци со кои апликацијата станува ваша (експериментални)",
   "dialog.update.major.new.sessions": "Истите сесии во апликацијата, терминалот и на веб",
   "dialog.update.major.new.pair": "Спарете телефон или друг компјутер",
   "dialog.update.major.keeps.data": "Ги задржува вашите сесии, проекти и поставки",

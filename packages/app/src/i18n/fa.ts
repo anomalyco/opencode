@@ -1156,7 +1156,7 @@ export const dict = {
   "dialog.update.major.lead": "نسخه اصلی بعدی دانلود شده است. برای تکمیل ارتقا، برنامه را دوباره راه‌اندازی کنید.",
   "dialog.update.major.new.browser": "مرورگر درون‌برنامه‌ای",
   "dialog.update.major.new.background": "عوامل فرعی و دستورات پس‌زمینه",
-  "dialog.update.major.new.plugins": "پلاگین‌های دسکتاپ که برنامه را مال خودتان می‌کنند",
+  "dialog.update.major.new.plugins": "پلاگین‌های دسکتاپ که برنامه را مال خودتان می‌کنند (آزمایشی)",
   "dialog.update.major.new.sessions": "همان جلسات در برنامه، ترمینال و وب",
   "dialog.update.major.new.pair": "گوشی یا رایانه دیگری را جفت کنید",
   "dialog.update.major.keeps.data": "جلسات، پروژه‌ها و تنظیمات شما را حفظ می‌کند",

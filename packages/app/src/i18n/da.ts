@@ -454,7 +454,7 @@ export const dict = {
   "dialog.update.major.lead": "Den næste hovedversion er downloadet. Genstart for at fuldføre opgraderingen.",
   "dialog.update.major.new.browser": "Indbygget browser",
   "dialog.update.major.new.background": "Underagenter og kommandoer i baggrunden",
-  "dialog.update.major.new.plugins": "Desktop-plugins, der gør appen til din egen",
+  "dialog.update.major.new.plugins": "Desktop-plugins, der gør appen til din egen (eksperimentel)",
   "dialog.update.major.new.sessions": "De samme sessioner i appen, terminalen og på nettet",
   "dialog.update.major.new.pair": "Par en telefon eller en anden computer",
   "dialog.update.major.keeps.data": "Bevarer dine sessioner, projekter og indstillinger",

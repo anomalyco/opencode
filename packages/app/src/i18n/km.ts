@@ -1152,7 +1152,7 @@ export const dict = {
   "dialog.update.major.lead": "កំណែធំបន្ទាប់ត្រូវបានទាញយករួចហើយ។ ចាប់ផ្តើមឡើងវិញដើម្បីបញ្ចប់ការដំឡើងកំណែ។",
   "dialog.update.major.new.browser": "កម្មវិធីរុករកក្នុងកម្មវិធី",
   "dialog.update.major.new.background": "ភ្នាក់ងាររង និងពាក្យបញ្ជាក្នុងផ្ទៃខាងក្រោយ",
-  "dialog.update.major.new.plugins": "កម្មវិធីជំនួយផ្ទៃតុសម្រាប់ប្ដូរកម្មវិធីតាមបំណងអ្នក",
+  "dialog.update.major.new.plugins": "កម្មវិធីជំនួយផ្ទៃតុសម្រាប់ប្ដូរកម្មវិធីតាមបំណងអ្នក (ពិសោធន៍)",
   "dialog.update.major.new.sessions": "សម័យដូចគ្នាក្នុងកម្មវិធី ស្ថានីយ និងគេហទំព័រ",
   "dialog.update.major.new.pair": "ផ្គូផ្គងទូរសព្ទ ឬកុំព្យូទ័រផ្សេងទៀត",
   "dialog.update.major.keeps.data": "រក្សាទុកសម័យ គម្រោង និងការកំណត់របស់អ្នក",

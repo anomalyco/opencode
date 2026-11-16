@@ -1164,7 +1164,7 @@ export const dict = {
     "Următoarea versiune majoră a fost descărcată. Repornește pentru a finaliza actualizarea.",
   "dialog.update.major.new.browser": "Navigator integrat",
   "dialog.update.major.new.background": "Subagenți și comenzi în fundal",
-  "dialog.update.major.new.plugins": "Pluginuri desktop care fac aplicația a ta",
+  "dialog.update.major.new.plugins": "Pluginuri desktop care fac aplicația a ta (experimentale)",
   "dialog.update.major.new.sessions": "Aceleași sesiuni în aplicație, în terminal și pe web",
   "dialog.update.major.new.pair": "Asociază un telefon sau un alt calculator",
   "dialog.update.major.keeps.data": "Păstrează sesiunile, proiectele și setările tale",

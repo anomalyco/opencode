@@ -1166,7 +1166,7 @@ export const dict = {
   "dialog.update.major.lead": "Հաջորդ հիմնական տարբերակը ներբեռնված է։ Վերագործարկեք՝ թարմացումն ավարտելու համար։",
   "dialog.update.major.new.browser": "Ներկառուցված դիտարկիչ",
   "dialog.update.major.new.background": "Ֆոնային ենթագործակալներ և հրամաններ",
-  "dialog.update.major.new.plugins": "Հավելվածը ձերը դարձնող աշխատասեղանի ընդլայնումներ",
+  "dialog.update.major.new.plugins": "Հավելվածը ձերը դարձնող աշխատասեղանի ընդլայնումներ (փորձարարական)",
   "dialog.update.major.new.sessions": "Նույն նիստերը հավելվածում, տերմինալում և համացանցում",
   "dialog.update.major.new.pair": "Զուգակցեք հեռախոս կամ այլ համակարգիչ",
   "dialog.update.major.keeps.data": "Պահպանում է ձեր նիստերը, նախագծերը և կարգավորումները",

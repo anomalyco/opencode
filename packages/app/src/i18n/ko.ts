@@ -344,7 +344,7 @@ export const dict = {
   "dialog.update.major.lead": "다음 메이저 릴리스를 다운로드했습니다. 다시 시작하면 업그레이드가 완료됩니다.",
   "dialog.update.major.new.browser": "앱 내 브라우저",
   "dialog.update.major.new.background": "백그라운드에서 실행되는 하위 에이전트와 명령어",
-  "dialog.update.major.new.plugins": "앱을 나만의 것으로 만드는 데스크톱 플러그인",
+  "dialog.update.major.new.plugins": "앱을 나만의 것으로 만드는 데스크톱 플러그인 (실험적)",
   "dialog.update.major.new.sessions": "앱, 터미널, 웹 어디서나 같은 세션",
   "dialog.update.major.new.pair": "휴대폰 또는 다른 컴퓨터와 페어링",
   "dialog.update.major.keeps.data": "세션, 프로젝트, 설정이 그대로 유지됩니다",

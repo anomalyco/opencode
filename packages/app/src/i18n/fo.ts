@@ -1155,7 +1155,7 @@ export const dict = {
   "dialog.update.major.lead": "Næsta høvuðsútgávan er heintað. Endurbyrja fyri at klára dagføringina.",
   "dialog.update.major.new.browser": "Innbygdur kagari",
   "dialog.update.major.new.background": "Undiragentar og skipanir í bakgrundini",
-  "dialog.update.major.new.plugins": "Skriviborðstilskot, sum gera appina til tína egnu",
+  "dialog.update.major.new.plugins": "Skriviborðstilskot, sum gera appina til tína egnu (á royndarstigi)",
   "dialog.update.major.new.sessions": "Somu setur í appini, farstøðini og á netinum",
   "dialog.update.major.new.pair": "Para eina telefon ella eina aðra teldu",
   "dialog.update.major.keeps.data": "Varðveitir tínar setur, verkætlanir og innstillingar",

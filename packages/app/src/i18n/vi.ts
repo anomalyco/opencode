@@ -551,7 +551,7 @@ export const dict = {
   "dialog.update.major.lead": "Phiên bản lớn tiếp theo đã được tải xuống. Khởi động lại để hoàn tất nâng cấp.",
   "dialog.update.major.new.browser": "Trình duyệt trong ứng dụng",
   "dialog.update.major.new.background": "Tác nhân phụ và lệnh chạy nền",
-  "dialog.update.major.new.plugins": "Plugin desktop để tùy biến ứng dụng theo ý bạn",
+  "dialog.update.major.new.plugins": "Plugin desktop để tùy biến ứng dụng theo ý bạn (thử nghiệm)",
   "dialog.update.major.new.sessions": "Dùng chung phiên trên ứng dụng, terminal và web",
   "dialog.update.major.new.pair": "Ghép nối điện thoại hoặc máy tính khác",
   "dialog.update.major.keeps.data": "Giữ nguyên các phiên, dự án và cài đặt của bạn",

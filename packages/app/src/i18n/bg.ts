@@ -1171,7 +1171,7 @@ export const dict = {
   "dialog.update.major.lead": "Следващата основна версия е изтеглена. Рестартирайте, за да завършите надграждането.",
   "dialog.update.major.new.browser": "Вграден браузър",
   "dialog.update.major.new.background": "Фонови субагенти и команди",
-  "dialog.update.major.new.plugins": "Плъгини, с които настолното приложение става ваше",
+  "dialog.update.major.new.plugins": "Плъгини, с които настолното приложение става ваше (експериментални)",
   "dialog.update.major.new.sessions": "Едни и същи сесии в приложението, терминала и браузъра",
   "dialog.update.major.new.pair": "Сдвояване с телефон или друг компютър",
   "dialog.update.major.keeps.data": "Запазва вашите сесии, проекти и настройки",

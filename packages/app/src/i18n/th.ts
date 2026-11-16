@@ -569,7 +569,7 @@ export const dict = {
   "dialog.update.major.lead": "ดาวน์โหลดเวอร์ชันหลักถัดไปแล้ว รีสตาร์ทเพื่ออัปเกรดให้เสร็จสมบูรณ์",
   "dialog.update.major.new.browser": "เบราว์เซอร์ในแอป",
   "dialog.update.major.new.background": "เอเจนต์ย่อยและคำสั่งที่ทำงานเบื้องหลัง",
-  "dialog.update.major.new.plugins": "ปลั๊กอินเดสก์ท็อปที่ทำให้แอปเป็นในแบบของคุณ",
+  "dialog.update.major.new.plugins": "ปลั๊กอินเดสก์ท็อปที่ทำให้แอปเป็นในแบบของคุณ (ทดลอง)",
   "dialog.update.major.new.sessions": "เซสชันเดียวกันทั้งในแอป เทอร์มินัล และเว็บ",
   "dialog.update.major.new.pair": "จับคู่โทรศัพท์หรือคอมพิวเตอร์เครื่องอื่น",
   "dialog.update.major.keeps.data": "เก็บเซสชัน โปรเจกต์ และการตั้งค่าของคุณไว้",

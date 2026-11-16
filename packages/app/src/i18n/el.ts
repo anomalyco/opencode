@@ -1174,7 +1174,7 @@ export const dict = {
   "dialog.update.major.lead": "Η επόμενη κύρια έκδοση έχει ληφθεί. Κάντε επανεκκίνηση για να ολοκληρωθεί η αναβάθμιση.",
   "dialog.update.major.new.browser": "Ενσωματωμένο πρόγραμμα περιήγησης",
   "dialog.update.major.new.background": "Υποπράκτορες και εντολές στο παρασκήνιο",
-  "dialog.update.major.new.plugins": "Προσθήκες για υπολογιστές που κάνουν την εφαρμογή δική σας",
+  "dialog.update.major.new.plugins": "Προσθήκες για υπολογιστές που κάνουν την εφαρμογή δική σας (πειραματικές)",
   "dialog.update.major.new.sessions": "Οι ίδιες συνεδρίες στην εφαρμογή, στο τερματικό και στον Ιστό",
   "dialog.update.major.new.pair": "Σύζευξη τηλεφώνου ή άλλου υπολογιστή",
   "dialog.update.major.keeps.data": "Διατηρεί τις συνεδρίες, τα έργα και τις ρυθμίσεις σας",

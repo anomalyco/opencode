@@ -1163,7 +1163,7 @@ export const dict = {
     "Следећа главна верзија је преузета. Поново покрените апликацију да бисте завршили надоградњу.",
   "dialog.update.major.new.browser": "Уграђени прегледач",
   "dialog.update.major.new.background": "Субагенти и команде у позадини",
-  "dialog.update.major.new.plugins": "Десктоп додаци којима прилагођавате апликацију себи",
+  "dialog.update.major.new.plugins": "Десктоп додаци којима прилагођавате апликацију себи (експериментални)",
   "dialog.update.major.new.sessions": "Исте сесије у апликацији, терминалу и на вебу",
   "dialog.update.major.new.pair": "Упарите телефон или други рачунар",
   "dialog.update.major.keeps.data": "Задржава ваше сесије, пројекте и подешавања",

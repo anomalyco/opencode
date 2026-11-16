@@ -1158,7 +1158,7 @@ export const dict = {
   "dialog.update.major.lead": "Næsta aðalútgáfa hefur verið sótt. Endurræstu til að ljúka uppfærslunni.",
   "dialog.update.major.new.browser": "Innbyggður vafri",
   "dialog.update.major.new.background": "Undirfulltrúar og skipanir í bakgrunni",
-  "dialog.update.major.new.plugins": "Skjáborðsviðbætur sem gera forritið að þínu eigin",
+  "dialog.update.major.new.plugins": "Skjáborðsviðbætur sem gera forritið að þínu eigin (á tilraunastigi)",
   "dialog.update.major.new.sessions": "Sömu setur í forritinu, skjáherminum og á vefnum",
   "dialog.update.major.new.pair": "Para síma eða aðra tölvu",
   "dialog.update.major.keeps.data": "Varðveitir setur, verkefni og stillingar þínar",

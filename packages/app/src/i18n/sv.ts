@@ -546,7 +546,7 @@ export const dict = {
   "dialog.update.major.lead": "Nästa huvudversion har hämtats. Starta om för att slutföra uppgraderingen.",
   "dialog.update.major.new.browser": "Inbyggd webbläsare",
   "dialog.update.major.new.background": "Underagenter och kommandon i bakgrunden",
-  "dialog.update.major.new.plugins": "Insticksprogram som gör skrivbordsappen till din egen",
+  "dialog.update.major.new.plugins": "Insticksprogram som gör skrivbordsappen till din egen (experimentellt)",
   "dialog.update.major.new.sessions": "Samma sessioner i appen, terminalen och på webben",
   "dialog.update.major.new.pair": "Parkoppla en telefon eller en annan dator",
   "dialog.update.major.keeps.data": "Behåller dina sessioner, projekt och inställningar",

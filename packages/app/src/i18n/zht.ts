@@ -566,7 +566,7 @@ export const dict = {
   "dialog.update.major.lead": "下一個主要版本已下載完成。重新啟動即可完成升級。",
   "dialog.update.major.new.browser": "應用程式內建瀏覽器",
   "dialog.update.major.new.background": "在背景執行的子代理程式和命令",
-  "dialog.update.major.new.plugins": "桌面外掛程式，打造專屬於你的應用程式",
+  "dialog.update.major.new.plugins": "桌面外掛程式，打造專屬於你的應用程式（實驗性）",
   "dialog.update.major.new.sessions": "應用程式、終端機和網頁共用相同的工作階段",
   "dialog.update.major.new.pair": "配對手機或另一台電腦",
   "dialog.update.major.keeps.data": "保留你的工作階段、專案和設定",

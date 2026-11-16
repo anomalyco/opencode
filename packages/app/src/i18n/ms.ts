@@ -1159,7 +1159,7 @@ export const dict = {
     "Keluaran utama seterusnya telah dimuat turun. Mulakan semula untuk melengkapkan naik taraf.",
   "dialog.update.major.new.browser": "Pelayar dalam aplikasi",
   "dialog.update.major.new.background": "Subagen dan arahan di latar belakang",
-  "dialog.update.major.new.plugins": "Plugin desktop untuk menyesuaikan aplikasi ikut cara anda",
+  "dialog.update.major.new.plugins": "Plugin desktop untuk menyesuaikan aplikasi ikut cara anda (percubaan)",
   "dialog.update.major.new.sessions": "Sesi yang sama dalam aplikasi, terminal, dan web",
   "dialog.update.major.new.pair": "Gandingkan telefon atau komputer lain",
   "dialog.update.major.keeps.data": "Mengekalkan sesi, projek, dan tetapan anda",

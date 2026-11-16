@@ -573,7 +573,7 @@ export const dict = {
   "dialog.update.major.lead": "Sljedeća glavna verzija je preuzeta. Ponovo pokreni aplikaciju da završiš nadogradnju.",
   "dialog.update.major.new.browser": "Ugrađeni preglednik",
   "dialog.update.major.new.background": "Podagenti i komande u pozadini",
-  "dialog.update.major.new.plugins": "Desktop plugini s kojima aplikacija postaje tvoja",
+  "dialog.update.major.new.plugins": "Desktop plugini s kojima aplikacija postaje tvoja (eksperimentalni)",
   "dialog.update.major.new.sessions": "Iste sesije u aplikaciji, terminalu i na webu",
   "dialog.update.major.new.pair": "Upari telefon ili drugi računar",
   "dialog.update.major.keeps.data": "Zadržava tvoje sesije, projekte i postavke",

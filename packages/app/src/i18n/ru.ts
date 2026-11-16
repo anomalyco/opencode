@@ -573,7 +573,7 @@ export const dict = {
     "Следующий крупный релиз уже загружен. Перезапустите приложение, чтобы завершить обновление.",
   "dialog.update.major.new.browser": "Встроенный браузер",
   "dialog.update.major.new.background": "Фоновые субагенты и команды",
-  "dialog.update.major.new.plugins": "Плагины для приложения, чтобы настроить его под себя",
+  "dialog.update.major.new.plugins": "Плагины для приложения, чтобы настроить его под себя (экспериментальные)",
   "dialog.update.major.new.sessions": "Одни и те же сессии в приложении, терминале и браузере",
   "dialog.update.major.new.pair": "Сопряжение с телефоном или другим компьютером",
   "dialog.update.major.keeps.data": "Сохраняет ваши сессии, проекты и настройки",

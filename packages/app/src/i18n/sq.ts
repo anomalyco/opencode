@@ -1165,7 +1165,7 @@ export const dict = {
     "Versioni tjetër madhor është shkarkuar. Rinisni aplikacionin për të përfunduar përditësimin.",
   "dialog.update.major.new.browser": "Shfletues i integruar",
   "dialog.update.major.new.background": "Nënagjentë dhe komanda në sfond",
-  "dialog.update.major.new.plugins": "Shtojca desktop që e bëjnë aplikacionin tuajin",
+  "dialog.update.major.new.plugins": "Shtojca desktop që e bëjnë aplikacionin tuajin (eksperimentale)",
   "dialog.update.major.new.sessions": "Të njëjtat sesione në aplikacion, terminal dhe ueb",
   "dialog.update.major.new.pair": "Çiftoni një telefon ose një kompjuter tjetër",
   "dialog.update.major.keeps.data": "Ruan sesionet, projektet dhe cilësimet tuaja",

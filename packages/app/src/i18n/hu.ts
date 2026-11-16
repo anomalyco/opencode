@@ -1172,7 +1172,7 @@ export const dict = {
     "A következő főverzió letöltődött. A frissítés befejezéséhez indítsa újra az alkalmazást.",
   "dialog.update.major.new.browser": "Beépített böngésző",
   "dialog.update.major.new.background": "Háttérben futó alügynökök és parancsok",
-  "dialog.update.major.new.plugins": "Asztali beépülő modulok az alkalmazás testreszabásához",
+  "dialog.update.major.new.plugins": "Asztali beépülő modulok az alkalmazás testreszabásához (kísérleti)",
   "dialog.update.major.new.sessions": "Ugyanazok a munkamenetek az alkalmazásban, a terminálban és a weben",
   "dialog.update.major.new.pair": "Telefon vagy másik számítógép párosítása",
   "dialog.update.major.keeps.data": "Megőrzi a munkameneteit, projektjeit és beállításait",
