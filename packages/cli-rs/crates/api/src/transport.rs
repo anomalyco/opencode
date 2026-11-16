@@ -334,7 +334,7 @@ impl Transport for Reqwest {
             if let Some(body) = request.body {
                 builder = builder.body(body);
             }
-            let response = fetch(builder).await.map_err(|error| error.to_string())?;
+            let response = fetch(builder).await.map_err(|error| describe(&error))?;
             let headers = response
                 .headers()
                 .iter()
@@ -343,9 +343,18 @@ impl Transport for Reqwest {
             Ok(Response {
                 status: response.status().as_u16(),
                 headers,
-                body: Box::pin(response.bytes_stream().map(|chunk| chunk.map_err(|error| error.to_string()))),
+                body: Box::pin(response.bytes_stream().map(|chunk| chunk.map_err(|error| describe(&error)))),
             })
         })
+    }
+}
+
+/// An HTTP error's text and the root of its cause: reqwest's own text ("error sending request for url (…)") does not
+/// say why, such as a refused connection, which only the error's sources hold.
+fn describe(error: &dyn std::error::Error) -> String {
+    match std::iter::successors(error.source(), |source| source.source()).last() {
+        Some(root) => format!("{error}: {root}"),
+        None => error.to_string(),
     }
 }
 
@@ -556,5 +565,18 @@ mod tests {
         assert!(matches!(error, FetchError::Location(crate::js::UrlError::NonAsciiHost(_))), "{error}");
         assert_eq!(error.to_string(), format!("https://B%C3%BCcher.example/: {}", crate::js::ASCII_HOST));
         assert_eq!(log.lock().unwrap().len(), 2);
+    }
+
+    // Expected (dx-fresh): a server that is not listening is told by its cause, not reqwest's "error sending request"
+    // alone, which `Could not reach server at …` would show with no reason.
+    #[tokio::test]
+    async fn a_refused_connection_says_why() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = crate::js::parse_url(&format!("http://{}/api/info", listener.local_addr().unwrap())).unwrap();
+        drop(listener);
+        let request = Request { method: "GET", url, headers: Vec::new(), body: None };
+        let error = Reqwest::new(client()).send(request).await.err().unwrap();
+        assert!(error.starts_with("error sending request for url"), "{error}");
+        assert!(error.contains("(os error"), "{error}");
     }
 }
