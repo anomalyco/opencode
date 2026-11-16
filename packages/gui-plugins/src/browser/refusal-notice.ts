@@ -19,7 +19,8 @@ export function externalTarget(value: string) {
 
   if (parsed.username || parsed.password) return
 
-  return apps.includes(scheme) ? "open" : "copy"
+  // The 320px side pane shares this row with two buttons. Keep even a wide-glyph target readable in place.
+  return apps.includes(scheme) && /^[\x21-\x7e]{1,128}$/.test(value) ? "open" : "copy"
 }
 
 /** Chromium consumes the activation on the first popup. Match its one-shot CDP event to the native request. */

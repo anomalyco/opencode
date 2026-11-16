@@ -9,7 +9,7 @@ import { displayHost, hostDisplay } from "./host-display"
 import type definition from "./index"
 
 export function RefusalBar(props: {
-  notice: { token: string; text: string; target?: string; label?: string }
+  notice: { token: string; text: string; target?: string; label?: string; opensApp?: boolean }
   answer: (dismiss: boolean) => Promise<void>
 }) {
   const ctx = usePlugin<typeof definition>()
@@ -44,7 +44,7 @@ export function RefusalBar(props: {
                 <Show
                   when={web()}
                   fallback={
-                    <span class="max-h-32 overflow-y-auto whitespace-pre-wrap break-all select-text">{target()}</span>
+                    <span class="min-w-0 whitespace-pre-wrap break-all select-text" classList={{ "max-h-32 overflow-y-auto": !props.notice.opensApp }}>{target()}</span>
                   }
                 >
                   {(parts) => (

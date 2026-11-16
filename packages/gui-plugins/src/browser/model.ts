@@ -648,6 +648,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (notice.reason === "external" || notice.reason === "popup") return {
         token: notice.token,
+        opensApp: notice.action === "open",
         text: notice.reason === "external" ? ctx.t("refused.scheme", { scheme: notice.target.split(":", 1)[0] }) : ctx.t("refused.popup"), target: notice.target,
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
