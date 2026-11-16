@@ -480,7 +480,7 @@ function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "reg
       {
         status: "unloaded",
         // A restored page's first navigation takes the next generation.
-        tab: { ...tab, loadError: undefined, loading: false, canGoBack: false, canGoForward: false, generation: tab.generation + 1 },
+        tab: { id: tab.id, url: tab.url, title: tab.title, loading: false, canGoBack: false, canGoForward: false, generation: tab.generation + 1 },
       },
     ]),
   )

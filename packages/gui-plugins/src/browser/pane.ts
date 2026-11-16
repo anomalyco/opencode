@@ -49,6 +49,7 @@ import { reusableFile, workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
 import { remotePreview } from "./remote-preview"
 import { artifactPages } from "./artifact-preview"
+import { invalidReply, wireOutcome, wireState } from "./wire"
 
 type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
 
@@ -242,7 +243,11 @@ export function createBrowserPane(input: {
 
             const reply = (requestID: string, outcome: Browser.Outcome) =>
               send(
-                rpc.result({ ...attachment, requestID, outcome: Schema.encodeSync(Browser.Outcome)(outcome) }, options),
+                rpc.result({ ...attachment, requestID, outcome: wireOutcome(outcome) }, options).pipe(
+                  // An older server can reject a locally valid result. Settle the same request, never rerun it.
+                  Effect.catchIf(error => Schema.isSchemaError(error) || ("type" in error && error.type === "rpc.invalid_input"),
+                    () => rpc.result({ ...attachment, requestID, outcome: invalidReply }, options)),
+                ),
               )
 
             // The window hears every event at once; it never waits on the server, which can stall for
@@ -250,15 +255,19 @@ export function createBrowserPane(input: {
             // inventory resolves every tab ID, so a state is retried until it arrives or the attachment
             // ends; the results queued behind it then never name a tab the server lacks. "unavailable"
             // means the server already dropped this attachment, which attach reports.
-            handle.sendState = (state) =>
+            handle.sendState = (inventory) => {
+              const state = wireState(inventory)
+
+              if (!state) return send(Effect.logWarning("Browser state is not a valid wire inventory"))
               send(
                 rpc.state({ ...attachment, state }, options).pipe(
                   Effect.retry({
-                    while: (error) => !("type" in error && error.type === "unavailable"),
+                    while: (error) => !Schema.isSchemaError(error) && !("type" in error && ["unavailable", "rpc.invalid_input"].includes(error.type)),
                     schedule: Schedule.min([Schedule.exponential("250 millis"), Schedule.spaced("10 seconds")]),
                   }),
                 ),
               )
+            }
 
             const run = (requestID: string, abort: AbortController) =>
               rpc.command({ ...attachment, requestID }, options).pipe(
@@ -283,21 +292,14 @@ export function createBrowserPane(input: {
                 ),
                 // An operation this desktop cannot decode comes from a newer plugin; answer it so
                 // the agent does not wait out the server's timeout.
-                Effect.tapError((error) =>
-                  Effect.sync(() => {
-                    if (!Schema.isSchemaError(error)) return
-                    reply(requestID, {
-                      type: "failure",
-                      code: "unsupported",
-                      message:
-                        "This desktop app does not support the requested browser operation. Ask the user to update the desktop app, or use another operation.",
-                    })
-                  }),
-                ),
-                // A request that vanished (cancelled before retrieval) fails only that request.
-                // Transport loss surfaces through the event stream and attach call instead.
                 Effect.catchCause((cause) =>
-                  abort.signal.aborted ? Effect.void : Effect.logWarning("Browser command failed", cause),
+                  Effect.sync(() => {
+                    if (abort.signal.aborted) return
+                    const error = Option.getOrUndefined(Cause.findErrorOption(cause))
+                    reply(requestID, Schema.isSchemaError(error) ? {
+                      type: "failure", code: "unsupported", message: "This desktop cannot decode the requested browser operation. Check the desktop and server versions.",
+                    } : invalidReply)
+                  }),
                 ),
                 Effect.forkScoped,
               )

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { invalidReply, wireOutcome, wireState } from "./wire"
 import { SessionNotFoundError } from "@opencode/protocol/errors"
 import {
   attachmentFailure,
@@ -87,6 +88,21 @@ test("a restored preview retries the failed attempt when the server returns", ()
   const restored = entry(state).tabs.get(tabA)?.tab
   expect(restored?.url).toBe("workspace://ses_x/report.html")
   expect(restored?.loadError).toBeUndefined()
+  expect(Object.hasOwn(restored ?? {}, "loadError")).toBe(false)
+})
+
+test("tab inventories and command replies cross the same JSON boundary, including after restore", () => {
+  for (const url of ["about:blank", "file:///project/index.html", "workspace://session/index.html", "artifact://art_report/"]) {
+    const failed = { ...tab(tabA, url), loadError: "ERR_FAILED" }
+    const restored = entry(attached({tabs:[failed], focusedTabID:tabA})).tabs.get(tabA)!.tab
+    for (const t of [failed, restored]) {
+      const state = { tabs: [t], focusedTabID: tabA }
+      expect(wireState(state)).toEqual(state)
+      expect(wireOutcome({type:"success",result:{value:state,files:[]}}).type).toBe("success")
+    }
+  }
+  // SAFETY: simulate malformed runtime data from a browser operation, not a type-safe caller.
+  expect(wireOutcome({type:"success",result:{value:{missing:undefined},files:[]}} as unknown as Browser.Outcome)).toEqual(invalidReply)
 })
 
 test("an offline registration returns the saved inventory for retry without forgetting it", () => {
