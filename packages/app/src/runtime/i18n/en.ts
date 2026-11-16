@@ -1236,7 +1236,7 @@ export const dict = {
   "settings.shortcuts.unassigned": "Unassigned",
   "settings.shortcuts.pressKeys": "Press keys",
   "settings.shortcuts.unbind": "Unbind",
-  "settings.shortcuts.insertLeader": "Leader",
+  "settings.shortcuts.insertLeader": "Add leader",
   "settings.shortcuts.addKey": "Add a key",
   "settings.shortcuts.leader.description": "Starts shortcuts that begin with Leader. Not set by default.",
   "settings.shortcuts.profile.title": "Keymap",

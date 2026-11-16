@@ -696,7 +696,14 @@ function SettingsKeybindsView(props: {
                           <span>{props.title(id)}</span>
                           <div class="flex items-center gap-1">
                             <Show when={props.active === id && props.canInsertLeader && !props.prefix}>
-                              <Button type="button" size="small" variant="ghost" onClick={props.onInsertLeader}>
+                              <Button
+                                type="button"
+                                size="small"
+                                variant="ghost-muted"
+                                icon="plus"
+                                data-action="settings-shortcut-add-leader"
+                                onClick={props.onInsertLeader}
+                              >
                                 {language.t("settings.shortcuts.insertLeader")}
                               </Button>
                             </Show>
