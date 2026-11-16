@@ -71,6 +71,8 @@ export function CommandPaletteView(props: {
   /** The row whose selection is still in progress, such as an archived session being restored. */
   busyEntryID?: string
   unhide?: (entry: CommandPaletteEntry) => (() => void) | undefined
+  /** Drops the heading of a list that only ever has one category. */
+  bare?: boolean
 }) {
   const language = useLanguage()
   const tabs = useTabs()
@@ -91,7 +93,12 @@ export function CommandPaletteView(props: {
   })
 
   return (
-    <Dialog class="command-palette command-palette-compact" size="large" fit>
+    <Dialog
+      class="command-palette command-palette-compact"
+      classList={{ "command-palette-bare": props.bare }}
+      size="large"
+      fit
+    >
       <DialogBody class="command-palette-body">
         <SearchList
           query={store.query}
