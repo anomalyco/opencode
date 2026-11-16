@@ -1,6 +1,7 @@
-//! V1 themes (`{ defs, theme }` with flat color keys) and the parts of their migration to V2 documents
-//! (`v1-migrate.ts` in `packages/theme/src/tui`) that the new-designs migration ([`super::v1_new`]) shares. Custom
-//! V1 themes and the generated `system` theme take this path at runtime.
+//! V1 themes (`{ defs, theme }` with flat color keys) and their migration to V2 documents (`v1-migrate.ts` in
+//! `packages/theme/src/tui`), with the parts the new-designs migration ([`super::v1_new`]) shares. The TUI takes the
+//! new-designs migration; mini takes `migrateV1` ([`migrate`]), as TS mini parses themes without the experiment.
+//! Custom V1 themes and the generated `system` theme take this path at runtime.
 
 use std::collections::HashMap;
 
@@ -8,7 +9,7 @@ use opentui::style::Color;
 use opentui::theme::ThemeMode;
 use serde_json::{Map, Value, json};
 
-use super::color::{ansi, from_hex, hex, hex_ints, luminance, to_oklch};
+use super::color::{Oklch, ansi, from_hex, hex, hex_ints, luminance, oklch_to_hex, to_oklch};
 use super::document::{STEPS, truthy};
 
 pub(crate) const CHROMATIC: [&str; 7] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"];
@@ -145,6 +146,127 @@ pub(crate) fn mode_name(mode: ThemeMode) -> &'static str {
         ThemeMode::Dark => "dark",
         ThemeMode::Light => "light",
     }
+}
+
+/// `migrateV1`.
+pub(crate) fn migrate(theme: &Value) -> Result<Value, String> {
+    migrate_with(theme, migrate_mode, |definition, _| json!({ "hue": definition["hue"] }))
+}
+
+fn migrate_mode(theme: &V1, mode: ThemeMode) -> Map<String, Value> {
+    let (text, muted, primary) = ("$hue.neutral.200", "$hue.neutral.400", "$hue.interactive.200");
+    let panel = "$hue.neutral.700";
+    let hues = infer_hues(theme);
+    let mut hue = Map::new();
+    hue.insert("gray".to_owned(), scale_value(&neutral_scale(theme)));
+    for (name, matched) in hues.chromatic() {
+        hue.insert(name.to_owned(), scale_value(&hue_scale(matched, mode)));
+    }
+    hue.insert("accent".to_owned(), json!(hues.alias("accent")));
+    hue.insert("interactive".to_owned(), json!(hues.alias("primary")));
+    hue.insert("neutral".to_owned(), json!("$hue.gray"));
+    let definition = json!({
+        "hue": hue,
+        "categorical": hues.categorical(),
+        "text": {
+            "base": text,
+            "muted": muted,
+            "action": {
+                "primary": {
+                    "base": "$text.base",
+                    "$disabled": muted,
+                    "$focused": hex(selected_foreground(theme, theme.get("primary"))),
+                    "$selected": primary,
+                },
+                "secondary": { "base": "$text.muted", "$hovered": "$text.base" },
+                "destructive": { "base": hex(selected_foreground(theme, theme.get("error"))), "$disabled": muted },
+            },
+            "formfield": {
+                "base": text,
+                "$hovered": primary,
+                "$focused": primary,
+                "$pressed": primary,
+                "$disabled": muted,
+                "$selected": primary,
+            },
+            "feedback": feedback_text(theme),
+        },
+        "background": {
+            "base": "$hue.neutral.800",
+            "raised": { "base": panel, "high": "$hue.neutral.600", "max": "$hue.neutral.500" },
+            "action": {
+                "primary": { "base": "transparent", "$hovered": panel, "$focused": primary, "$selected": "transparent" },
+                "secondary": { "base": "transparent" },
+                "destructive": { "base": hex(theme.get("error")) },
+            },
+            "formfield": { "base": "$background.base" },
+            "feedback": feedback_background(),
+        },
+        "@palette": palette_tokens(theme),
+        "@dialog": {
+            "background": {
+                "base": dialog_background(theme),
+                "action": { "primary": { "$hovered": "$background.raised.high" } },
+            },
+        },
+    });
+    reference_hues(splice_palette(definition))
+}
+
+/// `hueScale`: the color at step 200, fading toward the mode's end in lightness and chroma.
+fn hue_scale(color: Color, mode: ThemeMode) -> Vec<String> {
+    let value = to_oklch(color);
+    let end = if mode == ThemeMode::Light { value.l.max(0.97) } else { value.l.min(0.18) };
+    STEPS
+        .iter()
+        .map(|step| {
+            if *step == 200 {
+                return hex(color);
+            }
+            let progress = (f64::from(*step) - 200.0) / 700.0;
+            let generated =
+                Oklch { l: value.l + (end - value.l) * progress, c: value.c * (1.0 - progress * 0.5), h: value.h };
+            with_alpha(oklch_to_hex(generated), color.a)
+        })
+        .collect()
+}
+
+/// `neutralScale`: the V1 text and surface colors at fixed steps, interpolated between.
+fn neutral_scale(theme: &V1) -> Vec<String> {
+    let anchors = [
+        (200, theme.get("text")),
+        (400, theme.get("textMuted")),
+        (600, theme.get("backgroundElement")),
+        (700, theme.get("backgroundPanel")),
+        (800, theme.get("background")),
+    ];
+    STEPS
+        .iter()
+        .map(|step| {
+            if let Some((_, color)) = anchors.iter().find(|(anchor, _)| anchor == step) {
+                return hex(*color);
+            }
+            let (lower, upper) = match anchors.iter().position(|(anchor, _)| anchor > step) {
+                Some(0) => (anchors[0], anchors[1]),
+                Some(index) => (anchors[index - 1], anchors[index]),
+                None => (anchors[3], anchors[4]),
+            };
+            let amount = (f64::from(*step) - f64::from(lower.0)) / f64::from(upper.0 - lower.0);
+            interpolate(lower.1, upper.1, amount)
+        })
+        .collect()
+}
+
+fn interpolate(first: Color, second: Color, amount: f64) -> String {
+    let (start, end) = (to_oklch(first), to_oklch(second));
+    let hue = (((end.h - start.h) % 360.0 + 540.0) % 360.0) - 180.0;
+    let generated = Oklch {
+        l: start.l + (end.l - start.l) * amount,
+        c: start.c + (end.c - start.c) * amount,
+        h: start.h + hue * amount,
+    };
+    let alpha = (f64::from(first.a) + (f64::from(second.a) - f64::from(first.a)) * amount).round().clamp(0.0, 255.0);
+    with_alpha(oklch_to_hex(generated), alpha as u8)
 }
 
 /// How a migration lays one mode of a V1 theme out as a V2 definition.

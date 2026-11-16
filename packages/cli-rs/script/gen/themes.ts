@@ -1,6 +1,6 @@
 // Writes crates/ui/src/theme/generated/themes.json: every built-in theme as the V2 document the TypeScript TUI
 // resolves under the `new-designs` experiment, so the Rust resolver starts from the same documents. V1 themes are
-// migrated here, once.
+// migrated here, once per migration: `mini` is the `migrateV1` document, as mini parses without the experiment.
 import { DEFAULT_THEMES, getOpenCode2Theme, getOpenCodeTheme, parseTheme } from "../../../tui/src/theme/index.ts"
 
 const output = new URL("../../crates/ui/src/theme/generated/themes.json", import.meta.url).pathname
@@ -11,6 +11,7 @@ const themes = [
   ...Object.entries(DEFAULT_THEMES).map(([name, source]) => ({
     name,
     document: parseTheme(source, name, { newDesigns: true }),
+    mini: parseTheme(source, name),
   })),
   { name: "opencode", document: getOpenCodeTheme() },
 ]

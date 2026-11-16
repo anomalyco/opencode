@@ -29,7 +29,8 @@ fn mode_name(mode: ThemeMode) -> &'static str {
     if mode == ThemeMode::Light { "light" } else { "dark" }
 }
 
-/// Every difference between a Rust view and its TypeScript entry, named by path.
+/// Every difference between a Rust view and its TypeScript entry, named by path. Mini's entries leave the surfaces
+/// and the shifts out.
 fn compare(key: &str, modes: &[ThemeMode], theme: &Theme, expected: &Value, paths: &[String]) -> Vec<String> {
     let mut failures = Vec::new();
     let modes: Vec<_> = modes.iter().map(|mode| mode_name(*mode)).collect();
@@ -43,7 +44,7 @@ fn compare(key: &str, modes: &[ThemeMode], theme: &Theme, expected: &Value, path
         failures.push(format!("{key}: hues {hues:?}, expected {expected_hues:?}"));
     }
     let mut check = |what: &str, names: Vec<String>, actual: Vec<Color>| {
-        let wanted = unpack(expected[what].as_str().unwrap());
+        let Some(wanted) = expected[what].as_str().map(unpack) else { return };
         if wanted.len() != actual.len() {
             failures.push(format!("{key}: {what} has {} colors, expected {}", actual.len(), wanted.len()));
             return;
@@ -167,6 +168,36 @@ fn system_theme_matches_the_typescript_generator() {
         failures.extend(compare(key, &loaded.modes, &loaded.theme, expected, &paths));
     }
     report(failures, system.len());
+}
+
+/// Mini's V1 themes take `migrateV1`: the generated built-in documents, the raw V1 assets migrated in Rust as custom
+/// themes, and the `system` theme with and without the terminal's default colors.
+#[test]
+fn mini_themes_match_the_typescript_migration() {
+    let fixture = fixture();
+    let paths = paths(&fixture);
+    let mut failures = Vec::new();
+    let mini = fixture["mini"].as_object().unwrap();
+    for (key, expected) in mini {
+        let [name, requested] = key.splitn(2, '/').collect::<Vec<_>>()[..] else { panic!("{key}") };
+        let mut check = |what: &str, catalog: Catalog, name: &str| {
+            let loaded = catalog.load(name, mode(requested)).unwrap();
+            failures.extend(compare(&format!("{what} {key}"), &loaded.modes, &loaded.theme, expected, &paths));
+        };
+        if let Some(palette) = name.strip_prefix("system:") {
+            let colors: TerminalColors = serde_json::from_value(fixture["palettes"][palette].clone()).unwrap();
+            let mut catalog = Catalog::mini();
+            catalog.set_system(Some(generate_system(&colors, mode(requested))));
+            check("system", catalog, "system");
+            continue;
+        }
+        check("built-in", Catalog::mini(), name);
+        let raw = std::fs::read_to_string(format!("{ASSETS}/{name}.json")).unwrap();
+        let mut catalog = Catalog::mini();
+        catalog.set_custom(IndexMap::from([(name.to_owned(), serde_json::from_str(&raw).unwrap())]));
+        check("migrated", catalog, name);
+    }
+    report(failures, mini.len());
 }
 
 #[test]

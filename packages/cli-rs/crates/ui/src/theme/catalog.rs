@@ -1,6 +1,6 @@
 //! Which themes exist and how one loads (`allThemes`, `parseTheme`, and `loadTheme` in `packages/tui/src/theme` and
 //! `context/theme.tsx`), as the TUI does under the `new-designs` experiment: `opencode2` is listed first and V1
-//! themes take the new-designs migration.
+//! themes take the new-designs migration. [`Catalog::mini`] loads them as mini does, which ignores the experiment.
 
 use std::borrow::Cow;
 use std::sync::{LazyLock, OnceLock};
@@ -11,7 +11,7 @@ use serde_json::Value;
 use serde_json::value::RawValue;
 
 use super::document::{decode, modes};
-use super::{Theme, ThemeMode, resolve, v1_new};
+use super::{Theme, ThemeMode, resolve, v1, v1_new};
 
 /// A built-in theme: its document stays raw JSON until the theme is first loaded, so startup parses only the one in
 /// use.
@@ -22,11 +22,20 @@ struct Builtin {
     raw: &'static RawValue,
     #[serde(skip)]
     document: OnceLock<Value>,
+    /// A V1 theme's `migrateV1` document, which mini uses.
+    #[serde(rename = "mini")]
+    mini_raw: Option<&'static RawValue>,
+    #[serde(skip)]
+    mini: OnceLock<Value>,
 }
 
 impl Builtin {
-    fn document(&self) -> &Value {
-        self.document.get_or_init(|| serde_json::from_str(self.raw.get()).expect("generated/themes.json is valid"))
+    fn document(&self, mini: bool) -> &Value {
+        let (raw, document) = match self.mini_raw {
+            Some(raw) if mini => (raw, &self.mini),
+            _ => (self.raw, &self.document),
+        };
+        document.get_or_init(|| serde_json::from_str(raw.get()).expect("generated/themes.json is valid"))
     }
 }
 
@@ -62,9 +71,16 @@ pub struct Loaded {
 pub struct Catalog {
     custom: IndexMap<String, Value>,
     system: Option<Value>,
+    mini: bool,
 }
 
 impl Catalog {
+    /// The themes as mini loads them (`parseTheme` without `newDesigns`, `allThemes` without `opencode2`): V1
+    /// themes, built-in or custom, take `migrateV1`.
+    pub fn mini() -> Self {
+        Self { mini: true, ..Self::default() }
+    }
+
     /// Replaces the custom themes; values that are not theme documents are dropped (`setCustomThemes`).
     pub fn set_custom(&mut self, themes: IndexMap<String, Value>) {
         self.custom = themes.into_iter().filter(|(_, source)| is_theme_source(source)).collect();
@@ -104,13 +120,17 @@ impl Catalog {
         if let Some(custom) = self.custom.get(name) {
             return Some(ThemeSource::Custom(custom));
         }
-        BUILTINS.themes.iter().find(|theme| theme.name == name).map(|theme| ThemeSource::Builtin(theme.document()))
+        if self.mini && name == "opencode2" {
+            return None;
+        }
+        let builtin = BUILTINS.themes.iter().find(|theme| theme.name == name)?;
+        Some(ThemeSource::Builtin(builtin.document(self.mini)))
     }
 
     /// `loadTheme`: the theme `name` in `mode`, or in its first mode when it lacks `mode`.
     pub fn load(&self, name: &str, mode: ThemeMode) -> Result<Loaded, String> {
         let source = self.source(name).ok_or_else(|| format!("Theme \"{name}\" was not found"))?;
-        let document = parse(source, name)?;
+        let document = parse(source, name, self.mini)?;
         let modes = modes(&document);
         let requested = if modes.contains(&mode) { mode } else { modes.first().copied().unwrap_or(mode) };
         let (theme, mode) = resolve(&document, requested)?;
@@ -124,13 +144,14 @@ pub fn is_theme_source(source: &Value) -> bool {
 }
 
 /// `parseTheme`: V1 sources migrate, V2 sources pass the schema and must resolve in every mode they define.
-fn parse<'a>(source: ThemeSource<'a>, name: &str) -> Result<Cow<'a, Value>, String> {
+fn parse<'a>(source: ThemeSource<'a>, name: &str, mini: bool) -> Result<Cow<'a, Value>, String> {
     let source = match source {
         ThemeSource::Builtin(document) => return Ok(Cow::Borrowed(document)),
         ThemeSource::Custom(source) => source,
     };
     if source.get("theme").is_some() {
-        return v1_new::migrate(source).map(Cow::Owned);
+        let migrated = if mini { v1::migrate(source) } else { v1_new::migrate(source) };
+        return migrated.map(Cow::Owned);
     }
     let document = decode(source).map_err(|issue| invalid(name, &issue.value()))?;
     for mode in modes(&document) {
