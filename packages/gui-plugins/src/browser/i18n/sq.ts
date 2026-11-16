@@ -48,8 +48,6 @@ export default {
   "site.cookies.clear": "Pastro",
   "site.permissions": "Lejet janë bllokuar",
   "site.permissions.description": "Kamera, mikrofoni, vendndodhja dhe njoftimet nuk funksionojnë në këtë shfletues.",
-  "site.agent": "Agjenti mund ta përdorë këtë faqe",
-  "site.agent.description": "Mund ta lexojë faqen, të ekzekutojë skripte dhe të plotësojë formularë.",
   "page.add": "Shto faqen në sesion",
   "page.placeholder": "Shtoni kontekst për këtë faqe",
   "external.open": "Hap në shfletuesin e sistemit",

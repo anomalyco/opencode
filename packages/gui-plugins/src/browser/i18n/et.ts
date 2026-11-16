@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Tühjenda",
   "site.permissions": "Load on blokeeritud",
   "site.permissions.description": "Kaamera, mikrofon, asukoht ja teavitused selles brauseris ei tööta.",
-  "site.agent": "Agent saab seda lehte kasutada",
-  "site.agent.description": "See saab lehte lugeda, skripte käivitada ja vorme täita.",
   "page.add": "Lisa leht seansile",
   "page.placeholder": "Lisa selle lehe kohta konteksti",
   "external.open": "Ava süsteemi brauseris",

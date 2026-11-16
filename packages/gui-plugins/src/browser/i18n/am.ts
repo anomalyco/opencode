@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "አጽዳ",
   "site.permissions": "ፍቃዶች ታግደዋል",
   "site.permissions.description": "ካሜራ፣ ማይክሮፎን፣ አካባቢ እና ማሳወቂያዎች በዚህ አሳሽ ውስጥ አይሰሩም።",
-  "site.agent": "ወኪሉ ይህን ገጽ መጠቀም ይችላል",
-  "site.agent.description": "ገጹን ማንበብ፣ ስክሪፕቶችን ማሄድ እና ቅጾችን መሙላት ይችላል።",
   "page.add": "ገጹን ወደ ክፍለ ጊዜ አክል",
   "page.placeholder": "ስለዚህ ገጽ አውድ ያክሉ",
   "external.open": "በስርዓቱ አሳሽ ውስጥ ክፈት",

@@ -48,8 +48,6 @@ export default {
   "site.cookies.clear": "Șterge",
   "site.permissions": "Permisiunile sunt blocate",
   "site.permissions.description": "Camera, microfonul, locația și notificările nu funcționează în acest browser.",
-  "site.agent": "Agentul poate folosi această pagină",
-  "site.agent.description": "Poate citi pagina, rula scripturi și completa formulare.",
   "page.add": "Adaugă pagina în sesiune",
   "page.placeholder": "Adaugă context despre această pagină",
   "external.open": "Deschide în browserul sistemului",

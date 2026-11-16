@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "پاک کردن",
   "site.permissions": "مجوزها مسدود هستند",
   "site.permissions.description": "دوربین، میکروفون، موقعیت مکانی و اعلان‌ها در این مرورگر کار نمی‌کنند.",
-  "site.agent": "عامل می‌تواند از این صفحه استفاده کند",
-  "site.agent.description": "می‌تواند صفحه را بخواند، اسکریپت اجرا کند و فرم‌ها را پر کند.",
   "page.add": "افزودن صفحه به جلسه",
   "page.placeholder": "زمینه‌ای درباره این صفحه اضافه کنید",
   "external.open": "باز کردن در مرورگر سیستم",
