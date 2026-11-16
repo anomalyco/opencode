@@ -12,7 +12,7 @@ import { Browser } from "./rpc.js"
 import { BrowserSkill } from "./skill.js"
 
 export const register = Effect.fn("BrowserTools.register")(function* (
-  ctx: Pick<Context, "tool" | "skill" | "location">,
+  ctx: Pick<Context, "tool" | "skill" | "location" | "permission">,
   connection: BrowserConnection.Connection,
 ) {
   // Load and text waits run on the desktop; the rest poll from here with actions every desktop already supports.
@@ -30,7 +30,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     const finish = (tab: Browser.Tab, met: boolean, observed?: string) =>
       Clock.currentTimeMillis.pipe(
         Effect.flatMap((now) =>
-          exportResult(
+          modelResult(
             {
               ...tab,
               met,
@@ -38,7 +38,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
               elapsedMs: now - started,
               ...(observed === undefined ? {} : { observed }),
             },
-            [],
+            [], [],
           ),
         ),
       )
@@ -138,10 +138,10 @@ export const register = Effect.fn("BrowserTools.register")(function* (
 
   // Authorization comes before anything that reads the session's tabs or the server's files: a caller that a policy
   // blocks, or whose prompt is still open, learns nothing from them. Only the call's own input is checked first.
-  const admit = Effect.fn("BrowserTools.admit")(function* (tool: Tool.Context, operation: Browser.Method) {
+  const admit = Effect.fn("BrowserTools.admit")(function* (tool: Tool.Context, operation: Browser.Method, paths?: readonly string[]) {
     // A session without a desktop has no grant, so it hears that it is disconnected rather than core's denial.
     yield* connection.connected(tool.sessionID)
-    yield* connection.authorize(tool, operation)
+    yield* connection.authorize(tool, operation, paths)
   })
 
   const execute = Effect.fn("BrowserTools.execute")(function* (
@@ -166,18 +166,33 @@ export const register = Effect.fn("BrowserTools.register")(function* (
         message: `[browser.disconnected] ${shown} was not shown: no OpenCode desktop app is connected to this session, so nothing can open in its Review pane. Tell the user the file is at ${shown}; do not call browser.preview again until they open this session in the desktop app.`,
       })
     }
-    yield* admit(tool, action.type)
+    const paths = "paths" in action ? action.paths.map((path) => BrowserFiles.uploadPath(ctx.location.directory, path)) : undefined
+    yield* admit(tool, action.type, paths ?? (action.type === "preview" ? [action.path] : undefined))
+    if (action.type === "preview" && ctx.location.workspaceID) return yield* new Tool.Error({ message: "Browser preview requires a server-local workspace." })
     const checked = action.type === "preview" ? { ...action, path: yield* previewable(action.path) } : action
+    if (checked.type === "preview") {
+      const path = resolve(ctx.location.directory, checked.path)
+      yield* BrowserFiles.authorize(ctx, tool, "read", [path])
+      const physical = yield* BrowserFiles.physical([path])
+      if (physical[0] !== path) yield* BrowserFiles.authorize(ctx, tool, "read", physical)
+      checked.path = relative(ctx.location.directory, physical[0]!).split(sep).join("/")
+    }
     const target = yield* connection.target(tool.sessionID, checked)
-    const uploads =
-      action.type === "files.upload" || action.type === "files.drop"
-        ? yield* BrowserFiles.read(action.paths, ctx.location.directory)
-        : []
+    const uploads = paths ? yield* Effect.gen(function* () {
+      yield* BrowserFiles.authorize(ctx, tool, "read", paths)
+      const physical = yield* BrowserFiles.physical(paths)
+      const changed = physical.filter((path, index) => path !== paths[index])
+      if (changed.length) yield* BrowserFiles.authorize(ctx, tool, "read", changed)
+      return yield* BrowserFiles.read(physical, paths)
+    }) : []
     const response = yield* target.request(uploads)
     const output = yield* Effect.fromResult(decodeResult<Browser.Operation["output"]>(operation, response))
     if (checked.type === "preview" && /\.html?$/i.test(checked.path) && (!("tabID" in output) || !output.tabID || !("url" in output) || !output.url))
       return yield* new Tool.Error({ metadata: { code: "unsupported" }, message: "This desktop acknowledged the HTML preview but did not return its tab. Update the desktop before driving this preview." })
-    return yield* exportResult(action.type === "preview" ? { ...output, path: action.path } : output, response.files)
+    const plan = BrowserFiles.exportPaths(response.files)
+    if (plan.paths.length) yield* BrowserFiles.authorize(ctx, tool, "edit", plan.paths)
+    const saved = yield* BrowserFiles.save(response.files, plan)
+    return yield* modelResult(action.type === "preview" ? { ...output, path: action.path } : output, response.files, saved)
   })
 
   yield* ctx.skill.transform((editor) => editor.add(BrowserSkill.info))
@@ -260,9 +275,8 @@ function decodeResult<Output extends Schema.Codec<unknown>>(
   })
 }
 
-function exportResult(output: Schema.Schema.Type<Browser.Operation["output"]>, files: readonly Browser.File[]) {
+function modelResult(output: Schema.Schema.Type<Browser.Operation["output"]>, files: readonly Browser.File[], saved: Effect.Success<ReturnType<typeof BrowserFiles.save>>) {
   return Effect.gen(function* () {
-    const saved = yield* BrowserFiles.save(files)
     return {
       output: saved.length ? { ...output, files: saved } : output,
       content: [

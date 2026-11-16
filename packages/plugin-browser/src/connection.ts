@@ -396,14 +396,15 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
      * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
      * this plugin's (configured denies and asks win over the grant) and others such as `tool.use` policies.
      */
-    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, operation: Browser.Method) {
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, operation: Browser.Method, paths?: readonly string[]) {
       yield* ctx.permission.assert({
         sessionID: tool.sessionID,
         agent: tool.agent,
         action: "browser",
         resources: [operation],
         // "Always" approves this operation only, in core's saved approvals, never in the session rules the grant uses.
-        save: [operation],
+        save: paths ? [] : [operation],
+        ...(paths && { metadata: { input: { paths } } }),
         source: { type: "tool", messageID: tool.messageID, id: tool.id },
       })
     }),

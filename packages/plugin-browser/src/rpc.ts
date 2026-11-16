@@ -461,13 +461,13 @@ export const Operations = [
   ),
   operation(
     "files.upload",
-    "Upload server-local files to a file input in this tab. Bytes are copied to the desktop over RPC; paths are never assumed shared. Maximum 5 MiB total.",
+    "Upload server-local files to a file input in this tab. Requires read permission for every path and external_directory permission outside the workspace. Maximum 5 MiB total.",
     { ...target, paths: Schema.Array(short).check(Schema.isMinLength(1), Schema.isMaxLength(8)) },
     Tab,
   ),
   operation(
     "files.drop",
-    "Drop server-local files onto an element in this tab. Bytes are copied over RPC. Maximum 5 MiB total.",
+    "Drop server-local files onto an element in this tab. Requires read permission for every path and external_directory permission outside the workspace. Maximum 5 MiB total.",
     { ...target, paths: Schema.Array(short).check(Schema.isMinLength(1), Schema.isMaxLength(8)) },
     Tab,
   ),

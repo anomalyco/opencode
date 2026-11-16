@@ -568,6 +568,7 @@
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
+        "@opencode/util": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
