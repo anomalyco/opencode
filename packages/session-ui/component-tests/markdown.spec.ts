@@ -63,7 +63,7 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
 
   expect(result).toEqual([
     "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
-    '<img data-local-image="safe.png"><a>unsafe</a>',
+    '<img data-local-image="safe.png"><a data-app-link="javascript:alert(3)">unsafe</a>',
     '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
     '<form name="user-content-document" id="user-content-location"><input name="user-content-cookie"></form>',
     "<math><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></math>",
