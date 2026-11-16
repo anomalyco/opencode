@@ -623,7 +623,10 @@ fn a_plugin_that_hangs_fails_alone_and_the_js_host_starts_again() {
 #[test]
 fn a_plugin_that_exits_fails_alone_and_the_js_host_starts_again() {
     let Some(config) = config() else { return };
-    ends_the_js_host("probe.exit", None, "run-command ended the JS host: the JS host exited (exit status: 7)", config);
+    // How the platform's `ExitStatus` reads.
+    let exited = if cfg!(windows) { "exit code: 7" } else { "exit status: 7" };
+    let cause = format!("run-command ended the JS host: the JS host exited ({exited})");
+    ends_the_js_host("probe.exit", None, &cause, config);
 }
 
 // Expected (containment, a plugin that floods): effects sent outside any call past the host's bound of unread messages
@@ -1498,7 +1501,11 @@ fn the_manager_asks_before_a_project_typescript_plugin_runs() {
             .iter()
             .any(|entry| entry.target.as_deref() == Some(&*dir.to_string_lossy()) && entry.status == status)
     };
-    assert!(listed(Status::Declined), "{:?}", tui.plugins.entries());
+    // The decision is recorded off the UI thread, as the walk is.
+    harness.wait("the plugin was declined", || {
+        app.advance(Duration::from_millis(1));
+        listed(Status::Declined)
+    });
     assert!(
         tui.plugins.scripts.borrow().as_ref().unwrap().pid().is_none(),
         "the JS host started for a declined plugin"

@@ -578,7 +578,7 @@ fn a_project_plugin_imports_nothing_outside_its_approved_files() {
     let Some(config) = config() else { return };
     let root = opencode_util::temp::tempdir().unwrap();
     let work = root.path().join("work");
-    let dir = work.join(".opencode/plugins/reach");
+    let dir = work.join(".opencode").join("plugins").join("reach");
     std::fs::create_dir_all(work.join(".git")).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
     let marker = root.path().join("outside.ran");
@@ -708,7 +708,7 @@ fn a_project_plugin_imports_its_own_files_by_relative_paths() {
     let Some(config) = config() else { return };
     let root = opencode_util::temp::tempdir().unwrap();
     let work = root.path().join("work");
-    let dir = work.join(".opencode/plugins/near");
+    let dir = work.join(".opencode").join("plugins").join("near");
     std::fs::create_dir_all(work.join(".git")).unwrap();
     std::fs::create_dir_all(dir.join("dist/lib")).unwrap();
     std::fs::write(
@@ -742,7 +742,7 @@ fn a_dependency_changed_after_approval_runs_nothing_unapproved() {
     let Some(config) = config() else { return };
     let root = opencode_util::temp::tempdir().unwrap();
     let work = root.path().join("work");
-    let dir = work.join(".opencode/plugins/deps");
+    let dir = work.join(".opencode").join("plugins").join("deps");
     std::fs::create_dir_all(work.join(".git")).unwrap();
     std::fs::create_dir_all(dir.join("node_modules/dep")).unwrap();
     std::fs::write(dir.join("node_modules/dep/package.json"), r#"{ "name": "dep", "main": "index.js" }"#).unwrap();
@@ -867,7 +867,7 @@ fn project(globals: &[&str], config: Config) -> (Pipe, PathBuf, PathBuf) {
     let root = opencode_util::temp::tempdir().unwrap();
     let work = root.path().join("work");
     std::fs::create_dir_all(work.join(".git")).unwrap();
-    let dir = work.join(".opencode/plugins/v2probe");
+    let dir = work.join(".opencode").join("plugins").join("v2probe");
     copy(&Path::new(EXAMPLES).join("v2probe"), &dir);
     let marker = root.path().join("module.jsonl");
     std::fs::write(dir.join("marker.txt"), marker.to_string_lossy().as_bytes()).unwrap();
