@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+// Check before terminal initialization, which itself needs a valid cwd.
+import "./check-cwd"
 import { ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Cause, Effect } from "effect"
