@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
 use std::hash::{DefaultHasher, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use opencode_ui::dialog::DialogKeymap;
@@ -1981,7 +1981,12 @@ fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
     let part = install("@s/part@latest", "3", "@s/part");
     let configured = vec![Configured { target: "tui-pkg@1.0.0".into(), options: None }];
     let off = project.loader(Rc::new(Fake::default()), configured.clone()).with_npm(cache.clone());
-    let parts = || vec![ServerPart::Package("@s/part".into()), ServerPart::Package("not-cached@1".into())];
+    let parts = || {
+        vec![
+            ServerPart::Package { spec: "@s/part".into(), id: None },
+            ServerPart::Package { spec: "not-cached@1".into(), id: None },
+        ]
+    };
     off.set_server(parts(), vec!["@s/part".into()]);
     assert_eq!(off.targets().into_iter().map(|target| target.local).collect::<Vec<_>>(), [None]);
     let host = host();
@@ -2022,9 +2027,11 @@ fn a_server_part_inside_the_project_is_the_projects() {
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
     let loader = project.loader(Rc::new(Fake::default()), Vec::new()).with_npm(cache).with_scripts(scripts);
     let parts = [&link, &other].map(|path| path.to_string_lossy().into_owned());
-    let server = [&parts[0], &parts[1]].map(|path| ServerPart::Local(path.clone()));
-    loader
-        .set_server([server[0].clone(), server[1].clone(), ServerPart::Package("pkg@1.0.0".into())].into(), Vec::new());
+    let server = [&parts[0], &parts[1]].map(|path| ServerPart::Local { path: path.clone(), id: None });
+    loader.set_server(
+        [server[0].clone(), server[1].clone(), ServerPart::Package { spec: "pkg@1.0.0".into(), id: None }].into(),
+        Vec::new(),
+    );
     let targets: Vec<(String, bool)> =
         loader.targets().into_iter().map(|target| (target.target, target.project)).collect();
     let dir = dir.to_string_lossy().into_owned();
@@ -2051,7 +2058,7 @@ fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
     loader.reconcile(&dynamic(&host), &registry);
     assert_eq!(state(), (Status::Pending, 0));
     for path in [&link, &sibling] {
-        loader.set_server(vec![ServerPart::Local(path.to_string_lossy().into_owned())], Vec::new());
+        loader.set_server(vec![ServerPart::Local { path: path.to_string_lossy().into_owned(), id: None }], Vec::new());
         loader.reconcile(&dynamic(&host), &registry);
         assert_eq!(state(), (Status::Pending, 0), "{path:?}");
         assert_eq!(loader.targets().len(), 1, "{path:?}");
@@ -2070,7 +2077,8 @@ fn a_server_reported_native_build_never_loads() {
     let loader = project.loader(fake.clone(), Vec::new()).with_scripts(scripts);
     let path = elsewhere.to_string_lossy().into_owned();
     let library = elsewhere.join(entry_file()).to_string_lossy().into_owned();
-    let parts = vec![ServerPart::Local(path.clone()), ServerPart::Local(library.clone())];
+    let parts =
+        vec![ServerPart::Local { path: path.clone(), id: None }, ServerPart::Local { path: library.clone(), id: None }];
     loader.set_server(parts, vec![path.clone(), library]);
     loader.reconcile(&dynamic(&host), &registry);
     assert_eq!((loader.targets(), fake.loads.get()), (Vec::new(), 0));
@@ -2101,8 +2109,8 @@ fn only_the_users_own_configuration_vouches_for_a_server_part() {
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
     let configured = vec![Configured { target: "cli-pkg@2.0.0".into(), options: None }];
     let loader = project.loader(Rc::new(Fake::default()), configured).with_npm(cache).with_scripts(scripts);
-    let package = |spec: &str| ServerPart::Package(spec.into());
-    let local = |path: &Path| ServerPart::Local(path.to_string_lossy().into_owned());
+    let package = |spec: &str| ServerPart::Package { spec: spec.into(), id: None };
+    let local = |path: &Path| ServerPart::Local { path: path.to_string_lossy().into_owned(), id: None };
     let parts = vec![
         package("user-pkg@1.0.0"),
         package("project-pkg@1.0.0"),
@@ -2123,10 +2131,185 @@ fn only_the_users_own_configuration_vouches_for_a_server_part() {
             (path(&global), false),
             ("user-pkg@1.0.0".to_owned(), false),
             ("project-pkg@1.0.0".to_owned(), true),
-            ("cli-pkg@2.0.0".to_owned(), false),
             ("versioned@2.0.0".to_owned(), true),
             (path(&named), false),
             (path(&other), true),
+            // `cli.json`'s own, in its place: the server's part for the same package is left out (recheck-2).
+            ("cli-pkg@2.0.0".to_owned(), false),
         ]
     );
+}
+
+/// The loader on the JS host, with the npm cache under `project`, holding `specs` (each `name@version`).
+fn server_loader(project: &Project, configured: Vec<Configured>, specs: &[&str]) -> Loader {
+    let cache = project.root.path().join("cache");
+    for spec in specs {
+        let name = spec.rsplit_once('@').map_or(*spec, |(name, _)| name);
+        write(
+            &cache.join("npm").join(spec).join("5").join("node_modules").join(name).join("tui.ts"),
+            "export default {}\n",
+        );
+    }
+    let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host()));
+    project.loader(Rc::new(Fake::default()), configured).with_npm(cache).with_scripts(scripts)
+}
+
+/// Whether each target needs approval, by target.
+fn approvals(loader: &Loader) -> Vec<(String, bool)> {
+    loader.targets().into_iter().map(|target| (target.target, target.project)).collect()
+}
+
+// Expected (carbon recheck-1, TS `supervisor.ts`): the user's entries fold in order, as TS's server folds them. A
+// removal (`-<selector>`) withdraws what an earlier entry vouched for, by the spec, by the plugin's ID as the server
+// reports it, or by a `<prefix>.*` or `*` selector; a later entry that names it again, or a selector that enables it
+// again, vouches for it again. An entry that only selects never vouches for a package nobody named.
+#[test]
+fn a_removal_in_the_users_configuration_withdraws_its_vouch() {
+    let project = Project::new();
+    let specs = ["revoked@1.0.0", "byid@1.0.0", "byglob@1.0.0", "again@1.0.0", "enabled@1.0.0", "selected@1.0.0"];
+    let loader = server_loader(&project, Vec::new(), &specs);
+    let part = |spec: &str, id: &str| ServerPart::Package { spec: spec.into(), id: Some(id.into()) };
+    let parts = vec![
+        part("revoked@1.0.0", "revoked"),
+        part("byid@1.0.0", "acme.byid"),
+        part("byglob@1.0.0", "acme.byglob"),
+        part("again@1.0.0", "again"),
+        part("enabled@1.0.0", "enabled"),
+        part("selected@1.0.0", "selected"),
+    ];
+    let user = [
+        "revoked@1.0.0",
+        "byid@1.0.0",
+        "byglob@1.0.0",
+        "again@1.0.0",
+        "enabled@1.0.0",
+        // carbon's probe: the spec, removed by the spec.
+        "-revoked@1.0.0",
+        "-acme.byid",
+        "-acme.*",
+        "-again@1.0.0",
+        "-*",
+        "again@1.0.0",
+        "enabled",
+        "selected",
+    ];
+    loader.set_server(parts, user.map(str::to_owned).to_vec());
+    let expected = [
+        ("revoked@1.0.0", true),
+        ("byid@1.0.0", true),
+        ("byglob@1.0.0", true),
+        ("again@1.0.0", false),
+        ("enabled@1.0.0", false),
+        ("selected@1.0.0", true),
+    ];
+    assert_eq!(approvals(&loader), expected.map(|(spec, project)| (spec.to_owned(), project)));
+}
+
+// Expected (carbon recheck-1, TS `PluginSourceDirectory.discover`): a plugin directly under a global `plugins`
+// directory is the user's own, a link there too, but nothing inside one (its `node_modules`) is; and a removal of its
+// path withdraws that.
+#[cfg(unix)]
+#[test]
+fn only_a_direct_child_of_a_global_plugins_directory_is_vouched_for() {
+    let project = Project::new();
+    let legit = project.global();
+    write(&legit.join("tui.ts"), "export default {}\n");
+    let subdep = legit.join("node_modules").join("subdep");
+    write(&subdep.join("tui.ts"), "export default {}\n");
+    let elsewhere = project.root.path().join("dev").join("linked");
+    write(&elsewhere.join("tui.ts"), "export default {}\n");
+    let linked = project.config().join("plugins").join("linked");
+    std::os::unix::fs::symlink(&elsewhere, &linked).unwrap();
+    let removed = project.config().join("plugins").join("removed");
+    write(&removed.join("tui.ts"), "export default {}\n");
+    let loader = server_loader(&project, Vec::new(), &[]);
+    let path = |path: &Path| path.to_string_lossy().into_owned();
+    let parts = [&subdep, &linked, &removed].map(|dir| ServerPart::Local { path: path(dir), id: None });
+    loader.set_server(parts.to_vec(), vec![format!("-{}", path(&removed))]);
+    let held = approvals(&loader);
+    let of = |dir: &Path| held.iter().find(|(target, _)| *target == path(dir)).map(|(_, project)| *project);
+    assert_eq!(of(&subdep), Some(true), "{held:?}");
+    // The discovered plugins themselves are global; the server's parts for them are those targets.
+    assert_eq!(of(&linked), Some(false), "{held:?}");
+    assert_eq!(of(&legit), Some(false), "{held:?}");
+    let direct = loader.vouched(&[], &path(&linked), real(&linked).as_deref(), None);
+    let deep = loader.vouched(&[], &path(&subdep), real(&subdep).as_deref(), None);
+    let gone = loader.vouched(&[format!("-{}", path(&removed))], &path(&removed), real(&removed).as_deref(), None);
+    assert_eq!((direct, deep, gone), (true, false, false));
+}
+
+// Expected (carbon recheck-2, TS `mergePluginTargets`): a server's part and a `cli.json` entry for one directory are one
+// target, `cli.json`'s with its options, however the two spell it: the server reports where a link leads, the entry
+// names the link.
+#[cfg(unix)]
+#[test]
+fn a_server_part_and_a_cli_json_entry_for_one_directory_are_one_target() {
+    let project = Project::new();
+    let dir = project.root.path().join("dev").join("part");
+    write(&dir.join("tui.ts"), "export default {}\n");
+    let link = project.root.path().join("link");
+    std::os::unix::fs::symlink(&dir, &link).unwrap();
+    let options = Some(r#"{"from":"cli"}"#.to_owned());
+    let entry = Configured { target: link.to_string_lossy().into_owned(), options: options.clone() };
+    let loader = server_loader(&project, vec![entry], &[]);
+    let user = vec![link.to_string_lossy().into_owned()];
+    for reported in [&link, &dir] {
+        loader.set_server(
+            vec![ServerPart::Local { path: reported.to_string_lossy().into_owned(), id: None }],
+            user.clone(),
+        );
+        let targets: Vec<_> =
+            loader.targets().into_iter().map(|target| (target.target, target.options, target.project)).collect();
+        assert_eq!(targets, [(link.to_string_lossy().into_owned(), options.clone(), false)], "{reported:?}");
+    }
+}
+
+// Expected (carbon recheck-2, TS `context.tsx` reconcile): when `cli.json` and a server's part name one package at two
+// versions, `cli.json`'s is the target, as TS folds `cli.json` after the server's parts and its version replaces the
+// server's for the plugin's ID; the server's part is not loaded or asked about, vouched for or not.
+#[test]
+fn a_cli_json_package_takes_precedence_over_the_servers_version() {
+    let project = Project::new();
+    let configured = vec![Configured { target: "pkg@0.1.2".into(), options: None }];
+    let loader = server_loader(&project, configured, &["pkg@0.1.2", "pkg@0.1.3", "@s/other@1.0.0"]);
+    let part = |spec: &str| ServerPart::Package { spec: spec.into(), id: Some("acme.pkg".into()) };
+    for user in [vec!["pkg@0.1.3".to_owned(), "pkg@0.1.2".to_owned()], vec!["pkg@0.1.2".to_owned()]] {
+        loader.set_server(vec![part("pkg@0.1.3"), part("@s/other@1.0.0")], user);
+        let expected = [("@s/other@1.0.0".to_owned(), true), ("pkg@0.1.2".to_owned(), false)];
+        assert_eq!(approvals(&loader), expected);
+    }
+}
+
+// Expected (carbon recheck-3): a path the loader compares or hands to Bun carries no verbatim prefix:
+// `\\?\C:\x` is `C:\x`, and `\\?\UNC\server\share\x` is `\\server\share\x`; other paths are as they were.
+#[test]
+fn a_real_path_has_no_verbatim_prefix() {
+    for (path, plain_path) in [
+        (r"\\?\C:\Users\runneradmin\p", r"C:\Users\runneradmin\p"),
+        (r"\\?\UNC\srv\share\p", r"\\srv\share\p"),
+        (r"C:\Users\p", r"C:\Users\p"),
+        ("/home/me/p", "/home/me/p"),
+    ] {
+        assert_eq!(plain(PathBuf::from(path)), PathBuf::from(plain_path), "{path}");
+    }
+}
+
+// Expected (carbon recheck-3): on Windows, a package found in the cache and a server's local part are real paths
+// without the verbatim prefix `canonicalize` gives, the ones Bun is handed.
+#[cfg(windows)]
+#[test]
+fn windows_paths_reach_the_js_host_without_a_verbatim_prefix() {
+    let project = Project::new();
+    let loader = server_loader(&project, Vec::new(), &["pkg@1.0.0"]);
+    let dir = project.root.path().join("dev").join("part");
+    write(&dir.join("tui.ts"), "export default {}\n");
+    let parts = vec![
+        ServerPart::Package { spec: "pkg@1.0.0".into(), id: None },
+        ServerPart::Local { path: dir.to_string_lossy().into_owned(), id: None },
+    ];
+    loader.set_server(parts, Vec::new());
+    for target in loader.targets() {
+        let local = target.local.unwrap().to_string_lossy().into_owned();
+        assert!(!local.starts_with(r"\\?\"), "{local}");
+    }
 }

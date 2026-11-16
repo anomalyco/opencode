@@ -95,13 +95,14 @@ impl Target {
     }
 }
 
-/// A server plugin's TUI part as `GET /api/plugin` reports its source (TS `serverTuiPlugins`).
+/// A server plugin's TUI part as `GET /api/plugin` reports it (TS `serverTuiPlugins`): its source, and the plugin's ID
+/// when the server gives one, which the user's `-<id>` removals select (O-162, carbon recheck-1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ServerPart {
     /// A package spec, found in the npm cache ([`npm::resolve`]).
-    Package(String),
+    Package { spec: String, id: Option<String> },
     /// An absolute path on the server's machine.
-    Local(String),
+    Local { path: String, id: Option<String> },
 }
 
 /// The build a target holds on the disk now ([`Loader::found`]).
@@ -163,15 +164,32 @@ pub struct Loader {
     server: RefCell<(Vec<ServerPart>, Vec<String>)>,
     /// The package each npm spec resolved to, kept while the spec is a target: TS resolves a loaded package's entry
     /// once a session (`context.tsx:663-665`), so a later install does not move it.
-    packages: RefCell<HashMap<String, PathBuf>>,
+    packages: RefCell<HashMap<String, npm::Package>>,
 }
 
-/// What the user's own configuration names, which a server part needs to load without approval (O-162).
-#[derive(Default)]
-struct Vouched {
-    specs: Vec<String>,
-    paths: Vec<PathBuf>,
-    dirs: Vec<PathBuf>,
+/// The path `realpath` gives (carbon recheck-3): `canonicalize`, without the verbatim prefix it gives on Windows
+/// (`\\?\C:\x` is `C:\x`), so a path compares with one written as the user or the server writes it, and the JS host
+/// is handed one Bun and Node read alike.
+fn real(path: &Path) -> Option<PathBuf> {
+    std::fs::canonicalize(path).ok().map(plain)
+}
+
+/// `path` without a verbatim prefix ([`opencode_util::path::strip_verbatim`]).
+fn plain(path: PathBuf) -> PathBuf {
+    match path.to_str() {
+        Some(text) => PathBuf::from(opencode_util::path::strip_verbatim(text).into_owned()),
+        None => path,
+    }
+}
+
+/// TS's plugin selector (`matches`, `core/src/plugin/supervisor.ts`, `tui/src/plugin/context.tsx`): `*`, a
+/// `<prefix>.*`, or the name itself.
+fn selects(selector: &str, name: &str) -> bool {
+    selector == "*"
+        || match selector.strip_suffix('*').filter(|prefix| prefix.ends_with('.')) {
+            Some(prefix) => name.starts_with(prefix),
+            None => selector == name,
+        }
 }
 
 /// The `name` of the `package.json` in `dir`, which names a plugin that is not loaded in place of its path.
@@ -211,13 +229,20 @@ impl Loader {
     }
 
     /// Replaces the TUI parts of the server's plugins, after the server listed its plugins, and the `plugins` entries
-    /// of the user's global opencode config (`opencode.json`, `opencode.jsonc` in the config directory) as written;
+    /// of the user's own configuration as written, in order and removals included: the global opencode config's
+    /// (`opencode.json`, then `opencode.jsonc`, in the config directory), then `cli.json`'s;
     /// the next [`Loader::reconcile`] applies them. They load on the JS host only. Whether either changed.
     pub fn set_server(&self, parts: Vec<ServerPart>, user: Vec<String>) -> bool {
         let next = (parts, user);
         let changed = *self.server.borrow() != next;
         self.server.replace(next);
         changed
+    }
+
+    /// Replaces the `plugins` entries of the user's own configuration ([`Loader::set_server`]), after `cli.json` or the
+    /// global opencode config changed.
+    pub fn set_user(&self, user: Vec<String>) {
+        self.server.borrow_mut().1 = user;
     }
 
     /// The global config directory, which holds `cli.json` and the global opencode config.
@@ -230,33 +255,67 @@ impl Loader {
         local_source(target, &self.config_dir).or_else(|| self.package(target))
     }
 
+    /// The name of the package the npm spec `spec` names: by the spec, else as the cache holds it (a git spec). `None`
+    /// for a local path.
+    fn package_name(&self, spec: &str) -> Option<String> {
+        if local_source(spec, &self.config_dir).is_some() {
+            return None;
+        }
+        npm::name(spec).or_else(|| {
+            self.package(spec)?;
+            self.packages.borrow().get(spec).map(|package| package.name.clone())
+        })
+    }
+
     /// The package `spec` names in the cache (with the JS host only, which is what runs it), pinned once found.
     fn package(&self, spec: &str) -> Option<PathBuf> {
         if let Some(pinned) = self.packages.borrow().get(spec) {
-            return Some(pinned.clone());
+            return Some(pinned.directory.clone());
         }
         let cache = self.npm.as_deref().filter(|_| self.scripts.is_some())?;
-        let directory = npm::resolve(spec, cache)?.directory;
-        self.packages.borrow_mut().insert(spec.to_owned(), directory.clone());
+        let npm::Package { directory, name } = npm::resolve(spec, cache)?;
+        self.packages.borrow_mut().insert(spec.to_owned(), npm::Package { directory: directory.clone(), name });
         Some(directory)
     }
 
-    /// What the user's own configuration names (O-162): the package specs and the local paths (canonical) of the
-    /// `plugins` entries of `cli.json` and of the global opencode config, and the global plugin directories.
-    fn vouched(&self, user: &[String]) -> Vouched {
-        let configured = self.configured.borrow();
-        let entries = configured.iter().map(|entry| entry.target.as_str()).chain(user.iter().map(String::as_str));
-        let mut vouched = Vouched::default();
-        // TS resolves a `file://` URL and a `./` or `../` path against the config file's directory (`source.ts`).
-        for entry in entries.filter(|entry| !entry.starts_with('-')) {
-            match local_source(entry, &self.config_dir) {
-                Some(path) => vouched.paths.extend(std::fs::canonicalize(path)),
-                None => vouched.specs.push(entry.to_owned()),
+    /// Whether the user's own configuration names the server part `spec` (a package's spec, or the path the server
+    /// reported, `local` its real path), with the plugin ID `id` (O-162). `user` is the `plugins` entries of the
+    /// global opencode config (`opencode.json`, then `opencode.jsonc`) and then of `cli.json`, in order, removals
+    /// included. They fold as TS's server folds its operations (`supervisor.ts`, carbon recheck-1):
+    /// - a plugin directly under a global `plugin` or `plugins` directory is named first, as discovery adds it before
+    ///   any entry (`source.ts` `scan`, `PluginSourceDirectory.discover`), and nothing deeper in it is;
+    /// - an entry that is the spec, or names the path (`./`, `../` and `file://` against the config directory, as TS
+    ///   resolves them), names and enables it;
+    /// - a selector (`*`, `<prefix>.*`, `opencode.…`, or the ID) enables it again, without naming it;
+    /// - a `-<selector>` that selects the spec, the path or the ID disables it.
+    ///
+    /// It is vouched for when it is named and, after the last entry, enabled.
+    fn vouched(&self, user: &[String], spec: &str, local: Option<&Path>, id: Option<&str>) -> bool {
+        let dirs = ["plugin", "plugins"].map(|name| real(&self.config_dir.join(name)));
+        let child = local.is_some_and(|_| {
+            let parent = Path::new(spec).parent().and_then(real);
+            parent.is_some_and(|parent| dirs.contains(&Some(parent)))
+        });
+        let (mut named, mut enabled) = (child, child);
+        let select = |selector: &str| selects(selector, spec) || id.is_some_and(|id| selects(selector, id));
+        for entry in user {
+            if let Some(selector) = entry.strip_prefix('-') {
+                enabled &= !select(selector);
+                continue;
+            }
+            let names = match (local, local_source(entry, &self.config_dir)) {
+                (Some(local), Some(path)) => real(&path).as_deref() == Some(local),
+                (None, None) => entry == spec,
+                _ => false,
+            };
+            if names {
+                named = true;
+            }
+            if names || entry == "*" || entry.ends_with(".*") || entry.starts_with("opencode.") || select(entry) {
+                enabled = true;
             }
         }
-        let dirs = ["plugin", "plugins"].map(|name| std::fs::canonicalize(self.config_dir.join(name)));
-        vouched.dirs.extend(dirs.into_iter().flatten());
-        vouched
+        named && enabled
     }
 
     /// Runs the targets without a native build on `scripts`.
@@ -299,25 +358,30 @@ impl Loader {
         // needs approval as a project's plugin does (O-162): a project's `opencode.json` names packages the server runs
         // none of, and a path the server reports is its directory, held for the same artifact. A server target never
         // loads a native build.
-        let vouched = if parts.is_empty() { Vouched::default() } else { self.vouched(&user) };
+        // A package `cli.json` names, at any version, is `cli.json`'s: TS folds its entries after the server's parts,
+        // so its version replaces the server's for the plugin's ID (`context.tsx:289-309`, `desired.set`), and the
+        // server's part never loads (carbon recheck-2).
+        let configured = self.configured.borrow();
+        let named: Vec<String> = configured.iter().filter_map(|entry| self.package_name(&entry.target)).collect();
         let server = parts.into_iter().filter_map(|part| {
             let (target, local, vouched) = match part {
-                ServerPart::Package(spec) => {
+                ServerPart::Package { spec, id } => {
+                    if self.package_name(&spec).is_some_and(|name| named.contains(&name)) {
+                        return None;
+                    }
                     let local = self.package(&spec)?;
-                    let vouched = vouched.specs.contains(&spec);
+                    let vouched = self.vouched(&user, &spec, None, id.as_deref());
                     (spec, local, vouched)
                 }
-                ServerPart::Local(path) => {
-                    let local = Path::new(&path).is_absolute().then(|| std::fs::canonicalize(&path).ok()).flatten()?;
-                    let vouched =
-                        vouched.paths.contains(&local) || vouched.dirs.iter().any(|dir| local.starts_with(dir));
+                ServerPart::Local { path, id } => {
+                    let local = Path::new(&path).is_absolute().then(|| real(Path::new(&path))).flatten()?;
+                    let vouched = self.vouched(&user, &path, Some(&local), id.as_deref());
                     (path, local, vouched)
                 }
             };
             let target = Target { local: Some(local), target, options: None, project: !vouched };
             target.library().is_none().then_some((target, true))
         });
-        let configured = self.configured.borrow();
         let configured = configured.iter().map(|entry| Target {
             target: entry.target.clone(),
             local: self.local(&entry.target),
@@ -327,6 +391,8 @@ impl Loader {
         let mut targets: Vec<Target> = Vec::new();
         let discovered = discovered.map(|target| (target, false));
         let configured = configured.map(|target| (target, false));
+        // The targets that came from the server's parts, by their index.
+        let mut served: Vec<usize> = Vec::new();
         for (target, from_server) in discovered.chain(server).chain(configured) {
             let key = |target: &Target| {
                 target
@@ -348,9 +414,30 @@ impl Loader {
             if from_server && targets.iter().any(|known| key(known) == key(&target) || same_file(known)) {
                 continue;
             }
-            match targets.iter_mut().find(|known| key(known) == key(&target) || alias(known)) {
-                Some(known) => *known = target,
-                None => targets.push(target),
+            // A `cli.json` entry replaces a server's part for the same directory in its place, however each spells it
+            // (a link, a Windows verbatim path), as TS merges them by `localSource` (carbon recheck-2): the server's
+            // part is stored by its real path, the entry as written.
+            let real_path = |target: &Target| target.local.as_deref().and_then(real);
+            let same_part = |index: usize, known: &Target| {
+                !from_server
+                    && served.contains(&index)
+                    && real_path(known).is_some_and(|known| Some(known) == real_path(&target))
+            };
+            match targets
+                .iter()
+                .enumerate()
+                .position(|(index, known)| key(known) == key(&target) || alias(known) || same_part(index, known))
+            {
+                Some(index) => {
+                    served.retain(|served| *served != index);
+                    targets[index] = target;
+                }
+                None => {
+                    if from_server {
+                        served.push(targets.len());
+                    }
+                    targets.push(target);
+                }
             }
         }
         targets
@@ -619,7 +706,7 @@ impl Loader {
         // new build is asked about once that walk ends. A package from the npm cache a server part names (O-162) is
         // approved by its files and its install's `package.json` and lockfile ([`Artifact::tree`]), and runs where it is:
         // its dependencies sit beside it, not in it, so a copy of it could not import them.
-        let package = self.packages.borrow().values().any(|known| known == dir);
+        let package = self.packages.borrow().values().any(|known| known.directory == dir);
         let staged = match target.project {
             true => {
                 let Some(tree) = scripts.tree(dir) else {
