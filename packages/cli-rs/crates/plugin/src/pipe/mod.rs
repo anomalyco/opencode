@@ -817,6 +817,11 @@ impl Scripts {
         self.child.borrow().as_ref().map(Child::pid)
     }
 
+    /// The last lines the JS host wrote to standard error, which the client logs, while it runs.
+    pub fn stderr(&self) -> Vec<String> {
+        self.child.borrow().as_ref().map(Child::stderr).unwrap_or_default()
+    }
+
     /// The JS host's resident set, while it runs.
     pub fn resident(&self) -> Option<u64> {
         self.child.borrow().as_ref().and_then(Child::resident)

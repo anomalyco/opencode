@@ -361,6 +361,13 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+// The message of what a plugin threw, for its failure, which the error view shows. Its stack goes to standard error,
+// which the client logs, so the author finds the line that threw in the log.
+function thrown(error: unknown) {
+  if (error instanceof Error && error.stack) stderr(error.stack)
+  return message(error)
+}
+
 // Queues `request` for the call that runs, the setup that runs, or a batch of its own; resolves with its answer. A
 // call ends at its handler's first `await`: what it asks for after that is a batch's, the activation's, not the mount's.
 function effect(plugin: Plugin, request: Request): Promise<Json> {
@@ -444,7 +451,7 @@ function view(plugin: Plugin, mount: Mount) {
     if (node === undefined) return
     text = JSON.stringify(node)
   } catch (error) {
-    fail(plugin, `view threw: ${message(error)}`)
+    fail(plugin, `view threw: ${thrown(error)}`)
     return
   }
   if (!mount.whole && text === mount.last && given.length === 0 && released.length === 0) return
@@ -768,7 +775,7 @@ async function setup(seq: number, plugin: Plugin) {
     }
     if (!state.settled)
       void done.then(() => {
-        if (state.threw) return fail(plugin, `setup threw: ${message(state.error)}`)
+        if (state.threw) return fail(plugin, `setup threw: ${thrown(state.error)}`)
         if (typeof state.cleanup === "function") cleanUp(plugin, state.cleanup as () => unknown)
         changed(plugin)
       })
@@ -778,7 +785,7 @@ async function setup(seq: number, plugin: Plugin) {
   if (state.threw) {
     plugin.setting = false
     plugin.failed = true
-    send({ type: "done", seq, error: `setup threw: ${message(state.error)}` })
+    send({ type: "done", seq, error: `setup threw: ${thrown(state.error)}` })
     return
   }
   if (typeof state.cleanup === "function") cleanUp(plugin, state.cleanup as () => unknown)
@@ -848,7 +855,7 @@ async function load(seq: number, target: string, dir: string, options: Json, wit
     // A URL, so a drive letter, `#` or `%` in the path is not read as one.
     module = await import(`${pathToFileURL(entry).href}?generation=${seq}`)
   } catch (error) {
-    return send({ type: "done", seq, error: `cannot load ${target}: ${notInstalled(error) ?? message(error)}` })
+    return send({ type: "done", seq, error: `cannot load ${target}: ${notInstalled(error) ?? thrown(error)}` })
   }
   const definition = module?.default
   if (!definition || typeof definition.id !== "string" || !definition.id || typeof definition.setup !== "function")
@@ -942,10 +949,10 @@ function call(seq: number, plugin: Plugin, request: Json) {
       plugin.replies.delete(request.id)
       reply?.resolve(request.result)
     }
-    if (result instanceof Promise) result.catch((error) => fail(plugin, `${request.type} rejected: ${message(error)}`))
-  } catch (thrown) {
+    if (result instanceof Promise) result.catch((error) => fail(plugin, `${request.type} rejected: ${thrown(error)}`))
+  } catch (caught) {
     const call = { command: "run-command", input: "handle" }[request.type as string] ?? `on-${request.type}`
-    error = `${call} threw: ${message(thrown)}`
+    error = `${call} threw: ${thrown(caught)}`
   }
   const effects = plugin.callEffects
   const resolvers = plugin.resolvers
