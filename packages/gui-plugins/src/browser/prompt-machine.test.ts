@@ -1,18 +1,27 @@
 import { describe, expect, test } from "bun:test"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import {
+  createVisit,
   initialPrompts,
+  INTENT_MS,
   promptHost,
   promptSite,
   promptText,
   selectPrompt,
   transitionPrompts,
+  transitionVisit,
   type PromptEvent,
   type PromptState,
+  type Visit,
+  type VisitEvent,
   type WaitingRequest,
 } from "./prompt-machine"
 
 const replay = (events: readonly PromptEvent[], state: PromptState = initialPrompts) =>
   events.reduce((current, event) => transitionPrompts(current, event).state, state)
+
+const replayVisit = (events: readonly VisitEvent[], state: Visit) =>
+  events.reduce((current, event) => transitionVisit(current, event).state, state)
 
 const camera: WaitingRequest = {
   kind: "permission",
@@ -22,7 +31,15 @@ const camera: WaitingRequest = {
   remember: true,
 }
 
-const signIn: WaitingRequest = { kind: "auth", key: "https://a.example\nbasic\nAdmin", host: "a.example", realm: "Admin", failed: false }
+const signIn: WaitingRequest = {
+  kind: "auth",
+  key: "https://a.example\nbasic",
+  origin: "https://a.example",
+  host: "a.example",
+  realm: "Admin",
+  failed: false,
+  navigation: false,
+}
 
 describe("the queue of what a tab waits for", () => {
   test("joins a repeated identical request instead of stacking it", () => {
@@ -67,6 +84,94 @@ describe("the queue of what a tab waits for", () => {
     const settled = replay([{ type: "requested", request: camera }, { type: "settled", id: 1 }])
 
     expect(transitionPrompts(settled, { type: "requested", request: camera }).id).toBe(2)
+  })
+})
+
+describe("which prompt shows", () => {
+  test("shows Leave site? before a sign-in that waits, so a held close always comes back", () => {
+    const state = replay([
+      { type: "requested", request: signIn },
+      { type: "requested", request: { kind: "leave", key: "leave" } },
+    ])
+
+    expect(selectPrompt(state)?.kind).toBe("leave")
+  })
+
+  test("ends only the sign-ins of the navigation that stopped", () => {
+    const state = replay([
+      { type: "requested", request: { ...signIn, navigation: true } },
+      { type: "requested", request: { ...signIn, key: "fetch", navigation: false } },
+    ])
+    const stopped = transitionPrompts(state, { type: "cleared", kinds: ["auth"], navigation: true })
+
+    expect(stopped.ended).toEqual([1])
+    expect(stopped.state.items.map((item) => item.key)).toEqual(["fetch"])
+  })
+})
+
+describe("a tab's visit", () => {
+  const start = createVisit("https://bank.example")
+
+  test("follows the top-level navigation through redirects, and forgets it when it stops without committing", () => {
+    const pending = replayVisit([{ type: "started", url: "https://intranet.example/" }], start)
+    expect(pending.pending).toBe("https://intranet.example/")
+
+    const redirected = replayVisit([{ type: "redirected", url: "https://sso.intranet.example/login" }], pending)
+    expect(redirected.pending).toBe("https://sso.intranet.example/login")
+
+    // A 204, a download, a failed or a stopped load: the tab stays on its page.
+    const stopped = transitionVisit(redirected, { type: "stopped" })
+    expect(stopped.state.pending).toBeUndefined()
+    expect(stopped.clear).toEqual({ kinds: ["auth"], navigation: true })
+  })
+
+  test("ends the visit when another origin commits", () => {
+    const visited = replayVisit(
+      [
+        { type: "challenged", key: "https://bank.example\nbasic", attempt: 2 },
+        { type: "dismissed", origin: "https://bank.example" },
+      ],
+      start,
+    )
+    const same = transitionVisit(visited, { type: "committed", origin: "https://bank.example" })
+    const other = transitionVisit(visited, { type: "committed", origin: "https://news.example" })
+
+    expect(same.ended).toBe(false)
+    expect(same.state.dismissed).toEqual(["https://bank.example"])
+    expect(other.ended).toBe(true)
+    expect(other.state).toEqual(createVisit("https://news.example"))
+  })
+
+  test("lets a user navigation ask the page to confirm, only while it is fresh and nobody else navigated", () => {
+    const action = { type: "reload", tabID: Browser.TabID.make("tab_11111111-1111-1111-1111-111111111111") } as const
+    const intended = transitionVisit(start, { type: "intended", action, at: 1_000 }).state
+
+    expect(transitionVisit(intended, { type: "unloading", at: 1_000 + INTENT_MS }).leave).toEqual(action)
+    expect(transitionVisit(intended, { type: "unloading", at: 1_001 + INTENT_MS }).leave).toBeUndefined()
+    const agent = transitionVisit(intended, { type: "intent-ended" }).state
+    expect(transitionVisit(agent, { type: "unloading", at: 1_000 }).leave).toBeUndefined()
+    // Once asked, the same intent does not ask twice.
+    const asked = transitionVisit(intended, { type: "unloading", at: 1_000 }).state
+    expect(transitionVisit(asked, { type: "unloading", at: 1_000 }).leave).toBeUndefined()
+  })
+
+  test("lets the page go once after the user chose Leave", () => {
+    const leaving = transitionVisit(start, { type: "bypassed" }).state
+    const unloaded = transitionVisit(leaving, { type: "unloading", at: 0 })
+
+    expect(unloaded.proceed).toBe(true)
+    expect(transitionVisit(unloaded.state, { type: "unloading", at: 0 }).proceed).toBe(false)
+  })
+
+  test("asks again after a dismissed sign-in only when the user navigates", () => {
+    const dismissed = transitionVisit(start, { type: "dismissed", origin: "https://bank.example" }).state
+    const byPage = transitionVisit(dismissed, { type: "started", url: "https://bank.example/again" }).state
+    expect(byPage.dismissed).toEqual(["https://bank.example"])
+
+    const intended = transitionVisit(dismissed, { type: "intended", action: { type: "close" }, at: 0 }).state
+    const byUser = transitionVisit(intended, { type: "started", url: "https://bank.example/again" }).state
+    expect(byUser.dismissed).toEqual([])
+    expect(byUser.attempts).toEqual({})
   })
 })
 

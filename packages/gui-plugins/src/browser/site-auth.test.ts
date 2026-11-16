@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { challengeAnswer, MAX_SIGN_IN_ATTEMPTS, type Challenge } from "./site-auth"
+import { challengeAnswer, challengeKey, MAX_SIGN_IN_ATTEMPTS, type Challenge } from "./site-auth"
 
 const challenge = (input: Partial<Challenge> = {}): Challenge => ({
   url: "https://intranet.example/docs",
@@ -13,7 +13,7 @@ const challenge = (input: Partial<Challenge> = {}): Challenge => ({
 describe("which sign-in challenges ask the user", () => {
   test("asks for the page the user opens, before it commits", () => {
     expect(challengeAnswer(challenge(), { top: "https://start.example", pending: "https://intranet.example/", attempts: 0 }))
-      .toEqual({ type: "prompt", attempt: 1, key: "https://intranet.example\nbasic\nDocs" })
+      .toEqual({ type: "prompt", attempt: 1, key: challengeKey("https://intranet.example", "basic") })
   })
 
   test("asks for the page's own resources, for each scheme the user can answer", () => {
@@ -42,7 +42,18 @@ describe("which sign-in challenges ask the user", () => {
     )
 
     expect(retries.map((answer) => (answer.type === "prompt" ? answer.attempt : answer.type))).toEqual([2, 3, "cancel"])
-    // A first attempt starts the count again.
-    expect(challengeAnswer(challenge(), { top, attempts: MAX_SIGN_IN_ATTEMPTS })).toMatchObject({ attempt: 1 })
+    // A fresh request, as a page's fetch loop makes, counts in the same visit: it does not start the count again.
+    expect(challengeAnswer(challenge(), { top, attempts: MAX_SIGN_IN_ATTEMPTS })).toEqual({ type: "cancel" })
+  })
+
+  test("cannot reset the count by changing the realm on each challenge", () => {
+    const top = "https://intranet.example"
+    const keys = ["try-1", "try-2", "try-3"].map((realm) => challengeAnswer(challenge({ realm, first: false }), { top, attempts: 1 }))
+
+    expect(new Set(keys.map((answer) => (answer.type === "prompt" ? answer.key : answer.type))).size).toBe(1)
+  })
+
+  test("never asks again in a visit once the user dismissed the site's sign-in", () => {
+    expect(challengeAnswer(challenge(), { top: "https://intranet.example", attempts: 1, dismissed: true })).toEqual({ type: "cancel" })
   })
 })

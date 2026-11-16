@@ -416,8 +416,12 @@ export function createBrowserPage(
     })
 
   // Every state report goes through here, so a page that was disposed publishes nothing.
+  // While a user's close asks the page's beforeunload on a blank load, the tab reports nothing: the blank page is not
+  // where it is, and a close or a window that goes meanwhile keeps its real address for restore.
+  let quiet = false
+
   const publish = (error?: string) => {
-    if (!closed()) options.publish(error)
+    if (!closed() && !quiet) options.publish(error)
   }
 
   const dispatch = (event: DocumentEvent) => {
@@ -516,6 +520,11 @@ export function createBrowserPage(
     redo: (action) => execute(action, [], new AbortController().signal).then(() => undefined, () => undefined),
     close: () => options.closeTab?.(),
     focusPage: () => options.focusPage?.(),
+    quiet: (value) => {
+      quiet = value
+
+      if (!value) publish()
+    },
     report: (view) => {
       if (!closed()) options.prompt?.(view)
     },
@@ -897,7 +906,9 @@ export function createBrowserPage(
 
       // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
       if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
-      const signIn = origin === "agent" ? prompts.agentWait() : undefined
+
+      if (origin === "agent") prompts.agentStarted()
+      const signIn = origin === "agent" ? prompts.agentWait(leavable.includes(command.action.type)) : undefined
 
       try {
         return await Promise.race([

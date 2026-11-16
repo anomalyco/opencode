@@ -4,6 +4,7 @@ import { CodedError } from "./errors"
 import type { DialogInfo } from "./dialog-machine"
 import { PROMPT_TEXT_MAX, type PromptAnswer, type PromptView } from "./ipc"
 import {
+  createVisit,
   initialPrompts,
   promptHost,
   promptSite,
@@ -11,11 +12,14 @@ import {
   selectPrompt,
   selectPrompted,
   transitionPrompts,
+  transitionVisit,
+  type LeaveAction,
   type PromptEvent,
+  type VisitEvent,
   type Waiting,
   type WaitingRequest,
 } from "./prompt-machine"
-import { challengeAnswer } from "./site-auth"
+import { challengeAnswer, challengeKey } from "./site-auth"
 import {
   clipboardWrite,
   originOf,
@@ -30,17 +34,8 @@ import {
 /** How long a request that arrives while an agent command runs in the tab waits for the user before the page is told no. */
 export const AGENT_PROMPT_WAIT_MS = 20_000
 
-/**
- * How long a user's navigation stays the user's for its page's beforeunload. Chromium asks the page after the command
- * that started it may have ended: a dialog the page opens ends the command's wait.
- */
-const INTENT_MS = 10_000
-
 /** How long closing a tab waits for the page's beforeunload before it closes anyway. */
 const LEAVE_PROBE_MS = 3_000
-
-/** A user navigation the page may hold back; "Leave" runs it again. */
-export type LeaveAction = { readonly type: "close" } | Browser.Action
 
 /** A scripted dialog the user may answer, as the dialog gate holds it. */
 type OpenDialog = { readonly revision: number; readonly url: string; readonly dialog: DialogInfo; readonly repeat?: boolean }
@@ -74,7 +69,7 @@ export function createPagePrompts(input: {
   /** The page browses in a remote server's partition. */
   readonly remote: boolean
   readonly sites: SitePermissions
-  /** The agent caused what happens in the tab now (gentCaused in policy.ts). */
+  /** The agent caused what happens in the tab now (`agentCaused` in policy.ts). */
   readonly agentCaused: () => boolean
   /** The tab's top-level address as the pane shows it, so a preview reads as its file. */
   readonly top: () => string
@@ -88,36 +83,52 @@ export function createPagePrompts(input: {
   readonly close: () => void
   /** Gives the page keyboard focus back when its tab is in front. */
   readonly focusPage: () => void
+  /** Keeps the tab's state as it was while a close loads a blank page to ask the page's beforeunload. */
+  readonly quiet: (quiet: boolean) => void
   readonly report: (view: PromptView | null) => void
 }) {
   const contents = input.contents
   let state = initialPrompts
+  // The tab's visit: its navigation in flight, the user's last navigation, its sign-ins (see `transitionVisit`).
+  let visit = createVisit(contents.mainFrame.origin)
   // The callbacks each waiting item answers, by its id; a joined request adds its own.
   const permissionCallbacks = new Map<number, ((granted: boolean) => void)[]>()
   const authCallbacks = new Map<number, ((username?: string, password?: string) => void)[]>()
   const leaveActions = new Map<number, LeaveAction>()
   const deadlines = new Map<number, ReturnType<typeof setTimeout>>()
   // This visit's decisions, by origin and feature, until the tab leaves the origin or closes.
-  const visit = new Map<string, "allow" | "block">()
-  const attempts = new Map<string, number>()
+  const decisions = new Map<string, "allow" | "block">()
   // Agent commands running now, which a sign-in the user must answer stops with a clear error.
   const agentWaits = new Set<(error: Error) => void>()
-  // The user's last navigation or close, while Chromium may still ask its page's beforeunload about it.
-  let intent: { action: LeaveAction; at: number } | undefined
-  let bypass = false
-  let pending: string | undefined
-  let committedOrigin = contents.mainFrame.origin
   let reported = "null"
   let disposed = false
 
-  // A remote server's own machine never reads this desktop's kept decisions, nor writes them (see keptApplies).
-  const decided = (origin: string) => (kind: PermissionKind) =>
-    visit.get(`${origin}\n${kind}`) ?? (keptApplies(origin, input.remote) ? input.sites.get(origin, kind) : undefined)
+  // A kept "block" wins over this visit's answer, so blocking a site in Settings applies to its open tabs at once. A
+  // remote server's own machine never reads this desktop's kept decisions, nor writes them (see keptApplies).
+  const decided = (origin: string) => (kind: PermissionKind) => {
+    const kept = keptApplies(origin, input.remote) ? input.sites.get(origin, kind) : undefined
+
+    return kept === "block" ? kept : (decisions.get(`${origin}\n${kind}`) ?? kept)
+  }
 
   const dispatch = (event: PromptEvent) => {
     const next = transitionPrompts(state, event)
     state = next.state
     next.ended.forEach((id) => end(id))
+
+    return next
+  }
+
+  const dispatchVisit = (event: VisitEvent) => {
+    const next = transitionVisit(visit, event)
+    visit = next.state
+
+    if (next.ended) decisions.clear()
+
+    if (next.clear) {
+      dispatch({ type: "cleared", ...next.clear })
+      publish()
+    }
 
     return next
   }
@@ -164,24 +175,24 @@ export function createPagePrompts(input: {
     // What the agent caused never takes the user's focus.
     const focus = !contents.isDestroyed() && contents.isFocused() && !input.agentCaused()
 
-    if (dialog)
-      return {
-        id: dialog.revision,
-        waiting,
-        focus,
-        ask: {
-          kind: "dialog",
-          dialog: dialog.dialog.type === "confirm" || dialog.dialog.type === "prompt" ? dialog.dialog.type : "alert",
-          site: promptSite(dialog.url, input.top(), input.dialogFrame()),
-          message: promptText(dialog.dialog.message, PROMPT_TEXT_MAX),
-          value: promptText(dialog.dialog.defaultValue, PROMPT_TEXT_MAX),
-          stop: !!dialog.repeat,
-        },
-      }
+    // "Leave site?" goes first: a close the page held keeps its tab only while the pane shows it.
+    if (head && (head.kind === "leave" || !dialog)) return { id: head.id, waiting, focus, ask: ask(head) }
 
-    if (!head) return null
+    if (!dialog) return null
 
-    return { id: head.id, waiting, focus, ask: ask(head) }
+    return {
+      id: dialog.revision,
+      waiting,
+      focus,
+      ask: {
+        kind: "dialog",
+        dialog: dialog.dialog.type === "confirm" || dialog.dialog.type === "prompt" ? dialog.dialog.type : "alert",
+        site: promptSite(dialog.url, input.top(), input.dialogFrame()),
+        message: promptText(dialog.dialog.message, PROMPT_TEXT_MAX),
+        value: promptText(dialog.dialog.defaultValue, PROMPT_TEXT_MAX),
+        stop: !!dialog.repeat,
+      },
+    }
   }
 
   const ask = (item: Waiting): PromptView["ask"] => {
@@ -205,22 +216,35 @@ export function createPagePrompts(input: {
     return { kind: "leave" }
   }
 
-  // Grants a feature the user allowed, unless the system's privacy settings refuse this app the device.
-  const grant = (kinds: readonly PermissionKind[], callback: (granted: boolean) => void) => {
-    const blocked = kinds.find((kind): kind is "camera" | "microphone" => (kind === "camera" || kind === "microphone") && !device(kind))
+  // The first requested device the system's privacy settings refuse this app; asking the user about it is pointless.
+  const refused = (kinds: readonly PermissionKind[]) =>
+    kinds.find((kind): kind is "camera" | "microphone" => (kind === "camera" || kind === "microphone") && !device(kind))
+
+  // Grants what the user allowed; a device the system refuses says so instead.
+  const grant = (origin: string, kinds: readonly PermissionKind[], callback: (granted: boolean) => void) => {
+    const blocked = refused(kinds)
 
     if (!blocked) return void callback(true)
 
     if (process.platform === "darwin" && blocked === "microphone" && systemPreferences.getMediaAccessStatus("microphone") === "not-determined")
       return void systemPreferences.askForMediaAccess("microphone").then((granted) => {
-        if (granted && kinds.every((kind) => kind !== "camera" || device("camera"))) return callback(true)
+        // The page may have gone or moved on while macOS asked.
+        if (disposed || contents.isDestroyed() || originOf(contents.mainFrame.origin) !== origin) return callback(false)
+
+        if (granted && !refused(kinds)) return callback(true)
         callback(false)
 
-        if (!granted && !disposed) enqueue({ kind: "system", key: "system\nmicrophone", device: "microphone" })
+        if (!granted) enqueue({ kind: "system", key: "system\nmicrophone", device: "microphone" })
       }, () => callback(false))
     callback(false)
     enqueue({ kind: "system", key: `system\n${blocked}`, device: blocked })
   }
+
+  const signInRequired = (host: string) =>
+    new CodedError(
+      Browser.FailureCode.signInRequired,
+      `${host} asks for a user name and password. The browser pane asks the user to sign in; agent tools cannot answer it. Ask the user to sign in in the browser pane, then continue with browser.tabs.list({}).`,
+    )
 
   const login = (
     event: Electron.Event,
@@ -230,97 +254,66 @@ export function createPagePrompts(input: {
   ) => {
     // The proxy's handler answers its own challenge; one event is answered by one handler only.
     if (event.defaultPrevented) return
-    const key = `${URL.canParse(details.url) ? new URL(details.url).origin : "null"}\n${auth.scheme.toLowerCase()}\n${auth.realm}`
+    const origin = originOf(details.url)
+    const key = challengeKey(origin, auth.scheme)
 
     const answer = challengeAnswer(
       { url: details.url, isProxy: auth.isProxy, scheme: auth.scheme, realm: auth.realm, first: details.firstAuthAttempt },
-      { top: committedOrigin, pending, attempts: attempts.get(key) ?? 0 },
+      { top: visit.committed, pending: visit.pending, attempts: visit.attempts[key] ?? 0, dismissed: visit.dismissed.includes(origin) },
     )
 
-    if (answer.type !== "prompt") {
-      if (answer.type === "cancel") attempts.delete(key)
-
-      return
-    }
-
+    if (answer.type !== "prompt") return
     event.preventDefault()
-    attempts.set(answer.key, answer.attempt)
+    dispatchVisit({ type: "challenged", key: answer.key, attempt: answer.attempt })
     const once = onceCallback(callback)
 
     const id = enqueue({
       kind: "auth",
       key: answer.key,
+      origin,
       host: promptHost(details.url),
       realm: promptText(auth.realm, 256),
-      failed: answer.attempt > 1,
+      failed: !details.firstAuthAttempt,
+      navigation: details.isRequestForNavigation && visit.pending !== undefined && originOf(visit.pending) === origin,
     })
 
     authCallbacks.set(id, [...(authCallbacks.get(id) ?? []), once])
-    agentWaits.forEach((stop) =>
-      stop(
-        new CodedError(
-          Browser.FailureCode.signInRequired,
-          `${new URL(details.url).host} asks for a user name and password. The browser pane asks the user to sign in; agent tools cannot answer it. Ask the user to sign in in the browser pane, then continue with browser.tabs.list({}).`,
-        ),
-      ),
-    )
+    agentWaits.forEach((stop) => stop(signInRequired(new URL(details.url).host)))
   }
 
   // A page that asks to confirm before it unloads: a navigation or close the user started waits for "Leave site?";
   // the agent's and the page's own keep Electron's answer, which keeps the page. Synchronous: Chromium waits on it.
   const unload = (event: Electron.Event) => {
-    if (bypass) {
-      bypass = false
-      event.preventDefault()
+    const next = dispatchVisit({ type: "unloading", at: Date.now() })
 
-      return
-    }
+    if (next.proceed) return event.preventDefault()
 
-    const action = intent && Date.now() - intent.at <= INTENT_MS ? intent.action : undefined
-    intent = undefined
-
-    if (!action) return
+    if (!next.leave) return
     const id = enqueue({ kind: "leave", key: "leave" })
-    leaveActions.set(id, action)
+    leaveActions.set(id, next.leave)
   }
 
-  const started = (event: Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>) => {
-    if (!event.isMainFrame || event.isSameDocument) return
-    pending = event.url
-    intent = undefined
-    // A new top-level navigation replaces the one that asked for a sign-in or held the page.
-    dispatch({ type: "cleared", kinds: ["auth", "leave"] })
-    publish()
+  type Navigation = Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>
+
+  const started = (event: Navigation) => {
+    if (event.isMainFrame && !event.isSameDocument) dispatchVisit({ type: "started", url: event.url })
   }
 
-  const committed = () => {
-    pending = undefined
-    const origin = contents.mainFrame.origin
-
-    // The visit ends when the tab leaves the origin; requests of the page that went end with it.
-    if (origin !== committedOrigin) {
-      visit.clear()
-      attempts.clear()
-    }
-
-    committedOrigin = origin
-    dispatch({ type: "cleared", kinds: ["permission", "leave", "system"] })
-    publish()
+  const redirected = (event: Navigation) => {
+    if (event.isMainFrame) dispatchVisit({ type: "redirected", url: event.url })
   }
 
-  const intend = (action: LeaveAction) => {
-    const current = { action, at: Date.now() }
-    intent = current
+  const committed = () => dispatchVisit({ type: "committed", origin: contents.mainFrame.origin })
+  const stopped = () => dispatchVisit({ type: "stopped" })
 
-    return () => {
-      if (intent === current) intent = undefined
-    }
-  }
+  const intend = (action: LeaveAction) => dispatchVisit({ type: "intended", action, at: Date.now() })
 
   contents.on("login", login)
   contents.on("will-prevent-unload", unload)
   contents.on("did-start-navigation", started)
+  contents.on("did-redirect-navigation", redirected)
   contents.on("did-navigate", committed)
+  contents.on("did-stop-loading", stopped)
 
   const permissions: PagePermissions = {
     request(permission, details, callback) {
@@ -334,7 +327,8 @@ export function createPagePrompts(input: {
 
       if (answer === "block" || disposed) return once(false)
 
-      if (answer === "allow") return grant(kinds, once)
+      // Asking the user for a device the system refuses this app would keep an answer that cannot work.
+      if (answer === "allow" || refused(kinds)) return grant(origin, kinds, once)
 
       const id = enqueue({
         kind: "permission",
@@ -344,7 +338,10 @@ export function createPagePrompts(input: {
         remember: keptApplies(origin, input.remote),
       })
 
-      permissionCallbacks.set(id, [...(permissionCallbacks.get(id) ?? []), (granted) => (granted ? grant(kinds, once) : once(false))])
+      permissionCallbacks.set(id, [
+        ...(permissionCallbacks.get(id) ?? []),
+        (granted) => (granted ? grant(origin, kinds, once) : once(false)),
+      ])
 
       // A script the agent caused waits for this; it gets "no" in time rather than at its own timeout.
       if (input.agentCaused() && !deadlines.has(id))
@@ -370,7 +367,8 @@ export function createPagePrompts(input: {
       if (permission === "clipboard-sanitized-write") return clipboardWrite(request, input.agentCaused())
       const kinds = permissionKinds(permission, details.mediaType ? [details.mediaType] : [])
 
-      return siteAnswer({ ...request, kinds }, decided(origin)) === "allow"
+      // A device the system refuses reads as denied, as getUserMedia then fails.
+      return siteAnswer({ ...request, kinds }, decided(origin)) === "allow" && !refused(kinds)
     },
   }
 
@@ -380,26 +378,39 @@ export function createPagePrompts(input: {
     publish,
     /** Marks a navigation as the user's while it starts, so a page that holds it asks "Leave site?". */
     intend,
+    /** An agent command started: a page that unloads now does not ask the user. */
+    agentStarted: () => dispatchVisit({ type: "intent-ended" }),
     /**
      * Whether the user's close may go ahead now. A page that asks to confirm keeps the tab and asks "Leave site?",
-     * whose Leave closes it. The page's unload handlers run on a blank document load; a handler that hangs is given up
-     * on after a few seconds.
+     * whose Leave closes it. The page's unload handlers run on a blank document load, which the tab's state never
+     * shows; a handler that hangs is given up on after a few seconds.
      */
     async leave() {
       if (disposed || contents.isDestroyed()) return true
       const before = state.next
-      const clear = intend({ type: "close" })
+      intend({ type: "close" })
+      input.quiet(true)
       const timer = Promise.withResolvers<void>()
       const timeout = setTimeout(timer.resolve, LEAVE_PROBE_MS)
       await Promise.race([contents.loadURL("about:blank").catch(() => undefined), timer.promise])
       clearTimeout(timeout)
-      clear()
+      dispatchVisit({ type: "intent-ended" })
+      const held = state.items.some((item) => item.kind === "leave" && item.id >= before)
 
-      return !state.items.some((item) => item.kind === "leave" && item.id >= before)
+      // A page that stays keeps its state; one that goes closes with the state it had.
+      if (held) input.quiet(false)
+
+      return !held
     },
-    /** Stops an agent command when a sign-in prompt appears while it runs. */
-    agentWait() {
+    /**
+     * Stops an agent command when a sign-in prompt appears while it runs. A command other than a navigation stops at
+     * once while one waits: the page behind it is the one the sign-in holds back.
+     */
+    agentWait(navigation: boolean) {
       const stopped = Promise.withResolvers<never>()
+      const waiting = state.items.find((item): item is Extract<Waiting, { kind: "auth" }> => item.kind === "auth")
+
+      if (waiting && !navigation) stopped.reject(signInRequired(waiting.host))
       agentWaits.add(stopped.reject)
 
       return { promise: stopped.promise, stop: () => agentWaits.delete(stopped.reject) }
@@ -423,52 +434,53 @@ export function createPagePrompts(input: {
       leaveActions.delete(id)
       settle(id)
 
-      if (item.kind === "permission") {
+      if (item.kind === "permission" || item.kind === "system") {
         const allow = answer.kind === "permission" && answer.allow
 
-        if (answer.kind === "permission")
+        if (item.kind === "permission" && answer.kind === "permission")
           // A kept decision lives in the store alone, so changing it in Settings applies to open tabs at once.
           item.permissions.forEach((kind) =>
             answer.remember && item.remember
               ? input.sites.keep({ origin: item.origin, permission: kind, setting: allow ? "allow" : "block" })
-              : visit.set(`${item.origin}\n${kind}`, allow ? "allow" : "block"),
+              : decisions.set(`${item.origin}\n${kind}`, allow ? "allow" : "block"),
           )
         permission?.forEach((callback) => callback(allow))
 
-        return
+        return input.focusPage()
       }
 
       if (item.kind === "auth") {
+        if (answer.kind !== "auth") dispatchVisit({ type: "dismissed", origin: item.origin })
         // The credentials go to Chromium alone; nothing here keeps them.
         sign?.forEach((callback) => (answer.kind === "auth" ? callback(answer.username, answer.password) : callback()))
 
         return input.focusPage()
       }
 
-      if (item.kind === "leave" && answer.kind === "leave" && answer.leave && leave) {
+      if (answer.kind === "leave" && answer.leave && leave) {
         if (leave.type === "close") return input.close()
-        bypass = true
-        await input.redo(leave).finally(() => {
-          bypass = false
-        })
+        dispatchVisit({ type: "bypassed" })
+        await input.redo(leave).finally(() => dispatchVisit({ type: "bypass-ended" }))
 
         return
       }
 
-      if (item.kind === "leave") input.focusPage()
+      input.focusPage()
     },
     dispose() {
       if (disposed) return
       dispatch({ type: "cleared" })
       disposed = true
-      visit.clear()
+      decisions.clear()
       agentWaits.clear()
 
       if (contents.isDestroyed()) return
       contents.off("login", login)
       contents.off("will-prevent-unload", unload)
       contents.off("did-start-navigation", started)
+      contents.off("did-redirect-navigation", redirected)
       contents.off("did-navigate", committed)
+      contents.off("did-stop-loading", stopped)
     },
   }
 }

@@ -3,6 +3,7 @@
 // Oldest first; the pane shows one at a time with a count of the rest. A request with the key of one that waits joins
 // it instead of queueing again. Every item ends with an answer: the user's, its deadline, or a navigation or close
 // that clears it, each settled exactly once.
+import type { Browser } from "@opencode/plugin-browser/rpc"
 import { previewScheme } from "./scheme"
 import { originOf, type PermissionKind } from "./site-permissions"
 
@@ -20,10 +21,14 @@ export type Waiting =
       readonly kind: "auth"
       readonly id: number
       readonly key: string
+      /** The asking site, whose sign-in a dismissal ends for the visit. */
+      readonly origin: string
       readonly host: string
       readonly realm: string
       /** The site refused the last user name and password it was given. */
       readonly failed: boolean
+      /** It asks for the top-level page being opened, so it ends when that navigation stops without committing. */
+      readonly navigation: boolean
     }
   | { readonly kind: "leave"; readonly id: number; readonly key: string }
   | { readonly kind: "system"; readonly id: number; readonly key: string; readonly device: "camera" | "microphone" }
@@ -36,8 +41,8 @@ export type PromptEvent =
   | { readonly type: "requested"; readonly request: WaitingRequest }
   /** The user answered, or its deadline passed. */
   | { readonly type: "settled"; readonly id: number }
-  /** A navigation or close ends these kinds, or every item. */
-  | { readonly type: "cleared"; readonly kinds?: readonly Waiting["kind"][] }
+  /** A navigation or close ends these kinds, or every item; `navigation` limits it to the navigation's sign-ins. */
+  | { readonly type: "cleared"; readonly kinds?: readonly Waiting["kind"][]; readonly navigation?: boolean }
 
 export type PromptTransition = {
   readonly state: PromptState
@@ -67,7 +72,9 @@ export function transitionPrompts(state: PromptState, event: PromptEvent): Promp
       return { state: { ...state, items: state.items.filter((item) => item.id !== event.id) }, ended: [] }
     case "cleared": {
       const kinds = event.kinds
-      const ended = state.items.filter((item) => !kinds || kinds.includes(item.kind))
+      const ended = state.items.filter(
+        (item) => (!kinds || kinds.includes(item.kind)) && (!event.navigation || (item.kind === "auth" && item.navigation)),
+      )
 
       if (!ended.length) return { state, ended: [] }
 
@@ -79,13 +86,119 @@ export function transitionPrompts(state: PromptState, event: PromptEvent): Promp
   }
 }
 
-/** The item the pane shows: a sign-in or "Leave site?" first, as they block the page, then the oldest. */
+/**
+ * The item the pane shows: "Leave site?" first, as a close the page held keeps its tab only while the pane shows it,
+ * then a sign-in, as it blocks the page, then the oldest.
+ */
 export function selectPrompt(state: PromptState) {
-  return state.items.find((item) => item.kind === "auth" || item.kind === "leave") ?? state.items[0]
+  return (
+    state.items.find((item) => item.kind === "leave") ?? state.items.find((item) => item.kind === "auth") ?? state.items[0]
+  )
 }
 
 export function selectPrompted(state: PromptState, id: number) {
   return state.items.find((item) => item.id === id)
+}
+
+/** A user navigation or close the page may hold back; "Leave" runs it again. */
+export type LeaveAction = { readonly type: "close" } | Browser.Action
+
+/**
+ * How long a user's navigation stays the user's for its page's beforeunload. Chromium asks the page after the command
+ * that started it may have ended: a dialog the page opens ends the command's wait.
+ */
+export const INTENT_MS = 10_000
+
+/**
+ * A tab's visit to one top-level origin, as its prompts need it: the top-level navigation in flight (`pending`, after
+ * its redirects), the user's last navigation while the page may still ask to stay (`intent`), whether the user chose
+ * Leave (`bypass`), and the sign-ins asked for (`attempts`, by `challengeKey`) and dismissed (`dismissed`, by origin).
+ */
+export type Visit = {
+  readonly committed: string
+  readonly pending?: string
+  readonly intent?: { readonly action: LeaveAction; readonly at: number }
+  readonly bypass: boolean
+  readonly attempts: Readonly<Record<string, number>>
+  readonly dismissed: readonly string[]
+}
+
+export type VisitEvent =
+  /** A top-level, cross-document navigation started. */
+  | { readonly type: "started"; readonly url: string }
+  /** The top-level navigation in flight was redirected. */
+  | { readonly type: "redirected"; readonly url: string }
+  | { readonly type: "committed"; readonly origin: string }
+  /** Loading stopped: a 204, a download, a failure or Stop ends a navigation that did not commit. */
+  | { readonly type: "stopped" }
+  /** The user started a navigation or a close. */
+  | { readonly type: "intended"; readonly action: LeaveAction; readonly at: number }
+  /** An agent command started, or the close probe ended: what unloads now is not the user's doing. */
+  | { readonly type: "intent-ended" }
+  /** The page's beforeunload asks to stay. */
+  | { readonly type: "unloading"; readonly at: number }
+  /** The user chose Leave: the next unload proceeds. */
+  | { readonly type: "bypassed" }
+  | { readonly type: "bypass-ended" }
+  | { readonly type: "challenged"; readonly key: string; readonly attempt: number }
+  | { readonly type: "dismissed"; readonly origin: string }
+
+export type VisitTransition = {
+  readonly state: Visit
+  /** Prompts this event ends (see the `cleared` prompt event). */
+  readonly clear?: { readonly kinds: readonly Waiting["kind"][]; readonly navigation?: boolean }
+  /** The visit ended: decisions made for it go. */
+  readonly ended?: boolean
+  /** For `unloading`: the user's action to hold for "Leave site?". */
+  readonly leave?: LeaveAction
+  /** For `unloading`: the user chose Leave, so the page goes. */
+  readonly proceed?: boolean
+}
+
+export const createVisit = (committed: string): Visit => ({ committed, bypass: false, attempts: {}, dismissed: [] })
+
+export function transitionVisit(state: Visit, event: VisitEvent): VisitTransition {
+  switch (event.type) {
+    case "started": {
+      // A navigation the user started asks a site they dismissed again; one the page started does not.
+      const user = !!state.intent
+
+      return {
+        state: { ...state, pending: event.url, intent: undefined, ...(user ? { attempts: {}, dismissed: [] } : {}) },
+        clear: { kinds: ["auth", "leave"] },
+      }
+    }
+
+    case "redirected":
+      return { state: state.pending === undefined ? state : { ...state, pending: event.url } }
+    case "committed":
+      if (event.origin !== state.committed) return { state: createVisit(event.origin), clear: { kinds: ["permission", "leave", "system", "auth"] }, ended: true }
+
+      return { state: { ...state, pending: undefined }, clear: { kinds: ["permission", "leave", "system"] }, ended: false }
+    case "stopped":
+      return { state: { ...state, pending: undefined }, clear: { kinds: ["auth"], navigation: true } }
+    case "intended":
+      return { state: { ...state, intent: { action: event.action, at: event.at } } }
+    case "intent-ended":
+      return { state: state.intent ? { ...state, intent: undefined } : state }
+    case "unloading": {
+      if (state.bypass) return { state: { ...state, bypass: false }, proceed: true }
+      const fresh = state.intent && event.at - state.intent.at <= INTENT_MS ? state.intent.action : undefined
+
+      return { state: { ...state, intent: undefined }, leave: fresh, proceed: false }
+    }
+
+    case "bypassed":
+      return { state: { ...state, bypass: true } }
+    case "bypass-ended":
+      return { state: { ...state, bypass: false } }
+    case "challenged":
+      return { state: { ...state, attempts: { ...state.attempts, [event.key]: event.attempt } } }
+    case "dismissed":
+      return {
+        state: state.dismissed.includes(event.origin) ? state : { ...state, dismissed: [...state.dismissed, event.origin] },
+      }
+  }
 }
 
 /** The longest host the pane names; a longer one keeps its end, where the site's own domain is. */
