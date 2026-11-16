@@ -876,12 +876,12 @@ function ComposerAttachments(props: {
                         </AttachmentCard>
                       }
                     >
-                      <Show when={src()} fallback={<div class="w-[66px] h-[44px]" />}>
+                      <Show when={src()} fallback={<div class="w-[78px] h-[52px]" />}>
                         {(value) => (
                           <img
                             src={value()}
                             alt={attachment.filename}
-                            class="w-[66px] h-[44px] rounded-[6px] object-cover"
+                            class="w-[78px] h-[52px] rounded-[6px] object-cover"
                             onClick={(event) => props.onAttachmentClick?.(attachment, event.currentTarget)}
                           />
                         )}
