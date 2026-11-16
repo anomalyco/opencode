@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "შემდეგი",
   "releaseNotes.action.hideFuture": "მომავალში არ მაჩვენო",
   "releaseNotes.media.alt": "გამოშვების გადახედვა",
+  "action.reload": "განსაახლებლად გადატვირთეთ",
+  "action.reloading": "გადატვირთვა…",
+  "web.ready.title": "განახლება მზადაა",
+  "web.ready.message": "OpenCode-ის ახალი ვერსია მზადაა. გადატვირთეთ, რომ ის ყველა ღია ფანჯარაში გამოიყენოთ.",
+  "web.reload": "გადატვირთვა",
+  "web.reset.title": "სერვერიდან ხელახლა ჩატვირთვა",
+  "web.reset.description": "აპის შენახული ასლის გასუფთავება და სერვერის მიმდინარე ვერსიის ჩატვირთვა",
+  "web.reset.action": "სერვერიდან ხელახლა ჩატვირთვა",
 }

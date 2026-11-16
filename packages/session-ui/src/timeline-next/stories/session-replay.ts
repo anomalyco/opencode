@@ -736,13 +736,13 @@ const backgroundWork: Beat[] = [
   {
     kind: "report",
     source: "subagent",
-    state: "completed",
+    state: "cancelled",
     description: "Review the toggle",
     agent: "review",
     childID: "session_child_toggle",
-    body: "The toggle reads the scheme in an effect, which is right.",
+    body: "The review was stopped.",
   },
-  { kind: "say", text: "Both checks pass: the docs are accurate and the toggle reads the scheme correctly." },
+  { kind: "say", text: "The docs are accurate. The toggle review was stopped before it finished." },
   { kind: "idle" },
   { kind: "report", source: "shell", state: "cancelled", description: "bun run dev", shellID: "shell_dev" },
 ]

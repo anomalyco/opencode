@@ -49,4 +49,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} ጊዜው አልፎበታል ከ{{timeout}}ሚሴ በኋላ",
   "error.failedPort": "ወደብ ማግኘት አልተሳካም",
   "menu.remove": "አስወግድ",
+  "error.busy": "{{distro}} በሌላ ተግባር ተይዟል። ሲጠናቀቅ እንደገና ይሞክሩ።",
 }

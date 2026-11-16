@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Sesija saglabāta kā {{filename}}",
   "export.failed.title": "Neizdevās eksportēt sesiju",
   "export.failed.description": "Radās kļūda, eksportējot sesiju",
+  "usage.toggle": "Rādīt/Slēpt sesijas kontekstu",
 }

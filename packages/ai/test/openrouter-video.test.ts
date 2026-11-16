@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { Media, VideoClient, ai } from "../src/effect.js"
 import { OpenRouter } from "../src/providers.js"
+import { RequestExecutor, type HttpMiddleware } from "../src/route.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, type Call, type HandlerInput } from "./lib/http.js"
 
@@ -154,14 +155,14 @@ describe("ai.video.status / result / cancel / OpenRouter", () => {
             .status(model, id)
             .pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { id, status }))))),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "queued",
-        "running",
-        "completed",
-        "failed",
-        "cancelled",
-        "expired",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "running" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "error", reason: "cancelled" },
+        { status: "error", reason: "expired" },
+        { status: "running" },
       ])
     }),
   )
@@ -202,10 +203,40 @@ describe("ai.video.status / result / cancel / OpenRouter", () => {
     }),
   )
 
+  it.effect("keeps the caller's scoped middleware for a download on the provider's host, and drops it on another", () =>
+    Effect.gen(function* () {
+      const hooked: Array<string> = []
+      const hook: HttpMiddleware = (input, next) =>
+        Effect.sync(() => hooked.push(input.url)).pipe(Effect.andThen(next(input)))
+      const cdn = "https://cdn.example.test/video.mp4"
+      const respond = (input: HandlerInput) => {
+        if (input.request.url.endsWith("/content?index=0") || input.request.url === cdn)
+          return input.respond(Uint8Array.from([1]), { headers: { "content-type": "video/mp4" } })
+        return json(input, input.request.url.endsWith("other") ? { ...completed, unsigned_urls: [cdn] } : completed)
+      }
+      yield* Effect.gen(function* () {
+        // Read inside the scope; downloaded after it ends, as a caller storing the result later would.
+        const own = yield* ai.video.result(model, id).pipe(RequestExecutor.withMiddleware(hook))
+        yield* own.video.stream().pipe(Stream.runDrain)
+        // Downloaded inside the scope, but the URL isn't the provider's.
+        yield* Effect.gen(function* () {
+          const other = yield* ai.video.result(model, "other")
+          yield* other.video.stream().pipe(Stream.runDrain)
+        }).pipe(RequestExecutor.withMiddleware(hook))
+      }).pipe(Effect.provide(layer((input) => Effect.succeed(respond(input)))))
+      expect(hooked).toEqual([
+        "https://openrouter.test/api/v1/videos/gen-vid-1-abc",
+        "https://openrouter.test/api/v1/videos/gen-vid-1-abc/content?index=0",
+        "https://openrouter.test/api/v1/videos/other",
+      ])
+    }),
+  )
+
   it.effect("attaches no credentials to a result URL on another host", () =>
     Effect.gen(function* () {
       const response = yield* ai.video.result(model, id)
-      expect(response.video.headers).toEqual({})
+      expect(response.video.headers).toBeUndefined()
+      expect(response.video.middleware).toBeUndefined()
     }).pipe(
       Effect.provide(
         layer((input) =>
