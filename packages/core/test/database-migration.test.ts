@@ -26,6 +26,7 @@ import scheduleMigration from "@opencode/core/database/migration/20261026223005_
 import scheduleChecksMigration from "@opencode/core/database/migration/20261029165540_schedule_checks"
 import automationMigration from "@opencode/core/database/migration/20261116043204_automation"
 import automationEventPosition from "@opencode/core/database/migration/20261116181958_automation_event_position"
+import automationActiveIndex from "@opencode/core/database/migration/20261116213417_automation_active_index"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -478,7 +479,7 @@ describe("DatabaseMigration", () => {
         yield* insert("sch_counted", '{"type":"every","every":"1 minute"}', { remaining: 2 })
         yield* insert("sch_done", '{"type":"every","every":"1 minute"}', { status: "done" })
 
-        yield* DatabaseMigration.applyOnly(db, [automationMigration, automationEventPosition])
+        yield* DatabaseMigration.applyOnly(db, [automationMigration, automationEventPosition, automationActiveIndex])
 
         expect(
           yield* db.all(

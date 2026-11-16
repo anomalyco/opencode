@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "0709c7fb-3e7c-4bec-a6c5-0dd42ae64919",
-  "prevIds": ["a7b378df-5406-4eca-bdd4-045cffdddf08"],
+  "id": "ab8fea18-0d95-48a1-b631-c112235dc492",
+  "prevIds": ["0709c7fb-3e7c-4bec-a6c5-0dd42ae64919"],
   "ddl": [
     {
       "name": "account_state",
@@ -2367,9 +2367,9 @@
         }
       ],
       "isUnique": false,
-      "where": "\"automation\".\"status\" = 'active' and \"automation\".\"next_due_at\" is not null",
+      "where": "\"automation\".\"status\" = 'active'",
       "origin": "manual",
-      "name": "automation_due_idx",
+      "name": "automation_active_idx",
       "entityType": "indexes",
       "table": "automation"
     },

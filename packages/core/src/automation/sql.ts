@@ -45,8 +45,7 @@ export const AutomationTable = sqliteTable(
   (table) => [
     index("automation_project_idx").on(table.project_id),
     index("automation_session_idx").on(table.session_id),
-    index("automation_due_idx")
-      .on(table.next_due_at)
-      .where(sql`${table.status} = 'active' and ${table.next_due_at} is not null`),
+    // Active watches have no due time; both they and timers belong in the scheduler's index.
+    index("automation_active_idx").on(table.next_due_at).where(sql`${table.status} = 'active'`),
   ],
 )
