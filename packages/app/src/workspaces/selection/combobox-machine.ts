@@ -186,6 +186,13 @@ export function pickerComboboxView(state: PickerComboboxState) {
   }
 }
 
+// Escape closes an open list or drops a draft; only then does the input keep it from the dialog.
+export function ownsPickerEscape(state: PickerComboboxState, committed: string) {
+  if (state.status === "disposed") return false
+
+  return (state.status === "open" && state.items.length > 0) || state.input !== committed
+}
+
 function key(
   state: LiveCombobox,
   event: Extract<PickerComboboxEvent, { type: "key.down" }>,

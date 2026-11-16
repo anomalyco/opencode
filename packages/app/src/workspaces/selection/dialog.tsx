@@ -50,6 +50,7 @@ import {
 } from "./tree-machine"
 import {
   createPickerComboboxState,
+  ownsPickerEscape,
   pickerComboboxView,
   transitionPickerCombobox,
   type PickerComboboxEffect,
@@ -654,6 +655,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             showClearButton={!!comboboxView().input}
             onClearClick={() => dispatchCombobox({ type: "cleared" })}
             class="directory-picker-input"
+            data-owns-escape={ownsPickerEscape(machines().combobox, committed()) ? "" : undefined}
             appearance="large"
             leadingIcon={<Icon name="magnifying-glass" size="small" />}
             onInput={(event) => dispatchCombobox({ type: "input.changed", value: event.currentTarget.value })}

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import {
   createPickerComboboxState,
+  ownsPickerEscape,
   pickerComboboxView,
   transitionPickerCombobox,
   type PickerComboboxContext,
@@ -252,6 +253,10 @@ test("a draft never clears the selection, survives a selection that settles whil
 
   expect(run([{ type: "synced" }], edited.state, moved).state).toBe(edited.state)
   expect(run([{ type: "synced" }], cleared.state, moved).state).toMatchObject({ input: "/projects/billing/" })
+
+  expect(ownsPickerEscape(edited.state, selected.committed)).toBeTrue()
+  expect(ownsPickerEscape(cleared.state, selected.committed)).toBeTrue()
+  expect(ownsPickerEscape(synced.state, selected.committed)).toBeFalse()
 
   const escaped = run([key("Escape")], synced.state, selected)
 

@@ -104,3 +104,30 @@ test("the folder picker's tree scrolls with the mouse wheel inside the modal", a
   await page.mouse.wheel(0, 300)
   await expect.poll(scrollTop).toBeGreaterThan(0)
 })
+
+test("Escape closes suggestions, then drops a typed path, before it closes the picker", async ({ page }) => {
+  const picker = await openPicker(page, {
+    fileList: (path) =>
+      path === directory ? ["alpha", "beta"].map((name) => fileNode(directory, name, "directory")) : [],
+    findFiles: (input) => ["alpha", "beta"].filter((name) => input.query.length >= 3 && name.startsWith(input.query)),
+  })
+
+  const input = picker.getByRole("combobox")
+
+  await picker.getByRole("treeitem", { name: "beta", exact: true }).click()
+  await expect(input).toHaveValue("C:\\OpenCode\\Picker\\beta\\")
+
+  await input.fill("alp")
+  await expect(picker.getByRole("option")).toHaveCount(1)
+  await input.press("Escape")
+  await expect(picker.getByRole("option")).toHaveCount(0)
+  await expect(input).toHaveValue("alp")
+
+  await input.press("Escape")
+  await expect(picker).toBeVisible()
+  await expect(input).toHaveValue("C:\\OpenCode\\Picker\\beta\\")
+  await expect(picker.getByRole("treeitem", { name: "beta", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  await input.press("Escape")
+  await expect(picker).toBeHidden()
+})
