@@ -438,7 +438,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Sisäänrakennettu selain",
   "dialog.update.major.new.background": "Taustalla toimivat aliagentit ja komennot",
   "dialog.update.major.new.plugins": "Työpöytälaajennukset, joilla teet sovelluksesta omasi (kokeellinen)",
-  "dialog.update.major.new.sessions": "Samat istunnot sovelluksessa, terminaalissa ja verkossa",
+  "dialog.update.major.new.sessions": "Yksi yhteinen palvelin synkronoi sovelluksen, terminaalin ja verkon",
   "dialog.update.major.new.pair": "Yhdistä puhelin tai toinen tietokone",
   "dialog.update.major.keeps.data": "Säilyttää istuntosi, projektisi ja asetuksesi",
   "dialog.update.major.plugins": "OpenCode 1:lle tehdyt laajennukset tarvitsevat päivityksen",

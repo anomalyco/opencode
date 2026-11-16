@@ -1154,7 +1154,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Sisseehitatud brauser",
   "dialog.update.major.new.background": "Alamagendid ja käsud taustal",
   "dialog.update.major.new.plugins": "Töölauapluginad, millega rakendust enda järgi kohandada (eksperimentaalne)",
-  "dialog.update.major.new.sessions": "Samad seansid rakenduses, terminalis ja veebis",
+  "dialog.update.major.new.sessions": "Üks ühine server hoiab rakenduse, terminali ja veebi sünkroonis",
   "dialog.update.major.new.pair": "Paaristage telefon või teine arvuti",
   "dialog.update.major.keeps.data": "Säilitab teie seansid, projektid ja seaded",
   "dialog.update.major.plugins": "OpenCode 1 jaoks loodud pluginad vajavad värskendamist",

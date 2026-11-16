@@ -1161,7 +1161,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Programmanyň içindäki brauzer",
   "dialog.update.major.new.background": "Fon režiminde işleýän subagentler we buýruklar",
   "dialog.update.major.new.plugins": "Programmany özüňiziňki edýän iş stoly pluginleri (synag)",
-  "dialog.update.major.new.sessions": "Programmada, terminalda we webde şol bir sessiýalar",
+  "dialog.update.major.new.sessions": "Bir umumy serwer programmany, terminaly we webi sinhron saklaýar",
   "dialog.update.major.new.pair": "Telefony ýa-da başga kompýuteri birikdiriň",
   "dialog.update.major.keeps.data": "Sessiýalaryňyzy, taslamalaryňyzy we sazlamalaryňyzy saklaýar",
   "dialog.update.major.plugins": "OpenCode 1 üçin döredilen pluginleri täzelemek gerek",

@@ -547,7 +547,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Inbyggd webbläsare",
   "dialog.update.major.new.background": "Underagenter och kommandon i bakgrunden",
   "dialog.update.major.new.plugins": "Insticksprogram som gör skrivbordsappen till din egen (experimentellt)",
-  "dialog.update.major.new.sessions": "Samma sessioner i appen, terminalen och på webben",
+  "dialog.update.major.new.sessions": "En gemensam server håller app, terminal och webb synkroniserade",
   "dialog.update.major.new.pair": "Parkoppla en telefon eller en annan dator",
   "dialog.update.major.keeps.data": "Behåller dina sessioner, projekt och inställningar",
   "dialog.update.major.plugins": "Insticksprogram gjorda för OpenCode 1 behöver uppdateras",

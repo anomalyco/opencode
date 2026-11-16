@@ -1175,7 +1175,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Ενσωματωμένο πρόγραμμα περιήγησης",
   "dialog.update.major.new.background": "Υποπράκτορες και εντολές στο παρασκήνιο",
   "dialog.update.major.new.plugins": "Προσθήκες για υπολογιστές που κάνουν την εφαρμογή δική σας (πειραματικές)",
-  "dialog.update.major.new.sessions": "Οι ίδιες συνεδρίες στην εφαρμογή, στο τερματικό και στον Ιστό",
+  "dialog.update.major.new.sessions": "Ένας κοινός διακομιστής συγχρονίζει εφαρμογή, τερματικό και Ιστό",
   "dialog.update.major.new.pair": "Σύζευξη τηλεφώνου ή άλλου υπολογιστή",
   "dialog.update.major.keeps.data": "Διατηρεί τις συνεδρίες, τα έργα και τις ρυθμίσεις σας",
   "dialog.update.major.plugins": "Οι προσθήκες που φτιάχτηκαν για το OpenCode 1 χρειάζονται ενημέρωση",

@@ -574,7 +574,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Встроенный браузер",
   "dialog.update.major.new.background": "Фоновые субагенты и команды",
   "dialog.update.major.new.plugins": "Плагины для приложения, чтобы настроить его под себя (экспериментальные)",
-  "dialog.update.major.new.sessions": "Одни и те же сессии в приложении, терминале и браузере",
+  "dialog.update.major.new.sessions": "Один общий сервер синхронизирует приложение, терминал и браузер",
   "dialog.update.major.new.pair": "Сопряжение с телефоном или другим компьютером",
   "dialog.update.major.keeps.data": "Сохраняет ваши сессии, проекты и настройки",
   "dialog.update.major.plugins": "Плагины, созданные для OpenCode 1, требуют обновления",

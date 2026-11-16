@@ -1159,7 +1159,7 @@ export const dict: Record<string, string> = {
   "dialog.update.major.new.browser": "एपभित्रको ब्राउजर",
   "dialog.update.major.new.background": "पृष्ठभूमिमा चल्ने उप-एजेन्ट र आदेशहरू",
   "dialog.update.major.new.plugins": "एपलाई आफ्नै बनाउने डेस्कटप प्लगइनहरू (प्रयोगात्मक)",
-  "dialog.update.major.new.sessions": "एप, टर्मिनल र वेबमा उही सत्रहरू",
+  "dialog.update.major.new.sessions": "एउटै साझा सर्भरले एप, टर्मिनल र वेबलाई सिङ्कमा राख्छ",
   "dialog.update.major.new.pair": "फोन वा अर्को कम्प्युटर जोड्नुहोस्",
   "dialog.update.major.keeps.data": "तपाईंका सत्रहरू, परियोजनाहरू र सेटिङहरू कायम रहन्छन्",
   "dialog.update.major.plugins": "OpenCode 1 का लागि बनाइएका प्लगइनहरू अपडेट गर्न आवश्यक छ",

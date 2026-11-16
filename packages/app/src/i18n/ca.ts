@@ -1175,7 +1175,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Navegador integrat",
   "dialog.update.major.new.background": "Subagents i ordres en segon pla",
   "dialog.update.major.new.plugins": "Connectors d'escriptori per fer vostra l'aplicació (experimentals)",
-  "dialog.update.major.new.sessions": "Les mateixes sessions a l'aplicació, al terminal i al web",
+  "dialog.update.major.new.sessions": "Un servidor compartit sincronitza l'aplicació, el terminal i el web",
   "dialog.update.major.new.pair": "Vinculeu un telèfon o un altre ordinador",
   "dialog.update.major.keeps.data": "Conserva les vostres sessions, projectes i configuració",
   "dialog.update.major.plugins": "Els connectors fets per a OpenCode 1 s'han d'actualitzar",

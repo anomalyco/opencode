@@ -1155,7 +1155,7 @@ export const dict: Record<string, string> = {
   "dialog.update.major.new.browser": "යෙදුම තුළ බ්‍රවුසරයක්",
   "dialog.update.major.new.background": "පසුබිමේ ක්‍රියාත්මක වන උප නියෝජිතයන් සහ විධාන",
   "dialog.update.major.new.plugins": "යෙදුම ඔබට රිසි සේ සකසන ඩෙස්ක්ටොප් ප්ලගීන (පර්යේෂණාත්මක)",
-  "dialog.update.major.new.sessions": "යෙදුමේ, පර්යන්තයේ සහ වෙබයේ එකම සැසි",
+  "dialog.update.major.new.sessions": "එක් හවුල් සේවාදායකයක් යෙදුම, පර්යන්තය සහ වෙබය සමමුහුර්තව තබා ගනී",
   "dialog.update.major.new.pair": "දුරකථනයක් හෝ වෙනත් පරිගණකයක් යුගල කරන්න",
   "dialog.update.major.keeps.data": "ඔබගේ සැසි, ව්‍යාපෘති සහ සැකසීම් එලෙසම පවතී",
   "dialog.update.major.plugins": "OpenCode 1 සඳහා සෑදූ ප්ලගීන යාවත්කාලීන කළ යුතුය",

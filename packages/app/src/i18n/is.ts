@@ -1159,7 +1159,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Innbyggður vafri",
   "dialog.update.major.new.background": "Undirfulltrúar og skipanir í bakgrunni",
   "dialog.update.major.new.plugins": "Skjáborðsviðbætur sem gera forritið að þínu eigin (á tilraunastigi)",
-  "dialog.update.major.new.sessions": "Sömu setur í forritinu, skjáherminum og á vefnum",
+  "dialog.update.major.new.sessions": "Einn sameiginlegur netþjónn samstillir forritið, skjáherminn og vefinn",
   "dialog.update.major.new.pair": "Para síma eða aðra tölvu",
   "dialog.update.major.keeps.data": "Varðveitir setur, verkefni og stillingar þínar",
   "dialog.update.major.plugins": "Viðbætur sem gerðar voru fyrir OpenCode 1 þarf að uppfæra",

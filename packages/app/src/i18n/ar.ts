@@ -540,7 +540,7 @@ export const dict = {
   "dialog.update.major.new.browser": "متصفح داخل التطبيق",
   "dialog.update.major.new.background": "وكلاء فرعيون وأوامر تعمل في الخلفية",
   "dialog.update.major.new.plugins": "إضافات لسطح المكتب لتخصيص التطبيق على طريقتك (تجريبية)",
-  "dialog.update.major.new.sessions": "الجلسات نفسها في التطبيق والمحطة الطرفية والويب",
+  "dialog.update.major.new.sessions": "خادم مشترك واحد يُبقي التطبيق والمحطة الطرفية والويب متزامنة",
   "dialog.update.major.new.pair": "إقران هاتف أو حاسوب آخر",
   "dialog.update.major.keeps.data": "يحتفظ بجلساتك ومشاريعك وإعداداتك",
   "dialog.update.major.plugins": "الإضافات المصممة لـ OpenCode 1 تحتاج إلى تحديث",

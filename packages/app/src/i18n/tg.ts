@@ -1166,7 +1166,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Браузери дохили барнома",
   "dialog.update.major.new.background": "Субагентҳо ва фармонҳо дар пасзамина",
   "dialog.update.major.new.plugins": "Плагинҳои мизи корӣ, ки барномаро аз они шумо мекунанд (озмоишӣ)",
-  "dialog.update.major.new.sessions": "Ҳамон сеансҳо дар барнома, терминал ва веб",
+  "dialog.update.major.new.sessions": "Як сервери муштарак барнома, терминал ва вебро ҳамоҳанг нигоҳ медорад",
   "dialog.update.major.new.pair": "Телефон ё компютери дигарро пайваст кунед",
   "dialog.update.major.keeps.data": "Сеансҳо, лоиҳаҳо ва танзимоти шуморо нигоҳ медорад",
   "dialog.update.major.plugins": "Плагинҳое, ки барои OpenCode 1 сохта шудаанд, навсозиро талаб мекунанд",

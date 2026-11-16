@@ -1165,7 +1165,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Navigator integrat",
   "dialog.update.major.new.background": "Subagenți și comenzi în fundal",
   "dialog.update.major.new.plugins": "Pluginuri desktop care fac aplicația a ta (experimentale)",
-  "dialog.update.major.new.sessions": "Aceleași sesiuni în aplicație, în terminal și pe web",
+  "dialog.update.major.new.sessions": "Un server partajat sincronizează aplicația, terminalul și webul",
   "dialog.update.major.new.pair": "Asociază un telefon sau un alt calculator",
   "dialog.update.major.keeps.data": "Păstrează sesiunile, proiectele și setările tale",
   "dialog.update.major.plugins": "Pluginurile create pentru OpenCode 1 trebuie actualizate",

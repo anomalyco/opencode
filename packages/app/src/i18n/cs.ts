@@ -1165,7 +1165,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Vestavěný prohlížeč",
   "dialog.update.major.new.background": "Podagenti a příkazy na pozadí",
   "dialog.update.major.new.plugins": "Desktopové pluginy, díky kterým si aplikaci přizpůsobíte (experimentální)",
-  "dialog.update.major.new.sessions": "Stejné relace v aplikaci, terminálu i na webu",
+  "dialog.update.major.new.sessions": "Jeden společný server synchronizuje aplikaci, terminál i web",
   "dialog.update.major.new.pair": "Spárujte telefon nebo jiný počítač",
   "dialog.update.major.keeps.data": "Zachová vaše relace, projekty a nastavení",
   "dialog.update.major.plugins": "Pluginy vytvořené pro OpenCode 1 vyžadují aktualizaci",

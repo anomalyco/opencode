@@ -578,7 +578,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Uygulama içi tarayıcı",
   "dialog.update.major.new.background": "Arka planda alt ajanlar ve komutlar",
   "dialog.update.major.new.plugins": "Uygulamayı size özel kılan masaüstü eklentileri (deneysel)",
-  "dialog.update.major.new.sessions": "Uygulamada, terminalde ve web'de aynı oturumlar",
+  "dialog.update.major.new.sessions": "Tek bir ortak sunucu uygulamayı, terminali ve web'i senkronize tutar",
   "dialog.update.major.new.pair": "Telefon veya başka bir bilgisayar eşleştirin",
   "dialog.update.major.keeps.data": "Oturumlarınızı, projelerinizi ve ayarlarınızı korur",
   "dialog.update.major.plugins": "OpenCode 1 için geliştirilen eklentilerin güncellenmesi gerekiyor",

@@ -1164,7 +1164,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Iebūvēts pārlūks",
   "dialog.update.major.new.background": "Apakšaģenti un komandas fonā",
   "dialog.update.major.new.plugins": "Darbvirsmas spraudņi lietotnes pielāgošanai sev (eksperimentāli)",
-  "dialog.update.major.new.sessions": "Tās pašas sesijas lietotnē, terminālī un tīmeklī",
+  "dialog.update.major.new.sessions": "Viens kopīgs serveris sinhronizē lietotni, termināli un tīmekli",
   "dialog.update.major.new.pair": "Savienojiet pārī tālruni vai citu datoru",
   "dialog.update.major.keeps.data": "Saglabā jūsu sesijas, projektus un iestatījumus",
   "dialog.update.major.plugins": "OpenCode 1 paredzētie spraudņi ir jāatjaunina",

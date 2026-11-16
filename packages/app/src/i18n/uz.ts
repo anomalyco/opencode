@@ -1174,7 +1174,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Ilova ichidagi brauzer",
   "dialog.update.major.new.background": "Fonda ishlaydigan subagentlar va buyruqlar",
   "dialog.update.major.new.plugins": "Ilovani oʻzingizga moslaydigan ish stoli plaginlari (eksperimental)",
-  "dialog.update.major.new.sessions": "Bir xil seanslar ilovada, terminalda va vebda",
+  "dialog.update.major.new.sessions": "Bitta umumiy server ilova, terminal va vebni sinxron saqlaydi",
   "dialog.update.major.new.pair": "Telefon yoki boshqa kompyuterni ulang",
   "dialog.update.major.keeps.data": "Seanslar, loyihalar va sozlamalaringizni saqlab qoladi",
   "dialog.update.major.plugins": "OpenCode 1 uchun yaratilgan plaginlarni yangilash kerak",

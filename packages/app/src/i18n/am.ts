@@ -1132,7 +1132,7 @@ export const dict = {
   "dialog.update.major.new.browser": "የውስጠ-መተግበሪያ አሳሽ",
   "dialog.update.major.new.background": "ከበስተጀርባ የሚሰሩ ንዑስ ወኪሎች እና ትዕዛዞች",
   "dialog.update.major.new.plugins": "መተግበሪያውን የራስዎ የሚያደርጉ የዴስክቶፕ ፕለጊኖች (የሙከራ)",
-  "dialog.update.major.new.sessions": "በመተግበሪያው፣ በተርሚናል እና በድር ላይ ተመሳሳይ ክፍለ ጊዜዎች",
+  "dialog.update.major.new.sessions": "አንድ የጋራ አገልጋይ መተግበሪያውን፣ ተርሚናሉን እና ድሩን እንደተመሳሰሉ ያቆያል",
   "dialog.update.major.new.pair": "ስልክ ወይም ሌላ ኮምፒውተር ያጣምሩ",
   "dialog.update.major.keeps.data": "ክፍለ ጊዜዎችዎን፣ ፕሮጀክቶችዎን እና ቅንጅቶችዎን ያቆያል",
   "dialog.update.major.plugins": "ለOpenCode 1 የተሰሩ ፕለጊኖች ዝማኔ ያስፈልጋቸዋል",

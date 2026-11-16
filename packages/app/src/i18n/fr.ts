@@ -550,7 +550,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Navigateur intégré",
   "dialog.update.major.new.background": "Sous-agents et commandes en arrière-plan",
   "dialog.update.major.new.plugins": "Plugins de bureau pour une application à votre image (expérimentaux)",
-  "dialog.update.major.new.sessions": "Les mêmes sessions dans l'application, le terminal et sur le Web",
+  "dialog.update.major.new.sessions": "Un serveur partagé synchronise l'application, le terminal et le Web",
   "dialog.update.major.new.pair": "Associez un téléphone ou un autre ordinateur",
   "dialog.update.major.keeps.data": "Conserve vos sessions, projets et paramètres",
   "dialog.update.major.plugins": "Les plugins conçus pour OpenCode 1 doivent être mis à jour",

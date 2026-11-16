@@ -552,7 +552,7 @@ export const dict = {
   "dialog.update.major.new.browser": "इन-ऐप ब्राउज़र",
   "dialog.update.major.new.background": "बैकग्राउंड में चलने वाले सबएजेंट और कमांड",
   "dialog.update.major.new.plugins": "डेस्कटॉप प्लगइन जो ऐप को आपका अपना बनाते हैं (प्रायोगिक)",
-  "dialog.update.major.new.sessions": "ऐप, टर्मिनल और वेब पर वही सेशन",
+  "dialog.update.major.new.sessions": "एक साझा सर्वर ऐप, टर्मिनल और वेब को सिंक में रखता है",
   "dialog.update.major.new.pair": "फ़ोन या दूसरा कंप्यूटर पेयर करें",
   "dialog.update.major.keeps.data": "आपके सेशन, प्रोजेक्ट और सेटिंग्स बनाए रखता है",
   "dialog.update.major.plugins": "OpenCode 1 के लिए बने प्लगइन को अपडेट की ज़रूरत है",

@@ -1158,7 +1158,7 @@ export const dict = {
   "dialog.update.major.new.browser": "ჩაშენებული ბრაუზერი",
   "dialog.update.major.new.background": "ფონური სუბაგენტები და ბრძანებები",
   "dialog.update.major.new.plugins": "დესკტოპის პლაგინები აპლიკაციის თქვენზე მოსარგებად (ექსპერიმენტული)",
-  "dialog.update.major.new.sessions": "იგივე სესიები აპლიკაციაში, ტერმინალსა და ვებში",
+  "dialog.update.major.new.sessions": "ერთი საერთო სერვერი სინქრონში ამყოფებს აპლიკაციას, ტერმინალსა და ვებს",
   "dialog.update.major.new.pair": "დააწყვილეთ ტელეფონი ან სხვა კომპიუტერი",
   "dialog.update.major.keeps.data": "ინარჩუნებს თქვენს სესიებს, პროექტებსა და პარამეტრებს",
   "dialog.update.major.plugins": "OpenCode 1-ისთვის შექმნილ პლაგინებს განახლება სჭირდება",

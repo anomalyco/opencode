@@ -479,7 +479,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Innebygd nettleser",
   "dialog.update.major.new.background": "Underagenter og kommandoer i bakgrunnen",
   "dialog.update.major.new.plugins": "Programtillegg som gjør skrivebordsappen til din egen (eksperimentell)",
-  "dialog.update.major.new.sessions": "De samme sesjonene i appen, terminalen og på nettet",
+  "dialog.update.major.new.sessions": "Én felles server holder app, terminal og nett synkronisert",
   "dialog.update.major.new.pair": "Koble til en telefon eller en annen datamaskin",
   "dialog.update.major.keeps.data": "Beholder sesjonene, prosjektene og innstillingene dine",
   "dialog.update.major.plugins": "Programtillegg laget for OpenCode 1 må oppdateres",

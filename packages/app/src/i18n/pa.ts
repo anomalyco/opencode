@@ -553,7 +553,7 @@ export const dict = {
   "dialog.update.major.new.browser": "ایپ دے اندر براؤزر",
   "dialog.update.major.new.background": "پس منظر وچ چلن والے ذیلی ایجنٹ تے کمانڈز",
   "dialog.update.major.new.plugins": "ڈیسک ٹاپ پلگ انز جیہڑے ایپ نوں تہاڈی مرضی دے مطابق بناندے نیں (تجرباتی)",
-  "dialog.update.major.new.sessions": "ایپ، ٹرمینل تے ویب وچ اوہی سیشن",
+  "dialog.update.major.new.sessions": "اک سانجھا سرور ایپ، ٹرمینل تے ویب نوں ہم آہنگ رکھدا اے",
   "dialog.update.major.new.pair": "فون یا کوئی ہور کمپیوٹر جوڑو",
   "dialog.update.major.keeps.data": "تہاڈے سیشن، پروجیکٹ تے ترتیبات برقرار رکھدا اے",
   "dialog.update.major.plugins": "OpenCode 1 لئی بنائے گئے پلگ انز نوں اپ ڈیٹ دی لوڑ اے",

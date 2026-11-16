@@ -1157,7 +1157,7 @@ export const dict = {
   "dialog.update.major.new.browser": "مرورگر درون‌برنامه‌ای",
   "dialog.update.major.new.background": "عوامل فرعی و دستورات پس‌زمینه",
   "dialog.update.major.new.plugins": "پلاگین‌های دسکتاپ که برنامه را مال خودتان می‌کنند (آزمایشی)",
-  "dialog.update.major.new.sessions": "همان جلسات در برنامه، ترمینال و وب",
+  "dialog.update.major.new.sessions": "یک سرور مشترک برنامه، ترمینال و وب را همگام نگه می‌دارد",
   "dialog.update.major.new.pair": "گوشی یا رایانه دیگری را جفت کنید",
   "dialog.update.major.keeps.data": "جلسات، پروژه‌ها و تنظیمات شما را حفظ می‌کند",
   "dialog.update.major.plugins": "پلاگین‌های ساخته‌شده برای OpenCode 1 باید به‌روزرسانی شوند",

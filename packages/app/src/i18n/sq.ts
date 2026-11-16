@@ -1166,7 +1166,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Shfletues i integruar",
   "dialog.update.major.new.background": "Nënagjentë dhe komanda në sfond",
   "dialog.update.major.new.plugins": "Shtojca desktop që e bëjnë aplikacionin tuajin (eksperimentale)",
-  "dialog.update.major.new.sessions": "Të njëjtat sesione në aplikacion, terminal dhe ueb",
+  "dialog.update.major.new.sessions": "Një server i përbashkët sinkronizon aplikacionin, terminalin dhe uebin",
   "dialog.update.major.new.pair": "Çiftoni një telefon ose një kompjuter tjetër",
   "dialog.update.major.keeps.data": "Ruan sesionet, projektet dhe cilësimet tuaja",
   "dialog.update.major.plugins": "Shtojcat e bëra për OpenCode 1 duhen përditësuar",

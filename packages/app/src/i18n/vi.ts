@@ -552,7 +552,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Trình duyệt trong ứng dụng",
   "dialog.update.major.new.background": "Tác nhân phụ và lệnh chạy nền",
   "dialog.update.major.new.plugins": "Plugin desktop để tùy biến ứng dụng theo ý bạn (thử nghiệm)",
-  "dialog.update.major.new.sessions": "Dùng chung phiên trên ứng dụng, terminal và web",
+  "dialog.update.major.new.sessions": "Một máy chủ dùng chung giúp đồng bộ ứng dụng, terminal và web",
   "dialog.update.major.new.pair": "Ghép nối điện thoại hoặc máy tính khác",
   "dialog.update.major.keeps.data": "Giữ nguyên các phiên, dự án và cài đặt của bạn",
   "dialog.update.major.plugins": "Plugin dành cho OpenCode 1 cần được cập nhật",

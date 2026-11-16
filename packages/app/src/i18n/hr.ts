@@ -1171,7 +1171,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Ugrađeni preglednik",
   "dialog.update.major.new.background": "Subagenti i naredbe u pozadini",
   "dialog.update.major.new.plugins": "Dodaci za stolnu aplikaciju kojima je prilagođavate sebi (eksperimentalni)",
-  "dialog.update.major.new.sessions": "Iste sesije u aplikaciji, terminalu i na webu",
+  "dialog.update.major.new.sessions": "Jedan zajednički poslužitelj sinkronizira aplikaciju, terminal i web",
   "dialog.update.major.new.pair": "Uparite mobitel ili drugo računalo",
   "dialog.update.major.keeps.data": "Zadržava vaše sesije, projekte i postavke",
   "dialog.update.major.plugins": "Dodatke izrađene za OpenCode 1 treba ažurirati",

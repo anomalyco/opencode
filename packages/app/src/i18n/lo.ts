@@ -1150,7 +1150,7 @@ export const dict = {
   "dialog.update.major.new.browser": "ຕົວທ່ອງເວັບໃນແອັບ",
   "dialog.update.major.new.background": "subagent ແລະຄໍາສັ່ງທີ່ເຮັດວຽກໃນພື້ນຫຼັງ",
   "dialog.update.major.new.plugins": "ປລັກອິນເດັສທັອບທີ່ເຮັດໃຫ້ແອັບເປັນຂອງທ່ານເອງ (ທົດລອງ)",
-  "dialog.update.major.new.sessions": "ເຊດຊັນດຽວກັນໃນແອັບ, terminal ແລະເວັບ",
+  "dialog.update.major.new.sessions": "ເຊີບເວີຮ່ວມອັນດຽວເຮັດໃຫ້ແອັບ, terminal ແລະເວັບຊິງຄ໌ກັນ",
   "dialog.update.major.new.pair": "ຈັບຄູ່ໂທລະສັບ ຫຼືຄອມພິວເຕີເຄື່ອງອື່ນ",
   "dialog.update.major.keeps.data": "ເກັບຮັກສາເຊດຊັນ, ໂຄງການ ແລະການຕັ້ງຄ່າຂອງທ່ານໄວ້",
   "dialog.update.major.plugins": "ປລັກອິນທີ່ສ້າງສຳລັບ OpenCode 1 ຕ້ອງໄດ້ຮັບການອັບເດດ",

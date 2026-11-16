@@ -585,7 +585,7 @@ export const dict = {
   "dialog.update.major.new.browser": "Peramban dalam aplikasi",
   "dialog.update.major.new.background": "Subagen dan perintah di latar belakang",
   "dialog.update.major.new.plugins": "Plugin desktop untuk menyesuaikan aplikasi sesuka Anda (eksperimental)",
-  "dialog.update.major.new.sessions": "Sesi yang sama di aplikasi, terminal, dan web",
+  "dialog.update.major.new.sessions": "Satu server bersama menyinkronkan aplikasi, terminal, dan web",
   "dialog.update.major.new.pair": "Sandingkan ponsel atau komputer lain",
   "dialog.update.major.keeps.data": "Mempertahankan sesi, proyek, dan pengaturan Anda",
   "dialog.update.major.plugins": "Plugin yang dibuat untuk OpenCode 1 perlu diperbarui",

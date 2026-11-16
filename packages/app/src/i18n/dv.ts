@@ -1180,7 +1180,7 @@ export const dict = {
   "dialog.update.major.new.browser": "އެޕްގެ ތެރޭގައިވާ ބްރައުޒާ",
   "dialog.update.major.new.background": "ބެކްގްރައުންޑްގައި ހިނގާ ސަބްއޭޖެންޓުންނާއި ކޮމާންޑްތައް",
   "dialog.update.major.new.plugins": "އެޕް ތިބާ ބޭނުން ގޮތަށް ބައްޓަންކޮށްދޭ ޑެސްކްޓޮޕް ޕްލަގިންސް (ތަޖުރިބާގެ ގޮތުން)",
-  "dialog.update.major.new.sessions": "އެޕް، ޓާމިނަލް އަދި ވެބްގައި ހަމަ އެ ސެޝަންތައް",
+  "dialog.update.major.new.sessions": "އެޕް، ޓާމިނަލް އަދި ވެބް ސިންކްކޮށް ބަހައްޓާ މުޝްތަރަކް އެއް ސަރވަރ",
   "dialog.update.major.new.pair": "ފޯނެއް ނުވަތަ އެހެން ކޮމްޕިއުޓަރެއް ޕެއަރ ކުރުން",
   "dialog.update.major.keeps.data": "ތިބާގެ ސެޝަންތަކާއި، މަޝްރޫއުތަކާއި އަދި ސެޓިންގސް ދެމިހުންނާނެއެވެ",
   "dialog.update.major.plugins": "OpenCode 1 އަށް ހަދާފައިވާ ޕްލަގިންސް އަޕްޑޭޓް ކުރަން ޖެހޭނެއެވެ",

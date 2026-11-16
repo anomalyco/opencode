@@ -586,7 +586,7 @@ export const dict = {
   "dialog.update.major.new.browser": "应用内浏览器",
   "dialog.update.major.new.background": "后台运行的子智能体和命令",
   "dialog.update.major.new.plugins": "桌面插件，打造专属于你的应用（实验性）",
-  "dialog.update.major.new.sessions": "应用、终端和网页端共享相同的会话",
+  "dialog.update.major.new.sessions": "一个共享服务器，让应用、终端和网页端保持同步",
   "dialog.update.major.new.pair": "配对手机或另一台电脑",
   "dialog.update.major.keeps.data": "保留你的会话、项目和设置",
   "dialog.update.major.plugins": "为 OpenCode 1 开发的插件需要更新",
