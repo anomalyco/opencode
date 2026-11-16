@@ -14,7 +14,6 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
-import { BlobStore } from "@opencode/core/blob-store"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { Worktree } from "@opencode/core/worktree"
 import { Session } from "@opencode/core/session"
@@ -74,8 +73,6 @@ const applicationServiceNodes = [
   Job.node,
   Project.node,
   Project.sweepNode,
-  BlobStore.node,
-  BlobStore.sweepNode,
   Worktree.node,
   Session.node,
   Instance.node,

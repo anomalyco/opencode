@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { descending } from "./identifier.js"
 import { Model } from "./model.js"
 import { Money } from "./money.js"
-import { Base64, MediaRef } from "./prompt.js"
+import { Base64 } from "./prompt.js"
 import { PositiveInt, optional, statics } from "./schema.js"
 
 const description = (text: string) => ({ description: text })
@@ -88,7 +88,8 @@ export const ImageResult = Schema.Struct({
 // Video
 // ---------------------------------------------------------------------------
 
-export const VideoID = Schema.String.check(Schema.isStartingWith("video_")).pipe(
+// Strict, because the server names files after it.
+export const VideoID = Schema.String.check(Schema.isPattern(/^video_[0-9a-f]{12}[0-9A-Za-z]{14}$/u)).pipe(
   Schema.brand("Generate.VideoID"),
   Schema.annotate({ identifier: "Generate.VideoID" }),
   statics((schema) => ({
@@ -124,15 +125,12 @@ export const VideoRequest = Schema.Struct({
   sound: Schema.Boolean.pipe(optional).annotate(
     description("Whether the video has a generated soundtrack; unset leaves the model's default"),
   ),
-  expiresAfter: PositiveInt.check(Schema.isLessThanOrEqualTo(30 * 24 * 60 * 60 * 1000))
-    .pipe(optional)
-    .annotate(description("Milliseconds the finished video stays available; defaults to 86400000 (24 hours)")),
 }).annotate({ identifier: "Generate.VideoRequest" })
 
 export const VideoErrorReason = Schema.Literals(["failed", "cancelled", "expired", "unknown"]).annotate({
   identifier: "Generate.VideoErrorReason",
   description:
-    "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider or the stored video expired. unknown: the outcome could not be determined, for example after a restart during submission",
+    "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time",
 })
 export type VideoErrorReason = typeof VideoErrorReason.Type
 
@@ -146,8 +144,13 @@ export interface VideoCompleted extends Schema.Schema.Type<typeof VideoCompleted
 export const VideoCompleted = Schema.Struct({
   id: VideoID,
   status: Schema.Literal("completed"),
-  media: Schema.Array(MediaRef).annotate(description("Read each with GET /api/experimental/media/:hash")),
-  expiresAt: Schema.Finite.annotate(description("Epoch milliseconds after which the video may be deleted")),
+  mime: Schema.String,
+  bytes: Schema.Finite,
+  expiresAt: Schema.Finite.annotate(
+    description(
+      "Epoch milliseconds after which the video may be deleted. Read it with GET /api/experimental/generate/video/:id/content",
+    ),
+  ),
 }).annotate({ identifier: "Generate.VideoCompleted" })
 
 export interface VideoError extends Schema.Schema.Type<typeof VideoError> {}

@@ -90,7 +90,7 @@ export function replacements(options: Options): LayerNode.Replacements {
     FileSystemSearch.node.replace(fileSystemSearchLayer),
     Pty.node.replace(ptyLayer),
     Npm.node.replace(npmLayer),
-    // Stored videos need a local `blobs/` folder, which a Durable Object doesn't have.
+    // Stored videos need a local `objects/` folder, which a Durable Object doesn't have.
     VideoGeneration.node.replace(VideoGeneration.unsupportedLayer),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.

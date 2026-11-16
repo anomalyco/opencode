@@ -117,6 +117,8 @@ import type {
   ExperimentalGenerateVideoCreateOutput,
   ExperimentalGenerateVideoGetInput,
   ExperimentalGenerateVideoGetOutput,
+  ExperimentalGenerateVideoContentInput,
+  ExperimentalGenerateVideoContentOutput,
   ExperimentalGenerateDecisionsInput,
   ExperimentalGenerateDecisionsOutput,
   ExperimentalVoiceModelsOutput,
@@ -1225,7 +1227,6 @@ export function make(options: ClientOptions) {
                   aspect: input["aspect"],
                   resolution: input["resolution"],
                   sound: input["sound"],
-                  expiresAfter: input["expiresAfter"],
                 },
                 successStatus: 200,
                 declaredStatuses: [400, 401, 403, 404, 422, 502, 503],
@@ -1244,6 +1245,18 @@ export function make(options: ClientOptions) {
               },
               requestOptions,
             ).then((value) => value.data),
+          content: (input: ExperimentalGenerateVideoContentInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalGenerateVideoContentOutput>(
+              {
+                method: "GET",
+                path: `/api/experimental/generate/video/${encodeURIComponent(input.id)}/content`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+                binary: true,
+              },
+              requestOptions,
+            ),
         },
         decisions: (input: ExperimentalGenerateDecisionsInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalGenerateDecisionsOutput }>(

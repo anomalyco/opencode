@@ -166,13 +166,7 @@ const readBlobAttachment = Effect.fn("SessionPrompt.readBlobAttachment")(functio
   const { db } = yield* Database.Service
   const blob = yield* SessionBlob.read(db, SessionStored.refHash(uri))
   if (!blob) return yield* new AttachmentError({ uri, message: `Attachment is no longer stored: ${uri}` })
-  // History doesn't load file-backed blobs, such as generated videos, so they can't be attached yet.
-  if (blob.data === undefined)
-    return yield* new AttachmentError({
-      uri,
-      message: `Attachment is stored as a file and can't be attached yet: ${uri}`,
-    })
-  return { mime: blob.mime, data: blob.data }
+  return blob
 })
 
 const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(function* (uri: string) {

@@ -5567,7 +5567,7 @@
             }
           }
         },
-        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the video; read it with GET /api/experimental/generate/video/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the video for 7 days; read its state with GET /api/experimental/generate/video/:id and its bytes with GET /api/experimental/generate/video/:id/content. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
         "summary": "Create a video generation",
         "requestBody": {
           "content": {
@@ -5655,8 +5655,87 @@
             }
           }
         },
-        "description": "Read a video job: running, completed with media refs for GET /api/experimental/media/:hash and when they expire, or error with a reason. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "description": "Read a video job: running, completed with the video's type, size and expiry, or error with a reason. A finished video stays readable after a server restart; a running job does not. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
         "summary": "Read a video generation"
+      }
+    },
+    "/api/experimental/generate/video/{id}/content": {
+      "get": {
+        "tags": ["generate"],
+        "operationId": "experimental.generate.video.content",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Generate.VideoID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "VideoNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/VideoNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Stream a finished video's bytes, with single byte Range, ETag and 304 Not Modified support. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Read a generated video"
       }
     },
     "/api/experimental/generate/decisions": {
@@ -12273,7 +12352,7 @@
             }
           }
         },
-        "description": "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, 304 Not Modified and single byte Range support. Only blobs a stored message or inbox item still references, or that have not yet expired, are served. Experimental: may change without compatibility guarantees.",
+        "description": "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, and 304 Not Modified support. Only blobs a stored message or inbox item still references are served. Experimental: may change without compatibility guarantees.",
         "summary": "Read media blob"
       }
     },
@@ -19403,19 +19482,18 @@
             "type": "string",
             "enum": ["completed"]
           },
-          "media": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Prompt.MediaRef"
-            },
-            "description": "Read each with GET /api/experimental/media/:hash"
+          "mime": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "number"
           },
           "expiresAt": {
             "type": "number",
-            "description": "Epoch milliseconds after which the video may be deleted"
+            "description": "Epoch milliseconds after which the video may be deleted. Read it with GET /api/experimental/generate/video/:id/content"
           }
         },
-        "required": ["id", "status", "media", "expiresAt"],
+        "required": ["id", "status", "mime", "bytes", "expiresAt"],
         "additionalProperties": false
       },
       "Generate.VideoError": {
@@ -19441,11 +19519,11 @@
       "Generate.VideoErrorReason": {
         "type": "string",
         "enum": ["failed", "cancelled", "expired", "unknown"],
-        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider or the stored video expired. unknown: the outcome could not be determined, for example after a restart during submission"
+        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time"
       },
       "Generate.VideoID": {
         "type": "string",
-        "pattern": "^video_"
+        "pattern": "^video_[0-9a-f]{12}[0-9A-Za-z]{14}$"
       },
       "Generate.VideoJob": {
         "anyOf": [
@@ -19494,11 +19572,6 @@
           },
           "sound": {
             "type": "boolean"
-          },
-          "expiresAfter": {
-            "type": "integer",
-            "maximum": 2592000000,
-            "exclusiveMinimum": 0
           }
         },
         "required": ["model", "prompt"],
@@ -22110,9 +22183,6 @@
             "additionalProperties": false
           }
         ]
-      },
-      "Prompt.MediaRef": {
-        "type": "string"
       },
       "Prompt.Mention": {
         "type": "object",

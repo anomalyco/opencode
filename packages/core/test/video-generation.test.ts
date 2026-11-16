@@ -1,18 +1,15 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
-import { eq } from "drizzle-orm"
-import { Clock, type Duration, Effect, Layer, Stream } from "effect"
+import { type Duration, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { VideoStatus } from "@opencode/ai/effect"
-import { BlobStore } from "@opencode/core/blob-store"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Generate } from "@opencode/core/generate"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
-import { BlobTable } from "@opencode/core/session/sql"
 import type { VideoID, VideoJob } from "@opencode/schema/generate"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
@@ -28,10 +25,13 @@ const model = Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.I
 const providerError = (message: string, status?: number) =>
   new Generate.ProviderRequestError({ providerID: "test", reason: "provider", message, status })
 
+// The start of an MP4: a `ftyp` box, so its type is read from its bytes.
+const mp4 = Uint8Array.from([0, 0, 0, 0x14, ...new TextEncoder().encode("ftypmp42"), 0, 0, 0, 0, 1, 2, 3, 4])
+
 /** A provider the test drives. */
 const provider = () => ({
   status: { status: "running" } as VideoStatus,
-  result: Stream.make(new TextEncoder().encode("a small mp4")) as Stream.Stream<Uint8Array, Generate.Error>,
+  result: Stream.make(mp4) as Stream.Stream<Uint8Array, Generate.Error>,
   start: Effect.succeed({ id: "provider_1" }) as Effect.Effect<{ readonly id: string }, Generate.Error>,
   /** Status reads that fail before one succeeds. */
   failReads: 0,
@@ -39,7 +39,7 @@ const provider = () => ({
 type State = ReturnType<typeof provider>
 
 const app = (dir: string, state: State) =>
-  AppNodeBuilder.build(LayerNode.group([VideoGeneration.node, BlobStore.node, Database.node, LocationServiceMap.node]), [
+  AppNodeBuilder.build(LayerNode.group([VideoGeneration.node, Database.node, LocationServiceMap.node]), [
     Global.node.replace(Global.layerWith({ data: path.join(dir, "data"), config: path.join(dir, "config") })),
     Database.node.replace(Database.configured({ path: "opencode.db" })),
     offlineModels,
@@ -77,54 +77,55 @@ const settled = (id: VideoID, step: Duration.Input = "5 seconds") =>
     (job: VideoJob) => job.status !== "running",
   )
 
-const part = (dir: string, id: string) =>
+const exists = (file: string) =>
   Effect.promise(() =>
-    fs.stat(path.join(dir, "data", "blobs", `${id}.part`)).then(
+    fs.stat(file).then(
       () => true,
       () => false,
     ),
   )
+const object = (dir: string, id: string) => path.join(dir, "data", "objects", id)
 
-it.effect("stores a finished video under blobs/ before reporting it completed, past a failed status read", () =>
+it.effect("stores a finished video under objects/, reads it after a restart and deletes it after 7 days", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-generation-")).path
     const state = provider()
-    yield* Effect.gen(function* () {
+    const id = yield* Effect.gen(function* () {
       const generations = yield* VideoGeneration.Service
-      const store = yield* BlobStore.Service
-      const { db } = yield* Database.Service
       const started = yield* generations.start({ model, prompt: "a cat" })
       expect(yield* generations.get(started.id)).toEqual({ id: started.id, status: "running" })
 
       state.status = { status: "completed" }
+      // A failed status read is retried at the next interval.
       state.failReads = 1
       const job = yield* settled(started.id)
-      if (job.status !== "completed") throw new Error(`expected completed, got ${JSON.stringify(job)}`)
-      const hash = job.media[0]!.slice("media:".length)
-      expect(job.expiresAt).toBeGreaterThan((yield* Clock.currentTimeMillis) + 23 * 60 * 60 * 1000)
-      const blob = yield* db.select().from(BlobTable).where(eq(BlobTable.hash, hash)).get()
-      expect(blob).toMatchObject({ mime: "video/mp4", bytes: 11, expires_at: job.expiresAt })
-      expect(blob?.data.byteLength).toBe(0)
-      expect(yield* Effect.promise(() => fs.readFile(store.path(hash), "utf8"))).toBe("a small mp4")
-      expect(yield* part(dir, started.id)).toBe(false)
+      expect(job).toMatchObject({ id: started.id, status: "completed", mime: "video/mp4", bytes: mp4.length })
+      if (job.status === "completed") expect(job.expiresAt).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000)
+      expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(object(dir, started.id))))).toEqual(mp4)
+      expect(yield* exists(`${object(dir, started.id)}.part`)).toBe(false)
+      return started.id
+    }).pipe(Effect.provide(app(dir, state)))
 
-      // Forgotten with its video.
-      yield* TestClock.adjust("24 hours")
-      expect(yield* generations.get(started.id).pipe(Effect.flip)).toMatchObject({
-        _tag: "VideoGeneration.NotFoundError",
-      })
+    yield* Effect.gen(function* () {
+      const generations = yield* VideoGeneration.Service
+      // A new process knows nothing of the job, but the object is the record.
+      expect(yield* generations.get(id)).toMatchObject({ status: "completed", mime: "video/mp4" })
+      const old = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+      yield* Effect.promise(() => fs.utimes(object(dir, id), old, old))
+      yield* TestClock.adjust("1 hour")
+      yield* eventually(exists(object(dir, id)), (found) => !found)
+      expect(yield* generations.get(id).pipe(Effect.flip)).toMatchObject({ _tag: "VideoGeneration.NotFoundError" })
     }).pipe(Effect.provide(app(dir, state)))
   }),
 )
 
-it.effect("deletes the staged file and reports an error when the download keeps failing", () =>
+it.effect("deletes the partial file and reports an error when the download keeps failing", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-generation-fail-")).path
     const state = provider()
     state.result = state.result.pipe(Stream.concat(Stream.fail(providerError("connection reset"))))
     yield* Effect.gen(function* () {
       const generations = yield* VideoGeneration.Service
-      const { db } = yield* Database.Service
       const started = yield* generations.start({ model, prompt: "a bird" })
       state.status = { status: "completed" }
       expect(yield* settled(started.id, "1 second")).toEqual({
@@ -133,8 +134,8 @@ it.effect("deletes the staged file and reports an error when the download keeps 
         reason: "failed",
         error: "connection reset",
       })
-      expect(yield* part(dir, started.id)).toBe(false)
-      expect(yield* db.select().from(BlobTable).all()).toEqual([])
+      expect(yield* exists(`${object(dir, started.id)}.part`)).toBe(false)
+      expect(yield* exists(object(dir, started.id))).toBe(false)
     }).pipe(Effect.provide(app(dir, state)))
   }),
 )

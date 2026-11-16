@@ -22,8 +22,6 @@ import sessionInboxMigration from "@opencode/core/database/migration/20260812181
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
-import blobMigration from "@opencode/core/database/migration/20261025123711_blob"
-import blobExpiryMigration from "@opencode/core/database/migration/20261116055456_video_blob_expiry"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -230,37 +228,6 @@ describe("DatabaseMigration", () => {
         yield* DatabaseMigration.applyOnly(db, [dropSessionPendingMigration])
 
         expect(yield* db.all(sql`SELECT name FROM sqlite_master WHERE name LIKE 'session_pending%'`)).toEqual([])
-      }),
-    )
-  })
-
-  test("adds blob.expires_at in place, keeping every blob and blob_ref row", async () => {
-    await run(
-      Effect.gen(function* () {
-        const db = yield* makeDb
-        // Durable Object SQLite always enforces foreign keys, so a rebuild of blob would cascade into blob_ref.
-        yield* db.run(sql`PRAGMA foreign_keys = ON`)
-        yield* db.run(sql`CREATE TABLE session_v2 (id text PRIMARY KEY)`)
-        yield* db.run(sql`INSERT INTO session_v2 (id) VALUES ('ses_media')`)
-        yield* DatabaseMigration.applyOnly(db, [blobMigration])
-        yield* db.run(
-          sql`INSERT INTO blob (hash, mime, bytes, data, time_created) VALUES ('aa', 'image/png', 3, X'010203', 1)`,
-        )
-        yield* db.run(
-          sql`INSERT INTO blob_ref (session_id, message_id, hash, seq) VALUES ('ses_media', 'msg_1', 'aa', 1)`,
-        )
-
-        yield* DatabaseMigration.applyOnly(db, [blobExpiryMigration])
-
-        expect(yield* db.all(sql`SELECT session_id, message_id, hash, seq FROM blob_ref`)).toEqual([
-          { session_id: "ses_media", message_id: "msg_1", hash: "aa", seq: 1 },
-        ])
-        expect(yield* db.get(sql`SELECT hash, bytes, hex(data) AS data, expires_at FROM blob`)).toEqual({
-          hash: "aa",
-          bytes: 3,
-          data: "010203",
-          expires_at: null,
-        })
       }),
     )
   })

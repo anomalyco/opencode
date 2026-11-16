@@ -182,28 +182,17 @@ export const InstructionStateTable = sqliteTable("instruction_state", {
   current_values: text({ mode: "json" }).notNull().$type<Instruction.Values>(),
 })
 
-// A blob whose bytes live in a file under `blobs/` has an empty `data` and a non-zero `bytes`; see `SessionBlob.onDisk`.
-export const BlobTable = sqliteTable(
-  "blob",
-  {
-    hash: text().primaryKey(),
-    mime: text().notNull(),
-    bytes: integer().notNull(),
-    width: integer(),
-    height: integer(),
-    data: blob({ mode: "buffer" }).notNull(),
-    time_created: integer()
-      .notNull()
-      .$default(() => Date.now()),
-    /** Kept until then even with no ref, for media made outside a session. Null for session media. */
-    expires_at: integer(),
-  },
-  (table) => [
-    index("blob_expires_at_idx")
-      .on(table.expires_at)
-      .where(sql`${table.expires_at} IS NOT NULL`),
-  ],
-)
+export const BlobTable = sqliteTable("blob", {
+  hash: text().primaryKey(),
+  mime: text().notNull(),
+  bytes: integer().notNull(),
+  width: integer(),
+  height: integer(),
+  data: blob({ mode: "buffer" }).notNull(),
+  time_created: integer()
+    .notNull()
+    .$default(() => Date.now()),
+})
 
 export const BlobRefTable = sqliteTable(
   "blob_ref",

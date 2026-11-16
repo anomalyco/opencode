@@ -200,8 +200,6 @@ export type GenerateNative = { [x: string]: JsonValue }
 
 export type GenerateVideoID = string
 
-export type PromptMediaRef = string
-
 export type GenerateVideoErrorReason = "failed" | "cancelled" | "expired" | "unknown"
 
 export type GeneratePredicateAnswer = { type: "predicate"; name: string; probability: number }
@@ -741,7 +739,8 @@ export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
 export type GenerateVideoCompleted = {
   id: GenerateVideoID
   status: "completed"
-  media: Array<PromptMediaRef>
+  mime: string
+  bytes: number
   expiresAt: number
 }
 
@@ -4045,7 +4044,6 @@ export type ExperimentalGenerateVideoCreateInput = {
   readonly aspect?: (`${number}${":"}${number}` | "auto") | undefined
   readonly resolution?: ("480p" | "720p" | "1080p" | "4k" | (string & {})) | undefined
   readonly sound?: boolean | undefined
-  readonly expiresAfter?: number | undefined
 }
 
 export type ExperimentalGenerateVideoCreateOutput = GenerateVideoCreateResponse["data"]
@@ -4053,6 +4051,10 @@ export type ExperimentalGenerateVideoCreateOutput = GenerateVideoCreateResponse[
 export type ExperimentalGenerateVideoGetInput = { readonly id: string }
 
 export type ExperimentalGenerateVideoGetOutput = GenerateVideoGetResponse["data"]
+
+export type ExperimentalGenerateVideoContentInput = { readonly id: string }
+
+export type ExperimentalGenerateVideoContentOutput = globalThis.Uint8Array
 
 export type ExperimentalGenerateDecisionsInput = {
   readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }

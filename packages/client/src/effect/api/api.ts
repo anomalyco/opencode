@@ -1530,7 +1530,6 @@ export type ExperimentalGenerateVideoCreateInput = {
   readonly aspect?: Generate.VideoAspect | undefined
   readonly resolution?: Generate.VideoResolution | undefined
   readonly sound?: boolean | undefined
-  readonly expiresAfter?: number | undefined
 }
 export type ExperimentalGenerateVideoCreateOutput = Generate.VideoRunning
 export type ExperimentalGenerateVideoCreateOperation<E = never> = (

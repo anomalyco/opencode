@@ -968,7 +968,6 @@ const EndpointExperimentalGenerateVideoCreate =
           aspect: input["aspect"],
           resolution: input["resolution"],
           sound: input["sound"],
-          expiresAfter: input["expiresAfter"],
         },
       }).pipe(
         Effect.mapError(mapClientError),

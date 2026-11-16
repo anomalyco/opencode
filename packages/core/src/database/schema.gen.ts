@@ -177,8 +177,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`width\` integer,
           \`height\` integer,
           \`data\` blob NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`expires_at\` integer
+          \`time_created\` integer NOT NULL
         );
       `)
       yield* tx.run(`
@@ -323,9 +322,6 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       )
       yield* tx.run(`CREATE INDEX \`blob_ref_hash_idx\` ON \`blob_ref\` (\`hash\`);`)
       yield* tx.run(`CREATE INDEX \`blob_ref_session_seq_idx\` ON \`blob_ref\` (\`session_id\`,\`seq\`);`)
-      yield* tx.run(
-        `CREATE INDEX \`blob_expires_at_idx\` ON \`blob\` (\`expires_at\`) WHERE "blob"."expires_at" IS NOT NULL;`,
-      )
       yield* tx.run(
         `CREATE INDEX \`session_inbox_session_delivery_seq_idx\` ON \`session_inbox\` (\`session_id\`,\`delivery\`,\`enqueued_seq\`);`,
       )

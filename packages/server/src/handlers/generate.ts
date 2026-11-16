@@ -17,7 +17,11 @@ import type { DecisionRequest, VideoID, ImageRequest, VideoRequest } from "@open
 import { Global } from "@opencode/util/global"
 import { Model } from "@opencode/schema/model"
 import { Effect } from "effect"
+import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
+import { FSUtil } from "@opencode/util/fs-util"
+import { ContentHeaders } from "../content-headers"
+import { ByteRange } from "../range"
 import { Api } from "../api"
 import { awaitPlugins, locationErrors } from "../location"
 
@@ -26,6 +30,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     const global = yield* Global.Service
     const locations = yield* LocationServiceMap.Service
     const videos = yield* VideoGeneration.Service
+    const fs = yield* FSUtil.Service
     const services = locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))
     const text = Effect.fn("server.generate.text")(
       function* (request: { readonly payload: { readonly prompt: string; readonly model?: Model.Ref } }) {
@@ -85,6 +90,50 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       Effect.provide(services),
       locationErrors,
     )
+    // Raw, so it can stream the file and answer Range and 304 itself.
+    const videoContent = (id: VideoID, request: HttpServerRequest.HttpServerRequest) =>
+      Effect.gen(function* () {
+        yield* videoEnabled
+        const video = yield* videos
+          .content(id)
+          .pipe(Effect.mapError((error) => new VideoNotFoundError({ videoID: error.id, message: error.message })))
+        // The ID names one immutable video.
+        const etag = `"${id}"`
+        const headers = {
+          ...ContentHeaders.download({ mime: video.mime }),
+          "cache-control": "private, max-age=604800, immutable",
+          etag,
+          "accept-ranges": "bytes",
+        }
+        if (
+          request.headers["if-none-match"]
+            ?.split(",")
+            .some((tag) => tag.trim() === "*" || tag.trim().replace(/^w\//i, "") === etag)
+        )
+          return HttpServerResponse.empty({ status: 304, headers })
+        // If-Range takes only a strong match (RFC 9110 13.1.5); anything else serves the whole body.
+        const ifRange = request.headers["if-range"]
+        const range =
+          ifRange === undefined || ifRange.trim() === etag
+            ? ByteRange.parse(request.headers["range"], video.bytes)
+            : undefined
+        if (range === "unsatisfiable")
+          return HttpServerResponse.empty({
+            status: 416,
+            headers: { ...headers, "content-range": `bytes */${video.bytes}` },
+          })
+        const offset = range?.start ?? 0
+        const length = range === undefined ? video.bytes : range.end - range.start + 1
+        return HttpServerResponse.stream(fs.stream(video.path, { offset, bytesToRead: length }), {
+          status: range === undefined ? 200 : 206,
+          contentType: headers["content-type"],
+          contentLength: length,
+          headers:
+            range === undefined
+              ? headers
+              : { ...headers, "content-range": `bytes ${range.start}-${range.end}/${video.bytes}` },
+        })
+      }).pipe(Effect.provide(services), locationErrors)
     return handlers
       .handle("generate.text", text)
       .handle("generate.textLegacy", text)
@@ -92,6 +141,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       .handle("generate.decisions", decisions)
       .handle("generate.video.create", videoCreate)
       .handle("generate.video.get", videoGet)
+      .handleRaw("generate.video.content", (ctx) => videoContent(ctx.params.id, ctx.request))
   }),
 )
 
