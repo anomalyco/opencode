@@ -32,7 +32,25 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   open dialog stays and acts, as in TS (`P.8/sidebar-prompt` `kept`), but its session panel closes and the route on
   screen mounts again. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
   next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`) and
-  a command's `enabled` are kept; its `priority`, `bindings`, `target` and slash `aliases` are not mapped.
+  a command's `enabled` are kept; its `priority`, `bindings`, `target` and slash `aliases` are not mapped. A command
+  without an `id` is named by its keys, its title and its place among the layer's commands of the same keys and title,
+  so a component that mounts again names it as before and does not reload the plugin again (CT-1). A plugin whose
+  registrations change more than 64 times within 5 s, as one that names a command anew on each mount does, fails with
+  "it changed its registrations … and never settled", where TS would keep it running. A reply the plugin waits for
+  across a reload reaches it (CT-1).
+- **Server RPC** (CT-4): `@opencode/plugin/rpc` gives `Rpc.define`, and `client.rpc(definition)` calls each method as
+  TS's client does (`/api/rpc/<id>/<method>`, the output answered), with its events heard as the host's events of type
+  `rpc.<id>.<name>`. An error the server gives an RPC reaches the plugin as the client's error, not as TS's
+  `{ type, message, data }`, as the host's fetch answers an error as text. Every module the layer serves is also
+  `opentui:runtime-module:<specifier>`, encoded or not, as OpenTUI's runtime registry names it (CT-3).
+- **`client` replies** of up to 8 MiB arrive whole, in parts of a frame each (CT-5); one past that, or past what the JS
+  host's queue has room for at the time, fails with "the reply is N bytes, more than the JS host takes", where TS has no
+  limit.
+- **Elements** (CT-2) are event emitters, as OpenTUI's renderables are: `focus()` and `blur()` of an `<input>`, a
+  `<textarea>` or a `<scrollbox>` are the host's focus of the node, any node emits `focused` and `blurred` as OpenTUI's
+  do, and other events are heard and never come. A scroll box's `scrollTop`, `scrollHeight` and `viewport` are the
+  host's state of the scroll once it came (before, the viewport's height is `Infinity`, so a plugin scrolls nothing by
+  it), and `scrollTo` and `scrollBy` are the host's scroll verb. Other renderable members are undefined.
 - **Dialogs**: `select`, `confirm`, `prompt` and `alert` are the host's, each settled once as TS's are (an answer;
   `undefined` on escape, the backdrop, another plugin's dialog, `clear()` or the plugin's end). A select's `search`
   lists its rows for each query as TS's does (flat, in its order, the category as the footer), but the rows change
@@ -54,7 +72,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `data.shell`, `data.session.permission`, `data.session.form`, the
   location's `agent`, `command`, `mcp.resource`, `reference` and `skill` lists, `renderer` members other than
   `requestRender`, `width` and `height` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's returns the
-  renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS with the toast beside), `useKeyboard`, `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`,
+  renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS with the toast beside; `keyInput` is
+  an emitter whose listeners hear no key), `useKeyboard`, `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`,
   `onAnimationTick`, `useTimeline`, `<input>` and `<textarea>` events, `minWidth` other than 0, `maxWidth`,
   `alignSelf` and `flexBasis`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
   The intrinsics without a contract node (`select`, `tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`)
@@ -67,7 +86,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   plugin used it. A renderable a plugin builds itself (`new BoxRenderable(…)`) draws nothing.
 - **Colors**: the context's `theme` leaves are colors that carry their token, so a node the plugin colors from the
   theme follows a theme change without a call, where an installed package's node keeps the color it read in TS. The
-  `theme` object has no `hue`, `categorical` or `surface()`, and neither it nor `themeMode` is a signal.
+  `theme` object has no `hue` or `categorical`; its `surface(name)` answers the page's theme, not the raised surface's,
+  and says so once (CT-8); neither it nor `themeMode` is a signal.
 - **Numbers** a render computes are rounded and clamped to the contract's ranges.
 - **Raw writes to standard output** (`fs.writeSync(1, …)`, as oc-bg-color-sync writes `OSC 11` and `OSC 111` to set
   and reset the terminal's background) reach the terminal in TS, where the plugin runs in the TUI's process. Here they
