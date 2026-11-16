@@ -1,7 +1,7 @@
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { useSettingsSurface } from "@/settings/surface"
-import { useProjectsSidebar } from "@/shell/projects-sidebar"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { tabHref, useTabs } from "@/shell/tabs/tabs"
 import {
   INITIAL_TITLEBAR_HISTORY_STATE,
@@ -14,7 +14,7 @@ import {
 export function createTitlebarHistory() {
   const navigate = useNavigate()
   const location = useLocation()
-  const projects = useProjectsSidebar()
+  const projectNavigation = useProjectNavigation()
 
   const settings = useSettingsSurface()
 
@@ -52,7 +52,7 @@ export function createTitlebarHistory() {
 
   return {
     back: () => {
-      if (!projects() || !settings.active()) return dispatch({ type: "back" })
+      if (!projectNavigation() || !settings.active()) return dispatch({ type: "back" })
       const source = settings.route()
 
       const tab = tabs.restoreReady() && tabs.restoreTab(source)

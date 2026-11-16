@@ -27,7 +27,7 @@ import type { Project } from "@/runtime/server/types"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import { useProjectBrowser, type ProjectBrowserTarget } from "@/home/projects/browse"
 import { ServerLabel } from "@/servers/registry/label"
-import { useProjectsSidebar } from "@/shell/projects-sidebar"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { useLayout } from "@/shell/state/layout"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { useTabs, type Tab } from "@/shell/tabs/tabs"
@@ -86,12 +86,12 @@ export function SidebarOrganized(props: {
 
   const layout = useLayout()
 
-  const projectsSidebar = useProjectsSidebar()
+  const projectNavigation = useProjectNavigation()
 
   const browse = useProjectBrowser()
 
   const connections = createMemo(() => {
-    if (projectsSidebar()) return servers.visible
+    if (projectNavigation()) return servers.visible
     const server = props.currentTab?.server ?? layout.home.selection().server
 
     const connection = servers.visible.find((conn) => ServerConnection.key(conn) === server) ?? servers.visible[0]
@@ -194,7 +194,7 @@ export function SidebarOrganized(props: {
                           <ProjectList
                             connection={conn()}
                             grouped={grouped()}
-                            onViewHistory={projectsSidebar() ? browse : undefined}
+                            onViewHistory={projectNavigation() ? browse : undefined}
                             currentTab={props.currentTab}
                             isOpenTab={isOpenTab}
                             highlightActive={projectSelected()}
