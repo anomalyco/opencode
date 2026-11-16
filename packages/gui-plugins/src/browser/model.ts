@@ -51,7 +51,7 @@ type ModelState = {
   machine: State
   /** Each session's page icons and zoom by tab, as this desktop reports them. */
   pages: Record<string, Record<string, PageDetail | undefined> | undefined>
-  chrome: Record<string, Record<string, { find?: FindView; notice?: RefusalNotice } | undefined> | undefined>
+  chrome: Record<string, Record<string, { find?: FindView; notice?: RefusalNotice & { token: string } } | undefined> | undefined>
 }
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
@@ -269,7 +269,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (event.type === "find" || event.type === "refusal") {
       setState("chrome", sessionKey, (old) => ({ ...old, [event.tabID]: {
-        ...old?.[event.tabID], ...(event.type === "find" ? { find: event.view ?? undefined } : { notice: event.notice }),
+        ...old?.[event.tabID], ...(event.type === "find" ? { find: event.view ?? undefined } : { notice: { ...event.notice, token: event.token } }),
       } }))
 
       return
@@ -629,9 +629,23 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (!notice) return
 
-      return notice.reason === "external" ? { text: ctx.t("refused.external"), target: notice.target } : { text: describe(notice.reason) }
+      if (notice.reason === "external" || notice.reason === "popup") return {
+        text: ctx.t(notice.reason === "external" ? "refused.external" : "refused.popup"), target: notice.target,
+        label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
+      }
+
+      return { text: describe(notice.reason) }
     },
-    dismissNotice: (session: Session, tabID: string) => setState("chrome", session.key, tabID, "notice", undefined),
+    async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean) {
+      const token = state.chrome[session.key]?.[tabID]?.notice?.token
+
+      if (!token) return
+      setState("chrome", session.key, tabID, "notice", undefined)
+      const target = registration(session)
+
+      if (!target) throw new Error("browser.pane.unavailable")
+      await target.notice(tabID, token, dismiss)
+    },
     find(session: Session, tabID: Browser.TabID, action: FindAction) {
       return registration(session)?.find(tabID, action) ?? Promise.reject(new Error("browser.pane.unavailable"))
     },

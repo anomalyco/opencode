@@ -41,14 +41,15 @@ export type FindView = typeof FindView.Type
 
 const RefusalNotice = Schema.Union([
   Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web"]) }),
-  Schema.Struct({ reason: Schema.Literal("external"), target: text(2048) }),
+  Schema.Struct({ reason: Schema.Literal("external"), target: text(2048), action: Schema.Literals(["open", "copy"]) }),
+  Schema.Struct({ reason: Schema.Literal("popup"), target: text(16384), action: Schema.optionalKey(Schema.Literal("tab")) }),
 ])
 
 export type RefusalNotice = typeof RefusalNotice.Type
 
 export const PaneEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("find"), tabID: Browser.TabID, view: Schema.NullOr(FindView) }),
-  Schema.Struct({ type: Schema.Literal("refusal"), tabID: Browser.TabID, notice: RefusalNotice }),
+  Schema.Struct({ type: Schema.Literal("refusal"), tabID: Browser.TabID, notice: RefusalNotice, token: text(128) }),
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
   Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
   Schema.Struct({
@@ -131,6 +132,7 @@ export const BrowserPane = Ipc.define({
     load: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     command: { input: Schema.Struct({ binding, command: Browser.Action }) },
     find: { input: Schema.Struct({ binding, tabID: Browser.TabID, action: FindAction }) },
+    notice: { input: Schema.Struct({ binding, tabID: Browser.TabID, token: text(128), dismiss: Schema.Boolean }) },
     // Starts or stops the page's element picker; the page reports picks and exits as inspect events.
     inspect: { input: Schema.Struct({ binding, tabID: Browser.TabID, enabled: Schema.Boolean }) },
     // Highlights a picked element briefly, or clears any highlight when ref is omitted.

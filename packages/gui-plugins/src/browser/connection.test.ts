@@ -28,6 +28,7 @@ function fixture(reject?: Error) {
     load: async () => undefined,
     command: async () => undefined,
     find: async () => undefined,
+    notice: async () => undefined,
     inspect: async () => undefined,
     highlight: async (input) => {
       highlights.push(input)

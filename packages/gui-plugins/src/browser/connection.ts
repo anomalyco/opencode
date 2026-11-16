@@ -21,6 +21,7 @@ export type Registration = {
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
   zoom(tabID: Browser.TabID, zoom: Zoom): void
   find(tabID: Browser.TabID, action: FindAction): Promise<void>
+  notice(tabID: Browser.TabID, token: string, dismiss: boolean): Promise<void>
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
   reveal(tabID: Browser.TabID): Promise<void>
@@ -64,6 +65,7 @@ export function openBinding(input: {
     },
     command: (command) => ready.then(() => client.command({ binding, command })),
     find: (tabID, action) => ready.then(() => client.find({ binding, tabID, action })),
+    notice: (tabID, token, dismiss) => ready.then(() => client.notice({ binding, tabID, token, dismiss })),
     inspect(tabID, enabled) {
       if (status.closed) return
       void ready.then(() => client.inspect({ binding, tabID, enabled })).catch(() => undefined)

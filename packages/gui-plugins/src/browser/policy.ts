@@ -117,6 +117,12 @@ export function downloadOwner(download: {
 }): "agent" | "user" {
   if ([...download.page, ...download.chain].some(Browser.extensionOrigin)) return "user"
 
+  return activityOwner(download)
+}
+
+/** The same running-command and user-input boundary for downloads and opening external apps. */
+export function activityOwner(download: { readonly now: number; readonly agentRunning: boolean; readonly agentEndedAt?: number; readonly userInputAt?: number }): "agent" | "user" {
+
   if (download.agentRunning) return "agent"
 
   if (download.agentEndedAt === undefined || download.now - download.agentEndedAt > DOWNLOAD_GRACE_MS) return "user"

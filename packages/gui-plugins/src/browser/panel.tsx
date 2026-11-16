@@ -51,6 +51,7 @@ import {
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
 import { FindBar } from "./find-bar"
+import { RefusalBar } from "./refusal-bar"
 import type { FindAction } from "./ipc"
 import { BrowserProfile, type ProfileExtension } from "./profile/ipc"
 import {
@@ -849,15 +850,7 @@ export default function SessionBrowserPane(props: {
       </Show>
       <Show when={state()?.id} keyed>
         {(id) => <><Show when={props.model.notice(props.session, id)}>{(notice) => (
-          <section class="flex shrink-0 items-center gap-3 border-b-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-01 px-3 py-2">
-            <div role="status" class="min-w-0 flex-1 text-13-regular text-v2-text-text-base">
-              {notice().text}
-              <Show when={notice().target}>{(target) => (
-                <bdi dir="ltr" class="block truncate text-12-regular text-v2-text-text-muted" title={target()}>{target()}</bdi>
-              )}</Show>
-            </div>
-            <IconButton variant="ghost-muted" size="small" aria-label={plugin.t("refused.dismiss")} icon={<Icon name="close" />} onClick={() => props.model.dismissNotice(props.session, id)} />
-          </section>
+          <RefusalBar notice={notice()} answer={(dismiss) => props.model.answerNotice(props.session, id, dismiss)} />
         )}</Show><Show when={!suspended() && props.model.search(props.session, id)}>{(view) => (
           <FindBar view={view()} input={(el) => { findInput = el }} run={find} />
         )}</Show></>}

@@ -128,6 +128,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     load: async (input, caller) => (await pane()).load(caller.window, input.binding, input.tabID),
     command: async (input, caller) => (await pane()).command(caller.window, input.binding, input.command),
     find: async (input, caller) => (await pane()).find(caller.window, input.binding, input.tabID, input.action),
+    notice: async (input, caller) => (await pane()).notice(caller.window, input.binding, input.tabID, input.token, input.dismiss),
     inspect: async (input, caller) => (await pane()).inspect(caller.window, input.binding, input.tabID, input.enabled),
     highlight: async (input, caller) => (await pane()).highlight(caller.window, input.binding, input.tabID, input.ref),
     zoom: async (input, caller) => (await pane()).zoom(caller.window, input.binding, input.tabID, input.zoom),

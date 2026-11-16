@@ -341,6 +341,11 @@ export function createBrowserPane(input: {
       owned(window, binding)
       load(binding, tabID)
     },
+    notice(window: number, binding: string, tabID: Browser.TabID, token: string, dismiss: boolean) {
+      owned(window, binding)
+
+      return page(binding, tabID)?.answerNotice(token, dismiss)
+    },
     find(window: number, binding: string, tabID: Browser.TabID, action: FindAction) {
       owned(window, binding)
       const target = page(binding, tabID)
@@ -591,8 +596,8 @@ export function createBrowserPane(input: {
       },
       embeds: input.embeds,
       fail,
-      refused: (notice) => {
-        if (current()) emit(binding, { type: "refusal", tabID: id, notice })
+      refused: (notice, token) => {
+        if (current()) emit(binding, { type: "refusal", tabID: id, notice, token })
       },
       publish: (error) => {
         if (current()) dispatchBinding(binding, { type: "tab.published", tabID: id, attempt, tab: page.state(), error })

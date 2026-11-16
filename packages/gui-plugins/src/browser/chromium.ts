@@ -46,6 +46,7 @@ import {
   agentFrame,
   agentFrames,
   agentRefusal,
+  activityOwner,
   allowedDestination,
   committedLoad,
   destinationOrigin,
@@ -57,7 +58,8 @@ import {
   type Policy,
 } from "./policy"
 import type { PaneElement, RefusalNotice } from "./ipc"
-import { navigationNotice } from "./refusal-notice"
+import { navigationNotice, popupActivated } from "./refusal-notice"
+import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { previewAddress, previewFile, reloadAddress } from "./preview"
 import { previewScheme } from "./scheme"
@@ -201,7 +203,7 @@ export function createBrowserPage(
     partition: string
     network: BrowserNetwork | null
     publish: (error?: string) => void
-    refused: (notice: RefusalNotice) => void
+    refused: (notice: RefusalNotice, token: string) => void
     /** Reports the element picker starting, stopping, or picking an element. */
     inspect?: (event: { active: boolean; element?: PaneElement }) => void
     /** Reports the page's icon or zoom changing. */
@@ -372,6 +374,10 @@ export function createBrowserPage(
     }, sessionID)
 
   const activity: Activity = { agentRuns: 0 }
+  const notices = noticeActions(options.refused, options.menu.open)
+  const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
+  let popupReport: Protocol.Page.WindowOpenEvent | undefined
+  cdp.on("Page.windowOpen", (event) => { popupReport = event })
   // Set by the agent's first command; until then the tab renders as any other.
   let agentDriven = false
   let dialogGate = createDialogGateState()
@@ -476,6 +482,9 @@ export function createBrowserPage(
   // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
   // we woke on the first agent command, so wake its replacement too.
   contents.on("did-navigate", () => {
+    notices.clear()
+    popupReport = undefined
+
     if (agentDriven) contents.setBackgroundThrottling(false)
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
@@ -517,18 +526,29 @@ export function createBrowserPage(
 
     if (local && preview(event.url)) return
 
-    if (!local && (!event.isMainFrame || allowedDestination(event.url, policy))) return
+    if (!local && (allowedDestination(event.url, policy) || (!event.isMainFrame && /^(?:blob:|data:|about:srcdoc$)/i.test(event.url)))) return
     event.preventDefault()
     // The same reason a typed address gets, so a blocked link and a blocked address read alike.
-    options.refused(navigationNotice(event.url, policy))
+    refused(event.url)
   }
 
   contents.on("will-frame-navigate", guard)
   contents.on("will-redirect", guard)
   // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
-  contents.setWindowOpenHandler(({ url, disposition }) => {
+  contents.setWindowOpenHandler(({ url, disposition, postBody }) => {
+    const activated = popupActivated(popupReport, url)
+    popupReport = undefined
+
     if (url !== "about:blank" && !destinationOrigin(url) && !extensionURL(url, policy.extensions ?? []) && !preview(url)) {
-      options.refused(navigationNotice(url, policy))
+      refused(url)
+
+      return { action: "deny" }
+    }
+
+    if (!activated) {
+      const target = displayURL(url)
+      const replay = !postBody && target.length <= 16384 && (!!destinationOrigin(target) || !!preview(url))
+      notices.show(replay ? { reason: "popup", target, action: "tab" } : { reason: "popup", target: target.slice(0, 16384) })
 
       return { action: "deny" }
     }
@@ -749,6 +769,7 @@ export function createBrowserPage(
     view,
     contents,
     state,
+    answerNotice: notices.answer,
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,

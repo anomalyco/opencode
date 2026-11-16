@@ -208,4 +208,6 @@ export default {
   "menu.addWord": "Add to dictionary",
   "menu.spellcheck": "Check spelling",
   "menu.languages": "Spellcheck languages",
+  "refused.popup": "Pop-up blocked",
+  "refused.open": "Open",
 }

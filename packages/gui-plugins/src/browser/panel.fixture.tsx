@@ -477,6 +477,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           query, result: query ? { active: action.type === "next" ? 2 : 1, total: 3 } : null,
         } })
       },
+      notice: async () => undefined,
       reveal: async () => undefined,
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
@@ -1099,6 +1100,7 @@ export function mountBrowserRegion(input: RegionHost) {
       site: async () => ({ cookies: 0 }),
       clearSite: async () => undefined,
       find: async () => undefined,
+      notice: async () => undefined,
       reveal: async () => undefined,
       close: async () => undefined,
       state: () => undefined,
