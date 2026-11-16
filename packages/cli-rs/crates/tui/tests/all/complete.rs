@@ -6,6 +6,7 @@ use crate::support::{self, DIRECTORY, Fake, Harness, Log, WAIT, deref_harness, l
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use opencode_tui::Deps;
 use opencode_ui::path::Flavor;
@@ -558,6 +559,55 @@ fn an_open_list_stays_open_when_the_route_mounts_again() {
     setup.app.press("return");
     setup.wait_for("Fix the parser");
     assert_eq!(setup.text(), "");
+}
+
+/// Expected (review jsnpm-1): a dialog opened over an open list keeps its keys across a remount, as without one. Escape
+/// closes it and the list is open again under it, and Ctrl+C closes the dialog and does not end the client.
+#[test]
+fn a_dialog_over_an_open_list_keeps_its_keys_across_a_remount() {
+    let setup = Setup::new();
+    let remount = || opencode_plugin::Host::remount(&*opencode_tui::plugins::host::host(&setup.tui));
+    setup.app.type_text("/se");
+    setup.wait_for("/sessions");
+    for close in ["escape", "ctrl+c"] {
+        setup.dispatch("plugins.list");
+        setup.wait_for("show internal");
+        remount();
+        assert_eq!(setup.tui.keymap.mode(), "modal", "{close}");
+        setup.app.press(close);
+        assert!(!setup.tui.dialogs.is_open(), "{close} left the dialog open:\n{}", setup.app.text());
+        assert!(!setup.app.app().is_quitting(), "{close} ended the client");
+        setup.wait_for("/sessions");
+        assert_eq!(setup.text(), "/se");
+    }
+}
+
+/// Expected (review jsnpm-1): an `@` list keeps its file search's results and its selection across a remount: Enter
+/// picks the same row as a list that never remounted, and the search is not asked again.
+#[test]
+fn a_file_list_keeps_its_results_and_selection_across_a_remount() {
+    let picked = |remount: bool| {
+        let setup = Setup::new();
+        setup.app.type_text("@ma");
+        let searched = setup.app.wait_until(WAIT, || {
+            setup.requests("GET", "/api/fs/find").iter().any(|(query, _)| query.contains("query=ma"))
+        });
+        assert!(searched, "{:?}", setup.requests("GET", "/api/fs/find"));
+        setup.wait_for("src/main.rs");
+        let searches = setup.requests("GET", "/api/fs/find").len();
+        setup.app.press("down");
+        if remount {
+            opencode_plugin::Host::remount(&*opencode_tui::plugins::host::host(&setup.tui));
+        }
+        let again =
+            setup.app.wait_until(Duration::from_millis(200), || setup.requests("GET", "/api/fs/find").len() > searches);
+        assert!(!again, "searched again: {:?}", setup.requests("GET", "/api/fs/find"));
+        setup.app.press("return");
+        setup.text()
+    };
+    let twin = picked(false);
+    assert_ne!(twin, "@src/main.rs ", "row 1 is another row than the first");
+    assert_eq!(picked(true), twin);
 }
 
 /// Picks `@src/main.rs` from the file search.
