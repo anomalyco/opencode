@@ -5,8 +5,8 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createEffect, createSignal, createUniqueId, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
-import { usePlugin } from "@opencode/plugin/gui"
+import { createSignal, createUniqueId, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
+import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import { guardActivation } from "./activation-delay"
 import type definition from "./index"
 import { PROMPT_TEXT_MAX, SIGN_IN_TEXT_MAX, type PromptAnswer, type PromptSite, type PromptView } from "./ipc"
@@ -34,8 +34,16 @@ export function PromptDialog(props: {
   const title = createUniqueId()
   const description = createUniqueId()
   let box: HTMLDivElement | undefined
+  // A page can open a dialog under a click or key press already in flight: its default answer waits for a new one,
+  // from each dialog it shows on.
+  let guard: ReturnType<typeof guardActivation> | undefined
+  createKeyed(
+    () => props.view.id,
+    () => guard?.changed(),
+  )
   const pageDialog = () => (props.view.ask.kind === "dialog" ? props.view.ask : undefined)
   const signIn = () => (props.view.ask.kind === "auth" ? props.view.ask : undefined)
+
   // Only text that is there describes the dialog: an empty alert has none.
   const described = () => {
     const ask = props.view.ask
@@ -58,9 +66,7 @@ export function PromptDialog(props: {
 
   onMount(() => {
     if (!box) return
-    // A page can open a dialog under a click or key press already in flight: its default answer waits for a new one.
-    const guard = guardActivation(box)
-    createEffect(on(() => props.view.id, () => guard.changed(), { defer: true }))
+    guard = guardActivation(box)
     onCleanup(guard.dispose)
 
     if (!props.focus) return
@@ -392,15 +398,19 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
   const text = createUniqueId()
   let first: HTMLButtonElement | undefined
   let bar: HTMLElement | undefined
+  // The bar appears where the page was: a click or key press already in flight, or a page's double-click target, must
+  // not land on its answers, for each request it shows.
+  let guard: ReturnType<typeof guardActivation> | undefined
+  createKeyed(
+    () => props.view.id,
+    () => guard?.changed(),
+  )
 
   onMount(() => {
     if (props.focus) first?.focus({ preventScroll: true })
 
     if (!bar) return
-    // The bar appears where the page was: a click or key press already in flight, or a page's double-click target, must
-    // not land on its answers.
-    const guard = guardActivation(bar)
-    createEffect(on(() => props.view.id, () => guard.changed(), { defer: true }))
+    guard = guardActivation(bar)
     onCleanup(guard.dispose)
   })
 

@@ -133,6 +133,7 @@ export function siteAnswer(
   decided: { readonly kept: (kind: PermissionKind) => Setting | undefined; readonly visit: (kind: PermissionKind) => Setting | undefined },
 ) {
   if (!request.kinds.length || !sameSite(request) || !trustworthy(request.origin)) return "block" as const
+
   const decisions = request.kinds.map((kind) => {
     const kept = decided.kept(kind)
     const visit = decided.visit(kind)
@@ -154,6 +155,7 @@ export function siteAnswer(
 export function clipboardWrite(request: Omit<SiteRequest, "kinds">, agentDriven: boolean) {
   return !agentDriven && sameSite(request) && trustworthy(request.origin)
 }
+
 /** This machine's own names, which reach another computer through a remote server's network. */
 function loopback(hostname: string) {
   return (
@@ -201,6 +203,7 @@ export function createSitePermissions(storage: Storage, changed: () => void) {
       write(stored.value.filter((item) => !same(item, decision))),
   }
 }
+
 export type SitePermissions = ReturnType<typeof createSitePermissions>
 
 /**

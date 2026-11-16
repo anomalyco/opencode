@@ -138,6 +138,7 @@ export function downloadOwner(download: AgentActivity & {
 
   return agentCaused(download) ? "agent" : "user"
 }
+
 /** Actions that only take a tab away from its document, which the agent may run on an extension page to leave it. */
 const leaving = ["navigate", "back", "forward", "stop"]
 

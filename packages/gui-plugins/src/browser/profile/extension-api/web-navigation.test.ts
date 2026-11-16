@@ -27,12 +27,16 @@ test("a load the page's beforeunload kept reports its error for the top frame in
     isDestroyed: () => false,
     getURL: () => "https://a.example/form",
   })
+
   const emitted: [string, readonly Wire[]][] = []
+
   // SAFETY: web navigation reads only `watch` and `get` of the tabs, and only the members above of a tab's contents.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const tabs = {
     watch: (watch: (tab: { contents: typeof contents }) => (() => void) | void) => watch({ contents }) ?? (() => {}),
     get: () => undefined,
   } as unknown as ExtensionTabs
+
   createWebNavigation({ tabs, emit: (event, args) => emitted.push([event, args]) })
 
   contents.emit("did-fail-load", {}, -3, "ERR_ABORTED", "https://b.example/", true)

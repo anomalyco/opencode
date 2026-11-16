@@ -16,7 +16,7 @@ const server = createServer((_request, response) => {
 void electron.app.whenReady().then(async () => {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address()
-  const origin = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`
+  const origin = `http://127.0.0.1:${address instanceof Object ? address.port : 0}`
   const win = new electron.BrowserWindow({ show: false })
   const view = new electron.WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true } })
   win.contentView.addChildView(view)
@@ -34,6 +34,7 @@ void electron.app.whenReady().then(async () => {
     framed: () => {},
     warn: (message) => warnings.push(message),
   })
+
   // CDP's Page domain answers only once the page has a renderer.
   await contents.loadURL("about:blank")
   contents.debugger.attach("1.3")

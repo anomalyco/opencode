@@ -64,6 +64,7 @@ describe("what a page's permission request gets before anyone is asked", () => {
   test("takes the asking frame's own origin, so a sandboxed or opaque document never borrows the page's", () => {
     // What Electron 44 passes, measured live: isMainFrame and requestingUrl only, for every non-media permission.
     const page = { url: "https://bank.example/probe", origin: "https://bank.example" }
+
     const frames = [
       page,
       { url: "https://bank.example/upload.html", origin: "null" },
@@ -72,6 +73,7 @@ describe("what a page's permission request gets before anyone is asked", () => {
       { url: "blob:https://bank.example/0b6f", origin: "https://bank.example" },
       { url: "data:text/html,x", origin: "null" },
     ]
+
     const asked = (requestingUrl: string, mainFrame = false) =>
       requesterOrigin({ mainFrame, requestingUrl, main: page, frames })
 
@@ -159,15 +161,19 @@ describe("the decisions the user kept", () => {
   test("keeps one decision per site and feature, never a preview's, and changes only kept ones", () => {
     const values = new Map<string, unknown>()
     let changes = 0
+
     // SAFETY: the site permissions read only `store` and its `value` and `set`.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const storage = {
       store: (key: string, options: { initial: unknown }) => ({
         get value() {
           return values.has(key) ? values.get(key) : options.initial
         },
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
         set: (next: unknown) => values.set(key, next),
       }),
     } as unknown as Storage
+
     const sites = createSitePermissions(storage, () => changes++)
     const profile = { kind: "profile" } as const
     const server = { kind: "server", partition: "opencode-remote-a" } as const

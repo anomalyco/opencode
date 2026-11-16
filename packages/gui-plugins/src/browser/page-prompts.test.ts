@@ -8,6 +8,7 @@ import { AGENT_PROMPT_WAIT_MS, createPagePrompts, takeDialogs } from "./page-pro
 import { createSitePermissions } from "./site-permissions"
 
 beforeEach(() => jest.useFakeTimers())
+
 afterEach(() => jest.useRealTimers())
 
 describe("a tab's sign-in", () => {
@@ -134,7 +135,9 @@ describe("the takeover of a page's dialogs", () => {
     // An Electron without the internal listener, which then calls it with no callback.
     const contents = Object.assign(new EventEmitter(), { isDestroyed: () => false })
     const warnings: string[] = []
+
     // SAFETY: the takeover reads only the events and `isDestroyed` of a page's contents.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const dialogs = takeDialogs(contents as unknown as WebContents, {
       suppressed: () => false,
       opened: () => false,
@@ -152,6 +155,7 @@ describe("the takeover of a page's dialogs", () => {
     contents.on("-run-dialog", () => {})
     const answers: unknown[][] = []
     // SAFETY: as above.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     takeDialogs(contents as unknown as WebContents, { suppressed: () => false, opened: () => false, framed: () => {}, warn: () => {} })
 
     contents.emit("-run-dialog", { dialogType: "confirm" }, (...args: unknown[]) => answers.push(args))
@@ -168,11 +172,13 @@ function page(origin: string, options: { agent?: boolean } = {}) {
     isDestroyed: () => false,
     isFocused: () => true,
   })
+
   const views: (PromptView | null)[] = []
   const sites = createSitePermissions(memoryStorage(), () => {})
 
   const prompts = createPagePrompts({
     // SAFETY: the prompts read only the members above of a page's contents, and its events.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     contents: contents as unknown as WebContents,
     scope: { kind: "profile" },
     sites,
@@ -220,11 +226,13 @@ function memoryStorage() {
   const values = new Map<string, unknown>()
 
   // SAFETY: the site permissions read only `store` and its `value` and `set`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   return {
     store: (key: string, options: { initial: unknown }) => ({
       get value() {
         return values.has(key) ? values.get(key) : options.initial
       },
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
       set: (next: unknown) => values.set(key, next),
     }),
   } as unknown as Storage

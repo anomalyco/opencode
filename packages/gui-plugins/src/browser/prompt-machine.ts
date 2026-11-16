@@ -74,6 +74,7 @@ export function transitionPrompts(state: PromptState, event: PromptEvent): Promp
       return { state: { ...state, items: state.items.filter((item) => item.id !== event.id) }, ended: [] }
     case "cleared": {
       const kinds = event.kinds
+
       const ended = state.items.filter(
         (item) => (!kinds || kinds.includes(item.kind)) && (!event.navigation || (item.kind === "auth" && item.navigation)),
       )
@@ -162,11 +163,11 @@ export const createVisit = (committed: string): Visit => ({ committed, bypass: f
 export function transitionVisit(state: Visit, event: VisitEvent): VisitTransition {
   switch (event.type) {
     case "started": {
-      // A navigation the user started asks a site they dismissed again; one the page started does not.
-      const user = !!state.intent
+      const next = { ...state, pending: event.url, intent: undefined }
 
+      // A navigation the user started asks a site they dismissed again; one the page started does not.
       return {
-        state: { ...state, pending: event.url, intent: undefined, ...(user ? { attempts: {}, dismissed: [] } : {}) },
+        state: state.intent ? { ...next, attempts: {}, dismissed: [] } : next,
         clear: { kinds: ["auth", "leave"] },
       }
     }
@@ -237,6 +238,7 @@ export function promptSite(url: string, top: string, frame?: { readonly origin: 
 
   return { kind: "web" as const, host: promptHost(origin), embedded }
 }
+
 /** Page-supplied text the pane shows as text: bounded, without controls that reorder or hide what follows. */
 export function promptText(text: string, max: number) {
   return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu, "").slice(0, max)

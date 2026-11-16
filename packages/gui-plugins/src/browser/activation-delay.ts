@@ -13,13 +13,16 @@ export function activationAllowed(input: { readonly shownAt: number; readonly pr
   return input.pressedAt !== undefined && input.pressedAt >= input.shownAt && input.at - input.shownAt >= ACTIVATION_DELAY_MS
 }
 
+/** When the prompt last appeared or changed, and when the last press on it began. */
+type Activation = { shownAt: number; pressedAt?: number }
+
 /**
  * Guards the controls inside `root` marked `data-activation-guard`, and the submission of its forms: a click on one, or
  * a submit, that `activationAllowed` refuses is stopped before any handler of the control sees it. Call `changed` when
  * the prompt shows something new in the same place.
  */
 export function guardActivation(root: HTMLElement) {
-  const state: { shownAt: number; pressedAt?: number } = { shownAt: performance.now() }
+  const state: Activation = { shownAt: performance.now() }
 
   // A key held down since before the prompt repeats on it; only a press that starts on the prompt counts.
   const pressed = (event: PointerEvent | KeyboardEvent) => {

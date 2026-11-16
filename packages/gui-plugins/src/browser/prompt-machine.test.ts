@@ -103,6 +103,7 @@ describe("which prompt shows", () => {
       { type: "requested", request: { ...signIn, navigation: true } },
       { type: "requested", request: { ...signIn, key: "fetch", navigation: false } },
     ])
+
     const stopped = transitionPrompts(state, { type: "cleared", kinds: ["auth"], navigation: true })
 
     expect(stopped.ended).toEqual([1])
@@ -134,6 +135,7 @@ describe("a tab's visit", () => {
       ],
       start,
     )
+
     const same = transitionVisit(visited, { type: "committed", origin: "https://bank.example" })
     const other = transitionVisit(visited, { type: "committed", origin: "https://news.example" })
 

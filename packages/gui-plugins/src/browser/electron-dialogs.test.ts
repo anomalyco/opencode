@@ -21,6 +21,7 @@ test(
       })
 
       if (!built.success) throw new AggregateError(built.logs, "The Electron fixture did not build.")
+
       const child = Bun.spawn(
         [
           String(electron),
@@ -30,6 +31,7 @@ test(
         ],
         { env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, ELECTRON_ENABLE_LOGGING: undefined }, stdout: "pipe", stderr: "pipe" },
       )
+
       const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
       const line = stdout.split("\n").find((text) => text.startsWith("{"))
 

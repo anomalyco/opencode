@@ -371,6 +371,7 @@ export function createPagePrompts(input: {
         details.requestingUrl === undefined || requestOrigin(details, contents) === originOf(requesting)
           ? originOf(requesting)
           : "null"
+
       const request = { origin, top: contents.mainFrame.origin, mainFrame: details.isMainFrame }
 
       const agent = input.agentDriven()
@@ -543,7 +544,8 @@ export function takeDialogs(
     if (!callback) return input.warn("Electron's -run-dialog passed no callback; the dialog is left to CDP.")
 
     if (input.suppressed()) return callback(false, "")
-    const frame = info && typeof info === "object" && info.frame && !info.frame.isDestroyed() ? info.frame : undefined
+    const details = dialogCallback(info) ? undefined : info
+    const frame = details?.frame && !details.frame.isDestroyed() ? details.frame : undefined
     held.set(callback, frame ? { origin: frame.origin, main: frame.parent === null } : undefined)
     input.framed()
     // The page must never wait on a dialog nobody can see: one CDP never reported is dismissed.
@@ -577,8 +579,9 @@ export function takeDialogs(
 type DialogCallback = (success: boolean, text: string) => void
 
 function dialogCallback(value: RunDialogInfo | DialogCallback | undefined): value is DialogCallback {
-  return typeof value === "function"
+  return value instanceof Function
 }
+
 /**
  * Gives a top-level document Chromium's own `prompt` back. Electron replaces it in every main frame with one that
  * throws ("prompt() is not supported"); a frame Electron does not set up keeps the original, and calling it for this
