@@ -6,9 +6,8 @@
 //
 // Usage: bun run script/opentui-native.ts [--target <rust-target>] [--dest <dir>] [--quiet]
 //   The tag comes from the `opentui` dependency in Cargo.toml (`tag = "vX.Y.Z"`). Without `--target` it installs the
-//   host's library into the directory `.cargo/config.toml` names
-//   (`.opentui/<tag>/host-fill-with-bun-run-opentui-native`); with `--target` into `.opentui/<tag>/<target>`, unless
-//   `--dest` names another. It prints the directory, for `OPENTUI_LIB_DIR`.
+//   host's library into the directory `.cargo/config.toml` names (`.opentui/<tag>/host`); with `--target` into
+//   `.opentui/<tag>/<target>`, unless `--dest` names another. It prints the directory, for `OPENTUI_LIB_DIR`.
 //   Downloaded zips are kept in `$XDG_CACHE_HOME/opencode/opentui-native`, so a new worktree needs no network.
 //   `--quiet` is the check `bun run cargo` runs first: silent when the directory is current, when `OPENTUI_LIB_DIR`
 //   is set in the shell, or when the pin is no release (a `rev` or `path`, which brings its own directory).
@@ -23,18 +22,18 @@ import { inflateRawSync } from "node:zlib"
 // The OpenTUI releases the client can pin: the commit the tag names, the FNV-1a 64 of its `opentui.h`, and the sha256
 // of `opentui-native-<tag>-<platform>.zip` for each platform.
 const releases: Record<string, { commit: string; header: string; zips: Record<string, string> }> = {
-  "v0.9.1": {
-    commit: "a865cdc28617234da656725c539cb0356df2b41d",
+  "v0.9.2": {
+    commit: "3a7a56cbfac57de0fa302d2379ea09ed3ae5fe80",
     header: "0x99dd2d0018a6caa3",
     zips: {
-      "darwin-arm64": "81f4ac6a1b85c0722e37223d713685e8f9824639b5675c6673c33eb56b9eea77",
-      "darwin-x64": "2c1f94590115f3a27e9ab2c5a1c013dcdb99de03497c2e690a6363dffe14dc26",
-      "linux-arm64": "0fc085a5b1162730ab04c1846ba938fe86f10e4c51772a50d1a1ebef877825b3",
-      "linux-arm64-musl": "13546071921b5c084f3bc15b0099bf0dd8364a5e4bb62a8ca193c861edc069d2",
-      "linux-x64": "c445a090f587ab435c1658f84047d212682905e8b8044140f6d8202294eebd0a",
-      "linux-x64-musl": "c34cc4fe28e99cb04c401932c3c5c41080c6821ab9eb08a5c19326a44ada9dfc",
-      "windows-arm64": "3bdc98940e039fadd81b1fa7067a62d8bbc794ed1a99301c42452adaa1e2ed5a",
-      "windows-x64": "187cda48bc2669ae4bc0c3b2dd31776dac6330e4203d5e99a641db1a1acccf17",
+      "darwin-arm64": "2f8cc1ddd48f17f1878523574881c160a51e779f95bc29fbc81ec05ba8ceb72d",
+      "darwin-x64": "7dd0a02cc4f5ae06052dd89766431f5dffba33cd23b9076b54b8bcd29a770254",
+      "linux-arm64": "01d5cb1bd095584de23a29b2759761f34f06948b644959145e017076f96cbc1b",
+      "linux-arm64-musl": "b09374b593029276c3cf902bdbfcf99522b96f6bbd6993e21dfd7887ef9ab10b",
+      "linux-x64": "d4b39a430722f94d9f31e92b23d498c514d27c4e18a2d48d97bbbdd319fd8dd7",
+      "linux-x64-musl": "007a9dac96ecba2587623634e39bda4c0402ed803c781ee2c5c18b26e78dcf9b",
+      "windows-arm64": "9bcadc331b1fc6dda07ad46f8cd94dd98a517dcba0ea39b93046c41bd09c5ba9",
+      "windows-x64": "7ba03ec89a61831ae3464f64c1544e59c25b389fd1741e5197ac2258a1f192c0",
     },
   },
 }

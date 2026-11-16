@@ -32,9 +32,9 @@ The client takes OpenTUI's Rust crates from `packages/rust` of
 fetches it, but the checkout has no native library, and the bindings accept only the `opentui.h` they were generated
 from. `script/opentui-native.ts` installs the release's library from its zip (`opentui-native-<tag>-<platform>.zip`),
 checked against the sha256 table in the script and the release's header hash, with every licence and notice file of
-the zip under `licenses/`. `.cargo/config.toml` points `OPENTUI_LIB_DIR` at
-`.opentui/<tag>/host-fill-with-bun-run-opentui-native` in this package (git-ignored), and `bun run cargo` installs it
-there first when it is missing, so a build needs nothing else:
+the zip under `licenses/`. `.cargo/config.toml` points `OPENTUI_LIB_DIR` at `.opentui/<tag>/host` in this package
+(git-ignored); a plain `cargo` run that finds it empty fails with the command to run (`OPENTUI_LIB_HINT`). `bun run
+cargo` installs it first when it is missing, so a build needs nothing else:
 
 ```sh
 bun run --cwd packages/cli-rs cargo build --bin opencode-native
