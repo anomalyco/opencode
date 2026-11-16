@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "opencode",
-  "description": "AI-powered development tool",
+  "description": "ALjwharah is an open-source AI coding agent for development workflows",
   "version": "2.3.0",
   "private": true,
   "type": "module",
@@ -130,7 +130,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/anomalyco/opencode"
+    "url": "https://github.com/Al-jwharah/ALjwharah.code"
   },
   "license": "MIT",
   "prettier": {
