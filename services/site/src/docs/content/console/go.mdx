@@ -132,25 +132,23 @@ investigated. The linked reports track fixes and workarounds.
 
 ## Usage limits
 
-Usage limits are defined as monthly dollar amounts. The table below shows the
-monthly limit for each plan and the token costs for each model. Token pricing is
-the same for Go, Go Plus, and Go Teams.
+All priced Go models share one allowance. You can use 20% of a month's allowance in the 5-hour window, 50% in the
+weekly window and 100% in the monthly window. On Go Teams, each member has their own allowance across models.
 
-All paid models share one allowance, weighted by each model's monthly limit: the
-5-hour window allows 20% of the monthly allowance, the weekly window 50%, and the
-monthly window 100%. On Go Teams, each member has their own allowance; it is not
-shared across members.
-
-Each model's monthly limit below determines how heavily its usage counts toward
-that shared allowance; the **Monthly limit** column is a weight, not a separate
-budget. For example, on Go, $1 on a model with a $15 monthly limit counts as $4 of
-the $60 allowance. Each response reports how much the request counted, as
+**Monthly limit** is the dollar amount of usage that would use your whole monthly allowance if you used only that
+model. For example, $1 of usage on a model with a $15 monthly limit uses about 6.67% of the month. That's the same
+share as about $6.67 on a model with a $100 monthly limit. Each response reports its allowance usage in
 [`opencode.allowance`](/console/api/inference#cost).
 
-When any of the three limits is reached, every paid model is blocked until that limit resets. Free models continue to
-work.
+OpenCode makes a separate request to title a session. When it uses Go, that request counts at the title model's rate.
+OpenCode can select GPT-6 Luna when it's available on Go, even if you picked another model for the conversation.
+In OpenCode V2, choose the title model with `agents.title.model` in your [agent configuration](/agents).
+If you're [migrating a V1 configuration](/migrate-v1), this replaces `small_model`.
 
-Token prices are per 1M tokens.
+Switching priced models leaves all three meters where they are. If any window is full, included usage resumes once
+every full window has reset. You can still use free models or enable [Extra Usage](#usage-beyond-limits).
+
+Token prices below are per 1M tokens and are the same for Go, Go Plus and Go Teams.
 
 <PlanTabs id="go-pricing" label="Go plan" syncKey="go-plan">
   <div slot="go">
