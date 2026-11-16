@@ -1,6 +1,7 @@
 use super::*;
 use opentui::input::{Event, Input, Parser};
 use serde_json::{Map, Value};
+use std::time::Instant;
 
 /// P-ORACLE: replays `parity/fixtures/U.2/keymap.json`, written by `parity/oracle/U.2-keymap.ts` from the
 /// TypeScript TUI's keymap, and expects the same commands for every case.
@@ -46,7 +47,12 @@ fn oracle_key_sequences_run_the_commands_typescript_runs() {
             calls.borrow_mut().clear();
             for key in case["keys"].as_array().unwrap() {
                 if let Some(wait) = key.as_u64() {
-                    tui.expire_leader(Instant::now() + Duration::from_millis(wait));
+                    // The timer `dialog::expire_leader` sets fires within the wait.
+                    if let Some(generation) = tui.leader_armed()
+                        && Duration::from_millis(wait) >= tui.leader_timeout()
+                    {
+                        tui.expire_leader(generation);
+                    }
                     continue;
                 }
                 let mut out = Vec::new();

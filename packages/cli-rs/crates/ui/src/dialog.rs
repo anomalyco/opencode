@@ -867,6 +867,25 @@ pub fn route_keys(app: &App, keymap: Rc<DialogKeymap>) -> HandlerId {
     })
 }
 
+/// Clears the pending leader sequence `leader.timeout` after its last stroke on the app's clock, as TS's
+/// `registerTimedLeader` does. It listens to the keymap, not to keys, since [`route_keys`] stops the keys it takes.
+pub fn expire_leader(app: &App, keymap: &Rc<DialogKeymap>) -> Disposer {
+    let app = app.clone();
+    let timer = Cell::new(None::<TimerId>);
+    keymap.keymap().on_pending_sequence(bind!(keymap, |keymap, _| {
+        if let Some(previous) = timer.take() {
+            app.cancel_timer(previous);
+        }
+        let Some(generation) = keymap.leader_armed() else { return };
+        timer.set(Some(app.set_timeout(
+            keymap.leader_timeout(),
+            bind!(keymap, |keymap, _| {
+                keymap.expire_leader(generation);
+            }),
+        )));
+    }))
+}
+
 /// The focused widget's id followed by its ancestors' ids, the path `Keymap::set_focus` takes.
 pub fn focus_path(app: &App) -> Vec<FocusId> {
     std::iter::successors(app.focused(), |widget| widget.parent()).map(|widget| widget.id()).collect()
