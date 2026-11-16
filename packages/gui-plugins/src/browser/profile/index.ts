@@ -3,6 +3,7 @@ import path from "node:path"
 import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
 import type { Log, Storage } from "@opencode/plugin/gui/main"
+import type { PagePermissions } from "../page-prompts"
 import { guardSession } from "../session-guard"
 import { extensionAccess, extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
@@ -63,7 +64,9 @@ export async function createBrowserProfile(input: {
   // Each tab's download handler by its web contents ID; the pane fills it. Guarded before any extension loads or pane
   // exists, so no page of the profile ever has Electron's default handlers, which grant every permission.
   const downloads = new Map<number, (item: Electron.DownloadItem) => void>()
-  const unguard = guardSession(session, downloads)
+  // Each tab's permission prompts by its web contents ID; the pane fills it too.
+  const permissions = new Map<number, PagePermissions>()
+  const unguard = guardSession(session, downloads, permissions)
   const persistent = cookiesPersist(session)
   let settling: ReturnType<typeof setTimeout> | undefined
 
@@ -317,6 +320,8 @@ export async function createBrowserProfile(input: {
     partition: PARTITION,
     /** Each tab's download handler by its web contents ID, which the profile's one `will-download` listener calls. */
     downloads,
+    /** Each tab's permission prompts by its web contents ID, which the profile's permission handlers call. */
+    permissions,
     previews,
     /** The pane's tabs and windows as extensions see them; the pane registers each tab of the profile. */
     extensionTabs: apis.tabs,

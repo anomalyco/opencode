@@ -37,6 +37,8 @@ import {
   selectDialog,
   selectDialogTarget,
   selectOpenDialog,
+  selectSuppressed,
+  selectUserDialog,
   transitionDialogGate,
   type DialogGateEvent,
   type RunStopReason,
@@ -56,7 +58,9 @@ import {
   normalizeURL,
   type Policy,
 } from "./policy"
-import type { PaneElement, RefusalNotice } from "./ipc"
+import type { PaneElement, PromptView, RefusalNotice } from "./ipc"
+import { createPagePrompts, RESTORE_PROMPT, takeDialogs } from "./page-prompts"
+import type { SitePermissions } from "./site-permissions"
 import { navigationNotice } from "./refusal-notice"
 import { previewAddress, previewFile, reloadAddress } from "./preview"
 import { previewScheme } from "./scheme"
@@ -83,6 +87,9 @@ const retainedOperations: readonly Browser.Method[] = [
   "heap.object",
   "heap.compare",
 ]
+
+// The user's commands that leave the document, which a page's beforeunload may hold back for "Leave site?".
+const leavable: readonly Browser.Method[] = ["navigate", "back", "forward", "reload"]
 
 // Input the page receives while the element picker is on would pick an element instead.
 const pointerOperations: readonly Browser.Method[] = [
@@ -227,6 +234,16 @@ export function createBrowserPage(
     extensions?: () => ReadonlyArray<string>
     shared: Shared
     embeds: Embeds
+    /** The permission decisions the user kept for sites. */
+    sites: SitePermissions
+    /** The page browses in a remote server's partition. */
+    remote?: boolean
+    /** Reports what the tab waits on the user for, to the window only. */
+    prompt?: (view: PromptView | null) => void
+    /** Closes the tab, after the user chose to leave a page that asked to stay. */
+    closeTab?: () => void
+    /** Gives the page keyboard focus back after a prompt, when its tab is in front. */
+    focusPage?: () => void
   },
 ) {
   const policy: Policy = {
@@ -438,7 +455,14 @@ export function createBrowserPage(
     const next = transitionDialogGate(dialogGate, event)
     dialogGate = next.state
     next.effects.forEach((effect) => {
-      if (effect.type === "publish") return publish()
+      if (effect.type === "publish") {
+        prompts.publish()
+
+        return publish()
+      }
+
+      if (effect.type === "dismiss")
+        return void cdp.send("Page.handleJavaScriptDialog", { accept: false }).catch(() => undefined)
       const run = runs.get(effect.runID)
 
       if (!run) return
@@ -448,8 +472,38 @@ export function createBrowserPage(
       run.interrupted.reject(runStopError(effect.reason))
     })
 
-    return next.reply
+    return next
   }
+
+  // The user's answer to a page dialog, unless the agent answers it first.
+  const answerDialog = async (revision: number, accept: boolean, text: string, stop: boolean) => {
+    if (dispatchDialog({ type: "dialog.answering", revision, by: "user" }).answer !== "accepted") return
+
+    if (stop) dispatchDialog({ type: "dialog.suppressed" })
+    await cdp.send("Page.handleJavaScriptDialog", { accept, promptText: text }).then(
+      () => void dispatchDialog({ type: "dialog.handled", revision, at: Date.now() }),
+      () => void dispatchDialog({ type: "dialog.answer-failed", revision }),
+    )
+  }
+
+  // Page dialogs, permission requests, sign-ins and "Leave site?" wait for the user in the pane; see page-prompts.ts.
+  const dialogs = takeDialogs(contents, () => selectSuppressed(dialogGate), () => !!selectOpenDialog(dialogGate))
+
+  const prompts = createPagePrompts({
+    contents,
+    remote: !!options.remote,
+    sites: options.sites,
+    agentRunning: () => activity.agentRuns > 0,
+    top: () => state().url,
+    dialog: () => selectUserDialog(dialogGate),
+    answerDialog: (revision, answer) => answerDialog(revision, answer.accept, answer.text, answer.stop),
+    redo: (action) => execute(action, [], new AbortController().signal).then(() => undefined, () => undefined),
+    close: () => options.closeTab?.(),
+    focusPage: () => options.focusPage?.(),
+    report: (view) => {
+      if (!closed()) options.prompt?.(view)
+    },
+  })
 
   // Chromium uses the document URL as the title of untitled files; don't persist its internal origin as a title.
   const pageTitle = (address = state().url) => {
@@ -668,9 +722,14 @@ export function createBrowserPage(
       dialogType: event.type,
       message: event.message.slice(0, Browser.MAX_TEXT),
       defaultPrompt: event.defaultPrompt ?? "",
+      at: Date.now(),
     }),
   )
-  cdp.on("Page.javascriptDialogClosed", () => dispatchDialog({ type: "dialog.closed" }))
+  cdp.on("Page.javascriptDialogClosed", () => {
+    dialogs.closed()
+    dispatchDialog({ type: "dialog.closed", at: Date.now() })
+  })
+  contents.on("did-navigate", () => dispatchDialog({ type: "document.committed" }))
   // Hidden tabs keep a desktop-sized viewport until the renderer lays the embed out.
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   const embed = options.embeds.create(view, win)
@@ -723,6 +782,7 @@ export function createBrowserPage(
         ]),
     diagnostics.enable(),
     cdp.send("Page.enable"),
+    cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
     attachFrames(),
   ]).then(() => undefined)
@@ -780,16 +840,26 @@ export function createBrowserPage(
     detail,
     /** Takes a download this page started; see `guardSession`. */
     download,
+    /** Answers this page's permission requests and checks; see `guardSession`. */
+    permissions: prompts.permissions,
+    /** The user's answer to what the tab waits for; only the window calls it. */
+    answer: prompts.answer,
+    /** Whether the user's close may go ahead, or the page asked "Leave site?". */
+    leave: prompts.leave,
     /**
      * Runs one command, the agent's or the user's. The agent's never opens, reads or acts on an extension page, which
      * would run with that extension's privileges; every agent operation reaches the page through here.
      */
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
       await ready
+      const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
+
+      // The user leaving the page dismisses its dialog, as a browser's address bar does.
+      if (open) await answerDialog(open.revision, false, "", false)
 
       // Registers the run before any further await, and listens for its abort in the same turn, so a dialog or a
       // cancellation that arrives while it still inspects its target interrupts it.
-      const reply = dispatchDialog({ type: "run.started", actionType: command.action.type, aborted: signal.aborted })
+      const reply = dispatchDialog({ type: "run.started", actionType: command.action.type, aborted: signal.aborted }).reply
 
       if (reply?.status !== "accepted") throw runStopError(reply?.reason ?? "closed")
       const runID = reply.runID
@@ -809,9 +879,18 @@ export function createBrowserPage(
         }
       }
 
+      // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
+      if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
+      const signIn = origin === "agent" ? prompts.agentWait() : undefined
+
       try {
-        return await Promise.race([perform(command, run.controller.signal, origin), run.interrupted.promise])
+        return await Promise.race([
+          perform(command, run.controller.signal, origin),
+          run.interrupted.promise,
+          ...(signIn ? [signIn.promise] : []),
+        ])
       } finally {
+        signIn?.stop()
         signal.removeEventListener("abort", cancel)
         runs.delete(runID)
         dispatchDialog({ type: "run.finished", runID })
@@ -826,6 +905,8 @@ export function createBrowserPage(
       if (closed()) return
       dispatch({ type: "disposed" })
       dispatchDialog({ type: "disposed" })
+      prompts.dispose()
+      dialogs.dispose()
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)
       detachNetwork?.()
@@ -1196,15 +1277,18 @@ export function createBrowserPage(
         if (action.action !== "get") {
           const open = selectOpenDialog(dialogGate)
 
-          if (!open)
+          // The user may answer it in the pane first; then it is closed for the agent too.
+          if (!open || dispatchDialog({ type: "dialog.answering", revision: open.revision, by: "agent" }).answer !== "accepted")
             throw new Error(
               'This tab has no JavaScript dialog to handle. browser.dialog({tabID,action:"get"}) returns null when none is open; continue without accepting or dismissing one.',
             )
-          await cdp.send("Page.handleJavaScriptDialog", {
-            accept: action.action === "accept",
-            promptText: action.promptText,
-          })
-          dispatchDialog({ type: "dialog.handled", revision: open.revision })
+          await cdp
+            .send("Page.handleJavaScriptDialog", { accept: action.action === "accept", promptText: action.promptText })
+            .catch((error: Error) => {
+              dispatchDialog({ type: "dialog.answer-failed", revision: open.revision })
+              throw error
+            })
+          dispatchDialog({ type: "dialog.handled", revision: open.revision, at: Date.now() })
         }
 
         return result({ tab: state(), dialog: selectDialog(dialogGate) })

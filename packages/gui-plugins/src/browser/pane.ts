@@ -14,7 +14,7 @@ import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "
 import { agentRefusal, destinationOrigin, refusal } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
-import type { FindAction, PaneEvent } from "./ipc"
+import type { FindAction, PaneEvent, PromptAnswer } from "./ipc"
 import { createPageFind } from "./page-find"
 import {
   attachmentFailure,
@@ -40,6 +40,7 @@ import {
 } from "./pane-machine"
 import { createBrowserRestoreStore } from "./restore"
 import { guardSession } from "./session-guard"
+import type { SitePermissions } from "./site-permissions"
 import { workspaceFile } from "./workspace-file"
 
 type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
@@ -78,6 +79,8 @@ export function createBrowserPane(input: {
   readonly embeds: Embeds
   /** The desktop browser's one profile: cookies, site data and extensions for every session. */
   readonly profile: Profile
+  /** The permission decisions the user kept for sites. */
+  readonly sites: SitePermissions
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
@@ -119,7 +122,7 @@ export function createBrowserPane(input: {
 
       const remote = shared ? undefined : electron.session.fromPartition(partition)
       const preview = shared ? input.profile.previews.grant(() => selectFileRoots(machine.state, binding)) : undefined
-      const unguard = remote ? guardSession(remote, downloads) : () => undefined
+      const unguard = remote ? guardSession(remote, downloads, input.profile.permissions) : () => undefined
 
       const closed = () => dispatchBinding(binding, { type: "owner.closed" })
 
@@ -347,6 +350,10 @@ export function createBrowserPane(input: {
       if (!target) throw new Error("browser.pane.unavailable")
       searches.get(target)?.run(action)
     },
+    async answer(window: number, binding: string, tabID: Browser.TabID, id: number, answer: PromptAnswer) {
+      owned(window, binding)
+      await page(binding, tabID)?.answer(id, answer)
+    },
     async inspect(window: number, binding: string, tabID: Browser.TabID, enabled: boolean) {
       owned(window, binding)
       await page(binding, tabID)?.inspect(enabled)
@@ -389,6 +396,10 @@ export function createBrowserPane(input: {
           : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding), home: homedir() })
 
       if (reason) throw new Error(reason)
+      const closing = command.type === "tabs.close" ? page(binding, command.tabID) : undefined
+
+      // A page that asks to confirm keeps its tab; its "Leave site?" closes it.
+      if (closing && !(await closing.leave())) return
       // A navigation that the next one replaced, such as a second submit or a redirect, rejects with ERR_ABORTED while
       // the tab goes on loading. It is not a failed request; a page that fails to load reports its own error.
       await execute(binding, { action: command, files: [] }, new AbortController().signal, "user").catch(
@@ -495,6 +506,7 @@ export function createBrowserPane(input: {
 
   function release(page: BrowserPage) {
     searches.get(page)?.dispose()
+    input.profile.permissions.delete(page.contents.id)
     grants.get(page)?.()
     downloads.delete(page.contents.id)
     const done = page.dispose()
@@ -583,6 +595,21 @@ export function createBrowserPane(input: {
       extensions: () => extensions(binding),
       shared,
       embeds: input.embeds,
+      sites: input.sites,
+      remote: !handle.shared,
+      prompt: (view) => {
+        if (!current()) return
+
+        // The page held the keyboard; the window's document takes it, so the prompt can.
+        if (view?.focus && focused() && win.isFocused()) win.webContents.focus()
+        emit(binding, { type: "prompt", tabID: id, prompt: view })
+      },
+      closeTab: () => {
+        if (current()) dispatchBinding(binding, { type: "tab.closed", tabID: id })
+      },
+      focusPage: () => {
+        if (focused() && win.isFocused() && page.view.getVisible()) page.contents.focus()
+      },
       fail,
       refused: (notice) => {
         if (current()) emit(binding, { type: "refusal", tabID: id, notice })
@@ -632,6 +659,7 @@ export function createBrowserPane(input: {
       if (focused() && win.isFocused() && page.view.getVisible()) page.contents.focus()
     }))
     downloads.set(page.contents.id, page.download)
+    input.profile.permissions.set(page.contents.id, page.permissions)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.
     emit(binding, { type: "embed", tabID: id, embed: page.embed })

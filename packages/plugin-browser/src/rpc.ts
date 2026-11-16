@@ -16,6 +16,8 @@ export const FailureCode = {
   documentChanged: "document_changed",
   /** An element ref names no element any more: it is stale, or its element left the page. */
   staleRef: "stale_ref",
+  /** The site asks for a user name and password, which only the user can give, in the desktop's browser pane. */
+  signInRequired: "sign_in_required",
 } as const
 
 /**

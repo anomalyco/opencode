@@ -944,3 +944,32 @@ story("zooms the page from the browser options in view and keeps its zoom in the
   await expect(root.getByText("Zoom: 100", { exact: true })).toBeVisible()
   await expect(zoom).toBeHidden()
 })
+
+story("shows a page dialog in the pane instead of the page, and answers it with Escape", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const native = root.getByTestId("native-Alpha")
+  // The fixture's controls sit below the pane, outside the viewport.
+  await root.getByRole("button", { name: "Page confirm", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const dialog = page.getByRole("alertdialog", { name: "alpha.example says" })
+  await expect(dialog).toContainText("Discard the draft?")
+  await expect(dialog).toContainText("1 more waiting")
+  await expect(dialog.getByRole("checkbox", { name: "Stop this page from showing more dialogs" })).toBeVisible()
+  // A page blocked in a dialog draws nothing: the native view hides, and the dialog sits over the page's box.
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(dialog.getByRole("button", { name: "OK", exact: true })).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+  await expect(root.getByText('Answers: [{"kind":"dialog","accept":false,"text":"","stop":false}]', { exact: true })).toBeVisible()
+  await expect(native).toHaveAttribute("data-visible", "true")
+})
+
+story("asks for a site's permission in a bar while the page stays usable", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const bar = root.getByRole("alertdialog", { name: "Site permission request" })
+  await expect(bar).toContainText("alpha.example wants to use your camera and microphone.")
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await bar.getByRole("button", { name: "Always allow", exact: true }).click()
+  await expect(bar).toBeHidden()
+  await expect(root.getByText('Answers: [{"kind":"permission","allow":true,"remember":true}]', { exact: true })).toBeVisible()
+})

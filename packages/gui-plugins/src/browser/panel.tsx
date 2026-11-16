@@ -51,7 +51,8 @@ import {
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
 import { FindBar } from "./find-bar"
-import type { FindAction } from "./ipc"
+import type { FindAction, PromptAnswer } from "./ipc"
+import { blocking, PromptBar, PromptDialog } from "./prompts"
 import { BrowserProfile, type ProfileExtension } from "./profile/ipc"
 import {
   initialSiteState,
@@ -190,6 +191,35 @@ export default function SessionBrowserPane(props: {
   }
 
   const error = () => props.model.error(props.session)
+
+  // What the tab on screen waits on the user for: a bar above a page that keeps working, or a dialog over the still of
+  // a page it blocks. Each prompt mounts afresh, so its fields start from its own values.
+  const prompt = () => {
+    const tab = state()
+
+    return tab && !suspended() ? props.model.prompt(props.session, tab.id) : undefined
+  }
+
+  const promptKey = (modal: boolean) => {
+    const current = prompt()
+
+    return current && blocking(current) === modal ? `${current.ask.kind}:${current.id}` : undefined
+  }
+
+  const drawn = () => shown() && prompt()?.ask.kind !== "dialog"
+
+  // Focus moves to a prompt only when the user was in the pane or its page, never from the composer.
+  const promptFocus = () => !!prompt()?.focus || !!root?.contains(document.activeElement)
+
+  const answer = (value: PromptAnswer) => {
+    const tab = state()
+    const current = prompt()
+
+    if (!tab || !current) return
+    void props.model
+      .answer(props.session, tab.id, current.id, value)
+      .catch(() => showToast({ title: plugin.t("common.requestFailed") }))
+  }
 
   const inspectable = () => !!address() && !failed() && !suspended()
   const overlayed = createMemo(() => overlayView(overlay(), props.session.key, state()?.id))
@@ -866,16 +896,33 @@ export default function SessionBrowserPane(props: {
       <Show when={offering() && !empty() && !suspended()}>
         <SignInOffer variant="bar" imported={imported} closed={() => setConfirming(false)} />
       </Show>
+      {/* Nearest the page it is about, so the bars above it never move when it comes and goes. */}
+      <Show when={promptKey(false)} keyed>
+        {(key) => (
+          <Show when={key ? prompt() : undefined}>
+            {(view) => <PromptBar view={view()} answer={answer} focus={untrack(promptFocus)} />}
+          </Show>
+        )}
+      </Show>
       <embeds.View
         id={embed()}
-        visible={shown()}
-        frozen={overlayed().frozen}
+        // A page blocked in a JavaScript dialog draws no frame, so Chromium cannot capture a still of it: its dialog
+        // sits over the dimmed, empty page area at once. "Leave site?" and a sign-in leave the page drawing.
+        visible={drawn()}
+        frozen={overlayed().frozen || !!promptKey(true)}
         // A navigation, in-page or not, or a reload starting is another page.
         page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}
         radius={10}
         class="relative min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center"
       >
         <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
+        <Show when={promptKey(true)} keyed>
+          {(key) => (
+            <Show when={key ? prompt() : undefined}>
+              {(view) => <PromptDialog view={view()} answer={answer} focus={untrack(promptFocus)} />}
+            </Show>
+          )}
+        </Show>
         <Show when={empty() && !failed() && !suspended()}>
           <div dir="auto" data-scrollable class="size-full overflow-y-auto">
             <Show when={offering()}>

@@ -5,6 +5,7 @@ import type { Profile } from "./profile"
 import { RefsStore } from "./refs"
 import { BrowserPane } from "./ipc"
 import { BrowserProfile } from "./profile/ipc"
+import { BrowserSites, createSitePermissions } from "./site-permissions"
 import {
   createMainPaneState,
   isLoadingPaneAttempt,
@@ -21,6 +22,8 @@ const setup: Plugin.MainSetup = (ctx) => {
   const loads = new Map<number, ReturnType<typeof Promise.withResolvers<Pane>>>()
   let disposing: Promise<void> | undefined
   const refs = ctx.storage.store("refs", RefsStore)
+  // The permission decisions the user kept for sites; "Sign out everywhere" keeps them, as they are settings.
+  const sites = createSitePermissions(ctx.storage, () => sitesIpc.changed())
   // The desktop's one browser profile, created the first time a pane or the settings page needs it. A failed creation
   // is forgotten, so the next request tries again.
   const loaded: LoadedProfile = {}
@@ -83,6 +86,7 @@ const setup: Plugin.MainSetup = (ctx) => {
                   refs,
                   embeds: ctx.embeds,
                   profile: value,
+                  sites,
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
@@ -127,6 +131,8 @@ const setup: Plugin.MainSetup = (ctx) => {
     load: async (input, caller) => (await pane()).load(caller.window, input.binding, input.tabID),
     command: async (input, caller) => (await pane()).command(caller.window, input.binding, input.command),
     find: async (input, caller) => (await pane()).find(caller.window, input.binding, input.tabID, input.action),
+    answer: async (input, caller) =>
+      (await pane()).answer(caller.window, input.binding, input.tabID, input.id, input.answer),
     inspect: async (input, caller) => (await pane()).inspect(caller.window, input.binding, input.tabID, input.enabled),
     highlight: async (input, caller) => (await pane()).highlight(caller.window, input.binding, input.tabID, input.ref),
     zoom: async (input, caller) => (await pane()).zoom(caller.window, input.binding, input.tabID, input.zoom),
@@ -178,6 +184,12 @@ const setup: Plugin.MainSetup = (ctx) => {
       })
     },
     enable: (input) => serial(async () => (await profile()).enable(input.id, input.enabled)),
+  })
+
+  const sitesIpc = ctx.provide(BrowserSites, {
+    state: () => ({ decisions: sites.list() }),
+    set: async (input) => sites.set(input),
+    remove: async (input) => sites.remove(input),
   })
 
   // The host withdraws the Ipc before this runs, so windows hear nothing; they suspend on the Ipc going away.
