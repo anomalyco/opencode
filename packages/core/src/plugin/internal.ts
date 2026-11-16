@@ -258,7 +258,6 @@ const pre = [
   CommandPlugin.Plugin,
   GoalPlugin.Plugin,
   SkillPlugin.Plugin,
-  McpSkillPlugin.Plugin,
   VcsHgPlugin.Plugin,
   ModelsDevPlugin,
   ...ProviderPlugins,
@@ -304,6 +303,7 @@ const post = [
   ConfigToolOutputPlugin.Plugin,
   ConfigCompatibilityPlugin.Plugin,
   ConfigSkillPlugin.Plugin,
+  McpSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   // Run the dynamic npm SDK loader after SDK, instance, and external plugins register their `sdk` hooks.
   DynamicProviderPlugin,
