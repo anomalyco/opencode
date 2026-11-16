@@ -561,6 +561,7 @@ export function createBrowserPane(input: {
       readonly restore?: Browser.Tab
       readonly initialize?: boolean
       readonly popupOptions?: Electron.BrowserWindowConstructorOptions
+      readonly agentDriven?: boolean
     } = {},
   ) {
     const entry = selectBinding(machine.state, binding)
@@ -592,6 +593,7 @@ export function createBrowserPane(input: {
       initialize: options.initialize,
       restore: options.restore,
       popupOptions: options.popupOptions,
+      agentDriven: options.agentDriven,
       fileRoots: () => selectFileRoots(machine.state, binding),
       previewHost: handle.previewHost,
       extensions: () => extensions(binding),
@@ -646,8 +648,9 @@ export function createBrowserPane(input: {
       hidden: () => {
         if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
       },
-      popup: (popupOptions, background) => {
-        const popup = create(binding, { initialize: false, popupOptions })
+      // A pop-up of a tab the agent drives is the agent's too.
+      popup: (popupOptions, background, agentDriven) => {
+        const popup = create(binding, { initialize: false, popupOptions, agentDriven })
 
         if (!background) dispatchBinding(binding, { type: "tab.focused", tabID: popup.state().id })
 
