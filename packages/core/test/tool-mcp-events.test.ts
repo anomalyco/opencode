@@ -13,7 +13,7 @@ import { eventProducer } from "./fixture/event-server"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { registerToolPlugin, toolDefinitions, toolIdentity, toolNodeReplacements } from "./lib/tool"
+import { registerToolPlugin, toolIdentity, toolNodeReplacements } from "./lib/tool"
 
 const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
 const sessionID = Session.ID.make("ses_mcp_events")
@@ -114,7 +114,7 @@ describe("watch_mcp_event", () => {
   it.live("is absent while the mcp_events flag is off", () =>
     Effect.gen(function* () {
       const { registry } = yield* setup({ flag: "-mcp_events" })
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).not.toContain("opencode_watch_mcp_event")
+      expect((yield* registry.list()).map((tool) => tool.id)).not.toContain("opencode_watch_mcp_event")
     }),
   )
 

@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, spyOn } from "bun:test"
 import { DateTime, Effect, Layer, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Automation } from "@opencode/core/automation"
@@ -65,7 +65,7 @@ const memory = () => {
               ? { ...input.action, to: input.action.to ?? { session: input.sessionID! } }
               : input.action,
           status: "active",
-          nextDueAt: DateTime.add(now, { minutes: 20 }),
+          ...(input.trigger.type === "event" ? {} : { nextDueAt: DateTime.add(now, { minutes: 20 }) }),
           runCount: 0,
           time: { created: now, updated: now },
         }
@@ -112,7 +112,7 @@ const setup = (experimental: ConfigExperimental.Info | undefined) =>
       Effect.provide(sessions),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
     )
-    return { registry: yield* Tool.Service, rows: automations.rows, flag: automations.flag, commands, prompts }
+    return { registry: yield* Tool.Service, ...automations, commands, prompts }
   })
 
 /** Runs one Code Mode call, the way the model reaches these tools. */
@@ -158,7 +158,7 @@ const paths = (registry: Tool.Interface) =>
 const on = new ConfigExperimental.Info({ automations: true })
 
 describe("AutomationTools", () => {
-  it.effect("are absent unless experimental.automations (or the old schedules key) is enabled", () =>
+  it.effect("are absent unless experimental.automations is enabled", () =>
     Effect.gen(function* () {
       expect(yield* paths((yield* setup(undefined)).registry)).not.toContain(names[0])
       const off = yield* setup(new ConfigExperimental.Info({ automations: false }))
@@ -167,8 +167,27 @@ describe("AutomationTools", () => {
       const enabled = yield* setup(on)
       expect(yield* paths(enabled.registry)).toEqual(expect.arrayContaining(names))
       expect(enabled.commands.map((command) => command.name)).toEqual(["automation"])
-      const old = yield* setup(new ConfigExperimental.Info({ schedules: true }))
-      expect(yield* paths(old.registry)).toEqual(expect.arrayContaining(names))
+    }),
+  )
+
+  it.effect("passes the originating tool call to the service when creating an event watch", () =>
+    Effect.gen(function* () {
+      const { registry, service } = yield* setup(on)
+      const create = spyOn(service, "create")
+      const request = {
+        name: "watch build",
+        trigger: { type: "event", server: "ci", event: "build.changed" },
+        action: { type: "prompt", prompt: "Check the build" },
+      }
+      yield* run(registry, "automation_create", request)
+      expect(create).toHaveBeenCalledWith(
+        { ...request, sessionID },
+        {
+          sessionID,
+          agent: toolIdentity.agent,
+          source: { type: "tool", messageID: toolIdentity.messageID, id: expect.any(String) },
+        },
+      )
     }),
   )
 

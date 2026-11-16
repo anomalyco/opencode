@@ -200,8 +200,11 @@ export const Request = Schema.Struct({
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 
 export const CreateInput = Schema.Struct({
-  ...Request.fields,
+  // A creating Session supplies the directory, default recipient, and authority for code or child actions.
   sessionID: SessionID.pipe(optional),
-  directory: Schema.String.pipe(optional),
+  directory: Schema.String.annotate({
+    description: "Where it runs when there is no Session. Defaults to the server user's home folder.",
+  }).pipe(optional),
+  ...Request.fields,
 }).annotate({ identifier: "Automation.CreateInput" })
 export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
