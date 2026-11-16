@@ -23,6 +23,7 @@ import {
   type SessionScreen,
 } from "@opencode/plugin/gui"
 import { addressParts, connection, externalAction } from "./address"
+import { hostDisplay } from "./host-display"
 import { FileSource } from "../file/contract"
 import { remotePath, workspacePrefix } from "./remote-address"
 import {
@@ -274,7 +275,8 @@ export default function SessionBrowserPane(props: {
   }
 
   // The address field always shows the whole URL; at rest it draws the host emphasized.
-  const parts = () => addressParts(addressBar().field)
+  const webParts = createMemo(() => hostDisplay(addressBar().field))
+  const parts = () => webParts() ?? addressParts(addressBar().field)
   const site = () => !!addressBar().field && !addressBar().editing
   const recent = () => props.model.visits().slice(0, RECENT)
 
@@ -655,10 +657,10 @@ export default function SessionBrowserPane(props: {
                   input shows its own text so selection and the caret need no mirror. */}
               <Show when={!addressBar().editing && addressBar().field}>
                 <div aria-hidden="true" data-slot="browser-address-display">
-                  <span data-slot="browser-address-url" data-host={parts().host ? "" : undefined}>
-                    <span data-slot="browser-address-muted">{parts().scheme}</span>
-                    <span data-slot="browser-address-host">{parts().host}</span>
-                    {parts().rest}
+                  <span data-slot="browser-address-url" data-host={parts().host ? "" : undefined} data-web={webParts() ? "" : undefined} dir="ltr">
+                    <span data-slot="browser-address-authority"><span data-slot="browser-address-muted">{parts().scheme}</span>
+                    <span data-slot="browser-address-host" title={parts().host}><bdi dir="ltr">{parts().host}</bdi></span></span>
+                    <span data-slot="browser-address-rest">{parts().rest}</span>
                   </span>
                 </div>
               </Show>

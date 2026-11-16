@@ -112,6 +112,16 @@
     color: var(--v2-text-text-base);
   }
 
+  /* Drop path text first. If the authority itself is too long, keep its right edge, not the page-chosen prefix. */
+  [data-slot="browser-address-url"][data-web] {
+    display: flex;
+    width: 100%;
+    [data-slot="browser-address-authority"] { display: flex; flex: none; max-width: 100%; }
+    [data-slot="browser-address-muted"] { flex: none; }
+    [data-slot="browser-address-host"] { direction: rtl; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    [data-slot="browser-address-rest"] { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  }
+
   /* The page's zoom when it is not 100%, drawn like the zoom badge in the browser options. */
   [data-slot="browser-address-zoom"] {
     flex: none;

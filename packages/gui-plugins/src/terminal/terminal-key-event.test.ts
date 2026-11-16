@@ -51,7 +51,10 @@ describe("terminalLinkTarget", () => {
     expect(terminalLinkTarget(click, web)).toBeUndefined()
     expect(terminalLinkTarget({ ...click, ctrlKey: true }, web)).toBe("app")
     expect(terminalLinkTarget({ ...click, metaKey: true }, web)).toBe("app")
-    expect(terminalLinkTarget({ ...click, ctrlKey: true }, "/tmp/report.txt")).toBe("system")
+
+    for (const value of ["/tmp/report.txt", "file://server/share", "C:\\report.txt", "custom:open", "javascript:void(0)"]) expect(terminalLinkTarget({ ...click, ctrlKey: true }, value)).toBe("blocked")
+    expect(terminalLinkTarget({ ...click, shiftKey: true }, "file:///repo/report.html")).toBe("file")
+    expect(terminalLinkTarget({ ...click, metaKey: true }, "mailto:hello@example.com")).toBe("system")
     expect(terminalLinkTarget({ ...click, ctrlKey: true, altKey: true }, web)).toBeUndefined()
     expect(terminalLinkTarget({ ...click, ctrlKey: true, button: 1 }, web)).toBeUndefined()
     expect(terminalLinkTarget({ ...click, ctrlKey: true }, undefined)).toBeUndefined()

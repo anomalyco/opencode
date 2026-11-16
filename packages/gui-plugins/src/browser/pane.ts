@@ -40,7 +40,8 @@ import {
 } from "./pane-machine"
 import { createBrowserRestoreStore } from "./restore"
 import { guardSession } from "./session-guard"
-import { workspaceFile, type PreviewSource } from "./workspace-file"
+import { workspaceFile, type WorkspaceSource } from "./workspace-file"
+import { workspacePages } from "./workspace-pages"
 import { artifactKind } from "@opencode/util/artifact"
 import { workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
@@ -56,9 +57,9 @@ type Handle = {
   partition: string
   /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
   shared: boolean
-  previewHost?: string
+  workspace?: () => ReturnType<typeof workspacePages>
   artifacts?: () => ReturnType<typeof artifactPages>
-  source?: PreviewSource
+  source?: WorkspaceSource
   abort: AbortController
   registered: ReturnType<typeof Promise.withResolvers<void>>
   cleanup: () => void
@@ -198,14 +199,13 @@ export function createBrowserPane(input: {
             const attachment = { sessionID, connectionID: crypto.randomUUID() }
             const rpc = client.rpc(Browser.Definition)
 
-            const source: PreviewSource = builtin
+            const source: WorkspaceSource = builtin
               ? { type: "local", roots: () => selectFileRoots(machine.state, binding) }
               : remotePreview(server, sessionID, options.location, abort.signal)
 
-            const grant = yield* Effect.acquireRelease(Effect.sync(() => previews.grant(source, abort.signal)), (grant) => Effect.sync(grant.release))
             handle.source = source
             handle.artifacts = () => artifactPages(previews, server, session.location.directory, abort.signal)
-            handle.previewHost = grant.host
+            handle.workspace = () => workspacePages(previews, session.location.directory, source, abort.signal)
 
             if (shared) handle.network = createDirectNetwork(input.profile.session)
 
@@ -609,7 +609,7 @@ export function createBrowserPane(input: {
       restore: options.restore,
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
-      previewHost: handle.previewHost,
+      workspace: handle.workspace?.(),
       artifacts: handle.artifacts?.(),
       remote: remoteSource(binding),
       local: handle.shared,
@@ -758,7 +758,7 @@ export function createBrowserPane(input: {
         const remote = remoteSource(binding)
         const url = remote ? `${remote.prefix}${action.path.split("/").map(encodeURIComponent).join("/")}` : roots[0] && workspaceFileURL(roots[0], action.path)
 
-        if (!url || !(remote ? await remote.stat(action.path, signal) !== null : await workspaceFile(url, roots)))
+        if (!url || !(remote ? Number.isSafeInteger(await remote.stat(action.path, signal, action.path, true)) : await workspaceFile(url, roots)))
           throw new CodedError(Browser.FailureCode.previewUnavailable, remote?.needsUpdate?.() ? "Update this session's server to open workspace previews." : "The workspace file no longer exists or cannot be read by this session.")
         signal.throwIfAborted()
         const existing = inventory(binding).tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === url)

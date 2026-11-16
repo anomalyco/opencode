@@ -13,7 +13,7 @@ import { LocationQuery, locationQueryOpenApi } from "./location.js"
 export const ExperimentalGroup = PersistentPtyGroup.add(
   MediaGetEndpoint,
   HttpApiEndpoint.get("preview.read", "/api/experimental/preview/read", {
-    query: Schema.Struct({ ...LocationQuery.fields, sessionID: SessionID, path: Schema.String }),
+    query: Schema.Struct({ ...LocationQuery.fields, sessionID: SessionID, path: Schema.String, document: Schema.String, entry: Schema.optional(Schema.Literal("1")) }),
     success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
     error: SessionNotFoundError,
   })

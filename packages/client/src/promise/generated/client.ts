@@ -1513,7 +1513,13 @@ export function make(options: ClientOptions) {
             {
               method: "GET",
               path: `/api/experimental/preview/read`,
-              query: { location: input["location"], sessionID: input["sessionID"], path: input["path"] },
+              query: {
+                location: input["location"],
+                sessionID: input["sessionID"],
+                path: input["path"],
+                document: input["document"],
+                entry: input["entry"],
+              },
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
               empty: false,

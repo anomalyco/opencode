@@ -1,6 +1,5 @@
 import { Session } from "@opencode/core/session"
-import { openContained } from "@opencode/util/contained-file"
-import { realpath } from "node:fs/promises"
+import { openPreviewFile } from "@opencode/util/preview-scope"
 import { Effect, Stream } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ContentHeaders } from "../content-headers"
@@ -10,12 +9,12 @@ import { missingSession } from "./session-error"
 export const makePreviewRead = Effect.gen(function* () {
   const sessions = yield* Session.Service
   return Effect.fn("Preview.read")(function* (
-    query: { sessionID: Session.ID; path: string; location?: { directory?: string; workspace?: string } },
+    query: { sessionID: Session.ID; path: string; document: string; entry?: "1"; location?: { directory?: string; workspace?: string } },
     req: HttpServerRequest.HttpServerRequest,
   ) {
     const session = yield* sessions.get(query.sessionID).pipe(Effect.mapError(missingSession))
     const headers = {
-      "x-opencode-preview": "1",
+      "x-opencode-preview": "2",
       "cache-control": "no-store, no-transform",
       "accept-ranges": "bytes",
       ...ContentHeaders.download({ path: query.path, mime: "application/octet-stream" }),
@@ -28,15 +27,15 @@ export const makePreviewRead = Effect.gen(function* () {
       return HttpServerResponse.empty({ status: 404, headers })
     const opened = yield* Effect.acquireRelease(
       Effect.promise(() =>
-        realpath(session.location.directory)
-          .then((root) => openContained(root, query.path))
+        openPreviewFile(session.location.directory, query.document, query.path, query.entry === "1")
           .catch(() => undefined),
       ),
       (opened) =>
         Effect.promise(async () => {
-          await opened?.file.close()
+          if (opened && opened !== "denied") await opened.file.close()
         }),
     )
+    if (opened === "denied") return HttpServerResponse.empty({ status: 404, headers: {...headers,"x-opencode-preview-denied":"1"} })
     if (!opened) return HttpServerResponse.empty({ status: 404, headers })
     const range = req.headers.range ? parseRange(req.headers.range, opened.size) : undefined
     if (range === "unsatisfiable")

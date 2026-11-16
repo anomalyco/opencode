@@ -61,11 +61,12 @@ import type { PaneElement, RefusalNotice } from "./ipc"
 import { navigationNotice, popupActivated } from "./refusal-notice"
 import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
-import { previewAddress, previewFile, reloadAddress } from "./preview"
+import { reloadAddress } from "./preview"
+import type { workspacePages } from "./workspace-pages"
+import { artifactLinks } from "./artifact-links"
 import { previewScheme } from "./scheme"
-import { workspaceFile, type PreviewSource } from "./workspace-file"
+import type { WorkspaceSource } from "./workspace-file"
 import type { artifactPages } from "./artifact-preview"
-import { remotePath } from "./remote-address"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
@@ -227,9 +228,9 @@ export function createBrowserPage(
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
     /** This binding's isolated origin for workspace previews. */
-    previewHost?: string
+    workspace?: ReturnType<typeof workspacePages>
     artifacts?: ReturnType<typeof artifactPages>
-    remote?: Extract<PreviewSource, { type: "remote" }>
+    remote?: Extract<WorkspaceSource, { type: "remote" }>
     /** The server runs on this machine, so its loopback addresses are this machine's and the system browser reaches them. */
     local: boolean
     signal: AbortSignal
@@ -268,7 +269,9 @@ export function createBrowserPage(
   })
 
   const contents = view.webContents
-  const preview = (url: string) => options.artifacts?.display(url) ?? previewFile(url, options.previewHost, policy.fileRoots ?? [], policy.remote)
+  const preview = (url: string) => options.artifacts?.display(url) ?? options.workspace?.display(url)
+  // Keep the fence across transient blank/error documents. Page JS cannot clear it by navigating itself.
+  let artifactHost: string | undefined
   const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
   contents.on("before-mouse-event", (_event, mouse) => {
@@ -384,6 +387,7 @@ export function createBrowserPage(
 
   const activity: Activity = { agentRuns: 0 }
   const notices = noticeActions(options.refused, options.menu.open)
+  const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
   const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
@@ -444,7 +448,8 @@ export function createBrowserPage(
           break
         case "load-icon":
           // Never rejects: an icon that does not load is none.
-          void loadIcon(effect.favicons, options.network).then((icon) =>
+          // Main's icon fetch is outside the page's network policy. Never proxy an artifact's candidates for it.
+          void loadIcon(effect.favicons, artifactHost ? null : options.network).then((icon) =>
             dispatch({ type: "icon.loaded", attempt: effect.attempt, icon }),
           )
       }
@@ -491,6 +496,9 @@ export function createBrowserPage(
   // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
   // we woke on the first agent command, so wake its replacement too.
   contents.on("did-navigate", () => {
+    const url = contents.getURL()
+
+    if (options.artifacts?.display(url)) artifactHost = new URL(url).host
     notices.clear()
     popupReport = undefined
 
@@ -508,11 +516,7 @@ export function createBrowserPage(
 
     if (!file) return
     // History API routes never pass the protocol handler. Keep the last validated address for virtual routes.
-    const path = options.remote && remotePath(file, options.remote.prefix)
-
-    const exists = file.startsWith("artifact:") ? options.artifacts?.exists(file) : options.remote
-      ? path && options.remote.stat(path, options.signal).then((size) => size !== null)
-      : workspaceFile(file, policy.fileRoots ?? [])
+    const exists = file.startsWith("artifact:") ? options.artifacts?.exists(file) : options.workspace?.exists(url, options.signal)
 
     void Promise.resolve(exists).then((target) => {
       if (target && !closed() && !contents.isDestroyed() && contents.getURL() === url) report(file)
@@ -535,6 +539,14 @@ export function createBrowserPage(
   // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load,
   // except file: documents, which must stay inside the allowed roots at every depth.
   const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
+    if (artifactHost && !event.url.startsWith(`oc-preview://${artifactHost}/`)) {
+      event.preventDefault()
+
+      if (event.isMainFrame && destinationOrigin(event.url)) notices.show({reason:"popup", target:event.url.slice(0,16384), action:event.url.length <= 16384 ? "tab" : undefined})
+
+      return
+    }
+
     if (event.url === "about:blank") return
 
     const local = /^file:/i.test(event.url) || event.url.toLowerCase().startsWith(`${previewScheme}:`)
@@ -554,6 +566,12 @@ export function createBrowserPage(
     const activated = popupActivated(popupReport, url)
     popupReport = undefined
 
+    if (artifactHost) {
+      if (!postBody && destinationOrigin(url) && url.length <= 16384) notices.show({reason:"popup",target:url,action:"tab"})
+
+      return { action: "deny" }
+    }
+
     if (url !== "about:blank" && !destinationOrigin(url) && !extensionURL(url, policy.extensions ?? []) && !preview(url)) {
       refused(url)
 
@@ -564,6 +582,14 @@ export function createBrowserPage(
       const target = displayURL(url)
       const replay = !postBody && target.length <= 16384 && (!!destinationOrigin(target) || !!preview(url))
       notices.show(replay ? { reason: "popup", target, action: "tab" } : { reason: "popup", target: target.slice(0, 16384) })
+
+      return { action: "deny" }
+    }
+
+    const workspace = options.workspace?.display(url)
+
+    if (workspace && !postBody) {
+      void options.menu.open(workspace).catch(() => publish("browser.menu.failed"))
 
       return { action: "deny" }
     }
@@ -714,11 +740,22 @@ export function createBrowserPage(
 
   const menu = attachPageMenu(win, contents, {
     ...options.menu,
+    open: (url) => {
+      const current = contents.getURL()
+
+      if (options.workspace?.host(current) && /^(?:file|workspace):/.test(url) && !options.workspace.permits(current, url)) {
+        notices.show({reason:"browser.preview.restricted"})
+
+        return Promise.resolve()
+      }
+
+      return options.menu.open(url)
+    },
     policy: {
       get fileRoots() { return policy.fileRoots },
       get extensions() { return policy.extensions },
       remote: policy.remote,
-      previewHost: options.previewHost,
+      get previewHost() { return options.workspace?.host(contents.getURL()) },
       local: options.local,
     },
     cdp,
@@ -737,14 +774,24 @@ export function createBrowserPage(
     if (!closed()) options.hidden?.()
   })
 
-  const load = (url: string) => {
-    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? previewAddress(url, options.previewHost, policy.fileRoots ?? [], policy.remote) : url
+  const load = async (url: string) => {
+    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? options.workspace?.load(url, () => notices.show({reason:"browser.preview.restricted"})) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
+
+    if (options.artifacts?.display(destination)) {
+      artifactHost = new URL(destination).host
+      contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
+      await registerArtifactLinks(artifactHost)
+    }
+
     let committed = false
 
     const commit = () => {
       committed = true
+
+      // Only a successful navigation directed by browser chrome (this loadURL), not a renderer callback, may leave.
+      if (!options.artifacts?.display(destination)) artifactHost = undefined
     }
 
     contents.once("did-navigate", commit)
@@ -765,7 +812,10 @@ export function createBrowserPage(
     const tab = state()
 
     if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url)
-    const address = reloadAddress(contents.getURL(), state().url, options.previewHost, policy.fileRoots ?? [], policy.remote)
+    const actual = contents.getURL()
+
+    if (options.workspace?.host(actual) && options.workspace.display(actual) === tab.url) return void await load(tab.url)
+    const address = reloadAddress(actual, state().url, options.workspace?.host(actual), policy.fileRoots ?? [], policy.remote)
 
     if (address) return void await load(address)
     contents.reload()
@@ -889,6 +939,7 @@ export function createBrowserPage(
       dispatch({ type: "disposed" })
       menu.dispose()
       options.artifacts?.dispose()
+      options.workspace?.dispose()
       dispatchDialog({ type: "disposed" })
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)

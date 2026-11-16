@@ -1,6 +1,6 @@
 import { resolvePreviewRequest, type PreviewSource } from "../workspace-file"
 import { FSUtil } from "@opencode/util/fs-util"
-import { openContained } from "@opencode/util/contained-file"
+import type { FileHandle } from "node:fs/promises"
 import { Readable } from "node:stream"
 import { previewRange } from "./range"
 
@@ -36,6 +36,9 @@ export async function servePreview(
         "Content-Security-Policy":
           "sandbox allow-scripts allow-same-origin; default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'",
         "Cross-Origin-Resource-Policy": "same-origin",
+        // Chromium's network policy includes speculative connections and ICE, unlike CSP fetch directives.
+        "Connection-Allowlist": "(response-origin);webrtc=block",
+        "X-DNS-Prefetch-Control": "off",
         "Referrer-Policy": "no-referrer",
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
@@ -44,6 +47,8 @@ export async function servePreview(
   }
 
   const slice = previewRange(request.headers.get("range"), target.size)
+
+  if (target.type === "local" && (slice.status === 416 || request.method === "HEAD")) await target.file.close()
 
   const response =
     slice.status === 416 || request.method === "HEAD"
@@ -90,19 +95,15 @@ export async function servePreview(
   return new Response(request.method === "HEAD" ? null : response?.body, { status: slice.status, headers })
 }
 
-async function readLocal(target: { root: string; relative: string; size: number }, slice: ReturnType<typeof previewRange>, signal: AbortSignal) {
-  const opened = await openContained(target.root, target.relative)
+async function readLocal(target: { file: FileHandle }, slice: ReturnType<typeof previewRange>, signal: AbortSignal) {
+  if (signal.aborted || !slice.length) {
+    await target.file.close()
 
-  if (!opened) return Response.error()
-
-  if (target.size !== opened.size || signal.aborted || !slice.length) {
-    await opened.file.close()
-
-    return !signal.aborted && target.size === opened.size ? new Response(null) : Response.error()
+    return signal.aborted ? Response.error() : new Response(null)
   }
 
   const start = slice.range ? Number(slice.range.slice(6).split("-")[0]) : 0
-  const stream = opened.file.createReadStream({ start, end: start + slice.length - 1, signal })
+  const stream = target.file.createReadStream({ start, end: start + slice.length - 1, signal })
 
   // SAFETY: toWeb adapts this byte-only file stream to a WHATWG stream. Node and DOM disagree on the BYOB overload.
   const body = Readable.toWeb(stream, { strategy: { highWaterMark: 64 * 1024, size: (chunk: Uint8Array) => chunk.byteLength } })

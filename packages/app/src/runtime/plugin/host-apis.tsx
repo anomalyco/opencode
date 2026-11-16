@@ -312,9 +312,7 @@ export function createHostApis() {
         return true
       },
       openExternal(url) {
-        if (platform.openLocalFile && URL.canParse(url) && new URL(url).protocol === "file:")
-          return platform.openLocalFile(url)
-        platform.openExternal(url)
+        if (/^(?:https?:\/\/|mailto:)/i.test(url) && URL.canParse(url)) platform.openExternal(url)
       },
     }),
     desktop: () =>
