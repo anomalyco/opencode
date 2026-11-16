@@ -774,8 +774,8 @@ export function createBrowserPage(
     if (!closed()) options.hidden?.()
   })
 
-  const load = async (url: string) => {
-    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? options.workspace?.load(url, () => notices.show({reason:"browser.preview.restricted"})) : url
+  const load = async (url: string, retry = false) => {
+    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, () => notices.show({reason:"browser.preview.restricted"}), retry ? contents.getURL() : undefined) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
 
@@ -811,13 +811,13 @@ export function createBrowserPage(
   const reload = async () => {
     const tab = state()
 
-    if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url)
+    if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url, true)
     const actual = contents.getURL()
 
-    if (options.workspace?.host(actual) && options.workspace.display(actual) === tab.url) return void await load(tab.url)
+    if (options.workspace?.host(actual) && options.workspace.display(actual) === tab.url) return void await load(tab.url, true)
     const address = reloadAddress(actual, state().url, options.workspace?.host(actual), policy.fileRoots ?? [], policy.remote)
 
-    if (address) return void await load(address)
+    if (address) return void await load(address, true)
     contents.reload()
   }
 

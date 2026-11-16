@@ -11,11 +11,12 @@ export function remotePreview(
 ): Extract<WorkspaceSource, { type: "remote" }> {
   let outdated = false
 
-  const request = async (path: string, method: "HEAD" | "GET", range: string | undefined, signal: AbortSignal, document: string, entry: boolean) => {
+  const request = async (path: string, method: "HEAD" | "GET", range: string | undefined, signal: AbortSignal, document: string, entry: boolean, identity: string) => {
     const url = new URL("api/experimental/preview/read", `${server.url.replace(/\/+$/, "")}/`)
     url.searchParams.set("sessionID", session)
     url.searchParams.set("path", path)
     url.searchParams.set("document", document)
+    url.searchParams.set("root", identity)
 
     if (entry) url.searchParams.set("entry", "1")
     url.searchParams.set("location[directory]", location.directory)
@@ -36,7 +37,7 @@ export function remotePreview(
         signal: AbortSignal.any([signal, lifetime, timeout.signal]),
       })
 
-      if (response.headers.get("x-opencode-preview") === "2") {
+      if (response.headers.get("x-opencode-preview") === "3") {
         outdated = false
 
         return response
@@ -51,13 +52,24 @@ export function remotePreview(
     }
   }
 
+  const pin = async (document:string, signal:AbortSignal) => {
+    const response = await request(document, "HEAD", undefined, signal, document, true, "bind").catch(() => undefined)
+    const id = response?.headers.get("x-opencode-preview-root")
+
+    return response?.ok && id && /^[a-f0-9]{64}$/.test(id) ? id : undefined
+  }
+
   return {
     type: "remote",
     root: location.directory,
     prefix: workspacePrefix(session),
     needsUpdate: () => outdated,
-    stat: async (path, signal, document=path, entry=false) => {
-      const response = await request(path, "HEAD", undefined, signal, document, entry).catch(() => undefined)
+    pin,
+    stat: async (path, signal, document=path, entry=false, identity) => {
+      const id = identity ?? await pin(document,signal)
+
+      if (!id) return null
+      const response = await request(path, "HEAD", undefined, signal, document, entry, id).catch(() => undefined)
 
       if (response?.headers.get("x-opencode-preview-denied") === "1") return "denied"
       const length = response?.headers.get("content-length")
@@ -66,6 +78,6 @@ export function remotePreview(
         ? Number(length)
         : null
     },
-    read: (path, range, signal, document, entry) => request(path, "GET", range, signal, document, entry),
+    read: (path, range, signal, document, entry, identity) => request(path, "GET", range, signal, document, entry, identity),
   }
 }

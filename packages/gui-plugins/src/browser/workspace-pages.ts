@@ -1,7 +1,7 @@
 import { relative } from "node:path"
 import { homedir } from "node:os"
 import { fileURLToPath } from "node:url"
-import { openPreviewFile, previewAllowed } from "@opencode/util/preview-scope"
+import { openPreviewFile, previewAllowed, previewRoot } from "@opencode/util/preview-scope"
 import type { createPreviews } from "./profile/previews"
 import type { WorkspaceSource } from "./workspace-file"
 import { fileURLWithin } from "./policy"
@@ -15,7 +15,8 @@ export function workspacePages(
   source: WorkspaceSource,
   lifetime: AbortSignal,
 ) {
-  const grants = new Map<string, { document: string; release(): void }>()
+  const grants = new Map<string, { document: string; identity: string; release(): void }>()
+  let lastRoot: string | undefined
   const remote = source.type === "remote" ? source.prefix : undefined
   const roots = source.type === "local" ? [root] : []
 
@@ -27,10 +28,16 @@ export function workspacePages(
         : undefined
 
   return {
-    load(address: string, refused: () => void) {
+    async load(address: string, refused: () => void, retryFrom?: string) {
       const document = path(address)
 
       if (!document) return
+      const old = retryFrom && this.host(retryFrom)
+      const prior = retryFrom === undefined ? undefined : (old && grants.get(old)?.identity) || lastRoot
+      const identity = prior ?? (source.type === "remote" ? await source.pin(document, lifetime) : await previewRoot(root).then(pin => pin.id, () => undefined))
+
+      if (lifetime.aborted) return
+      lastRoot = identity
       let first = true
       let notified = false
 
@@ -38,6 +45,8 @@ export function workspacePages(
         {
           ...source,
           document,
+          // An unavailable initial bind must still let Chromium report a failed load. Never read without a pin.
+          identity: identity ?? "",
           takeEntry() {
             const value = first
             first = false
@@ -53,7 +62,7 @@ export function workspacePages(
         lifetime,
       )
 
-      grants.set(grant.host, { document, release: grant.release })
+      grants.set(grant.host, { document, identity: identity ?? "", release: grant.release })
 
       return previewAddress(address, grant.host, roots, remote)
     },
@@ -88,14 +97,15 @@ export function workspacePages(
     },
     async exists(url: string, signal: AbortSignal) {
       const host = this.host(url)
-      const doc = host && grants.get(host)?.document
+      const grant = host && grants.get(host)
       const display = this.display(url)
       const file = display && path(display)
 
-      if (!doc || !file) return false
+      if (!grant || !file) return false
+      const doc = grant.document
 
-      if (source.type === "remote") return Number.isSafeInteger(await source.stat(file, signal, doc, file === doc))
-      const opened = await openPreviewFile(root, doc, file, file === doc).catch(() => undefined)
+      if (source.type === "remote") return Number.isSafeInteger(await source.stat(file, signal, doc, file === doc, grant.identity))
+      const opened = await openPreviewFile(root, doc, file, file === doc, grant.identity).catch(() => undefined)
 
       if (!opened || opened === "denied") return false
       await opened.file.close()

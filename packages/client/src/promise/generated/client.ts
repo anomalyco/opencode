@@ -1518,6 +1518,7 @@ export function make(options: ClientOptions) {
                 sessionID: input["sessionID"],
                 path: input["path"],
                 document: input["document"],
+                root: input["root"],
                 entry: input["entry"],
               },
               successStatus: 200,

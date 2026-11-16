@@ -3,6 +3,7 @@ import { link, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import { previewRoot } from "@opencode/util/preview-scope"
 import { resolvePreviewRequest, workspaceFile, type PreviewSource } from "./workspace-file"
 
 test("preview and reveal resolve existing regular files under the real workspace, including a linked root", async () => {
@@ -26,7 +27,8 @@ test("preview and reveal resolve existing regular files under the real workspace
     await mkdir(path.dirname(doc))
     await writeFile(doc, "report")
     await symlink(repo, path.join(repo, "reports", "alias"), directoryLink)
-    const restricted = new Map<string, PreviewSource>([["scoped", {type:"local", roots:()=>[repo], document:"reports/index.html", takeEntry:()=>false, denied:()=>{}}]])
+    const identity = (await previewRoot(repo)).id
+    const restricted = new Map<string, PreviewSource>([["scoped", {type:"local", identity, roots:()=>[repo], document:"reports/index.html", takeEntry:()=>false, denied:()=>{}}]])
     const scoped = (path: string) => resolvePreviewRequest(pathToFileURL(path).href.replace("file://", "oc-preview://scoped"), "GET", "oc-preview://scoped", restricted, new AbortController().signal)
     const control = await scoped(doc)
     expect(control?.type).toBe("local")
@@ -41,7 +43,7 @@ test("preview and reveal resolve existing regular files under the real workspace
     await link(file, path.join(repo, "hardlink"))
     expect(await lookup(path.join(repo, "hardlink"))).toMatchObject({ size: 6 })
 
-    const scope = { document:"index.html", takeEntry:()=>false, denied:()=>{} }
+    const scope = { identity, document:"index.html", takeEntry:()=>false, denied:()=>{} }
     const grants = new Map([["first", { ...scope,type: "local" as const, roots: () => [repo] }]])
     const url = pathToFileURL(file).href.replace("file://", "oc-preview://first")
     const request = (method: string) => resolvePreviewRequest(url, method, "oc-preview://first", grants, new AbortController().signal)
@@ -65,7 +67,7 @@ test("preview and reveal resolve existing regular files under the real workspace
 
     const sources = new Map<string, PreviewSource>([
       ["local", { ...scope,type: "local", roots: () => [repo] }],
-      ["remote", { ...scope,type: "remote",root:"/work", prefix: "workspace://session/", stat: async (path) => {
+      ["remote", { ...scope,type: "remote",root:"/work", prefix: "workspace://session/", pin:async()=>identity, stat: async (path) => {
         remotePaths.push(path)
 
         return path === "server-only.html" ? 17 : null
