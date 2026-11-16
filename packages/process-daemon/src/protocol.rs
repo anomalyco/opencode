@@ -52,8 +52,7 @@ pub enum Request {
         cols: u16,
         rows: u16,
     },
-    /// Unix only. The child gets exactly `env`; `cwd` and `output_path` must
-    /// be absolute.
+    /// The child gets exactly `env`; `cwd` and `output_path` must be absolute.
     CreatePipe {
         program: String,
         args: Vec<String>,

@@ -44,11 +44,6 @@ export const content = {
       body: "OpenCode'u kendi betiklerinizden, CI işlerinizden ve araçlarınızdan yönetin.",
       action: "Dokümanlar",
     },
-    ide: {
-      name: "IDE eklentileri",
-      body: "OpenCode'u VS Code, Cursor ve Windsurf'te ya da ACP ile Zed ve JetBrains IDE'lerinde açın.",
-      action: "Kur",
-    },
     mini: {
       name: "Mini",
       body: "Minimal bir terminal arayüzü. Yanıtlar kaydırma geçmişinize yazılır, altta tek bir prompt kalır.",
@@ -255,47 +250,6 @@ export const content = {
         "in-your-process": {
           title: "Kendi sürecinizde",
           body: "OpenCode'u kendi yapılandırmanız ve modellerinizle sürecinizin içinde çalıştırır.",
-        },
-      },
-    },
-    ide: {
-      title: "OpenCode | VS Code, Cursor ve Zed için editör entegrasyonları",
-      description:
-        "OpenCode'u editörünüzde kullanın. VS Code, Cursor, Windsurf ve VSCodium için eklenti, Zed, JetBrains IDE'leri ve diğer ACP editörleri için opencode acp.",
-      intro:
-        "OpenCode'u editörünüzün içinde kullanın. VS Code, Cursor, Windsurf ve VSCodium'da entegre terminalde opencode çalıştırın, eklenti kendini kursun. Zed, JetBrains IDE'leri ve Agent Client Protocol destekleyen diğer editörler OpenCode'u opencode acp ile çalıştırır.",
-      features: {
-        "quick-launch": {
-          title: "Hızlı açılış",
-          body: "Cmd+Esc ya da Ctrl+Esc, OpenCode'u bölünmüş bir terminalde açar.",
-        },
-        "new-session": {
-          title: "Yeni oturum",
-          body: "Cmd+Shift+Esc ya da Ctrl+Shift+Esc yeni bir oturum başlatır.",
-        },
-        context: {
-          title: "Bağlam",
-          body: "Geçerli seçiminizi ya da sekmenizi OpenCode ile paylaşır.",
-        },
-        "file-references": {
-          title: "Dosya referansı",
-          body: "Cmd+Option+K ya da Alt+Ctrl+K, @File#L37-42 ekler.",
-        },
-        "installs-itself": {
-          title: "Kendini kurar",
-          body: "Eklemek için entegre terminalde opencode çalıştırın.",
-        },
-        "acp-editors": {
-          title: "ACP editörleri",
-          body: "Zed, JetBrains IDE'leri, Avante.nvim ve CodeCompanion.nvim.",
-        },
-        "open-vsx": {
-          title: "Open VSX",
-          body: "Cursor, Windsurf ve VSCodium için Open VSX'te de var.",
-        },
-        "same-agent": {
-          title: "Aynı ajan",
-          body: "Terminalde çalıştırdığınız OpenCode, kodunuzun yanında.",
         },
       },
     },
@@ -554,7 +508,7 @@ export const content = {
     },
     colors: {
       title: "Renkler",
-      body: "Logo ve yazı logosu tek bir mürekkebi üç opaklıkta kullanır, koyu arka planlar için daha açık bir mürekkep vardır. Aşağıdaki değerler, standart dosyalardaki gibi bu mürekkebin beyaz ya da #0B0B0B üzerindeki hâlidir. Kopyalamak için bir değere tıklayın.",
+      body: "Logo ve yazı logosu tek bir mürekkebi üç opaklıkta kullanır, koyu arka planlar için daha açık bir mürekkep vardır. Aşağıdaki değerler standart dosyalardaki renklerdir. Bunları yalnızca logo ve yazı logosu için kullanın; diğer metinlerde veya arka planlarda kullanmayın. Kopyalamak için bir değere tıklayın.",
       palettes: {
         light: {
           name: "Açık",
@@ -1179,20 +1133,6 @@ export const content = {
     sdk: {
       more: {
         label: "SDK dokümanlarını okuyun",
-      },
-    },
-    ide: {
-      links: {
-        "vs-code-marketplace": {
-          label: "VS Code Marketplace",
-        },
-        "open-vsx-cursor-windsurf-vscodium": {
-          label: "Open VSX (Cursor, Windsurf, VSCodium)",
-        },
-      },
-      lead: "Editörünüzün entegre terminalinde opencode çalıştırın, eklenti kendini kursun ya da kendiniz kurun.",
-      more: {
-        label: "Zed, JetBrains IDE'leri ve diğer ACP editörlerini kurun",
       },
     },
     mini: {

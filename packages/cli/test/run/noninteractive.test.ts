@@ -670,6 +670,47 @@ describe("runNonInteractivePrompt", () => {
     expect(lists).toEqual([])
   })
 
+  test("waits for a subagent's report and the parent turn it triggers before exiting", async () => {
+    const lists: ExperimentalJobListOutput[] = [[subagentJob], []]
+    const output = await capture({
+      format: "json",
+      jobs: () => lists.shift() ?? [],
+      messages: (messageID) => [
+        idleMessage("failed", "msg_report_idle"),
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+      turn: (id) => [
+        prompted(id),
+        settled(),
+        {
+          id: "evt_report_text",
+          created: 2,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_report_answer", ordinal: 0, text: "Report handled." },
+        },
+        {
+          id: "evt_report_failed",
+          created: 3,
+          type: "session.execution.failed",
+          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          data: { sessionID: "ses_1", error: { type: "unknown", message: "report turn failed" } },
+        },
+      ],
+    })
+    const events = jsonLines(output.stdout)
+    expect(events.find((event) => event.type === "background_wait")).toMatchObject({
+      jobs: [{ id: "ses_child", kind: "subagent" }],
+    })
+    expect(output.stdout).toContain("Report handled.")
+    // The first turn succeeded; the report-triggered turn decides the exit code.
+    expect(output.exitCode).toBe(1)
+    expect(events.find((event) => event.type === "error")).toMatchObject({
+      error: { message: "Execution failed" },
+    })
+    expect(lists).toEqual([])
+  })
+
   test("a recovered step failure exits 0, reports its retry once, and still waits for background work", async () => {
     const lists: ExperimentalJobListOutput[] = [[shellJob("sh_train", "python train.py")], []]
     const retry = { attempt: 1, error: { type: "provider.transport", message: "Recovered transport error" } }

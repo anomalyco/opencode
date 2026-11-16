@@ -4,14 +4,19 @@
 // menus, the phone menus, the Contents rail, search, the status bars and the funnel.
 import { Funnel } from "../lib/funnel"
 import { downloadOf, surfaceOf, targetOf } from "../lib/funnel-config"
-import { base } from "./config"
-import { closeNavMenus, installNavMenus } from "@opencode/nav-menus"
+import { startContents } from "../component/site/contents-spy"
+import { copyHeadingLinks, copyWithFeedback } from "../component/site/copy-feedback"
 import { fanMotion } from "../component/site/fan-motion"
 import { holdOpenMenu } from "../component/site/menu-hold"
+import { navMenusOnIntent } from "../component/site/nav-intent"
+import { isSearchShortcut } from "../component/site/search-key"
+import { sectionNavScroll } from "../component/site/site-frame"
+import { startThemeSwitch } from "../component/site/theme-switch"
 
-// The page reports to the Console's funnel like the site's (lib/funnel.ts). The docs are English, at the host's root
-// like the site; their config is built in, as a chunk would bring Vite's preload helper with it.
-Funnel.start(async () => ({ surfaceOf, targetOf, localeOf: () => "en", base: "", downloadOf }))
+// The page reports to the Console's funnel like the site's (lib/funnel.ts), in its language (English but on the V1
+// docs' other languages), at the host's root like the site; their config is built in, as a chunk would bring Vite's
+// preload helper with it.
+Funnel.start(async () => ({ surfaceOf, targetOf, localeOf: () => site.dataset.locale ?? "en", base: "", downloadOf }))
 
 const $ = <T extends Element = HTMLElement>(selector: string, root: ParentNode = document) =>
   root.querySelector<T>(selector)
@@ -19,90 +24,43 @@ const $$ = <T extends Element = HTMLElement>(selector: string, root: ParentNode 
   ...root.querySelectorAll<T>(selector),
 ]
 const site = $("[data-site]")!
+// The page's docs set's base, which search results and links start from, and what the page says in
+// its language, with {{params}} to fill in (DocsLayout.tsx).
+const base = site.dataset.docsBase!
+const strings: Record<string, string> = JSON.parse(site.dataset.strings!)
+const fill = (text: string, params: Record<string, string>) => text.replace(/\{\{(\w+)\}\}/g, (_, name) => params[name])
 const html = document.documentElement
 const on = <K extends keyof DocumentEventMap>(type: K, listener: (event: DocumentEventMap[K]) => void) =>
   document.addEventListener(type, listener)
 const phone = matchMedia("(max-width: 60rem)")
+// Arrow keys by the direction they move in: left and right swap in a right-to-left page.
+const inline = (key: string) =>
+  html.dir === "rtl" ? ({ ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" }[key] ?? key) : key
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms))
 
-// The theme switch: system, light, dark, saved as the site saves it (opencode-theme), so the docs
-// and the site share one choice.
-const themes = ["system", "light", "dark"] as const
-type Theme = (typeof themes)[number]
-const themeNames = { system: "System", light: "Light", dark: "Dark" }
-function showTheme(theme: Theme) {
-  site.dataset.theme = theme
-  const next = themes[(themes.indexOf(theme) + 1) % 3]
-  const cycle = $('[data-component="theme-toggle"] [data-slot="cycle"]')
-  cycle?.setAttribute("aria-label", `${themeNames[theme]} theme. Switch to ${themeNames[next]}`)
-  $$("[data-slot=icon]", cycle ?? undefined).forEach((icon, index) =>
-    icon.toggleAttribute("data-current", index === themes.indexOf(theme)),
-  )
-  $$<HTMLMetaElement>('meta[name="theme-color"]').forEach(
-    (meta) =>
-      (meta.content = theme === "dark" || (theme === "system" && meta.media.includes("dark")) ? "#0c0c0c" : "#fbfbfb"),
-  )
-  $<HTMLMetaElement>('meta[name="color-scheme"]')!.content = theme === "system" ? "light dark" : theme
-}
-showTheme((site.dataset.theme as Theme) ?? "system")
-
-// Copy with feedback in place (DESIGN.md): the button's data-state shows "Copied" or "Failed" for
-// 1.5s, and the live region after it says so.
-async function copied(button: HTMLElement, write: () => Promise<unknown>, message: string, failure = "Couldn't copy") {
-  const live = button.nextElementSibling?.matches("[aria-live]") ? button.nextElementSibling : undefined
-  const run = String(Number(button.dataset.run ?? 0) + 1)
-  button.dataset.run = run
-  const state = await Promise.resolve()
-    .then(write)
-    .then(
-      () => "copied",
-      () => "failed",
-    )
-  button.dataset.state = state
-  if (live) live.textContent = state === "copied" ? message : failure
-  await wait(1500)
-  // A later copy owns the label now.
-  if (button.dataset.run !== run) return
-  button.dataset.state = "idle"
-  if (live) live.textContent = ""
-}
+// The theme switch (component/site/theme-switch.ts), saved as the site saves it, so the docs and the
+// site share one choice, and heading links (copy-feedback.ts), as on the site's pages.
+startThemeSwitch(site, (current, next) => fill(strings.cycle, { theme: strings[current], next: strings[next] }))
+copyHeadingLinks(strings.linkCopied, strings.copyFailed)
 
 const clipboard = (text: string) => navigator.clipboard.writeText(text)
 
 on("click", (event) => {
   const target = event.target as Element
-  const cycle = target.closest("[data-slot=cycle]")
-  if (cycle) {
-    const theme = themes[(themes.indexOf(site.dataset.theme as Theme) + 1) % 3]
-    localStorage.setItem("opencode-theme", theme)
-    return showTheme(theme)
-  }
-
   const copy = target.closest<HTMLElement>("[data-code]")
-  if (copy)
-    return copied(
-      copy,
-      () => clipboard(copy.dataset.code ?? ""),
-      "Copied to clipboard",
-      "Couldn't copy. Select the code instead.",
-    )
-
-  const heading = target.closest<HTMLElement>("[data-heading-id]")
-  if (heading) {
-    const id = heading.dataset.headingId
-    history.replaceState(history.state, "", `#${id}`)
-    return copied(heading, () => clipboard(`${location.origin}${location.pathname}#${id}`), "Link copied")
-  }
+  // Copy with feedback in place (copy-feedback.ts): the live region after the button says how it went.
+  if (copy) return copyWithFeedback(copy, () => clipboard(copy.dataset.code ?? ""), strings.copied, strings.codeFailed)
 
   const markdown = target.closest<HTMLElement>("[data-copy-markdown]")
   if (markdown)
-    return copied(
+    return copyWithFeedback(
       markdown,
       () =>
         fetch(location.pathname, { headers: { Accept: "text/markdown" } }).then((response) =>
           response.ok ? response.text().then(clipboard) : Promise.reject(),
         ),
-      "Copied the page as Markdown",
+      strings.markdownCopied,
+      strings.copyFailed,
     )
 
   const tab = target.closest<HTMLElement>("[data-code-tab], [data-plan-tab]")
@@ -110,10 +68,6 @@ on("click", (event) => {
 
   const section = target.closest("[data-slot=section-toggle]")
   if (section) return toggleSection()
-
-  if (target.closest('[data-component="menu-toggle"]'))
-    return toggleMenu(!site.querySelector("[data-component=site-menu-sheet][data-open]"))
-  if (target.closest('[data-component="site-menu-sheet"] :is([data-slot=backdrop], a)')) return toggleMenu(false)
 })
 
 // Code tabs, and plan tabs (which switch together across the page by their sync key and are remembered).
@@ -140,7 +94,7 @@ $$("[data-plan-tabs]").forEach((tabs) => {
   if (tab) selectTab(tab)
 })
 
-// The phone section menu (the sidebar folded into a button) and the phone menu sheet.
+// The phone section menu (the sidebar folded into a button).
 function toggleSection(open?: boolean) {
   const nav = $("[data-component=section-nav]")!
   const next = open ?? !nav.hasAttribute("data-open")
@@ -152,31 +106,15 @@ function toggleSection(open?: boolean) {
   holdOpenMenu()
 }
 
-// The Contents bar's list holds the page still while it's open (component/site/menu-hold.ts).
-document.addEventListener(
-  "toggle",
-  (event) => (event.target as Element).matches("[data-component=contents-menu]") && holdOpenMenu(),
-  true,
-)
-
-function toggleMenu(open: boolean) {
-  const toggle = $('[data-component="menu-toggle"]')!
-  $("[data-component=site-menu-sheet]")!.toggleAttribute("data-open", open)
-  toggle.setAttribute("aria-expanded", String(open))
-  toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu")
-  for (const part of [$("[data-slot=frame]")!, $("[data-component=site-footer]")!]) part.inert = open
-  html.style.overflow = open ? "hidden" : ""
-}
-
 phone.addEventListener("change", () => {
-  toggleMenu(false)
   toggleSection(false)
   closeLockup()
 })
 
-// The logo menu and the product menu (on DOCS), shared with the site and the other OpenCode sites (packages/nav-menus).
-// Opening one closes the lockup's own menus.
-installNavMenus({ link: (path) => path })
+// The logo menu and the product menu (on DOCS), shared with the site and the other OpenCode sites (packages/nav-menus),
+// loaded on first use (nav-intent.ts). Opening one closes the lockup's own menus, as the static pages' script closes
+// the site's (src/client/menus.ts).
+const navMenus = navMenusOnIntent({ link: (path) => path })
 on("opencode-nav-menu-open" as keyof DocumentEventMap, () => closeLockup())
 
 // The sections menu and its V2/V1 flyout come in as one panel with the nav menus' motion (packages/nav-menus).
@@ -190,8 +128,27 @@ function enter(menu: HTMLElement) {
   menu.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "ease-out" })
 }
 
+// The versions flyout appears softly beside "Docs": a 140ms fade with a 3px nudge from the row it opens
+// from, on the strong ease-out, transform and opacity only. Only its first showing in an open menu
+// animates; coming back to "Docs" shows it at once, and it hides at once. Reduced motion shows it at once.
+let flown = false
+function flyIn(submenu: HTMLElement) {
+  if (flown || matchMedia("(prefers-reduced-motion: reduce)").matches) return
+  flown = true
+  const from = `translateX(${html.dir === "rtl" ? 3 : -3}px)`
+  submenu.animate(
+    [
+      { opacity: 0, transform: from },
+      { opacity: 1, transform: "translateX(0)" },
+    ],
+    { duration: 140, easing: "cubic-bezier(0.23, 1, 0.32, 1)" },
+  )
+}
+
 // The docs lockup (component/site/docs-lockup.tsx): the chevron opens the sections menu, where "Docs"
-// has its versions in a flyout beside it, or nested under it on phones and touch screens.
+// has its versions in a flyout beside it, or nested under it on phones and touch screens. An older
+// version adds a second menu, of the versions, so each dropdown in it opens on its own.
+const dropdown = '[data-component="docs-lockup"] [data-slot="dropdown"]'
 let lockup: HTMLElement | undefined
 let subTimer = 0
 const menuOf = (root: HTMLElement) => $("[data-slot=menu]", root)!
@@ -205,13 +162,13 @@ const rows = (root: HTMLElement) =>
 
 function openLockup(root: HTMLElement, focus?: "first" | "last" | "current") {
   closeLockup()
-  closeNavMenus()
+  navMenus.close()
   lockup = root
   const menu = menuOf(root)
-  // Phones: the labels start at the bar's logo mark and the "›" centres on its menu button, from the inline
-  // start and end edges (docs-lockup.css).
+  // Phones: the labels start at the bar's logo mark and the "›" centres on the bar's last mark (the
+  // GitHub mark, on the menu column), from the inline start and end edges (docs-lockup.css).
   const logo = $("[data-component=topbar] [data-slot=logo] [data-slot=icon]")?.getBoundingClientRect()
-  const button = $("[data-component=menu-toggle]")?.getBoundingClientRect()
+  const button = $("[data-component=topbar] [data-component=github-link]")?.getBoundingClientRect()
   if (logo?.width && button?.width) {
     const rtl = html.dir === "rtl"
     const centre = button.left + button.width / 2
@@ -237,6 +194,7 @@ function openLockup(root: HTMLElement, focus?: "first" | "last" | "current") {
 }
 
 function closeLockup(refocus?: boolean) {
+  flown = false
   if (!lockup) return
   const root = lockup
   lockup = undefined
@@ -245,7 +203,10 @@ function closeLockup(refocus?: boolean) {
   $$("[aria-haspopup=menu]:not([role=menuitem], [data-nav-product])", root).forEach((button) =>
     button.setAttribute("aria-expanded", "false"),
   )
-  if (refocus) $("[data-slot=toggle]", root)?.focus()
+  if (refocus)
+    $$("[data-slot=toggle], [data-slot=trigger]", root)
+      .find((button) => button.offsetParent)
+      ?.focus()
 }
 
 function toggleSub(root: HTMLElement, open: boolean, focus?: boolean) {
@@ -256,7 +217,7 @@ function toggleSub(root: HTMLElement, open: boolean, focus?: boolean) {
   parent.toggleAttribute("data-open", open)
   const submenu = $("[data-slot=submenu]", parent)!
   submenu.hidden = !open
-  if (opening && menuOf(root).dataset.submenu === "flyout") enter(submenu)
+  if (opening && menuOf(root).dataset.submenu === "flyout") flyIn(submenu)
   $$("[aria-expanded]", parent).forEach((item) => item.setAttribute("aria-expanded", String(open)))
   if (open && focus)
     ($('[aria-current="page"]', $("[data-slot=submenu]", parent)!) ?? $("[data-slot=submenu] a", parent))?.focus()
@@ -264,19 +225,25 @@ function toggleSub(root: HTMLElement, open: boolean, focus?: boolean) {
 
 on("click", (event) => {
   const target = event.target as Element
-  const root = target.closest<HTMLElement>('[data-component="docs-lockup"]')
+  const root = target.closest<HTMLElement>(dropdown)
   if (!root) return
   if (target.closest("[data-slot=toggle], [data-slot=trigger]"))
     return lockup === root ? closeLockup() : openLockup(root)
   const expand = target.closest("[data-slot=expand]")
   if (expand) return toggleSub(root, expand.getAttribute("aria-expanded") !== "true")
+  // Nested (phones, touch and narrow windows): tapping "Docs" opens and closes its versions in place,
+  // like its "›", instead of leaving for the docs home, which V2 still links. The flyout keeps the link.
+  const parent = target.closest("[data-slot=parent] > [role=menuitem]")
+  if (parent && menuOf(root).dataset.submenu === "nested") {
+    event.preventDefault()
+    return toggleSub(root, parent.getAttribute("aria-expanded") !== "true")
+  }
   if (target.closest("a")) closeLockup()
 })
 
 on("keydown", (event) => {
   const target = event.target as HTMLElement
-  const key =
-    html.dir === "rtl" ? ({ ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" }[event.key] ?? event.key) : event.key
+  const key = inline(event.key)
   // Escape closes the lockup wherever focus is: a click on its trigger may leave focus on the trigger (or,
   // in Safari, on the page), and keyboard opening moves it into the menu, so it can't wait for a keydown
   // that started inside the menu.
@@ -287,7 +254,7 @@ on("keydown", (event) => {
     toggleSub(lockup, false)
     return $("[data-slot=parent] > [role=menuitem]", lockup)?.focus()
   }
-  const root = target.closest?.<HTMLElement>('[data-component="docs-lockup"]')
+  const root = target.closest?.<HTMLElement>(dropdown)
   if (!root) return
   if (target.matches("[data-slot=toggle], [data-slot=trigger]")) {
     if (key === "ArrowDown" || key === "Enter" || key === " ") openLockup(root, "current")
@@ -322,7 +289,8 @@ on("keydown", (event) => {
 })
 
 // The flyout opens while the pointer rests on "Docs" and closes 300ms after it leaves, so the pointer
-// can cut across to it. Keyboard focus follows the pointer between rows, so only one row looks active.
+// can cut across to it. Keyboard focus follows the pointer between rows, so only one row looks active, as in the
+// static pages' menus (src/client/menus.ts).
 on("pointerover", (event) => {
   if (event.pointerType !== "mouse" || !lockup) return
   const target = event.target as Element
@@ -341,8 +309,6 @@ on("pointerover", (event) => {
 on("pointerdown", (event) => {
   const target = event.target as Element
   if (lockup && !lockup.contains(target)) closeLockup()
-  const contents = $<HTMLDetailsElement>("[data-component=contents-menu][open]")
-  if (contents && !contents.contains(target)) contents.open = false
   const section = $("[data-component=section-nav][data-open]")
   if (section && !section.contains(target)) toggleSection(false)
 })
@@ -353,7 +319,7 @@ on("keydown", (event) => {
   if (!tab) return
   const tabs = $$("[role=tab]", tab.parentElement!)
   const at = tabs.indexOf(tab)
-  const next = { Home: 0, End: tabs.length - 1, ArrowRight: at + 1, ArrowLeft: at - 1 }[event.key]
+  const next = { Home: 0, End: tabs.length - 1, ArrowRight: at + 1, ArrowLeft: at - 1 }[inline(event.key)]
   if (next === undefined) return
   event.preventDefault()
   const item = tabs[(next + tabs.length) % tabs.length]
@@ -361,119 +327,105 @@ on("keydown", (event) => {
   item.focus()
 })
 
-// Escape closes what's open (menus return focus to their button); "0" goes to the site's home page,
-// as on the site; "/", ⌘K and Ctrl+K open search.
+// The V1 docs' language select (DocsFooter.tsx) opens the page in the language chosen.
+on("change", (event) => {
+  const select = (event.target as Element).closest<HTMLSelectElement>("[data-docs-lang]")
+  if (select) location.assign(select.value)
+})
+
+// Escape closes the section menu (the Contents menu closes itself, contents-spy.ts) and gives focus
+// back to its button; "/", ⌘K and Ctrl+K open search (search-key.ts); "0" goes to the site's home
+// page, as on the site's pages (src/client/entry.ts, which also has the nav's number keys).
 on("keydown", (event) => {
-  const typing = (event.target as Element).closest?.("input, textarea, select, [contenteditable]")
-  if (event.key === "Escape") {
-    const contents = $<HTMLDetailsElement>("[data-component=contents-menu][open]")
-    if (contents) {
-      contents.open = false
-      $("summary", contents)?.focus()
-    }
-    if ($("[data-component=site-menu-sheet][data-open]")) {
-      toggleMenu(false)
-      $('[data-component="menu-toggle"]')?.focus()
-    }
-    if ($("[data-component=section-nav][data-open]")) {
-      toggleSection(false)
-      $("[data-slot=section-toggle]")?.focus()
-    }
+  if (event.key === "Escape" && $("[data-component=section-nav][data-open]")) {
+    toggleSection(false)
+    $("[data-slot=section-toggle]")?.focus()
   }
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+  if (isSearchShortcut(event)) {
     event.preventDefault()
     return openSearch("shortcut")
   }
-  if (event.metaKey || event.ctrlKey || event.altKey || event.repeat || typing) return
-  if (event.key === "/") {
-    event.preventDefault()
-    openSearch("shortcut")
-  }
-  if (event.key === "0") location.assign("/")
+  const typing = (event.target as Element).closest?.("input, textarea, select, [contenteditable]")
+  if (event.key === "0" && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat && !typing)
+    location.assign("/")
 })
 
-// The section nav scrolls under the logo and lockup: it holds the wheel only while it can scroll and
-// fades at an edge while items pass under it (site.css, docs.css). It starts with the current page in view.
+// The section nav scrolls under the logo and lockup, as on the site's pages (component/site/site-frame.ts).
 const nav = $('[data-component="sidebar"] > [data-component="section-nav"]')!
-function fade() {
-  nav.toggleAttribute("data-scrolls", nav.scrollHeight > nav.clientHeight)
-  nav.toggleAttribute("data-fade-top", nav.scrollTop > 0)
-  nav.toggleAttribute("data-fade-bottom", nav.scrollTop + nav.clientHeight < nav.scrollHeight - 1)
-}
-const currentPage = $<HTMLElement>('[aria-current="page"]', nav)
-if (currentPage && currentPage.offsetTop + currentPage.offsetHeight > nav.clientHeight)
-  nav.scrollTop = currentPage.offsetTop - nav.clientHeight / 2
-new ResizeObserver(fade).observe(nav)
-nav.addEventListener("scroll", fade, { passive: true })
+sectionNavScroll(nav)
 
 // The sidebar leaves with the article at the page's end, but the logo and lockup stay fixed
 // (site.css): while it is on its way out its items pass under them, and data-under fades them there,
 // as Site does on the site's own pages.
 const sidebar = nav.parentElement!
-function under() {
-  sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
-}
-window.addEventListener("scroll", under, { passive: true })
+const under = () => sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
+addEventListener("scroll", under, { passive: true })
+addEventListener("resize", under, { passive: true })
 under()
 
-// The Contents rail and its phone bar mark the section being read: the last heading past a third of
-// the window, or at the end of the page the one the address names (else the last in view). The rail
-// keeps it in view; the phone bar draws its lines once pinned (data-stuck).
-const links = $$<HTMLAnchorElement>(":is([data-component=on-this-page], [data-component=contents-menu]) a")
-const headings = [...new Set(links.map((link) => decodeURIComponent(link.hash.slice(1))))].flatMap((id) => {
-  const heading = document.getElementById(id)
-  return heading ? [heading] : []
-})
-let spied = ""
-function spy() {
-  const tops = headings.map((heading) => ({ id: heading.id, top: heading.getBoundingClientRect().top }))
-  const visible = tops.filter((item) => item.top >= 0 && item.top < innerHeight)
-  const bottom = scrollY + innerHeight >= html.scrollHeight - 2
-  const end = visible.find((item) => `#${item.id}` === decodeURIComponent(location.hash)) ?? visible.at(-1)
-  const id = (bottom && end ? end : tops.filter((item) => item.top <= innerHeight / 3).at(-1))?.id ?? tops[0]?.id
-  const contents = $<HTMLElement>("[data-component=contents-menu]")
-  if (contents)
-    contents.toggleAttribute(
-      "data-stuck",
-      scrollY > 0 && contents.getBoundingClientRect().top <= parseFloat(getComputedStyle(contents).top) + 0.5,
+// The phone Contents bar names the section being read. A new name replaces
+// the old within the label's own line: the old leaves upward (4px, fading out, 150ms) as the new comes
+// up from 4px below (fading in, 200ms), both on the strong ease-out, transform and opacity only. A swap
+// mid-swap starts from where the words are; swaps closer together than 120ms (a fast scroll) cut
+// straight to the latest name, so nothing queues. The first name and reduced motion swap at once. The
+// accessible name follows ("Contents: <section>"); it isn't a live region, so scrolling announces nothing.
+const contentsBar = $<HTMLElement>("[data-docs-contents]")
+const ease = "cubic-bezier(0.23, 1, 0.32, 1)"
+let swappedAt = -Infinity
+function nameSection(title: string, animate: boolean) {
+  const label = contentsBar && $("[data-slot=label]", contentsBar)
+  if (!label) return
+  $("summary", contentsBar!)!.setAttribute("aria-label", fill(strings.contents, { section: title }))
+  const current = label.querySelector<HTMLElement>("[data-slot=word]:not([data-leaving])")!
+  if (current.textContent === title) return
+  const word = document.createElement("span")
+  word.dataset.slot = "word"
+  word.textContent = title
+  const now = performance.now()
+  const instant = !animate || now - swappedAt < 120 || matchMedia("(prefers-reduced-motion: reduce)").matches
+  swappedAt = now
+  $$("[data-leaving]", label).forEach((leaving) => leaving.remove())
+  if (instant) return current.replaceWith(word)
+  const style = getComputedStyle(current)
+  const from = { opacity: style.opacity, transform: style.transform === "none" ? "translateY(0)" : style.transform }
+  current.getAnimations().forEach((animation) => animation.cancel())
+  current.dataset.leaving = ""
+  label.append(word)
+  current
+    .animate([from, { opacity: 0, transform: "translateY(-4px)" }], { duration: 150, easing: ease, fill: "forwards" })
+    .finished.then(
+      () => current.remove(),
+      () => undefined,
     )
-  if (id === spied) return
-  spied = id ?? ""
-  links.forEach((link) =>
-    decodeURIComponent(link.hash.slice(1)) === id
-      ? link.setAttribute("aria-current", "location")
-      : link.removeAttribute("aria-current"),
+  word.animate(
+    [
+      { opacity: 0, transform: "translateY(4px)" },
+      { opacity: 1, transform: "translateY(0)" },
+    ],
+    { duration: 200, easing: ease },
   )
-  const link = $("[data-component=on-this-page] [aria-current]")
-  const box = link?.closest<HTMLElement>("[data-component=aside] > *")
-  if (!link || !box) return
-  const item = link.getBoundingClientRect()
-  const view = box.getBoundingClientRect()
-  if (item.top < view.top) box.scrollTop -= view.top - item.top + 24
-  if (item.bottom > view.bottom) box.scrollTop += item.bottom - view.bottom + 24
 }
-let frame = 0
-const schedule = () => {
-  cancelAnimationFrame(frame)
-  frame = requestAnimationFrame(spy)
-}
-addEventListener("scroll", schedule, { passive: true })
-addEventListener("resize", schedule, { passive: true })
-on("click", (event) => {
-  const link = (event.target as Element).closest("[data-component=contents-menu] a")
-  const menu = link?.closest("details")
-  if (menu) menu.open = false
-})
 
-// An address naming an endpoint or schema of the API reference opens its card.
+// An address naming an endpoint or schema of the API reference opens its card, before Contents reads
+// the page.
 function reveal() {
   const target = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)))
   const card = target && target.closest("details")
   if (card) card.open = true
-  schedule()
 }
 addEventListener("hashchange", reveal)
 reveal()
+
+// The Contents rail, and its phone bar (a dropdown) named after the section marked, as on the site's
+// pages (contents-spy.ts).
+let named = false
+startContents((id) => {
+  const link = $$<HTMLAnchorElement>("[data-docs-contents] a").find(
+    (item) => decodeURIComponent(item.hash.slice(1)) === id,
+  )
+  if (link) nameSection(link.textContent ?? "", named)
+  named = true
+})
 
 // Search: the site's palette over Pagefind's full-text index of the docs, loaded from its built file on
 // first use or as soon as a search looks likely. Through `Function`, because Vite would wrap a plain
@@ -563,8 +515,17 @@ input.addEventListener("input", async () => {
   if (query && !pages.length) {
     const empty = document.createElement("p")
     empty.dataset.slot = "empty"
-    empty.innerHTML = `<span></span>. Try a shorter word, or <a href="${base}">browse the docs</a>.`
-    empty.firstChild!.textContent = `No results for “${query}”`
+    // The sentence in the page's language, with the query and the link in their places, all as text.
+    const none = document.createElement("span")
+    none.textContent = fill(strings.noResults, { query })
+    const link = document.createElement("a")
+    link.href = base
+    link.textContent = strings.browse
+    empty.append(
+      ...strings.empty
+        .split(/(\{\{\w+\}\})/)
+        .map((part) => (part === "{{results}}" ? none : part === "{{link}}" ? link : part)),
+    )
     results.append(empty)
   }
   input.setAttribute("aria-expanded", String(!!query))
@@ -617,43 +578,41 @@ function choose(option: HTMLAnchorElement) {
 }
 
 // The status bars, as the site's footer shows them: the last five 3-hour windows by their worst
-// service, then the live status. Kept a minute in sessionStorage, since every docs page is a full load.
+// service, then the live status (the site's /status.json). Asked for once the footer comes near, and
+// kept five minutes in sessionStorage, since every docs page is a full load.
 type Status = "operational" | "degraded" | "outage" | "unknown"
-const headlines = {
-  operational: "All systems operational",
-  degraded: "Degraded performance",
-  outage: "Service disruption",
-  unknown: "Status unavailable",
-}
-const rank = { unknown: 0, operational: 1, degraded: 2, outage: 3 }
 function showStatus(bars: Status[]) {
   const link = $("[data-component=status]")
   if (!link) return
   const current = bars.at(-1)!
   const normal = current === "operational"
   link.dataset.state = current
-  link.title = headlines[current]
+  link.title = strings[current]
   // As in the site's footer, "Normal" or else "Status"; screen readers hear the headline instead.
-  $("[data-slot=sr-only]", link)!.textContent = normal ? "Status: " : `Status: ${headlines[current]}`
+  $("[data-slot=sr-only]", link)!.textContent = strings.statusPrefix + (normal ? "" : strings[current])
   const text = $("[data-slot=status-text]", link)!
-  text.textContent = normal ? "Normal" : "Status"
+  text.textContent = normal ? strings.normal : strings.status
   if (normal) text.removeAttribute("aria-hidden")
   else text.setAttribute("aria-hidden", "true")
   $$("[data-slot=bars] > span", link).forEach((bar, index) => (bar.dataset.state = bars[index] ?? "unknown"))
 }
 const saved = JSON.parse(sessionStorage.getItem("docs-status-bars") ?? "null") as { bars: Status[]; at: number } | null
 if (saved?.bars?.length === 6) showStatus(saved.bars)
-const idle = (run: () => void) => ("requestIdleCallback" in window ? requestIdleCallback(run) : setTimeout(run, 1500))
-if (!saved || Date.now() - saved.at > 60_000)
-  idle(() =>
-    fetch("/status/api/status", { signal: AbortSignal.timeout(10_000) })
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((body: { status: Status; history: { services: Record<string, Status> }[] }) => {
-        const worst = (list: Status[]) => list.reduce<Status>((a, b) => (rank[b] > rank[a] ? b : a), "unknown")
-        const bars = [...body.history.slice(-5).map((entry) => worst(Object.values(entry.services))), body.status]
-        if (bars.length !== 6 || !bars.every((bar) => bar in rank)) return
-        sessionStorage.setItem("docs-status-bars", JSON.stringify({ bars, at: Date.now() }))
-        showStatus(bars)
-      })
-      .catch(() => undefined),
+const footerStatus = $("[data-component=status]")
+if (footerStatus && (!saved || Date.now() - saved.at > 300_000)) {
+  const near = new IntersectionObserver(
+    (entries) => {
+      if (!entries[0].isIntersecting) return
+      near.disconnect()
+      fetch("/status.json", { signal: AbortSignal.timeout(10_000) })
+        .then((response) => (response.ok ? response.json() : Promise.reject()))
+        .then((body: { bars: Status[] }) => {
+          sessionStorage.setItem("docs-status-bars", JSON.stringify({ bars: body.bars, at: Date.now() }))
+          showStatus(body.bars)
+        })
+        .catch(() => undefined)
+    },
+    { rootMargin: "100% 0px" },
   )
+  near.observe(footerStatus)
+}

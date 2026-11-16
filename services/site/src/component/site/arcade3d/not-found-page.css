@@ -1,0 +1,14 @@
+/* The not-found page has no site frame, so in production it links this stylesheet alone, not the
+   shell's (src/static/render.tsx). It carries its own copy of the shell's stylesheets it renders, in
+   the shell's order: the fonts, the tokens and resets, its tools' (search, tooltips, the phone menu)
+   own styles, and the site's stylesheet they sit in. Then the arcade's, from its components. */
+@import "../../../style/fonts.css";
+@import "../../../style/index.css";
+@import "../nav-order.css";
+@import "../github-link.css";
+@import "../phone-menu.css";
+@import "../search.css";
+@import "../tooltip.css";
+@import "../site.css";
+@import "../rtl.css";
+@import "../locale-type.css";

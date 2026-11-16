@@ -112,6 +112,7 @@ export type IconName =
   | "outline-list-changelog"
   | "outline-magnifier-minus"
   | "outline-magnifier-plus"
+  | "outline-maximize"
   | "outline-pair"
   | "outline-photo"
   | "outline-quote"

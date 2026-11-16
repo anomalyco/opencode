@@ -1,17 +1,28 @@
+import { headerBottom, keepUnderHeader } from "./under-header"
+
 let anchors = 0
 
 /**
  * Opens a dropdown's menu where it fits. Call it as soon as the menu is in the page, laid out by its
  * CSS against its positioning box (the trigger, or a split button): beside it, at its gap, with its
  * width and inline alignment. The menu opens below unless only above has room; with room on neither
- * side it takes the taller one and scrolls. Sideways it keeps 16px clear of the window's edges, and
- * on phones takes that whole width (long rows end in an ellipsis).
+ * side it takes the taller one and scrolls. The room above ends at the pinned header (under-header.ts).
+ * Sideways it keeps 16px clear of the window's edges, and on phones takes that whole width (long rows
+ * end in an ellipsis).
  *
  * The menu then moves to the top layer (a manual popover), so no scrolling box, such as the product
  * carousel's track, cuts it off, and stays tied to its box by CSS anchor positioning as the page
- * scrolls. A browser without anchor positioning keeps it in its box.
+ * scrolls, cut where it passes under the header, which stays on top. A browser without anchor
+ * positioning keeps it in its box.
+ *
+ * A menu placed before goes back to its box first: still fixed to the window it has no box to measure
+ * against, and closing it (closeMenus) may have taken it out of the top layer already.
  */
 export function placeMenu(menu: HTMLElement) {
+  if (menu.popover) {
+    menu.removeAttribute("popover")
+    menu.removeAttribute("style")
+  }
   const box = menu.offsetParent
   if (!(box instanceof HTMLElement)) return
   // Measured as laid out, not as drawn: the opening animation scales the menu from a corner.
@@ -24,7 +35,7 @@ export function placeMenu(menu: HTMLElement) {
   const laid = menu.getBoundingClientRect()
   const gap = Math.max(0, laid.top >= anchor.bottom ? laid.top - anchor.bottom : anchor.top - laid.bottom)
   const below = window.innerHeight - anchor.bottom - gap - 8
-  const above = anchor.top - gap - 8
+  const above = anchor.top - gap - 8 - headerBottom(menu)
   const side = laid.height <= below || (laid.height > above && below >= above) ? "below" : "above"
   const room = side === "below" ? below : above
   const shift = Math.max(left - laid.left, Math.min(0, right - laid.right))
@@ -55,4 +66,5 @@ export function placeMenu(menu: HTMLElement) {
   menu.popover = "manual"
   menu.showPopover()
   menu.style.animation = ""
+  keepUnderHeader(menu, box)
 }

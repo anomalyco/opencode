@@ -1033,6 +1033,8 @@ effect: (ctx) =>
 Call `yield* ctx.tool.reload()` after changing source data captured by the callback. Reload replays active transforms
 without changing their order; it does not rerun the plugin effect.
 
+Effect tools accept the same [freeform input declaration](/build/plugins/server#freeform-tool-input) as Promise tools. If the model does not advertise that format, the tool keeps its normal object input.
+
 Tools have an `id` containing their effective name, and `get()` returns `undefined` when that ID is not present. Use
 `update` and `remove` with the effective tool name, including its namespace (`acme_greeting` above). Dots in
 namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
@@ -1286,6 +1288,9 @@ effect: (ctx) =>
     )
   }),
 ```
+
+Messages in the `context`, `compaction`, and `generate` hooks carry their stored message's `metadata`, read-only
+(for example, what a `prompt` hook set). It is not sent to the model.
 
 The `system` part that holds OpenCode's instructions also lists each source in `metadata.experimental.instructions` as
 `{ key, text }`, such as `core/date` or `core/environment`, so a hook can tell the sources apart. The list is a copy:

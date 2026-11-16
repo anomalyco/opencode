@@ -18,7 +18,7 @@
 
     /* No real footage yet: plain black in both themes. */
     [data-slot="media"][data-empty] {
-      background: #000;
+      background: var(--media-black);
     }
 
     @media (max-width: 39.9375rem) {

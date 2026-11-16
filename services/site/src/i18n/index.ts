@@ -18,9 +18,9 @@ type Load = () => Promise<{ default: Payload }>
 export type Table = { all: Load; slices?: Record<string, Load | Payload> }
 
 // The server registers every language at startup (i18n/server.ts). The browser loads only what the
-// page can show, in the page's language: the shell's strings before it hydrates (entry-client.tsx),
-// and each lazy boundary's (a page route, a module loaded with import()) before that module runs. A
-// production build splits the strings that way (script/i18n-slices.ts); the development server
+// page can show, in the page's language: the shell's strings before it renders a component
+// (client/solid.tsx), and each lazy boundary's (a module loaded with import()) before that module
+// runs. A production build splits the strings that way (script/i18n-slices.ts); the development server
 // loads whole languages (i18n/tables.ts). Switching to a language in place loads all of it first.
 const stores: Partial<Record<Locale, { dict: Partial<Dict>; content: Record<string, unknown>; same: Set<string> }>> = {}
 const complete = new Set<Locale>()

@@ -9,6 +9,7 @@ import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
 import { usePlugin } from "../../plugin/context"
 import { DIALOG_INSET, DialogBleed, DialogFooter, DialogHeader, DialogLayout } from "../../ui/dialog"
+import { useSessionLinks } from "../../ui/session-link"
 import { useToast } from "../../ui/toast"
 import { getScrollAcceleration } from "../../util/scroll"
 
@@ -172,6 +173,7 @@ export function Answer(props: {
         >
           <box paddingLeft={DIALOG_INSET} paddingRight={DIALOG_INSET} paddingTop={1} paddingBottom={1}>
             <markdown
+              ref={useSessionLinks()}
               syntaxStyle={syntax()}
               renderNode={props.markdown()}
               content={props.answer}

@@ -3,7 +3,8 @@ import { arrangements, fontContent, glyphs, isLetter, subAnagrams, words } from 
 import { CoverTitle } from "./cover-title"
 import { downloadFont } from "./download"
 import { layout, Word } from "./glyph"
-import { Plate, prefersReducedMotion, useClock, useVisible } from "./plate"
+import { useVisible } from "~/component/site/visible"
+import { Plate, prefersReducedMotion, useClock } from "./plate"
 
 const pad = (value: number, length: number) => String(value).padStart(length, "0")
 

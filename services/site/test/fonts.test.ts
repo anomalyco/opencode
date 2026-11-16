@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
+import { interFaces } from "~/component/site/inter-fonts"
+import { monoFontFaces } from "~/component/site/mono-fonts"
 
 const root = path.resolve(import.meta.dir, "..")
 // The licensed mono face the site used before OpenTUI Mono, and its foundry. Built from parts so
@@ -34,5 +36,20 @@ describe("fonts", () => {
     const ranges = await Bun.file(path.join(root, "src/asset/fonts/opentui-mono.json")).json()
     expect(Object.keys(ranges)).toEqual(["latin", "rest"])
     expect(await Bun.file(path.join(root, "src/asset/fonts/OpenTUIMono-OFL.txt")).exists()).toBe(true)
+  })
+
+  test("the stylesheet's faces are the ones mono-fonts.ts and inter-fonts.ts describe", async () => {
+    // Each face's declarations, with a font file named by its file name alone and numbers as numbers.
+    const faces = (css: string) =>
+      [...css.matchAll(/@font-face \{([^}]*)\}/g)].map((face) =>
+        face[1]
+          .replace(/url\("?[^)"]*[\\/]([\w-]+\.woff2)"?\)/g, "url($1)")
+          .replace(/\d+\.\d+/g, (number) => String(Number(number)))
+          .split(";")
+          .map((declaration) => declaration.trim().replace(/\s+/g, " "))
+          .filter(Boolean),
+      )
+    const css = await Bun.file(path.join(root, "src/style/fonts.css")).text()
+    expect(faces(css)).toEqual(faces(`${monoFontFaces}\n${interFaces}`))
   })
 })

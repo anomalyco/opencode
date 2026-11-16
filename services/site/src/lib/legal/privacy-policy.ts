@@ -4,7 +4,7 @@ export const privacyPolicy: LegalDocumentContent = {
   path: "/legal/privacy-policy",
   title: "Privacy Policy",
   metaTitle: "OpenCode | Privacy Policy for the website and services",
-  effective: "Effective date: Nov 8, 2026",
+  effective: "Effective date: Nov 9, 2026",
   description:
     "How OpenCode collects, uses, shares and protects your personal data when you use the OpenCode website, apps and hosted services, and the choices you have.",
   body: [
@@ -232,7 +232,12 @@ export const privacyPolicy: LegalDocumentContent = {
                 "ul",
                 {},
                 ["li", {}, "Passing through to upstream provider to provide services"],
-                ["li", {}, "Not stored"],
+                [
+                  "li",
+                  {},
+                  "Not stored, except by hosted agents as described in ",
+                  ["a", { href: "#integrations" }, "Integrations with Third-Party Services"],
+                ],
               ],
             ],
             [
@@ -405,13 +410,21 @@ export const privacyPolicy: LegalDocumentContent = {
       "p",
       {},
       ["strong", {}, "What we receive and store."],
-      " To connect a Connected Service, you sign in with that service and authorize OpenCode Console, or you or a workspace administrator enter an API key. We encrypt and store the access and refresh tokens or API keys, and any OAuth client secret your workspace provides, and we record the permissions you granted, so that your OpenCode agent can act for you within them. Where a service gives us your user or workspace identifier when you sign in, as Slack and Zoom do, we store it too, so we can recognize your connection and act when the service tells us you removed our app. We store information about the service's tools and instructions, such as their names, descriptions and inputs, and the status of your connection. We don't store the content you access through a Connected Service, such as messages, files, meetings, recordings or CRM records.",
+      " To connect a Connected Service, you sign in with that service and authorize OpenCode Console, or you or a workspace administrator enter an API key. We encrypt and store the access and refresh tokens or API keys, and any OAuth client secret your workspace provides, and we record the permissions you granted, so that your OpenCode agent can act for you within them. Where a service gives us your user or workspace identifier when you sign in, as Slack and Zoom do, we store it too, so we can recognize your connection and act when the service tells us you removed our app. We store information about the service's tools and instructions, such as their names, descriptions and inputs, and the status of your connection. When you run OpenCode on your own device, OpenCode Console doesn't store the content you access through a Connected Service, such as messages, files, meetings, recordings or CRM records.",
+    ],
+    [
+      "p",
+      {},
+      ["strong", {}, "Hosted agents."],
+      " When your workspace runs an OpenCode agent hosted by OpenCode Console, such as in Slack, GitHub, Discord, email or the Console itself, we store the content of each session (one conversation with the agent, such as a Slack thread). This includes the messages and files shared with the agent, the files in its sandbox (the isolated environment where it runs commands), and the results of its tool calls, including content it retrieves from Connected Services. We store this so the agent can finish its work and continue the conversation later. We delete a session and its sandbox 30 days after its last activity, such as a message to the agent, a scheduled run or a response it finishes. Reading a session doesn't count as activity. We delete them sooner when the agent, its service account or the workspace is deleted. We also delete them sooner when the Slack, GitHub or email inbox connection the session came through is disconnected or removed, such as by uninstalling OpenCode from Slack, or when the agent no longer has a trigger (the setting that lets a Slack workspace, Discord server, GitHub repository, inbox, webhook or schedule start the agent) for the place the session came from. Pausing an agent or turning a trigger off doesn't delete its sessions. For emails sent to an inbox connected to your workspace's agent, we delete the full messages after 90 days, or sooner when the inbox is disconnected or the workspace is deleted. While the inbox is connected, we keep each email's sender, recipient, subject and a preview of up to 200 characters, along with the agent's draft and sent replies and its notes to your team, in the workspace's review queue, and delete them after the inbox is disconnected or the workspace is deleted. If someone schedules a task with the agent in Slack, we keep its instructions until 30 days after the schedule ends, or until Slack is disconnected or the workspace is deleted. To ask us to delete a session or email thread sooner, email ",
+      ["a", { href: "mailto:help@anoma.ly" }, "help@anoma.ly"],
+      ".",
     ],
     [
       "p",
       {},
       ["strong", {}, "How we use it."],
-      " When your OpenCode agent uses a Connected Service, OpenCode Console sends the request to the service with your credentials and returns the service's response to your OpenCode agent. We use data from Connected Services only to provide these features to you, keep them secure and comply with the law. For each request we record limited information, such as the service, the tool used and whether it succeeded, but not what was sent or returned. We keep these records for up to 30 days.",
+      " When your OpenCode agent uses a Connected Service, OpenCode Console sends the request to the service with your credentials and returns the service's response to your OpenCode agent. We use data from Connected Services only to provide these features to you, keep them secure and comply with the law. Our request logs record limited information about each request, such as the service, the tool used and whether it succeeded, but not what was sent or returned. We keep these logs for up to 30 days. These logs don't include the content of hosted agent sessions. See \"Hosted agents\" above for what they store and how long we keep it.",
     ],
     [
       "p",
@@ -429,7 +442,7 @@ export const privacyPolicy: LegalDocumentContent = {
       "p",
       {},
       ["strong", {}, "Retention and deletion."],
-      " We keep your tokens or API keys for a Connected Service until you disconnect it, a workspace administrator removes it, you leave the workspace, your account is deleted, the workspace is deleted in OpenCode Console or the service tells us you removed our app. We then delete them and any user identifier we stored. Where the service supports it, we also ask the service to revoke your OAuth tokens, unless another of your connections still relies on the same authorization. To ask for access to or deletion of your data, email ",
+      ' We keep your tokens or API keys for a Connected Service until you disconnect it, a workspace administrator removes it, you leave the workspace, your account is deleted, the workspace is deleted in OpenCode Console or the service tells us you removed our app. We then delete them and any user identifier we stored. Where the service supports it, we also ask the service to revoke your OAuth tokens, unless another of your connections still relies on the same authorization. Hosted agent sessions are deleted as described under "Hosted agents" above. Disconnecting any other Connected Service, such as Zoom or HubSpot, doesn\'t delete what a session already received from it. That content stays until the session is deleted. To ask for access to or deletion of your data, email ',
       ["a", { href: "mailto:help@anoma.ly" }, "help@anoma.ly"],
       ".",
     ],

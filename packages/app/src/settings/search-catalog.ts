@@ -17,6 +17,12 @@ type Entry<Tab> = {
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "general", label: "settings.tab.preferences" },
+  {
+    tab: "general",
+    label: "settings.helpFeedback",
+    target: "settings-help-feedback",
+    keywords: "support report issue",
+  },
   { tab: "appearance", label: "settings.general.section.appearance" },
   { tab: "notifications", label: "settings.tab.notifications" },
   { tab: "shortcuts", label: "settings.shortcuts.title", keywords: "keybind keyboard hotkey" },
@@ -117,6 +123,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     target: "settings-fold-user-messages",
     description: "settings.experimental.row.foldUserMessages.description",
     keywords: "fold collapse long messages prompts read more",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.newTimeline.title",
+    target: "settings-new-timeline",
+    description: "settings.experimental.row.newTimeline.description",
+    keywords: "new timeline redesign activity explored edited ran grouping status",
   },
   {
     tab: "experimental",

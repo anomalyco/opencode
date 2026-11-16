@@ -2,6 +2,7 @@ import { expect } from "bun:test"
 import { Generate } from "@opencode/core/generate"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Effect, Layer } from "effect"
+import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
 
@@ -21,8 +22,10 @@ const generate = makeLocationNode({
 
 it.live("reports response encoding failures as server errors and request decoding failures as bad requests", () =>
   Effect.gen(function* () {
+    const config = yield* tmpdirScoped()
     const handler = yield* ServerFetch.make(
       {
+        config: { directory: config.path, project: false },
         database: { path: ":memory:" },
         fs: { filewatcher: false },
         models: { fetch: false },

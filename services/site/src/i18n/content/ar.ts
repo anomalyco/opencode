@@ -10,11 +10,6 @@ export const content = {
     mobile: { name: "Mobile", body: "ابدأ الجلسات ووجّهها ووافق عليها من هاتفك أينما كنت.", action: "تنزيل" },
     terminal: { name: "Terminal", body: "واجهة طرفية سريعة تعمل في أي صدفة أو محرر أو خادم بعيد.", action: "تثبيت" },
     sdk: { body: "تحكّم في OpenCode من سكربتاتك ومهام CI وأدواتك.", action: "الوثائق" },
-    ide: {
-      name: "إضافات IDE",
-      body: "افتح OpenCode في VS Code وCursor وWindsurf، أو في Zed وبيئات JetBrains عبر ACP.",
-      action: "تثبيت",
-    },
     mini: { body: "واجهة طرفية بسيطة. تُطبع الردود في سجل التمرير، ويبقى سطر إدخال واحد في الأسفل.", action: "تثبيت" },
   },
   productDetails: {
@@ -128,23 +123,6 @@ export const content = {
           body: "اربط OpenCode بالروبوتات ولوحات المعلومات وسير العمل ببضعة أسطر.",
         },
         "in-your-process": { title: "داخل عمليتك", body: "يشغّل OpenCode داخل عمليتك، بإعداداتك ونماذجك." },
-      },
-    },
-    ide: {
-      title: "OpenCode | تكاملات المحررات لـ VS Code وCursor وZed",
-      description:
-        "استخدم OpenCode داخل محررك، مع الإضافة لـ VS Code وCursor وWindsurf وVSCodium، وopencode acp لـ Zed وبيئات JetBrains ومحررات ACP الأخرى.",
-      intro:
-        "استخدم OpenCode داخل محررك. في VS Code وCursor وWindsurf وVSCodium، شغّل opencode في الطرفية المدمجة فتثبّت الإضافة نفسها. أما Zed وبيئات JetBrains والمحررات الأخرى التي تدعم Agent Client Protocol فتشغّل OpenCode عبر opencode acp.",
-      features: {
-        "quick-launch": { title: "تشغيل سريع", body: "يفتح Cmd+Esc أو Ctrl+Esc OpenCode في طرفية مقسّمة." },
-        "new-session": { title: "جلسة جديدة", body: "يبدأ Cmd+Shift+Esc أو Ctrl+Shift+Esc جلسة أخرى." },
-        context: { title: "السياق", body: "يشارك تحديدك الحالي أو علامة التبويب مع OpenCode." },
-        "file-references": { title: "مراجع الملفات", body: "يُدرج Cmd+Option+K أو Alt+Ctrl+K المرجع @File#L37-42." },
-        "installs-itself": { title: "تثبّت نفسها", body: "شغّل opencode في الطرفية المدمجة لإضافتها." },
-        "acp-editors": { title: "محررات ACP", body: "Zed وبيئات JetBrains وAvante.nvim وCodeCompanion.nvim." },
-        "open-vsx": { title: "Open VSX", body: "متاحة أيضًا على Open VSX لـ Cursor وWindsurf وVSCodium." },
-        "same-agent": { title: "نفس الوكيل", body: "OpenCode الذي تشغّله في الطرفية، بجانب كودك." },
       },
     },
     mini: {
@@ -278,7 +256,7 @@ export const content = {
     },
     colors: {
       title: "الألوان",
-      body: "يستخدم الشعار والشعار النصي حبرًا واحدًا بثلاث درجات من العتامة، مع حبر أفتح للخلفيات الداكنة. القيم أدناه هي ذلك الحبر فوق الأبيض أو #0B0B0B، كما تعرضه الملفات القياسية. انقر قيمة لنسخها.",
+      body: "يستخدم الشعار والشعار النصي حبرًا واحدًا بثلاث درجات من العتامة، مع حبر أفتح للخلفيات الداكنة. القيم أدناه هي الألوان الموجودة في الملفات القياسية. استخدمها للشعار والشعار النصي فقط، وليس لنصوص أو خلفيات أخرى. انقر قيمة لنسخها.",
       palettes: {
         light: {
           name: "فاتح",
@@ -614,14 +592,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "سكربت" } } },
     sdk: { more: { label: "اقرأ وثائق SDK" } },
-    ide: {
-      lead: "شغّل opencode في الطرفية المدمجة في محررك فتثبّت الإضافة نفسها، أو ثبّتها بنفسك.",
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      more: { label: "إعداد Zed وبيئات JetBrains ومحررات ACP الأخرى" },
-    },
     mini: {
       lead: "يأتي Mini مع OpenCode CLI. ثبّته بأي من هذه الطرق، ثم شغّل opencode mini.",
       commands: { curl: { name: "سكربت" } },

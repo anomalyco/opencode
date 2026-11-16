@@ -51,6 +51,10 @@ export const PredicateQuestion = Schema.Struct({
   name: Schema.String,
   type: Schema.Literal("predicate"),
   instructions: Schema.String,
+  /** What counts as true and as false, for statements the instructions alone leave ambiguous. */
+  criteria: Schema.optional(
+    Schema.Struct({ true: Schema.optional(Schema.String), false: Schema.optional(Schema.String) }),
+  ),
 })
 export type PredicateQuestion = Schema.Schema.Type<typeof PredicateQuestion>
 

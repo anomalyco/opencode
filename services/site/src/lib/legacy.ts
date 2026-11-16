@@ -50,6 +50,10 @@ export function legacyRedirect(request: Legacy): Response | undefined {
   const share = request.path.match(/^\/s\/([^/]+)\/?$/)
   if (share) return redirect(301, `https://opncd.ai/share/${share[1]}`)
 
+  // The IDE extensions page, removed in Nov 2026: its V1 docs page covers the extensions. Old links and
+  // search results.
+  if (/^\/ide\/?$/.test(request.path) && read) return redirect(301, `/v1/docs/ide/${request.search}`)
+
   // The V2 docs' first address, before they moved to /docs in Nov 2026. Apps up to v2.2.5 (Help menu,
   // settings links, the opencode skill), the READMEs and install script of those releases, search
   // engines and outside links. Pages, Markdown twins and the docs' files (llms.txt, the sitemap,

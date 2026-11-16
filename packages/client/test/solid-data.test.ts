@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
-import { createRoot } from "solid-js"
+import { createRoot, createSignal } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
 
@@ -323,6 +323,241 @@ test("omits inline tool-result file payloads from read and live tool results whe
         {
           state: { status: "completed", content: [{ type: "file", uri: "data:image/png;base64,", mime: "image/png" }] },
         },
+      ],
+    })
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("reads a function omitToolFileData for each live tool result", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
+  const running = (id: string) => ({
+    type: "tool",
+    id,
+    name: "execute",
+    time: { created: 1, ran: 1 },
+    state: { status: "running", input: {}, metadata: {} },
+  })
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () =>
+      Response.json({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "provider", id: "model" },
+            time: { created: 1 },
+            content: [running("call_off"), running("call_on")],
+          },
+        ],
+        cursor: {},
+      }),
+  })
+  const [omit, setOmit] = createSignal(true)
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      omitToolFileData: omit,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  const succeed = (id: string, seq: number) => {
+    const event: OpenCodeEvent = {
+      id: `evt_${id}`,
+      created: 2,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_toggle", seq, version: 2 },
+      data: {
+        sessionID: "ses_toggle",
+        assistantMessageID: "msg_assistant",
+        id,
+        executed: true,
+        content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+  }
+  try {
+    await setup.data.session.message.sync("ses_toggle")
+    succeed("call_off", 1)
+    setOmit(false)
+    succeed("call_on", 2)
+
+    expect(setup.data.session.message.get("ses_toggle", "msg_assistant")).toMatchObject({
+      content: [
+        { state: { content: [{ type: "file", uri: "data:image/png;base64,", mime: "image/png" }] } },
+        { state: { content: [{ type: "file", uri: screenshot, mime: "image/png" }] } },
+      ],
+    })
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("restores dropped tool files from the server once they are shown again", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
+  const assistant = (state: object) => ({
+    id: "msg_assistant",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    time: { created: 1 },
+    content: [{ type: "tool", id: "call_shot", name: "execute", time: { created: 1, ran: 1 }, state }],
+  })
+  const requests: string[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      requests.push(url.pathname)
+      if (url.pathname.endsWith("/message/msg_assistant"))
+        return Response.json({
+          data: assistant({
+            status: "completed",
+            input: {},
+            content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+          }),
+        })
+      return Response.json({ data: [assistant({ status: "running", input: {}, metadata: {} })], cursor: {} })
+    },
+  })
+  const [omit, setOmit] = createSignal(true)
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      omitToolFileData: omit,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_restore")
+    const success: OpenCodeEvent = {
+      id: "evt_shot",
+      created: 2,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_restore", seq: 1, version: 2 },
+      data: {
+        sessionID: "ses_restore",
+        assistantMessageID: "msg_assistant",
+        id: "call_shot",
+        executed: true,
+        content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: success.type, details: success }))
+    expect(setup.data.session.message.get("ses_restore", "msg_assistant")).toMatchObject({
+      content: [{ state: { content: [{ uri: "data:image/png;base64," }] } }],
+    })
+
+    setOmit(false)
+    await setup.data.session.message.restoreFiles()
+
+    expect(requests.filter((path) => path.endsWith("/message/msg_assistant"))).toHaveLength(1)
+    expect(setup.data.session.message.get("ses_restore", "msg_assistant")).toMatchObject({
+      content: [{ state: { content: [{ type: "file", uri: screenshot, mime: "image/png" }] } }],
+    })
+    // Nothing is left to restore, so a second call reads nothing.
+    await setup.data.session.message.restoreFiles()
+    expect(requests.filter((path) => path.endsWith("/message/msg_assistant"))).toHaveLength(1)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("restoring dropped tool files keeps live progress made while the server read was in flight", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
+  const tool = (id: string, state: object) => ({ type: "tool", id, name: "execute", time: { created: 1, ran: 1 }, state })
+  const running = { status: "running", input: {}, metadata: {} }
+  const assistant = (content: object[]) => ({
+    id: "msg_assistant",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    time: { created: 1 },
+    content,
+  })
+  const read = Promise.withResolvers<Response>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      if (url.pathname.endsWith("/message/msg_assistant")) return read.promise
+      return Response.json({ data: [assistant([tool("call_shot", running), tool("call_work", running)])], cursor: {} })
+    },
+  })
+  const [omit, setOmit] = createSignal(true)
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      omitToolFileData: omit,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  const succeed = (
+    id: string,
+    seq: number,
+    content: Extract<OpenCodeEvent, { type: "session.tool.success" }>["data"]["content"],
+  ) => {
+    const event: OpenCodeEvent = {
+      id: `evt_${id}`,
+      created: 2,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_inflight", seq, version: 2 },
+      data: { sessionID: "ses_inflight", assistantMessageID: "msg_assistant", id, executed: true, content },
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+  }
+  try {
+    await setup.data.session.message.sync("ses_inflight")
+    succeed("call_shot", 1, [{ type: "file", uri: screenshot, mime: "image/png" }])
+    setOmit(false)
+    const restoring = setup.data.session.message.restoreFiles()
+    // The second tool finishes while the read is in flight; the server's snapshot predates it.
+    succeed("call_work", 2, [{ type: "text", text: "done" }])
+    read.resolve(
+      Response.json({
+        data: assistant([
+          tool("call_shot", { status: "completed", input: {}, content: [{ type: "file", uri: screenshot, mime: "image/png" }] }),
+          tool("call_work", running),
+        ]),
+      }),
+    )
+    await restoring
+
+    expect(setup.data.session.message.get("ses_inflight", "msg_assistant")).toMatchObject({
+      content: [
+        { id: "call_shot", state: { status: "completed", content: [{ type: "file", uri: screenshot }] } },
+        { id: "call_work", state: { status: "completed", content: [{ type: "text", text: "done" }] } },
       ],
     })
   } finally {

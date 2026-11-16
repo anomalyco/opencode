@@ -3,6 +3,39 @@
 export const legalHistory = {
   "/legal/privacy-policy": [
     {
+      sha: "9e9b551e3a72b12b839ba3fe266a0db89c909602",
+      date: "2026-11-08",
+      subject: "docs(legal): cover hosted agent sessions and their retention (#62789)",
+      effective: "Nov 9, 2026",
+      first: false,
+      added: [
+        "Effective date: Nov 9, 2026",
+        "Not stored, except by hosted agents as described in Integrations with Third-Party Services",
+        "When you run OpenCode on your own device, OpenCode Console doesn't store the content you access through a Connected Service, such as messages, files, meetings, recordings or CRM records.",
+        "Hosted agents.",
+        "When your workspace runs an OpenCode agent hosted by OpenCode Console, such as in Slack, GitHub, Discord, email or the Console itself, we store the content of each session (one conversation with the agent, such as a Slack thread).",
+        "This includes the messages and files shared with the agent, the files in its sandbox (the isolated environment where it runs commands), and the results of its tool calls, including content it retrieves from Connected Services.",
+        "We store this so the agent can finish its work and continue the conversation later.",
+        "We delete a session and its sandbox 30 days after its last activity, such as a message to the agent, a scheduled run or a response it finishes.",
+        "Reading a session doesn't count as activity.",
+        "We delete them sooner when the agent, its service account or the workspace is deleted.",
+        "We also delete them sooner when the Slack, GitHub or email inbox connection the session came through is disconnected or removed, such as by uninstalling OpenCode from Slack, or when the agent no longer has a trigger (the setting that lets a Slack workspace, Discord server, GitHub repository, inbox, webhook or schedule start the agent) for the place the session came from.",
+        "Pausing an agent or turning a trigger off doesn't delete its sessions.",
+      ],
+      removed: [
+        "Effective date: Nov 8, 2026",
+        "Not stored",
+        "We don't store the content you access through a Connected Service, such as messages, files, meetings, recordings or CRM records.",
+        "For each request we record limited information, such as the service, the tool used and whether it succeeded, but not what was sent or returned.",
+        "We keep these records for up to 30 days.",
+      ],
+      addedCount: 23,
+      removedCount: 5,
+      source:
+        "https://github.com/anomalyco/opencode/blob/9e9b551e3a72b12b839ba3fe266a0db89c909602/services/site/src/lib/legal/privacy-policy.ts",
+      diff: "https://github.com/anomalyco/opencode/commit/9e9b551e3a72b12b839ba3fe266a0db89c909602#diff-13f1bdb3583f198406200946a0d6bde1bc1f9271e4e629272db2023a211e2819",
+    },
+    {
       sha: "9c7212c99a69b9d1c644fc30ad79068124aab1a7",
       date: "2026-11-08",
       subject: "docs(legal): cover integrations with third-party services (#62700)",

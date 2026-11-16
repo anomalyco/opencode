@@ -25,7 +25,7 @@ export type TitlebarHistoryState =
 
 export type TitlebarHistoryEvent =
   | { readonly type: "location.changed"; readonly current: HistoryLocation; readonly max?: number }
-  | { readonly type: "back" }
+  | { readonly type: "back"; readonly destination?: HistoryLocation }
   | { readonly type: "forward" }
   /** `currentUrl` is the router's URL when the fallback timer fires. */
   | { readonly type: "traverse.timed-out"; readonly attempt: number; readonly currentUrl: string }
@@ -58,13 +58,27 @@ export function transitionTitlebarHistory(
   if (event.type === "back" || event.type === "forward") {
     const cursor = state.status === "traversing" ? state.targetIndex : state.index
     const targetIndex = event.type === "back" ? cursor - 1 : cursor + 1
-    const to = state.stack[targetIndex]
+    const destination = event.type === "back" ? event.destination : undefined
+
+    const entry = state.stack[targetIndex]
+
+    const to = destination && destination.url !== entry?.url ? destination : entry
 
     if (!to) return { state, effects: NO_EFFECTS }
     const attempt = state.attempt + 1
 
+    // Keep Forward pointed at Settings even if its source tab has closed.
+    const stack =
+      to === entry ? state.stack : targetIndex < 0 ? [to, ...state.stack] : replace(state.stack, targetIndex, to)
+
     return {
-      state: { status: "traversing", attempt, stack: state.stack, index: state.index, targetIndex },
+      state: {
+        status: "traversing",
+        attempt,
+        stack,
+        index: targetIndex < 0 ? state.index + 1 : state.index,
+        targetIndex: Math.max(0, targetIndex),
+      },
       effects: [{ type: "navigate", attempt, to, timeoutMs: HISTORY_TRAVERSE_TIMEOUT_MS }],
     }
   }

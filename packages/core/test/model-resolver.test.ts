@@ -49,6 +49,7 @@ function model(packageName: string | undefined, options: RequestOptions = {}) {
     limit: options.limit ?? { context: 100, output: 20 },
   }
   AISDKNative.rewrite(info, {
+    builtins: Provider.builtinPackages,
     specifier: packageName,
     providerID: info.providerID,
     canonical: info.canonical,

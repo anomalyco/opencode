@@ -22,7 +22,11 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
 import { linkSegments } from "../components/link-segments"
 import { LinkedText } from "../components/linked-text"
-import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
+import {
+  sessionReferenceClipboardText,
+  sessionReferenceText,
+  setupSessionLinks,
+} from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
 import { useSources } from "../context/sources"
 import { SourcesChip } from "../sources/sources-chip"
@@ -56,7 +60,7 @@ import type {
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
-import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
+import { attached, typeLabel } from "../components/message-file"
 import {
   DISPOSED_ATTACHMENT_MEDIA_EVENT,
   INITIAL_ATTACHMENT_MEDIA_STATE,
@@ -130,17 +134,15 @@ function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy"
+    copied: boolean
     label: JSX.Element
     size?: "small" | "normal"
   },
 ) {
-  const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
-
   return (
-    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4}>
+    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4} forceOpen={props.copied || undefined}>
       <IconButton
-        icon={<Icon name={icon()} size="small" />}
+        icon={<Icon name={props.copied ? "check" : "outline-copy"} size="small" />}
         size={props.size ?? "normal"}
         variant="ghost-muted"
         disabled={props.disabled}
@@ -210,7 +212,7 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   return value
 }
 
-function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
+export function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
   const value = createPacedValue(
     () => props.text,
     () => props.streaming,
@@ -576,13 +578,6 @@ export function CurrentUserMessageDisplay(props: {
               return "height" in current ? current.height : undefined
             }
 
-            const placeholderStyle = () =>
-              imageAttachmentPlaceholderStyle({
-                width: width(),
-                height: height(),
-                loaded: mediaView().status === "ready",
-              })
-
             return (
               <Show
                 when={!image()}
@@ -594,7 +589,6 @@ export function CurrentUserMessageDisplay(props: {
                     data-placeholder={mediaView().placeholder ? "true" : undefined}
                     data-width={width()}
                     data-height={height()}
-                    style={placeholderStyle()}
                     onClick={(event) => {
                       const src = mediaView().src
                       const origin = event.currentTarget
@@ -680,7 +674,12 @@ export function CurrentUserMessageDisplay(props: {
               </Tooltip>
             </div>
           </Show>
-          <div data-slot="user-message-text" dir="auto" data-comments={comments().length > 0 ? "true" : undefined}>
+          <div
+            data-slot="user-message-text"
+            dir="auto"
+            data-comments={comments().length > 0 ? "true" : undefined}
+            onCopy={copySessionReferences}
+          >
             <Show
               when={props.fold}
               fallback={<CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />}
@@ -886,11 +885,31 @@ function CurrentHighlightedText(props: { text: string; files: PromptAttachment[]
 
 type HighlightSegment = { text: string; type?: "file" | "agent" | "link" }
 
+function copySessionReferences(event: ClipboardEvent & { currentTarget: HTMLDivElement }) {
+  const selection = window.getSelection()
+
+  if (event.defaultPrevented || !event.clipboardData || !selection || selection.isCollapsed) return
+  const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
+
+  if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
+  const text = sessionReferenceClipboardText(event.currentTarget, ranges)
+
+  if (text === undefined) return
+  event.preventDefault()
+  event.clipboardData.setData("text/plain", text)
+}
+
 function SessionReferenceText(props: { text: string }) {
   const markdown = useMarkdown()
   const root = document.createElement("span")
   createEffect(() => root.replaceChildren(sessionReferenceText(props.text, (id) => markdown?.sessionTitle?.(id))))
-  onCleanup(setupSessionLinks(root, () => markdown?.openSession))
+  onCleanup(
+    setupSessionLinks(
+      root,
+      () => markdown?.openSession,
+      () => markdown?.sessionMenu,
+    ),
+  )
 
   return root
 }
@@ -1213,9 +1232,13 @@ export function AssistantTextContent(props: {
 
   function copyFooter() {
     return (
-      <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+      <div
+        data-slot="text-part-copy-wrapper"
+        data-interrupted={interrupted() ? "" : undefined}
+        data-copy-always-visible={data.copyAlwaysVisible ? "" : undefined}
+      >
         <MessageActionButton
-          icon={copy.copied() ? "check" : "copy"}
+          copied={copy.copied()}
           size="small"
           label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
           onMouseDown={(event) => event.preventDefault()}
