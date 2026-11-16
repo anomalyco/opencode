@@ -220,11 +220,20 @@ fn stamp(dir: &Path) -> Result<(u64, bool), String> {
     let mut hasher = DefaultHasher::new();
     let mut racy = false;
     let recent = std::time::SystemTime::now() - RACY;
-    own(dir, &mut hasher, 0, &mut |_, metadata, hasher| {
+    let mut visit = |_: &Path, metadata: &std::fs::Metadata, hasher: &mut DefaultHasher| {
         meta(metadata, hasher);
         racy |= metadata.modified().map_or(true, |modified| modified >= recent);
         Ok(())
-    })?;
+    };
+    own(dir, &mut hasher, 0, &mut visit)?;
+    // A package of the npm cache is approved with its install's manifest and lockfile (O-162).
+    if let Some(root) = approval::install_root(dir) {
+        for file in ["package.json", "package-lock.json"].map(|name| root.join(name)) {
+            if let Ok(metadata) = std::fs::metadata(&file) {
+                visit(&file, &metadata, &mut hasher)?;
+            }
+        }
+    }
     Ok((hasher.finish(), racy))
 }
 

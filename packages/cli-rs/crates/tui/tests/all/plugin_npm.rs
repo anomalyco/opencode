@@ -26,15 +26,18 @@ pub(crate) fn install(home: &Path, spec: &str, name: &str, generation: &str) {
 /// The TUI on Home with `plugins` in `cli.json`, the roots of a run with `HOME=home`, and the JS host; the server
 /// lists `server` as its plugins.
 fn open(home: &opencode_util::temp::TempDir, plugins: &[&str], server: serde_json::Value) -> Option<Pipe> {
-    open_in(home, plugins, server, None)
+    open_in(home, plugins, server, None, &[], true)
 }
 
-/// [`open`], working in `cwd` when one is given.
+/// [`open`], working in `cwd` when one is given, with `user` as the `plugins` of the global opencode config, and a
+/// server on this machine when `here` (one the client started; the fake's URL is not a loopback address).
 fn open_in(
     home: &opencode_util::temp::TempDir,
     plugins: &[&str],
     server: serde_json::Value,
     cwd: Option<&Path>,
+    user: &[&str],
+    here: bool,
 ) -> Option<Pipe> {
     let config = config()?;
     let fake = Fake::new(move |seen| match seen.path.as_str() {
@@ -50,10 +53,16 @@ fn open_in(
         roots: support::roots(support::home_paths(home.path()), "test"),
         ..support::deps(Arc::new(fake))
     };
-    let harness = support::mount(120, 30, deps);
+    let args = opencode_tui::Args { local: here, ..opencode_tui::Args::default() };
+    let harness = support::mount_on(opentui::testing::TestApp::new(120, 30), deps, args);
     let root = opencode_util::temp::tempdir().unwrap();
     let cwd = cwd.map_or_else(|| root.path().to_path_buf(), Path::to_path_buf);
-    let external = External { config_dir: root.path().join("config"), cwd, dev: Vec::new() };
+    let config_dir = root.path().join("config");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    // JSONC, as the user may write it.
+    let global = format!("// mine\n{}", serde_json::json!({ "plugins": user }));
+    std::fs::write(config_dir.join("opencode.jsonc"), global).unwrap();
+    let external = External { config_dir, cwd, dev: Vec::new() };
     external_with(&harness.tui, external, Some(config));
     Some(Pipe { harness, root })
 }
@@ -161,7 +170,8 @@ fn a_package_named_in_cli_json_loads_from_the_cache() {
 }
 
 // Expected (TS `serverTuiPlugins`, `context.tsx:96-103`, `301-305`): the TUI part of an active server plugin with a
-// TUI feature loads from the cache under the target the server reports, and a local one from its path; a part of a
+// TUI feature loads from the cache under the target the server reports, and a local one from its path, each named by
+// the user's global opencode config, so with no approval (O-162); a part of a
 // plugin that is not active, or has no TUI feature, is not loaded, and one the cache does not hold is left out, as TS
 // leaves out an optional target it cannot load (`context.tsx:362-363`).
 #[test]
@@ -188,7 +198,8 @@ fn a_server_plugins_tui_part_loads_from_what_the_server_reports() {
         part(serde_json::json!({ "type": "package", "target": "opencode-sidebar-tokens@0.1.3" }), true, "failed"),
         part(serde_json::json!({ "type": "package", "target": "not-cached@1.0.0" }), true, "active"),
     ]);
-    let Some(pipe) = open(&home, &[], server) else { return };
+    let user = ["opencode-session-usage@0.1.8", local.to_str().unwrap()];
+    let Some(pipe) = open_in(&home, &[], server, None, &user, true) else { return };
     pipe.active("opencode.sidebar.limit");
     pipe.active("sidebar.prompt");
     assert_eq!(status(&pipe, "opencode-session-usage@0.1.8"), Some(Status::Active));
@@ -196,10 +207,9 @@ fn a_server_plugins_tui_part_loads_from_what_the_server_reports() {
     assert_eq!(status(&pipe, "not-cached@1.0.0"), None, "a part the cache does not hold was listed");
 }
 
-// Expected (O-146, js-npm): a server plugin's TUI part whose files are inside the project, as a local path in the
+// Expected (O-146, O-162): a server plugin's TUI part whose files are inside the project, as a local path in the
 // project's `opencode.json` is, is a project plugin: it waits for the user's approval, and runs once approved. A part
-// the server names by package, from the user's npm cache, loads with none, as TS loads it, even when the project's
-// configuration named it.
+// the server names by package, from the user's npm cache, loads with none when the user's global config names it.
 #[test]
 fn a_project_local_server_part_waits_for_approval_and_a_cached_one_does_not() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -214,7 +224,9 @@ fn a_project_local_server_part_waits_for_approval_and_a_cached_one_does_not() {
         part(serde_json::json!({ "type": "local", "path": target })),
         part(serde_json::json!({ "type": "package", "target": "opencode-sidebar-tokens@0.1.3" })),
     ]);
-    let Some(pipe) = open_in(&home, &[], server, Some(&work)) else { return };
+    let Some(pipe) = open_in(&home, &[], server, Some(&work), &["opencode-sidebar-tokens@0.1.3"], true) else {
+        return;
+    };
     pipe.active("sidebar.tokens");
     pipe.harness.wait("the part is held", || {
         pipe.settle();
@@ -230,4 +242,63 @@ fn a_project_local_server_part_waits_for_approval_and_a_cached_one_does_not() {
     assert_eq!(crate::plugin_pipe::decide(&pipe.harness, &target, &artifact, decision), Ok(true));
     pipe.active("sidebar.prompt");
     assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the part's files");
+}
+
+// Expected (O-162, carbon jsnpm-2): a package the server reports that only a project's configuration names waits for
+// the user's approval, keyed by its files and its install's lockfile, while one the user's global config names loads at
+// once. Once approved it runs where it is, in the cache, since its dependencies sit beside it.
+#[test]
+fn a_package_only_the_project_names_waits_for_approval() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    install(home.path(), "opencode-sidebar-tokens@0.1.3", "opencode-sidebar-tokens", "1794700000000");
+    install(home.path(), "opencode-sidebar-prompt@0.1.6", "opencode-sidebar-prompt", "1794700000000");
+    let lock = support::home_paths(home.path()).cache.join("npm/opencode-sidebar-tokens@0.1.3/1794700000000");
+    std::fs::write(lock.join("package-lock.json"), r#"{ "lockfileVersion": 3 }"#).unwrap();
+    let part = |spec: &str| {
+        let source = serde_json::json!({ "type": "package", "target": spec });
+        serde_json::json!({ "source": source, "features": { "server": true, "tui": true }, "state": { "status": "active" } })
+    };
+    let server = serde_json::json!([part("opencode-sidebar-tokens@0.1.3"), part("opencode-sidebar-prompt@0.1.6")]);
+    let target = "opencode-sidebar-tokens@0.1.3";
+    let Some(pipe) = open_in(&home, &[], server, None, &["opencode-sidebar-prompt@0.1.6"], true) else { return };
+    pipe.active("sidebar.prompt");
+    pipe.harness.wait("the package is held", || {
+        pipe.settle();
+        status(&pipe, target) == Some(Status::Pending)
+    });
+    assert_eq!(pipe.status("sidebar.tokens"), None, "the project's package ran before its approval");
+    let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(&pipe.harness.tui, target) else {
+        panic!("no artifact held for {target}")
+    };
+    assert!(artifact.path.starts_with(lock.canonicalize().unwrap()), "{:?}", artifact.path);
+    // The install's lockfile is part of what is approved.
+    let identify = || opencode_plugin::loader::approval::Artifact::tree(&artifact.path).unwrap().sha256;
+    assert_eq!(identify(), artifact.sha256);
+    std::fs::write(lock.join("package-lock.json"), r#"{ "lockfileVersion": 3, "packages": {} }"#).unwrap();
+    assert_ne!(identify(), artifact.sha256);
+    std::fs::write(lock.join("package-lock.json"), r#"{ "lockfileVersion": 3 }"#).unwrap();
+    let decision = opencode_plugin::loader::approval::Decision::Approved;
+    assert_eq!(crate::plugin_pipe::decide(&pipe.harness, target, &artifact, decision), Ok(true));
+    pipe.active("sidebar.tokens");
+}
+
+// Expected (O-162): a local path a server on another machine reports names nothing here and is left out, even one the
+// user's configuration names; its packages still load from this machine's cache.
+#[test]
+fn a_remote_servers_local_parts_are_left_out() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    install(home.path(), "opencode-sidebar-tokens@0.1.3", "opencode-sidebar-tokens", "1794700000000");
+    let local = home.path().join("local-part");
+    crate::ports::unpack("opencode-sidebar-prompt", &local);
+    let part = |source: serde_json::Value| serde_json::json!({ "source": source, "features": { "server": true, "tui": true }, "state": { "status": "active" } });
+    let target = local.to_string_lossy().into_owned();
+    let server = serde_json::json!([
+        part(serde_json::json!({ "type": "local", "path": target })),
+        part(serde_json::json!({ "type": "package", "target": "opencode-sidebar-tokens@0.1.3" })),
+    ]);
+    let user = ["opencode-sidebar-tokens@0.1.3", target.as_str()];
+    let Some(pipe) = open_in(&home, &[], server, None, &user, false) else { return };
+    pipe.active("sidebar.tokens");
+    assert_eq!(status(&pipe, &target), None, "a remote server's local path was listed");
+    assert_eq!(pipe.status("sidebar.prompt"), None);
 }

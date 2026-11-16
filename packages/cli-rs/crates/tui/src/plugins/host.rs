@@ -18,7 +18,7 @@ use opencode_local::storage::Storage;
 use opencode_plugin::abi;
 use opencode_plugin::loader::approval::{self, Approvals, Artifact, Decision};
 use opencode_plugin::loader::native::Native;
-use opencode_plugin::loader::{Configured, Loader};
+use opencode_plugin::loader::{Configured, Loader, ServerPart};
 use opencode_plugin::node::{abi_mode, assign, refill, theme_color};
 use opencode_plugin::{Builtin, Definition, Host, Registry, RouteMount, SlotInput, SlotMount, Status};
 use opencode_store::State;
@@ -1299,24 +1299,31 @@ fn sync_server_plugins(tui: &Tui) {
 
 /// The TUI parts of the active server plugins, which TS loads from the server's list (`serverTuiPlugins`,
 /// `context.tsx:96-103`, `301-305`): with the JS host the loader loads them, from the local path or the package
-/// cache the server reports; without it they are listed as not loaded, unless their target is listed already, and a
-/// part the server no longer lists leaves the list.
+/// cache the server reports, holding for approval those the user's own configuration does not name (O-162); without
+/// it they are listed as not loaded, unless their target is listed already, and a part the server no longer lists
+/// leaves the list. A local path from a server on another machine names nothing here, and is left out.
 fn set_server_parts(tui: &Rc<Tui>, plugins: &[PluginInfo]) {
     // Only the client that loads external plugins has TS's reconcile to stand in for.
     let Some(loader) = tui.plugins.loader.borrow().clone() else { return };
-    let parts: Vec<String> = plugins
+    let here = same_machine(tui.startup.args.local, tui.data.client().base_url());
+    let typed: Vec<ServerPart> = plugins
         .iter()
         .filter(|plugin| matches!(plugin.state, PluginState::Active(_)) && plugin.features.tui == Some(true))
         .filter_map(|plugin| match &plugin.source {
-            PluginSource::Package(package) => Some(package.target.clone()),
-            PluginSource::Local(local) => Some(local.path.clone()),
+            PluginSource::Package(package) => Some(ServerPart::Package(package.target.clone())),
+            PluginSource::Local(local) if here => Some(ServerPart::Local(local.path.clone())),
             _ => None,
         })
         .collect();
+    let parts: Vec<String> = typed
+        .iter()
+        .map(|part| match part {
+            ServerPart::Package(target) | ServerPart::Local(target) => target.clone(),
+        })
+        .collect();
     if tui.plugins.scripts.borrow().is_some() {
-        if *tui.plugins.server_parts.borrow() != parts {
-            tui.plugins.server_parts.replace(parts.clone());
-            loader.set_server(parts);
+        tui.plugins.server_parts.replace(parts);
+        if loader.set_server(typed, user_plugins(loader.config_dir())) {
             loader.reconcile(&host(tui), &tui.plugins);
             tell_plugins(tui);
         }
@@ -1381,6 +1388,39 @@ fn tell_skipped(tui: &Tui) {
             }),
         );
     tui.toasts.show(options);
+}
+
+/// Whether the server runs on this machine, so the paths it reports are this machine's: one the client started or the
+/// service (no `--server`), or a `--server` on a loopback address. A loopback port may still be a tunnel to another
+/// machine; a path it reports then needs approval like any the user's configuration does not name (O-162).
+fn same_machine(local: bool, url: &url::Url) -> bool {
+    local
+        || match url.host() {
+            Some(url::Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
+            Some(url::Host::Ipv4(address)) => address.is_loopback(),
+            Some(url::Host::Ipv6(address)) => address.is_loopback(),
+            None => false,
+        }
+}
+
+/// The `plugins` entries of the user's global opencode config as written (TS `ConfigDiscovery`: `opencode.json`,
+/// then `opencode.jsonc`, in the global config directory), a package's spec or a path; a file that does not parse
+/// names none.
+fn user_plugins(config_dir: &Path) -> Vec<String> {
+    ["opencode.json", "opencode.jsonc"]
+        .iter()
+        .filter_map(|name| std::fs::read_to_string(config_dir.join(name)).ok())
+        .filter_map(|text| opencode_local::jsonc::parse(&text))
+        .flat_map(|config| match config.get("plugins") {
+            Some(Value::Array(entries)) => entries.clone(),
+            _ => Vec::new(),
+        })
+        .filter_map(|entry| match entry {
+            Value::String(spec) => Some(spec),
+            Value::Object(entry) => entry.get("package").and_then(Value::as_str).map(str::to_owned),
+            _ => None,
+        })
+        .collect()
 }
 
 fn server_failed(plugins: &[PluginInfo]) -> usize {

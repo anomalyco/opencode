@@ -95,6 +95,15 @@ impl Target {
     }
 }
 
+/// A server plugin's TUI part as `GET /api/plugin` reports its source (TS `serverTuiPlugins`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ServerPart {
+    /// A package spec, found in the npm cache ([`npm::resolve`]).
+    Package(String),
+    /// An absolute path on the server's machine.
+    Local(String),
+}
+
 /// The build a target holds on the disk now ([`Loader::found`]).
 pub enum Found {
     /// A library, identified at once.
@@ -149,11 +158,20 @@ pub struct Loader {
     /// The global cache directory TS installs packages into (`~/.cache/opencode`), where a target named by npm
     /// package is found ([`npm::resolve`]), and nothing installed.
     npm: Option<PathBuf>,
-    /// The TUI parts of the active server plugins, by the target the server reports (TS `serverTuiPlugins`).
-    server: RefCell<Vec<String>>,
+    /// The TUI parts of the active server plugins (TS `serverTuiPlugins`), and the `plugins` entries of the user's
+    /// global opencode config, which vouch for the parts they name (O-162).
+    server: RefCell<(Vec<ServerPart>, Vec<String>)>,
     /// The package each npm spec resolved to, kept while the spec is a target: TS resolves a loaded package's entry
     /// once a session (`context.tsx:663-665`), so a later install does not move it.
     packages: RefCell<HashMap<String, PathBuf>>,
+}
+
+/// What the user's own configuration names, which a server part needs to load without approval (O-162).
+#[derive(Default)]
+struct Vouched {
+    specs: Vec<String>,
+    paths: Vec<PathBuf>,
+    dirs: Vec<PathBuf>,
 }
 
 /// The `name` of the `package.json` in `dir`, which names a plugin that is not loaded in place of its path.
@@ -192,24 +210,53 @@ impl Loader {
         Self { npm: Some(cache), ..self }
     }
 
-    /// Replaces the TUI parts of the server's plugins, after the server listed its plugins; the next
-    /// [`Loader::reconcile`] applies them. They load on the JS host only.
-    pub fn set_server(&self, parts: Vec<String>) {
-        self.server.replace(parts);
+    /// Replaces the TUI parts of the server's plugins, after the server listed its plugins, and the `plugins` entries
+    /// of the user's global opencode config (`opencode.json`, `opencode.jsonc` in the config directory) as written;
+    /// the next [`Loader::reconcile`] applies them. They load on the JS host only. Whether either changed.
+    pub fn set_server(&self, parts: Vec<ServerPart>, user: Vec<String>) -> bool {
+        let next = (parts, user);
+        let changed = *self.server.borrow() != next;
+        self.server.replace(next);
+        changed
     }
 
-    /// The local path a configured or server target names, or the package an npm spec names in the cache (with the
-    /// JS host only, which is what runs it).
+    /// The global config directory, which holds `cli.json` and the global opencode config.
+    pub fn config_dir(&self) -> &Path {
+        &self.config_dir
+    }
+
+    /// The local path a configured target names, or the package an npm spec names in the cache.
     fn local(&self, target: &str) -> Option<PathBuf> {
-        local_source(target, &self.config_dir).or_else(|| {
-            if let Some(pinned) = self.packages.borrow().get(target) {
-                return Some(pinned.clone());
+        local_source(target, &self.config_dir).or_else(|| self.package(target))
+    }
+
+    /// The package `spec` names in the cache (with the JS host only, which is what runs it), pinned once found.
+    fn package(&self, spec: &str) -> Option<PathBuf> {
+        if let Some(pinned) = self.packages.borrow().get(spec) {
+            return Some(pinned.clone());
+        }
+        let cache = self.npm.as_deref().filter(|_| self.scripts.is_some())?;
+        let directory = npm::resolve(spec, cache)?.directory;
+        self.packages.borrow_mut().insert(spec.to_owned(), directory.clone());
+        Some(directory)
+    }
+
+    /// What the user's own configuration names (O-162): the package specs and the local paths (canonical) of the
+    /// `plugins` entries of `cli.json` and of the global opencode config, and the global plugin directories.
+    fn vouched(&self, user: &[String]) -> Vouched {
+        let configured = self.configured.borrow();
+        let entries = configured.iter().map(|entry| entry.target.as_str()).chain(user.iter().map(String::as_str));
+        let mut vouched = Vouched::default();
+        // TS resolves a `file://` URL and a `./` or `../` path against the config file's directory (`source.ts`).
+        for entry in entries.filter(|entry| !entry.starts_with('-')) {
+            match local_source(entry, &self.config_dir) {
+                Some(path) => vouched.paths.extend(std::fs::canonicalize(path)),
+                None => vouched.specs.push(entry.to_owned()),
             }
-            let cache = self.npm.as_deref().filter(|_| self.scripts.is_some())?;
-            let directory = npm::resolve(target, cache)?.directory;
-            self.packages.borrow_mut().insert(target.to_owned(), directory.clone());
-            Some(directory)
-        })
+        }
+        let dirs = ["plugin", "plugins"].map(|name| std::fs::canonicalize(self.config_dir.join(name)));
+        vouched.dirs.extend(dirs.into_iter().flatten());
+        vouched
     }
 
     /// Runs the targets without a native build on `scripts`.
@@ -242,19 +289,33 @@ impl Loader {
             })
         });
         // TS's order: the discovered directories, the server plugins' TUI parts, then `cli.json` (`context.tsx:290-309`).
-        let server: Vec<String> = match self.scripts {
+        let (parts, user) = match self.scripts {
             Some(_) => self.server.borrow().clone(),
-            None => Vec::new(),
+            None => Default::default(),
         };
         // A part that does not resolve is left out, as TS leaves out an optional target it cannot load
-        // (`context.tsx:362-363`). One whose files are inside the project, as a local path of the project's
-        // configuration is, is the project's and needs approval (O-146); a package of the user's npm cache does not.
-        let project = project_root(&self.cwd);
-        let project = std::fs::canonicalize(&project).unwrap_or(project);
-        let server = server.into_iter().filter_map(|target| {
-            let local = self.local(&target)?;
-            let inside = std::fs::canonicalize(&local).unwrap_or_else(|_| local.clone()).starts_with(&project);
-            Some((Target { local: Some(local), target, options: None, project: inside }, true))
+        // (`context.tsx:362-363`). It loads without approval only when the user's own configuration names it: its spec
+        // in `cli.json` or the global opencode config, or its path there or under a global plugin directory. Any other
+        // needs approval as a project's plugin does (O-162): a project's `opencode.json` names packages the server runs
+        // none of, and a path the server reports is its directory, held for the same artifact. A server target never
+        // loads a native build.
+        let vouched = if parts.is_empty() { Vouched::default() } else { self.vouched(&user) };
+        let server = parts.into_iter().filter_map(|part| {
+            let (target, local, vouched) = match part {
+                ServerPart::Package(spec) => {
+                    let local = self.package(&spec)?;
+                    let vouched = vouched.specs.contains(&spec);
+                    (spec, local, vouched)
+                }
+                ServerPart::Local(path) => {
+                    let local = Path::new(&path).is_absolute().then(|| std::fs::canonicalize(&path).ok()).flatten()?;
+                    let vouched =
+                        vouched.paths.contains(&local) || vouched.dirs.iter().any(|dir| local.starts_with(dir));
+                    (path, local, vouched)
+                }
+            };
+            let target = Target { local: Some(local), target, options: None, project: !vouched };
+            target.library().is_none().then_some((target, true))
         });
         let configured = self.configured.borrow();
         let configured = configured.iter().map(|entry| Target {
@@ -280,10 +341,11 @@ impl Loader {
                 };
                 file(known).is_some_and(|known| file(&target) == Some(known))
             };
-            let alias = |known: &Target| known.project && !target.project && same_file(known);
-            // A project's server part that names a project's plugin directory another way is that plugin: one target,
-            // one approval.
-            if from_server && target.project && targets.iter().any(|known| known.project && same_file(known)) {
+            // Only a configured entry stands in for a project's plugin: a server's never does (carbon jsnpm-2).
+            let alias = |known: &Target| !from_server && known.project && !target.project && same_file(known);
+            // A server part that names a target already found, under any spelling, is that target: one target, one
+            // approval.
+            if from_server && targets.iter().any(|known| key(known) == key(&target) || same_file(known)) {
                 continue;
             }
             match targets.iter_mut().find(|known| key(known) == key(&target) || alias(known)) {
@@ -554,13 +616,17 @@ impl Loader {
         // Its files are hashed and copied off the UI thread (FT-2): until the first walk, or the copy of an approved
         // tree, ended it is starting. A copy that does not stage, as the files changed under a stamp the walk could not
         // tell from the approved one, is held back with why, and its tree is hashed whole again off the UI thread: the
-        // new build is asked about once that walk ends.
+        // new build is asked about once that walk ends. A package from the npm cache a server part names (O-162) is
+        // approved by its files and its install's `package.json` and lockfile ([`Artifact::tree`]), and runs where it is:
+        // its dependencies sit beside it, not in it, so a copy of it could not import them.
+        let package = self.packages.borrow().values().any(|known| known == dir);
         let staged = match target.project {
             true => {
                 let Some(tree) = scripts.tree(dir) else {
                     return !registry.loaded(name) && starting(registry, name, listed);
                 };
                 match self.approved(host, registry, name, tree) {
+                    Ok(_) if package => None,
                     Ok(artifact) => match self.approvals.staging().map(|root| scripts.staged(&artifact, &root)) {
                         Ok(None) => return !registry.loaded(name) && starting(registry, name, listed),
                         Ok(Some(Ok(staged))) => Some(staged),

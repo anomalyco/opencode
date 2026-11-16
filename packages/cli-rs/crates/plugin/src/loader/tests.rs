@@ -1953,8 +1953,9 @@ fn a_project_typescript_plugin_named_through_a_link_is_listed_once() {
     assert_eq!(named, [(link.to_str().unwrap(), false)]);
 }
 
-// Expected (TS `context.tsx:663-665`, `Npm.resolve`, js-npm): with the JS host, a `cli.json` entry and a server
-// plugin's TUI part that name an npm package resolve in the package cache, need no approval, and keep the generation
+// Expected (TS `context.tsx:663-665`, `Npm.resolve`, js-npm, O-162): with the JS host, a `cli.json` entry and a server
+// plugin's TUI part that name an npm package resolve in the package cache, need no approval when the user's own
+// configuration names them (here the part, in the global opencode config), and keep the generation
 // they resolved to while they are targets, as TS resolves a loaded package once a session; a package is not watched.
 // A server part the cache does not hold is left out, as TS leaves out an optional target. Without the JS host neither
 // resolves, and server parts are not targets.
@@ -1975,12 +1976,13 @@ fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
     let part = install("@s/part@latest", "3", "@s/part");
     let configured = vec![Configured { target: "tui-pkg@1.0.0".into(), options: None }];
     let off = project.loader(Rc::new(Fake::default()), configured.clone()).with_npm(cache.clone());
-    off.set_server(vec!["@s/part".into(), "not-cached@1".into()]);
+    let parts = || vec![ServerPart::Package("@s/part".into()), ServerPart::Package("not-cached@1".into())];
+    off.set_server(parts(), vec!["@s/part".into()]);
     assert_eq!(off.targets().into_iter().map(|target| target.local).collect::<Vec<_>>(), [None]);
     let host = host();
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
     let loader = project.loader(Rc::new(Fake::default()), configured).with_npm(cache.clone()).with_scripts(scripts);
-    loader.set_server(vec!["@s/part".into(), "not-cached@1".into()]);
+    loader.set_server(parts(), vec!["@s/part".into()]);
     let resolved = |loader: &Loader| {
         loader.targets().into_iter().map(|target| (target.target, target.local, target.project)).collect::<Vec<_>>()
     };
@@ -1995,8 +1997,9 @@ fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
     assert!(!watched.iter().any(|dir| dir.starts_with(&cache)), "{watched:?}");
 }
 
-// Expected (O-146, js-npm): a server part inside the project is a project target, one from the npm cache is not; a part
-// that names a project's plugin directory another way (a link) is that plugin, one target with one approval.
+// Expected (O-146, O-162): a server part inside the project is a project target, and so is a package from the npm cache
+// that only the project's configuration names; a part that names a project's plugin directory another way (a link) is
+// that plugin, one target with one approval.
 #[cfg(unix)]
 #[test]
 fn a_server_part_inside_the_project_is_the_projects() {
@@ -2014,9 +2017,111 @@ fn a_server_part_inside_the_project_is_the_projects() {
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
     let loader = project.loader(Rc::new(Fake::default()), Vec::new()).with_npm(cache).with_scripts(scripts);
     let parts = [&link, &other].map(|path| path.to_string_lossy().into_owned());
-    loader.set_server(vec![parts[0].clone(), parts[1].clone(), "pkg@1.0.0".into()]);
+    let server = [&parts[0], &parts[1]].map(|path| ServerPart::Local(path.clone()));
+    loader
+        .set_server([server[0].clone(), server[1].clone(), ServerPart::Package("pkg@1.0.0".into())].into(), Vec::new());
     let targets: Vec<(String, bool)> =
         loader.targets().into_iter().map(|target| (target.target, target.project)).collect();
     let dir = dir.to_string_lossy().into_owned();
-    assert_eq!(targets, [(dir, true), (parts[1].clone(), true), ("pkg@1.0.0".to_owned(), false)]);
+    assert_eq!(targets, [(dir, true), (parts[1].clone(), true), ("pkg@1.0.0".to_owned(), true)]);
+}
+
+// Expected (carbon jsnpm-2, O-162): a project's plugin directory that links outside the project stays pending, its
+// native build unopened, also once the server reports it by the link or by where it leads: a server part never stands in
+// for a project's plugin.
+#[cfg(unix)]
+#[test]
+fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
+    let project = Project::new();
+    let sibling = project.root.path().join("sibling-plugin");
+    write(&sibling.join(entry_file()), "id=linked");
+    fs::create_dir_all(project.plugins()).unwrap();
+    let link = project.plugins().join("linked");
+    std::os::unix::fs::symlink(&sibling, &link).unwrap();
+    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
+    let loader = project.loader(fake.clone(), Vec::new()).with_scripts(scripts);
+    let target = link.to_string_lossy().into_owned();
+    let state = || (entry(&registry.entries(), &target).status.clone(), fake.loads.get());
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!(state(), (Status::Pending, 0));
+    for path in [&link, &sibling] {
+        loader.set_server(vec![ServerPart::Local(path.to_string_lossy().into_owned())], Vec::new());
+        loader.reconcile(&dynamic(&host), &registry);
+        assert_eq!(state(), (Status::Pending, 0), "{path:?}");
+        assert_eq!(loader.targets().len(), 1, "{path:?}");
+    }
+}
+
+// Expected (O-162): a server target never opens a native build, even one the user's own configuration names: the part
+// is left out, and nothing loads.
+#[test]
+fn a_server_reported_native_build_never_loads() {
+    let project = Project::new();
+    let elsewhere = project.root.path().join("elsewhere").join("native");
+    write(&elsewhere.join(entry_file()), "id=native");
+    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
+    let loader = project.loader(fake.clone(), Vec::new()).with_scripts(scripts);
+    let path = elsewhere.to_string_lossy().into_owned();
+    let library = elsewhere.join(entry_file()).to_string_lossy().into_owned();
+    let parts = vec![ServerPart::Local(path.clone()), ServerPart::Local(library.clone())];
+    loader.set_server(parts, vec![path.clone(), library]);
+    loader.reconcile(&dynamic(&host), &registry);
+    assert_eq!((loader.targets(), fake.loads.get()), (Vec::new(), 0));
+}
+
+// Expected (O-162): a package the server reports loads without approval only when the user's own configuration names
+// its spec, exactly as written: the global opencode config or `cli.json`. One only a project's configuration names (the
+// server's list carries no provenance), or that the user names at another version, waits for approval. A local path
+// is vouched for under a global plugin directory or as a path of the user's configuration; any other waits.
+#[test]
+fn only_the_users_own_configuration_vouches_for_a_server_part() {
+    let project = Project::new();
+    let cache = project.root.path().join("cache");
+    for spec in ["user-pkg@1.0.0", "cli-pkg@2.0.0", "project-pkg@1.0.0", "versioned@2.0.0"] {
+        let name = spec.split('@').next().unwrap();
+        write(
+            &cache.join("npm").join(spec).join("5").join("node_modules").join(name).join("tui.ts"),
+            "export default {}\n",
+        );
+    }
+    let global = project.config().join("plugins").join("mine");
+    write(&global.join("tui.ts"), "export default {}\n");
+    let named = project.root.path().join("dev").join("named");
+    write(&named.join("tui.ts"), "export default {}\n");
+    let other = project.root.path().join("dev").join("other");
+    write(&other.join("tui.ts"), "export default {}\n");
+    let host = host();
+    let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
+    let configured = vec![Configured { target: "cli-pkg@2.0.0".into(), options: None }];
+    let loader = project.loader(Rc::new(Fake::default()), configured).with_npm(cache).with_scripts(scripts);
+    let package = |spec: &str| ServerPart::Package(spec.into());
+    let local = |path: &Path| ServerPart::Local(path.to_string_lossy().into_owned());
+    let parts = vec![
+        package("user-pkg@1.0.0"),
+        package("project-pkg@1.0.0"),
+        package("cli-pkg@2.0.0"),
+        package("versioned@2.0.0"),
+        local(&global),
+        local(&named),
+        local(&other),
+    ];
+    let user = vec!["user-pkg@1.0.0".into(), "versioned@1.0.0".into(), named.to_string_lossy().into_owned()];
+    loader.set_server(parts, user);
+    let held: Vec<(String, bool)> =
+        loader.targets().into_iter().map(|target| (target.target, target.project)).collect();
+    let path = |path: &Path| path.to_string_lossy().into_owned();
+    assert_eq!(
+        held,
+        [
+            (path(&global), false),
+            ("user-pkg@1.0.0".to_owned(), false),
+            ("project-pkg@1.0.0".to_owned(), true),
+            ("cli-pkg@2.0.0".to_owned(), false),
+            ("versioned@2.0.0".to_owned(), true),
+            (path(&named), false),
+            (path(&other), true),
+        ]
+    );
 }
