@@ -144,7 +144,12 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
             *current.borrow_mut() = failure.clone();
             let failed = failure.clone();
             setup.failure(Rc::new(move || failed.borrow().clone()));
-            setup.continues(loaded.continues);
+            // The setup already ran on the JS host for the first activation and for a reload's handover, which go
+            // on from the chain the handover names; a later activation runs a fresh setup, which owns its own
+            // generation alone, not the dialogs of the activations before it (big-boi's catalog recheck).
+            let effects = loaded.effects.borrow_mut().take();
+            let continues = effects.as_ref().and(loaded.continues);
+            setup.continues(continues);
             let wake = Arc::new(Wake::new(Some(setup.host().app().proxy())));
             let mailbox = Mailbox::new(setup.id(), wake);
             mailbox.refuse_messages();
@@ -160,6 +165,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 host: Rc::downgrade(setup.host()),
                 loaded: loaded.clone(),
                 js: Cell::new(loaded.seq),
+                continues,
                 handed_over: Cell::new(false),
                 keys: RefCell::new(loaded.manifest.storage.iter().take(crate::storage::KEYS).cloned().collect()),
                 generation: setup.generation(),
@@ -179,7 +185,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 guest.watch(key, request);
             }
             // The first activation's setup ran on the JS host as it loaded; a later one runs it again.
-            match loaded.effects.borrow_mut().take() {
+            match effects {
                 Some(effects) => guest.effects("setup", effects, false, "setup"),
                 None => guest.setup_again(),
             }
@@ -196,6 +202,8 @@ pub(crate) struct Guest {
     loaded: Rc<Loaded>,
     /// The load whose setup made the JS host's activation of the plugin, which a deactivation names.
     js: Cell<u64>,
+    /// The first activation of the chain it goes on from, as a handover named it; none for a fresh setup.
+    continues: Option<u64>,
     /// Where the replies to this activation's requests go.
     relay: RefCell<Rc<Relay>>,
     /// A reload of its registrations handed its activation of the JS host to the guest that replaces it, whose end
@@ -371,7 +379,7 @@ impl Guest {
                 holds,
                 effects: RefCell::new(Some(Vec::new())),
                 watches: RefCell::new(watches),
-                continues: Some(self.loaded.continues.unwrap_or(self.generation)),
+                continues: Some(self.continues.unwrap_or(self.generation)),
                 relay: RefCell::new(Some(self.relay.borrow().clone())),
             };
             (load.state, load.registered) = (super::Loading::Loaded(Rc::new(loaded)), false);
