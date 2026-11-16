@@ -1173,4 +1173,16 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} ဆက်ရှင်များကို သိမ်းဆည်းထားပါမည်။",
   "workspace.reset.note": "၎င်းသည် မူရင်းဌာနခွဲနှင့် ကိုက်ညီစေရန် အလုပ်ခွင်ကို ပြန်လည်သတ်မှတ်ပါမည်။",
   "dialog.usageExceeded.dontShowAgain": "ထပ်မပြပါနှင့်",
+  "dialog.update.major.title": "OpenCode 2.0 အဆင်သင့်ဖြစ်ပါပြီ",
+  "dialog.update.major.lead":
+    "နောက်ထပ် အဓိကဗားရှင်းကို ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ။ အဆင့်မြှင့်တင်မှု အပြီးသတ်ရန် ပြန်လည်စတင်ပါ။",
+  "dialog.update.major.keeps.data": "သင့်စက်ရှင်များ၊ ပရောဂျက်များနှင့် ဆက်တင်များကို ဆက်လက်ထိန်းသိမ်းထားသည်",
+  "dialog.update.major.keeps.config": "သင့်လက်ရှိ Config နှင့် အလုပ်လုပ်သည်",
+  "dialog.update.major.plugins": "OpenCode 1 အတွက် ပြုလုပ်ထားသော ပလပ်အင်များကို အပ်ဒိတ်လုပ်ရန် လိုအပ်သည်",
+  "dialog.update.major.scheduled": "သင်ထွက်သည့်အခါ OpenCode 2.0 ကို ထည့်သွင်းပါမည်။",
+  "dialog.update.major.failed": "OpenCode 2.0 ကို ထည့်သွင်း၍မရပါ။",
+  "dialog.update.major.manual": "OpenCode 2.0 ကို ကိုယ်တိုင်ထည့်သွင်းရန် {{url}} တွင် ကြည့်ပါ",
+  "dialog.update.major.action.quit": "ထွက်သည့်အခါ အဆင့်မြှင့်ပါ",
+  "dialog.update.major.action.restart": "အဆင့်မြှင့်ရန် ပြန်လည်စတင်ပါ",
+  "dialog.update.major.action.restartNow": "ယခု ပြန်လည်စတင်ပါ",
 }

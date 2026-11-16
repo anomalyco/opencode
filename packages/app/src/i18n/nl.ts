@@ -543,6 +543,17 @@ export const dict = {
   "dialog.releaseNotes.action.hideFuture": "Laat deze in de toekomst niet zien",
   "dialog.releaseNotes.media.alt": "Releasevoorbeeld",
   "dialog.usageExceeded.dontShowAgain": "Niet meer weergeven",
+  "dialog.update.major.title": "OpenCode 2.0 staat klaar",
+  "dialog.update.major.lead": "De volgende hoofdversie is gedownload. Start opnieuw op om de upgrade te voltooien.",
+  "dialog.update.major.keeps.data": "Behoudt je sessies, projecten en instellingen",
+  "dialog.update.major.keeps.config": "Werkt met je huidige configuratie",
+  "dialog.update.major.plugins": "Plug-ins gemaakt voor OpenCode 1 hebben een update nodig",
+  "dialog.update.major.scheduled": "OpenCode 2.0 wordt geïnstalleerd wanneer je afsluit.",
+  "dialog.update.major.failed": "OpenCode 2.0 kon niet worden geïnstalleerd.",
+  "dialog.update.major.manual": "Zie {{url}} om OpenCode 2.0 handmatig te installeren",
+  "dialog.update.major.action.quit": "Upgraden bij afsluiten",
+  "dialog.update.major.action.restart": "Opnieuw opstarten om te upgraden",
+  "dialog.update.major.action.restartNow": "Nu opnieuw opstarten",
 
   "context.breakdown.title": "Contextanalyse",
   "context.breakdown.note":

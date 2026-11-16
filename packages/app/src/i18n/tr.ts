@@ -573,6 +573,17 @@ export const dict = {
   "dialog.project.edit.worktree.startup.placeholder": "örneğin bun install",
 
   "dialog.usageExceeded.dontShowAgain": "Bir daha gösterme",
+  "dialog.update.major.title": "OpenCode 2.0 hazır",
+  "dialog.update.major.lead": "Bir sonraki ana sürüm indirildi. Yükseltmeyi tamamlamak için yeniden başlatın.",
+  "dialog.update.major.keeps.data": "Oturumlarınızı, projelerinizi ve ayarlarınızı korur",
+  "dialog.update.major.keeps.config": "Mevcut yapılandırmanızla çalışır",
+  "dialog.update.major.plugins": "OpenCode 1 için geliştirilen eklentilerin güncellenmesi gerekiyor",
+  "dialog.update.major.scheduled": "OpenCode 2.0, uygulamadan çıktığınızda kurulacak.",
+  "dialog.update.major.failed": "OpenCode 2.0 kurulamadı.",
+  "dialog.update.major.manual": "OpenCode 2.0 sürümünü elle kurmak için {{url}} adresine bakın",
+  "dialog.update.major.action.quit": "Çıkışta yükselt",
+  "dialog.update.major.action.restart": "Yükseltmek için yeniden başlat",
+  "dialog.update.major.action.restartNow": "Şimdi yeniden başlat",
 
   "context.breakdown.title": "Bağlam Dökümü",
   "context.breakdown.note": 'Girdi tokenlerinin yaklaşık dökümü. "Diğer" araç tanımları ve ek yükleri içerir.',

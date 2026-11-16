@@ -1167,4 +1167,16 @@ export const dict = {
   "workspace.reset.archived.many": "A {{count}} munkamenetek archiválva lesznek.",
   "workspace.reset.note": "Ezzel visszaállítja a munkaterületet, hogy megfeleljen az alapértelmezett ágnak.",
   "dialog.usageExceeded.dontShowAgain": "Ne jelenjen meg újra",
+  "dialog.update.major.title": "Az OpenCode 2.0 készen áll",
+  "dialog.update.major.lead":
+    "A következő főverzió letöltődött. A frissítés befejezéséhez indítsa újra az alkalmazást.",
+  "dialog.update.major.keeps.data": "Megőrzi a munkameneteit, projektjeit és beállításait",
+  "dialog.update.major.keeps.config": "Működik a jelenlegi konfigurációjával",
+  "dialog.update.major.plugins": "Az OpenCode 1-hez készült beépülő modulokat frissíteni kell",
+  "dialog.update.major.scheduled": "Az OpenCode 2.0 kilépéskor települ.",
+  "dialog.update.major.failed": "Az OpenCode 2.0 telepítése nem sikerült.",
+  "dialog.update.major.manual": "Az OpenCode 2.0 kézi telepítéséhez lásd: {{url}}",
+  "dialog.update.major.action.quit": "Frissítés kilépéskor",
+  "dialog.update.major.action.restart": "Újraindítás a frissítéshez",
+  "dialog.update.major.action.restartNow": "Újraindítás most",
 }

@@ -1160,4 +1160,16 @@ export const dict = {
   "workspace.reset.archived.many": "Seancat {{count}} do të arkivohen.",
   "workspace.reset.note": "Kjo do të rivendosë hapësirën e punës që të përputhet me degën e paracaktuar.",
   "dialog.usageExceeded.dontShowAgain": "Mos e shfaq përsëri",
+  "dialog.update.major.title": "OpenCode 2.0 është gati",
+  "dialog.update.major.lead":
+    "Versioni tjetër madhor është shkarkuar. Rinisni aplikacionin për të përfunduar përditësimin.",
+  "dialog.update.major.keeps.data": "Ruan sesionet, projektet dhe cilësimet tuaja",
+  "dialog.update.major.keeps.config": "Punon me konfigurimin tuaj aktual",
+  "dialog.update.major.plugins": "Shtojcat e bëra për OpenCode 1 duhen përditësuar",
+  "dialog.update.major.scheduled": "OpenCode 2.0 do të instalohet kur të dilni nga aplikacioni.",
+  "dialog.update.major.failed": "OpenCode 2.0 nuk mund të instalohej.",
+  "dialog.update.major.manual": "Për të instaluar OpenCode 2.0 manualisht, shihni {{url}}",
+  "dialog.update.major.action.quit": "Përditëso në dalje",
+  "dialog.update.major.action.restart": "Rinis për të përditësuar",
+  "dialog.update.major.action.restartNow": "Rinis tani",
 }

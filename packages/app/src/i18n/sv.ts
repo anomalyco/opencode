@@ -542,6 +542,17 @@ export const dict = {
   "dialog.releaseNotes.action.hideFuture": "Visa inte dessa i framtiden",
   "dialog.releaseNotes.media.alt": "Förhandsvisning av version",
   "dialog.usageExceeded.dontShowAgain": "Visa inte igen",
+  "dialog.update.major.title": "OpenCode 2.0 är redo",
+  "dialog.update.major.lead": "Nästa huvudversion har hämtats. Starta om för att slutföra uppgraderingen.",
+  "dialog.update.major.keeps.data": "Behåller dina sessioner, projekt och inställningar",
+  "dialog.update.major.keeps.config": "Fungerar med din nuvarande konfiguration",
+  "dialog.update.major.plugins": "Insticksprogram gjorda för OpenCode 1 behöver uppdateras",
+  "dialog.update.major.scheduled": "OpenCode 2.0 installeras när du avslutar.",
+  "dialog.update.major.failed": "Det gick inte att installera OpenCode 2.0.",
+  "dialog.update.major.manual": "Se {{url}} för att installera OpenCode 2.0 manuellt",
+  "dialog.update.major.action.quit": "Uppgradera vid avslut",
+  "dialog.update.major.action.restart": "Starta om för att uppgradera",
+  "dialog.update.major.action.restartNow": "Starta om nu",
 
   "context.breakdown.title": "Kontextfördelning",
   "context.breakdown.note":

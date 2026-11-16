@@ -1160,4 +1160,16 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} seje bodo arhivirane.",
   "workspace.reset.note": "To bo ponastavilo delovni prostor, da bo ustrezal privzeti veji.",
   "dialog.usageExceeded.dontShowAgain": "Ne prikaži več",
+  "dialog.update.major.title": "OpenCode 2.0 je pripravljen",
+  "dialog.update.major.lead":
+    "Naslednja glavna različica je prenesena. Znova zaženite aplikacijo, da dokončate nadgradnjo.",
+  "dialog.update.major.keeps.data": "Ohrani vaše seje, projekte in nastavitve",
+  "dialog.update.major.keeps.config": "Deluje z vašo trenutno konfiguracijo",
+  "dialog.update.major.plugins": "Vtičnike, izdelane za OpenCode 1, je treba posodobiti",
+  "dialog.update.major.scheduled": "OpenCode 2.0 bo nameščen ob izhodu iz aplikacije.",
+  "dialog.update.major.failed": "OpenCode 2.0 ni bilo mogoče namestiti.",
+  "dialog.update.major.manual": "Za ročno namestitev OpenCode 2.0 glejte {{url}}",
+  "dialog.update.major.action.quit": "Nadgradite ob izhodu",
+  "dialog.update.major.action.restart": "Znova zaženite za nadgradnjo",
+  "dialog.update.major.action.restartNow": "Znova zaženite zdaj",
 }

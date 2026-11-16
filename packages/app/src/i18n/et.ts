@@ -1148,4 +1148,16 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} seanssi arhiivitakse.",
   "workspace.reset.note": "See lähtestab tööruumi, et see vastaks vaikeharule.",
   "dialog.usageExceeded.dontShowAgain": "Ära kuva enam",
+  "dialog.update.major.title": "OpenCode 2.0 on valmis",
+  "dialog.update.major.lead":
+    "Järgmine põhiversioon on alla laaditud. Värskendamise lõpuleviimiseks taaskäivitage rakendus.",
+  "dialog.update.major.keeps.data": "Säilitab teie seansid, projektid ja seaded",
+  "dialog.update.major.keeps.config": "Töötab teie praeguse konfiguratsiooniga",
+  "dialog.update.major.plugins": "OpenCode 1 jaoks loodud pluginad vajavad värskendamist",
+  "dialog.update.major.scheduled": "OpenCode 2.0 installitakse rakendusest väljumisel.",
+  "dialog.update.major.failed": "OpenCode 2.0 installimine ebaõnnestus.",
+  "dialog.update.major.manual": "OpenCode 2.0 käsitsi installimiseks vaadake {{url}}",
+  "dialog.update.major.action.quit": "Värskendage väljumisel",
+  "dialog.update.major.action.restart": "Taaskäivitage värskendamiseks",
+  "dialog.update.major.action.restartNow": "Taaskäivitage kohe",
 }

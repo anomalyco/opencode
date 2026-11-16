@@ -1174,4 +1174,16 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} ސެޝަންތައް އަރުޝީފް ކުރެވޭނެއެވެ.",
   "workspace.reset.note": "މިއީ ޑިފޯލްޓް ބްރާންޗާ އެއްގޮތްވާ ގޮތަށް ވޯކްސްޕޭސް ރީސެޓް ކުރާނެ ކަމެކެވެ.",
   "dialog.usageExceeded.dontShowAgain": "އަލުން ނުދައްކާ",
+  "dialog.update.major.title": "OpenCode 2.0 ތައްޔާރުވެއްޖެ",
+  "dialog.update.major.lead":
+    "ދެން އޮތް މައިގަނޑު ރިލީޒް ޑައުންލޯޑް ކުރެވިއްޖެއެވެ. އަޕްގްރޭޑް ނިންމުމަށް ރީސްޓާޓް ކުރާށެވެ.",
+  "dialog.update.major.keeps.data": "ތިބާގެ ސެޝަންތަކާއި، މަޝްރޫއުތަކާއި އަދި ސެޓިންގސް ދެމިހުންނާނެއެވެ",
+  "dialog.update.major.keeps.config": "ތިބާގެ މިހާރުގެ ކޮންފިގް އާއެކު މަސައްކަތްކުރާނެއެވެ",
+  "dialog.update.major.plugins": "OpenCode 1 އަށް ހަދާފައިވާ ޕްލަގިންސް އަޕްޑޭޓް ކުރަން ޖެހޭނެއެވެ",
+  "dialog.update.major.scheduled": "އެޕް ބަންދުކުރާއިރު OpenCode 2.0 އިންސްޓޯލް ވާނެއެވެ.",
+  "dialog.update.major.failed": "OpenCode 2.0 އިންސްޓޯލް ނުކުރެވުނެވެ.",
+  "dialog.update.major.manual": "OpenCode 2.0 މެނުއަލްކޮށް އިންސްޓޯލް ކުރުމަށް {{url}} ބަލާށެވެ",
+  "dialog.update.major.action.quit": "ބަންދުކުރާއިރު އަޕްގްރޭޑް ކުރުން",
+  "dialog.update.major.action.restart": "އަޕްގްރޭޑް ކުރުމަށް ރީސްޓާޓް ކުރުން",
+  "dialog.update.major.action.restartNow": "މިހާރު ރީސްޓާޓް ކުރުން",
 }

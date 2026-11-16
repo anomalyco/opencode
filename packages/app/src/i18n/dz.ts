@@ -1178,4 +1178,16 @@ export const dict: Record<string, string> = {
   "workspace.reset.archived.many": "{{count}} ལཱ་ཡུན་ཚུ་ཡིག་མཛོད་ནང་བཞག་འོང་།",
   "workspace.reset.note": "འདི་གིས་ སྔོན་སྒྲིག་ཡན་ལག་མཐུན་སྒྲིག་འབད་ནི་ལུ་ ལཱ་གི་ས་སྒོ་འདི་སླར་སྒྲིག་འབད་འོང་།",
   "dialog.usageExceeded.dontShowAgain": "ལོག་སྟེ་མ་སྟོན།",
+  "dialog.update.major.title": "OpenCode 2.0 གྲ་སྒྲིག་ཡོད",
+  "dialog.update.major.lead":
+    "ཐོན་རིམ་གཙོ་བོ་ཤུལ་མམ་འདི་ ཕབ་ལེན་འབད་ཚར་ཡི། དུས་མཐུན་བཟོ་ནི་འདི་མཇུག་བསྡུ་ནིའི་དོན་ལུ་ ལོག་འགོ་བཙུགས།",
+  "dialog.update.major.keeps.data": "ཁྱོད་ཀྱི་ལཱ་ཡུན་དང་ ལས་གཞི་ སྒྲིག་སྟངས་ཚུ་རང་འཇགས་བཞགཔ་ཨིན",
+  "dialog.update.major.keeps.config": "ཁྱོད་ཀྱི་ད་ལྟོའི་རིམ་སྒྲིག་དང་གཅིག་ཁར་ལཱ་འབདཝ་ཨིན",
+  "dialog.update.major.plugins": "OpenCode 1 གི་དོན་ལུ་བཟོ་ཡོད་པའི་པ་ལག་ཨིན་ཚུ་ དུས་མཐུན་བཟོ་དགོཔ་ཨིན",
+  "dialog.update.major.scheduled": "ཁྱོད་ཀྱིས་ཕྱིར་འཐོན་འབདཝ་ད་ OpenCode 2.0 གཞི་བཙུགས་འབད་འོང་།",
+  "dialog.update.major.failed": "OpenCode 2.0 གཞི་བཙུགས་འབད་མ་ཚུགས།",
+  "dialog.update.major.manual": "OpenCode 2.0 ལག་ཐོག་ལས་གཞི་བཙུགས་འབད་ནིའི་དོན་ལུ་ {{url}} ལུ་བལྟ",
+  "dialog.update.major.action.quit": "ཕྱིར་འཐོན་འབདཝ་ད་དུས་མཐུན་བཟོ",
+  "dialog.update.major.action.restart": "དུས་མཐུན་བཟོ་ནིའི་དོན་ལུ་ལོག་འགོ་བཙུགས",
+  "dialog.update.major.action.restartNow": "ད་ལྟོ་ལོག་འགོ་བཙུགས",
 }

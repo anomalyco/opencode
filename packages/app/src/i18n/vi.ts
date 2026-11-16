@@ -547,6 +547,17 @@ export const dict = {
   "dialog.releaseNotes.action.hideFuture": "Không hiển thị lại",
   "dialog.releaseNotes.media.alt": "Xem trước bản phát hành",
   "dialog.usageExceeded.dontShowAgain": "Không hiển thị lại",
+  "dialog.update.major.title": "OpenCode 2.0 đã sẵn sàng",
+  "dialog.update.major.lead": "Phiên bản lớn tiếp theo đã được tải xuống. Khởi động lại để hoàn tất nâng cấp.",
+  "dialog.update.major.keeps.data": "Giữ nguyên các phiên, dự án và cài đặt của bạn",
+  "dialog.update.major.keeps.config": "Tương thích với cấu hình hiện tại của bạn",
+  "dialog.update.major.plugins": "Plugin dành cho OpenCode 1 cần được cập nhật",
+  "dialog.update.major.scheduled": "OpenCode 2.0 sẽ được cài đặt khi bạn thoát.",
+  "dialog.update.major.failed": "Không cài đặt được OpenCode 2.0.",
+  "dialog.update.major.manual": "Để cài đặt OpenCode 2.0 thủ công, hãy xem {{url}}",
+  "dialog.update.major.action.quit": "Nâng cấp khi thoát",
+  "dialog.update.major.action.restart": "Khởi động lại để nâng cấp",
+  "dialog.update.major.action.restartNow": "Khởi động lại ngay",
 
   "context.breakdown.title": "Phân tích ngữ cảnh",
   "context.breakdown.note":

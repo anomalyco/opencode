@@ -568,6 +568,18 @@ export const dict = {
     "Запускается после создания нового рабочего пространства (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "например, bun install",
   "dialog.usageExceeded.dontShowAgain": "Больше не показывать",
+  "dialog.update.major.title": "OpenCode 2.0 готов к установке",
+  "dialog.update.major.lead":
+    "Следующий крупный релиз уже загружен. Перезапустите приложение, чтобы завершить обновление.",
+  "dialog.update.major.keeps.data": "Сохраняет ваши сессии, проекты и настройки",
+  "dialog.update.major.keeps.config": "Работает с вашей текущей конфигурацией",
+  "dialog.update.major.plugins": "Плагины, созданные для OpenCode 1, требуют обновления",
+  "dialog.update.major.scheduled": "OpenCode 2.0 будет установлен при выходе из приложения.",
+  "dialog.update.major.failed": "Не удалось установить OpenCode 2.0.",
+  "dialog.update.major.manual": "Чтобы установить OpenCode 2.0 вручную, перейдите по адресу {{url}}",
+  "dialog.update.major.action.quit": "Обновить при выходе",
+  "dialog.update.major.action.restart": "Перезапустить и обновить",
+  "dialog.update.major.action.restartNow": "Перезапустить сейчас",
 
   "context.breakdown.title": "Разбивка контекста",
   "context.breakdown.note":

@@ -580,6 +580,17 @@ export const dict = {
   "dialog.releaseNotes.media.alt": "Pratinjau rilis",
 
   "dialog.usageExceeded.dontShowAgain": "Jangan tampilkan lagi",
+  "dialog.update.major.title": "OpenCode 2.0 sudah siap",
+  "dialog.update.major.lead": "Rilis utama berikutnya telah diunduh. Mulai ulang untuk menyelesaikan pembaruan.",
+  "dialog.update.major.keeps.data": "Mempertahankan sesi, proyek, dan pengaturan Anda",
+  "dialog.update.major.keeps.config": "Berfungsi dengan konfigurasi Anda saat ini",
+  "dialog.update.major.plugins": "Plugin yang dibuat untuk OpenCode 1 perlu diperbarui",
+  "dialog.update.major.scheduled": "OpenCode 2.0 akan diinstal saat Anda keluar.",
+  "dialog.update.major.failed": "OpenCode 2.0 tidak dapat diinstal.",
+  "dialog.update.major.manual": "Untuk menginstal OpenCode 2.0 secara manual, lihat {{url}}",
+  "dialog.update.major.action.quit": "Perbarui saat keluar",
+  "dialog.update.major.action.restart": "Mulai ulang untuk memperbarui",
+  "dialog.update.major.action.restartNow": "Mulai ulang sekarang",
 
   "context.breakdown.title": "Rincian Konteks",
   "context.breakdown.note": 'Perkiraan rincian token masukan. "Lainnya" mencakup definisi alat dan beban tambahan.',

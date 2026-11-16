@@ -1170,4 +1170,16 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} sesijos bus archyvuojamos.",
   "workspace.reset.note": "Tai iš naujo nustatys darbo sritį, kad ji atitiktų numatytąją šaką.",
   "dialog.usageExceeded.dontShowAgain": "Daugiau nerodyti",
+  "dialog.update.major.title": "OpenCode 2.0 paruoštas",
+  "dialog.update.major.lead":
+    "Kita pagrindinė versija jau atsisiųsta. Paleiskite programą iš naujo, kad užbaigtumėte atnaujinimą.",
+  "dialog.update.major.keeps.data": "Išsaugo jūsų seansus, projektus ir nustatymus",
+  "dialog.update.major.keeps.config": "Veikia su jūsų dabartine konfigūracija",
+  "dialog.update.major.plugins": "OpenCode 1 skirtus papildinius reikia atnaujinti",
+  "dialog.update.major.scheduled": "OpenCode 2.0 bus įdiegtas, kai baigsite darbą.",
+  "dialog.update.major.failed": "Nepavyko įdiegti OpenCode 2.0.",
+  "dialog.update.major.manual": "Norėdami įdiegti OpenCode 2.0 rankiniu būdu, žr. {{url}}",
+  "dialog.update.major.action.quit": "Atnaujinti baigiant darbą",
+  "dialog.update.major.action.restart": "Paleisti iš naujo ir atnaujinti",
+  "dialog.update.major.action.restartNow": "Paleisti iš naujo dabar",
 }

@@ -571,6 +571,18 @@ export const dict = {
   "dialog.project.edit.worktree.startup.placeholder": "p. ej. bun install",
 
   "dialog.usageExceeded.dontShowAgain": "No volver a mostrar",
+  "dialog.update.major.title": "OpenCode 2.0 está listo",
+  "dialog.update.major.lead":
+    "La próxima versión principal ya está descargada. Reinicia para completar la actualización.",
+  "dialog.update.major.keeps.data": "Conserva tus sesiones, proyectos y ajustes",
+  "dialog.update.major.keeps.config": "Funciona con tu configuración actual",
+  "dialog.update.major.plugins": "Los plugins creados para OpenCode 1 necesitan una actualización",
+  "dialog.update.major.scheduled": "OpenCode 2.0 se instalará cuando salgas.",
+  "dialog.update.major.failed": "No se pudo instalar OpenCode 2.0.",
+  "dialog.update.major.manual": "Para instalar OpenCode 2.0 manualmente, consulta {{url}}",
+  "dialog.update.major.action.quit": "Actualizar al salir",
+  "dialog.update.major.action.restart": "Reiniciar para actualizar",
+  "dialog.update.major.action.restartNow": "Reiniciar ahora",
 
   "context.breakdown.title": "Desglose del contexto",
   "context.breakdown.note":

@@ -474,6 +474,17 @@ export const dict = {
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
 
   "dialog.usageExceeded.dontShowAgain": "Ikke vis igjen",
+  "dialog.update.major.title": "OpenCode 2.0 er klar",
+  "dialog.update.major.lead": "Den neste hovedversjonen er lastet ned. Start på nytt for å fullføre oppgraderingen.",
+  "dialog.update.major.keeps.data": "Beholder sesjonene, prosjektene og innstillingene dine",
+  "dialog.update.major.keeps.config": "Fungerer med den nåværende konfigurasjonen din",
+  "dialog.update.major.plugins": "Programtillegg laget for OpenCode 1 må oppdateres",
+  "dialog.update.major.scheduled": "OpenCode 2.0 installeres når du avslutter.",
+  "dialog.update.major.failed": "OpenCode 2.0 kunne ikke installeres.",
+  "dialog.update.major.manual": "Se {{url}} for å installere OpenCode 2.0 manuelt",
+  "dialog.update.major.action.quit": "Oppgrader ved avslutning",
+  "dialog.update.major.action.restart": "Start på nytt for å oppgradere",
+  "dialog.update.major.action.restartNow": "Start på nytt nå",
 
   "context.breakdown.title": "Kontekstfordeling",
   "context.breakdown.note":

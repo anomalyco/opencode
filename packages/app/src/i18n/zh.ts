@@ -581,6 +581,17 @@ export const dict = {
   "dialog.project.edit.worktree.startup.placeholder": "例如 bun install",
 
   "dialog.usageExceeded.dontShowAgain": "不再显示",
+  "dialog.update.major.title": "OpenCode 2.0 已就绪",
+  "dialog.update.major.lead": "下一个大版本已下载。重启即可完成升级。",
+  "dialog.update.major.keeps.data": "保留你的会话、项目和设置",
+  "dialog.update.major.keeps.config": "兼容你当前的配置",
+  "dialog.update.major.plugins": "为 OpenCode 1 开发的插件需要更新",
+  "dialog.update.major.scheduled": "OpenCode 2.0 将在你退出时安装。",
+  "dialog.update.major.failed": "无法安装 OpenCode 2.0。",
+  "dialog.update.major.manual": "如需手动安装 OpenCode 2.0，请参阅 {{url}}",
+  "dialog.update.major.action.quit": "退出时升级",
+  "dialog.update.major.action.restart": "重启并升级",
+  "dialog.update.major.action.restartNow": "立即重启",
 
   "context.breakdown.title": "上下文细分",
   "context.breakdown.note": "输入 token 的大致细分。“其他”包含工具定义和开销。",

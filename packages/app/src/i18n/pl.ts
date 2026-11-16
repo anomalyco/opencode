@@ -539,6 +539,18 @@ export const dict = {
     "Uruchamiany po utworzeniu nowej przestrzeni roboczej (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "np. bun install",
   "dialog.usageExceeded.dontShowAgain": "Nie pokazuj ponownie",
+  "dialog.update.major.title": "OpenCode 2.0 jest gotowy",
+  "dialog.update.major.lead":
+    "Kolejna główna wersja została pobrana. Uruchom aplikację ponownie, aby dokończyć aktualizację.",
+  "dialog.update.major.keeps.data": "Zachowuje sesje, projekty i ustawienia",
+  "dialog.update.major.keeps.config": "Działa z obecną konfiguracją",
+  "dialog.update.major.plugins": "Wtyczki stworzone dla OpenCode 1 wymagają aktualizacji",
+  "dialog.update.major.scheduled": "OpenCode 2.0 zostanie zainstalowany przy zamykaniu aplikacji.",
+  "dialog.update.major.failed": "Nie udało się zainstalować OpenCode 2.0.",
+  "dialog.update.major.manual": "Aby ręcznie zainstalować OpenCode 2.0, zobacz {{url}}",
+  "dialog.update.major.action.quit": "Zaktualizuj przy zamykaniu",
+  "dialog.update.major.action.restart": "Uruchom ponownie i zaktualizuj",
+  "dialog.update.major.action.restartNow": "Uruchom ponownie teraz",
 
   "context.breakdown.title": "Podział kontekstu",
   "context.breakdown.note": 'Przybliżony podział tokenów wejściowych. "Inne" obejmuje definicje narzędzi i narzut.',

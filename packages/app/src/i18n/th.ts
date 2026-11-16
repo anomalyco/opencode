@@ -565,6 +565,17 @@ export const dict = {
   "dialog.project.edit.worktree.startup.placeholder": "เช่น bun install",
 
   "dialog.usageExceeded.dontShowAgain": "ไม่ต้องแสดงอีก",
+  "dialog.update.major.title": "OpenCode 2.0 พร้อมแล้ว",
+  "dialog.update.major.lead": "ดาวน์โหลดเวอร์ชันหลักถัดไปแล้ว รีสตาร์ทเพื่ออัปเกรดให้เสร็จสมบูรณ์",
+  "dialog.update.major.keeps.data": "เก็บเซสชัน โปรเจกต์ และการตั้งค่าของคุณไว้",
+  "dialog.update.major.keeps.config": "ใช้งานได้กับการกำหนดค่าปัจจุบันของคุณ",
+  "dialog.update.major.plugins": "ปลั๊กอินที่สร้างสำหรับ OpenCode 1 ต้องได้รับการอัปเดต",
+  "dialog.update.major.scheduled": "OpenCode 2.0 จะติดตั้งเมื่อคุณออกจากแอป",
+  "dialog.update.major.failed": "ติดตั้ง OpenCode 2.0 ไม่สำเร็จ",
+  "dialog.update.major.manual": "หากต้องการติดตั้ง OpenCode 2.0 ด้วยตนเอง โปรดดูที่ {{url}}",
+  "dialog.update.major.action.quit": "อัปเกรดเมื่อออกจากแอป",
+  "dialog.update.major.action.restart": "รีสตาร์ทเพื่ออัปเกรด",
+  "dialog.update.major.action.restartNow": "รีสตาร์ททันที",
 
   "context.breakdown.title": "การแบ่งบริบท",
   "context.breakdown.note": 'การแบ่งโดยประมาณของโทเค็นนำเข้า "อื่น ๆ" รวมถึงคำนิยามเครื่องมือและโอเวอร์เฮด',

@@ -451,6 +451,18 @@ export const dict = {
   "dialog.releaseNotes.action.hideFuture": "Non mostrarli in futuro",
   "dialog.releaseNotes.media.alt": "Anteprima delle novità",
   "dialog.usageExceeded.dontShowAgain": "Non mostrare più",
+  "dialog.update.major.title": "OpenCode 2.0 è pronto",
+  "dialog.update.major.lead":
+    "La prossima versione principale è stata scaricata. Riavvia per completare l'aggiornamento.",
+  "dialog.update.major.keeps.data": "Mantiene le tue sessioni, i progetti e le impostazioni",
+  "dialog.update.major.keeps.config": "Funziona con la tua configurazione attuale",
+  "dialog.update.major.plugins": "I plugin creati per OpenCode 1 devono essere aggiornati",
+  "dialog.update.major.scheduled": "OpenCode 2.0 verrà installato quando esci.",
+  "dialog.update.major.failed": "Impossibile installare OpenCode 2.0.",
+  "dialog.update.major.manual": "Per installare OpenCode 2.0 manualmente, consulta {{url}}",
+  "dialog.update.major.action.quit": "Aggiorna all'uscita",
+  "dialog.update.major.action.restart": "Riavvia per aggiornare",
+  "dialog.update.major.action.restartNow": "Riavvia ora",
 
   "context.breakdown.title": "Ripartizione del contesto",
   "context.breakdown.note":

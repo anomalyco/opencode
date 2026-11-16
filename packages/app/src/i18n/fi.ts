@@ -433,6 +433,17 @@ export const dict = {
   "dialog.releaseNotes.action.hideFuture": "Älä näytä näitä jatkossa",
   "dialog.releaseNotes.media.alt": "Julkaisun esikatselu",
   "dialog.usageExceeded.dontShowAgain": "Älä näytä uudelleen",
+  "dialog.update.major.title": "OpenCode 2.0 on valmiina",
+  "dialog.update.major.lead": "Seuraava pääversio on ladattu. Viimeistele päivitys käynnistämällä sovellus uudelleen.",
+  "dialog.update.major.keeps.data": "Säilyttää istuntosi, projektisi ja asetuksesi",
+  "dialog.update.major.keeps.config": "Toimii nykyisten määritystesi kanssa",
+  "dialog.update.major.plugins": "OpenCode 1:lle tehdyt laajennukset tarvitsevat päivityksen",
+  "dialog.update.major.scheduled": "OpenCode 2.0 asennetaan, kun lopetat sovelluksen.",
+  "dialog.update.major.failed": "OpenCode 2.0:n asennus epäonnistui.",
+  "dialog.update.major.manual": "Jos haluat asentaa OpenCode 2.0:n manuaalisesti, katso {{url}}",
+  "dialog.update.major.action.quit": "Päivitä lopetettaessa",
+  "dialog.update.major.action.restart": "Päivitä käynnistämällä uudelleen",
+  "dialog.update.major.action.restartNow": "Käynnistä uudelleen nyt",
 
   "context.breakdown.title": "Kontekstin erittely",
   "context.breakdown.note":

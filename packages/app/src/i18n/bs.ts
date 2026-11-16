@@ -569,6 +569,17 @@ export const dict = {
   "dialog.project.edit.worktree.startup.placeholder": "npr. bun install",
 
   "dialog.usageExceeded.dontShowAgain": "Nemoj više prikazivati",
+  "dialog.update.major.title": "OpenCode 2.0 je spreman",
+  "dialog.update.major.lead": "Sljedeća glavna verzija je preuzeta. Ponovo pokreni aplikaciju da završiš nadogradnju.",
+  "dialog.update.major.keeps.data": "Zadržava tvoje sesije, projekte i postavke",
+  "dialog.update.major.keeps.config": "Radi s tvojom trenutnom konfiguracijom",
+  "dialog.update.major.plugins": "Plugine napravljene za OpenCode 1 treba ažurirati",
+  "dialog.update.major.scheduled": "OpenCode 2.0 će se instalirati pri izlasku iz aplikacije.",
+  "dialog.update.major.failed": "Nije moguće instalirati OpenCode 2.0.",
+  "dialog.update.major.manual": "Da ručno instaliraš OpenCode 2.0, pogledaj {{url}}",
+  "dialog.update.major.action.quit": "Nadogradi pri izlasku",
+  "dialog.update.major.action.restart": "Ponovo pokreni za nadogradnju",
+  "dialog.update.major.action.restartNow": "Ponovo pokreni sada",
 
   "context.breakdown.title": "Razlaganje konteksta",
   "context.breakdown.note":
