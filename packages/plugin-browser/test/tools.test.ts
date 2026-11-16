@@ -48,6 +48,11 @@ test("URL normalization rejects filesystem paths instead of treating them as hos
     '"ftp://example.com/file" is not a browser URL. Use an http:// or https:// address',
   )
   expect(() => navigate("https://user:secret@example.com")).toThrow("is not a browser URL")
+  // Preview addresses, internal or as tabs.list shows a remote server's file, point to browser.preview.
+  for (const url of ["workspace://ses_1/site/index.html", "oc-preview://abc/site/index.html"]) {
+    expect(() => navigate(url)).toThrow("Use browser.preview({ path })")
+    expect(() => BrowserTools.normalizeAction({ type: "tabs.open", url })).toThrow("Use browser.preview({ path })")
+  }
   expect(navigate("example.com/docs")).toEqual({ type: "navigate", tabID, url: "https://example.com/docs" })
   expect(navigate("localhost:8000")).toEqual({ type: "navigate", tabID, url: "http://localhost:8000/" })
   // A subdomain of localhost is this machine too, as the pane's address bar reads it.

@@ -287,6 +287,8 @@ export function normalizeAction(action: Exclude<Browser.Input, { readonly type: 
   if (action.type === "tabs.open" && action.url === undefined) return action
   const value = action.url?.trim() || "about:blank"
   if (/^oc-preview:/i.test(value)) throw new Tool.Error({ message: "This is an internal preview address. Use browser.preview({ path }) with a workspace-relative path, or click a link in the preview tab." })
+  // tabs.list shows a remote server's previews this way; it is a display address, not something a tab can load.
+  if (/^workspace:/i.test(value)) throw new Tool.Error({ message: "This is a workspace preview address. Use browser.preview({ path }) with the workspace-relative path after the session ID, or click a link in the preview tab." })
   // A filesystem path would otherwise gain a scheme and parse as a hostname: /tmp/x becomes https://tmp/x.
   if (/^(?:[\\/.~]|[a-zA-Z]:[\\/])/.test(value) || /^file:/i.test(value))
     throw new Tool.Error({
