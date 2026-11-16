@@ -418,6 +418,18 @@ export namespace Step {
   })
   export type Parked = typeof Parked.Type
 
+  /** Atomically consumes a parked Step after all its Questions have been answered. */
+  export const Settled = Event.durable({
+    type: "session.step.settled",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+      generation: NonNegativeInt,
+    },
+  })
+  export type Settled = typeof Settled.Type
+
   export const Failed = Event.durable({
     type: "session.step.failed",
     ...options,

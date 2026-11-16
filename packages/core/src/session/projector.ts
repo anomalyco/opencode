@@ -48,10 +48,11 @@ type MessageEvent = Exclude<
   | typeof SessionEvent.Forked.Type
   | typeof SessionEvent.Deleted.Type
   | SessionEvent.Step.Parked
+  | SessionEvent.Step.Settled
   | SessionEvent.QuestionResolution.Resolved
 >
 
-type StorageEvent = MessageEvent | SessionEvent.Step.Parked | SessionEvent.QuestionResolution.Resolved
+type StorageEvent = MessageEvent | SessionEvent.Step.Parked | SessionEvent.Step.Settled | SessionEvent.QuestionResolution.Resolved
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const encodeStoredUser = Schema.encodeSync(SessionStored.User)
@@ -415,6 +416,91 @@ const projectParked = Effect.fnUntraced(function* (db: DatabaseService, event: S
     })
   }), { discard: true })
   yield* setSession(db, event.data.sessionID, { time_updated: event.created })
+})
+
+/**
+ * Consumes the original parked Step only after every Question has been answered
+ * and its original tool has been durably finalized.
+ * The event bus owns the surrounding transaction.
+ */
+const projectStepSettled = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  event: SessionEvent.Step.Settled,
+) {
+  const data = event.data
+  const conflict = (message: string) =>
+    Effect.die(new SessionParking.ConflictError({ message }))
+
+  const pending = yield* db.select().from(SessionPendingStepTable).where(and(
+    eq(SessionPendingStepTable.session_id, data.sessionID),
+    eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
+    eq(SessionPendingStepTable.generation, data.generation),
+  )).get().pipe(Effect.orDie)
+  if (!pending) return yield* conflict("Original parked Step is missing or already settled")
+
+  const parked = Schema.decodeUnknownSync(SessionEvent.Step.ParkedPayload)(pending.data)
+  if (parked.questions.length === 0)
+    return yield* conflict("Parked Step has no Questions")
+
+  const owner = yield* db.select().from(SessionMessageTable).where(and(
+    eq(SessionMessageTable.session_id, data.sessionID),
+    eq(SessionMessageTable.id, data.assistantMessageID),
+    eq(SessionMessageTable.type, "assistant"),
+    eq(SessionMessageTable.step_started_seq, data.generation),
+  )).get().pipe(Effect.orDie)
+  if (!owner) return yield* conflict("Parked Step owner generation does not match")
+
+  const [full = owner] = yield* SessionHistory.withParts(db, [owner])
+  const assistant = SessionHistory.decodeMessageRowSync(full)
+  if (assistant.type !== "assistant" || assistant.time.streamed === undefined ||
+    assistant.time.completed !== undefined || assistant.finish !== undefined ||
+    assistant.error !== undefined)
+    return yield* conflict("Parked Step owner is not a streamed, nonterminal assistant")
+
+  for (const item of parked.questions) {
+    const question = yield* db.select().from(SessionQuestionTable).where(and(
+      eq(SessionQuestionTable.id, item.questionID),
+      eq(SessionQuestionTable.session_id, data.sessionID),
+      eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+      eq(SessionQuestionTable.generation, data.generation),
+      eq(SessionQuestionTable.call_id, item.callID),
+      eq(SessionQuestionTable.status, "answered"),
+    )).get().pipe(Effect.orDie)
+    if (!question) return yield* conflict("Parked Step has an unresolved or mismatched Question")
+
+    const tool = assistant.content.find((part) => part.type === "tool" && part.id === item.callID)
+    if (!tool || tool.type !== "tool" || tool.state.status !== "completed" ||
+      tool.executed !== false || tool.time.completed === undefined)
+      return yield* conflict("Original Question tool has not been completed")
+  }
+
+  const consumed = yield* db.delete(SessionPendingStepTable).where(and(
+    eq(SessionPendingStepTable.session_id, data.sessionID),
+    eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
+    eq(SessionPendingStepTable.generation, data.generation),
+  )).returning({ sessionID: SessionPendingStepTable.session_id }).get().pipe(Effect.orDie)
+  if (!consumed) return yield* conflict("Parked Step was concurrently consumed")
+
+  const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
+  yield* writes.updateAssistant(produce(assistant, (draft) => {
+    draft.time.completed = DateTime.makeUnsafe(event.created)
+    draft.finish = parked.finish
+    draft.rawFinish = parked.rawFinish
+    draft.native = castDraft(parked.native)
+    draft.cost = parked.cost
+    draft.tokens = castDraft(parked.tokens)
+    if (parked.snapshot || parked.files)
+      draft.snapshot = {
+        ...draft.snapshot,
+        end: parked.snapshot,
+        files: parked.files ? Array.from(parked.files) : undefined,
+      }
+  }))
+
+  yield* applyUsage(db, data.sessionID, {
+    cost: parked.cost,
+    tokens: parked.tokens,
+  }, event.created)
 })
 
 /** Atomically admit the resolution and finalize the original tool when it has a materialized outcome. */
@@ -1336,6 +1422,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Step.FirstToken, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Parked, (event) => projectParked(db, event))
+    yield* bus.project(SessionEvent.Step.Settled, (event) => projectStepSettled(db, event))
     yield* bus.project(SessionEvent.QuestionResolution.Resolved, (event) => projectQuestionResolved(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {

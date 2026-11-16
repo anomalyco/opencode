@@ -149,6 +149,200 @@ describe("Question resolution admission", () => {
     terminal,
   })
 
+  it.effect("rejects a stale settlement generation without consuming the parked Step", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+
+      const result = yield* fixture.bus.publish(SessionEvent.Step.Settled, {
+        sessionID,
+        assistantMessageID,
+        generation: fixture.generation + 1,
+      }).pipe(Effect.exit)
+
+      expect(result._tag).toBe("Failure")
+      expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+      expect(yield* fixture.db.select().from(SessionPendingStepTable).get())
+        .toMatchObject({
+          session_id: sessionID,
+          assistant_message_id: assistantMessageID,
+          generation: fixture.generation,
+        })
+    }),
+  )
+
+  it.effect("accounts nonzero parked usage once and rejects duplicate settlement", () =>
+    Effect.gen(function* () {
+      const fixture = yield* seed
+      const bus = yield* Bus.Service
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID,
+        id: "call_owner",
+        name: "question",
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "call_owner",
+        input: prepared.input,
+        executed: false,
+      })
+      yield* bus.publish(SessionEvent.Step.Streamed, { sessionID, assistantMessageID })
+      yield* bus.publish(SessionEvent.Step.Parked, {
+        ...parkedData(sessionID, assistantMessageID, fixture.generation),
+        cost: Money.USD.make(1.25),
+        tokens: { input: 11, output: 7, reasoning: 2, cache: { read: 3, write: 1 } },
+      })
+      yield* bus.publish(
+        SessionEvent.QuestionResolution.Resolved,
+        resolve(fixture.generation, { status: "answered", answer: { q0: "Yes" } }),
+      )
+
+      const settled = { sessionID, assistantMessageID, generation: fixture.generation }
+      yield* bus.publish(SessionEvent.Step.Settled, settled)
+
+      const first = yield* fixture.db.select().from(SessionTable)
+        .where(eq(SessionTable.id, sessionID)).get()
+      expect(first?.cost).toBe(1.25)
+      expect(first).toMatchObject({
+        cost: 1.25,
+        tokens_input: 11,
+        tokens_output: 7,
+        tokens_reasoning: 2,
+        tokens_cache_read: 3,
+        tokens_cache_write: 1,
+      })
+
+      const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+      expect(yield* bus.publish(SessionEvent.Step.Settled, settled).pipe(Effect.exit))
+        .toMatchObject({ _tag: "Failure" })
+      expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+      expect(yield* fixture.db.select().from(SessionTable)
+        .where(eq(SessionTable.id, sessionID)).get()).toEqual(first)
+    }),
+  )
+
+  it.effect("rejects settlement while the original Question is pending", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+
+      const result = yield* fixture.bus.publish(SessionEvent.Step.Settled, {
+        sessionID,
+        assistantMessageID,
+        generation: fixture.generation,
+      }).pipe(Effect.exit)
+
+      expect(result._tag).toBe("Failure")
+      expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+      expect(yield* fixture.db.select().from(SessionPendingStepTable).all()).toHaveLength(1)
+      expect(yield* fixture.db.select().from(SessionQuestionTable).get())
+        .toMatchObject({ status: "pending" })
+
+      const row = yield* fixture.db.select().from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID)).get()
+      expect(row).toBeDefined()
+      if (!row) return
+      const [full = row] = yield* SessionHistory.withParts(fixture.db, [row])
+      const assistant = SessionHistory.decodeMessageRowSync(full)
+      expect(assistant.type).toBe("assistant")
+      if (assistant.type === "assistant") expect(assistant.time.completed).toBeUndefined()
+    }),
+  )
+
+  it.effect("rolls back parked consumption when assistant finalization fails", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      yield* fixture.bus.publish(
+        SessionEvent.QuestionResolution.Resolved,
+        resolve(fixture.generation, { status: "answered", answer: { q0: "Yes" } }),
+      )
+      const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+      const before = yield* fixture.db.select().from(SessionTable)
+        .where(eq(SessionTable.id, sessionID)).get()
+
+      yield* fixture.db.run(sql`
+        CREATE TRIGGER reject_step_settlement
+        BEFORE UPDATE ON session_message
+        WHEN NEW.id = 'msg_step_owner'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected step settlement failure');
+        END
+      `)
+
+      const result = yield* fixture.bus.publish(SessionEvent.Step.Settled, {
+        sessionID,
+        assistantMessageID,
+        generation: fixture.generation,
+      }).pipe(Effect.exit)
+
+      expect(result._tag).toBe("Failure")
+      expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+      expect(yield* fixture.db.select().from(SessionPendingStepTable).all()).toHaveLength(1)
+      expect(yield* fixture.db.select().from(SessionQuestionTable).get())
+        .toMatchObject({ status: "answered" })
+      expect(yield* fixture.db.select().from(SessionTable)
+        .where(eq(SessionTable.id, sessionID)).get()).toEqual(before)
+
+      const row = yield* fixture.db.select().from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID)).get()
+      expect(row).toBeDefined()
+      if (!row) return
+      const [full = row] = yield* SessionHistory.withParts(fixture.db, [row])
+      const assistant = SessionHistory.decodeMessageRowSync(full)
+      expect(assistant.type).toBe("assistant")
+      if (assistant.type === "assistant") expect(assistant.time.completed).toBeUndefined()
+    }),
+  )
+
+  it.effect("settles the original parked Step after its Question is answered", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      yield* fixture.bus.publish(
+        SessionEvent.QuestionResolution.Resolved,
+        resolve(fixture.generation, { status: "answered", answer: { q0: "Yes" } }),
+      )
+
+      const settled = {
+        sessionID,
+        assistantMessageID,
+        generation: fixture.generation,
+      }
+      yield* fixture.bus.publish(SessionEvent.Step.Settled, settled)
+
+      const row = yield* fixture.db.select().from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID)).get()
+      expect(row).toBeDefined()
+      if (!row) return
+
+      const [full = row] = yield* SessionHistory.withParts(fixture.db, [row])
+      const assistant = SessionHistory.decodeMessageRowSync(full)
+      expect(assistant.type).toBe("assistant")
+      if (assistant.type !== "assistant") return
+
+      expect(assistant.time.completed).toBeDefined()
+      expect(assistant.finish).toBe("tool-calls")
+      expect(assistant.cost).toBe(Money.USD.make(0))
+      expect(assistant.content.find((part) => part.type === "tool" && part.id === "call_owner"))
+        .toMatchObject({ state: { status: "completed" } })
+
+      expect(yield* fixture.db.select().from(SessionPendingStepTable).all()).toHaveLength(0)
+      expect(yield* fixture.db.select().from(SessionQuestionTable).get())
+        .toMatchObject({ status: "answered" })
+
+      const session = yield* fixture.db.select().from(SessionTable)
+        .where(eq(SessionTable.id, sessionID)).get()
+      expect(session?.cost).toBe(0)
+
+      const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+      expect(yield* fixture.bus.publish(SessionEvent.Step.Settled, settled).pipe(Effect.exit))
+        .toMatchObject({ _tag: "Failure" })
+      expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+      expect(yield* fixture.db.select().from(SessionPendingStepTable).all()).toHaveLength(0)
+    }),
+  )
+
   it.effect("accepts a valid answer exactly once without advancing the sequence on duplicate", () =>
     Effect.gen(function* () {
       const fixture = yield* setup
