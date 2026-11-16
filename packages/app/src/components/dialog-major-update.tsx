@@ -1,7 +1,8 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode-ai/ui/v2/dialog-v2"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { createEffect, For, onMount, Show } from "solid-js"
+import { createEffect, createMemo, For, onMount, Show } from "solid-js"
 import announcementImage from "@/assets/upgrade/opencode-2-0.png"
 import { ExternalLink } from "@/components/external-link"
 import { useLanguage } from "@/context/language"
@@ -32,10 +33,24 @@ export function preloadMajorUpdateImage() {
 
 // The desktop offer for OpenCode 2.0. OpenCode 2 is already downloaded when this opens, so the choices are when to
 // install it: now, when the app quits, or later.
-export function DialogMajorUpdate(props: { major: MajorUpdaterPlatform; image?: HTMLImageElement; later: () => void }) {
+export function DialogMajorUpdate(props: {
+  major: MajorUpdaterPlatform
+  image?: HTMLImageElement
+  later: () => void
+  // Reports a restart or an upgrade on quit that failed. The card can be closed by then, so it does not show the toast.
+  failed: () => void
+}) {
   const dialog = useDialog()
   const language = useLanguage()
   const status = () => props.major.state().status
+  // The install is starting or being armed. Nothing can be chosen until that ends.
+  const busy = () => status() === "installing" || status() === "scheduling"
+  // While busy, the card keeps the layout the user chose from.
+  const scheduled = createMemo<boolean>((previous) => (busy() ? previous : status() === "scheduled"), false)
+  const quit = createMemo<boolean>((previous) => {
+    const state = props.major.state()
+    return state.status === "ready" ? state.quit : previous
+  }, true)
 
   // Solid builds this dialog from a template in another document. An image that moves between documents loads again,
   // so the decoded image joins the card only once the card is in the page.
@@ -46,24 +61,21 @@ export function DialogMajorUpdate(props: { major: MajorUpdaterPlatform; image?: 
 
   // A newer OpenCode 1 release withdraws the offer, so there is nothing left to choose here.
   createEffect(() => {
-    if (status() !== "ready" && status() !== "scheduled") dialog.close()
+    if (status() === "unavailable" || status() === "downloading") dialog.close()
   })
 
-  const failed = () =>
-    showToast({
-      title: language.t("dialog.update.major.failed"),
-      description: language.t("dialog.update.major.manual", { url: MAJOR_INSTRUCTIONS }),
-    })
-  const restart = () => void props.major.restart().catch(failed)
+  const restart = () => void props.major.restart().catch(props.failed)
   const schedule = () =>
     void props.major.schedule().then(() => {
       dialog.close()
       showToast({ variant: "success", icon: "circle-check", title: language.t("dialog.update.major.scheduled") })
-    }, failed)
+    }, props.failed)
 
+  // The card can open by itself while the user types, and after a check that took minutes. Focus therefore never
+  // starts on a button that installs: a key press meant for something else must not restart the app.
   return (
     <Show
-      when={status() !== "scheduled"}
+      when={!scheduled()}
       fallback={
         <Dialog fit>
           <DialogHeader>
@@ -77,18 +89,22 @@ export function DialogMajorUpdate(props: { major: MajorUpdaterPlatform; image?: 
             />
           </DialogHeader>
           <DialogFooter>
-            <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
+            <ButtonV2 variant="ghost" autofocus onClick={() => dialog.close()}>
               {language.t("common.close")}
             </ButtonV2>
-            <ButtonV2 variant="contrast" autofocus onClick={restart}>
-              {language.t("dialog.update.major.action.restartNow")}
+            <ButtonV2 variant="contrast" disabled={busy()} onClick={restart}>
+              {language.t(
+                status() === "installing"
+                  ? "settings.updates.action.installing"
+                  : "dialog.update.major.action.restartNow",
+              )}
             </ButtonV2>
           </DialogFooter>
         </Dialog>
       }
     >
       <Dialog fit containerClass="!w-[min(calc(100vw-32px),720px)]">
-        <div class="flex w-full">
+        <div class="flex w-full outline-none" tabindex="-1" autofocus>
           <div class="flex min-w-0 flex-1 flex-col">
             <DialogHeader hideClose>
               <DialogTitleGroup
@@ -134,24 +150,39 @@ export function DialogMajorUpdate(props: { major: MajorUpdaterPlatform; image?: 
             </DialogHeader>
             <div class="flex-1" />
             <DialogFooter>
-              <ButtonV2
-                variant="ghost"
-                onClick={() => {
-                  props.later()
-                  dialog.close()
-                }}
-              >
-                {language.t("desktop.updater.dialog.later")}
-              </ButtonV2>
-              <ButtonV2 variant="neutral" onClick={schedule}>
-                {language.t("dialog.update.major.action.quit")}
-              </ButtonV2>
-              <ButtonV2 variant="contrast" autofocus onClick={restart}>
-                {language.t("dialog.update.major.action.restart")}
-              </ButtonV2>
+              {/* Translated labels can be longer than the row, so the buttons wrap instead of shrinking. */}
+              <div class="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
+                <ButtonV2
+                  variant="ghost"
+                  class="shrink-0 whitespace-nowrap"
+                  disabled={busy()}
+                  onClick={() => {
+                    props.later()
+                    dialog.close()
+                  }}
+                >
+                  {language.t("desktop.updater.dialog.later")}
+                </ButtonV2>
+                <Show when={quit()}>
+                  <ButtonV2 variant="neutral" class="shrink-0 whitespace-nowrap" disabled={busy()} onClick={schedule}>
+                    <Show when={status() === "scheduling"}>
+                      <Spinner class="size-3.5 shrink-0" />
+                    </Show>
+                    {language.t("dialog.update.major.action.quit")}
+                  </ButtonV2>
+                </Show>
+                <ButtonV2 variant="contrast" class="shrink-0 whitespace-nowrap" disabled={busy()} onClick={restart}>
+                  {language.t(
+                    status() === "installing"
+                      ? "settings.updates.action.installing"
+                      : "dialog.update.major.action.restart",
+                  )}
+                </ButtonV2>
+              </div>
             </DialogFooter>
           </div>
-          <div class="w-[280px] shrink-0 self-stretch bg-[#080807]" ref={media} />
+          {/* A narrow window has no room for the image beside the text. */}
+          <div class="w-[280px] shrink-0 self-stretch bg-[#080807] max-md:hidden" ref={media} />
         </div>
       </Dialog>
     </Show>

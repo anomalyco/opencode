@@ -151,6 +151,9 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
       to: undefined as string | undefined,
     })
     const state = { started: false }
+    // For other dialogs that open by themselves, so they can give way: `started` once it is known whether release notes
+    // may open in this window, `notes` when they may.
+    const [decision, setDecision] = createStore({ started: false, notes: false })
     let timer: ReturnType<typeof setTimeout> | undefined
 
     const clearTimer = () => {
@@ -209,6 +212,10 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
       state.started = true
 
       const previous = store.version
+      setDecision({
+        started: true,
+        notes: !!previous && previous !== platform.version && settings.general.releaseNotes(),
+      })
       if (!previous) {
         setStore("version", platform.version)
         return
@@ -222,6 +229,8 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
 
     return {
       ready,
+      started: () => decision.started,
+      notes: () => decision.notes,
       from: () => range.from,
       to: () => range.to,
       get last() {
