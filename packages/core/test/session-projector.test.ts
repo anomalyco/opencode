@@ -374,6 +374,97 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("rebuilds exhaustion retirement from stored facts, not a commit hook", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
+      const id = SessionMessage.ID.make("msg_exhausted_replay")
+      yield* inbox.admit({
+        id,
+        sessionID,
+        item: { type: "user", payload: { text: "resume me" }, delivery: "steer" },
+        resume: true,
+      })
+      // The boundary is a real sequence: `Event.Seq` rejects negatives, so it must exist.
+      const admitted = yield* db
+        .select({ seq: SessionInboxTable.enqueued_seq })
+        .from(SessionInboxTable)
+        .where(eq(SessionInboxTable.id, id))
+        .get()
+        .pipe(Effect.orDie)
+      if (admitted === undefined) return yield* Effect.die("admission row missing")
+      // Writing the exhaustion must not be the only thing that retires: no commit hook participates.
+      let committed = 0
+      yield* bus.publishAll([
+        [
+          SessionEvent.Execution.Failed,
+          { sessionID, error: { type: "aborted", message: "Execution was interrupted repeatedly" } },
+          { commit: () => Effect.sync(() => void (committed += 1)) },
+        ] as const,
+        [
+          SessionEvent.InboxResumeRetired,
+          { sessionID, reason: "exhausted" as const, through: Event.Seq.make(admitted.seq) },
+          undefined,
+        ] as const,
+      ])
+      // Both facts are durable rows, which is what makes the retirement replayable at all.
+      const stored = yield* db
+        .select({ type: EventTable.type })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .all()
+        .pipe(Effect.orDie)
+      expect(stored.map((row) => row.type)).toContain(Bus.versionedType(SessionEvent.InboxResumeRetired.type, 1))
+      expect(committed).toBe(1)
+      expect(
+        (yield* db.select().from(SessionInboxTable).where(eq(SessionInboxTable.id, id)).get().pipe(Effect.orDie))
+          ?.resume_retired,
+      ).toBe(true)
+    }),
+  )
+
+  it.effect("retires only rows at or below the recorded boundary", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
+      const first = SessionMessage.ID.make("msg_boundary_first")
+      const second = SessionMessage.ID.make("msg_boundary_second")
+      for (const id of [first, second])
+        yield* inbox.admit({
+          id,
+          sessionID,
+          item: { type: "user", payload: { text: id }, delivery: "steer" },
+          resume: true,
+        })
+      const rows = yield* db
+        .select({ id: SessionInboxTable.id, seq: SessionInboxTable.enqueued_seq })
+        .from(SessionInboxTable)
+        .orderBy(asc(SessionInboxTable.enqueued_seq))
+        .all()
+        .pipe(Effect.orDie)
+      const boundary = rows.find((row) => row.id === first)?.seq
+      if (boundary === undefined) return yield* Effect.die("missing first row")
+
+      yield* bus.publish(SessionEvent.InboxResumeRetired, {
+        sessionID,
+        reason: "interrupted",
+        through: Event.Seq.make(boundary),
+      })
+
+      // The row at the boundary retires; the one admitted after it stays eligible.
+      expect(
+        (yield* db
+          .select()
+          .from(SessionInboxTable)
+          .orderBy(asc(SessionInboxTable.enqueued_seq))
+          .all()
+          .pipe(Effect.orDie)).map((row) => row.resume_retired),
+      ).toEqual([true, false])
+    }),
+  )
+
   it.effect("projects durable context messages supported by the updater", () =>
     Effect.gen(function* () {
       const db = yield* seedSession({ agent: Agent.ID.make("plan"), model: previousModel })

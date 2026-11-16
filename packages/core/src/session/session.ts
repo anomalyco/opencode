@@ -175,6 +175,9 @@ export const make = Effect.fn("Session.make")(function* () {
               id: messageID,
               sessionID: session.id,
               item,
+              // `prompt` ignores revert, so admitting with a wake and waking are one decision. Record
+              // it durably: a crash before the claim leaves a row restart recovery can resume.
+              resume: input.resume !== false,
             })
           }).pipe(
             instances.provide(session),
@@ -297,22 +300,27 @@ export const make = Effect.fn("Session.make")(function* () {
     ) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          yield* get(sessionID)
+          const session = yield* get(sessionID)
           const inputID = input.id ?? SessionMessage.ID.create()
-          const admittedInput = {
-            type: "synthetic",
-            payload: SessionInbox.SyntheticPayload.make({
-              text: input.text,
-              description: input.description,
-              metadata: input.metadata,
-            }),
-            delivery: input.delivery ?? "steer",
-          } satisfies SessionInbox.Item
+          // Decide before admission so the durable intent and the wake below can no longer disagree.
+          // The previous code read revert after the admit publish, so a revert staged in that window
+          // suppressed the wake while the row was already admitted. A revert staged between this read
+          // and the publish no longer suppresses the wake; the row commits either way.
+          const resume = input.resume !== false && !session.revert
           const admitted = yield* admission
             .admit({
               id: inputID,
               sessionID,
-              item: admittedInput,
+              item: {
+                type: "synthetic",
+                payload: SessionInbox.SyntheticPayload.make({
+                  text: input.text,
+                  description: input.description,
+                  metadata: input.metadata,
+                }),
+                delivery: input.delivery ?? "steer",
+              } satisfies SessionInbox.Item,
+              resume,
             })
             .pipe(
               Effect.catchTag(
@@ -320,7 +328,7 @@ export const make = Effect.fn("Session.make")(function* () {
                 () => new SyntheticConflictError({ sessionID, inputID }),
               ),
             )
-          if (input.resume !== false && !(yield* get(sessionID)).revert) yield* execution.wake(sessionID)
+          if (resume) yield* execution.wake(sessionID)
           return admitted
         }),
       ),
