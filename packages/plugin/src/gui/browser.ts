@@ -36,7 +36,7 @@ export interface Browser {
      */
     open(session: SessionRef, url: string): Promise<string>
     /**
-     * Closes the tab this instance opened. Unknown, foreign and already closed handles do nothing.
+     * Closes the tab this instance opened. Navigating it elsewhere revokes the handle. Unknown, foreign, revoked and already closed handles do nothing.
      * @param id - The handle returned by this plugin's `open`, not an agent or layout tab ID.
      */
     close(id: string): Promise<void>

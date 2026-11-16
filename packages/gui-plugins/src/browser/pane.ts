@@ -465,15 +465,14 @@ export function createBrowserPane(input: {
     },
     async createTab(window: number, binding: string, owner: string, url: string) {
       owned(window, binding)
-      // Never adopt an existing file tab, even when this plugin opens the same URL as the user.
-      const result = await execute(binding, { action: { type: "tabs.open", url }, files: [] }, new AbortController().signal, "user", "new")
-
-      const tab = Schema.decodeUnknownSync(Schema.Struct({ id: Browser.TabID }))(result.value).id
       const handle = handles.get(binding)
 
-      if (!handle || !selectTabSlot(machine.state, binding, tab)) throw new Error("browser.pane.unavailable")
+      if (!handle) throw new Error("browser.pane.unavailable")
+      const grant = handle.pluginTabs.reserve(owner)
+      // Never adopt an existing file tab, even when this plugin opens the same URL as the user.
+      await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", undefined, grant.created)
 
-      return handle.pluginTabs.grant(owner, tab)
+      return grant.id
     },
     async closeTab(window: number, owner: string, id: string) {
       for (const [binding, handle] of handles) {
@@ -481,7 +480,14 @@ export function createBrowserPane(input: {
 
         const tabID = handle.pluginTabs.resolve(owner, id)
 
-        if (tabID) return this.command(window, binding, { type: "tabs.close", tabID })
+        if (!tabID) continue
+        const closing = page(binding, tabID)
+
+        if (closing && !(await closing.leave())) return
+
+        if (handle.pluginTabs.resolve(owner, id) === tabID) dispatchBinding(binding, { type: "tab.closed", tabID })
+
+        return
       }
     },
     forget(server: string, session: string) {
@@ -797,6 +803,9 @@ export function createBrowserPane(input: {
     }
 
     handle.pages.set(attempt, page)
+    // Renderer-initiated main-frame navigation (including a clicked link) never goes through execute.
+    page.contents.on("will-navigate", () => handle.pluginTabs.forget(id))
+    page.contents.on("did-navigate-in-page", (_event, _url, mainFrame) => { if (mainFrame) handle.pluginTabs.forget(id) })
     searches.set(page, createPageFind(page.contents, (view) => {
       if (current()) emit(binding, { type: "find", tabID: id, view })
     }, () => {
@@ -881,7 +890,7 @@ export function createBrowserPane(input: {
     dispatchBinding(binding, { type: "tab.published", tabID, attempt, tab: page.state() })
   }
 
-  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity): Promise<Browser.Result> {
+  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity, created?: (id: Browser.TabID) => void): Promise<Browser.Result> {
     const action = command.action
     const driven = { agentRuns: 0, agentEndedAt: Date.now(), agent: command.agent }
 
@@ -930,6 +939,8 @@ export function createBrowserPane(input: {
         signal.throwIfAborted()
         normalizeURL(url, pagePolicy(binding))
         const existing = inventory(binding).tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === url)
+
+        if (existing) handles.get(binding)?.pluginTabs.forget(existing.id)
         const tab = existing ? acquire(existing.id) : create(binding, {activity: origin === "agent" ? driven : undefined})
 
         if (!tab) throw new Error("Workspace preview tab is unavailable.")
@@ -984,6 +995,7 @@ export function createBrowserPane(input: {
 
       const opened = create(binding, { activity: origin === "agent" ? driven : inherited })
       const tabID = opened.state().id
+      created?.(tabID)
       using opening = new DisposableStack()
       opening.defer(() => { if (page(binding, tabID) === opened) dispatchBinding(binding, { type: "tab.closed", tabID }) })
 
@@ -1040,6 +1052,8 @@ export function createBrowserPane(input: {
       return { value: inventory(binding), files: [] }
     }
 
+    if (action.type === "navigate" || action.type === "back" || action.type === "forward" || action.type === "reload")
+      handles.get(binding)?.pluginTabs.forget(action.tabID)
     const target = acquire(action.tabID)
 
     if (!target) throw new Error("Browser tab is unavailable. Call browser.tabs.list({}) and use an existing tabID.")

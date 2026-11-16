@@ -5,11 +5,10 @@ export function pluginTabs() {
   const grants = new Map<Browser.TabID, { owner: string; id: string }>()
 
   return {
-    grant(owner: string, tab: Browser.TabID) {
+    reserve(owner: string) {
       const id = crypto.randomUUID()
-      grants.set(tab, { owner, id })
 
-      return id
+      return { id, created: (tab: Browser.TabID) => { grants.set(tab, { owner, id }) } }
     },
     resolve(owner: string, id: string) {
       for (const [tab, grant] of grants) {
