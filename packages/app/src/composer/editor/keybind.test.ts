@@ -3,6 +3,7 @@ import { handleComposerKeyDown, resolveComposerKeyAction } from "./keybind"
 import { INITIAL_COMPOSITION_STATE, isComposing, transitionComposition } from "./composition-machine"
 
 const keybinds = {
+  first: () => false,
   alternate: (event: KeyboardEvent) => event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.shiftKey,
   submit: (event: KeyboardEvent) => event.key === "s" && event.metaKey,
   newline: (event: KeyboardEvent) => event.key === "Enter" && event.shiftKey,
@@ -24,7 +25,7 @@ function handle(input: {
   suggestion?: boolean
   controller?: boolean
 }) {
-  const submissions: boolean[] = []
+  const submissions: string[] = []
   const result = { edits: 0, newlines: 0, selections: 0, submissions }
 
   handleComposerKeyDown({
@@ -94,7 +95,7 @@ describe("composer keybind integration", () => {
     expect(transitionComposition(ended, { type: "composition.end" })).toBe(ended)
     expect(
       handle({ event: keyEvent({ key: "s", metaKey: true }), keybinds, composing: isComposing(ended) }).submissions,
-    ).toEqual([false])
+    ).toEqual(["submit"])
     expect(
       handle({ event: keyEvent({ key: "Enter", keyCode: 229 }), composing: isComposing(ended) }).submissions,
     ).toEqual([])
@@ -102,7 +103,9 @@ describe("composer keybind integration", () => {
 
   test("custom alternate delivery observes composition and repeat suppression", () => {
     const bindings = { ...keybinds, alternate: (event: KeyboardEvent) => event.key === "q" && event.ctrlKey }
-    expect(handle({ event: keyEvent({ key: "q", ctrlKey: true }), keybinds: bindings }).submissions).toEqual([true])
+    expect(handle({ event: keyEvent({ key: "q", ctrlKey: true }), keybinds: bindings }).submissions).toEqual([
+      "alternate",
+    ])
     expect(
       handle({ event: keyEvent({ key: "q", ctrlKey: true, repeat: true }), keybinds: bindings }).submissions,
     ).toEqual([])
@@ -124,11 +127,11 @@ describe("composer keybind integration", () => {
         event: keyEvent({ key: "Enter", ctrlKey: true }),
         keybinds: { ...keybinds, submit: (event) => event.key === "Enter" && event.ctrlKey, newline: () => false },
       }).submissions,
-    ).toEqual([false])
+    ).toEqual(["submit"])
   })
 
   test("default Mod+Enter uses alternate delivery", () => {
-    expect(handle({ event: keyEvent({ key: "Enter", ctrlKey: true }), keybinds }).submissions).toEqual([true])
+    expect(handle({ event: keyEvent({ key: "Enter", ctrlKey: true }), keybinds }).submissions).toEqual(["alternate"])
   })
 
   test("Mod+ArrowUp still edits the first queued prompt", () => {
@@ -165,7 +168,7 @@ describe("composer keybind integration", () => {
       edits: 0,
       newlines: 0,
       selections: 0,
-      submissions: [false],
+      submissions: ["submit"],
     })
   })
 
