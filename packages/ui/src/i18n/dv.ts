@@ -161,6 +161,7 @@ export const dict = {
   "ui.common.dismiss": "ދުރުކޮށްލުން",
   "ui.common.close": "ލެއްޕުން",
   "ui.common.next": "ދެން",
+  "ui.common.continue": "ކުރިއަށްގެންދިޔުން",
   "ui.common.submit": "ހުށަހެޅުން",
   "ui.common.showMore": "އިތުރަށް ދައްކާ",
   "ui.permission.deny": "ދޮގުކުރުން",

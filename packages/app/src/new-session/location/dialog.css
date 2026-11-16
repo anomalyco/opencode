@@ -1,17 +1,3 @@
-[data-component="dialog-v2"]:has(.new-session-location) {
-  align-items: flex-start;
-}
-
-[data-component="dialog-v2"]:has(.new-session-location) [data-slot="dialog-container"] {
-  width: min(calc(100vw - 24px), 480px);
-  height: auto;
-  max-height: min(calc(100vh - 96px), 480px);
-  min-height: 0;
-  margin-top: max(48px, calc((100vh - 480px) / 2));
-  background: var(--v2-background-bg-base);
-  box-shadow: var(--v2-elevation-overlay);
-}
-
 .new-session-location .palette-menu-search {
   padding: 6px 6px 0;
 }
@@ -159,6 +145,26 @@
   flex-shrink: 0;
   align-items: center;
   gap: 6px;
+}
+
+.new-session-location-branch {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--v2-text-text-muted);
+}
+
+.new-session-location-branch [data-slot="icon-svg"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.new-session-location-branch > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .new-session-location-tag {

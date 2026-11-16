@@ -30,7 +30,7 @@ use windows_sys::Win32::System::WindowsProgramming::{
 use super::{LOCK_FILE, REGISTRATION_FILE, Registration, registration_path, sweep};
 use crate::protocol::{PROTOCOL_VERSION, features};
 use crate::transport::Listener;
-use crate::transport::windows::{owned_handle, security::PrivateSecurity};
+use crate::transport::windows::{owned_handle, security::PrivateSecurity, wide};
 
 pub(super) fn read_registration(directory: &Path) -> Result<Registration> {
     let security = PrivateSecurity::new()?;
@@ -74,9 +74,9 @@ impl Runtime {
         if let Some(parent) = directory.parent() {
             fs::create_dir_all(parent)?;
         }
-        let wide = wide_path(directory)?;
+        let directory_wide = wide(directory.as_os_str())?;
         // SAFETY: wide path and private descriptor are valid through creation.
-        if unsafe { CreateDirectoryW(wide.as_ptr(), &security.attributes()) } == 0 {
+        if unsafe { CreateDirectoryW(directory_wide.as_ptr(), &security.attributes()) } == 0 {
             let error = std::io::Error::last_os_error();
             if error.raw_os_error() != Some(ERROR_ALREADY_EXISTS as i32) {
                 return Err(error.into());
@@ -300,7 +300,7 @@ fn open(
     sharing: u32,
     security: &PrivateSecurity,
 ) -> Result<File> {
-    let path = wide_path(path)?;
+    let path = wide(path.as_os_str())?;
     // SAFETY: all pointers are valid; OPEN_REPARSE_POINT lets check_kind reject
     // links rather than inspecting a different target after following them.
     let handle = unsafe {
@@ -330,15 +330,6 @@ fn check_kind(file: &File, directory: bool) -> Result<()> {
         bail!("unexpected PTY storage file type");
     }
     Ok(())
-}
-
-fn wide_path(path: &Path) -> Result<Vec<u16>> {
-    let mut wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
-    if wide.contains(&0) {
-        bail!("PTY storage path contains NUL");
-    }
-    wide.push(0);
-    Ok(wide)
 }
 
 #[cfg(test)]

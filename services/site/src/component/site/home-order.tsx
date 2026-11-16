@@ -128,6 +128,8 @@ function write(order: readonly string[]) {
 
 /** Keeps the page's section order in step with Settings (call once from the home page). */
 export function useHomeOrder() {
+  // Production keeps no saved order: the server's style element already holds the default's rules.
+  if (!import.meta.env.DEV) return
   onMount(() => {
     createEffect(() => write(draft() ?? siteSettings.homeOrder))
   })

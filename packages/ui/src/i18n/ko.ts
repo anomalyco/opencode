@@ -147,6 +147,7 @@ export const dict = {
   "ui.common.dismiss": "닫기",
   "ui.common.close": "닫기",
   "ui.common.next": "다음",
+  "ui.common.continue": "계속",
   "ui.common.submit": "제출",
   "ui.common.showMore": "더 보기",
 

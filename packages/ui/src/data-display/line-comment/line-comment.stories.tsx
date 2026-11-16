@@ -1,6 +1,5 @@
-// @ts-nocheck
-import { createSignal } from "solid-js"
-import { LineCommentEditor, LineComment, LineCommentOverflowIcon } from "./line-comment"
+import { createEffect, createSignal, Show } from "solid-js"
+import { LineCommentEditor, LineComment, LineCommentOverflowIcon, type LineCommentEditorProps } from "./line-comment"
 import { Menu } from "../../navigation/menu/menu"
 import { Popover } from "../../components/popover"
 
@@ -32,69 +31,116 @@ export default {
 }
 
 export const Display = {
-  render: () => (
-    <div style={{ width: "400px" }}>
-      <LineComment
-        comment="Consider guarding against empty arrays."
-        actions={
-          <Menu gutter={4}>
-            <Menu.Trigger as="button" type="button" data-slot="line-comment-v2-overflow" aria-label="Comment actions">
-              <LineCommentOverflowIcon />
-            </Menu.Trigger>
-            <Menu.Portal>
-              <Menu.Content>
-                <Menu.Item>Edit</Menu.Item>
-                <Menu.Item>Delete</Menu.Item>
-              </Menu.Content>
-            </Menu.Portal>
-          </Menu>
-        }
-      />
-    </div>
-  ),
-}
-
-export const DisplayWithoutActions = {
-  render: () => (
-    <div style={{ width: "400px" }}>
-      <LineComment comment="Consider guarding against empty arrays." />
-    </div>
-  ),
-}
-
-export const DisplayMultiline = {
-  render: () => (
-    <div style={{ width: "400px" }}>
-      <LineComment comment={"Consider guarding against empty arrays.\n\nAn early return keeps the happy path flat."} />
-    </div>
-  ),
-}
-
-export const Editor = {
-  args: { variant: "default", allowEmpty: false, alternateSubmit: false },
-  argTypes: {
-    variant: { control: "select", options: ["default", "compact"] },
-    allowEmpty: { control: "boolean" },
-    alternateSubmit: { control: "boolean" },
-  },
-  render: (args) => {
-    const [value, setValue] = createSignal("")
-
+  args: { comment: "Consider guarding against empty arrays.", selection: "", actions: true, clickable: false },
+  render: (args: { comment: string; selection: string; actions: boolean; clickable: boolean }) => {
     const [result, setResult] = createSignal("")
 
     return (
-      <div style={{ width: "400px" }}>
+      <div style={{ width: "min(400px, 100%)" }}>
+        <LineComment
+          comment={args.comment}
+          selection={args.selection}
+          onOpen={args.clickable ? () => setResult("Opened") : undefined}
+          tabIndex={args.clickable ? 0 : undefined}
+          onKeyDown={(event) => {
+            if (args.clickable && event.target === event.currentTarget && event.key === "Enter") setResult("Opened")
+          }}
+          actions={
+            args.actions && (
+              <Menu gutter={4}>
+                <Menu.Trigger
+                  as="button"
+                  type="button"
+                  data-slot="line-comment-v2-overflow"
+                  aria-label="Comment actions"
+                >
+                  <LineCommentOverflowIcon />
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content>
+                    <Menu.Item onSelect={() => setResult("Editing")}>Edit</Menu.Item>
+                    <Menu.Item onSelect={() => setResult("Deleted")}>Delete</Menu.Item>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu>
+            )
+          }
+        />
+        <output>{result()}</output>
+      </div>
+    )
+  },
+}
+
+export const DisplayWithoutActions = {
+  args: { ...Display.args, actions: false },
+  render: Display.render,
+}
+
+export const DisplayMultiline = {
+  args: {
+    ...DisplayWithoutActions.args,
+    comment: `${Display.args.comment}\n\nAn early return keeps the happy path flat.`,
+  },
+  render: Display.render,
+}
+
+const editor = {
+  variant: "default",
+  value: "",
+  selection: "",
+  allowEmpty: false,
+  alternateSubmit: false,
+  alternateDisabled: false,
+  submitting: false,
+  autofocus: true,
+  placeholder: "",
+  label: "",
+  cancelLabel: "",
+  submitLabel: "",
+  rows: 0,
+  mentions: false,
+  popover: false,
+}
+
+export const Editor = {
+  args: editor,
+  argTypes: {
+    variant: { control: "select", options: ["default", "compact"] },
+    rows: { control: { type: "range", min: 0, max: 10, step: 1 } },
+  },
+  render: (args: Omit<typeof editor, "variant"> & Pick<LineCommentEditorProps, "variant">) => {
+    const [value, setValue] = createSignal(args.value)
+
+    const [result, setResult] = createSignal("")
+
+    const pending: (() => void)[] = []
+
+    const files = ["src/app.ts", "src/api.ts", "src/server.ts"]
+
+    createEffect(() => setValue(args.value))
+
+    const content = () => (
+      <div style={{ width: args.popover ? "360px" : "min(400px, 100%)" }}>
         <LineCommentEditor
           variant={args.variant}
+          autofocus={args.autofocus}
+          selection={args.selection}
+          submitting={args.submitting}
+          placeholder={args.placeholder || undefined}
+          label={args.label || undefined}
+          cancelLabel={args.cancelLabel || undefined}
+          submitLabel={args.submitLabel || undefined}
+          rows={args.rows || undefined}
           allowEmpty={args.allowEmpty}
           value={value()}
           onInput={setValue}
           onCancel={() => {
-            setValue("")
+            if (!args.popover) setValue("")
             setResult("Cancelled")
           }}
           onSubmit={(comment) => {
-            setValue("")
+            if (!args.popover) setValue("")
             setResult(`Submitted: ${comment}`)
           }}
           alternateSubmit={
@@ -102,6 +148,7 @@ export const Editor = {
               ? {
                   label: "Send",
                   keys: ["Ctrl", "Enter"],
+                  disabled: args.alternateDisabled,
                   onSubmit: (comment) => {
                     setValue("")
                     setResult(`Sent: ${comment}`)
@@ -109,7 +156,32 @@ export const Editor = {
                 }
               : undefined
           }
+          mention={
+            args.mentions
+              ? {
+                  items: (query) =>
+                    new Promise<string[]>((resolve) =>
+                      pending.push(() => resolve(files.filter((file) => file.includes(query)))),
+                    ),
+                }
+              : undefined
+          }
         />
+        <Show when={args.mentions}>
+          <button type="button" onClick={() => pending.splice(0).forEach((finish) => finish())}>
+            Finish search
+          </button>
+        </Show>
+      </div>
+    )
+
+    return (
+      <div>
+        <Show when={args.popover} fallback={content()}>
+          <Popover trigger="Open editor" triggerAs="button" portal={false}>
+            {content()}
+          </Popover>
+        </Show>
         <output aria-label="Editor result">{result()}</output>
       </div>
     )
@@ -117,78 +189,18 @@ export const Editor = {
 }
 
 export const EditorFilled = {
-  render: () => {
-    const [value, setValue] = createSignal("Use a sentinel or early return when the list is empty.")
-
-    return (
-      <div style={{ width: "400px" }}>
-        <LineCommentEditor
-          value={value()}
-          onInput={setValue}
-          onCancel={() => setValue("")}
-          onSubmit={() => {}}
-          autofocus={false}
-        />
-      </div>
-    )
-  },
+  args: { ...editor, autofocus: false, value: "Use a sentinel or early return when the list is empty." },
+  render: Editor.render,
 }
 
 /** File search answers only when "Finish search" is pressed, so the loading state can be explored. */
 export const EditorWithMentions = {
-  render: () => {
-    const [value, setValue] = createSignal("")
-    const [result, setResult] = createSignal("")
-    const pending: (() => void)[] = []
-    const files = ["src/app.ts", "src/api.ts", "src/server.ts"]
-
-    return (
-      <div style={{ width: "400px" }}>
-        <LineCommentEditor
-          value={value()}
-          onInput={setValue}
-          onCancel={() => {
-            setValue("")
-            setResult("Cancelled")
-          }}
-          onSubmit={(comment) => {
-            setValue("")
-            setResult(`Submitted: ${comment}`)
-          }}
-          mention={{
-            items: (query) =>
-              new Promise((resolve) => pending.push(() => resolve(files.filter((file) => file.includes(query))))),
-          }}
-        />
-        <button type="button" onClick={() => pending.splice(0).forEach((finish) => finish())}>
-          Finish search
-        </button>
-        <output aria-label="Editor result">{result()}</output>
-      </div>
-    )
-  },
+  args: { ...editor, mentions: true },
+  render: Editor.render,
 }
 
 /** An editor inside a popover: Escape in the field cancels the comment, and Escape on its buttons closes the popover. */
 export const EditorInPopover = {
-  render: () => {
-    const [value, setValue] = createSignal("")
-    const [result, setResult] = createSignal("")
-
-    return (
-      <div>
-        <Popover trigger="Open editor" triggerAs="button" portal={false}>
-          <div style={{ width: "360px" }}>
-            <LineCommentEditor
-              value={value()}
-              onInput={setValue}
-              onCancel={() => setResult("Cancelled")}
-              onSubmit={(comment) => setResult(`Submitted: ${comment}`)}
-            />
-          </div>
-        </Popover>
-        <output aria-label="Editor result">{result()}</output>
-      </div>
-    )
-  },
+  args: { ...editor, popover: true },
+  render: Editor.render,
 }

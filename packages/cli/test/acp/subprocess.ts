@@ -37,6 +37,7 @@ type AcpProcess = {
   readonly pid: number
   readonly exited: Promise<number>
   readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
+  readonly waitForMessage: (predicate: Waiter["predicate"], description: string) => Promise<JsonRpcMessage>
   readonly close: () => Promise<number>
   readonly stderr: () => string
   readonly [Symbol.asyncDispose]: () => Promise<void>
@@ -294,6 +295,7 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
     pid: child.pid,
     exited: child.exited,
     request,
+    waitForMessage: (predicate, description) => take(predicate, 10_000, description),
     async close() {
       if (!inputClosed) {
         inputClosed = true

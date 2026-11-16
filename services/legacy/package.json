@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/legacy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy:dev": "cf deploy --mode dev",
+    "deploy:production": "cf deploy --mode production",
+    "test": "bun test",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@octokit/auth-app": "8.0.1",
+    "@octokit/rest": "catalog:",
+    "hono": "catalog:",
+    "jose": "6.0.11"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@tsconfig/node22": "catalog:",
+    "@typescript/native": "catalog:",
+    "cf": "1.0.0-beta.12",
+    "wrangler": "4.156.2"
+  }
+}

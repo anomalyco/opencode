@@ -74,6 +74,7 @@ test("an expanded group spends the mounting budget that older rows used", async 
       config: {
         get: async () => ({
           animations: false,
+          session: { verbosity: "medium" },
           tabs: { enabled: false },
           keybinds: { "session.messages_last_user": "ctrl+shift+u", "session.last": "ctrl+shift+l" },
         }),

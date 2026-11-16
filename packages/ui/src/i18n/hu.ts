@@ -165,6 +165,7 @@ export const dict = {
   "ui.common.dismiss": "Elvetés",
   "ui.common.close": "Bezárás",
   "ui.common.next": "Következő",
+  "ui.common.continue": "Folytatás",
   "ui.common.submit": "Beküld",
   "ui.common.showMore": "Mutasson többet",
   "ui.permission.deny": "Megtagadás",

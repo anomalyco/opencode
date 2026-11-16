@@ -56,6 +56,7 @@ const session: ComposerSession = {
         delivery: value.delivery ?? "steer",
       }),
       setStatus() {},
+      acceptSend() {},
     },
   },
   current: () => undefined,

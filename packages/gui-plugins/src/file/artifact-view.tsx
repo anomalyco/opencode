@@ -38,6 +38,7 @@ import {
 import { FileViewer } from "@opencode/plugin/gui/file"
 import { uuid } from "@opencode/util/uuid"
 import { ArtifactToolbar } from "./artifact-toolbar"
+import { findableHtml } from "./find"
 import {
   createArtifactViewerState,
   createVideoOverlayState,
@@ -148,6 +149,7 @@ export default function ArtifactView(props: {
       <div
         data-slot="artifact-document-stage"
         data-kind="markdown"
+        data-file-find="document"
         data-document-surface-inset
         data-document-surface-scrollport
         data-document-surface-column
@@ -716,7 +718,7 @@ function ArtifactAudio(props: MediaProps) {
 }
 
 function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" | "html" }) {
-  const source = createMediaSource(() => props.content)
+  const source = createMediaSource(() => (props.kind === "html" ? findableHtml(props.content) : props.content))
   // PDF Open Parameters: start with the thumbnail pane closed and the page fitted to the pane width.
   const src = () => (props.kind === "pdf" ? `${source().src}#navpanes=0&view=FitH` : source().src)
 
@@ -724,6 +726,7 @@ function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" 
     <iframe
       class="block h-full w-full flex-1 border-0 bg-white"
       title={getFilename(props.path)}
+      data-file-find={props.kind === "html" ? "frame" : undefined}
       src={src()}
       // The PDF viewer is Chromium's own and does not run in a sandboxed frame. HTML runs as an
       // opaque origin: no app storage, cookies, or credentialed requests reach it.
@@ -798,7 +801,7 @@ function ArtifactMermaid(props: { text: string; cacheKey?: string }) {
 
   return (
     <div class="relative flex min-h-0 flex-1 flex-col">
-      <div ref={scroller} class="min-h-0 flex-1 overflow-auto" data-scrollable>
+      <div ref={scroller} class="min-h-0 flex-1 overflow-auto" data-scrollable data-file-find="document">
         <div class="grid min-h-full w-max min-w-full place-items-center">
           <div data-slot="artifact-diagram" style={{ width: `${Math.min(view.width, 896)}px`, zoom: view.zoom }}>
             <Markdown text={`\`\`\`mermaid\n${props.text}\n\`\`\``} cacheKey={props.cacheKey} />
@@ -837,7 +840,7 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
   }
 
   return (
-    <div class="min-h-0 flex-1 overflow-auto" data-scrollable>
+    <div class="min-h-0 flex-1 overflow-auto" data-scrollable data-file-find="document">
       <table data-slot="artifact-table" class="min-w-full text-13-regular text-text-base">
         <thead>
           <tr>
