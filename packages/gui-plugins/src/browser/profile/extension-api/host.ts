@@ -285,4 +285,3 @@ export async function createExtensionHost(input: {
     },
   }
 }
-
