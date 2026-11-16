@@ -297,6 +297,16 @@ struct Results {
 /// A mounted prompt's autocomplete. Dropping it removes its layers and its popup.
 pub struct Autocomplete(Rc<State>);
 
+/// An open popup's place ([`Autocomplete::open`]).
+pub struct Open {
+    mode: Mode,
+    index: u32,
+    selected: usize,
+    offset: usize,
+    /// The anchor's row on the screen.
+    placed: f64,
+}
+
 struct State {
     tui: Weak<Tui>,
     prompt: Weak<Inner>,
@@ -319,6 +329,9 @@ struct State {
     options: RefCell<Vec<Item>>,
     /// The prompt's root, which the popup sits on.
     anchor: View,
+    /// Where the anchor of the popup this one reopens was on the screen, for as long as this anchor has no layout
+    /// ([`Autocomplete::reopen`]): the route mounted again in the same place.
+    placed: Cell<Option<f64>>,
     popup: View,
     list: View,
     mode: RefCell<Option<Disposer>>,
@@ -366,6 +379,7 @@ pub fn mount(tui: &Tui, prompt: &Rc<Inner>, anchor: &View) -> Autocomplete {
         editing: Cell::new(false),
         options: RefCell::default(),
         anchor: anchor.clone(),
+        placed: Cell::new(None),
         popup,
         list,
         mode: RefCell::default(),
@@ -400,6 +414,26 @@ impl Autocomplete {
     /// Draws an open popup in the page theme again, keeping its search and selection.
     pub fn restyle(&self, tui: &Tui) {
         self.0.render(tui);
+    }
+
+    /// Where the open popup is: what it lists from which trigger, and its selection and first row.
+    pub fn open(&self) -> Option<Open> {
+        let state = &self.0;
+        let mode = state.visible.get()?;
+        let (index, selected, offset) = (state.index.get(), state.selected.get(), state.offset.get());
+        Some(Open { mode, index, selected, offset, placed: state.anchor.rect().screen_y })
+    }
+
+    /// Opens the popup where `open` was, over the prompt's text as it is now: a remount of the route keeps an open
+    /// list open, as TS's stays open while a plugin loads. The options are those of now, the selection kept by its
+    /// place, as TS keeps `selected` until the search changes.
+    pub fn reopen(&self, open: Open) {
+        let state = &self.0;
+        state.placed.set(Some(open.placed));
+        state.show(open.mode, open.index);
+        let count = state.options.borrow().len();
+        state.offset.set(open.offset);
+        state.move_to(open.selected.min(count.saturating_sub(1)));
     }
 
     /// The store changed: catalogs may have arrived.
@@ -697,7 +731,12 @@ impl State {
 
     fn height(&self) -> usize {
         let count = self.options.borrow().len().max(1);
-        let anchor = self.anchor.rect().screen_y.max(0.0) as usize;
+        let rect = self.anchor.rect();
+        let anchor = match self.placed.get() {
+            Some(placed) if rect.width <= 0.0 => placed,
+            _ => rect.screen_y,
+        };
+        let anchor = anchor.max(0.0) as usize;
         ROWS.min(count).min(anchor.max(1))
     }
 

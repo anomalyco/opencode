@@ -10,13 +10,8 @@ export default defineApp({
   config: { experimental: { "new-designs": true }, plugins: ["./plugins/v2search"] },
   env: { OPENCODE_PARITY_PLUGIN: "npm" },
   steps: [
-    // The plugin loaded before `/` is typed (its footer line): a plugin that loads while the list is open remounts the
-    // route in Rust, which closes the list (reported with FT-12).
-    {
-      checkpoint: "home",
-      until: "v2search loaded",
-      masks: [{ x: 26, y: 16, width: 90, height: 1, reason: "the placeholder example: random in TS and Rust" }],
-    },
+    // Typed at once, so the plugin loads while the list is open, and its command joins the open list. The Rust client
+    // remounts the route as a plugin loads, which closed the list (js-followups); TS keeps it open.
     { type: "/find" },
     { checkpoint: "slash", until: "Find a turn" },
     { keys: ["enter"] },

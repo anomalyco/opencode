@@ -222,6 +222,11 @@ impl Tui {
             self.view.borrow().is_some() && self.route() == route && !crate::features::location::pending(self);
         // Mounting may move the focus (a docked panel, a pending permission); an open dialog keeps it.
         let dialog = self.dialogs.is_open().then(|| self.app.focused());
+        // A remount (a plugin loaded, a theme change) keeps the composer's open list open in the new composer, as TS's
+        // stays open (js-followups).
+        let complete = remount
+            .then(|| self.prompt.current.borrow().upgrade().and_then(|prompt| prompt.autocomplete.get()?.open()))
+            .flatten();
         // A remount of a plugin's route drops the old view once the new one is mounted, so a plugin that counts its
         // mounts (`mounts()`) hears the new one begin before the old one ends, and keeps its state (review carbon-4).
         // The host's own routes drop it first: the composer hands its draft on as it goes.
@@ -273,6 +278,12 @@ impl Tui {
             }
         }
         *self.view.borrow_mut() = Some(view);
+        let prompt = complete.and_then(|open| Some((self.prompt.current.borrow().upgrade()?, open)));
+        if let Some((prompt, open)) = prompt
+            && let Some(complete) = prompt.autocomplete.get()
+        {
+            complete.reopen(open);
+        }
         crate::features::title::route_changed(self);
         crate::features::devtools::route_changed(self);
         crate::features::attention::program_status::sync(self);

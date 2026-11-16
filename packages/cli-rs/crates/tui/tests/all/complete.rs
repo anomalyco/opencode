@@ -541,6 +541,25 @@ fn escape_hides_and_ctrl_c_dismisses_the_command() {
     setup.wait_for("/agents");
 }
 
+/// Expected (js-followups, TS `autocomplete.tsx` keeps `store.selected` until the filter changes): the route mounting
+/// again under an open list, as it does when a plugin loads or reloads, keeps the list open with its search and the
+/// selection by its place, and the screen equals the one before. Keys go on to the list, and Enter runs its command.
+#[test]
+fn an_open_list_stays_open_when_the_route_mounts_again() {
+    let setup = Setup::new();
+    setup.app.type_text("/se");
+    setup.wait_for("/sessions");
+    setup.app.press("down");
+    let before = setup.app.render().text();
+    opencode_plugin::Host::remount(&*opencode_tui::plugins::host::host(&setup.tui));
+    assert_eq!(setup.app.render().text(), before);
+    setup.app.type_text("ssions");
+    setup.wait_for("/sessions");
+    setup.app.press("return");
+    setup.wait_for("Fix the parser");
+    assert_eq!(setup.text(), "");
+}
+
 /// Picks `@src/main.rs` from the file search.
 fn mention_main(setup: &Setup) {
     setup.app.type_text("@ma");
