@@ -115,6 +115,9 @@ export const PredicateQuestion = Schema.Struct({
   type: Schema.Literal("predicate"),
   name: QuestionName,
   instructions: Schema.String,
+  criteria: Schema.Struct({ true: Schema.String.pipe(optional), false: Schema.String.pipe(optional) })
+    .pipe(optional)
+    .annotate(description("What counts as true and as false, for statements the instructions alone leave ambiguous")),
 }).annotate({ identifier: "Generate.PredicateQuestion", description: "The probability that a statement is true" })
 
 export interface ChoiceQuestion extends Schema.Schema.Type<typeof ChoiceQuestion> {}

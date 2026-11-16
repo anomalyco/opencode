@@ -1,6 +1,16 @@
 import { useFilteredList } from "@opencode/ui/hooks"
 import { Switch } from "@opencode/ui/switch"
-import { type Component, createEffect, createMemo, For, type JSX, Show } from "solid-js"
+import {
+  type Component,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  onCleanup,
+  Show,
+  untrack,
+} from "solid-js"
 
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -14,6 +24,13 @@ import { SettingsRow } from "@/settings/row"
 import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelSections } from "@/providers/models/provider-group"
 import { SettingsSearchEmpty } from "@/settings/search-empty"
 import { SettingsSearchField } from "@/settings/search-field"
+import { settingsScroller } from "@/settings/scroller"
+import {
+  createModelsRevealState,
+  revealingModelProvider,
+  transitionModelsReveal,
+  type ModelsRevealEvent,
+} from "./machine"
 
 import "@/settings/settings.css"
 
@@ -25,8 +42,10 @@ export const ModelProvidersSchema = Schema.Struct({
 
 export const SettingsModels: Component<{
   active?: boolean
+  /** A provider to reveal, picked on the Providers page. */
   provider?: string
-  onReveal?: () => void
+  /** The reveal of `provider` ended: it was shown, gave up, or the user moved on. */
+  onConsumeTarget?: () => void
   headerAction?: JSX.Element
 }> = (props) => {
   const language = useLanguage()
@@ -102,42 +121,83 @@ export const SettingsModels: Component<{
     )
   }
 
-  createEffect(() => {
-    if (!props.active || !props.provider) return
-    const provider = props.provider
+  const [reveal, setReveal] = createSignal(createModelsRevealState())
+  let revealTimer: ReturnType<typeof setTimeout> | undefined
+  let revealFrame: number | undefined
 
-    if (list.filter()) {
-      list.clear()
+  const dispatch = (event: ModelsRevealEvent): void =>
+    untrack(() => {
+      const result = transitionModelsReveal(reveal(), event)
+      setReveal(result.state)
+      result.effects.forEach((effect) => {
+        if (effect.type === "filter.clear") return list.clear()
 
-      return
-    }
+        // Expand only the path to the target so the saved layout of other providers is kept.
+        if (effect.type === "section.expand") {
+          if (effect.expandConsole) setStore("collapsed", CONSOLE_GROUP_KEY, false)
+          setStore("collapsed", effect.provider, false)
 
-    if (!list.grouped.latest.some((group) => group.category === provider)) return
-    const section = sections.get(provider)
+          return
+        }
 
-    if (!section?.isConnected) return
+        if (effect.type === "timeout.start") {
+          revealTimer = setTimeout(
+            () => dispatch({ type: "reveal.timed-out", attempt: effect.attempt }),
+            effect.timeoutMs,
+          )
 
-    // Expand only the path to the target so the saved layout of other providers is kept.
-    if (managed()?.providers.some((item) => item.id === provider)) setStore("collapsed", CONSOLE_GROUP_KEY, false)
-    setStore("collapsed", provider, false)
-    requestAnimationFrame(() => {
-      const panel = section.closest<HTMLElement>(".settings-panel")
-      const header = panel?.querySelector<HTMLElement>(".settings-tab-header")
+          return
+        }
 
-      if (panel && header) {
-        panel.scrollTo({
-          top: panel.scrollTop + section.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 24,
+        if (effect.type === "timeout.cancel") {
+          clearTimeout(revealTimer)
+          revealTimer = undefined
+
+          return
+        }
+
+        if (effect.type === "frame.cancel") {
+          if (revealFrame !== undefined) cancelAnimationFrame(revealFrame)
+          revealFrame = undefined
+
+          return
+        }
+
+        if (effect.type === "target.consume") return props.onConsumeTarget?.()
+
+        revealFrame = requestAnimationFrame(() => {
+          revealFrame = undefined
+          scrollToSection(sections.get(effect.provider))
+          dispatch({ type: "frame.completed", attempt: effect.attempt })
         })
-      } else {
-        section.scrollIntoView({ block: "start" })
-      }
+      })
+    })
 
-      section
-        .querySelector<HTMLElement>(".provider-model-group-trigger, .settings-models-group-trigger")
-        ?.focus({ preventScroll: true })
-      props.onReveal?.()
+  createEffect(() =>
+    dispatch({
+      type: "target.synced",
+      active: !!props.active,
+      provider: props.provider,
+      hasFilter: untrack(() => !!list.filter()),
+    }),
+  )
+
+  // Checks the catalog only while a reveal looks for its provider.
+  createEffect(() => {
+    const provider = revealingModelProvider(reveal())
+
+    if (!provider) return
+
+    dispatch({
+      type: "catalog.synced",
+      hasFilter: !!list.filter(),
+      inCatalog: list.grouped.latest.some((group) => group.category === provider),
+      inConsoleGroup: !!managed()?.providers.some((item) => item.id === provider),
+      sectionReady: !!sections.get(provider)?.isConnected,
     })
   })
+
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return (
     <>
@@ -152,7 +212,10 @@ export const SettingsModels: Component<{
         <SettingsSearchField
           value={list.filter()}
           active={props.active ?? true}
-          onInput={list.onInput}
+          onInput={(value) => {
+            dispatch({ type: "filter.typed" })
+            list.onInput(value)
+          }}
           placeholder={language.t("dialog.model.search.placeholder")}
         />
       </div>
@@ -187,7 +250,13 @@ export const SettingsModels: Component<{
               disabled={searching()}
               onExpandedChange={(key, value) => setStore("collapsed", key, !value)}
               onSetVisibility={setProviderVisibility}
-              ref={(providerID, element) => sections.set(providerID, element)}
+              ref={(providerID, element) => {
+                sections.set(providerID, element)
+                // A ref runs before the section joins the document.
+                queueMicrotask(() => {
+                  if (element.isConnected) dispatch({ type: "section.ready", provider: providerID })
+                })
+              }}
               rows={(items) => <ModelRows items={items} />}
             />
           </Show>
@@ -195,4 +264,22 @@ export const SettingsModels: Component<{
       </div>
     </>
   )
+}
+
+function scrollToSection(section: HTMLElement | undefined) {
+  if (!section?.isConnected) return
+  const panel = section.closest<HTMLElement>(".settings-panel")
+  const header = panel?.querySelector<HTMLElement>(".settings-tab-header")
+
+  if (panel && header) {
+    settingsScroller(panel).scrollBy({
+      top: section.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 24,
+    })
+  } else {
+    section.scrollIntoView({ block: "start" })
+  }
+
+  section
+    .querySelector<HTMLElement>(".provider-model-group-trigger, .settings-models-group-trigger")
+    ?.focus({ preventScroll: true })
 }

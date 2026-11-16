@@ -1,0 +1,3 @@
+[test]
+root = "./test"
+preload = ["./test/happydom.ts"]

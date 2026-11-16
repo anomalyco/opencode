@@ -29,7 +29,7 @@ const handler = Effect.fn("cli.stats")(function* (input: Runtime.Input<typeof Co
       : project
   const details = input.models || input.tools || input.cost || input.full
   const stats = yield* request(server.endpoint.url, (signal) =>
-    client.session.stats(
+    client.experimental.session.stats(
       {
         from: range.from,
         to: range.to,

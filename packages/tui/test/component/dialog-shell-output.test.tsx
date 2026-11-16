@@ -20,7 +20,7 @@ import { createApi, createEventStream, createFetch, json } from "../fixture/tui-
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-async function setup(width: number, output = "") {
+async function setup(width: number, output = "", newDesigns = false) {
   const temporary = await tmpdir()
   const location = { directory: `${temporary.path}/original` }
   const shell: ShellInfo = {
@@ -35,6 +35,7 @@ async function setup(width: number, output = "") {
   }
   const state = { output, missing: false, failure: false }
   const requests: { url: URL; method: string }[] = []
+  const copied: string[] = []
   const events = createEventStream()
   const envelope = (data: unknown) => json({ location, data })
   const api = createApi(
@@ -67,10 +68,14 @@ async function setup(width: number, output = "") {
 
   const app = await testRender(
     () => (
-      <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
+      <TestTuiContexts
+        directory={temporary.path}
+        paths={{ state: temporary.path }}
+        clipboard={{ read: async () => undefined, write: async (text) => void copied.push(text) }}
+      >
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
-            <ConfigProvider config={createTuiResolvedConfig()}>
+            <ConfigProvider config={createTuiResolvedConfig({ experimental: { "new-designs": newDesigns } })}>
               <RouteProvider initialRoute={{ type: "session", sessionID: "ses_fixture" }}>
                 <ClientProvider api={api}>
                   <DataProvider directory={temporary.path}>
@@ -101,6 +106,7 @@ async function setup(width: number, output = "") {
     shell,
     location,
     requests,
+    copied,
     events,
     async [Symbol.asyncDispose]() {
       app.renderer.destroy()
@@ -222,4 +228,28 @@ test("large captures open at a bounded tail and clicking a shell opens the viewe
   expect(reads[0]?.url.searchParams.get("cursor")).toBe(String(Number.MAX_SAFE_INTEGER))
   expect(reads[1]?.url.searchParams.get("cursor")).toBe(String(Buffer.byteLength(app.state.output) - 65536))
   expect(reads[1]?.url.searchParams.get("limit")).toBe("65536")
+})
+
+test("new designs show footer actions instead of the legacy hint line", async () => {
+  await using app = await setup(100, "Frame 1\n", true)
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Shell output") && frame.includes("Frame 1"))
+  const frame = app.captureCharFrame()
+  expect(frame).toContain("follow end")
+  expect(frame).toContain("copy command c")
+  expect(frame).toContain("copy output o")
+  expect(frame).not.toContain("back esc")
+})
+
+test("the retained 64 KiB tail starts on a whole character", async () => {
+  await using app = await setup(100, "😀", true)
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Shell output") && frame.includes("😀"))
+  // The second page brings the text to 64 KiB + 1 code units, so the tail would start on the emoji's second half.
+  const rest = ("x".repeat(1023) + "\n").repeat(63) + "x".repeat(1023)
+  app.state.output += rest
+  await app.waitForFrame((frame) => frame.includes("Earlier output omitted"), { maxPasses: 100 })
+  app.mockInput.pressKey("o")
+  await app.waitFor(() => app.copied.length > 0)
+  expect(app.copied).toEqual([rest])
 })

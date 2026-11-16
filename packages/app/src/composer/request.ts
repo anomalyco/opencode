@@ -47,6 +47,8 @@ type BuildPromptRequestInput = {
   images: (Omit<ImageAttachmentPart, "blob"> & { dataUrl: string })[]
   text: string
   sessionDirectory: string
+  // Comment mentions that name an existing file; when given, the others stay text and are not attached.
+  existingMentions?: ReadonlySet<string>
 }
 
 const absolute = (directory: string, path: string) => {
@@ -74,6 +76,11 @@ const parseCommentMentions = (comment: string) => {
   })
 }
 
+/** The paths that comments in the context mention with `@`, as written. */
+export function commentMentions(context: ContextItem[]) {
+  return context.flatMap((item) => (item.comment ? parseCommentMentions(item.comment) : []))
+}
+
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
 
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
@@ -82,7 +89,7 @@ const isSkillAttachment = (part: Prompt[number]): part is SkillPart => part.type
 
 const isPathAttachment = (part: Prompt[number]): part is PathAttachmentPart => part.type === "path"
 
-/** The sent form of a note: its optional link and live subject travel only when present. */
+/** The sent form of a note: optional display fields, link and live subject travel only when present. */
 export function noteComment(item: NoteContextItem, comment: string) {
   const note: NoteComment = {
     type: "note",
@@ -92,6 +99,10 @@ export function noteComment(item: NoteContextItem, comment: string) {
     subject: item.subject,
     comment,
   }
+
+  if (item.title !== undefined) note.title = item.title
+
+  if (item.subtitle !== undefined) note.subtitle = item.subtitle
 
   if (item.href) note.href = item.href
 
@@ -147,6 +158,8 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
 
   const mentioned = (comment: string) =>
     parseCommentMentions(comment).flatMap((path) => {
+      if (input.existingMentions && !input.existingMentions.has(path)) return []
+
       const uri = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
 
       if (used.has(uri)) return []
@@ -159,7 +172,6 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     if (item.type === "note") {
       const comment = item.comment.trim()
 
-      if (!comment) return []
       comments.push(noteComment(item, comment))
 
       return mentioned(comment)

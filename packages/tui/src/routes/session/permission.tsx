@@ -9,7 +9,7 @@ import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
 import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../../util/permission"
 import { getScrollAcceleration } from "../../util/scroll"
-import { useConfig } from "../../config"
+import { useConfig, useCursorStyle } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
 import { usePathFormatter } from "../../context/path-format"
@@ -278,7 +278,7 @@ function RejectPrompt(props: {
   let input: TextareaRenderable
   const enabled = useInteractivity()
   const theme = useTheme()
-  const config = useConfig().data
+  const cursorStyle = useCursorStyle()
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   Keymap.createLayer(() => ({
@@ -357,7 +357,7 @@ function RejectPrompt(props: {
           textColor={theme.text.base}
           focusedTextColor={theme.text.base}
           cursorColor={theme.text.base}
-          cursorStyle={config.cursor}
+          cursorStyle={cursorStyle()}
         />
         <box
           id="session.permission.reject.actions"

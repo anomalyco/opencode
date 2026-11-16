@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, Message, ToolDefinition, Media } from "../../src/effect.js"
+import { ai, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
 import { configure } from "../../src/providers/openai-compatible-responses.js"
 import { OpenAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
@@ -25,7 +25,7 @@ describe("Open Responses-compatible route", () => {
         provider: "example",
       }).model("example-model")
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           system: "You are concise.",
           prompt: "Say hello.",
@@ -64,7 +64,7 @@ describe("Open Responses-compatible route", () => {
         provider: "example",
       }).model("example-model")
       const prepared = yield* compileRequest(
-        LLM.request({ model, prompt: "Say hello.", providerOptions: { store: true, include: [] } }),
+        ai.request({ model, prompt: "Say hello.", providerOptions: { store: true, include: [] } }),
       )
 
       expect(prepared.body.store).toBe(true)
@@ -80,7 +80,7 @@ describe("Open Responses-compatible route", () => {
         provider: "example",
       }).model("example-model")
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           system: "Initial instructions.",
           messages: [Message.user("Before."), Message.system("Operator update."), Message.assistant("After.")],
@@ -104,7 +104,7 @@ describe("Open Responses-compatible route", () => {
         provider: "example",
       }).model("example-model")
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [Message.user("Before."), Message.user([]), Message.user("After.")],
         }),
@@ -126,7 +126,7 @@ describe("Open Responses-compatible route", () => {
       }).model("example-model")
       const pdf = "data:application/pdf;base64,JVBERi0xLjQ="
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.user([{ type: "media", media: Media.fromDataUrl(pdf), filename: "input.pdf" }]),
@@ -164,7 +164,7 @@ describe("Open Responses-compatible route", () => {
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
       const error = yield* compileRequest(
-        LLM.request({ model, prompt: "Draw.", tools: [OpenAI.imageGeneration()] }),
+        ai.request({ model, prompt: "Draw.", tools: [OpenAI.imageGeneration()] }),
       ).pipe(Effect.flip)
 
       expect(error.reason._tag).toBe("InvalidRequest")
@@ -178,8 +178,9 @@ describe("Open Responses-compatible route", () => {
         "example-model",
       )
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
+          prompt: "Hello",
           tools: [
             {
               type: "namespace",
@@ -222,7 +223,7 @@ describe("Open Responses-compatible route", () => {
         "example-model",
       )
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant({ type: "tool-call", id: "call_1", name: "lookup", namespace: "crm", input: {} }),
@@ -245,7 +246,7 @@ describe("Open Responses-compatible route", () => {
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "Read the file.",
           tools: [
@@ -279,7 +280,7 @@ describe("Open Responses-compatible route", () => {
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -350,7 +351,7 @@ describe("Open Responses-compatible route", () => {
         { type: "file_search_call", id: "fs_1", queries: "not-an-array" },
       ]
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: items.map((item) =>
             Message.assistant({
@@ -380,7 +381,7 @@ describe("Open Responses-compatible route", () => {
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -399,13 +400,105 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("keeps one item when GitHub Copilot sends a new item id on every event", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://api.githubcopilot.test" }).model("gpt-5")
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item: { type: "reasoning", id: "rs-added" } },
+              { type: "response.reasoning_summary_part.added", output_index: 0, item_id: "rs-part", summary_index: 0 },
+              {
+                type: "response.reasoning_summary_text.delta",
+                output_index: 0,
+                item_id: "rs-delta",
+                summary_index: 0,
+                delta: "Thinking",
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: { type: "reasoning", id: "rs-done", encrypted_content: "opaque", summary: [] },
+              },
+              { type: "response.output_item.added", output_index: 1, item: { type: "message", id: "msg-added" } },
+              { type: "response.output_text.delta", output_index: 1, item_id: "msg-delta", delta: "Hello" },
+              { type: "response.output_item.done", output_index: 1, item: { type: "message", id: "msg-done" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
+      expect(response.message.content).toMatchObject([
+        {
+          type: "reasoning",
+          text: "Thinking",
+          providerMetadata: {
+            "openai-compatible": { itemId: "rs-added", reasoningEncryptedContent: "opaque" },
+          },
+        },
+        { type: "text", text: "Hello" },
+      ])
+    }),
+  )
+
+  it.effect("names the GitHub Copilot content filter that blocked a response", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://api.githubcopilot.test" }).model("gpt-5")
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.incomplete",
+              response: {
+                id: "resp_1",
+                incomplete_details: { reason: "content_filter" },
+                content_filters: [
+                  { source_type: "prompt", blocked: false },
+                  {
+                    source_type: "completion",
+                    blocked: true,
+                    content_filter_raw: [{ action: "BLOCK", label: "TextCopyright", result: true }],
+                  },
+                ],
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.finishReason).toMatchObject({ normalized: "content-filter", category: "TextCopyright" })
+    }),
+  )
+
+  it.effect("converts the GitHub Copilot billing on the completed event to USD", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://api.githubcopilot.test" }).model("gpt-5")
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.completed",
+              response: { id: "resp_1", usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 } },
+              copilot_usage: { total_nano_aiu: 4_473_525_000 },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0.04473525 })
+    }),
+  )
+
   it.effect("ignores bare null frames between events", () =>
     Effect.gen(function* () {
       const model = configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -427,7 +520,7 @@ describe("Open Responses-compatible route", () => {
   )
 
   describe("stream validation", () => {
-    const request = LLM.request({
+    const request = ai.request({
       model: configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
       prompt: "Respond.",
     })
@@ -774,7 +867,7 @@ describe("Open Responses-compatible route", () => {
         baseURL: "https://responses.example.test/v1",
         provider: "example",
       }).model("example-model")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Look it up." })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Look it up." })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -815,7 +908,7 @@ describe("Open Responses-compatible route", () => {
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think it through." })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Think it through." })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -848,7 +941,7 @@ describe("Open Responses-compatible route", () => {
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think it through." })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Think it through." })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -880,7 +973,7 @@ describe("Open Responses-compatible route", () => {
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant({
@@ -912,7 +1005,7 @@ describe("Open Responses-compatible route", () => {
         baseURL: "https://responses.example.test/v1",
         provider: "example",
       }).model("example-model")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Unsafe request" })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Unsafe request" })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -949,7 +1042,7 @@ describe("Open Responses-compatible route", () => {
         },
       ])
 
-      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      const prepared = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(prepared.body.input).toEqual([
         {
           type: "message",
@@ -982,10 +1075,11 @@ describe("Open Responses-compatible route", () => {
         },
       }).model("example-model")
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "Think.",
-          generation: { presencePenalty: 0.2, frequencyPenalty: -0.1 },
+          presencePenalty: 0.2,
+          frequencyPenalty: -0.1,
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       )
@@ -1019,7 +1113,7 @@ describe("Open Responses-compatible route", () => {
         baseURL: "https://responses.example.test/v1",
         provider: "example",
       }).model("example-model")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Search." })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Search." })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(

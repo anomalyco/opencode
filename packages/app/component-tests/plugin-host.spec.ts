@@ -1,11 +1,28 @@
 import type { Component, Owner } from "solid-js"
 import type { PluginInfo } from "@opencode/client/promise"
-import type { Context, Contract, DialogHandle, Dialogs, Live, SessionRef, SessionScreen } from "@opencode/plugin/gui"
+import type {
+  CodeBlockProps,
+  Context,
+  Contract,
+  DialogHandle,
+  Dialogs,
+  Live,
+  SessionRef,
+  SessionScreen,
+} from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
+import type { JSHandle } from "@playwright/test"
+import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
+
+/** What the code block cases drive from the page. */
+type CodeBlocksHost = ReturnType<typeof mountCodeBlocks>
+
+/** What the theme preview case drives from the page. */
+type ThemesHost = ReturnType<typeof mountThemes>
 
 /** What the scoped-registration case keeps from inside its plugin. */
 type Scope = { owner?: Owner | null; end: () => void; ctx?: Context }
@@ -166,6 +183,66 @@ story("a dialog handle closes its own dialog, and a dialog closes with the scope
   })
 })
 
+story("Escape closes the top dialog while a dialog below it plays its exit animation", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountPluginHost, until } = await import(fixture)
+    const host = mountPluginHost()
+    const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
+    const shown = () => ["below", "middle", "top"].filter((value) => document.body.textContent?.includes(value))
+    const handles: DialogHandle[] = []
+    host.load((ctx: Context) => {
+      handles.push(ctx.dialogs.open(text("below")), ctx.dialogs.open(text("middle")), ctx.dialogs.open(text("top")))
+    }, 0)
+    await until(() => shown().length === 3)
+    handles[1]?.close()
+    // In the same tick, so the middle dialog is still playing its exit animation.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    await until(() => shown().length === 1)
+    const outcome = shown()
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual(["below"])
+})
+
+story("a dialog closes itself while the dialog above it exits, and a double close never reaches below", async ({
+  page,
+}) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountPluginHost, until, useDialog } = await import(fixture)
+    const host = mountPluginHost()
+    const shown = () => ["base", "middle", "top"].filter((value) => document.body.textContent?.includes(value))
+    const own = { close: () => {} }
+    host.load((ctx: Context) => {
+      ctx.dialogs.open(() => Object.assign(document.createElement("p"), { textContent: "base" }))
+      // A Cancel button inside the middle dialog: a plain close() from its own layer.
+      ctx.dialogs.open(() => {
+        const dialog = useDialog()
+        own.close = () => dialog.close()
+
+        return Object.assign(document.createElement("p"), { textContent: "middle" })
+      })
+      ctx.dialogs.open(() => Object.assign(document.createElement("p"), { textContent: "top" }))
+    }, 0)
+    await until(() => shown().length === 3)
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    // In the same tick, while the top dialog is still playing its exit animation; twice, as a double click would.
+    own.close()
+    own.close()
+    await until(() => shown().length === 1)
+    // Past every exit animation, so a close that reached the base dialog would have removed it by now.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const outcome = shown()
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual(["base"])
+})
+
 story("a dialog pushed in the same tick as a reload never mounts", async ({ page }) => {
   const shown = await page.evaluate(async (fixture) => {
     const { mountPluginHost } = await import(fixture)
@@ -303,7 +380,7 @@ story("a plugin's toasts close when it goes away, and a handle closes only its o
   expect(result).toEqual({ kept: true, setups: 2 })
 })
 
-story("ctx.ui renders the app's own components in a plugin's contribution and dialog", async ({ page }) => {
+story("ctx.ui renders the app's components in a contribution, a host menu and a dialog", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountSessionRegion, until, createComponent, createSignal, Slot } = await import(fixture)
 
@@ -322,6 +399,7 @@ story("ctx.ui renders the app's own components in a plugin's contribution and di
               const ui = ctx.ui
               const [on, setOn] = createSignal(false)
               const [name, setName] = createSignal("")
+              const [period, setPeriod] = createSignal("day")
 
               const dialog = () =>
                 ctx.dialogs.open((handle) =>
@@ -374,6 +452,64 @@ story("ctx.ui renders the app's own components in a plugin's contribution and di
                   createComponent(ui.Keybind, { keys: ["Ctrl", "K"] }),
                   createComponent(ui.Markdown, { text: "# Fixture heading\n\nSome *text*." }),
                   createComponent(ui.Code, { content: "const fence = `\n```\n`", language: "ts" }),
+                  createComponent(ui.SettingsLayout, {
+                    title: "Fixture settings",
+                    description: "Fixture page description",
+                    get children() {
+                      return createComponent(ui.SettingsSection, {
+                        title: "Fixture section",
+                        footer: "Fixture footer",
+                        get children() {
+                          return createComponent(ui.SettingsRow, {
+                            id: "fixture-period",
+                            title: "Period",
+                            description: "How far back to count",
+                            get children() {
+                              return createComponent(ui.Select<"day" | "month">, {
+                                label: "Period",
+                                options: [
+                                  { value: "day", label: "Day" },
+                                  { value: "month", label: "Month" },
+                                ],
+                                get value() {
+                                  return period()
+                                },
+                                onChange: (value: "day" | "month") => {
+                                  setPeriod(value)
+                                  record(`select ${value}`)
+                                },
+                              })
+                            },
+                          })
+                        },
+                      })
+                    },
+                  }),
+                ],
+              })
+
+              ctx.add(Slot, {
+                at: "session.location.menu",
+                render: () => [
+                  createComponent(ui.MenuSeparator, {}),
+                  createComponent(ui.MenuItem, {
+                    label: "Usage",
+                    icon: "status",
+                    keys: ["U"],
+                    onSelect: () => record("usage"),
+                  }),
+                  createComponent(ui.MenuGroup, {
+                    label: "Fixture menu group",
+                    get children() {
+                      return createComponent(ui.MenuSub, {
+                        label: "Open in",
+                        onOpenChange: (open: boolean) => record(`sub ${open}`),
+                        get children() {
+                          return createComponent(ui.MenuItem, { label: "Editor", onSelect: () => record("editor") })
+                        },
+                      })
+                    },
+                  }),
                 ],
               })
             },
@@ -427,6 +563,43 @@ story("ctx.ui renders the app's own components in a plugin's contribution and di
   await expect(dialog.locator('[data-slot="dialog-close-button"]')).toHaveCount(1)
   await dialog.getByRole("button", { name: "Close fixture" }).click()
   await expect(dialog).toHaveCount(0)
+
+  // Settings components render the host's settings markup, and search finds the row by its id.
+  await expect(root.locator(".settings-tab-header h2.settings-tab-title")).toHaveText("Fixture settings")
+  const section = root.getByRole("region", { name: "Fixture section" })
+  await expect(section.locator("h3.settings-section-title")).toHaveText("Fixture section")
+  await expect(section).toContainText("Fixture footer")
+  const row = section.locator('[data-component="settings-list"] > [data-component="settings-row"]')
+  await expect(row).toHaveAttribute("data-action", "fixture-period")
+  await expect(row.locator('[data-slot="settings-row-description"]')).toHaveText("How far back to count")
+
+  const select = row.locator('[data-slot="settings-row-control"] [data-component="select-v2"]')
+  // The trigger is named by the label and the selected choice.
+  await expect(select).toHaveAccessibleName("Period Day")
+  await select.click()
+  await page.getByRole("option", { name: "Month" }).click()
+  await expect(select).toHaveAccessibleName("Period Month")
+
+  // Menu rows render inside the host's menu as its own rows: keyboard items, a group, and a submenu.
+  await root.getByRole("button", { name: "Project menu" }).click()
+  const project = page.getByRole("menu")
+  await expect(project.getByRole("separator")).toHaveCount(1)
+  const usage = project.getByRole("menuitem", { name: "Usage" })
+  await expect(usage).toHaveAttribute("data-component", "menu-v2-item")
+  await expect(usage.locator('use[href="#opencode-v2-icon-status"]')).toHaveCount(1)
+  await expect(usage.locator('[data-component="keybind-v2"]')).toHaveText("U")
+  await usage.click()
+  await expect(project).toHaveCount(0)
+
+  await root.getByRole("button", { name: "Project menu" }).click()
+  await expect(page.getByRole("menu").getByText("Fixture menu group")).toBeVisible()
+  await page.getByRole("menuitem", { name: "Open in" }).hover()
+  await page.getByRole("menu", { name: "Open in" }).getByRole("menuitem", { name: "Editor" }).click()
+  await expect(page.getByRole("menu")).toHaveCount(0)
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-ui",
+    /^button;menu;submit acme;select month;usage;sub true;editor;/,
+  )
 })
 
 story(
@@ -870,6 +1043,63 @@ story(
   },
 )
 
+story("a throwing effect or state reader fails only its own plugin; later plugins still activate", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountPlugins, until, createMemo, createRoot } = await import(fixture)
+    const later = Promise.withResolvers<void>()
+    const thrown = { count: 0 }
+
+    const host = mountPlugins({
+      // Creating the broken plugin's instance throws.
+      plugin: (id: string) => {
+        if (id === "broken") throw new Error("instance broke")
+
+        return undefined
+      },
+      definitions: [
+        { id: "acme", windowEntry: async () => ({ default: () => {} }) },
+        { id: "broken", windowEntry: async () => ({ default: () => {} }) },
+        {
+          id: "later",
+          windowEntry: async () => {
+            await later.promise
+
+            return { default: () => {} }
+          },
+        },
+      ],
+    })
+
+    // A reader with no error boundary: its throw reaches the write that woke it, here acme becoming active.
+    const dispose = createRoot((dispose: () => void) => {
+      createMemo(() => {
+        if (host.status("acme") === "active" && thrown.count++ === 0) throw new Error("reader broke")
+      })
+
+      return dispose
+    })
+
+    await until(() => thrown.count > 0 && host.status("broken") === "failed")
+    later.resolve()
+    await until(() => host.status("later") === "active")
+
+    const outcome = {
+      acme: host.status("acme"),
+      broken: host.failure("broken")?.error.includes("instance broke"),
+      later: host.status("later"),
+      // In the app, an error that reaches the boundary above the host replaces the whole window.
+      escaped: host.escaped(),
+    }
+
+    dispose()
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual({ acme: "active", broken: true, later: "active", escaped: [] })
+})
+
 story(
   "a plugin follows another's contract across load, reload and disable, provides only its own, and a failed one stays failed",
   async ({ page }) => {
@@ -957,6 +1187,7 @@ story(
       const Other = Ipc.define({ id: "other.ipc", methods: {} })
       const [available, setAvailable] = createSignal(false)
       const [awake, setAwake] = createSignal(false)
+      const [failed, setFailed] = createSignal(false)
       const kept: Kept = {}
 
       const client = {
@@ -967,6 +1198,7 @@ story(
 
       const host = mountPlugins({
         ipc: (token: { readonly id: string }) => (token.id === Awake.id && available() ? client : undefined),
+        ipcFailed: (token: { readonly id: string }) => token.id === Awake.id && failed(),
         definitions: [{ id: "acme", windowEntry: async () => ({ default: (ctx: Context) => void (kept.ctx = ctx) }) }],
       })
 
@@ -976,6 +1208,16 @@ story(
       if (!ctx) throw new Error("the plugin never set up")
 
       const main = ctx.main(Awake)
+      // A call that waits rejects once main fails to answer the window's subscribe, instead of waiting forever.
+      const stuck = main.get()
+      setFailed(true)
+
+      const unanswered = await stuck.then(
+        () => false,
+        (cause: unknown) => String(cause).includes("unavailable: failed"),
+      )
+
+      setFailed(false)
       const waiting = main.get()
       const before = main.state()
       setAwake(true)
@@ -1002,10 +1244,11 @@ story(
 
       host.unmount()
 
-      return { before, answered, state, foreign, rejected, same: ctx.main(Awake) === main }
+      return { unanswered, before, answered, state, foreign, rejected, same: ctx.main(Awake) === main }
     }, fixture)
 
     expect(result).toEqual({
+      unanswered: true,
       before: undefined,
       answered: true,
       state: { awake: true },
@@ -1102,6 +1345,8 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
       // A bundle main could not read never reaches the window.
       { id: "garbled", builtin: false, enabled: true, error: "SyntaxError: garbled bundle" },
       { id: "flaky", builtin: false, enabled: true },
+      // A plugin whose GUI has no window entry runs only in main, so main's error is its only status.
+      { id: "main-only", builtin: false, enabled: true, error: "Error: main broke" },
     ]
 
     const listed = (id: string, features: PluginInfo["features"]): PluginInfo => ({
@@ -1153,6 +1398,7 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
         { id: "acme", windowEntry: async () => ({ default: () => {} }) },
         { id: "notes", windowEntry: async () => ({ default: () => {} }) },
         { id: "flaky", windowEntry: fails("flaky broke") },
+        { id: "main-only" },
       ],
     })
 
@@ -1170,6 +1416,7 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
     "flaky",
     "lint-rules",
     "notes",
+    "main-only",
     "garbled",
     "terminal",
   ])
@@ -1182,17 +1429,20 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
   await expect(plugins.getByText("SyntaxError: garbled bundle", { exact: true })).toBeVisible()
   await expect(plugins.getByText("Error: flaky broke", { exact: true })).toBeVisible()
   await expect(plugins.getByText("Error: terminal broke", { exact: true })).toBeVisible()
+  await expect(plugins.getByText("Error: main broke", { exact: true })).toBeVisible()
   await expect(plugins.getByRole("button", { name: "Show details" })).toHaveCount(2)
   const flaky = plugins.locator(".settings-extension-row").filter({ hasText: "flaky" })
   await flaky.getByRole("button", { name: "Show details" }).press("Enter")
   await expect(flaky.locator("pre")).toHaveText(/^Error: flaky broke\s+at /)
   await expect(flaky.getByRole("button", { name: "Hide details" })).toHaveAttribute("aria-expanded", "true")
-  await expect(plugins.getByText("Failed", { exact: true })).toHaveCount(2)
+  // Every plugin settled: none still says it loads.
+  await expect(plugins.getByText("Failed", { exact: true })).toHaveCount(3)
+  await expect(plugins.getByText("Loading", { exact: true })).toHaveCount(0)
   await expect(plugins.getByText("Built-in", { exact: true })).toHaveCount(1)
   // A built-in always runs, so it has no switch; the switches carry on and off without a status label.
-  await expect(plugins.getByRole("switch")).toHaveCount(3)
+  await expect(plugins.getByRole("switch")).toHaveCount(4)
   await expect(plugins.getByRole("switch", { name: "terminal" })).toHaveCount(0)
-  await expect(plugins.getByRole("button", { name: "Reload" })).toHaveCount(4)
+  await expect(plugins.getByRole("button", { name: "Reload" })).toHaveCount(5)
   await expect(plugins.getByText("Active", { exact: true })).toHaveCount(0)
 
   // The fixture mounts below the story, out of the viewport, so the controls are driven from the keyboard.
@@ -1424,6 +1674,285 @@ story("startup enable state does not wait for the manager, and live updates beat
   })
 })
 
+story(
+  "a plugin theme joins the theme picker and leaves it with its plugin, keeping the user's choice",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountThemes, until, Theme } = await import(fixture)
+      const root = document.documentElement
+
+      const variant = {
+        palette: {
+          neutral: "#101418",
+          ink: "#e6edf3",
+          primary: "#009fff",
+          success: "#3fb950",
+          warning: "#d29922",
+          error: "#f85149",
+          info: "#a371f7",
+        },
+      }
+
+      const host = mountThemes({
+        definitions: [
+          {
+            id: "acme",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(Theme, {
+                  $schema: "https://opencode.ai/desktop-theme.json",
+                  name: "Midnight",
+                  id: "midnight",
+                  light: variant,
+                  dark: variant,
+                }),
+            }),
+          },
+        ],
+      })
+
+      await until(() => host.status("acme") === "active")
+      const names = host.options().map((option: { name: string }) => option.name)
+      const index = names.indexOf("Midnight")
+      host.select("acme:midnight")
+      await until(() => root.dataset.theme === "acme:midnight")
+
+      host.disable("acme")
+      await until(() => root.dataset.theme === "oc-2")
+
+      const withdrawn = {
+        listed: host.options().some((option: { id: string }) => option.id === "acme:midnight"),
+        selected: host.selected(),
+        stored: localStorage.getItem("opencode-theme-id"),
+      }
+
+      host.enable()
+      await until(() => root.dataset.theme === "acme:midnight")
+      const restored = host.selected()
+      host.unmount()
+
+      return { neighbors: names.slice(index - 1, index + 2), withdrawn, restored }
+    }, fixture)
+
+    expect(result).toEqual({
+      // Alphabetical among the app's themes, not appended after them.
+      neighbors: ["Mercury", "Midnight", "Monokai"],
+      withdrawn: { listed: false, selected: "oc-2", stored: "acme:midnight" },
+      restored: "acme:midnight",
+    })
+  },
+)
+
+story("a theme preview survives a system light/dark flip and a plugin theme arriving, and is never saved", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" })
+
+  const host: JSHandle<ThemesHost> = await page.evaluateHandle(async (fixture) => {
+    const { mountThemes, Theme } = await import(fixture)
+    // The frame's own provider saved its scheme; this window follows the system.
+    localStorage.setItem("opencode-color-scheme", "system")
+    localStorage.removeItem("opencode-theme-id")
+    localStorage.removeItem("opencode-theme-css-light")
+    localStorage.removeItem("opencode-theme-css-dark")
+
+    const variant = {
+      palette: {
+        neutral: "#101418",
+        ink: "#e6edf3",
+        primary: "#009fff",
+        success: "#3fb950",
+        warning: "#d29922",
+        error: "#f85149",
+        info: "#a371f7",
+      },
+    }
+
+    const host: ThemesHost = mountThemes({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(Theme, {
+                $schema: "https://opencode.ai/desktop-theme.json",
+                name: "Midnight",
+                id: "midnight",
+                light: variant,
+                dark: variant,
+              }),
+          }),
+        },
+      ],
+    })
+
+    host.previewScheme("light")
+
+    return host
+  }, fixture)
+
+  const read = () =>
+    host.evaluate((host) => ({
+      theme: document.documentElement.dataset.theme,
+      shown: document.documentElement.dataset.colorScheme,
+      mode: host.mode(),
+      scheme: localStorage.getItem("opencode-color-scheme"),
+      id: localStorage.getItem("opencode-theme-id"),
+      cached: [localStorage.getItem("opencode-theme-css-light"), localStorage.getItem("opencode-theme-css-dark")].map(
+        (css) => css !== null,
+      ),
+    }))
+
+  // A media change reaches the provider's listener before one added after it.
+  const flip = async (colorScheme: "light" | "dark") => {
+    const changed = await page.evaluateHandle(() => ({
+      done: new Promise<void>((resolve) =>
+        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => resolve(), { once: true }),
+      ),
+    }))
+
+    await page.emulateMedia({ colorScheme })
+    await changed.evaluate((changed) => changed.done)
+  }
+
+  // The plugin's theme arrives while the preview is up.
+  await expect.poll(() => host.evaluate((host) => host.status("acme"))).toBe("active")
+  const previewed = await read()
+
+  await flip("light")
+  await flip("dark")
+  const flipped = await read()
+
+  await host.evaluate((host) => host.preview("acme:midnight"))
+  const midnight = await read()
+
+  await host.evaluate((host) => host.cancel())
+  const cancelled = await read()
+
+  await host.evaluate((host) => {
+    host.preview("acme:midnight")
+    host.commit()
+  })
+  const committed = await read()
+  await host.evaluate((host) => host.unmount())
+
+  expect({ previewed, flipped, midnight, cancelled, committed }).toEqual({
+    previewed: { theme: "oc-2", shown: "light", mode: "light", scheme: "system", id: null, cached: [false, false] },
+    flipped: { theme: "oc-2", shown: "light", mode: "light", scheme: "system", id: null, cached: [false, false] },
+    midnight: {
+      theme: "acme:midnight",
+      shown: "light",
+      mode: "light",
+      scheme: "system",
+      id: null,
+      cached: [false, false],
+    },
+    cancelled: { theme: "oc-2", shown: "dark", mode: "dark", scheme: "system", id: null, cached: [false, false] },
+    committed: {
+      theme: "acme:midnight",
+      shown: "dark",
+      mode: "dark",
+      scheme: "system",
+      id: "acme:midnight",
+      cached: [true, true],
+    },
+  })
+})
+
+story("a selected plugin theme that never returns shows the default theme once plugins settle", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountThemes, until } = await import(fixture)
+    const root = document.documentElement
+    // The last run picked a theme whose plugin is now uninstalled, and cached its colors.
+    localStorage.setItem("opencode-theme-id", "gone:midnight")
+    localStorage.setItem("opencode-theme-css-dark", "--background-base:#010203;")
+    localStorage.setItem("opencode-theme-css-light", "--background-base:#010203;")
+
+    const host = mountThemes({ definitions: [], pending: true })
+    // The window is ready to show on the cached colors while the plugin list is still on its way.
+    await until(() => host.applied() > 0)
+    const waiting = host.selected()
+    // The frame's own provider already shows the default theme; mark the root to see this provider apply it.
+    root.dataset.theme = "frame"
+
+    host.load()
+    await until(() => root.dataset.theme === "oc-2")
+
+    const settled = {
+      selected: host.selected(),
+      stored: localStorage.getItem("opencode-theme-id"),
+      cached: localStorage.getItem("opencode-theme-css-dark") ?? localStorage.getItem("opencode-theme-css-light"),
+    }
+
+    host.unmount()
+
+    return { waiting, settled }
+  }, fixture)
+
+  expect(result).toEqual({
+    waiting: "gone:midnight",
+    settled: { selected: "oc-2", stored: "gone:midnight", cached: null },
+  })
+})
+
+story(
+  "a panel with a width of its own sizes the side region and keeps the width the user drags it to",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountPanelWidths, until, Panel } = await import(fixture)
+
+      const panel = (id: string, width?: "narrow") => ({
+        id: `${id}-plugin`,
+        windowEntry: async () => ({
+          default: (ctx: Context) =>
+            void ctx.add(Panel, {
+              id,
+              region: "side",
+              width,
+              list: (input: { open: readonly string[] }) =>
+                input.open.includes("main") ? [{ id: "main", title: id }] : [],
+              render: () => null,
+            }),
+        }),
+      })
+
+      // The row is 1200px wide: the chat panel and the side region share 1192px beside the 8px gap.
+      const host = mountPanelWidths({
+        definitions: [panel("quota", "narrow"), panel("files")],
+        active: "quota-plugin:main",
+        width: 1200,
+      })
+
+      // The chat panel is on screen at this width, and the divider's handle starts a drag from it.
+      const settle = (width: number) => until(() => host.chat() === width && host.handle() === width)
+
+      // `narrow` leaves the side region its minimum, 320px.
+      await settle(872)
+      host.drag(700)
+      await settle(700)
+      const dragged = { widths: host.widths(), conversation: host.conversation() }
+
+      // A panel without a width keeps the conversation's, and a drag on it changes only that.
+      host.select("files-plugin:main")
+      await settle(600)
+      host.drag(650)
+      await settle(650)
+      const shared = { widths: host.widths(), conversation: host.conversation() }
+
+      host.select("quota-plugin:main")
+      await settle(700)
+      host.unmount()
+
+      return { dragged, shared }
+    }, fixture)
+
+    expect(result).toEqual({
+      dragged: { widths: { "quota-plugin:quota": 492 }, conversation: { width: 600, resized: false } },
+      shared: { widths: { "quota-plugin:quota": 492 }, conversation: { width: 650, resized: true } },
+    })
+  },
+)
+
 story("composer pills show per session, open their rows, and fail only their own plugin", async ({ page }) => {
   const statuses = await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)
@@ -1510,4 +2039,195 @@ story("composer pills show per session, open their rows, and fail only their own
 
   await rows.nth(0).click()
   await expect(page.locator("body")).toHaveAttribute("data-picked", "12")
+})
+
+story("a composer pill with a menu opens the plugin's content under the host's heading", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountComposerPills, until, ComposerPill } = await import(fixture)
+
+    const host = mountComposerPills({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(ComposerPill, {
+                id: "goal",
+                // `menu` wins over the view's rows.
+                show: () => ({ label: "Goal", title: "Ship the release", rows: [{ id: "unused", label: "Unused" }] }),
+                menu: (input: { readonly session: { readonly directory: string }; close(): void }) => {
+                  const button = document.createElement("button")
+                  button.dataset.testid = "goal-pause"
+                  button.textContent = `Pause ${input.session.directory}`
+                  button.onclick = () => input.close()
+
+                  return button
+                },
+              }),
+          }),
+        },
+      ],
+    })
+
+    await until(() => host.status("acme") === "active")
+  }, fixture)
+
+  const pill = page.getByTestId("composer-pills").locator('[data-slot="session-plugin-pill"]')
+  await expect(pill).toHaveText("Goal")
+
+  await pill.click()
+  const popover = page.locator('[data-slot="session-plugin-pill-popover"]')
+  await expect(popover.getByText("Ship the release")).toBeVisible()
+  await expect(popover.locator('[data-slot="session-plugin-pill-row"]')).toHaveCount(0)
+  await expect(popover.getByTestId("goal-pause")).toHaveText("Pause /repo")
+
+  await popover.getByTestId("goal-pause").click()
+  await expect(popover).toHaveCount(0)
+
+  // The content renders again on the next open.
+  await pill.click()
+  await expect(page.getByTestId("goal-pause")).toBeVisible()
+})
+
+story("code block content replaces complete blocks of its languages, and actions sit beside Copy", async ({ page }) => {
+  const host = await page.evaluateHandle(async (fixture) => {
+    const { mountCodeBlocks, until, CodeBlock, CodeBlockAction } = await import(fixture)
+
+    const host: CodeBlocksHost = mountCodeBlocks({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) => {
+              ctx.add(CodeBlock, {
+                languages: ["chart"],
+                render: (props: CodeBlockProps) => {
+                  const chart = document.createElement("div")
+                  chart.dataset.testid = "chart"
+                  chart.textContent = `${props.language} ${props.code} in ${props.session?.directory}`
+
+                  return chart
+                },
+              })
+              ctx.add(CodeBlock, {
+                languages: ["broken"],
+                render: () => {
+                  throw new Error("chart failed")
+                },
+              })
+              // Declines, so the block keeps its code.
+              ctx.add(CodeBlock, { languages: ["quiet"], render: () => undefined })
+              ctx.add(CodeBlockAction, {
+                id: "run",
+                languages: ["sh"],
+                icon: "terminal",
+                title: "Run in terminal",
+                run: (input: CodeBlockProps) =>
+                  void (document.body.dataset.ran = `${input.code} in ${input.session?.directory}`),
+              })
+            },
+          }),
+        },
+      ],
+    })
+
+    await until(() => host.status("acme") === "active")
+    // The closing fence has not arrived yet.
+    host.show("```chart\nA,B", true)
+
+    return host
+  }, fixture)
+
+  const root = page.getByTestId("code-blocks")
+  const blocks = root.locator('[data-component="markdown-code"]')
+  await expect(blocks.locator("pre code")).toHaveText("A,B")
+  await expect(root.getByTestId("chart")).toHaveCount(0)
+
+  // The closing fence arrives while the message still streams.
+  await host.evaluate((host) => host.show("```chart\nA,B\n```\n\nMore", true))
+  await expect(root.getByTestId("chart")).toHaveText("chart A,B in /repo")
+  await expect(blocks.locator("pre")).toBeHidden()
+
+  await host.evaluate((host) =>
+    host.show(
+      [
+        "```chart\nA,B\n```",
+        "```broken\nx\n```",
+        "```quiet\ny\n```",
+        "```sh\necho hi\n```",
+        "```ts\nconst a = 1\n```",
+      ].join("\n\n"),
+    ),
+  )
+
+  await expect(blocks).toHaveCount(5)
+  await expect(root.getByTestId("chart")).toHaveText("chart A,B in /repo")
+  await expect(blocks.nth(0).locator("pre")).toBeHidden()
+
+  // A render that throws or declines keeps the code; the failure is the plugin's, which keeps running.
+  for (const index of [1, 2]) {
+    await expect(blocks.nth(index).locator("pre")).toBeVisible()
+    await expect(blocks.nth(index).locator('[data-slot="markdown-code-content"]')).toHaveCount(0)
+  }
+
+  expect(await host.evaluate((host) => ({ failure: host.failure("acme"), status: host.status("acme") }))).toEqual({
+    failure: { phase: "render", error: expect.stringContaining("chart failed") },
+    status: "active",
+  })
+
+  // Only the shell block gets the action, before its Copy button; the TypeScript block is untouched.
+  await expect(root.locator('[data-slot="markdown-code-actions"]')).toHaveCount(1)
+  const shell = blocks.nth(3)
+  await expect(shell.locator('[data-slot="markdown-code-actions"] + [data-slot="markdown-copy-button"]')).toHaveCount(1)
+  await shell.hover()
+  await shell.getByRole("button", { name: "Run in terminal" }).click()
+  await expect(page.locator("body")).toHaveAttribute("data-ran", "echo hi in /repo")
+  await expect(blocks.nth(4).locator("pre code")).toHaveText("const a = 1")
+  await expect(
+    blocks.nth(4).locator('[data-slot="markdown-code-actions"], [data-slot="markdown-code-content"]'),
+  ).toHaveCount(0)
+})
+
+story("code block content follows plugins that join and leave after the message rendered", async ({ page }) => {
+  const host = await page.evaluateHandle(async (fixture) => {
+    const { mountCodeBlocks, until } = await import(fixture)
+    const host: CodeBlocksHost = mountCodeBlocks({ definitions: [] })
+    host.show("```chart\nA,B\n```")
+    await until(() => !!document.querySelector('[data-testid="code-blocks"] [data-markdown-ready] pre code'))
+
+    return host
+  }, fixture)
+
+  const root = page.getByTestId("code-blocks")
+  await expect(root.locator("pre code")).toHaveText("A,B")
+
+  await host.evaluate(async (host, fixture) => {
+    const { CodeBlock } = await import(fixture)
+
+    host.define([
+      {
+        id: "acme",
+        windowEntry: async () => ({
+          default: (ctx: Context) =>
+            void ctx.add(CodeBlock, {
+              languages: ["chart"],
+              render: () => {
+                const chart = document.createElement("div")
+                chart.dataset.testid = "chart"
+                chart.textContent = "drawn"
+
+                return chart
+              },
+            }),
+        }),
+      },
+    ])
+  }, fixture)
+
+  await expect(root.getByTestId("chart")).toHaveText("drawn")
+  await expect(root.locator("pre")).toBeHidden()
+
+  await host.evaluate((host) => host.define([]))
+  await expect(root.getByTestId("chart")).toHaveCount(0)
+  await expect(root.locator("pre code")).toHaveText("A,B")
 })

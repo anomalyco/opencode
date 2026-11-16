@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { FetchHttpClient } from "effect/http"
-import { LLM, LLMRequest, Message } from "../src/effect.js"
+import { ai, Message } from "../src/effect.js"
 import { LLMClient } from "../src/route/client.js"
 import { OpenAI } from "../src/providers.js"
 import { testEffect } from "./lib/effect.js"
@@ -72,25 +72,24 @@ testEffect(runtimeLayer(FetchHttpClient.layer)).live("compaction and a tool loop
     const model = OpenAI.configure({ apiKey: "fixture", baseURL: `http://127.0.0.1:${server.port}/v1` }).responses(
       "fixture",
     )
-    const request = LLM.request({
+    const request = ai.request({
       model,
       prompt: "original",
       tools: [{ name: "lookup", description: "Lookup a number", inputSchema: { type: "object", properties: {} } }],
     })
-    const compacted = yield* LLMClient.compact(request)
+    const compacted = yield* ai.compact(request)
     const messages = [...compacted.replacement, Message.user("Look up the answer")]
-    const first = yield* LLMClient.generate(LLMRequest.update(request, { messages }))
+    const first = yield* LLMClient.generate({ ...request, messages })
     expect(first.toolCalls).toHaveLength(1)
     const call = first.toolCalls[0]!
-    const last = yield* LLMClient.generate(
-      LLMRequest.update(request, {
-        messages: [
-          ...messages,
-          first.message,
-          Message.tool({ id: call.id, name: call.name, result: "42", resultType: "text" }),
-        ],
-      }),
-    )
+    const last = yield* LLMClient.generate({
+      ...request,
+      messages: [
+        ...messages,
+        first.message,
+        Message.tool({ id: call.id, name: call.name, result: "42", resultType: "text" }),
+      ],
+    })
     expect(last.text).toBe("The answer is 42.")
     expect(calls).toEqual(["/v1/responses/compact", "/v1/responses", "/v1/responses"])
   }),

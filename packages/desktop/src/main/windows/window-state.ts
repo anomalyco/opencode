@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { Option, Schema } from "effect"
 import type { BrowserWindow, Rectangle } from "electron"
 
 // Remembers a window's bounds and maximized / fullscreen flags across launches in the same JSON
@@ -21,46 +22,82 @@ export type Displays = {
   matching: (bounds: Rectangle) => Rectangle
 }
 
+const StateFile = Schema.fromJsonString(
+  Schema.Struct({
+    x: Schema.optional(Schema.Int),
+    y: Schema.optional(Schema.Int),
+    width: Schema.optional(Schema.Int),
+    height: Schema.optional(Schema.Int),
+    displayBounds: Schema.optional(
+      Schema.Struct({ x: Schema.Int, y: Schema.Int, width: Schema.Int, height: Schema.Int }),
+    ),
+    isMaximized: Schema.optional(Schema.Boolean),
+    isFullScreen: Schema.optional(Schema.Boolean),
+  }),
+)
+
 // Bounds are only trusted when they still fit on one of the current displays; otherwise the window
-// falls back to the default size on the primary display. A saved maximized or fullscreen state
-// without bounds is kept so manage() can restore it.
-export function resolveWindowState(saved: unknown, defaults: { width: number; height: number }, displays: Displays) {
-  const state = isState(saved) ? saved : undefined
+// falls back to the default size on the primary display. A saved maximized or fullscreen state is
+// kept in every fallback so manage() can restore it.
+export function resolveWindowState(
+  saved: Partial<WindowState> | undefined,
+  defaults: { width: number; height: number },
+  displays: Displays,
+): WindowState {
+  if (!saved) return { width: defaults.width, height: defaults.height }
 
-  if (!state) return { width: defaults.width, height: defaults.height } satisfies WindowState
-
-  if (!hasBounds(state)) {
-    return state.isMaximized || state.isFullScreen
-      ? ({ ...state, width: defaults.width, height: defaults.height } satisfies WindowState)
-      : ({ width: defaults.width, height: defaults.height } satisfies WindowState)
+  if (!hasBounds(saved)) {
+    return saved.isMaximized || saved.isFullScreen
+      ? { ...saved, width: defaults.width, height: defaults.height }
+      : { width: defaults.width, height: defaults.height }
   }
 
-  if (!state.displayBounds) return state
-  const visible = displays.all().some((bounds) => within(state, bounds))
+  const savedDisplay = saved.displayBounds
 
-  if (visible) return state
+  if (!savedDisplay) return saved
+  const all = displays.all()
+
+  // Normal bounds are only recorded while the window is restored, so a window maximized on another
+  // display keeps x/y on the display it was restored on. maximize() uses the display under the normal
+  // bounds, so move them onto the saved display while it is still connected.
+  const target =
+    saved.isMaximized || saved.isFullScreen ? all.find((bounds) => sameBounds(bounds, savedDisplay)) : undefined
+
+  if (target && !within(saved, target)) {
+    const width = Math.min(saved.width, target.width)
+    const height = Math.min(saved.height, target.height)
+
+    return {
+      ...saved,
+      x: target.x + Math.floor((target.width - width) / 2),
+      y: target.y + Math.floor((target.height - height) / 2),
+      width,
+      height,
+    }
+  }
+
+  if (all.some((bounds) => within(saved, bounds))) return saved
+  const primary = displays.primary()
 
   return {
     width: defaults.width,
     height: defaults.height,
-    x: 0,
-    y: 0,
-    displayBounds: displays.primary(),
-  } satisfies WindowState
+    x: primary.x,
+    y: primary.y,
+    displayBounds: primary,
+    isMaximized: saved.isMaximized,
+    isFullScreen: saved.isFullScreen,
+  }
 }
 
 export function windowStateFile(id: string) {
   return `window-state-${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function readWindowState(file: string): unknown {
+export function readWindowState(file: string) {
   if (!existsSync(file)) return undefined
 
-  try {
-    return JSON.parse(readFileSync(file, "utf8"))
-  } catch {
-    return undefined
-  }
+  return Option.getOrUndefined(Schema.decodeUnknownOption(StateFile)(readFileSync(file, "utf8")))
 }
 
 // Tracks the window until it closes and writes the final state then. Bounds are recorded while
@@ -111,19 +148,8 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
   win.on("closed", closed)
 }
 
-function isState(value: unknown): value is WindowState {
-  return typeof value === "object" && value !== null
-}
-
-function hasBounds(state: WindowState): state is WindowState & Required<Pick<WindowState, "x" | "y">> {
-  return (
-    Number.isInteger(state.x) &&
-    Number.isInteger(state.y) &&
-    Number.isInteger(state.width) &&
-    state.width > 0 &&
-    Number.isInteger(state.height) &&
-    state.height > 0
-  )
+function hasBounds(state: Partial<WindowState>): state is WindowState & Required<Pick<WindowState, "x" | "y">> {
+  return state.x !== undefined && state.y !== undefined && (state.width ?? 0) > 0 && (state.height ?? 0) > 0
 }
 
 function within(state: WindowState & { x: number; y: number }, bounds: Rectangle) {
@@ -133,4 +159,8 @@ function within(state: WindowState & { x: number; y: number }, bounds: Rectangle
     state.x + state.width <= bounds.x + bounds.width &&
     state.y + state.height <= bounds.y + bounds.height
   )
+}
+
+function sameBounds(a: Rectangle, b: Rectangle) {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 }

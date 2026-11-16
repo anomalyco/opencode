@@ -11,7 +11,7 @@ import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { Plugin } from "@opencode/plugin/effect"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
 import { OpenCodeWorkerd } from "../src/effect/workerd"
-import { Deferred, Effect, Fiber, Latch, Layer, Option, Stream } from "effect"
+import { Deferred, Effect, Fiber, Latch, Layer, Option, Schedule, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import type { OpenCodeEvent } from "../src/effect"
@@ -36,6 +36,15 @@ const sessionID = (fixture: Fixture) => fixture.sdk.Session.ID.create()
 
 const location = (fixture: Fixture) =>
   fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })
+
+// The server doesn't wait for plugins, so an SDK caller waits until the plugin-provided entry it needs is loaded.
+// Activation takes milliseconds here; the cap stays well inside the 5s test timeout so a miss fails with its name.
+const loaded = <A, E, R>(name: string, read: Effect.Effect<A, E, R>, ready: (value: A) => boolean) =>
+  read.pipe(
+    Effect.repeat({ until: ready, schedule: Schedule.spaced("10 millis") }),
+    Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => Effect.die(new Error(`${name} never loaded`)) }),
+    Effect.andThen(read),
+  )
 
 for (const selection of ["explicit", "default"] as const) {
   it.live(`generate.text uses configured providers with ${selection} model selection`, () =>
@@ -67,8 +76,11 @@ for (const selection of ["explicit", "default"] as const) {
             overrides: [llmClient.replace(Layer.succeed(LLMClient.Service, llm))],
           },
         )
+        yield* loaded("custom/fictional-chat", opencode.model.list({ location: location(fixture) }), (models) =>
+          models.data.some((model) => model.providerID === "custom" && model.id === "fictional-chat"),
+        )
 
-        const result = yield* opencode.generate.text({
+        const result = yield* opencode.experimental.generate.text({
           prompt: "Say ready",
           ...(selection === "explicit"
             ? {
@@ -89,7 +101,7 @@ for (const selection of ["explicit", "default"] as const) {
   )
 }
 
-it.live("seeds host plugins from CreateOptions and waits for delayed model plugins without self-deadlock", () =>
+it.live("seeds host plugins from CreateOptions and loads delayed model plugins without self-deadlock", () =>
   withEmbedded("opencode-embedded-seeded-plugin-", (fixture) =>
     Effect.gen(function* () {
       const llm = yield* TestLLM.Test.pipe(
@@ -136,10 +148,12 @@ it.live("seeds host plugins from CreateOptions and waits for delayed model plugi
         },
       )
 
-      const [defaultModel, generated] = yield* Effect.all(
-        [opencode.model.default({ location: location(fixture) }), opencode.generate.text({ prompt: "Say ready" })],
-        { concurrency: "unbounded" },
+      const defaultModel = yield* loaded(
+        "seeded model",
+        opencode.model.default({ location: location(fixture) }),
+        (model) => model.data?.providerID === "seeded",
       )
+      const generated = yield* opencode.experimental.generate.text({ prompt: "Say ready" })
 
       expect(listedDuringSetup.length).toBeGreaterThan(0)
       expect(defaultModel.data).toMatchObject({
@@ -184,9 +198,13 @@ it.live("OpenCodeWorkerd seeds plugins before cold model resolution", () =>
         ],
       })
 
-      const selected = yield* opencode.model.default({
-        location: fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make("/workspace") }),
-      })
+      const selected = yield* loaded(
+        "workerd-seeded model",
+        opencode.model.default({
+          location: fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make("/workspace") }),
+        }),
+        (model) => model.data?.providerID === "workerd-seeded",
+      )
       expect(selected.data).toMatchObject({
         providerID: "workerd-seeded",
         id: "fictional-chat",
@@ -223,16 +241,16 @@ it.live(
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
         const pendingAfterAdmit = yield* opencode.sessions.inbox.list({ sessionID: id })
-        yield* opencode.sessions.instructions.entry.put({ sessionID: id, key: "deploy-target", value: "production" })
-        yield* opencode.sessions.instructions.entry.put({ sessionID: id, key: "flags", value: { beta: true } })
-        const contextEntries = yield* opencode.sessions.instructions.entry.list({ sessionID: id })
-        yield* opencode.sessions.instructions.entry.remove({ sessionID: id, key: "flags" })
-        const remainingContextEntries = yield* opencode.sessions.instructions.entry.list({ sessionID: id })
+        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "deploy-target", value: "production" })
+        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "flags", value: { beta: true } })
+        const contextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
+        yield* opencode.experimental.session.instructions.entry.remove({ sessionID: id, key: "flags" })
+        const remainingContextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
         const wake = yield* opencode.sessions.prompt({
           sessionID: id,
           text: "Promote this input",
         })
-        const prompted = yield* opencode.sessions.log({ sessionID: id, follow: true }).pipe(
+        const prompted = yield* opencode.experimental.session.log({ sessionID: id, follow: true }).pipe(
           Stream.filter((event) => event.type === "session.inbox.delivered" && event.data.inboxID === wake.id),
           Stream.runHead,
           Effect.timeout("10 seconds"),
@@ -240,7 +258,7 @@ it.live(
         )
         const wakeContext = yield* opencode.sessions.context({ sessionID: id })
         const pendingAfterPromote = yield* opencode.sessions.inbox.list({ sessionID: id })
-        const event = yield* opencode.sessions.log({ sessionID: id }).pipe(
+        const event = yield* opencode.experimental.session.log({ sessionID: id }).pipe(
           Stream.filter((item) => item.type === "session.model.selected"),
           Stream.take(1),
           Stream.runHead,
@@ -255,10 +273,10 @@ it.live(
         const missingSessionID = fixture.sdk.Session.ID.create()
         const missing = yield* Effect.all(
           [
-            opencode.sessions.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
+            opencode.experimental.session.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.message.get({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
-            opencode.sessions.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
+            opencode.experimental.session.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.inbox.list({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
           { concurrency: "unbounded" },
@@ -320,6 +338,11 @@ it.live("embedded client exposes plugin-backed web search", () =>
             })
           }),
       })
+      yield* loaded(
+        "embedded-websearch provider",
+        opencode.websearch.providers({ location: location(fixture) }),
+        (providers) => providers.data.some((provider) => provider.id === providerID),
+      )
 
       const result = yield* opencode.websearch.query({
         query: "opencode",
@@ -576,7 +599,7 @@ it.live(
           const wantsTool = !toolIssued && request.tools.some((tool) => tool.name === "shell")
           if (!wantsTool) return TestLLM.text("done", "answer")
           toolIssued = true
-          return TestLLM.tool("call-shell", "shell", { command: "echo hi" })
+          return TestLLM.toolCall("call-shell", "shell", { command: "echo hi" })
         })
         const models = Layer.mock(SessionRunnerModel.Service, {
           resolve: () =>
@@ -635,7 +658,7 @@ it.live(
         expect(calls).toEqual(["create"])
 
         yield* Deferred.succeed(createRelease, undefined)
-        yield* opencode.sessions.wait({ sessionID: session.id })
+        yield* opencode.experimental.session.wait({ sessionID: session.id })
         // Provisioning settled, the workspace connected, and the turn completed. The
         // memory driver rejects the actual spawn, which surfaces to the model as an
         // ordinary tool error before the final text response.

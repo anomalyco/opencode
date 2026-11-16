@@ -6,8 +6,9 @@ import { AppBaseProviders, AppInterface } from "../../src/app"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
 
 // The app on a Windows desktop platform, so the titlebar shows the app menu. Menu actions are listed in an output.
-// `path` opens a route other than Home.
-export function mount(input: { server: string; path?: string }) {
+// `path` opens a route other than Home. `holdOpen` records an opened path but never answers, like an editor that keeps
+// the launch running until it exits.
+export function mount(input: { server: string; path?: string; os?: "macos"; openApps?: boolean; holdOpen?: boolean }) {
   const root = document.getElementById("root")
 
   if (!root) throw new Error("Missing fixture root")
@@ -15,7 +16,14 @@ export function mount(input: { server: string; path?: string }) {
 
   if (input.path) history.set({ value: input.path, replace: true })
   render(() => {
-    const [store, setStore] = createStore<{ actions: string[] }>({ actions: [] })
+    const [store, setStore] = createStore<{
+      actions: string[]
+      opened: { path: string; app?: string }[]
+      trafficLights?: { x: number; y: number }
+    }>({
+      actions: [],
+      opened: [],
+    })
 
     const unused = async () => {
       throw new Error("Unexpected fixture action")
@@ -42,7 +50,7 @@ export function mount(input: { server: string; path?: string }) {
 
     const platform: Platform = {
       platform: "desktop",
-      os: "windows",
+      os: input.os ?? "windows",
       windowID: "windows-menu-test",
       openExternal: () => undefined,
       openDirectoryPickerDialog: async () => null,
@@ -50,12 +58,30 @@ export function mount(input: { server: string; path?: string }) {
       restart: unused,
       plugins: bridge,
       runDesktopMenuAction: (action) => setStore("actions", (actions) => [...actions, action]),
+      setTrafficLightsPosition: async (position) => void setStore("trafficLights", { x: position.x, y: position.y }),
+    }
+
+    if (input.openApps) {
+      platform.checkAppExists = async (app) => app === "Visual Studio Code" || app === "code"
+      platform.openPath = (path, app) => {
+        setStore("opened", (opened) => [...opened, { path, app }])
+
+        return input.holdOpen ? new Promise<void>(() => undefined) : Promise.resolve()
+      }
+
+      platform.revealPath = async () => true
     }
 
     return (
       <PlatformProvider value={platform}>
         <AppBaseProviders locale="en">
           <output aria-label="Desktop menu actions">{store.actions.join(",")}</output>
+          <output aria-label="Opened paths" class="sr-only">
+            {JSON.stringify(store.opened)}
+          </output>
+          <output aria-label="Traffic lights" class="sr-only">
+            {JSON.stringify(store.trafficLights ?? null)}
+          </output>
           <AppInterface
             servers={[{ type: "sidecar", variant: "base", displayName: "Local Server", http: { url: input.server } }]}
             router={(props) => <MemoryRouter {...props} history={history} />}

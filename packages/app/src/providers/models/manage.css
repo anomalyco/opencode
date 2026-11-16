@@ -1,15 +1,6 @@
-/* Outranks the deeply nested base dialog header rule. */
-[data-component="dialog-v2"]
-  [data-slot="dialog-container"]
-  .settings-manage-models-dialog[data-slot="dialog-content"]
-  [data-slot="dialog-header"] {
-  padding-bottom: 12px;
-}
-
 .manage-models-search {
   flex-shrink: 0;
-  /* The 1px top keeps the field's outside focus outline from clipping against the body. */
-  padding: 1px 12px 8px;
+  padding: 0 6px 8px;
 }
 
 .settings-manage-models-dialog .settings-panel.settings-models {

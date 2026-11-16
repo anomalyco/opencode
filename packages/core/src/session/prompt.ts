@@ -67,10 +67,11 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
         const skill = yield* skillService.get(attachment.id)
         if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
         prepared.set(skill.id, skill.name)
+        const files = yield* skillService.files(skill.id)
         return {
           id: skill.id,
           name: skill.name,
-          text: (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output,
+          text: (yield* Skill.prepare(fs, skill, files).pipe(Effect.orDie)).output,
           mention: attachment.mention,
         }
       }),
@@ -99,7 +100,7 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
     return FileAttachment.create({
       data: Base64.make(Buffer.from(blob.data).toString("base64")),
       mime: blob.mime,
-      source: { type: "inline" },
+      source: input.source ?? { type: "inline" },
       name: input.name,
       description: input.description,
       mention: input.mention,
@@ -109,7 +110,7 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
   const resolved = input.uri.startsWith("data:")
     ? {
         bytes: yield* decodeDataURL(input.uri, label),
-        source: { type: "inline" as const },
+        source: input.source ?? { type: "inline" as const },
         start: undefined,
         end: undefined,
         name: undefined,
@@ -196,9 +197,9 @@ const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(functio
     return {
       bytes: Buffer.from(
         entries
-          .filter((entry) => entry.type === "file" || entry.type === "directory")
-          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1))
-          .map((entry) => entry.name + (entry.type === "directory" ? path.sep : ""))
+          .filter((entry) => entry.type === "File" || entry.type === "Directory")
+          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "Directory" ? -1 : 1))
+          .map((entry) => entry.name + (entry.type === "Directory" ? path.sep : ""))
           .join("\n"),
       ),
       source: { type: "uri" as const, uri },

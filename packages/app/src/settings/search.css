@@ -4,6 +4,11 @@
   min-height: 0;
 }
 
+/* Only results scroll inside the search; with the nav list below it, the list absorbs a short sidebar. */
+.settings-search[data-empty="true"] {
+  flex-shrink: 0;
+}
+
 .settings-search[data-empty="true"] [data-slot="text-input-v2-icon-button"] {
   visibility: hidden;
 }

@@ -1,47 +1,25 @@
-import { Show, onCleanup, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Show, type JSX } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { usePlugin } from "@opencode/plugin/gui"
+import { createInlineRename } from "./inline-rename"
 
-/** A terminal's side panel tab label: renamed by double-click or its context menu, which also closes it. */
+/**
+ * A terminal's side panel tab label: renamed by double-click or its context menu, which also closes it. Without
+ * `rename` the terminal cannot be renamed.
+ */
 export function TerminalTabLabel(props: {
   label: string
   title: string
-  rename: (title: string) => void
+  /** Receives the edited title, or `null` for an emptied field; unchanged titles are the receiver's to skip. */
+  rename?: (title: string | null) => void
   close: () => void
 }): JSX.Element {
   const plugin = usePlugin()
-  const [store, setStore] = createStore({ editing: false, title: "" })
-  let input: HTMLInputElement | undefined
-  let frame: number | undefined
-  let renameRequested = false
+  const rename = createInlineRename({ title: () => props.title, rename: () => props.rename })
 
-  const edit = () => {
-    setStore({ editing: true, title: props.title })
-
-    // A blur fired while the trigger releases focus would end the edit before it starts.
-    if (frame !== undefined) cancelAnimationFrame(frame)
-    frame = requestAnimationFrame(() => {
-      frame = undefined
-      input?.focus()
-      input?.select()
-    })
-  }
-
-  const save = () => {
-    if (!store.editing) return
-    const value = store.title.trim()
-
-    if (value && value !== props.title) props.rename(value)
-    setStore("editing", false)
-  }
-
-  onCleanup(() => {
-    if (frame !== undefined) cancelAnimationFrame(frame)
-  })
-
-  // The label renders inside the strip's tab trigger, so the field keeps its keys and pointer from the trigger.
+  // The label renders inside the strip's tab trigger, so the field keeps its keys, pointer and focus from the trigger:
+  // the tab list returns focus that enters it from outside to the trigger.
   const isolate = (event: Event) => event.stopPropagation()
 
   return (
@@ -51,37 +29,28 @@ export function TerminalTabLabel(props: {
         <span
           class="max-w-40 truncate"
           data-slot="terminal-tab-title"
-          classList={{ invisible: store.editing }}
+          classList={{ invisible: rename.editing() }}
           onDblClick={(event) => {
             event.stopPropagation()
-            edit()
+            rename.start("pointer")
           }}
         >
           {props.label}
         </span>
-        <Show when={store.editing}>
+        <Show when={rename.editing()}>
           <input
-            ref={input}
+            ref={rename.ref}
             type="text"
             aria-label={plugin.t("common.rename")}
-            value={store.title}
-            onInput={(event) => setStore("title", event.currentTarget.value)}
-            onBlur={save}
+            value={rename.draft()}
+            onInput={(event) => rename.change(event.currentTarget.value)}
+            onBlur={rename.blur}
             onKeyDown={(event) => {
               event.stopPropagation()
-
-              if (event.key === "Enter") {
-                event.preventDefault()
-                save()
-
-                return
-              }
-
-              if (event.key !== "Escape") return
-              event.preventDefault()
-              setStore("editing", false)
+              rename.keydown(event)
             }}
             onKeyUp={isolate}
+            onFocusIn={isolate}
             onPointerDown={isolate}
             onMouseDown={isolate}
             onClick={isolate}
@@ -90,15 +59,10 @@ export function TerminalTabLabel(props: {
         </Show>
       </Menu.Context.Trigger>
       <Menu.Context.Portal>
-        <Menu.Context.Content
-          onCloseAutoFocus={(event) => {
-            if (!renameRequested) return
-            event.preventDefault()
-            renameRequested = false
-            edit()
-          }}
-        >
-          <Menu.Item onSelect={() => (renameRequested = true)}>{plugin.t("common.rename")}</Menu.Item>
+        <Menu.Context.Content onCloseAutoFocus={rename.closeAutoFocus}>
+          <Menu.Item disabled={!props.rename} onSelect={() => rename.start("menu")}>
+            {plugin.t("common.rename")}
+          </Menu.Item>
           <Menu.Item onSelect={() => props.close()}>{plugin.t("common.close")}</Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>

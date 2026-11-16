@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords } from "../schema/index.js"
-import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
+import { SpeechModel, type SpeechEvent, type SpeechRequest } from "../speech.js"
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
@@ -28,7 +28,7 @@ export type GoogleSpeechOptions = {
   }
 } & Record<string, unknown>
 
-export type Request = SpeechRequestFor<GoogleSpeechOptions>
+export type Request = SpeechRequest<SpeechModel<GoogleSpeechOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema

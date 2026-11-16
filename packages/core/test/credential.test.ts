@@ -119,18 +119,18 @@ describe("Credential", () => {
       expect(yield* credentials.list(integrationID)).toEqual([])
 
       expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: older.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: older.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: newer.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: newer.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: older.id } },
-        { type: Credential.Event.Updated.type, data: {} },
-        { type: Credential.Event.Updated.type, data: {} },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: older.id } },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: newer.id } },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: replacement.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: replacement.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: replacement.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: older.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: older.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: null } },
       ])
       expect(events.every((event) => !("location" in event))).toBeTrue()
@@ -178,8 +178,8 @@ describe("Credential", () => {
           .pipe(Effect.orDie),
       ).toEqual({ active: true })
       expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
-        { type: Credential.Event.Updated.type, data: {} },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: oldest.id } },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: newest.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: newer.id } },
       ])
     }),
@@ -260,11 +260,11 @@ describe("Credential", () => {
 
       expect(yield* credentials.list(integrationID)).toEqual([first, imported, legacy])
       expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: first.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: first.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: legacy.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: legacy.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: imported.id } },
       ])
     }),
   )

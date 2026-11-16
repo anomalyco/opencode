@@ -131,7 +131,7 @@ function renderUpdate(previous: ReadonlyArray<File>, current: ReadonlyArray<File
     (file) => file.path,
     (before, after) => before.content !== after.content,
   )
-  return [
+  const parts = [
     ...changes.removed.map((file) => `The instructions from ${file.path} no longer apply.`),
     ...changes.added.map((file) => `New instructions apply from:\n${render([file])}`),
     ...changes.changed.map(({ previous: before, current: after }) => {
@@ -145,5 +145,6 @@ function renderUpdate(previous: ReadonlyArray<File>, current: ReadonlyArray<File
       const replacement = `The instructions changed:\n${render([after])}`
       return diff.length < replacement.length ? diff : replacement
     }),
-  ].join("\n\n")
+  ]
+  return parts.length === 0 ? undefined : parts.join("\n\n")
 }

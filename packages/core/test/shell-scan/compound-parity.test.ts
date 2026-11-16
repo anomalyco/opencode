@@ -26,11 +26,10 @@ describe("compound function acceptance", () => {
           const name = head.includes("probe-name") ? "probe-name" : "probe"
           const source = context(`${head} ${body}; ${name}`)
           test(`${shell}: ${source}`, async () => {
-            // Braces preserve the function's behavior, but avoid Tree-sitter's recovery artifacts.
-            const legacy = await Effect.runPromise(
+            const braced = await Effect.runPromise(
               ShellParse.scan(context(`${head} { ${body}; }; ${name}`), shell, "/workspace"),
             )
-            expect(await Effect.runPromise(ShellParse.scanPortable(source, shell, "/workspace"))).toEqual(legacy)
+            expect(await Effect.runPromise(ShellParse.scan(source, shell, "/workspace"))).toEqual(braced)
           })
         }
   }
@@ -79,8 +78,8 @@ describe("Zsh parenthesized loop acceptance", () => {
     for (const context of contexts) {
       const source = context(fixture.source)
       test(source, async () => {
-        const legacy = await Effect.runPromise(ShellParse.scan(context(fixture.equivalent), "zsh", "/workspace"))
-        expect(await Effect.runPromise(ShellParse.scanPortable(source, "zsh", "/workspace"))).toEqual(legacy)
+        const equivalent = await Effect.runPromise(ShellParse.scan(context(fixture.equivalent), "zsh", "/workspace"))
+        expect(await Effect.runPromise(ShellParse.scan(source, "zsh", "/workspace"))).toEqual(equivalent)
       })
     }
 

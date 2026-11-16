@@ -25,7 +25,7 @@ manifests() {
       "PublisherSupportUrl: https://github.com/anomalyco/opencode/issues" "PrivacyUrl: https://opencode.ai/legal/privacy-policy" \
       "PackageName: $name" "PackageUrl: https://opencode.ai/" "License: MIT" "LicenseUrl: https://github.com/anomalyco/opencode/blob/HEAD/LICENSE" \
       "ShortDescription: $description" "Moniker: $moniker" "Tags:" "- ai" "- coding-agent" "- developer-tools" \
-      "Documentations:" "- DocumentLabel: Docs" "  DocumentUrl: https://opencode.ai/v2/docs"
+      "Documentations:" "- DocumentLabel: Docs" "  DocumentUrl: https://opencode.ai/docs"
     footer defaultLocale
   } > "$out/$id/$id.locale.en-US.yaml"
 }

@@ -1,12 +1,21 @@
 import { showToast } from "@opencode/ui/toast"
-import { lazy, onCleanup, Suspense } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createSignal, lazy, onCleanup, Suspense, untrack } from "solid-js"
 import { MenuItem, Server, Style, type ServerEntry, type ServerState, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
+import {
+  initialWslAdd,
+  transitionWslAdd,
+  WSL_DIALOG_LOAD_TIMEOUT_MS,
+  type WslAddEffect,
+  type WslAddEvent,
+} from "./add-machine"
 import { Wsl, type WslServerItem } from "./contract"
+import { wslRowView } from "./row-view"
 import type definition from "./index"
 
 const loadDialog = () => import("./dialog")
+
+type DialogModule = Awaited<ReturnType<typeof loadDialog>>
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
   if (ctx.app.platform !== "desktop") return
@@ -32,33 +41,62 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   const state = () => client()?.state()
   const styled = { added: false }
-  // Row actions of one server share a pending state, like one request per row.
-  const [requests, setRequests] = createStore<Record<string, number>>({})
-  const pending = (key: string) => (requests[key] ?? 0) > 0
 
-  const request = <T,>(key: string, action: () => Promise<T>) => {
-    setRequests(key, (count = 0) => count + 1)
-    void Promise.try(action)
-      .catch((cause: unknown) =>
-        showToast({
-          variant: "error",
-          title: ctx.t("common.requestFailed"),
-          description: cause instanceof Error ? cause.message : String(cause),
-        }),
-      )
-      .finally(() => setRequests(key, (count = 1) => count - 1))
+  // What a row can do follows main's state; a request only reports its failure.
+  const run = (action: () => Promise<void>) => {
+    void Promise.try(action).catch((cause: unknown) =>
+      showToast({
+        variant: "error",
+        title: ctx.t("common.requestFailed"),
+        description: cause instanceof Error ? cause.message : String(cause),
+      }),
+    )
   }
 
   const byKey = (key: string) => state()?.servers.find((item) => `wsl:${item.config.distro}` === key)
 
-  const add = () =>
-    void loadDialog().then((module) => {
-      if (ctx.signal.aborted) return
+  const [addState, setAddState] = createSignal(initialWslAdd)
 
-      if (!styled.added) ctx.add(Style, module.css)
-      styled.added = true
-      dialog.open(() => <module.DialogAddWslServer api={client()} state={state()} />)
-    })
+  const dispatchAdd = (event: WslAddEvent<DialogModule>) => {
+    const next = transitionWslAdd(untrack(addState), event)
+
+    if (next.state !== untrack(addState)) setAddState(next.state)
+    next.effects.forEach(runAdd)
+  }
+
+  const runAdd = (effect: WslAddEffect<DialogModule>) => {
+    if (effect.type === "toast-failed")
+      return void showToast({
+        variant: "error",
+        title: ctx.t("common.requestFailed"),
+        description: effect.error || undefined,
+      })
+
+    if (effect.type === "load") {
+      const attempt = effect.attempt
+      const deadline = Promise.withResolvers<never>()
+      const timer = setTimeout(() => deadline.reject(new Error()), WSL_DIALOG_LOAD_TIMEOUT_MS)
+
+      // A chunk that fails or never loads, such as after an update replaced the app's files, answers the click.
+      return void Promise.race([loadDialog(), deadline.promise])
+        .finally(() => clearTimeout(timer))
+        .then(
+          (module) => dispatchAdd({ type: "add.loaded", attempt, module }),
+          (cause: unknown) =>
+            dispatchAdd({ type: "add.failed", attempt, error: cause instanceof Error ? cause.message : String(cause) }),
+        )
+    }
+
+    const module = effect.module
+
+    if (!styled.added) ctx.add(Style, module.css)
+    styled.added = true
+    dialog.open(() => <module.DialogAddWslServer api={client()} state={state()} />)
+  }
+
+  onCleanup(() => dispatchAdd({ type: "disposed" }))
+
+  const add = () => dispatchAdd({ type: "add.requested" })
 
   const entry = (item: WslServerItem): ServerEntry => {
     const runtime = item.runtime
@@ -74,7 +112,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       remove: () => Promise.try(() => api().removeServer({ id: item.config.id })),
       row: (row) => (
         <Suspense>
-          <Row row={row} distro={item.config.distro} state={state} api={client} pending={pending} request={request} />
+          <Row row={row} distro={item.config.distro} state={state} api={client} run={run} />
         </Suspense>
       ),
     }
@@ -98,12 +136,12 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       id: "retry",
       title: ctx.t("server.retryStart"),
       when: (key) => {
-        const kind = byKey(key)?.runtime.kind
+        const item = byKey(key)
 
-        return kind === "failed" || kind === "stopped"
+        return !!item && wslRowView(state(), item.config.distro).retry
       },
       run: (key) =>
-        request(key, async () => {
+        run(async () => {
           const wsl = api()
           const item = byKey(key)
 

@@ -1,15 +1,14 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
+import type { Route, CompactionOperations } from "../route/client.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
 import {
-  HttpOptions,
   ProviderID,
   ToolDefinition,
-  mergeHttpOptions,
   type ModelID,
   type OpenString,
   type ProviderOptions,
+  type RequestOptions,
 } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
@@ -18,12 +17,14 @@ import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenAISpeech } from "../protocols/openai-speech.js"
 import { OpenAITranscription } from "../protocols/openai-transcription.js"
 import { OpenAIDecisions, type OptionsInput as OpenAIDecisionOptionsInput } from "../protocols/openai-decisions.js"
+import { OpenAIEmbeddings, type OptionsInput as OpenAIEmbeddingOptionsInput } from "../protocols/openai-embeddings.js"
 
 export type { OpenAIOptionsInput, OpenAIResponseIncludable, OpenAIServiceTier } from "./openai-options.js"
 export type { OpenAIImageOptions } from "../protocols/openai-images.js"
 export type { OpenAISpeechOptions } from "../protocols/openai-speech.js"
 export type { OpenAITranscriptionOptions } from "../protocols/openai-transcription.js"
 export type { OptionsInput as OpenAIDecisionOptions } from "../protocols/openai-decisions.js"
+export type { OptionsInput as OpenAIEmbeddingOptions } from "../protocols/openai-embeddings.js"
 
 export const id = ProviderID.make("openai")
 
@@ -32,7 +33,7 @@ export const routes = [OpenAIResponses.route, OpenAIChat.route]
 // This provider facade wraps the lower-level Responses and Chat model factories
 // with OpenAI-specific conveniences: typed options, API-key sugar, env fallback,
 // and default option normalization.
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly queryParams?: Record<string, string>
@@ -74,7 +75,7 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
     readonly organization?: string
     readonly project?: string
@@ -106,18 +107,17 @@ export const configure = (input: Config = {}) => {
   const chat = (id: string | ModelID) =>
     chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({
       id,
-      compatibility: { supportsPromptCacheKey: true },
+      capabilities: { promptCacheKey: true },
     })
   const deployment = MediaRoute.deployment(input, auth(input))
   const media = {
     ...deployment,
-    http: mergeHttpOptions(
-      deployment.http,
-      input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
-    ),
+    http: { ...deployment.http, query: { ...deployment.http?.query, ...input.queryParams } },
   }
+  // The ChatGPT backend (ChatGPT sign-in) rejects multipart image edits with "Unsupported content type".
+  const imageInput = media.baseURL?.startsWith("https://chatgpt.com/") ? "json-edits" : undefined
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    OpenAIImages.model({ ...media, id: modelID, providerOptions })
+    OpenAIImages.model({ ...media, id: modelID, providerOptions, imageInput })
   const speech = (modelID: string | ModelID) => OpenAISpeech.model({ ...media, id: modelID })
   const transcription = (modelID: string | ModelID) => OpenAITranscription.model({ ...media, id: modelID })
   const decisionRoute = OpenAIDecisions.route.with({
@@ -128,6 +128,14 @@ export const configure = (input: Config = {}) => {
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<OpenAIDecisionOptionsInput>({ id: modelID, providerOptions })
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    endpoint: { baseURL: media.baseURL },
+    auth: media.auth,
+    headers: media.headers,
+    http: media.http,
+  })
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    embeddingRoute.model<OpenAIEmbeddingOptionsInput>({ id: modelID, providerOptions })
 
   return {
     id,
@@ -138,6 +146,7 @@ export const configure = (input: Config = {}) => {
     speech,
     transcription,
     decision,
+    embedding,
     configure,
   }
 }
@@ -153,7 +162,7 @@ const config = ({
   project,
   queryParams,
   ...providerOptions
-}: Settings): Config => {
+}: Settings = {}): Config => {
   const headers = {
     ...(organization === undefined ? {} : { "OpenAI-Organization": organization }),
     ...(project === undefined ? {} : { "OpenAI-Project": project }),
@@ -169,25 +178,27 @@ const config = ({
   }
 }
 
-export const model: ProviderPackage.Definition<
+export const model: ProviderPackage.Model<
   Settings,
   OpenAIProviderOptionsInput,
   typeof OpenAIResponses.route.compact
->["model"] = (modelID, settings) => {
+> = (modelID, settings) => {
   return configure(config(settings)).responses(modelID)
 }
 
-export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => configure(config(settings)).chat(modelID)
-export const imageModel = (modelID: string, settings: Settings) => {
+export const chatModel: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).chat(modelID)
+export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
-export const decisionModel = (modelID: string, settings: Settings) => {
+export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).decision(modelID, input.providerOptions)
+}
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
 }
 export const responses = provider.responses
 export const chat = provider.chat
@@ -195,3 +206,4 @@ export const image = provider.image
 export const speech = provider.speech
 export const transcription = provider.transcription
 export const decision = provider.decision
+export const embedding = provider.embedding

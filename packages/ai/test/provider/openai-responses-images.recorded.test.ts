@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, Message } from "../../src/effect.js"
+import { ai, LLMEvent, Message } from "../../src/effect.js"
 import { OpenAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -29,8 +29,8 @@ describe("OpenAI Responses image generation recorded", () => {
           partialImages: 0,
         }),
       ]
-      const response = yield* LLM.generate(
-        LLM.request({
+      const response = yield* ai.generate(
+        ai.request({
           model: openai.responses("gpt-5-mini"),
           messages: [initial],
           tools,
@@ -49,8 +49,8 @@ describe("OpenAI Responses image generation recorded", () => {
       expect(result.result.value[0].mime).toBe("image/jpeg")
       expect(result.result.value[0].uri.startsWith("data:image/jpeg;base64,")).toBe(true)
 
-      const edited = yield* LLM.generate(
-        LLM.request({
+      const edited = yield* ai.generate(
+        ai.request({
           model: openai.responses("gpt-5-mini"),
           messages: [initial, response.message, Message.user("Now make the triangle blue.")],
           tools,

@@ -1,8 +1,10 @@
 import { createMemo } from "solid-js"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
-import { type ServerCtx, useGlobal, useServerCtx } from "@/runtime/server/runtime"
+import { type ServerCtx, useGlobal } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerFailed } from "@/runtime/server/health-machine"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { workspaceSelectionDestination } from "@/workspaces/paths"
 import { useTabs } from "@/shell/tabs/tabs"
@@ -16,7 +18,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
   const global = useGlobal()
   const pickDirectory = useDirectoryPicker()
   const projectServer = () => serverSDK.server
-  const projectServerCtx = useServerCtx(projectServer)
+  const projectServerCtx = useServer().ctx
 
   // Every server project, one per directory, marked as used by this client or not; the selector orders them.
   const listed = (ctx: ServerCtx, server?: PromptServer) => {
@@ -44,17 +46,21 @@ export function createComposerProjectControls(props: { draftId: string; worktree
 
   // Servers that are down or still connecting contribute nothing.
   const ready = createMemo(() =>
-    servers.list.filter((connection) => {
-      if (connection.type === "plugin" && connection.state !== "ready") return false
-
-      return global.servers.health[ServerConnection.key(connection)]?.healthy !== false
-    }),
+    servers.list.filter(
+      (connection) =>
+        !!ServerConnection.http(connection) &&
+        !isServerFailed(global.servers.health[ServerConnection.key(connection)]),
+    ),
   )
 
   const projects = createMemo(() => {
-    if (servers.list.length <= 1) return listed(projectServerCtx())
+    if (servers.list.length <= 1) return listed(projectServerCtx)
 
-    return ready().flatMap((connection) => listed(global.ensureServerCtx(connection), promptServer(connection)))
+    return ready().flatMap((connection) => {
+      const ctx = global.serverCtx(ServerConnection.key(connection))
+
+      return ctx ? listed(ctx, promptServer(connection)) : []
+    })
   })
 
   const selectProject = (directory: string, serverKey?: string, workspace?: string) => {
@@ -64,7 +70,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
 
     if (!connection) return
 
-    global.ensureServerCtx(connection).projects.touch(directory)
+    global.serverCtx(ServerConnection.key(connection))?.projects.touch(directory)
     tabs.updateDraft(props.draftId, {
       server: ServerConnection.key(connection),
       directory,
@@ -87,7 +93,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
         const directory = Array.isArray(result) ? result[0] : result
 
         if (!directory) return
-        void global.ensureServerCtx(connection).projects.add(directory)
+        void global.serverCtx(ServerConnection.key(connection))?.projects.add(directory)
         selectProject(directory, serverKey)
       },
     })
