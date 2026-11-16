@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test"
 import {
   INITIAL_KEYBIND_CAPTURE_STATE,
   LEADER_SLOT,
-  selectCapturedChord,
+  selectCapturePrefix,
   selectCapturingKeybind,
+  selectExtendableKeybind,
   transitionKeybindCapture,
   type KeybindCaptureEffect,
   type KeybindCaptureEvent,
@@ -22,6 +23,13 @@ const capture = (id: string, pageActive = true): KeybindCaptureEvent => ({ type:
 const press = (stroke: string, conflictTitles: string[] = []): KeybindCaptureEvent => ({
   type: "key.pressed",
   input: { kind: "stroke", stroke, conflictTitles },
+})
+
+const extend = (id: string, chord: string): KeybindCaptureEvent => ({
+  type: "capture.extended",
+  id,
+  chord,
+  pageActive: true,
 })
 
 const backspace: KeybindCaptureEvent = { type: "key.pressed", input: { kind: "backspace" } }
@@ -61,51 +69,41 @@ describe("keybind capture machine", () => {
     ])
   })
 
-  test("strokes build a chord that the pause or Enter saves; a clashing chord starts again", () => {
-    const chord = replay([capture("session.beta"), press("mod+k"), press("mod+c")])
+  test("a key saves at once, and + adds the next key to the saved shortcut", () => {
+    const saved = replay([capture("session.beta"), press("mod+k")])
 
-    expect(selectCapturedChord(chord.state)).toBe("mod+k mod+c")
-    expect(chord.effects).toEqual([{ type: "chord.wait" }])
-    expect(transitionKeybindCapture(chord.state, { type: "chord.timeout", conflictTitles: [] }).effects).toEqual([
+    expect(saved.effects).toEqual([
+      { type: "binding.set", id: "session.beta", value: "mod+k" },
+      { type: "keybinds.resume" },
+    ])
+    expect(selectExtendableKeybind(saved.state)).toBe("session.beta")
+
+    const extending = replay([extend("session.beta", "mod+k")], saved.state)
+    expect(extending.effects).toEqual([{ type: "keybinds.suspend" }])
+    expect(replay([press("mod+c")], extending.state).effects).toEqual([
       { type: "binding.set", id: "session.beta", value: "mod+k mod+c" },
       { type: "keybinds.resume" },
     ])
-    expect(
-      transitionKeybindCapture(chord.state, {
-        type: "key.pressed",
-        input: { kind: "enter", stroke: "enter", strokeConflicts: [], finishConflicts: [] },
-      }).effects,
-    ).toEqual([{ type: "binding.set", id: "session.beta", value: "mod+k mod+c" }, { type: "keybinds.resume" }])
 
-    const clash = transitionKeybindCapture(chord.state, { type: "chord.timeout", conflictTitles: ["Alpha"] })
-    expect(selectCapturingKeybind(clash.state)).toBe("session.beta")
-    expect(selectCapturedChord(clash.state)).toBe("")
+    // Recording another row, or unbinding, takes the + away.
+    expect(selectExtendableKeybind(replay([capture("session.alpha")], saved.state).state)).toBeUndefined()
+    expect(selectExtendableKeybind(replay([{ type: "unbind.clicked", id: "x" }], saved.state).state)).toBeUndefined()
+  })
+
+  test("a clashing key keeps recording the same chord", () => {
+    const extending = replay([extend("session.beta", "mod+k")]).state
+    const clash = transitionKeybindCapture(extending, press("mod+c", ["Alpha"]))
+
+    expect(clash.state).toBe(extending)
+    expect(selectCapturePrefix(clash.state)).toBe("mod+k")
     expect(clash.effects).toEqual([{ type: "notify.conflict", keybind: "mod+k mod+c", conflictTitles: ["Alpha"] }])
-
-    // A late timeout after the chord was saved changes nothing.
-    const saved = transitionKeybindCapture(chord.state, { type: "chord.timeout", conflictTitles: [] }).state
-    expect(transitionKeybindCapture(saved, { type: "chord.timeout", conflictTitles: [] }).state).toBe(saved)
   })
 
-  test("Enter is a stroke until a chord has started, and a chord ends at its longest", () => {
-    const enter = replay([
-      capture("session.beta"),
-      { type: "key.pressed", input: { kind: "enter", stroke: "enter", strokeConflicts: [], finishConflicts: [] } },
-    ])
-
-    expect(selectCapturedChord(enter.state)).toBe("enter")
-
-    const longest = replay([capture("session.beta"), press("a"), press("b"), press("c"), press("d")])
-    expect(longest.effects).toEqual([
-      { type: "binding.set", id: "session.beta", value: "a b c d" },
-      { type: "keybinds.resume" },
-    ])
-  })
-
-  test("Backspace takes back the last stroke, and with none removes the shortcut", () => {
-    const taken = replay([capture("session.beta"), press("mod+k"), backspace])
-    expect(selectCapturedChord(taken.state)).toBe("")
-    expect(taken.effects).toEqual([])
+  test("Backspace drops the key being added, and with nothing before it removes the shortcut", () => {
+    const dropped = replay([extend("session.beta", "mod+k"), backspace])
+    expect(selectCapturingKeybind(dropped.state)).toBe("session.beta")
+    expect(selectCapturePrefix(dropped.state)).toBe("")
+    expect(dropped.effects).toEqual([])
 
     expect(replay([capture("session.beta"), backspace]).effects).toEqual([
       { type: "binding.set", id: "session.beta", value: "none" },
@@ -118,15 +116,19 @@ describe("keybind capture machine", () => {
   })
 
   test("the leader starts only a command's chord, and the leader slot saves one stroke", () => {
-    const leader = replay([capture("session.beta"), { type: "leader.inserted" }, press("n")])
-    expect(selectCapturedChord(leader.state)).toBe("<leader> n")
-    expect(selectCapturedChord(replay([{ type: "leader.inserted" }], leader.state).state)).toBe("<leader> n")
-    expect(selectCapturedChord(replay([capture(LEADER_SLOT), { type: "leader.inserted" }]).state)).toBe("")
+    const leader = replay([capture("session.beta"), { type: "leader.inserted" }])
+    expect(selectCapturePrefix(leader.state)).toBe("<leader>")
+    expect(selectCapturePrefix(replay([{ type: "leader.inserted" }], leader.state).state)).toBe("<leader>")
+    expect(replay([press("n")], leader.state).effects[0]).toEqual({
+      type: "binding.set",
+      id: "session.beta",
+      value: "<leader> n",
+    })
+    expect(selectCapturePrefix(replay([capture(LEADER_SLOT), { type: "leader.inserted" }]).state)).toBe("")
 
-    expect(replay([capture(LEADER_SLOT), press("ctrl+x")]).effects).toEqual([
-      { type: "leader.set", value: "ctrl+x" },
-      { type: "keybinds.resume" },
-    ])
+    const set = replay([capture(LEADER_SLOT), press("ctrl+x")])
+    expect(set.effects).toEqual([{ type: "leader.set", value: "ctrl+x" }, { type: "keybinds.resume" }])
+    expect(selectExtendableKeybind(set.state)).toBeUndefined()
   })
 
   test("modifier-only keys are ignored and Escape stops recording", () => {

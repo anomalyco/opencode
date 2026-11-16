@@ -31,8 +31,10 @@ import { SettingsSearchField } from "@/settings/search-field"
 import {
   INITIAL_KEYBIND_CAPTURE_STATE,
   LEADER_SLOT,
-  selectCapturedChord,
+  MAX_CHORD_STROKES,
+  selectCapturePrefix,
   selectCapturingKeybind,
+  selectExtendableKeybind,
   transitionKeybindCapture,
   type KeybindCaptureEffect,
   type KeybindCaptureEvent,
@@ -277,11 +279,8 @@ function filteredFor(
   return out
 }
 
-// The pause after a stroke that ends a chord being recorded.
-const CHORD_PAUSE_MS = 1000
-
-// What the recording driver holds between effects: the shortcut suspension and the chord pause.
-type CaptureDriver = { release?: () => void; timer?: ReturnType<typeof setTimeout> }
+// What the recording driver holds between effects: the release of the shortcut suspension.
+type CaptureDriver = { release?: () => void }
 
 export function createKeybindSettingsController(
   input: {
@@ -385,20 +384,8 @@ export function createKeybindSettingsController(
     }
 
     if (effect.type === "keybinds.resume") {
-      clearTimeout(driver.timer)
       driver.release?.()
       driver.release = undefined
-
-      return
-    }
-
-    if (effect.type === "chord.wait") {
-      clearTimeout(driver.timer)
-      driver.timer = setTimeout(
-        () =>
-          dispatch({ type: "chord.timeout", conflictTitles: conflictsFor(selectCapturedChord(untrack(captureState))) }),
-        CHORD_PAUSE_MS,
-      )
 
       return
     }
@@ -452,18 +439,9 @@ export function createKeybindSettingsController(
 
     if (!stroke) return { kind: "modifier-only" }
 
-    const recorded = selectCapturedChord(untrack(captureState))
-    const chord = recorded ? `${recorded} ${stroke}` : stroke
+    const prefix = selectCapturePrefix(untrack(captureState))
 
-    if (event.key === "Enter" && plain)
-      return {
-        kind: "enter",
-        stroke,
-        strokeConflicts: conflictsFor(chord),
-        finishConflicts: recorded ? conflictsFor(recorded) : [],
-      }
-
-    return { kind: "stroke", stroke, conflictTitles: conflictsFor(chord) }
+    return { kind: "stroke", stroke, conflictTitles: conflictsFor(prefix ? `${prefix} ${stroke}` : stroke) }
   }
 
   const target = input.target ?? (typeof document !== "undefined" ? document : undefined)
@@ -487,6 +465,12 @@ export function createKeybindSettingsController(
 
   const format = (config: string | undefined) => formatKeybind(config ?? "", language.t, leader())
 
+  const firstCombo = (id: string) => {
+    const config = effective(id)
+
+    return config && config !== "none" ? (config.split(",")[0]?.trim() ?? "") : ""
+  }
+
   return {
     catalog: {
       groups: GROUPS,
@@ -496,8 +480,13 @@ export function createKeybindSettingsController(
     },
     capture: {
       active: () => selectCapturingKeybind(captureState()),
-      /** The chord recorded so far, formatted, while recording. */
-      recorded: () => format(selectCapturedChord(captureState())),
+      /** The keys the key being recorded adds to, formatted. */
+      prefix: () => format(selectCapturePrefix(captureState())),
+      /** Whether the row offers + to add a key to its shortcut: it was just saved and has room for another. */
+      extendable: (id: string) =>
+        selectExtendableKeybind(captureState()) === id && chordStrokes(firstCombo(id)).length < MAX_CHORD_STROKES,
+      extend: (id: string) =>
+        dispatch({ type: "capture.extended", id, chord: firstCombo(id), pageActive: pageActive() }),
       toggle: (id: string) => dispatch({ type: "capture.toggled", id, pageActive: pageActive() }),
       unbind: (id: string) => dispatch({ type: "unbind.clicked", id }),
       insertLeader: () => dispatch({ type: "leader.inserted" }),
@@ -568,9 +557,11 @@ export function SettingsKeybinds(props: { active?: boolean }) {
       title={controller.catalog.title}
       keybind={controller.catalog.keybind}
       active={controller.capture.active()}
-      recorded={controller.capture.recorded()}
+      prefix={controller.capture.prefix()}
+      extendable={controller.capture.extendable}
       canInsertLeader={controller.leader.set()}
       onCapture={controller.capture.toggle}
+      onExtend={controller.capture.extend}
       onUnbind={controller.capture.unbind}
       onInsertLeader={controller.capture.insertLeader}
       hasOverrides={controller.settings.hasOverrides()}
@@ -593,9 +584,11 @@ function SettingsKeybindsView(props: {
   title: (id: string) => string
   keybind: (id: string) => string
   active: string | null
-  recorded: string
+  prefix: string
+  extendable: (id: string) => boolean
   canInsertLeader: boolean
   onCapture: (id: string) => void
+  onExtend: (id: string) => void
   onUnbind: (id: string) => void
   onInsertLeader: () => void
   hasOverrides: boolean
@@ -683,7 +676,7 @@ function SettingsKeybindsView(props: {
                     id={LEADER_SLOT}
                     binding={props.leader}
                     active={props.active}
-                    recorded={props.recorded}
+                    prefix={props.prefix}
                     onCapture={props.onCapture}
                     onUnbind={props.onUnbind}
                   />
@@ -702,7 +695,7 @@ function SettingsKeybindsView(props: {
                         <div class="flex items-center justify-between gap-4 py-3 border-b border-v2-border-border-base last:border-none">
                           <span>{props.title(id)}</span>
                           <div class="flex items-center gap-1">
-                            <Show when={props.active === id && props.canInsertLeader && !props.recorded}>
+                            <Show when={props.active === id && props.canInsertLeader && !props.prefix}>
                               <Button type="button" size="small" variant="ghost" onClick={props.onInsertLeader}>
                                 {language.t("settings.shortcuts.insertLeader")}
                               </Button>
@@ -711,10 +704,21 @@ function SettingsKeybindsView(props: {
                               id={id}
                               binding={props.keybind(id)}
                               active={props.active}
-                              recorded={props.recorded}
+                              prefix={props.prefix}
                               onCapture={props.onCapture}
                               onUnbind={props.onUnbind}
                             />
+                            <Show when={props.extendable(id)}>
+                              <IconButton
+                                type="button"
+                                size="small"
+                                variant="ghost-muted"
+                                icon={<Icon name="plus" />}
+                                aria-label={language.t("settings.shortcuts.addKey")}
+                                data-action="settings-shortcut-add-key"
+                                onClick={() => props.onExtend(id)}
+                              />
+                            </Show>
                           </div>
                         </div>
                       )}
@@ -740,7 +744,7 @@ function ShortcutButton(props: {
   id: string
   binding: string
   active: string | null
-  recorded: string
+  prefix: string
   onCapture: (id: string) => void
   onUnbind: (id: string) => void
 }) {
@@ -749,7 +753,7 @@ function ShortcutButton(props: {
 
   return (
     <div class="flex items-center gap-1">
-      <Show when={recording() && props.binding && !props.recorded}>
+      <Show when={recording() && props.binding && !props.prefix}>
         <Button type="button" size="small" variant="ghost-danger" onClick={() => props.onUnbind(props.id)}>
           {language.t("settings.shortcuts.unbind")}
         </Button>
@@ -763,7 +767,7 @@ function ShortcutButton(props: {
         onClick={() => props.onCapture(props.id)}
       >
         <Show when={recording()} fallback={props.binding || language.t("settings.shortcuts.unassigned")}>
-          {props.recorded ? `${props.recorded} …` : language.t("settings.shortcuts.pressKeys")}
+          {props.prefix ? `${props.prefix} …` : language.t("settings.shortcuts.pressKeys")}
         </Show>
       </Button>
     </div>

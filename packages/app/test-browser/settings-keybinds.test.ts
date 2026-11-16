@@ -87,8 +87,6 @@ function key(key: string, init?: KeyboardEventInit) {
   return new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
 }
 
-const enter = () => document.dispatchEvent(key("Enter"))
-
 describe("keybind settings controller", () => {
   test("derives the catalog, effective bindings, and filtered groups", () => {
     const state = setup({ "session.beta": "alt+k" })
@@ -117,13 +115,11 @@ describe("keybind settings controller", () => {
 
     state.controller.capture.toggle("session.beta")
     document.dispatchEvent(modKey("a"))
-    enter()
     expect(state.changes).toEqual([])
     expect(state.notifications).toHaveLength(1)
     expect(state.controller.capture.active()).toBe("session.beta")
 
     document.dispatchEvent(modKey("x"))
-    enter()
     expect(state.changes).toEqual([["session.beta", "mod+x"]])
     expect(state.suppression).toEqual([false, true])
     expect(state.controller.capture.active()).toBeNull()
@@ -132,23 +128,28 @@ describe("keybind settings controller", () => {
     state.dispose()
     expect(state.suppression).toEqual([false, true, false, true])
     document.dispatchEvent(modKey("z"))
-    enter()
     expect(state.changes).toEqual([["session.beta", "mod+x"]])
   })
 
-  test("records a chord, and rejects one that starts or is started by another shortcut", () => {
+  test("+ adds a key to the saved shortcut, and a chord may not start or be started by another", () => {
     const state = setup()
 
     state.controller.capture.toggle("session.beta")
     document.dispatchEvent(modKey("k"))
-    enter()
     expect(state.notifications.map((toast) => toast.description)).toEqual([expect.stringContaining("Chord")])
 
     document.dispatchEvent(modKey("j"))
+    expect(state.changes).toEqual([["session.beta", "mod+j"]])
+    expect(state.controller.capture.extendable("session.beta")).toBe(true)
+    expect(state.controller.capture.extendable("session.alpha")).toBe(false)
+
+    state.controller.capture.extend("session.beta")
+    expect(state.controller.capture.prefix()).not.toBe("")
     document.dispatchEvent(modKey("c"))
-    expect(state.controller.capture.recorded()).not.toBe("")
-    enter()
-    expect(state.changes).toEqual([["session.beta", "mod+j mod+c"]])
+    expect(state.changes).toEqual([
+      ["session.beta", "mod+j"],
+      ["session.beta", "mod+j mod+c"],
+    ])
 
     state.dispose()
   })
@@ -176,12 +177,9 @@ describe("keybind settings controller", () => {
     state.controller.capture.toggle("session.beta")
     state.controller.capture.insertLeader()
     document.dispatchEvent(key("n"))
-    enter()
     expect(state.notifications.map((toast) => toast.description)).toEqual([expect.stringContaining("Next")])
 
-    state.controller.capture.insertLeader()
     document.dispatchEvent(key("m"))
-    enter()
     expect(state.changes).toEqual([["session.beta", "<leader> m"]])
 
     state.dispose()
