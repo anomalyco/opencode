@@ -20,6 +20,12 @@ export const File = Schema.Struct({
   name: Schema.String.pipe(optional),
 }).annotate({ identifier: "Generate.File" })
 
+export interface ImageFile extends Schema.Schema.Type<typeof ImageFile> {}
+export const ImageFile = Schema.Struct({
+  ...File.fields,
+  mime: Schema.String.check(Schema.isPattern(/^image\//iu)),
+}).annotate({ identifier: "Generate.ImageFile" })
+
 export interface Usage extends Schema.Schema.Type<typeof Usage> {}
 export const Usage = Schema.Struct({
   input: Schema.Finite.pipe(optional),
@@ -107,11 +113,11 @@ export interface VideoRequest extends Schema.Schema.Type<typeof VideoRequest> {}
 export const VideoRequest = Schema.Struct({
   model: Model.Ref,
   prompt: Schema.String,
-  start: File.pipe(optional).annotate(description("Image the video starts on exactly")),
-  end: File.pipe(optional).annotate(description("Image the video ends on exactly")),
+  start: ImageFile.pipe(optional).annotate(description("Image the video starts on exactly")),
+  end: ImageFile.pipe(optional).annotate(description("Image the video ends on exactly")),
   references: Schema.Array(File)
     .pipe(optional)
-    .annotate(description("Images that guide the subject or style without pinning a frame")),
+    .annotate(description("Images, videos or audio that guide the subject or style without pinning a frame")),
   duration: PositiveInt.pipe(optional).annotate(description("Length in seconds")),
   aspect: VideoAspect.pipe(optional),
   resolution: VideoResolution.pipe(optional),

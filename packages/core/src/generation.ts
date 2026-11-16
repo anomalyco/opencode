@@ -3,7 +3,6 @@ export * as Generation from "./generation.js"
 import { Media } from "@opencode/ai/effect"
 import {
   GenerationID,
-  type File,
   type VideoErrorReason,
   type VideoJob,
   type VideoRequest,
@@ -145,8 +144,6 @@ const layer = Layer.effect(
     })
 
     const video = Effect.fn("Generation.video")(function* (input: VideoRequest) {
-      const start = yield* frame(input.start, "start")
-      const end = yield* frame(input.end, "end")
       const id = GenerationID.create()
       const retention = input.expiresAfter ?? 24 * 60 * 60 * 1000
       // Recorded before the paid call: a restart that finds this row still submitting reports an unknown outcome
@@ -165,8 +162,8 @@ const layer = Layer.effect(
           const started = yield* generate((service) =>
             service.video.start({
               ...input,
-              start,
-              end,
+              start: input.start && Media.image(Media.base64(input.start.data, input.start.mime)),
+              end: input.end && Media.image(Media.base64(input.end.data, input.end.mime)),
               references: input.references?.map((file) => Media.base64(file.data, file.mime)),
             }),
           ).pipe(
@@ -259,14 +256,6 @@ const layer = Layer.effect(
     return Service.of({ video, get })
   }),
 )
-
-// Frames are pinned images; `Media.image` throws on anything else.
-function frame(file: File | undefined, field: "start" | "end") {
-  if (file === undefined) return Effect.succeed(undefined)
-  if (!file.mime.toLowerCase().startsWith("image/"))
-    return Effect.fail(new Generate.InvalidRequestError({ message: `The ${field} frame must be an image`, field }))
-  return Effect.succeed(Media.image(Media.base64(file.data, file.mime)))
-}
 
 /** Videos need `blobs/` on a local disk, which Durable Objects don't have. */
 export const unsupportedLayer = Layer.succeed(

@@ -19136,6 +19136,22 @@
         "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?:[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$",
         "description": "Aspect ratio as width:height, for example 16:9"
       },
+      "Generate.ImageFile": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Prompt.Base64"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["data", "mime"],
+        "additionalProperties": false
+      },
       "Generate.ImageOutput": {
         "type": "object",
         "properties": {
@@ -19454,10 +19470,10 @@
             "type": "string"
           },
           "start": {
-            "$ref": "#/components/schemas/Generate.File"
+            "$ref": "#/components/schemas/Generate.ImageFile"
           },
           "end": {
-            "$ref": "#/components/schemas/Generate.File"
+            "$ref": "#/components/schemas/Generate.ImageFile"
           },
           "references": {
             "type": "array",

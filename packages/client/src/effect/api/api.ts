@@ -1523,8 +1523,8 @@ export type ExperimentalGenerateImageOperation<E = never> = (
 export type ExperimentalGenerateVideoStartInput = {
   readonly model: Model.Ref
   readonly prompt: string
-  readonly start?: Generate.File | undefined
-  readonly end?: Generate.File | undefined
+  readonly start?: Generate.ImageFile | undefined
+  readonly end?: Generate.ImageFile | undefined
   readonly references?: ReadonlyArray<Generate.File> | undefined
   readonly duration?: number | undefined
   readonly aspect?: Generate.VideoAspect | undefined
