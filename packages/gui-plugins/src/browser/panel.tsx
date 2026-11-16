@@ -50,6 +50,8 @@ import {
   type OverlayEvent,
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
+import { FindBar } from "./find-bar"
+import type { FindAction } from "./ipc"
 import { BrowserProfile, type ProfileExtension } from "./profile/ipc"
 import {
   initialSiteState,
@@ -170,6 +172,22 @@ export default function SessionBrowserPane(props: {
   let box: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let anchor: HTMLFormElement | undefined
+  let findInput: HTMLInputElement | undefined
+
+  const find = (action: FindAction) => {
+    const tab = state()
+
+    if (!tab) return
+
+    if (action.type === "open" && findInput?.isConnected) {
+      findInput.focus()
+      findInput.select()
+
+      return
+    }
+
+    void props.model.find(props.session, tab.id, action).catch(() => showToast({ title: plugin.t("common.requestFailed") }))
+  }
 
   const error = () => props.model.error(props.session)
 
@@ -348,6 +366,7 @@ export default function SessionBrowserPane(props: {
       inspectable,
       inspect: toggleInspect,
       focusAddress,
+      find: () => find({ type: "open" }),
       // Dispatched inside the pane, so keybinds scoped to it, such as closing the browser tab, apply.
       press: (event) => {
         if (!visible()) return
@@ -804,6 +823,7 @@ export default function SessionBrowserPane(props: {
                 <Menu.Item disabled={!address()} onSelect={copyLink}>
                   {plugin.t("link.copy")}
                 </Menu.Item>
+                <Menu.Item disabled={!inspectable()} onSelect={() => find({ type: "open" })}>{plugin.t("find.open")}</Menu.Item>
                 <Menu.Item disabled={!reachable()} onSelect={openExternal}>
                   {plugin.t(address().startsWith("file:") ? "external.reveal" : "external.menu")}
                 </Menu.Item>
@@ -826,6 +846,11 @@ export default function SessionBrowserPane(props: {
         >
           {error()}
         </div>
+      </Show>
+      <Show when={state()?.id} keyed>
+        {(id) => <Show when={!suspended() && props.model.search(props.session, id)}>{(view) => (
+          <FindBar view={view()} input={(el) => { findInput = el }} run={find} />
+        )}</Show>}
       </Show>
       {/* Above a page, where a signed-out site is the reason to import; the new tab page shows the offer as a card. */}
       <Show when={offering() && !empty() && !suspended()}>

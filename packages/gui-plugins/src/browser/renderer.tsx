@@ -144,6 +144,23 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }
   })
 
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+
+    if (!pane) return undefined
+
+    return {
+      id: "find",
+      title: ctx.t("find.open"),
+      group: ctx.t("command.category.view"),
+      bind: "mod+f",
+      scope: "#browser-panel",
+      editable: true,
+      enabled: pane.visible() && pane.inspectable(),
+      run: pane.find,
+    }
+  })
+
   // The system browser's address shortcut, in the pane and, forwarded like mod+t and mod+w, from a page with focus.
   // Ctrl+L focuses the composer outside the pane on Windows and Linux.
   ctx.add(Command, (): Command | undefined => {

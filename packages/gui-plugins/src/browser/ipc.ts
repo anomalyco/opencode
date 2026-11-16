@@ -25,7 +25,22 @@ export const PaneElement = Schema.Struct({
 
 export type PaneElement = typeof PaneElement.Type
 
+const FindAction = Schema.Union([
+  Schema.Struct({ type: Schema.Literals(["open", "close", "previous", "next"]) }),
+  Schema.Struct({ type: Schema.Literal("query"), query: detail(4096) }),
+])
+
+export type FindAction = typeof FindAction.Type
+
+const FindView = Schema.Struct({
+  query: detail(4096),
+  result: Schema.NullOr(Schema.Struct({ active: Schema.Int, total: Schema.Int })),
+})
+
+export type FindView = typeof FindView.Type
+
 export const PaneEvent = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("find"), tabID: Browser.TabID, view: Schema.NullOr(FindView) }),
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
   Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
   Schema.Struct({
@@ -107,6 +122,7 @@ export const BrowserPane = Ipc.define({
     // Creates the page of a restored tab the first time the pane shows it.
     load: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     command: { input: Schema.Struct({ binding, command: Browser.Action }) },
+    find: { input: Schema.Struct({ binding, tabID: Browser.TabID, action: FindAction }) },
     // Starts or stops the page's element picker; the page reports picks and exits as inspect events.
     inspect: { input: Schema.Struct({ binding, tabID: Browser.TabID, enabled: Schema.Boolean }) },
     // Highlights a picked element briefly, or clears any highlight when ref is omitted.

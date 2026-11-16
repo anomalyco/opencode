@@ -69,6 +69,21 @@ story("hides the native view immediately while the pane stays mounted", async ({
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
+story("updates the selected match while the same find field stays focused", async ({ page }) => {
+  const pane = page.locator("#browser-panel")
+  await pane.getByRole("button", { name: "Browser options" }).click()
+  await page.getByRole("menuitem", { name: "Find in page" }).click()
+  const field = pane.getByRole("searchbox", { name: "Find in page" })
+  await field.fill("landmark")
+  const count = pane.getByRole("search").getByRole("status")
+  await expect(count).toHaveText("1 of 3")
+  await field.press("Enter")
+  await expect(count).toHaveText("2 of 3")
+  await expect(field).toBeFocused()
+  await field.press("Escape")
+  await expect(field).toHaveCount(0)
+})
+
 story("paints a still of the page in place of the native view while a panel moves", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const motion = root.getByRole("button", { name: "Toggle panel motion", exact: true })

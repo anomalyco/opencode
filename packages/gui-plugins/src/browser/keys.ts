@@ -12,7 +12,7 @@ export type PageShortcut = {
 
 // Unshifted chords with the platform's modifier that belong to the app shell or browser pane rather than the page:
 // opening, closing or switching tabs, focusing the address field, opening settings, and toggling the file tree.
-const shellKeys = ["t", "w", "l", "n", "1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "\\"]
+const shellKeys = ["t", "w", "l", "f", "n", "1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "\\"]
 
 // Shifted chords with the platform's modifier that belong to the app shell rather than the page: reopening a tab,
 // switching side-panel tabs, toggling the side panel, opening the command palette, or running session commands. New Window and Close Window
@@ -55,7 +55,7 @@ export function pageReload(input: PageKey, mac: boolean) {
 
 /**
  * Returns the shortcut to forward to the app window when a focused page receives a key press that belongs to the
- * browser pane or app shell, or `undefined` when the key belongs to the page (typing, editing, clipboard, find,
+ * browser pane or app shell, or `undefined` when the key belongs to the page (typing, editing, clipboard,
  * history, or in-page shortcuts like ⌘K and ⌘B).
  */
 export function pageShortcut(input: PageKey, mac: boolean): PageShortcut | undefined {

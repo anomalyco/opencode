@@ -296,7 +296,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       embeds,
       t,
       // English plural forms, as the host picks them.
-      plural: (key: string, count: number) => t(`${key}.${count === 1 ? "one" : "other"}`, { count }),
+      plural: (key: string, count: number, params?: Parameters<typeof t>[1]) => t(`${key}.${count === 1 ? "one" : "other"}`, { ...params, count }),
     }
 
     const panel: PanelFrame = {
@@ -470,8 +470,15 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
         return { cookies: store.cookies }
       },
-      // Main deletes the site's data and reloads the page.
+      find: async (value) => {
+        const action = value.action
+        const query = action.type === "query" ? action.query : model.search({ key: store.session }, value.tabID)?.query ?? ""
+        emit(store.session, { type: "find", tabID: value.tabID, view: action.type === "close" ? null : {
+          query, result: query ? { active: action.type === "next" ? 2 : 1, total: 3 } : null,
+        } })
+      },
       reveal: async () => undefined,
+      // Main deletes the site's data and reloads the page.
       clearSite: async () => {
         setStore({ cookies: 0, generation: store.generation + 1 })
         report()
@@ -1091,6 +1098,7 @@ export function mountBrowserRegion(input: RegionHost) {
       zoom: async () => undefined,
       site: async () => ({ cookies: 0 }),
       clearSite: async () => undefined,
+      find: async () => undefined,
       reveal: async () => undefined,
       close: async () => undefined,
       state: () => undefined,

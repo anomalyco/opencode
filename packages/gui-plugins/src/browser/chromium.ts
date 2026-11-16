@@ -284,6 +284,9 @@ export function createBrowserPage(
 
     if (shortcut) {
       event.preventDefault()
+
+      // An automated key press targets the page, not the user's search field in the app window.
+      if (shortcut.key === "f" && activity.agentRuns > 0) return
       options.shortcut?.(shortcut)
 
       return

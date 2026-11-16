@@ -34,7 +34,7 @@ test.each([
   expect(pageLetter(row.input)).toBe(row.letter)
 })
 
-test("forwards browser and shell shortcuts while leaving page editing, find, reload and in-page chords to the page", () => {
+test("forwards browser and shell shortcuts while leaving page editing, reload and in-page chords to the page", () => {
   const cases: [modifiers: string, key: string, mac: boolean, forwarded: string | undefined, code?: string][] = [
     // Browser tab, window and shell chords forwarded from the page.
     ["mod", "t", true, "t"],
@@ -103,7 +103,8 @@ test("forwards browser and shell shortcuts while leaving page editing, find, rel
     ["mod", "z", false, undefined],
     ["mod", "y", false, undefined],
     // Find, reload, history, and the pane's own picker and zoom chords.
-    ["mod", "f", true, undefined],
+    ["mod", "f", true, "f"],
+    ["mod", "f", false, "f"],
     ["mod", "g", true, undefined],
     ["mod+shift", "G", true, undefined],
     ["mod", "r", true, undefined],

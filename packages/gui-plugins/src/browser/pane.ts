@@ -14,7 +14,8 @@ import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "
 import { agentRefusal, destinationOrigin, refusal } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
-import type { PaneEvent } from "./ipc"
+import type { FindAction, PaneEvent } from "./ipc"
+import { createPageFind } from "./page-find"
 import {
   attachmentFailure,
   createPaneState,
@@ -83,6 +84,7 @@ export function createBrowserPane(input: {
   const handles = new Map<string, Handle>()
   // Release each tab's registration with the profile's extensions.
   const grants = new WeakMap<BrowserPage, () => void>()
+  const searches = new WeakMap<BrowserPage, ReturnType<typeof createPageFind>>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
@@ -338,6 +340,13 @@ export function createBrowserPane(input: {
       owned(window, binding)
       load(binding, tabID)
     },
+    find(window: number, binding: string, tabID: Browser.TabID, action: FindAction) {
+      owned(window, binding)
+      const target = page(binding, tabID)
+
+      if (!target) throw new Error("browser.pane.unavailable")
+      searches.get(target)?.run(action)
+    },
     async inspect(window: number, binding: string, tabID: Browser.TabID, enabled: boolean) {
       owned(window, binding)
       await page(binding, tabID)?.inspect(enabled)
@@ -485,6 +494,7 @@ export function createBrowserPane(input: {
   }
 
   function release(page: BrowserPage) {
+    searches.get(page)?.dispose()
     grants.get(page)?.()
     downloads.delete(page.contents.id)
     const done = page.dispose()
@@ -613,6 +623,11 @@ export function createBrowserPane(input: {
     }
 
     handle.pages.set(attempt, page)
+    searches.set(page, createPageFind(page.contents, (view) => {
+      if (current()) emit(binding, { type: "find", tabID: id, view })
+    }, () => {
+      if (focused() && win.isFocused() && page.view.getVisible()) page.contents.focus()
+    }))
     downloads.set(page.contents.id, page.download)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.

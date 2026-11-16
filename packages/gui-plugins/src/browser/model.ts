@@ -16,7 +16,7 @@ import {
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
-import { BrowserPane, type PaneEvent } from "./ipc"
+import { BrowserPane, type FindAction, type FindView, type PaneEvent } from "./ipc"
 import {
   addressFocusTab,
   createInitialState,
@@ -51,6 +51,7 @@ type ModelState = {
   machine: State
   /** Each session's page icons and zoom by tab, as this desktop reports them. */
   pages: Record<string, Record<string, PageDetail | undefined> | undefined>
+  searches: Record<string, Record<string, FindView | undefined> | undefined>
 }
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
@@ -68,6 +69,7 @@ type PaneHandle = {
   inspect: () => void
   /** Focuses the address field and selects its text. */
   focusAddress: () => void
+  find: () => void
   /** Runs a key press the page handed to the app, as if it was pressed in this pane. */
   press: (event: ShortcutEvent) => void
   /** Marks the pane as holding the user's focus, which the page took outside the window's document. */
@@ -102,7 +104,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const owner = getOwner()
   const history = ctx.stores.history
-  const [state, setState] = createStore<ModelState>({ machine: createInitialState(untrack(ipc)), pages: {} })
+  const [state, setState] = createStore<ModelState>({ machine: createInitialState(untrack(ipc)), pages: {}, searches: {} })
   const machine = () => state.machine
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
   // The I/O handles the machine's effects drive. They are never read as state.
@@ -151,6 +153,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (current?.attempt !== effect.attempt) return
       registrations.delete(effect.sessionKey)
+      setState("searches", effect.sessionKey, undefined)
       current.registration.close()
 
       return
@@ -264,8 +267,20 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const receive = (drive: Drive, attempt: number, event: PaneEvent) => {
     const sessionKey = drive.ref.key
 
-    if (event.type === "state")
+    if (event.type === "find") {
+      setState("searches", sessionKey, (old) => ({ ...old, [event.tabID]: event.view ?? undefined }))
+
+      return
+    }
+
+    if (event.type === "state") {
+      const open = event.state?.tabs
+      Object.keys(state.searches[sessionKey] ?? {}).forEach((id) => {
+        if (!open?.some((tab) => tab.id === id)) setState("searches", sessionKey, id, undefined)
+      })
+
       return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error })
+    }
 
     if (event.type === "embed")
       return dispatch({ type: "pane.embed", sessionKey, attempt, tabID: event.tabID, embed: event.embed })
@@ -377,6 +392,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       .filter((item) => item.startsWith(`${sessionKey}\n`))
       .forEach((item) => recorded.delete(item))
     setState("pages", sessionKey, undefined)
+    setState("searches", sessionKey, undefined)
   }
 
   // A server whose plugin lacked the browser RPC may have it once its plugins finish loading, its event stream
@@ -601,6 +617,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     /** A page's icon and zoom, once this desktop reported them. */
     page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
+    search: (session: Session, tabID: string) => state.searches[session.key]?.[tabID],
+    find(session: Session, tabID: Browser.TabID, action: FindAction) {
+      return registration(session)?.find(tabID, action) ?? Promise.reject(new Error("browser.pane.unavailable"))
+    },
     zoom(session: Session, tabID: Browser.TabID, zoom: Zoom) {
       registration(session)?.zoom(tabID, zoom)
     },
