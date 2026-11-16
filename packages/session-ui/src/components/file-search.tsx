@@ -25,6 +25,7 @@ export function FileSearchBar(props: {
           right: `${props.pos.right}px`,
         }}
         onPointerDown={(e) => e.stopPropagation()}
+        data-floating-overlay
       >
         <Icon name="magnifying-glass" size="small" class="text-v2-icon-icon-muted shrink-0" />
         <input
