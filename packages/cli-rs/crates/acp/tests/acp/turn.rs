@@ -6,8 +6,8 @@ use serde_json::{Value, json};
 
 use crate::wire::{
     Reply, WireOptions, assert_matches, background_shell, child_created, delivered, durable_event, ephemeral_event,
-    events, lock, permission_asked, shell_notice, start_session, succeeded, text_delta, tool_called, tool_started,
-    tool_succeeded, turn,
+    events, lock, permission_asked, shell_notice, start_session, step_ended, succeeded, text_delta, tokens,
+    tool_called, tool_started, tool_succeeded, turn,
 };
 
 fn child_work() -> WireOptions {
@@ -258,6 +258,49 @@ async fn streams_resumed_turns_after_background_shells_finish() {
         &json!([
             { "messageId": "msg_reaction_1", "content": { "text": "first reaction" } },
             { "messageId": "msg_reaction_2", "content": { "text": "second reaction" } },
+        ]),
+    );
+}
+
+// The other schedule of a shell that exits at once (`background-turn`'s fast shell): its notice is queued while the
+// turn still runs, so the server delivers it within that execution. The reaction belongs to the prompt's turn and
+// streams before its response, whose usage counts the reaction's step.
+#[tokio::test]
+async fn streams_a_shell_reaction_delivered_within_its_turn_before_the_response() {
+    let acp = start_session(
+        WireOptions {
+            on_prompt: Some(events(|call| {
+                let session = call.session_id.as_str();
+                let mut events = background_shell(session, "sh_fast");
+                events.extend([
+                    text_delta(session, "msg_launched", "launched", 0),
+                    step_ended(session, "msg_launched", "stop", tokens(10)),
+                    shell_notice(session, "msg_notice_fast", "sh_fast", true),
+                    delivered(session, "msg_notice_fast"),
+                    text_delta(session, "msg_reaction", "fast shell reaction", 0),
+                    step_ended(session, "msg_reaction", "stop", tokens(10)),
+                ]);
+                turn(session, &call.id, events)
+            })),
+            ..WireOptions::default()
+        },
+        json!({}),
+    )
+    .await;
+
+    let response = acp.prompt(&acp.session_id, "run the fast shell").await.unwrap();
+    assert_matches(&response, &json!({ "stopReason": "end_turn", "usage": { "inputTokens": 20 } }));
+    let chunks: Vec<Value> = acp
+        .turn_updates()
+        .into_iter()
+        .map(|item| item["update"].clone())
+        .filter(|update| update["sessionUpdate"] == "agent_message_chunk")
+        .collect();
+    assert_matches(
+        &json!(chunks),
+        &json!([
+            { "messageId": "msg_launched", "content": { "text": "launched" } },
+            { "messageId": "msg_reaction", "content": { "text": "fast shell reaction" } },
         ]),
     );
 }
