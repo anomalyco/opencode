@@ -8,7 +8,6 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { createSignal, createUniqueId, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import { guardActivation } from "./activation-delay"
-import { cancels } from "./prompt-keys"
 import type definition from "./index"
 import { PROMPT_TEXT_MAX, SIGN_IN_TEXT_MAX, type PromptAnswer, type PromptSite, type PromptView } from "./ipc"
 
@@ -516,9 +515,7 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
 
 type Plugin = ReturnType<typeof usePlugin<typeof definition>>
 
-const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
-
-const cancelKey = (event: KeyboardEvent) => cancels(event, mac)
+const cancelKey = (event: KeyboardEvent) => !event.isComposing && event.key === "Escape"
 
 function siteSays(ctx: Plugin, site: PromptSite) {
   if (site.kind === "web") return ctx.t(site.embedded ? "prompt.site.embedded" : "prompt.site.web", { host: site.host })
