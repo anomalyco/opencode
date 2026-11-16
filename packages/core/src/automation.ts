@@ -445,15 +445,6 @@ const layer = Layer.effect(
         const dueAt = row.next_due_at ?? now
         const late = now - dueAt >= LATE_AFTER
         const id = `msg_${row.id}_${run}`
-        const admit = (sessionID: SessionSchema.ID, text: string) =>
-          sessions.prompt({
-            sessionID,
-            // A code action's unsuffixed ID identifies its tool calls, not its returned prompt.
-            id: SessionMessage.ID.make(action.type === "code" ? `${id}_send` : id),
-            text,
-            delivery: "steer",
-            metadata: { automation: { id: row.id, name: row.name, run, dueAt, late } },
-          })
         // Commit the action result and advance the cursor or timer together, only after any handoff is durable.
         const complete = Effect.fnUntraced(function* (
           values: Pick<Row, "last_output"> & Partial<Pick<Row, "state" | "failures" | "last_message_id">>,
@@ -475,6 +466,26 @@ const layer = Layer.effect(
           )
         })
 
+        const admit = (
+          sessionID: SessionSchema.ID,
+          text: string,
+          values: Parameters<typeof complete>[0],
+          done = false,
+        ) => {
+          // A code action's unsuffixed ID identifies its tool calls, not its returned prompt.
+          const messageID = SessionMessage.ID.make(action.type === "code" ? `${id}_send` : id)
+          return sessions.prompt(
+            {
+              sessionID,
+              id: messageID,
+              text,
+              delivery: "steer",
+              metadata: { automation: { id: row.id, name: row.name, run, dueAt, late } },
+            },
+            complete({ ...values, last_message_id: messageID }, done),
+          )
+        }
+
         if (action.type === "prompt") {
           const target = yield* promptTarget(row, action.to)
           // Only an unchanging timer prompt can be coalesced. Re-wake it in case the first wake was lost.
@@ -490,11 +501,7 @@ const layer = Layer.effect(
           const text = event ? AutomationEvent.prompt(action.prompt, event) : action.prompt
           if (event && Buffer.byteLength(text) > 32_768)
             return yield* new InvalidError({ reason: "Event prompt exceeds 32 KiB" })
-          const item = yield* admit(target, text)
-          return yield* complete({
-            last_message_id: item.id,
-            last_output: deliverySummary(item.sessionID, action.to.subagent),
-          })
+          return yield* admit(target, text, { last_output: deliverySummary(target, action.to.subagent) })
         }
 
         // The tools were authorized for the creating Session's agent and permissions, so a run needs that Session.
@@ -524,7 +531,17 @@ const layer = Layer.effect(
         const send = outcome.send
         if (!send) return yield* complete(values, outcome.done)
         const sent = yield* promptTarget(row, send.to ?? { session: owner.id }).pipe(
-          Effect.flatMap((target) => admit(target, send.prompt)),
+          Effect.flatMap((target) =>
+            admit(
+              target,
+              send.prompt,
+              {
+                ...values,
+                last_output: AutomationCode.handoffOutput(deliverySummary(target, send.to?.subagent), outcome.output),
+              },
+              outcome.done,
+            ),
+          ),
           Effect.result,
         )
         if (Result.isFailure(sent))
@@ -534,18 +551,6 @@ const layer = Layer.effect(
             error: sent.failure.message,
             invalid: sent.failure instanceof InvalidError || sent.failure instanceof FileSystem.DirectoryNotFoundError,
           })
-
-        yield* complete(
-          {
-            ...values,
-            last_message_id: sent.success.id,
-            last_output: AutomationCode.handoffOutput(
-              deliverySummary(sent.success.sessionID, send.to?.subagent),
-              outcome.output,
-            ),
-          },
-          outcome.done,
-        )
       },
       (effect, row, now, _event?: AutomationEvent.Message) =>
         effect.pipe(Effect.catchTag("Automation.InvalidError", (error) => pauseWith(row, now, error.reason))),
@@ -556,7 +561,7 @@ const layer = Layer.effect(
       const due = row.next_due_at
       if (due === null) return
       // Claimed for each run, not once per tick: the lease may have passed to another process since the tick began.
-      if (!(yield* claimLeader(yield* Clock.currentTimeMillis))) return
+      if (!(yield* claimLeader(now))) return
       // A slot that only comes up late, after the automation expired (downtime, a retry), never runs.
       if (expired(row, now) && now - due >= LATE_AFTER) {
         return yield* settle(row, {
@@ -576,24 +581,32 @@ const layer = Layer.effect(
       return yield* runAction(row, now)
     })
 
-    const tickAt = Effect.fnUntraced(function* (now: number) {
+    const tickAt = Effect.fnUntraced(function* (from: number) {
+      const eligible = and(
+        eq(AutomationTable.status, "active"),
+        lte(AutomationTable.next_due_at, from),
+        or(isNull(AutomationTable.retry_at), lte(AutomationTable.retry_at, from)),
+      )
       const due = yield* db
-        .select()
+        .select({ id: AutomationTable.id })
         .from(AutomationTable)
-        .where(
-          and(
-            eq(AutomationTable.status, "active"),
-            lte(AutomationTable.next_due_at, now),
-            or(isNull(AutomationTable.retry_at), lte(AutomationTable.retry_at, now)),
-          ),
-        )
+        .where(eligible)
         .orderBy(asc(AutomationTable.next_due_at))
         .all()
         .pipe(Effect.orDie)
       yield* Effect.forEach(
         due,
-        (row) =>
-          runDue(row, now).pipe(
+        Effect.fnUntraced(function* ({ id }) {
+          // Selection isn't admission: a timer queued behind slow actions can be paused, removed or rescheduled.
+          const row = yield* db
+            .select()
+            .from(AutomationTable)
+            .where(and(eq(AutomationTable.id, id), eligible))
+            .get()
+            .pipe(Effect.orDie)
+          if (!row) return
+          const now = yield* Clock.currentTimeMillis
+          yield* runDue(row, now).pipe(
             Effect.catchCause((cause) => {
               if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
               const error = Cause.squash(cause)
@@ -612,7 +625,8 @@ const layer = Layer.effect(
                 ),
               )
             }),
-          ),
+          )
+        }),
         { discard: true, concurrency: due.length > 1 ? TICK_CONCURRENCY : 1 },
       )
     }, Effect.withSpan("Automation.tick"))

@@ -12,6 +12,7 @@ import { LocationActivity } from "@opencode/core/location-activity"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -26,6 +27,7 @@ import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Clock, Context, Duration, Effect, Fiber, Latch, Layer, Schedule, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import { eq } from "drizzle-orm"
 import { eventProducer } from "./fixture/event-server"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { offlineModels } from "./fixture/models"
@@ -452,6 +454,85 @@ it.effect("pause, restart, resume and delete cancel and reacquire exactly one st
     expect(f.state.streams).toHaveLength(2)
     expect(restarted.state.streams).toHaveLength(1)
     expect(wakes).toEqual([])
+  }),
+)
+
+for (const pause of ["local", "reconciled"]) {
+  it.effect(`checkpoints an accepted handoff across a ${pause} pause`, () =>
+    Effect.gen(function* () {
+      const f = yield* setup()
+      const a = yield* f.create({
+        action:
+          pause === "local"
+            ? { type: "code", code: `return { state: input.event.id, send: { prompt: "Delivered" } }` }
+            : { type: "prompt", prompt: "Review." },
+      })
+      // Keep the leader running so a pause by another process is observed by watch reconciliation.
+      if (pause === "reconciled")
+        yield* f.create({ trigger: { type: "at", at: "in 1 hour" }, action: { type: "prompt", prompt: "Later" } })
+      const entered = yield* Latch.make()
+      const release = yield* Latch.make()
+      yield* f.start.pipe(Effect.provideService(Wake, entered.open.pipe(Effect.andThen(release.await))))
+      const stream = yield* f.opened
+      yield* f.event(stream.id, "first", "success")
+      yield* entered.await.pipe(Effect.timeout("5 seconds"), TestClock.withLive)
+      const { db } = yield* Database.Service
+      yield* Effect.gen(function* () {
+        expect(yield* f.sessions.inbox(sessionID)).toHaveLength(1)
+        if (pause === "local") {
+          yield* Effect.forkChild(f.automations.pause(a.id), { startImmediately: true })
+          yield* f.settled(a.id, (row) => row.status === "paused")
+          return
+        }
+        yield* db.update(AutomationTable).set({ status: "paused" }).where(eq(AutomationTable.id, a.id)).run()
+        yield* TestClock.adjust("30 seconds")
+      }).pipe(Effect.ensuring(release.open))
+      expect(yield* f.cancelled).toBe(stream.id)
+      expect(yield* f.automations.get(a.id)).toMatchObject({
+        status: "paused",
+        runCount: 1,
+        lastOutcome: "fired",
+        state: pause === "local" ? "first" : undefined,
+      })
+      yield* f.automations.resume(a.id)
+      expect((yield* f.opened).params.cursor).toBe("first")
+      expect(wakes).toEqual([sessionID])
+    }),
+  )
+}
+
+it.effect("pause cancels a prompt still preparing without waiting for its hook or admitting it on resume", () =>
+  Effect.gen(function* () {
+    const f = yield* setup()
+    const a = yield* f.create({ action: { type: "prompt", prompt: "Review." } })
+    const entered = yield* Latch.make()
+    const release = yield* Latch.make()
+    const locations = yield* LocationServiceMap.Service
+    const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(f.location)))
+    const hook = yield* hooks.register("session", "prompt", () => entered.open.pipe(Effect.andThen(release.await)))
+    yield* f.start
+    const stream = yield* f.opened
+    yield* f.notify("active", stream.id, { cursor: "before" })
+    yield* f.event(stream.id, "first", "pending")
+    yield* entered.await.pipe(Effect.timeout("5 seconds"), TestClock.withLive)
+    const pausing = yield* Effect.forkChild(f.automations.pause(a.id), { startImmediately: true })
+    expect(
+      yield* f.cancelled.pipe(Effect.timeout("5 seconds"), TestClock.withLive, Effect.ensuring(release.open)),
+    ).toBe(stream.id)
+    expect(yield* Fiber.join(pausing)).toMatchObject({ status: "paused", runCount: 0 })
+    expect(yield* f.sessions.inbox(sessionID)).toEqual([])
+    expect(wakes).toEqual([])
+
+    yield* hook.dispose
+    yield* f.automations.resume(a.id)
+    const next = yield* f.opened
+    expect(next.params.cursor).toBe("before")
+    yield* f.event(next.id, "second", "success")
+    yield* f.settled(a.id, (row) => row.runCount === 1)
+    expect(yield* f.sessions.inbox(sessionID)).toMatchObject([
+      { payload: { text: expect.stringContaining('"id":"second"') } },
+    ])
+    expect(wakes).toEqual([sessionID])
   }),
 )
 

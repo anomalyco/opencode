@@ -902,6 +902,46 @@ describe("Automation", () => {
     }),
   )
 
+  it.effect("does not start queued timers that were paused, deleted or rescheduled", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup()
+      // Four earlier actions occupy the workers after the tick has selected every due timer.
+      const first = yield* Effect.forEach([1, 2, 3, 4], (n) =>
+        automations.create({
+          sessionID,
+          name: `first ${n}`,
+          trigger: { type: "at", at: "in 1 second" },
+          action: code("return"),
+        }),
+      )
+      const [paused, deleted, rescheduled] = yield* Effect.forEach(["paused", "deleted", "rescheduled"], (name) =>
+        automations.create({
+          sessionID,
+          name,
+          trigger: every("1 minute"),
+          action: code(`await tools.slack.post({ text: "${name}" })`),
+        }),
+      )
+      const entered = yield* Latch.make()
+      const release = yield* Latch.make()
+      activationGate = entered.open.pipe(Effect.andThen(release.await))
+      yield* TestClock.adjust("1 minute")
+      const ticking = yield* Effect.forkChild(automations.tick, { startImmediately: true })
+      yield* entered.await.pipe(Effect.timeout("5 seconds"), TestClock.withLive)
+      yield* automations.pause(paused.id)
+      yield* automations.remove(deleted.id)
+      yield* automations.pause(rescheduled.id)
+      yield* automations.resume(rescheduled.id)
+      yield* release.open
+      yield* Fiber.join(ticking)
+
+      expect(slack.posts).toEqual([])
+      expect((yield* automations.get(paused.id)).runCount).toBe(0)
+      expect((yield* automations.get(rescheduled.id)).runCount).toBe(0)
+      for (const timer of first) expect((yield* automations.get(timer.id)).runCount).toBe(1)
+    }),
+  )
+
   it.effect("pauses with a reason when its directory disappears", () =>
     Effect.gen(function* () {
       const automations = yield* setup(missingDirectory)
