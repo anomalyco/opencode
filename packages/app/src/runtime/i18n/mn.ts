@@ -149,7 +149,7 @@ export const dict = {
   "provider.connect.title": "Холбох {{provider}}",
   "provider.connect.method.apiKey": "API түлхүүр",
   "provider.connect.status.inProgress": "Зөвшөөрөл хийгдэж байна…",
-  "provider.connect.status.waiting": "Зөвшөөрөл хүлээж байна…",
+  "provider.connect.status.waiting": "Зөвшөөрөл хүлээж байна",
   "provider.connect.status.failed": "Зөвшөөрөл амжилтгүй болсон: {{error}}",
   "provider.connect.apiKey.description":
     "Бүртгэлээ холбохын тулд {{provider}} API түлхүүрээ оруулаад OpenCode-д {{provider}} загварыг ашиглана уу.",
@@ -823,7 +823,6 @@ export const dict = {
   "workspace.delete.location": "Байршил",
   "command.session.location.cycle": "Сешний байршлыг солих",
   "dialog.provider.anthropic.note": "API түлхүүрээр Claude загваруудад шууд хандах",
-  "provider.connect.title.anthropicProMax": "Anthropic-оор нэвтрэх",
   "prompt.toast.uploading.cancelFile": "{{filename}} файлын байршуулалтыг цуцлах",
   "prompt.toast.uploadFailed.title": "Байршуулж чадсангүй",
   "prompt.toast.uploading.percent": "{{percent}}%",

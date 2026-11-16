@@ -153,7 +153,7 @@ export const dict = {
   "provider.connect.title": "{{provider}} সংযোগ করুন",
   "provider.connect.method.apiKey": "API কী",
   "provider.connect.status.inProgress": "অনুমোদন চলছে…",
-  "provider.connect.status.waiting": "অনুমোদনের জন্য অপেক্ষা করা হচ্ছে…",
+  "provider.connect.status.waiting": "অনুমোদনের জন্য অপেক্ষা করা হচ্ছে",
   "provider.connect.status.failed": "অনুমোদন ব্যর্থ হয়েছে: {{error}}",
   "provider.connect.apiKey.description":
     "আপনার অ্যাকাউন্ট সংযোগ করতে আপনার {{provider}} API কী লিখুন এবং OpenCode-এ {{provider}} মডেলগুলি ব্যবহার করুন৷",
@@ -824,7 +824,6 @@ export const dict = {
 
   "command.session.location.cycle": "সেশনের অবস্থান পর্যায়ক্রমে বদলান",
   "dialog.provider.anthropic.note": "API কী-এর মাধ্যমে Claude মডেলে সরাসরি অ্যাক্সেস",
-  "provider.connect.title.anthropicProMax": "Anthropic দিয়ে লগ ইন করুন",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}}-এর আপলোড বাতিল করুন",
   "prompt.toast.uploadFailed.title": "আপলোড ব্যর্থ হয়েছে",
