@@ -5,7 +5,7 @@ import { OpenCode } from "@opencode/client"
 import { Effect } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
-import { ServerFetch } from "../src/fetch"
+import { serveRoutes } from "./fixture/routes"
 
 const client = (handler: (request: Request) => Promise<Response>) =>
   OpenCode.make({
@@ -81,14 +81,16 @@ export default {
       )
     })
 
-    const handler = yield* ServerFetch.make({
+    const server = yield* serveRoutes({
       app: { version: "test" },
       database: { path: path.join(dir, "opencode.db") },
       config: { directory: global, project: true, claude: false },
       models: { fetch: false },
       fs: { filewatcher: false },
     })
+    const handler = server.handler
     const api = client(handler)
+    yield* server.pluginsLoaded(enabled)
 
     yield* Effect.promise(async () => {
       // Disabled location returns ForbiddenError

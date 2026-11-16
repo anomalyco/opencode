@@ -25,19 +25,54 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import type { Project } from "@/runtime/server/types"
 import { ProjectIcon } from "@/shell/layout/project-icon"
+import { useProjectBrowser, type ProjectBrowserTarget } from "@/home/projects/browse"
+import { ServerLabel } from "@/servers/registry/label"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { useLayout } from "@/shell/state/layout"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { useTabs, type Tab } from "@/shell/tabs/tabs"
 import { pathKey } from "@/workspaces/path-key"
 import "./tab-nav.css"
 import { ProjectSessionRow } from "./project-session-row"
-import { createSidebarSessionActivity, mergeSidebarSessions } from "./sidebar-sessions"
+import { isSidebarSessionActivity, mergeSidebarSessions } from "./sidebar-sessions"
 
 const SidebarState = Persistence.struct({
   projectsCollapsed: Schema.Boolean,
+  collapsedServers: Persistence.record(Schema.Boolean),
   expanded: Persistence.record(Schema.Boolean),
   order: Persistence.record(Schema.mutable(Schema.Array(Schema.String))),
 })
+
+/** Tracks session activity on every server, and keeps a preview tab once its session does something. */
+export function createSidebarActivityListener() {
+  const tabs = useTabs()
+
+  const global = useGlobal()
+
+  // Keep a preview tab once its session shows activity. Ordering comes from the shared data layer, so this listener
+  // only decides when a preview has become worth keeping.
+  createEffect(() => {
+    global.servers.list().forEach((conn) => {
+      const server = ServerConnection.key(conn)
+      const ctx = global.serverCtx(server)
+
+      if (!ctx) return
+      onCleanup(
+        ctx.data.listen(({ details }) => {
+          if (!isSidebarSessionActivity(details)) return
+          const sessionID = details.data.sessionID
+          const preview = tabs.preview()
+
+          if (
+            preview?.server === server &&
+            (preview.sessionId === sessionID || preview.sessionId === ctx.data.session.root(sessionID))
+          )
+            tabs.keepPreview()
+        }),
+      )
+    })
+  })
+}
 
 export function SidebarOrganized(props: {
   currentTab: Tab | undefined
@@ -47,34 +82,26 @@ export function SidebarOrganized(props: {
 
   const tabs = useTabs()
 
-  const global = useGlobal()
+  const servers = useServers()
 
-  const activity = createSidebarSessionActivity()
+  const layout = useLayout()
 
-  createEffect(() => {
-    global.servers.list().forEach((conn) => {
-      const server = ServerConnection.key(conn)
+  const projectNavigation = useProjectNavigation()
 
-      const ctx = global.serverCtx(server)
+  const browse = useProjectBrowser()
 
-      if (!ctx) return
-      onCleanup(
-        ctx.data.listen(({ details: event }) => {
-          const updated = activity.update(server, event)
+  const connections = createMemo(() => {
+    if (projectNavigation()) return servers.visible
+    const server = props.currentTab?.server ?? layout.home.selection().server
 
-          if (!updated) return
-          const preview = tabs.preview()
+    const connection = servers.visible.find((conn) => ServerConnection.key(conn) === server) ?? servers.visible[0]
 
-          if (
-            preview?.server === server &&
-            (preview.sessionId === updated.data.sessionID ||
-              preview.sessionId === ctx.data.session.root(updated.data.sessionID))
-          )
-            tabs.keepPreview()
-        }),
-      )
-    })
+    return connection ? [connection] : []
   })
+
+  const grouped = () => connections().length > 1
+
+  createSidebarActivityListener()
 
   const [local, setLocal] = createStore<{
     projectSession: { server: ServerConnection.Key; sessionId: string } | undefined
@@ -96,6 +123,7 @@ export function SidebarOrganized(props: {
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.organize"), SidebarState, {
     projectsCollapsed: false,
+    collapsedServers: {},
     expanded: {},
     order: {},
   })
@@ -120,7 +148,7 @@ export function SidebarOrganized(props: {
           <section class="flex shrink-0 flex-col gap-2">
             <button
               type="button"
-              class="flex h-6 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+              class="flex h-6 min-w-0 items-center gap-1.5 rounded-[6px] px-2 text-start text-[13px] leading-[var(--line-height-compact)] font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
               aria-expanded={!state.projectsCollapsed}
               onClick={() => setState("projectsCollapsed", (value) => !value)}
             >
@@ -128,24 +156,60 @@ export function SidebarOrganized(props: {
               <Icon
                 name="fill-triangle-down"
                 size="small"
-                class="shrink-0 text-v2-icon-icon-muted transition-transform"
+                class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
                 classList={{ "-rotate-90 rtl:rotate-90": state.projectsCollapsed }}
               />
             </button>
             <Show when={!state.projectsCollapsed}>
-              <div class="flex min-w-0 flex-col gap-1">
-                <ProjectList
-                  currentTab={props.currentTab}
-                  lastActivity={activity.get}
-                  isOpenTab={isOpenTab}
-                  highlightActive={projectSelected()}
-                  onSelect={(session) => setLocal("projectSession", session)}
-                  state={state}
-                  ready={ready()}
-                  onExpand={(key) => setState("expanded", key, (value) => !value)}
-                  onReorder={(server, ids) => setState("order", server, ids)}
-                />
-              </div>
+              <Key each={connections()} by={ServerConnection.key}>
+                {(conn) => {
+                  const key = ServerConnection.key(conn())
+
+                  const expanded = () => !state.collapsedServers[key]
+
+                  return (
+                    <div
+                      role={grouped() ? "group" : undefined}
+                      aria-label={grouped() ? servers.label(conn()) : undefined}
+                      class="flex min-w-0 flex-col gap-1"
+                    >
+                      <Show when={grouped()}>
+                        <button
+                          type="button"
+                          class="flex h-6 min-w-0 items-center gap-1.5 rounded-[6px] px-2 text-start text-12-regular text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover"
+                          aria-expanded={expanded()}
+                          onClick={() => setState("collapsedServers", key, (collapsed) => !collapsed)}
+                        >
+                          <Icon
+                            name="fill-triangle-down"
+                            size="small"
+                            class="shrink-0 text-v2-icon-icon-muted"
+                            classList={{ "-rotate-90 rtl:rotate-90": !expanded() }}
+                          />
+                          <ServerLabel server={conn()} />
+                        </button>
+                      </Show>
+                      <Show when={!grouped() || expanded()}>
+                        <div class="flex min-w-0 flex-col gap-1" classList={{ "ps-3": grouped() }}>
+                          <ProjectList
+                            connection={conn()}
+                            grouped={grouped()}
+                            onViewHistory={projectNavigation() ? browse : undefined}
+                            currentTab={props.currentTab}
+                            isOpenTab={isOpenTab}
+                            highlightActive={projectSelected()}
+                            onSelect={(session) => setLocal("projectSession", session)}
+                            state={state}
+                            ready={ready()}
+                            onExpand={(key) => setState("expanded", key, (value) => !value)}
+                            onReorder={(server, ids) => setState("order", server, ids)}
+                          />
+                        </div>
+                      </Show>
+                    </div>
+                  )
+                }}
+              </Key>
             </Show>
           </section>
           <div class="flex shrink-0 flex-col gap-3" classList={{ hidden: tabs.store.length === 0 }}>
@@ -162,8 +226,10 @@ export function SidebarOrganized(props: {
 }
 
 function ProjectList(props: {
+  connection: ServerConnection.Any
+  grouped: boolean
+  onViewHistory?: (target: ProjectBrowserTarget) => void
   currentTab: Tab | undefined
-  lastActivity: (server: ServerConnection.Key, sessionId: string) => number | undefined
   isOpenTab: (server: ServerConnection.Key, sessionId: string) => boolean
   highlightActive: boolean
   onSelect: (session: { server: ServerConnection.Key; sessionId: string }) => void
@@ -176,8 +242,6 @@ function ProjectList(props: {
 
   const servers = useServers()
 
-  const layout = useLayout()
-
   const actions = createProjectSessionActions()
 
   const projectActions = createProjectActions()
@@ -187,25 +251,14 @@ function ProjectList(props: {
     sessionLimits: {},
   })
 
-  const connection = createMemo(
-    () =>
-      servers.visible.find(
-        (conn) => ServerConnection.key(conn) === (props.currentTab?.server ?? layout.home.selection().server),
-      ) ?? servers.visible[0],
-  )
+  const server = ServerConnection.key(props.connection)
 
-  const ctx = useServerCtx(connection)
-
-  const server = () => {
-    const conn = connection()
-
-    return conn ? ServerConnection.key(conn) : undefined
-  }
+  const ctx = useServerCtx(() => props.connection)
 
   const projects = createMemo(() => {
     const list = ctx()?.projects.used() ?? []
 
-    const order = props.state.order[server() ?? ""] ?? []
+    const order = props.state.order[server] ?? []
 
     return [
       ...order.flatMap((id) => list.find((project) => project.id === id) ?? []),
@@ -217,20 +270,20 @@ function ProjectList(props: {
 
   // Freeze the initial order, then append newly used projects instead of following last activity.
   createEffect(() => {
-    const key = server()
-
-    if (!props.ready || !servers.hydrated() || !key || !ctx()?.sync.project.ready()) return
+    if (!props.ready || !servers.hydrated() || !ctx()?.sync.project.ready()) return
     const ids = projects().map((project) => project.id)
 
-    const saved = props.state.order[key] ?? []
+    const saved = props.state.order[server] ?? []
 
     if (ids.length === saved.length && ids.every((id, index) => id === saved[index])) return
-    untrack(() => props.onReorder(key, ids))
+    untrack(() => props.onReorder(server, ids))
   })
 
   const sessions = useQuery(() => ({
-    ...homeSessionsQuery(connection(), ctx()),
-    enabled: ctx()?.sdk.connection.status() === "connected",
+    ...homeSessionsQuery(props.connection, ctx()),
+    enabled:
+      ctx()?.sdk.connection.status() === "connected" &&
+      (!props.grouped || visible().some((project) => props.state.expanded[`${server}:${project.id}`])),
   }))
 
   const records = createMemo(() => {
@@ -241,10 +294,7 @@ function ProjectList(props: {
     return buildHomeSessionRecords({
       sessions: () =>
         current.data.session.apply(
-          mergeSidebarSessions(sessions.isPending ? [] : (sessions.data?.() ?? []), current.data.session.list(), (id) =>
-            props.lastActivity(ServerConnection.key(current.sdk.server), id),
-          ),
-          { activity: false },
+          mergeSidebarSessions(sessions.isPending ? [] : (sessions.data?.() ?? []), current.data.session.known()),
         ),
       projects,
       projectDirectories: () => undefined,
@@ -256,101 +306,103 @@ function ProjectList(props: {
 
   return (
     <>
-      <Show when={connection()}>
-        {(conn) => (
-          <DragDropProvider
-            sensors={[
-              PointerSensor.configure({
-                activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
-                preventActivation: (event) =>
-                  event.target instanceof Element && !!event.target.closest("[data-project-action]"),
-              }),
-            ]}
-            modifiers={[RestrictToVerticalAxis]}
-            plugins={(defaults) => [
-              ...defaults.filter((plugin) => plugin !== Accessibility),
-              Feedback.configure({ dropAnimation: null }),
-            ]}
-            onDragEnd={(event) => {
-              const source = event.operation.source
+      <DragDropProvider
+        sensors={[
+          PointerSensor.configure({
+            activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+            preventActivation: (event) =>
+              event.target instanceof Element && !!event.target.closest("[data-project-action]"),
+          }),
+        ]}
+        modifiers={[RestrictToVerticalAxis]}
+        plugins={(defaults) => [
+          ...defaults.filter((plugin) => plugin !== Accessibility),
+          Feedback.configure({ dropAnimation: null }),
+        ]}
+        onDragEnd={(event) => {
+          const source = event.operation.source
 
-              if (event.canceled || !isSortable(source) || source.initialIndex === source.index) return
-              props.onReorder(
-                ServerConnection.key(conn()),
-                arrayMove(
-                  projects().map((project) => project.id),
-                  source.initialIndex,
-                  source.index,
-                ),
-              )
-            }}
-          >
-            <Key each={visible()} by={(project) => `${ServerConnection.key(conn())}:${project.id}`}>
-              {(project, index) => {
-                const key = () => `${server()}:${project().id}`
+          if (event.canceled || !isSortable(source) || source.initialIndex === source.index) return
+          props.onReorder(
+            server,
+            arrayMove(
+              projects().map((project) => project.id),
+              source.initialIndex,
+              source.index,
+            ),
+          )
+        }}
+      >
+        <Key each={visible()} by={(project) => project.id}>
+          {(project, index) => {
+            const key = () => `${server}:${project().id}`
 
-                const projectSessions = () => grouped().get(pathKey(project().worktree)) ?? []
+            const projectSessions = () => grouped().get(pathKey(project().worktree)) ?? []
 
-                const limit = () => local.sessionLimits[key()] ?? 5
+            const limit = () => local.sessionLimits[key()] ?? 5
 
-                return (
-                  <ProjectRow
-                    project={project()}
-                    server={conn()}
-                    actions={projectActions}
-                    index={index()}
-                    expanded={!!props.state.expanded[key()]}
-                    onToggle={() => {
-                      if (props.state.expanded[key()]) setLocal("sessionLimits", key(), 5)
-                      props.onExpand(key())
-                    }}
-                  >
-                    <Key
-                      each={projectSessions().slice(0, limit())}
-                      by={(record) => record.session.id}
-                      fallback={
-                        <div class="ps-8 pe-2 py-2 text-12-regular text-v2-text-text-faint">
-                          {language.t("sidebar.organize.empty")}
-                        </div>
+            return (
+              <ProjectRow
+                project={project()}
+                server={props.connection}
+                onViewHistory={props.onViewHistory}
+                actions={projectActions}
+                index={index()}
+                expanded={!!props.state.expanded[key()]}
+                onToggle={() => {
+                  if (props.state.expanded[key()]) setLocal("sessionLimits", key(), 5)
+                  props.onExpand(key())
+                }}
+              >
+                <Key
+                  each={projectSessions().slice(0, limit())}
+                  by={(record) => record.session.id}
+                  fallback={
+                    <div class="ps-8 pe-2 py-2 text-12-regular text-v2-text-text-faint">
+                      {language.t("sidebar.organize.empty")}
+                    </div>
+                  }
+                >
+                  {(record) => (
+                    <ProjectSessionRow
+                      server={server}
+                      session={record().session}
+                      openTab={props.isOpenTab(server, record().session.id)}
+                      active={
+                        props.highlightActive &&
+                        props.currentTab?.type === "session" &&
+                        props.currentTab.server === server &&
+                        props.currentTab.sessionId === record().session.id
                       }
-                    >
-                      {(record) => (
-                        <ProjectSessionRow
-                          server={ServerConnection.key(conn())}
-                          session={record().session}
-                          openTab={props.isOpenTab(ServerConnection.key(conn()), record().session.id)}
-                          active={
-                            props.highlightActive &&
-                            props.currentTab?.type === "session" &&
-                            props.currentTab.server === ServerConnection.key(conn()) &&
-                            props.currentTab.sessionId === record().session.id
-                          }
-                          onOpen={() => {
-                            props.onSelect({
-                              server: ServerConnection.key(conn()),
-                              sessionId: record().session.id,
-                            })
-                            actions.openProjectSession(conn(), project().worktree, record().session, { preview: true })
-                          }}
-                        />
-                      )}
-                    </Key>
-                    <Show when={projectSessions().length > limit()}>
-                      <Button
-                        variant="ghost-muted"
-                        size="small"
-                        class="ms-[23px] self-start"
-                        onClick={() => setLocal("sessionLimits", key(), (value) => (value ?? 5) + 5)}
-                      >
-                        {language.t("sidebar.organize.showMore")}
-                      </Button>
-                    </Show>
-                  </ProjectRow>
-                )
-              }}
-            </Key>
-          </DragDropProvider>
-        )}
+                      onOpen={() => {
+                        props.onSelect({
+                          server,
+                          sessionId: record().session.id,
+                        })
+                        actions.openProjectSession(props.connection, project().worktree, record().session, {
+                          preview: true,
+                        })
+                      }}
+                    />
+                  )}
+                </Key>
+                <Show when={projectSessions().length > limit()}>
+                  <Button
+                    variant="ghost-muted"
+                    size="small"
+                    class="ms-[23px] self-start"
+                    onClick={() => setLocal("sessionLimits", key(), (value) => (value ?? 5) + 5)}
+                  >
+                    {language.t("sidebar.organize.showMore")}
+                  </Button>
+                </Show>
+              </ProjectRow>
+            )
+          }}
+        </Key>
+      </DragDropProvider>
+      <Show when={props.grouped && ctx()?.sync.project.ready() && !projects().length}>
+        <span class="px-2 text-12-regular text-v2-text-text-faint">{language.t("settings.projects.empty.title")}</span>
       </Show>
       <Show when={projects().length > 7}>
         <Button
@@ -367,6 +419,7 @@ function ProjectList(props: {
 }
 
 function ProjectRow(props: {
+  onViewHistory?: (target: ProjectBrowserTarget) => void
   project: Project
   server: ServerConnection.Any
   actions: ReturnType<typeof createProjectActions>
@@ -444,6 +497,7 @@ function ProjectRow(props: {
                   importingSession={props.actions.importingSession()}
                   canRevealProject={props.actions.canReveal}
                   onOpenProjectNewSession={props.actions.openNewSession}
+                  onViewHistory={props.onViewHistory}
                   onImportSession={props.actions.importSession}
                   onEditProject={props.actions.edit}
                   onRevealProject={props.actions.reveal}

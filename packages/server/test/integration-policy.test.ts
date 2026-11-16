@@ -4,6 +4,7 @@ import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { createRoutes } from "../src/routes"
+import { pluginsLoaded } from "./fixture/routes"
 
 it.live("integration policy filters /connect and blocks denied integrations and providers", () =>
   Effect.gen(function* () {
@@ -58,6 +59,7 @@ it.live("integration policy filters /connect and blocks denied integrations and 
         return { status: response.status, body: response.status === 204 ? undefined : await response.json() }
       })
 
+    yield* pluginsLoaded(context, tmp.path)
     const integrations = yield* request("GET", "/api/integration")
     expect(integrations.status).toBe(200)
     // MCP sign-ins are outside integration policy; `mcp.use` governs MCP servers.

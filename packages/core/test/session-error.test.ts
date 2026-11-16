@@ -262,6 +262,7 @@ describe("toSessionError", () => {
     const cases = [
       ["subscription_sharing_user_not_eligible", "token sharing isn't available for this account"],
       ["subscription_sharing_usage_limit_exceeded", "ChatGPT usage limit reached"],
+      ["subscription_sharing_workplace_individual_usage_limit_exceeded", "workspace admin"],
       ["subscription_sharing_usage_unavailable", "Try again later"],
       ["subscription_sharing_unsupported_capability", "Remove the unsupported feature"],
       ["subscription_sharing_route_not_supported", "Check the configured endpoint"],

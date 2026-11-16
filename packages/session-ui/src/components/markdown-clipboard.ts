@@ -1,3 +1,5 @@
+import { sessionReferenceRange } from "./markdown-session-links"
+
 // Chromium's default copy inlines computed styles, so text copied from a dark theme pastes as light text on the
 // destination's white page. Copied HTML keeps only semantic markup and lets the destination style it.
 
@@ -68,8 +70,10 @@ function hasProtocol(value: string, protocols: Set<string>) {
 }
 
 export function markdownClipboardHtml(root: Element, range: Range) {
-  const ancestor = range.commonAncestorContainer
-  let content: Node = range.cloneContents()
+  const selection = sessionReferenceRange(range)
+
+  const ancestor = selection.commonAncestorContainer
+  let content: Node = selection.cloneContents()
 
   for (
     let element = ancestor instanceof Element ? ancestor : ancestor.parentElement;
@@ -84,6 +88,11 @@ export function markdownClipboardHtml(root: Element, range: Range) {
 
   const container = document.createElement("div")
   container.appendChild(content)
+  container.querySelectorAll<HTMLElement>("[data-session-reference]").forEach((reference) => {
+    const code = document.createElement("code")
+    code.textContent = reference.dataset.sessionReference ?? ""
+    reference.replaceWith(code)
+  })
   container.querySelectorAll(removedSelector).forEach((element) => element.remove())
   container.querySelectorAll("*").forEach(sanitizeAttributes)
 

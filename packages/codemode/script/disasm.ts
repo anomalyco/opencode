@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
 // The bytecode disassembler: pcs, ops, constants, handler and finally tables, local names, source lines.
-import { sourceLocation } from "../src/vm/runtime/model.js"
-import type { Code } from "../src/vm/code.js"
-import { compileSource } from "../src/vm/compiler/compile.js"
+import { sourceLocation } from "../src/runtime/model.js"
+import type { Code } from "../src/code.js"
+import { compileSource } from "../src/compiler/compile.js"
 import {
   BinOpSymbols,
   CheckBaseKind,
@@ -13,8 +13,8 @@ import {
   OpNames,
   PutKind,
   UnaryOpSymbols,
-} from "../src/vm/opcodes.js"
-import { parseProgram } from "../src/vm/runtime/execute.js"
+} from "../src/opcodes.js"
+import { parseProgram } from "../src/runtime/execute.js"
 
 const formatFlags = (flags: number): string => {
   const names: Array<string> = []

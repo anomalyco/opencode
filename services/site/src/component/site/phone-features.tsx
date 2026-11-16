@@ -63,7 +63,8 @@ export function PhoneFeatures(props: { features: readonly Feature[]; listID: str
       </Show>
 
       {/* The site's FAQ rows (component/faq.tsx and its styles in site.css), so the plus, its turn
-          into a minus and the height animation are the FAQ's own. */}
+          into a minus and the height animation are the FAQ's own (src/client/faq.ts keeps
+          one open at a time on a static page). */}
       <Show when={import.meta.env.DEV || siteSettings.phoneFeatures === "accordion"}>
         <ul data-component="faq" data-slot="accordion">
           <For each={props.features}>

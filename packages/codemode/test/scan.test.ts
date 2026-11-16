@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Result } from "effect"
-import { CodeMode } from "./lib/index.js"
+import { CodeMode } from "../src/index.js"
 
 describe("CodeMode.scanTools", () => {
   test("extracts dotted, bracketed and nested static tool calls in first-seen order", () => {

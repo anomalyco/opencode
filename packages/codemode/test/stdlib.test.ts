@@ -16,7 +16,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "./lib/index.js"
+import { CodeMode, Tool } from "../src/index.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
@@ -1216,6 +1216,86 @@ describe("TextEncoder and TextDecoder", () => {
       true,
       true,
     ])
+  })
+
+  test("streams an emoji one byte at a time and copies the pending bytes", async () => {
+    expect(
+      await value(`
+      const decoder = new TextDecoder()
+      const chunk = new Uint8Array([65, 0xf0])
+      const stream = { stream: true }
+      const start = decoder.decode(chunk, stream)
+      chunk[1] = 0
+      return [start, decoder.decode(undefined, stream), decoder.decode(new Uint8Array([0x9f]), stream),
+        decoder.decode(new Uint8Array([0x98]), stream), decoder.decode(new Uint8Array([0x80, 66])), decoder.decode()]
+    `),
+    ).toEqual(["A", "", "", "", "😀B", ""])
+  })
+
+  test("only strips the first BOM of each stream, including a split BOM", async () => {
+    expect(
+      await value(`
+      return [false, true].map(ignoreBOM => {
+        const decoder = new TextDecoder('utf8', { ignoreBOM })
+        const bom = new Uint8Array([0xef, 0xbb, 0xbf])
+        return [decoder.decode(bom.slice(0, 1), { stream: true }), decoder.decode(bom.slice(1), { stream: true }),
+          decoder.decode(bom), decoder.decode(bom)]
+      })
+    `),
+    ).toEqual([
+      ["", "", "\ufeff", ""],
+      ["", "\ufeff", "\ufeff", "\ufeff"],
+    ])
+  })
+
+  test("reports malformed UTF-8 immediately and truncated UTF-8 on flush", async () => {
+    expect(
+      await value(`
+      return [false, true].map(fatal => {
+        return [[[0xe0], [0x80]], [[0xed, 0xa0]], [[0xf0, 0x80]], [[0xf4, 0x90]],
+          [[0xe2, 0x82], [65]], [[0xf0, 0x9f], undefined, undefined, [0xef, 0xbb, 0xbf, 66]]].flatMap(chunks => {
+          const decoder = new TextDecoder('utf8', { fatal })
+          return chunks.map(bytes => {
+            try { return bytes ? decoder.decode(new Uint8Array(bytes), { stream: true }) : decoder.decode() }
+            catch (error) { return error.name }
+          })
+        })
+      })
+    `),
+    ).toEqual([
+      ["", "��", "��", "��", "��", "", "�A", "", "�", "", "B"],
+      ["", "TypeError", "TypeError", "TypeError", "TypeError", "", "TypeError", "", "TypeError", "", "B"],
+    ])
+  })
+
+  test("keeps unread input in order after a fatal stream error", async () => {
+    expect(
+      await value(`
+      const decoder = new TextDecoder('utf8', { fatal: true })
+      const stream = { stream: true }
+      const fail = bytes => {
+        try { return decoder.decode(bytes, stream) } catch (error) { return error.name }
+      }
+      const chunk = new Uint8Array([0xff, 65])
+      const first = fail(chunk)
+      chunk[1] = 0
+      return [first, decoder.decode(), fail(new Uint8Array([0xe2, 0x82])),
+        fail(new Uint8Array([66, 67])), decoder.decode(new Uint8Array([68])), decoder.decode()]
+    `),
+    ).toEqual(["TypeError", "A", "", "TypeError", "BCD", ""])
+  })
+
+  test("rejects primitive options before touching the partial character", async () => {
+    expect(
+      await value(`
+      const decoder = new TextDecoder()
+      decoder.decode(new Uint8Array([0xc2]), { stream: true })
+      const errors = [true, false, 0, '', Symbol.iterator].map(options => {
+        try { return decoder.decode(undefined, options) } catch (error) { return error.name }
+      })
+      return [...errors, decoder.decode(new Uint8Array([0xa2]), null)]
+    `),
+    ).toEqual(["TypeError", "TypeError", "TypeError", "TypeError", "TypeError", "¢"])
   })
 
   test("only UTF-8 is supported; fatal decoding rejects malformed input", async () => {

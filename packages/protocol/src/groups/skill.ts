@@ -2,7 +2,6 @@ import { Skill } from "@opencode/schema/skill"
 import { Location } from "@opencode/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
-import { ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const SkillGroup = HttpApiGroup.make("server.skill")
@@ -10,7 +9,6 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
     HttpApiEndpoint.get("skill.list", "/api/skill", {
       query: LocationQuery,
       success: Location.response(Schema.Array(Skill.Info)),
-      error: ServiceUnavailableError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(

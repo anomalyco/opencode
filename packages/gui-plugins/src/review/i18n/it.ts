@@ -15,4 +15,13 @@ export default {
   "settings.wrapLines.title": "A capo automatico",
   "settings.wrapLines.description":
     "Manda a capo le righe lunghe nei diff per dispositivi mobili invece di scorrere orizzontalmente",
+  "menu.count.one": "{{count}} file modificato",
+  "menu.count.other": "{{count}} file modificati",
+  "folder.more": "{{count}} · altri non mostrati",
+  "folder.failed": "Impossibile caricare le modifiche",
+  "command.open": "Apri revisione",
+  "load.failed": "Impossibile caricare le modifiche",
+  "load.timeout": "Il server ha impiegato troppo tempo a rispondere",
+  offline: "Impossibile raggiungere questo server",
+  "menu.count.many": "{{count}} file modificati",
 }

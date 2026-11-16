@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test"
 import {
   REMOTE_SERVER,
   SERVER,
+  T0,
   expectPath,
   holdRoute,
   project,
@@ -385,4 +386,138 @@ test("a project's auto-accept choice overrides the default in both directions", 
   await settings.locator('[data-action="settings-project-auto-accept-permissions"]').click()
   await page.getByRole("option", { name: "Use default (On)" }).click()
   await expect.poll(() => replies).toEqual(["permission-api", "permission-web"])
+})
+
+test("customized vertical sidebar merges a project across servers and narrows it with the view menu", async ({
+  page,
+}) => {
+  // The same repo on two machines shares its project ID, so both servers' sessions share one group.
+  const shared = (directory: string) => project({ id: "proj_shared", directory, name: "shared" })
+
+  const local = session({ id: "ses_local_open", directory: directoryA, title: "Local open", projectID: "proj_shared" })
+
+  const recent = session({
+    id: "ses_local_recent",
+    directory: directoryA,
+    title: "Local recent",
+    projectID: "proj_shared",
+    created: T0 - 60_000,
+  })
+
+  const remote = session({
+    id: "ses_remote_open",
+    directory: directoryB,
+    title: "Remote open",
+    projectID: "proj_shared",
+  })
+
+  const config = (directory: string, sessions: ReturnType<typeof session>[]) => ({
+    directory,
+    project: shared(directory),
+    provider: { all: [], connected: [], default: {} },
+    sessions,
+    pageMessages: () => ({ items: [] }),
+  })
+
+  await mockServers(page, {
+    [SERVER]: config(directoryA, [local, recent]),
+    [REMOTE_SERVER]: config(directoryB, [remote]),
+  })
+  await seed(page, {
+    servers: [REMOTE_SERVER],
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }],
+    settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "customize" } },
+  })
+  await page.goto(sessionHref(local.id))
+  await expectSessionTitle(page, local.title)
+
+  const sidebar = page.locator('[data-slot="vertical-tabs"]')
+
+  const groups = sidebar.locator("[data-sidebar-group]")
+
+  const titles = sidebar.locator("[data-titlebar-tab-slot] [data-titlebar-tab-title]")
+
+  await expect(groups).toHaveText([/shared$/])
+  await expect(titles).toHaveText([local.title, remote.title])
+  // Only the tab from the other machine names its server.
+  await expect(sidebar.locator('[data-slot="tab-label"]')).toHaveCount(1)
+  await expect(sidebar.getByRole("button", { name: recent.title })).toBeVisible()
+
+  // Collapsing the group that holds the current session keeps only that session below it.
+  const header = groups.first().locator("button[aria-expanded]")
+
+  await header.click()
+  await expect(header).toHaveAttribute("aria-expanded", "false")
+  // Only a collapsed group counts its open tabs.
+  await expect(groups).toHaveText([/shared\s*2$/])
+  await expect(titles).toHaveText([local.title])
+  await expect(sidebar.getByRole("button", { name: recent.title })).toHaveCount(0)
+  await header.click()
+  await expect(titles).toHaveText([local.title, remote.title])
+
+  const menu = page.getByRole("menu")
+
+  await page.getByRole("button", { name: "View options" }).click()
+
+  // Moving between submenu triggers swaps the open submenu instead of stacking them.
+  for (const [name, item] of [
+    [/^Group by/, "Server → Project"],
+    [/^Sort by/, "Attention"],
+  ] as const) {
+    const box = await menu.getByRole("menuitem", { name }).boundingBox()
+
+    if (!box) throw new Error(`no ${name} trigger`)
+    await page.mouse.move(box.x + 40, box.y + box.height / 2, { steps: 12 })
+    await expect(menu.last()).toContainText(item)
+  }
+
+  await expect(menu).toHaveCount(2)
+  await menu.getByRole("menuitem", { name: /^Group by/ }).click()
+  await page.getByRole("menuitemradio", { name: "Server → Project" }).click()
+  await page.keyboard.press("Escape")
+  await expect(groups).toHaveCount(4)
+  await expect(sidebar.locator('[data-slot="tab-label"]')).toHaveCount(0)
+
+  // A server filter hides the other server's rows, but never the active tab.
+  await page.getByRole("button", { name: "View options" }).click()
+  await page.getByRole("menuitem", { name: /^Server/ }).click()
+  await page.getByRole("menuitemcheckbox").last().click()
+  await page.keyboard.press("Escape")
+  await page.keyboard.press("Escape")
+  await expect(titles).toHaveText([local.title, remote.title])
+  await expect(sidebar.getByRole("button", { name: recent.title })).toHaveCount(0)
+  await page.getByRole("button", { name: "View options" }).click()
+  await menu.getByRole("menuitem", { name: "Reset filters" }).click()
+  await expect(sidebar.getByRole("button", { name: recent.title })).toBeVisible()
+})
+
+test("deleting a session's tab in the customized sidebar removes it from the list too", async ({ page }) => {
+  const first = session({ id: "ses_delete_first", directory: directoryA, title: "Delete me" })
+
+  const second = session({ id: "ses_delete_second", directory: directoryA, title: "Keep me" })
+
+  await mockServers(page, {
+    [SERVER]: {
+      directory: directoryA,
+      project: project({ id: "proj_delete", directory: directoryA }),
+      provider: { all: [], connected: [], default: {} },
+      sessions: [first, second],
+      pageMessages: () => ({ items: [] }),
+    },
+  })
+  await seed(page, {
+    tabs: [first.id, second.id],
+    settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "customize" } },
+  })
+  await page.goto(sessionHref(first.id))
+  await expectSessionTitle(page, first.title)
+
+  const sidebar = page.locator('[data-slot="vertical-tabs"]')
+
+  await sidebar.locator("[data-titlebar-tab-title]", { hasText: first.title }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Delete session", exact: true }).click()
+  await expectSessionTitle(page, second.title)
+  // The session the app had loaded must not come back as a recent row, which would open a missing session.
+  await expect(sidebar.getByText(first.title)).toHaveCount(0)
 })

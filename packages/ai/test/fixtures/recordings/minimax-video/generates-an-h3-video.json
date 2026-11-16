@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:minimax-video",
+      "provider:minimax",
+      "protocol:minimax-video"
+    ],
+    "name": "minimax-video/generates-an-h3-video",
+    "recordedAt": "2026-11-13T05:21:52.796Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.minimax.io/v2/video_generation",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"MiniMax-H3-Lite\",\"content\":[{\"type\":\"text\",\"text\":\"A single red balloon drifting slowly upward against a clear blue sky.\"}],\"resolution\":\"480P\",\"duration\":4,\"ratio\":\"16:9\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462821491831079\"}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v2/query/video_generation/462821491831079",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task\":{\"id\":\"462821491831079\",\"model\":\"MiniMax-H3-Lite\",\"status\":\"running\",\"created_at\":1794547292,\"updated_at\":1794547292,\"resolution\":\"480P\",\"duration\":4,\"usage\":{},\"ratio\":\"16:9\",\"task_type\":\"generation\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v2/query/video_generation/462821491831079",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task\":{\"id\":\"462821491831079\",\"model\":\"MiniMax-H3-Lite\",\"status\":\"running\",\"created_at\":1794547292,\"updated_at\":1794547292,\"resolution\":\"480P\",\"duration\":4,\"usage\":{},\"ratio\":\"16:9\",\"task_type\":\"generation\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v2/query/video_generation/462821491831079",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task\":{\"id\":\"462821491831079\",\"model\":\"MiniMax-H3-Lite\",\"status\":\"succeeded\",\"created_at\":1794547292,\"updated_at\":1794547308,\"content\":{\"url\":\"https://video-product.cdn.minimax.io/h3-480p/2026/11/13/style1/462821491831079-1-8d955ea33e6c8868_aigc.mp4\"},\"resolution\":\"480P\",\"duration\":4,\"usage\":{\"total_seconds\":4,\"input_seconds\":0,\"output_seconds\":4,\"input_image_count\":0,\"total_tokens\":41664,\"prompt_tokens\":0,\"completion_tokens\":41664},\"ratio\":\"16:9\",\"task_type\":\"generation\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v2/query/video_generation/462821491831079",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task\":{\"id\":\"462821491831079\",\"model\":\"MiniMax-H3-Lite\",\"status\":\"succeeded\",\"created_at\":1794547292,\"updated_at\":1794547308,\"content\":{\"url\":\"https://video-product.cdn.minimax.io/h3-480p/2026/11/13/style1/462821491831079-1-8d955ea33e6c8868_aigc.mp4\"},\"resolution\":\"480P\",\"duration\":4,\"usage\":{\"total_seconds\":4,\"input_seconds\":0,\"output_seconds\":4,\"input_image_count\":0,\"total_tokens\":41664,\"prompt_tokens\":0,\"completion_tokens\":41664},\"ratio\":\"16:9\",\"task_type\":\"generation\"}}"
+      }
+    }
+  ]
+}

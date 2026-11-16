@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Далее",
   "releaseNotes.action.hideFuture": "Больше не показывать",
   "releaseNotes.media.alt": "Предварительный просмотр выпуска",
+  "action.reload": "Перезагрузить для обновления",
+  "action.reloading": "Перезагрузка…",
+  "web.ready.title": "Обновление готово",
+  "web.ready.message": "Новая версия OpenCode готова. Перезагрузите, чтобы использовать её во всех открытых окнах.",
+  "web.reload": "Перезагрузить",
+  "web.reset.title": "Перезагрузить с сервера",
+  "web.reset.description": "Удалить сохранённую копию приложения и загрузить текущую версию с сервера",
+  "web.reset.action": "Перезагрузить с сервера",
 }

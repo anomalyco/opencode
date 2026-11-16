@@ -126,7 +126,7 @@ test("shows the TPS default in session settings", () => {
 test("shows transcript verbosity in session settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
     category: "Session",
-    default: "medium",
+    default: "low",
     values: ["low", "medium", "high"],
   })
 })
