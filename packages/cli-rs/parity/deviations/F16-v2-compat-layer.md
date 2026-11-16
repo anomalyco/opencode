@@ -36,7 +36,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
 - **Dialogs**: `select`, `confirm`, `prompt` and `alert` are the host's, each settled once as TS's are (an answer;
   `undefined` on escape, the backdrop, another plugin's dialog, `clear()` or the plugin's end). A select's `search`
   lists its rows for each query as TS's does (flat, in its order, the category as the footer), but the rows change
-  once the JS host answered the query, not in the keystroke's own frame (`P.8/select-search`). A select's `actions` and
+  once the JS host answered the query, not in the keystroke's own frame (`P.8/select-search`). A `dialog.set` right
+  after `dialog.select` sizes the select as in TS; its `centered` is not mapped for a select, which the host places
+  as its own selects, where TS centers it. A select's `actions` and
   a prompt's `value` and `description` are reported, not mapped. `ui.dialog.show` shows the plugin's JSX
   in the host's panel dialog, bare (only the dialog's frame, as TS's), in the size and place `ui.dialog.set` gives, and
   a render that throws closes it. A panel's body is a node of ABI 1.x: a `<scrollbox>` in it is a box that does not

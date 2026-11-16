@@ -30,7 +30,7 @@ export default {
           title: "Find a turn",
           slash: { name: "find" },
           async run() {
-            const picked = await context.ui.dialog.select({
+            const selection = context.ui.dialog.select({
               title: "Find a turn",
               options: turns,
               search: (query: string, options: typeof turns) =>
@@ -38,6 +38,9 @@ export default {
                   `${option.title} ${option.description}`.toLowerCase().includes(query.toLowerCase()),
                 ),
             })
+            // As session-time's `/time`: the select is sized right after it opens.
+            context.ui.dialog.set({ size: "xlarge" })
+            const picked = await selection
             context.ui.toast.show({ message: `picked ${picked}` })
           },
         },
