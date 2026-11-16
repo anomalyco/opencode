@@ -44,6 +44,33 @@ test("a redraw after the capture request must still belong to its document and r
   expect(frameStillCurrent(restoring, restoring)).toBe(false)
 })
 
+// The extension filter gate publishes its held navigation as a start and a spinner, and Stop during the wait ends it
+// with a stop and no commit (navigation-turn.ts).
+test("a redraw against the filter gate's held navigation: rejected while it is held, current again once it is cancelled", () => {
+  const held: DocumentEvent[] = [
+    { type: "navigation.started", url: "https://site.test/b", isMainFrame: true, isSameDocument: false },
+    { type: "loading.started" },
+  ]
+
+  const page = replay(visit("https://site.test/a")).state
+  const waiting = replay(held, page).state
+  expect(isNavigationPending(waiting)).toBe(true)
+  expect(frameStillCurrent(page, waiting)).toBe(false)
+  // Never issued, so the page still shows the document the redraw drew.
+  const cancelled = transitionDocument(waiting, { type: "loading.stopped", title: "https://site.test/a" }).state
+  expect(isNavigationPending(cancelled)).toBe(false)
+  expect(frameStillCurrent(page, cancelled)).toBe(true)
+  expect(frameStillCurrent(page, replay(visit("https://site.test/b"), waiting).state)).toBe(false)
+
+  // A restored tab whose held load is stopped shows its blank page; one whose load was never issued stays restoring,
+  // and no redraw of it is current.
+  const restoring = createDocumentState({ generation: 1, title: "B", url: "https://site.test/b" })
+  const blank = replay([...held, { type: "loading.stopped", title: "" }], restoring).state
+  expect(blank.status).toBe("blank")
+  expect(frameStillCurrent(blank, blank)).toBe(true)
+  expect(frameStillCurrent(restoring, blank)).toBe(false)
+})
+
 // Electron's events for a navigation that commits and finishes loading.
 const visit = (url: string, title = url): DocumentEvent[] => [
   { type: "navigation.started", url, isMainFrame: true, isSameDocument: false },

@@ -1908,6 +1908,11 @@ export function createBrowserPage(
     return withFrames(view.getVisible() && win.isVisible() && !win.isMinimized(), signal, async stop => {
       if (isNavigationPending(documentState)) await waitFor(() => !isNavigationPending(documentState), stop)
       abortError(stop)
+
+      // The restored address never opened (its preview failed, or its load was cancelled before it was issued): the
+      // tab shows no document, so a redraw would pass a blank surface off as the page.
+      if (documentState.status === "restoring")
+        throw new Error("This restored tab has not opened its page. Reload or navigate the tab, then take the screenshot again.")
       const before = documentState
       const frame = await screenshot(action, stop)
       abortError(stop)
