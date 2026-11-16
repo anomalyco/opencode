@@ -5,6 +5,7 @@ import "./component/spinner-renderable"
 import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
+import { LocalModel } from "@opencode/schema/local-model"
 import { Global } from "@opencode/util/global"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
@@ -749,6 +750,21 @@ function App() {
   })
 
   const connected = useConnected()
+  const releaseLocalModel = (wait: boolean) => {
+    const model = local.model.current()
+    if (!model) return Promise.resolve()
+    const directory = (location.ref ?? data.location.default()).directory
+    // The server owns the address and the key. A missing server must not stop clear or exit.
+    const pending = client.api
+      .rpc(LocalModel.Definition)
+      .unload({ providerID: model.providerID, modelID: model.modelID }, { location: { directory } })
+      .then(() => true)
+      .catch(() => false)
+    if (wait) return pending
+    void pending
+    return Promise.resolve()
+  }
+
   const appCommands = createMemo(() =>
     [
       {
@@ -803,6 +819,7 @@ function App() {
         category: "Session",
         slash: { name: "clear" },
         run: () => {
+          releaseLocalModel(false)
           const model = local.model.current()
           const agent = local.agent.current()
           const current =
@@ -1178,7 +1195,11 @@ function App() {
         name: "app.exit",
         title: "Exit the app",
         slash: { name: "exit", aliases: ["quit", "q"] },
-        run: () => exit(),
+        run: async () => {
+          // Quit after the server has the request. Leaving first drops it.
+          await releaseLocalModel(true)
+          exit()
+        },
         category: "System",
       },
       {
