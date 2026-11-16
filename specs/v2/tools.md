@@ -176,6 +176,8 @@ The second argument is runtime control, not part of the tool's input. `timeoutMs
 
 The selected deadline covers the invocation's executable work, including approval waits inside that work. Expiry rejects only that call with a catchable tool error. The program may use `Promise.allSettled` to collect successful siblings, and the session runner can deliver pending steering at its next normal boundary. Expiry requests cancellation through the existing invocation scope; it does not prove remote work stopped or rolled back and never automatically replays the call. Caller interruption remains interruption.
 
+If the deadline expires while approval is pending, that request is withdrawn and treated as rejected for the awaiting action. The action does not run, no deny rule is saved, late replies cannot authorize it, and sibling requests stay pending. The model receives an approval-timeout error that distinguishes missing timely approval from an explicit user denial. It may request fresh approval or wait for the user; a retry needs a new approval. A timely reply followed by slow execution produces an execution-timeout error instead.
+
 The feature does not add timeout arguments to native model tool schemas or change durable events. The reusable Code Mode library exposes this capability through `toolTimeouts: true` for plain and idempotent tools; durable library tools retain their existing single-argument contract.
 
 ## Laws

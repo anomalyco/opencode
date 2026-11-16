@@ -62,6 +62,10 @@ export type CallResult =
 export type Hooks<R = never> = {
   readonly "tool.before"?: ((call: ToolInvocation) => Effect.Effect<void, unknown, R>) | undefined
   readonly "tool.after"?: ((call: ToolInvocation, result: CallResult) => Effect.Effect<void, never, R>) | undefined
+  /** Selects the timeout message after the expired invocation's cleanup; undefined keeps the default diagnostic. */
+  readonly "tool.timeout"?:
+    | ((call: ToolInvocation, timeoutMs: number) => Effect.Effect<string | undefined, never, R>)
+    | undefined
   readonly "extension.before"?: ((call: ExtensionInvocation) => Effect.Effect<void, unknown, R>) | undefined
   readonly "extension.after"?:
     | ((call: ExtensionInvocation, result: CallResult) => Effect.Effect<void, never, R>)
@@ -718,8 +722,9 @@ export const make = <R>(
             })).timeoutMs
       const input = yield* decode(name, tool, toolTimeouts ? args.slice(0, 1) : args)
       yield* Effect.sync(() => options.admit(name))
+      const call = { name, input, key }
       return yield* hooked(
-        { name, input, key },
+        call,
         hooks["tool.before"],
         hooks["tool.after"],
         Effect.gen(function* () {
@@ -730,7 +735,12 @@ export const make = <R>(
               : execute.pipe(
                   Effect.timeoutOrElse({
                     duration: timeoutMs,
-                    orElse: () => Effect.fail(toolError(`Tool '${name}' timed out after ${timeoutMs}ms.`)),
+                    orElse: () =>
+                      (hooks["tool.timeout"]?.(call, timeoutMs) ?? Effect.undefined).pipe(
+                        Effect.flatMap((message) =>
+                          Effect.fail(toolError(message ?? `Tool '${name}' timed out after ${timeoutMs}ms.`)),
+                        ),
+                      ),
                   }),
                 ),
           )

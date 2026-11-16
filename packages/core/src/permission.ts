@@ -64,6 +64,11 @@ export const Unattended = Context.Reference<Permission.Ruleset | undefined>("@op
   defaultValue: () => undefined,
 })
 
+/** @internal Observes an unanswered approval interrupted within the current tool invocation. */
+export const AwaitInterrupted = Context.Reference<(() => void) | undefined>("@opencode/Permission/AwaitInterrupted", {
+  defaultValue: () => undefined,
+})
+
 export class DeclinedError extends Schema.TaggedError<DeclinedError>()("Permission.DeclinedError", {}) {}
 
 export class CorrectedError extends Schema.TaggedError<CorrectedError>()("Permission.CorrectedError", {
@@ -276,9 +281,16 @@ const layer = Layer.effect(
               // WITH feedback (CorrectedError) intentionally stays typed so the leaf can turn
               // it into ToolFailure and the model continues.
               Effect.catchTag("Permission.DeclinedError", (error) => Effect.die(error)),
-              Effect.ensuring(
-                Effect.sync(() => {
-                  pending.delete(item.request.id)
+              Effect.onInterrupt(() =>
+                Effect.gen(function* () {
+                  if (!pending.delete(item.request.id)) return
+                  const interrupted = yield* AwaitInterrupted
+                  interrupted?.()
+                  yield* bus.publish(Permission.Event.Replied, {
+                    sessionID: item.request.sessionID,
+                    requestID: item.request.id,
+                    reply: "reject",
+                  })
                 }),
               ),
             )
@@ -308,34 +320,44 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
+          if (input.reply === "reject") {
+            const rejected = [
+              existing,
+              ...Array.from(pending.values()).filter(
+                (item) => item !== existing && item.request.sessionID === existing.request.sessionID,
+              ),
+            ]
+            // The user rejected the current batch; consume every affected request before any publication yields.
+            rejected.forEach((item) => pending.delete(item.request.id))
+            yield* Effect.forEach(
+              rejected,
+              (item) =>
+                bus
+                  .publish(Permission.Event.Replied, {
+                    sessionID: item.request.sessionID,
+                    requestID: item.request.id,
+                    reply: "reject",
+                  })
+                  .pipe(
+                    // Feedback applies to the whole batch, so parallel asks don't end the step.
+                    Effect.andThen(
+                      Deferred.fail(
+                        item.deferred,
+                        input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
+                      ),
+                    ),
+                  ),
+              { discard: true },
+            )
+            return
+          }
+          // Accept the reply before publishing it, so interruption cannot withdraw an answered request.
+          pending.delete(input.requestID)
           yield* bus.publish(Permission.Event.Replied, {
             sessionID: existing.request.sessionID,
             requestID: existing.request.id,
             reply: input.reply,
           })
-
-          if (input.reply === "reject") {
-            yield* Deferred.fail(
-              existing.deferred,
-              input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
-            )
-            pending.delete(input.requestID)
-            for (const [id, item] of pending) {
-              if (item.request.sessionID !== existing.request.sessionID) continue
-              yield* bus.publish(Permission.Event.Replied, {
-                sessionID: item.request.sessionID,
-                requestID: item.request.id,
-                reply: "reject",
-              })
-              // Feedback applies to the whole batch, so parallel asks don't end the step.
-              yield* Deferred.fail(
-                item.deferred,
-                input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
-              )
-              pending.delete(id)
-            }
-            return
-          }
 
           if (input.reply === "always" && existing.request.save?.length) {
             yield* saved.add({
@@ -345,21 +367,19 @@ const layer = Layer.effect(
             })
           }
           yield* Deferred.succeed(existing.deferred, undefined)
-          pending.delete(input.requestID)
           if (input.reply !== "always" || !existing.request.save?.length) return
 
           for (const [id, item] of pending) {
             const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
               Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
             )
-            if (result?.effect !== "allow") continue
+            if (result?.effect !== "allow" || !pending.delete(id)) continue
             yield* bus.publish(Permission.Event.Replied, {
               sessionID: item.request.sessionID,
               requestID: item.request.id,
               reply: "always",
             })
             yield* Deferred.succeed(item.deferred, undefined)
-            pending.delete(id)
           }
         }),
       ),

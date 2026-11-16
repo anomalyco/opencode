@@ -61,7 +61,12 @@ type Tools = {
 class Run extends Context.Service<
   Run,
   {
-    readonly executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>
+    readonly executeTool: (
+      name: string,
+      tool: Info,
+      input: unknown,
+      context: Tool.ToolContext,
+    ) => Effect.Effect<unknown, unknown>
     readonly hooks: CodeMode.Hooks
   }
 >()("@opencode/CodeModeTool/Run") {}
@@ -95,7 +100,8 @@ export const create = (
           description,
           "Ordinary tool calls may opt into a per-call deadline with `tools.example(input, { timeoutMs: 120000 })`. `timeoutMs` must be a positive safe integer in milliseconds.",
           "Omitting the deadline preserves existing limits. Earlier tool or interpreter deadlines still apply.",
-          "The clock includes waits inside the tool, including approval waits. A timeout rejects only that call and requests cancellation, but the remote operation may continue. Use `Promise.allSettled` to retain successful sibling results. Do not automatically replay timed-out operations.",
+          "The clock includes waits inside the tool, including approval waits. A timeout rejects only that call and requests cancellation, but the remote operation may continue. Use `Promise.allSettled` to retain successful sibling results. Check whether side-effecting work completed before replaying it.",
+          "An approval-timeout error means no timely approval was received, not an explicit user denial. The action awaiting approval did not run; its prompt was withdrawn and no deny rule was saved. You may request fresh approval or wait for the user. A retry requires fresh approval.",
         ].join("\n")
       : description,
     input: CodeMode.Input,
@@ -106,6 +112,7 @@ export const create = (
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        const interruptedApprovals = new Set<string>()
         const lock = Semaphore.makeUnsafe(1)
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
@@ -132,7 +139,7 @@ export const create = (
           .execute(code)
           .pipe(
             Effect.provideService(Run, {
-              executeTool: (name, tool, input) =>
+              executeTool: (name, tool, input, call) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
                   // The program sees the same failure text the model gets for a direct call.
@@ -143,6 +150,7 @@ export const create = (
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.
                     cancel: undefined,
                   }).pipe(
+                    Effect.provideService(Permission.AwaitInterrupted, () => void interruptedApprovals.add(call.key)),
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
                   const content = resultContent(executed)
@@ -151,7 +159,15 @@ export const create = (
                     yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
                   return resultValue(executed)
                 }),
-              hooks: progressHooks(record),
+              hooks: {
+                ...progressHooks(record),
+                "tool.timeout": (call, timeoutMs) =>
+                  Effect.sync(() =>
+                    interruptedApprovals.delete(call.key)
+                      ? `Tool '${call.name}' approval timed out after ${timeoutMs}ms: no approval received, not an explicit user denial. The action awaiting approval did not run. You may request approval again or wait for the user. A retry requires fresh approval.`
+                      : undefined,
+                  ),
+              },
             }),
             // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
             Effect.onError(() =>
@@ -328,7 +344,7 @@ function inventoryTools(inventory: Inventory) {
       input: child.inputSchema,
       freeform: registration.freeform !== undefined,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
-      execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
+      execute: (input, context) => Run.use((run) => run.executeTool(name, registration, input, context)),
     })
   }
   return renderTools(root)
@@ -351,6 +367,8 @@ function resultValue(executed: Result) {
 const runHooks = {
   "tool.before": (call) => Run.use((run) => run.hooks["tool.before"]?.(call) ?? Effect.void),
   "tool.after": (call, result) => Run.use((run) => run.hooks["tool.after"]?.(call, result) ?? Effect.void),
+  "tool.timeout": (call, timeoutMs) =>
+    Run.use((run) => run.hooks["tool.timeout"]?.(call, timeoutMs) ?? Effect.undefined),
   "extension.before": (call) => Run.use((run) => run.hooks["extension.before"]?.(call) ?? Effect.void),
   "extension.after": (call, result) => Run.use((run) => run.hooks["extension.after"]?.(call, result) ?? Effect.void),
 } satisfies CodeMode.Hooks<Run>

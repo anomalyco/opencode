@@ -6,6 +6,57 @@ import { CodeMode, Tool, toolError } from "../src/index.js"
 const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect.pipe(Effect.provide(TestClock.layer())))
 
 describe("optional per-call timeouts", () => {
+  test.each([
+    ["host diagnostic", "Approval unavailable"],
+    ["default diagnostic", undefined],
+  ] as const)("selects the %s after interrupting and cleaning up the invocation", (_name, diagnostic) =>
+    run(
+      Effect.gen(function* () {
+        const cleanup: Array<string> = []
+        const timeouts: Array<{ call: CodeMode.ToolInvocation; timeoutMs: number }> = []
+        const keys: Array<string> = []
+        const after: Array<CodeMode.CallResult> = []
+        const fiber = yield* CodeMode.make({
+          toolTimeouts: true,
+          tools: {
+            pending: Tool.make({
+              description: "Wait for approval",
+              input: Schema.Struct({ resource: Schema.String }),
+              execute: (_input, context) => {
+                keys.push(context.key)
+                return Effect.never.pipe(Effect.onInterrupt(() => Effect.sync(() => void cleanup.push("done"))))
+              },
+            }),
+          },
+          hooks: {
+            "tool.timeout": (call: CodeMode.ToolInvocation, timeoutMs: number) =>
+              Effect.sync(() => {
+                expect(cleanup).toEqual(["done"])
+                timeouts.push({ call, timeoutMs })
+                return diagnostic
+              }),
+            "tool.after": (_call, result) => Effect.sync(() => void after.push(result)),
+          },
+        })
+          .execute(
+            `
+            try { await tools.pending({ resource: "file" }, { timeoutMs: 100 }) }
+            catch (error) { return error.message }
+          `,
+          )
+          .pipe(Effect.forkChild({ startImmediately: true }))
+
+        yield* TestClock.adjust(100)
+        const message = diagnostic ?? "Tool 'pending' timed out after 100ms."
+        expect(yield* Fiber.join(fiber)).toMatchObject({ ok: true, value: message })
+        expect(timeouts).toEqual([
+          { call: { name: "pending", input: { resource: "file" }, key: keys[0] }, timeoutMs: 100 },
+        ])
+        expect(after).toMatchObject([{ status: "failure", error: { _tag: "ToolError", message } }])
+      }),
+    ),
+  )
+
   test.each(["plain", "idempotent"])("expires one %s invocation without losing successful siblings", (mode) =>
     run(
       Effect.gen(function* () {

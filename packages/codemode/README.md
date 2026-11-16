@@ -131,6 +131,11 @@ executable effect, including waits inside it, and requests cancellation through 
 abort signal. It does not guarantee that remote work stops or side effects roll back. Existing earlier interpreter or
 tool deadlines still win; caller interruption remains interruption. No retry or default deadline is added.
 
+Hosts may provide `hooks["tool.timeout"]` to return a more specific error message for an expired invocation. It receives
+the same `{ name, input, key }` as the other tool hooks and the selected `timeoutMs`, after the invocation's cancellation
+cleanup has finished. Return `undefined` to keep the default message. The `tool.after` hook receives the resulting
+failure once.
+
 `Tool.durable` calls retain their single-argument contract and reject a second options argument. Per-call timeouts do
 not change their suspension or snapshot format.
 
