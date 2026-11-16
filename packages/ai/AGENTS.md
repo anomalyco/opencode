@@ -7,7 +7,8 @@
 - **One canonical model.** The Schema classes in `src/schema/` are the data model. Do not add a parallel shape or a second construction path.
 - **Independent of Session.** Auth, permissions, plugins, and orchestration belong in Core. `ai.stream`/`ai.generate` run exactly one model call.
 - **Reuse protocols.** Providers compose existing protocols with `Route.make(...)` instead of cloning them.
-- **One API, two runtimes.** `ai` from `@opencode/ai` and `ai` from `@opencode/ai/effect` have the same namespaces and operations, with the same names, overloads, input and options (plus `signal` on the Promise side); keep `test/promise-parity.types.ts` passing.
+- **One API, two runtimes.** `ai` from `@opencode/ai` and `ai` from `@opencode/ai/effect` have the same namespaces and operations, with the same names, overloads, input and options (plus `RunOptions`, `signal` and `http`, on the Promise side); keep `test/promise-parity.types.ts` passing.
+- **One way to hook HTTP.** Every request goes through `RequestExecutor`, which applies executor-wide middleware (`RequestExecutor.middleware`) and the caller's scoped middleware (`RequestExecutor.withMiddleware`, Promise `{ http }`). Don't add a per-method hook option or send HTTP any other way. A `url` asset downloads with its own `middleware`, which a route sets only for URLs on the provider's origin. Keep `test/http-hooks.test.ts` passing; it lists every Promise method.
 
 ## Code style
 

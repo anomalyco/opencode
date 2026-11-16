@@ -169,12 +169,12 @@ const decodeResult = Effect.fn("OpenRouterVideo.decodeResult")(function* (
   if (urls.length === 0) return yield* output.invalid(`${route.name} completed without a video URL`)
   // The content URLs are OpenRouter's own and only download with the API key.
   const videos = yield* Effect.forEach(urls, (url) =>
-    context.headers(url).pipe(
-      Effect.map((headers) =>
+    context.credentials(url).pipe(
+      Effect.map((credentials) =>
         Media.url(url, {
           mediaType: "video/mp4",
           expiresAt: job.expires_at === undefined || job.expires_at === null ? undefined : job.expires_at * 1000,
-          headers,
+          ...credentials,
         }),
       ),
     ),
