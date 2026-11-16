@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import type { Storage } from "@opencode/plugin/gui/main"
 import {
   clipboardWrite,
+  createSitePermissions,
   originOf,
   permissionKinds,
   requesterOrigin,
@@ -104,5 +106,34 @@ describe("what a page's permission request gets before anyone is asked", () => {
     expect(keptApplies("http://localhost:3000", false)).toBe(true)
     expect(keptApplies("oc-preview://3f1c", false)).toBe(false)
   })
+})
 
+describe("the decisions the user kept", () => {
+  test("keeps one decision per site and feature, never a preview's, and changes only kept ones", () => {
+    const values = new Map<string, unknown>()
+    let changes = 0
+    // SAFETY: the site permissions read only `store` and its `value` and `set`.
+    const storage = {
+      store: (key: string, options: { initial: unknown }) => ({
+        get value() {
+          return values.has(key) ? values.get(key) : options.initial
+        },
+        set: (next: unknown) => values.set(key, next),
+      }),
+    } as unknown as Storage
+    const sites = createSitePermissions(storage, () => changes++)
+
+    sites.keep({ origin: "https://meet.example", permission: "camera", setting: "allow" })
+    sites.keep({ origin: "https://meet.example", permission: "camera", setting: "block" })
+    sites.keep({ origin: "oc-preview://3f1c", permission: "camera", setting: "allow" })
+    sites.set({ origin: "https://other.example", permission: "camera", setting: "allow" })
+    expect(sites.list()).toEqual([{ origin: "https://meet.example", permission: "camera", setting: "block" }])
+    expect(sites.get("https://meet.example", "camera")).toBe("block")
+
+    sites.set({ origin: "https://meet.example", permission: "camera", setting: "allow" })
+    expect(sites.get("https://meet.example", "camera")).toBe("allow")
+    sites.remove({ origin: "https://meet.example", permission: "camera" })
+    expect(sites.list()).toEqual([])
+    expect(changes).toBe(4)
+  })
 })

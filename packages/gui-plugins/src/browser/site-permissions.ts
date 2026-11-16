@@ -143,6 +143,7 @@ function loopback(hostname: string) {
     /^127(?:\.\d{1,3}){3}$/.test(hostname)
   )
 }
+
 /** The kept decisions, in main. Each change is written at once and reported to `changed`. */
 export function createSitePermissions(storage: Storage, changed: () => void) {
   const stored = storage.store("site-permissions", { schema: SiteDecisions, initial: [] })

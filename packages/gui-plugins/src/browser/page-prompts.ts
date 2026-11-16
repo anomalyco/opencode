@@ -1,4 +1,4 @@
-import { systemPreferences, type WebContents } from "electron"
+import electron, { type WebContents } from "electron"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { CodedError } from "./errors"
 import type { DialogInfo } from "./dialog-machine"
@@ -226,8 +226,8 @@ export function createPagePrompts(input: {
 
     if (!blocked) return void callback(true)
 
-    if (process.platform === "darwin" && blocked === "microphone" && systemPreferences.getMediaAccessStatus("microphone") === "not-determined")
-      return void systemPreferences.askForMediaAccess("microphone").then((granted) => {
+    if (process.platform === "darwin" && blocked === "microphone" && electron.systemPreferences.getMediaAccessStatus("microphone") === "not-determined")
+      return void electron.systemPreferences.askForMediaAccess("microphone").then((granted) => {
         // The page may have gone or moved on while macOS asked.
         if (disposed || contents.isDestroyed() || originOf(contents.mainFrame.origin) !== origin) return callback(false)
 
@@ -586,7 +586,7 @@ export const RESTORE_PROMPT = `(() => {
 
 function device(kind: "camera" | "microphone") {
   if (process.platform !== "darwin" && process.platform !== "win32") return true
-  const status = systemPreferences.getMediaAccessStatus(kind)
+  const status = electron.systemPreferences.getMediaAccessStatus(kind)
 
   // macOS asks once for the microphone; this app declares no camera use, so macOS would end it for asking.
   if (process.platform === "darwin" && status === "not-determined") return false
