@@ -1184,6 +1184,7 @@ test("the location dialog separates added projects from server projects and tags
   await expect(names).toHaveText(["console", "sstapollo"])
   await expect(back).toHaveCount(0)
   await expect(arrow).toBeVisible()
+  await expect(search).toHaveAttribute("placeholder", "Search other projects")
   expect(await leading.boundingBox()).toEqual(leadingBox)
   expect(await input.boundingBox()).toEqual(inputBox)
   await arrow.click()

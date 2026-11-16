@@ -131,13 +131,13 @@
 }
 
 /* A list with one category needs no header naming it; the header returns once a second section shows. */
-.command-palette
+.command-palette-bare
   [data-slot="search-list-results"]:not(:has(> [data-slot="search-list-section"] ~ [data-slot="search-list-section"]))
   [data-slot="search-list-header"] {
   display: none;
 }
 
-.command-palette
+.command-palette-bare
   [data-slot="search-list-results"]:not(:has(> [data-slot="search-list-section"] ~ [data-slot="search-list-section"])) {
   padding-top: 4px;
 }

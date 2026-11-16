@@ -290,7 +290,7 @@ export function locationDialogView(state: LocationDialogState) {
       return {
         drilled: undefined,
         titleKey: undefined,
-        placeholderKey: "session.new.project.search",
+        placeholderKey: "session.new.project.other.search",
         ownsEscape: true,
         otherGroupHeader: false,
       } as const
