@@ -47,7 +47,7 @@ test("the authenticated read under a server base path names exactly the file val
       if (req.method === "HEAD") checked.push(url.searchParams.get("path") ?? "")
       else reads.push(url.searchParams.get("path") ?? "")
 
-      return new Response("x", { headers: { "x-opencode-preview": "1", "content-length": "1" } })
+      return new Response("x", { headers: { "x-opencode-preview": "2", "content-length": "1" } })
     },
   })
 
@@ -60,7 +60,7 @@ test("the authenticated read under a server base path names exactly the file val
     controller.signal,
   )
 
-  const grants = new Map<string, PreviewSource>([["grant", source]])
+  const grants = new Map<string, PreviewSource>([["grant", {...source, document:"index.html", takeEntry:()=>false, denied:()=>{}}]])
   const names = ["dir/50% off.html", "#?.txt", "a%2fb", "%252e%252e/[slug]", "日本語.txt"]
 
   try {

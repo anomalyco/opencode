@@ -40,7 +40,7 @@ const FindView = Schema.Struct({
 export type FindView = typeof FindView.Type
 
 const RefusalNotice = Schema.Union([
-  Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web"]) }),
+  Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web", "browser.preview.restricted"]) }),
   Schema.Struct({ reason: Schema.Literal("external"), target: text(2048), action: Schema.Literals(["open", "copy"]) }),
   Schema.Struct({ reason: Schema.Literal("popup"), target: text(16384), action: Schema.optionalKey(Schema.Literal("tab")) }),
 ])

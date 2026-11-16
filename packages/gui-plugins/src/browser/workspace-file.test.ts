@@ -22,6 +22,18 @@ test("preview and reveal resolve existing regular files under the real workspace
     await symlink(sibling, path.join(repo, "linked"), directoryLink)
     expect(await lookup(path.join(alias, name), alias)).toMatchObject({ path: await realpath(file), size: 6 })
     expect(await lookup(path.join(repo, "linked", name))).toBeUndefined()
+    const doc = path.join(repo, "reports", "index.html")
+    await mkdir(path.dirname(doc))
+    await writeFile(doc, "report")
+    await symlink(repo, path.join(repo, "reports", "alias"), directoryLink)
+    const restricted = new Map<string, PreviewSource>([["scoped", {type:"local", roots:()=>[repo], document:"reports/index.html", takeEntry:()=>false, denied:()=>{}}]])
+    const scoped = (path: string) => resolvePreviewRequest(pathToFileURL(path).href.replace("file://", "oc-preview://scoped"), "GET", "oc-preview://scoped", restricted, new AbortController().signal)
+    const control = await scoped(doc)
+    expect(control?.type).toBe("local")
+
+    if (control?.type === "local") await control.file.close()
+    expect(await scoped(file)).toBeUndefined()
+    expect(await scoped(path.join(repo, "reports", "alias", name))).toBeUndefined()
     expect(await lookup(path.join(sibling, name))).toBeUndefined()
     expect(await lookup(repo)).toBeUndefined()
     expect(await lookup(path.join(repo, "missing"))).toBeUndefined()
@@ -29,12 +41,14 @@ test("preview and reveal resolve existing regular files under the real workspace
     await link(file, path.join(repo, "hardlink"))
     expect(await lookup(path.join(repo, "hardlink"))).toMatchObject({ size: 6 })
 
-    const grants = new Map([["first", { type: "local" as const, roots: () => [repo] }]])
+    const scope = { document:"index.html", takeEntry:()=>false, denied:()=>{} }
+    const grants = new Map([["first", { ...scope,type: "local" as const, roots: () => [repo] }]])
     const url = pathToFileURL(file).href.replace("file://", "oc-preview://first")
     const request = (method: string) => resolvePreviewRequest(url, method, "oc-preview://first", grants, new AbortController().signal)
 
     for (const method of ["GET", "HEAD"]) {
       const opened = await request(method)
+
       if (opened?.type !== "local") throw new Error("missing local control")
       expect((await opened.file.stat()).size).toBe(opened.size)
       expect(opened.size).toBe(6)
@@ -50,8 +64,8 @@ test("preview and reveal resolve existing regular files under the real workspace
     const remotePaths: string[] = []
 
     const sources = new Map<string, PreviewSource>([
-      ["local", { type: "local", roots: () => [repo] }],
-      ["remote", { type: "remote", prefix: "workspace://session/", stat: async (path) => {
+      ["local", { ...scope,type: "local", roots: () => [repo] }],
+      ["remote", { ...scope,type: "remote",root:"/work", prefix: "workspace://session/", stat: async (path) => {
         remotePaths.push(path)
 
         return path === "server-only.html" ? 17 : null
@@ -64,6 +78,7 @@ test("preview and reveal resolve existing regular files under the real workspace
     const disk = pathToFileURL(file).href.replace("file://", "oc-preview://local")
     const local = await resolve(disk)
     expect(local).toMatchObject({ type: "local", size: 6 })
+
     if (local?.type === "local") await local.file.close()
     expect(await resolve(disk.replace("//local", "//remote"))).toBeUndefined()
     remotePaths.length = 0

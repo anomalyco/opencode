@@ -1,5 +1,5 @@
 import type { ServerEndpoint } from "@opencode/plugin/gui/main"
-import type { PreviewSource } from "./workspace-file"
+import type { WorkspaceSource } from "./workspace-file"
 import { workspacePrefix } from "./remote-address"
 
 /** The endpoint's marker distinguishes a missing file on a capable server from an older server's router 404. */
@@ -8,13 +8,16 @@ export function remotePreview(
   session: string,
   location: { directory: string; workspace?: string },
   lifetime: AbortSignal,
-): Extract<PreviewSource, { type: "remote" }> {
+): Extract<WorkspaceSource, { type: "remote" }> {
   let outdated = false
 
-  const request = async (path: string, method: "HEAD" | "GET", range: string | undefined, signal: AbortSignal) => {
+  const request = async (path: string, method: "HEAD" | "GET", range: string | undefined, signal: AbortSignal, document: string, entry: boolean) => {
     const url = new URL("api/experimental/preview/read", `${server.url.replace(/\/+$/, "")}/`)
     url.searchParams.set("sessionID", session)
     url.searchParams.set("path", path)
+    url.searchParams.set("document", document)
+
+    if (entry) url.searchParams.set("entry", "1")
     url.searchParams.set("location[directory]", location.directory)
 
     if (location.workspace) url.searchParams.set("location[workspace]", location.workspace)
@@ -33,7 +36,7 @@ export function remotePreview(
         signal: AbortSignal.any([signal, lifetime, timeout.signal]),
       })
 
-      if (response.headers.get("x-opencode-preview") === "1") {
+      if (response.headers.get("x-opencode-preview") === "2") {
         outdated = false
 
         return response
@@ -50,16 +53,19 @@ export function remotePreview(
 
   return {
     type: "remote",
+    root: location.directory,
     prefix: workspacePrefix(session),
     needsUpdate: () => outdated,
-    stat: async (path, signal) => {
-      const response = await request(path, "HEAD", undefined, signal).catch(() => undefined)
+    stat: async (path, signal, document=path, entry=false) => {
+      const response = await request(path, "HEAD", undefined, signal, document, entry).catch(() => undefined)
+
+      if (response?.headers.get("x-opencode-preview-denied") === "1") return "denied"
       const length = response?.headers.get("content-length")
 
       return response?.ok && length && /^\d+$/.test(length) && Number.isSafeInteger(Number(length))
         ? Number(length)
         : null
     },
-    read: (path, range, signal) => request(path, "GET", range, signal),
+    read: (path, range, signal, document, entry) => request(path, "GET", range, signal, document, entry),
   }
 }

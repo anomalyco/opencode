@@ -128,6 +128,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (error === "browser.address.workspace") return ctx.t("refused.workspace")
 
+    if (error === "browser.preview.restricted") return ctx.t("preview.restricted")
+
     if (error === "browser.address.web") return ctx.t("refused.web")
 
     return ctx.t("common.requestFailed")

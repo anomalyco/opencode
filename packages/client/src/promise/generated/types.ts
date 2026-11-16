@@ -4597,6 +4597,8 @@ export type ExperimentalPreviewReadInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly sessionID: string
   readonly path: string
+  readonly document: string
+  readonly entry?: "1" | undefined
 }
 
 export type ExperimentalPreviewReadOutput = globalThis.Uint8Array

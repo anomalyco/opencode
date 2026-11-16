@@ -61,11 +61,11 @@ import type { PaneElement, RefusalNotice } from "./ipc"
 import { navigationNotice, popupActivated } from "./refusal-notice"
 import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
-import { previewAddress, previewFile, reloadAddress } from "./preview"
+import { reloadAddress } from "./preview"
+import type { workspacePages } from "./workspace-pages"
 import { previewScheme } from "./scheme"
-import { workspaceFile, type PreviewSource } from "./workspace-file"
+import type { WorkspaceSource } from "./workspace-file"
 import type { artifactPages } from "./artifact-preview"
-import { remotePath } from "./remote-address"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
@@ -227,9 +227,9 @@ export function createBrowserPage(
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
     /** This binding's isolated origin for workspace previews. */
-    previewHost?: string
+    workspace?: ReturnType<typeof workspacePages>
     artifacts?: ReturnType<typeof artifactPages>
-    remote?: Extract<PreviewSource, { type: "remote" }>
+    remote?: Extract<WorkspaceSource, { type: "remote" }>
     /** The server runs on this machine, so its loopback addresses are this machine's and the system browser reaches them. */
     local: boolean
     signal: AbortSignal
@@ -268,7 +268,7 @@ export function createBrowserPage(
   })
 
   const contents = view.webContents
-  const preview = (url: string) => options.artifacts?.display(url) ?? previewFile(url, options.previewHost, policy.fileRoots ?? [], policy.remote)
+  const preview = (url: string) => options.artifacts?.display(url) ?? options.workspace?.display(url)
   const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
   contents.on("before-mouse-event", (_event, mouse) => {
@@ -508,11 +508,7 @@ export function createBrowserPage(
 
     if (!file) return
     // History API routes never pass the protocol handler. Keep the last validated address for virtual routes.
-    const path = options.remote && remotePath(file, options.remote.prefix)
-
-    const exists = file.startsWith("artifact:") ? options.artifacts?.exists(file) : options.remote
-      ? path && options.remote.stat(path, options.signal).then((size) => size !== null)
-      : workspaceFile(file, policy.fileRoots ?? [])
+    const exists = file.startsWith("artifact:") ? options.artifacts?.exists(file) : options.workspace?.exists(url, options.signal)
 
     void Promise.resolve(exists).then((target) => {
       if (target && !closed() && !contents.isDestroyed() && contents.getURL() === url) report(file)
@@ -590,6 +586,14 @@ export function createBrowserPage(
 
   // Called from the session's one download listener (`guardSession`) for a download this page started. One the user
   // started is left to the system's save flow, so it goes where they save it and the agent never reads it.
+    const workspace = options.workspace?.display(url)
+
+    if (workspace && !postBody) {
+      void options.menu.open(workspace).catch(() => publish("browser.menu.failed"))
+
+      return { action: "deny" }
+    }
+
   const download = (item: Electron.DownloadItem) => {
     const owner = downloadOwner({
       now: Date.now(),
@@ -718,7 +722,7 @@ export function createBrowserPage(
       get fileRoots() { return policy.fileRoots },
       get extensions() { return policy.extensions },
       remote: policy.remote,
-      previewHost: options.previewHost,
+      get previewHost() { return options.workspace?.host(contents.getURL()) },
       local: options.local,
     },
     cdp,
@@ -736,9 +740,20 @@ export function createBrowserPage(
 
     if (!closed()) options.hidden?.()
   })
+    open: (url) => {
+      const current = contents.getURL()
+
+      if (options.workspace?.host(current) && /^(?:file|workspace):/.test(url) && !options.workspace.permits(current, url)) {
+        notices.show({reason:"browser.preview.restricted"})
+
+        return Promise.resolve()
+      }
+
+      return options.menu.open(url)
+    },
 
   const load = (url: string) => {
-    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? previewAddress(url, options.previewHost, policy.fileRoots ?? [], policy.remote) : url
+    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? options.workspace?.load(url, () => notices.show({reason:"browser.preview.restricted"})) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
     let committed = false
@@ -765,7 +780,9 @@ export function createBrowserPage(
     const tab = state()
 
     if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url)
-    const address = reloadAddress(contents.getURL(), state().url, options.previewHost, policy.fileRoots ?? [], policy.remote)
+    const actual = contents.getURL()
+    if (options.workspace?.host(actual) && options.workspace.display(actual) === tab.url) return void await load(tab.url)
+    const address = reloadAddress(actual, state().url, options.workspace?.host(actual), policy.fileRoots ?? [], policy.remote)
 
     if (address) return void await load(address)
     contents.reload()
@@ -796,6 +813,7 @@ export function createBrowserPage(
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
+
     async inspect(enabled: boolean) {
       if (closed()) return
       await ready
@@ -889,6 +907,7 @@ export function createBrowserPage(
       dispatch({ type: "disposed" })
       menu.dispose()
       options.artifacts?.dispose()
+      options.workspace?.dispose()
       dispatchDialog({ type: "disposed" })
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)

@@ -34,6 +34,7 @@ export const info = Skill.Info.make({
     "## Show the user",
     "",
     "- `tools.browser.preview({ path })` opens workspace HTML in the session browser, even off screen. Pass its returned `tabID` straight to `snapshot`; previewing the same file reloads it. Other files open in the file panel, queued until the user returns to this session. No browser tab ID is returned for them.",
+    "- Put HTML assets in the document's folder or below it; parent folders, hidden paths and secret filenames are not available to the page.",
     "- `tabs.open` and `navigate` take web addresses. For another workspace file, pass its server-local path to `preview`, or click a relative link. Neither the displayed file address nor the page's isolated origin is a navigation argument.",
     "- New tabs open in front by default so the user can watch. Pass `focus: false` only when the user asked you to work in the background.",
     "- `screenshot` works on a hidden tab; only `fullPage: true` needs the tab on screen in the Review pane, and on macOS no screenshot works while the OpenCode window is minimized or hidden. It returns the image for you to look at and a server-local file path.",

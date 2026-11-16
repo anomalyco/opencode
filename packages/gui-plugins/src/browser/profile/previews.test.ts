@@ -6,7 +6,7 @@ type Remote = Extract<PreviewSource, { type: "remote" }>
 
 function fixture(read: Remote["read"]) {
   const grants = new Map<string, PreviewSource>([
-    ["test", { type: "remote", prefix: "workspace://session/", stat: async () => 10, read }],
+    ["test", { type: "remote", root:"/work", document:"index.html",takeEntry:()=>false,denied:()=>{},prefix: "workspace://session/", stat: async () => 10, read }],
   ])
 
   return {
