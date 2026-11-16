@@ -43,6 +43,12 @@ export function createPageFind(contents: WebContents, report: (view: FindView | 
       }
 
       const previous = state
+
+      if (state.status === "closed" && (action.type === "previous" || action.type === "next")) {
+        state = transitionFind(state, { type: "open" })
+        report(findView(state))
+      }
+
       state = transitionFind(state, action)
       const view = findView(state)
 
@@ -50,7 +56,7 @@ export function createPageFind(contents: WebContents, report: (view: FindView | 
       clearTimeout(timer)
 
       if (action.type === "previous" || action.type === "next")
-        return search(action.type === "next", previous.status === "editing")
+        return search(action.type === "next", previous.status === "editing" || previous.status === "closed")
       report(view)
 
       if (!state.query) return contents.stopFindInPage("clearSelection")

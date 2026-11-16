@@ -82,6 +82,7 @@ type PaneHandle = {
   /** Focuses the address field and selects its text. */
   focusAddress: () => void
   find: () => void
+  findMatch: (direction: "next" | "previous") => void
   /** Runs a key press the page handed to the app, as if it was pressed in this pane. */
   press: (event: ShortcutEvent) => void
   /** Marks the pane as holding the user's focus, which the page took outside the window's document. */

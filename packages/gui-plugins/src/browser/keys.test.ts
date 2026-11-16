@@ -51,6 +51,10 @@ test.each([
 test("forwards browser and shell shortcuts while leaving page editing, reload and in-page chords to the page", () => {
   const cases: [modifiers: string, key: string, mac: boolean, forwarded: string | undefined, code?: string][] = [
     // Browser tab, window and shell chords forwarded from the page.
+    ["mod", "g", true, "g"], ["mod+shift", "G", true, "g"],
+    ["mod", "g", false, "g"], ["mod+shift", "G", false, "g"],
+    ["", "F3", false, "F3"], ["shift", "F3", false, "F3"],
+    ["", "F3", true, undefined], ["ctrl", "g", true, undefined],
     ["mod", "t", true, "t"],
     ["mod", "t", false, "t"],
     // Dvorak: T is on the physical K key and Y on the physical T key; the character decides.
@@ -119,8 +123,6 @@ test("forwards browser and shell shortcuts while leaving page editing, reload an
     // Find, reload, history, and the pane's own picker and zoom chords.
     ["mod", "f", true, "f"],
     ["mod", "f", false, "f"],
-    ["mod", "g", true, undefined],
-    ["mod+shift", "G", true, undefined],
     ["mod", "r", true, undefined],
     ["mod", "r", false, undefined],
     ["mod", "[", true, undefined],
