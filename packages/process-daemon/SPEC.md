@@ -181,10 +181,14 @@ starts a pipe process: any command without a terminal. Both return
   `"SIGTERM"`, when a signal ended the process (on Windows, when the daemon
   signalled it); `exit_code` is then null. `signal` is left out when there is
   none.
-- On Unix an exited pipe process stays listed, as a zombie, until `terminate`.
-  The zombie keeps its PID and process group ID reserved, so killing the group
-  can never reach an unrelated process. On Windows the process object and job
-  handle stay open until `terminate`, so the PID is not reused either.
+- An exited pipe process stays listed until `terminate`. On macOS the daemon
+  reaps the child on exit if it is the last member of its process group, and
+  rechecks on `list` and `get` if descendants outlive the child. On
+  Linux with group signalling through pidfds (6.9+), it reaps the child and
+  keeps a pidfd only if the group may still have members. Where the group
+  cannot safely be released or addressed by pidfd, the zombie reserves its
+  PID and group ID until `terminate`. On Windows the process object and job
+  handle stay open until `terminate`.
   `terminate` kills the whole tree (SIGKILL on Unix; the job on Windows),
   reaps it and removes the process; it never waits on a descendant that left
   the process group or job and still holds the pipe. The daemon never deletes

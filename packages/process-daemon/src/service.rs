@@ -630,7 +630,7 @@ struct TerminalHandle {
     /// Dropped at shutdown, before the joins, to cancel a pipe reader that a
     /// surviving descendant would otherwise keep blocked.
     cancel: Mutex<Option<Box<dyn Send>>>,
-    /// Runs after the joins; reaps a pipe process kept as a zombie until now.
+    /// Runs after the joins; releases any remaining pipe process resources.
     reap: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// Pipe only: the child, for `signal`.
     process: Option<Arc<pipe::Process>>,
@@ -894,7 +894,15 @@ impl TerminalHandle {
         if self.mode.is_pty() {
             self.request(|reply| ActorMessage::RefreshForegroundProcess { reply })?;
         }
-        Ok(self.info())
+        let info = self.info();
+        #[cfg(target_os = "macos")]
+        if matches!(info.lifecycle, TerminalLifecycle::Exited { .. })
+            && let Some(process) = &self.process
+        {
+            // A descendant that still needed the group at child exit may now be gone.
+            process.release();
+        }
+        Ok(info)
     }
 
     fn request<T>(&self, make: impl FnOnce(Reply<Result<T>>) -> ActorMessage) -> Result<T> {

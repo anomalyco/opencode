@@ -2,7 +2,7 @@
 //! stdout and stderr sharing one pipe so their bytes keep their order.
 //!
 //! The platform modules own the child, its process tree and the output pipe:
-//! Unix keeps a zombie so the PID and process group stay reserved, and Windows
+//! Unix guards against signalling a reused process group, and Windows
 //! keeps the process and its kill-on-close job. Everything the two must do the
 //! same way lives here:
 //!
@@ -157,8 +157,7 @@ struct Waiter {
 }
 
 /// Registers a spawned pipe process with its actor, then runs the platform's
-/// reader and waiter. Both are started in that order, and the waiter last, so
-/// it is joined before the process is reaped.
+/// reader and waiter. Shutdown joins both before releasing the process.
 fn start_pipe(
     id: TerminalId,
     order: u64,

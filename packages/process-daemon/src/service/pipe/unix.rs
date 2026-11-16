@@ -3,10 +3,9 @@
 //! The child runs in its own process group with stdin on `/dev/null`. Three
 //! choices keep the daemon safe from what the child leaves behind:
 //!
-//! - The waiter observes the exit with `WNOWAIT` and leaves the child as a
-//!   zombie until shutdown. While the zombie exists, its PID and process group
-//!   ID cannot be reused, so killing the group can never hit an unrelated
-//!   process, even long after the exit.
+//! - The waiter observes the exit with `WNOWAIT`. Before reaping, it retires
+//!   numeric signals or switches to an identity-bound group handle. A group
+//!   that still needs its numeric ID keeps the child reserved until shutdown.
 //! - The reader polls a cancel pipe as well as the output pipe, so shutdown
 //!   never waits on a pipe that a descendant which left the process group
 //!   still holds open.
@@ -16,13 +15,15 @@
 use std::fs::OpenOptions;
 use std::io::{self, PipeReader, PipeWriter, Read};
 use std::os::fd::AsFd;
+#[cfg(target_os = "linux")]
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::Instant;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use nix::errno::Errno;
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
@@ -121,12 +122,11 @@ impl TerminalHandle {
         drop(command);
         let process = Arc::new(Process {
             pid: child.id(),
-            reaped: Mutex::new(false),
+            target: Mutex::new(Target::Child),
         });
         // Dropping `Child` neither waits nor kills; `Process` reaps it.
         drop(child);
 
-        let pid = process.pid;
         start_pipe(
             id,
             order,
@@ -135,7 +135,7 @@ impl TerminalHandle {
             Box::new(cancel_writer),
             move |actor| read_output(output, OutputSink::new(sink, actor), cancel, exited),
             move || super::Waiter {
-                exit: wait_exit(pid),
+                exit: wait_exit(process.pid).inspect(|_| process.release()),
                 // Starts the reader's drain deadline, after the exit message.
                 after: Box::new(exited_writer),
             },
@@ -170,11 +170,18 @@ fn reset_signals() -> io::Result<()> {
     Ok(())
 }
 
-/// A pipe child that stays a zombie after it exits, until `reap`.
+#[derive(Debug)]
+enum Target {
+    Child,
+    #[cfg(target_os = "linux")]
+    Group(OwnedFd),
+    Gone,
+}
+
 #[derive(Debug)]
 pub(in crate::service) struct Process {
     pid: u32,
-    reaped: Mutex<bool>,
+    target: Mutex<Target>,
 }
 
 impl Process {
@@ -182,47 +189,96 @@ impl Process {
         self.pid
     }
 
-    /// Kills the whole process group. Never signals after `reap`, when the
-    /// group ID may belong to someone else.
     pub(super) fn kill(&self) {
-        let reaped = self.reaped.lock().unwrap_or_else(PoisonError::into_inner);
-        if !*reaped && let Ok(pid) = i32::try_from(self.pid) {
-            // SAFETY: the unreaped child keeps its PID and group ID reserved.
-            // Signal the child directly too, in case it moved to another group.
-            unsafe {
-                libc::killpg(pid, libc::SIGKILL);
-                libc::kill(pid, libc::SIGKILL);
-            }
-        }
+        let _ = self.signal(ProcessSignal::Kill);
     }
 
     /// Sends `signal` to the process group and the child. Allowed after the
-    /// exit, to reach what is left of the group; refused after `reap`.
+    /// exit, to reach what is left of the group.
     pub(in crate::service) fn signal(&self, signal: ProcessSignal) -> Result<()> {
         let signal = match signal {
             ProcessSignal::Term => libc::SIGTERM,
             ProcessSignal::Int => libc::SIGINT,
             ProcessSignal::Kill => libc::SIGKILL,
         };
-        let reaped = self.reaped.lock().unwrap_or_else(PoisonError::into_inner);
-        if *reaped {
-            bail!("process has been reaped");
+        let target = self.target.lock().unwrap_or_else(PoisonError::into_inner);
+        match &*target {
+            Target::Gone => return Ok(()),
+            #[cfg(target_os = "linux")]
+            Target::Group(fd) => {
+                return match signal_group(fd, signal) {
+                    Err(Errno::ESRCH) | Ok(()) => Ok(()),
+                    Err(error) => Err(error).context("failed to signal process group"),
+                };
+            }
+            Target::Child => (),
         }
         let pid = i32::try_from(self.pid).context("invalid pid")?;
         // SAFETY: the unreaped child keeps its PID and group ID reserved.
-        check_signal(unsafe { libc::killpg(pid, signal) }, self.pid)?;
+        let group = check_signal(unsafe { libc::killpg(pid, signal) }, self.pid);
         // Signal the child directly too, in case it moved to another group.
         // SAFETY: as above.
-        check_signal(unsafe { libc::kill(pid, signal) }, self.pid)
+        group.and(check_signal(unsafe { libc::kill(pid, signal) }, self.pid))
     }
 
-    /// Call only after the waiter has returned: kill the group first, so the
-    /// child has exited and this does not block.
-    pub(super) fn reap(&self) {
-        let mut reaped = self.reaped.lock().unwrap_or_else(PoisonError::into_inner);
-        if *reaped {
-            return;
+    /// Releases an exited child once numeric group signals are no longer needed.
+    pub(in crate::service) fn release(&self) {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let mut target = self.target.lock().unwrap_or_else(PoisonError::into_inner);
+        #[cfg(target_os = "linux")]
+        {
+            // Linux 6.9+ can address the original group even after its leader
+            // has been reaped and the numeric PID reused. Probe before reaping.
+            // SAFETY: pidfd_open returns a new owned descriptor on success.
+            let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, self.pid, 0) };
+            if fd < 0 {
+                return;
+            }
+            // SAFETY: pidfd_open returned this fresh descriptor.
+            let fd = unsafe { OwnedFd::from_raw_fd(fd as i32) };
+            if signal_group(&fd, 0).is_err() {
+                return;
+            }
+            self.waitpid();
+            *target = if signal_group(&fd, 0) == Err(Errno::ESRCH) {
+                Target::Gone
+            } else {
+                Target::Group(fd)
+            };
         }
+        #[cfg(target_os = "macos")]
+        {
+            if !matches!(*target, Target::Child) {
+                return;
+            }
+            // libproc snapshots the group under the process-list lock. Two
+            // slots distinguish the zombie alone from any remaining members,
+            // including descendants that already closed their output pipes.
+            let mut members = [0i32; 2];
+            // SAFETY: members has room for the specified number of bytes.
+            let count = unsafe {
+                libc::proc_listpgrppids(
+                    self.pid as i32,
+                    members.as_mut_ptr().cast(),
+                    std::mem::size_of_val(&members) as i32,
+                )
+            };
+            if count == 1 && members[0] == self.pid as i32 {
+                self.waitpid();
+                *target = Target::Gone;
+            }
+        }
+    }
+
+    pub(super) fn reap(&self) {
+        let mut target = self.target.lock().unwrap_or_else(PoisonError::into_inner);
+        if matches!(*target, Target::Child) {
+            self.waitpid();
+        }
+        *target = Target::Gone;
+    }
+
+    fn waitpid(&self) {
         let Ok(pid) = i32::try_from(self.pid) else {
             return;
         };
@@ -233,8 +289,23 @@ impl Process {
                 break;
             }
         }
-        *reaped = true;
     }
+}
+
+#[cfg(target_os = "linux")]
+fn signal_group(fd: &OwnedFd, signal: i32) -> nix::Result<()> {
+    // SAFETY: the kernel takes the group identity from the pidfd; a null
+    // siginfo requests ordinary kill semantics.
+    Errno::result(unsafe {
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            fd.as_raw_fd(),
+            signal,
+            std::ptr::null::<libc::siginfo_t>(),
+            libc::PIDFD_SIGNAL_PROCESS_GROUP,
+        )
+    })
+    .map(|_| ())
 }
 
 /// Reads errno right after a `kill`/`killpg` result. A zombie group with no

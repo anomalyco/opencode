@@ -218,16 +218,45 @@ fn terminate_does_not_wait_for_a_descendant_that_left_the_group() {
 }
 
 #[test]
-fn an_exited_process_is_kept_until_terminate() {
+fn finished_records_do_not_keep_unreaped_children() {
+    // Linux validates the signal scope before looking up the fd. Older kernels
+    // reject the scope and must keep the numeric group ID reserved instead.
+    #[cfg(target_os = "linux")]
+    let early_reap = unsafe {
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            -1,
+            0,
+            std::ptr::null::<libc::siginfo_t>(),
+            libc::PIDFD_SIGNAL_PROCESS_GROUP,
+        );
+        nix::errno::Errno::last() == nix::errno::Errno::EBADF
+    };
+    #[cfg(not(target_os = "linux"))]
+    let early_reap = cfg!(target_os = "macos");
     let service = TerminalService::default();
-    let (info, file) = start(&service, "exit 0");
-    run(&service, info.id, &file);
-    let pid = info.pid.unwrap() as i32;
-    // The zombie keeps the PID and process group reserved.
-    assert!(alive(pid));
-    assert_eq!(service.list(ProcessMode::Pipe).unwrap().len(), 1);
-    service.terminate(info.id).unwrap();
-    assert!(!alive(pid));
+    let mut finished = Vec::new();
+    for _ in 0..8 {
+        let (info, file) = start(&service, "exit 7");
+        assert_eq!(run(&service, info.id, &file).exit.exit_code, Some(7));
+        finished.push(info);
+    }
+    for info in &finished {
+        assert_eq!(alive(info.pid.unwrap() as i32), !early_reap);
+    }
+    assert_eq!(
+        service.list(ProcessMode::Pipe).unwrap().len(),
+        finished.len()
+    );
+    for info in finished {
+        let pid = info.pid.unwrap() as i32;
+        assert_eq!(
+            service.wait(info.id).unwrap().recv().unwrap().exit_code,
+            Some(7)
+        );
+        service.terminate(info.id).unwrap();
+        assert!(!alive(pid));
+    }
     assert!(service.list(ProcessMode::Pipe).unwrap().is_empty());
 }
 
