@@ -3046,6 +3046,14 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
+export type UnknownError = {
+  readonly _tag: "UnknownError"
+  readonly message: string
+  readonly ref?: string | undefined
+}
+export const isUnknownError = (value: unknown): value is UnknownError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnknownError"
+
 export type LocationNotFoundError = {
   readonly _tag: "LocationNotFoundError"
   readonly location: { readonly directory: string }
@@ -3130,14 +3138,6 @@ export type SessionBusyError = {
 }
 export const isSessionBusyError = (value: unknown): value is SessionBusyError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SessionBusyError"
-
-export type UnknownError = {
-  readonly _tag: "UnknownError"
-  readonly message: string
-  readonly ref?: string | undefined
-}
-export const isUnknownError = (value: unknown): value is UnknownError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnknownError"
 
 export type FormNotFoundError = { readonly _tag: "FormNotFoundError"; readonly id: string; readonly message: string }
 export const isFormNotFoundError = (value: unknown): value is FormNotFoundError =>

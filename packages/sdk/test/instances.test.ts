@@ -221,9 +221,11 @@ test.each(["configuration", "plugin setup"])(
     expect(before.payload.text).toBe("healthy: Before failure")
     const input = { sessionID: retry.id, id: SessionMessage.ID.create(), text: "Retry this input", resume: false }
 
+    // The public client keeps the server's readable 500, including the ref for the server log.
     expect(await opencode.sessions.prompt(input).catch((error: unknown) => error)).toMatchObject({
-      name: "ClientError",
-      reason: "UnexpectedStatus",
+      _tag: "UnknownError",
+      message: "Server failed to handle the request. Check server logs for details.",
+      ref: expect.stringMatching(/^err_[0-9a-f]{8}$/),
     })
     expect(await opencode.sessions.inbox.list({ sessionID: retry.id })).toEqual([])
     expect((await opencode.message.list({ sessionID: retry.id })).data).toEqual([])
@@ -367,8 +369,9 @@ test("Promise instance plugin ID collisions reject admission and reconstruct on 
   expect(configured).toEqual([])
 
   expect(await opencode.sessions.prompt(input).catch((error: unknown) => error)).toMatchObject({
-    name: "ClientError",
-    reason: "UnexpectedStatus",
+    _tag: "UnknownError",
+    message: "Server failed to handle the request. Check server logs for details.",
+    ref: expect.stringMatching(/^err_[0-9a-f]{8}$/),
   })
   expect(await opencode.sessions.inbox.list({ sessionID: session.id })).toEqual([])
   expect((await opencode.message.list({ sessionID: session.id })).data).toEqual([])
