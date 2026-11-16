@@ -54,4 +54,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} времето за изчакване изтече след {{timeout}}ms",
   "error.failedPort": "Неуспешно получаване на порт",
   "menu.remove": "Премахване",
+  "error.busy": "{{distro}} е зает с друга задача. Опитайте отново, когато приключи.",
 }
