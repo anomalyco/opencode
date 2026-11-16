@@ -4,7 +4,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { showToast } from "@opencode/ui/toast"
 import { createMemo, on, Show } from "solid-js"
-import { actionGuard } from "./action-guard"
+import { actionGuard } from "./activation-delay"
 import type definition from "./index"
 
 export function RefusalBar(props: {
