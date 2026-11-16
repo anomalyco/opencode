@@ -30,7 +30,8 @@ function dispatch(event: MenuRouterEvent) {
  */
 export function startDesktopMenu(api: ElectronAPI) {
   api.onMenuCommand((id, accelerator) => {
-    if (accelerator && keyboardOwned(document.activeElement)) return
+    // A minimized or unfocused window keeps its active element: only a window with the keyboard drops the command.
+    if (accelerator && document.hasFocus() && keyboardOwned(document.activeElement)) return
     dispatch({ type: "command.received", id })
   })
 }
