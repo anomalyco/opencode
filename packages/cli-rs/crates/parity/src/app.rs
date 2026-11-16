@@ -30,6 +30,9 @@ pub struct Recording {
     /// Environment variables the TUI reads at startup, such as `OPENCODE_ROUTE`.
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    /// js-npm: packages installed in TS's npm cache, by spec, each the pinned tarball of its name.
+    #[serde(default)]
+    pub cache: BTreeMap<String, String>,
     pub routes: Vec<RouteSpec>,
     pub steps: Vec<Step>,
     /// With a fake IDE MCP server (E.5): what the TS TUI sent it, in order.
