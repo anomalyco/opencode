@@ -42,7 +42,15 @@ export function hexPaths(platform: NodeJS.Platform, home: string, env: NodeJS.Pr
   }
 }
 
-const metadata = (file: string) => stat(file).catch(() => undefined)
+// Only a path that isn't there means "not installed"; any other failure makes the result unknown.
+const absent = (error: NodeJS.ErrnoException) => error.code === "ENOENT" || error.code === "ENOTDIR"
+
+const unlessAbsent = (error: NodeJS.ErrnoException) => {
+  if (absent(error)) return undefined
+  throw error
+}
+
+const metadata = (file: string) => stat(file).catch(unlessAbsent)
 
 export async function detectHex(paths: ReturnType<typeof hexPaths>) {
   if (await metadata(path.join(paths.support, "local-api.json"))) return true
@@ -50,14 +58,18 @@ export async function detectHex(paths: ReturnType<typeof hexPaths>) {
   if (paths.registry) {
     const version = await readFile(path.join(paths.support, "current-version"), "utf8").then(
       (text) => text.trim(),
-      () => undefined,
+      unlessAbsent,
     )
 
     if (version && (await metadata(path.join(paths.support, "versions", version, "hex.exe")))?.isFile()) return true
 
+    // `reg query` exits 1 when the key is missing; a spawn failure or timeout leaves the result unknown.
     return promisify(execFile)(paths.registry, ["query", uninstallKey], { windowsHide: true, timeout: 1000 }).then(
       () => true,
-      () => false,
+      (error: { code?: unknown }) => {
+        if (error.code === 1) return false
+        throw error
+      },
     )
   }
 
