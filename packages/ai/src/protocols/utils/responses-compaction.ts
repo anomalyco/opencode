@@ -87,8 +87,8 @@ export const make = (
 ): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {
     const route = request.model.route
-    // The standalone compaction endpoint rejects histories containing configuration updates. Tool updates
-    // fold into `tools` as well so it sees the current tool set.
+    // The standalone compaction endpoint rejects effort updates (`configuration_update`). It accepts
+    // `additional_tools` but drops them, so tool updates fold into `tools` to show it the current tool set.
     const folded = foldToolUpdates(stripEffortUpdates(request))
     const native = yield* OpenResponses.lowerConversation(folded, adapter)
     const generation = OpenResponses.lowerGeneration(request)
