@@ -185,7 +185,7 @@ export function isNavigationPending(state: DocumentState) {
 
 /** A requested redraw can answer only for its original document and route, not a pending or replaced document. */
 export function frameStillCurrent(before: DocumentState, after: DocumentState) {
-  return before.status !== "closed" && after.status !== "closed" && before.pending === undefined &&
+  return before.status !== "closed" && before.status !== "restoring" && before.status === after.status && before.pending === undefined &&
     after.pending === undefined && before.generation === after.generation && before.url === after.url
 }
 

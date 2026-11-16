@@ -38,6 +38,10 @@ test("a redraw after the capture request must still belong to its document and r
   expect(frameStillCurrent(page, replay(visit("https://site.test/a"), page).state)).toBe(false)
   expect(frameStillCurrent(page, transitionDocument(page, { type: "navigation.in-page", isMainFrame: true, url: "https://site.test/b", title: "B" }).state)).toBe(false)
   expect(frameStillCurrent(page, transitionDocument(page, { type: "disposed" }).state)).toBe(false)
+  const failed = transitionDocument(page, { type: "navigation.failed", url: "https://site.test/a", isMainFrame: true, code: -2, description: "ERR_FAILED" }).state
+  expect(frameStillCurrent(page, failed)).toBe(false)
+  const restoring = createDocumentState({ generation: 1, title: "A", url: "https://site.test/a" })
+  expect(frameStillCurrent(restoring, restoring)).toBe(false)
 })
 
 // Electron's events for a navigation that commits and finishes loading.
