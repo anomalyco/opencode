@@ -532,10 +532,11 @@ describe("Automation", () => {
         })
       const automation = yield* create("helper")
       expect(automation.status).toBe("active")
-      for (const agent of ["nobody", "internal", Agent.defaultID])
-        expect(yield* Effect.flip(create(agent))).toMatchObject({
-          reason: `Unknown agent, or one that can't run as a subagent: ${agent}`,
-        })
+      expect(yield* Effect.flip(create("nobody"))).toMatchObject({ reason: "Unknown subagent: nobody" })
+      expect(yield* Effect.flip(create("internal"))).toMatchObject({ reason: "Subagent internal is hidden" })
+      expect(yield* Effect.flip(create(Agent.defaultID))).toMatchObject({
+        reason: `Agent ${Agent.defaultID} is primary-only`,
+      })
 
       // An agent the creating Session's `subagent` permission denies is out too.
       agentRules = [
@@ -546,7 +547,13 @@ describe("Automation", () => {
       const ref = Location.Ref.make({ directory: AbsolutePath.make(enabledDirectory) })
       yield* map.invalidate(ref)
       expect(yield* Effect.flip(create("helper"))).toMatchObject({
-        reason: "Unknown agent, or one that can't run as a subagent: helper",
+        reason: "Cannot start subagent helper: Permission denied: subagent",
+      })
+
+      agentRules = [{ action: "subagent", resource: "helper", effect: "ask" }]
+      yield* map.invalidate(ref)
+      expect(yield* Effect.flip(create("helper"))).toMatchObject({
+        reason: expect.stringContaining("subagent helper: Permission subagent needs approval"),
       })
 
       // An agent that is gone by the time a run comes up pauses the automation.
@@ -558,7 +565,7 @@ describe("Automation", () => {
       expect(yield* automations.get(automation.id)).toMatchObject({
         status: "paused",
         runCount: 0,
-        lastOutput: "Agent helper is no longer available as a subagent",
+        lastOutput: "Unknown subagent: helper",
       })
       expect(yield* pending).toEqual([])
     }),
@@ -1224,18 +1231,21 @@ describe("Automation", () => {
           const t = await tools.slack.read_thread({})
           if (!t.replies) return
           if (t.replies === 1) return { state: "in progress", send: { prompt: "First reply" } }
+          console.log("checks complete")
           return { done: true, send: { prompt: "All checks passed" } }
         `),
         })
         yield* tick(automations)
         expect(wakes).toEqual([])
         expect(yield* pending).toEqual([])
+        expect((yield* automations.get(automation.id)).lastOutput).toBeUndefined()
         slack.replies = 1
         yield* tick(automations)
         expect(yield* automations.get(automation.id)).toMatchObject({
           status: "active",
           runCount: 2,
           state: "in progress",
+          lastOutput: `Prompted ${sessionID}`,
         })
         slack.replies = 2
         yield* tick(automations)
@@ -1251,6 +1261,7 @@ describe("Automation", () => {
           status: "done",
           runCount: 3,
           state: "in progress",
+          lastOutput: `Prompted ${sessionID}\nchecks complete`,
         })
       }),
     )
@@ -1278,7 +1289,27 @@ describe("Automation", () => {
         expect(slack.messageIDs).toEqual([SessionMessage.ID.make(`msg_${automation.id}_1`)])
         expect(slack.messageIDs).not.toContain(messageID(automation, 1))
         expect(yield* sessions.get(child)).toMatchObject({ agent: "helper", parentID: sessionID, permissions })
-        expect(yield* automations.get(automation.id)).toMatchObject({ status: "active", runCount: 1 })
+        expect(yield* automations.list({ sessionID })).toMatchObject([
+          { id: automation.id, status: "active", runCount: 1, lastOutput: `Started subagent ${child}` },
+        ])
+      }),
+    )
+
+    it.effect("keeps the handoff visible and logs within the UTF-8 output budget", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const owner = yield* insertSession(Session.ID.make(`ses_${"x".repeat(128)}`), enabledDirectory)
+        const automation = yield* automations.create({
+          sessionID: owner.id,
+          name: "verbose",
+          trigger: every("1 minute"),
+          action: code(`console.log("界".repeat(10900)); return { send: { prompt: "ready" } }`),
+        })
+        yield* tick(automations)
+        const output = (yield* automations.get(automation.id)).lastOutput ?? ""
+        expect(output.startsWith(`Prompted ${owner.id}\n界`)).toBe(true)
+        expect(output.endsWith("界…")).toBe(true)
+        expect(Buffer.byteLength(output)).toBeLessThanOrEqual(32 * 1024)
       }),
     )
 
@@ -1327,6 +1358,17 @@ describe("Automation", () => {
             runCount: 1,
             state: "before",
           })
+        expect((yield* automations.get(deep.id)).lastOutput).toBe("Paused: Subagent depth limit reached (1)")
+        expect((yield* automations.get(blocked.id)).lastOutput).toBe(
+          "Paused: Cannot start subagent helper: Permission denied: subagent",
+        )
+        expect((yield* Effect.forEach(rows, (row) => automations.get(row.id))).map((row) => row.lastOutput)).toEqual([
+          expect.stringContaining("must return nothing or"),
+          "Paused: Subagent internal is hidden",
+          `Paused: Agent ${Agent.defaultID} is primary-only`,
+          "Paused: Unknown subagent: missing",
+          expect.stringContaining("subagent helper: Permission subagent needs approval"),
+        ])
         expect(yield* pending).toEqual([])
         expect(wakes).toEqual([])
         expect((yield* sessions.list({ parentID: sessionID })).data.map((session) => session.id)).toEqual([nested.id])
@@ -1367,6 +1409,94 @@ describe("Automation", () => {
         expect(yield* pending).toEqual([{ id, sessionID }])
         expect(wakes).toEqual([sessionID])
         expect(yield* automations.get(automation.id)).toMatchObject({ status: "done", runCount: 1, state: 42 })
+      }),
+    )
+
+    it.effect("pauses on a missing handoff directory without rerunning the check", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const { db } = yield* Database.Service
+        const automation = yield* automations.create({
+          sessionID,
+          name: "gone",
+          trigger: every("1 minute"),
+          action: code(
+            `await tools.slack.post({ text: "checked" }); return { state: 1, done: true, send: { prompt: "ready" } }`,
+          ),
+        })
+        // The code's authorized location remains, but its creating session now points at a missing worktree.
+        yield* db
+          .update(SessionTable)
+          .set({ directory: missingDirectory })
+          .where(eq(SessionTable.id, sessionID))
+          .run()
+          .pipe(Effect.orDie)
+        folders.missingNow = true
+        yield* tick(automations)
+        expect(yield* automations.get(automation.id)).toMatchObject({
+          status: "paused",
+          runCount: 0,
+          state: undefined,
+          lastOutput: expect.stringContaining(missingDirectory),
+        })
+        yield* tick(automations)
+        expect(slack.posts).toEqual(["checked"])
+        expect(yield* pending).toEqual([])
+        expect(wakes).toEqual([])
+      }),
+    )
+
+    it.effect("keeps distinct child handoffs pending and rewakes the recorded child on restart", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const automation = yield* automations.create({
+          sessionID,
+          name: "checks",
+          trigger: every("1 minute"),
+          action: code(`return { done: runs === 1, send: { prompt: "Check " + runs, to: { subagent: "helper" } } }`),
+        })
+        yield* tick(automations)
+        yield* tick(automations)
+        const children = [1, 2].map((run) => Session.ID.make(`ses_${automation.id}_${run}`))
+        expect(wakes).toEqual(children)
+        wakes.length = 0
+        const fiber = yield* Effect.forkChild(automations.run)
+        yield* Effect.yieldNow
+        expect(wakes).toContain(children[1])
+        expect(yield* pendingIDs).toEqual([1, 2].map((run) => messageID(automation, run)))
+        yield* Fiber.interrupt(fiber)
+      }),
+    )
+
+    it.effect("does not use an inbox ID to override changed authority when retrying an admitted child prompt", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const sessions = yield* Session.Service
+        const automation = yield* automations.create({
+          sessionID,
+          name: "triage",
+          trigger: every("1 minute"),
+          action: code(`return { state: 1, done: true, send: { to: { subagent: "helper" }, prompt: "triage" } }`),
+        })
+        // The real admission succeeded, but the wake failed before the automation could record it.
+        duringWake = Effect.die("lost wake")
+        yield* tick(automations)
+        const child = Session.ID.make(`ses_${automation.id}_1`)
+        const item = [{ id: messageID(automation, 1), sessionID: child }]
+        expect(yield* pending).toEqual(item)
+        expect(yield* automations.get(automation.id)).toMatchObject({ status: "active", runCount: 0 })
+        yield* sessions.setPermissions({ sessionID, permissions: [{ action: "edit", resource: "*", effect: "deny" }] })
+        wakes.length = 0
+        yield* TestClock.adjust("5 minutes")
+        yield* automations.tick
+        expect(wakes).toEqual([])
+        expect(yield* pending).toEqual(item)
+        expect(yield* automations.get(automation.id)).toMatchObject({
+          status: "paused",
+          runCount: 0,
+          state: undefined,
+          lastOutput: expect.stringContaining("no longer matches the creator's permissions"),
+        })
       }),
     )
 

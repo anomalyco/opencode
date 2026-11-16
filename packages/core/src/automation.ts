@@ -188,6 +188,9 @@ const expired = (row: Pick<Row, "expires_at">, now: number) => row.expires_at !=
 
 const optionalTime = (value: number | null) => (value === null ? undefined : DateTime.makeUnsafe(value))
 
+const deliverySummary = (sessionID: SessionSchema.ID, subagent?: Agent.ID) =>
+  `${subagent === undefined ? "Prompted" : "Started subagent"} ${sessionID}`
+
 const toInfo = (row: Row): Info => ({
   id: row.id,
   name: row.name,
@@ -229,24 +232,38 @@ const layer = Layer.effect(
       Effect.gen(function* () {
         yield* Plugin.awaitActivation
         const location = yield* Location.Service
-        if (location.project.id !== owner.projectID) return undefined
+        if (location.project.id !== owner.projectID)
+          return yield* new InvalidError({ reason: "The creating session's location is no longer in its project" })
         const config = yield* Config.Service
-        if ((yield* SubagentDepth.reached(owner, sessions, config)) !== undefined) return undefined
+        const limit = yield* SubagentDepth.reached(owner, sessions, config)
+        if (limit !== undefined) return yield* new InvalidError({ reason: `Subagent depth limit reached (${limit})` })
         const agents = yield* Agent.Service
         const agent = yield* agents.resolve(id)
-        if (agent === undefined || agent.mode === "primary" || agent.hidden) return undefined
+        if (!agent) return yield* new InvalidError({ reason: `Unknown subagent: ${id}` })
+        if (agent.hidden) return yield* new InvalidError({ reason: `Subagent ${id} is hidden` })
+        if (agent.mode === "primary") return yield* new InvalidError({ reason: `Agent ${id} is primary-only` })
         const creator = yield* agents.resolve(owner.agent)
-        if (!creator) return undefined
+        if (!creator)
+          return yield* new InvalidError({
+            reason: `Creating session's agent not found: ${owner.agent ?? "(default)"}`,
+          })
         const permission = yield* Permission.Service
-        const allowed = yield* permission
-          .allows({
+        yield* permission
+          .assert({
             action: "subagent",
             resources: [agent.id],
             sessionID: owner.id,
             agent: creator.id,
           })
-          .pipe(Effect.provideService(Permission.Unattended, undefined))
-        return allowed ? agent : undefined
+          .pipe(
+            // Only consulted for an ask. Never borrow an ambient grant, even if a hook turned a config allow into an ask.
+            Effect.provideService(Permission.Unattended, [{ action: "subagent", resource: "*", effect: "deny" }]),
+            Effect.catchTag(
+              "Permission.BlockedError",
+              (error) => new InvalidError({ reason: `Cannot start subagent ${id}: ${error.message}` }),
+            ),
+          )
+        return agent
       }).pipe(instances.provide(owner))
 
     /** Runs `effect` in the Location of `directory`; fails with DirectoryNotFoundError when the folder is gone. */
@@ -342,8 +359,6 @@ const layer = Layer.effect(
       if (owner.projectID !== row.project_id)
         return yield* new InvalidError({ reason: "The session that created this automation moved to another project" })
       const agent = yield* subagent(owner, to.subagent)
-      if (agent === undefined)
-        return yield* new InvalidError({ reason: `Agent ${to.subagent} is no longer available as a subagent` })
       // The id is derived from the run too, so a retry adopts the child it already started instead of leaking one.
       // Like the subagent tool's children it inherits the parent's location and permissions, but it reports to no one.
       const child = yield* sessions.create({
@@ -354,14 +369,12 @@ const layer = Layer.effect(
         title: row.name,
       })
       // Session.create adopts an existing ID, even if its caller requested a different parent or agent.
-      if (
-        child.parentID !== owner.id ||
-        child.agent !== agent.id ||
-        child.projectID !== row.project_id ||
-        !isDeepStrictEqual(child.location, owner.location) ||
-        !isDeepStrictEqual(child.permissions, owner.permissions)
-      )
-        return yield* new InvalidError({ reason: `Run child ${child.id} no longer matches the requested target` })
+      if (child.parentID !== owner.id || child.agent !== agent.id || child.projectID !== row.project_id)
+        return yield* new InvalidError({ reason: `Run child ${child.id} has a different parent, agent or project` })
+      if (!isDeepStrictEqual(child.location, owner.location))
+        return yield* new InvalidError({ reason: `Run child ${child.id} is no longer in the creator's location` })
+      if (!isDeepStrictEqual(child.permissions, owner.permissions))
+        return yield* new InvalidError({ reason: `Run child ${child.id} no longer matches the creator's permissions` })
       return child.id
     })
 
@@ -400,7 +413,7 @@ const layer = Layer.effect(
             last_message_id: item.id,
             last_run_at: now,
             last_outcome: now - due >= LATE_AFTER ? "late" : "fired",
-            last_output: `${action.to.session === undefined ? "Started subagent" : "Prompted"} ${item.sessionID}`,
+            last_output: deliverySummary(item.sessionID, action.to.subagent),
             retry_at: null,
             ...(yield* advance(row)),
             time_updated: now,
@@ -477,7 +490,7 @@ const layer = Layer.effect(
           ok: false,
           output: outcome.output,
           error: sent.failure.message,
-          invalid: sent.failure instanceof InvalidError,
+          invalid: sent.failure instanceof InvalidError || sent.failure instanceof FileSystem.DirectoryNotFoundError,
         })
 
       yield* settle(
@@ -489,7 +502,9 @@ const layer = Layer.effect(
           ...(outcome.state === undefined ? {} : { state: outcome.state }),
           last_run_at: now,
           last_outcome: now - due >= LATE_AFTER ? "late" : "fired",
-          last_output: outcome.output ?? null,
+          last_output: sent
+            ? AutomationCode.handoffOutput(deliverySummary(sent.success.sessionID, send?.to?.subagent), outcome.output)
+            : (outcome.output ?? null),
           retry_at: null,
           ...(yield* advance(row, outcome.done)),
           time_updated: yield* Clock.currentTimeMillis,
@@ -551,7 +566,7 @@ const layer = Layer.effect(
               const error = Cause.squash(cause)
               // The folder (e.g. a removed worktree) is gone; pause rather than retrying every 5 minutes.
               if (error instanceof FileSystem.DirectoryNotFoundError)
-                return pauseWith(row, now, `Directory no longer exists: ${row.directory}`)
+                return pauseWith(row, now, `Directory no longer exists: ${error.directory}`)
               // Back off rather than retrying a failing run on every tick.
               return Effect.logWarning("automation failed to run", { automationID: row.id, cause }).pipe(
                 Effect.andThen(
@@ -584,8 +599,8 @@ const layer = Layer.effect(
       return Math.max(0, Math.min(MAX_SLEEP, row.at - (yield* Clock.currentTimeMillis)))
     })
 
-    // A crash between admitting a prompt and its Session claiming the work leaves the prompt unclaimed and the
-    // Session asleep, so wake every Session whose last automation prompt is still pending.
+    // A crash between admission and a Session claiming the work can lose the wake. Each automation records only its
+    // last admission, not earlier pending children. Inbox IDs and metadata supplied by callers are not run receipts.
     const rewake = db
       .selectDistinct({ sessionID: SessionInboxTable.session_id })
       .from(AutomationTable)
@@ -762,11 +777,7 @@ const layer = Layer.effect(
           // The child of each run hangs off the creating Session.
           if (owner === undefined)
             return yield* new InvalidError({ reason: "A prompt to a subagent needs a session to be its parent" })
-          const agent = yield* subagent(owner, to.subagent)
-          if (agent === undefined)
-            return yield* new InvalidError({
-              reason: `Unknown agent, or one that can't run as a subagent: ${to.subagent}`,
-            })
+          yield* subagent(owner, to.subagent)
         }
         return { type: "prompt" as const, prompt: action.prompt, to }
       }

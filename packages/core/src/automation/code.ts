@@ -21,6 +21,14 @@ const CODE_LIMITS: CodeMode.ExecutionLimits = {
   maxOutputBytes: MAX_OUTPUT_BYTES,
 }
 
+/** Keep the delivery visible first, including when the logs use the entire byte budget. */
+export function handoffOutput(delivery: string, logs?: string) {
+  const text = logs === undefined ? delivery : `${delivery}\n${logs}`
+  if (Buffer.byteLength(text) <= MAX_OUTPUT_BYTES) return text
+  const { read } = new TextEncoder().encodeInto(text, new Uint8Array(MAX_OUTPUT_BYTES - Buffer.byteLength("…")))
+  return text.slice(0, read) + "…"
+}
+
 /** Tools that would let an automation rewrite automations, or move and rename the Session that authorized it. */
 const FORBIDDEN_TOOLS = new Set([
   // Approving the shell tool unattended would approve every command, not a particular command.
