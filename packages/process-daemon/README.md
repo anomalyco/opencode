@@ -225,7 +225,7 @@ to the complete response including metadata.
 
 ## Verification
 
-Install Git, Rust 1.90.0, and Zig 0.16.0. Normal builds do not need bindgen or
+Install Git, Rust 1.90.0, and Zig 0.17.0. Normal builds do not need bindgen or
 libclang and do not depend on a third-party Ghostty Rust crate.
 
 ```sh
@@ -238,7 +238,7 @@ printf 'demo\nlist\nquit\n' | cargo run -- play --name play
 ### Direct Ghostty bindings
 
 `ghostty-revision` pins the official [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty)
-source. `build.rs` fetches that commit, builds libghostty with Zig 0.16, and
+source. `build.rs` fetches that commit, builds libghostty with Zig 0.17, and
 links its static archive (`ghostty-vt-static.lib` on Windows, not the DLL
 import library). It uses an isolated checkout under Cargo's build directory.
 The package declares `links = "ghostty-vt"` so Cargo rejects dependency graphs
@@ -292,10 +292,8 @@ MIRIFLAGS=-Zmiri-tree-borrows cargo +nightly-2026-09-02 miri test --locked --man
 The Windows jobs in the monorepo's
 `.github/workflows/check-process-daemon.yml` build for Windows x64 and ARM64 and execute
 tests natively on `windows-2025` and `windows-11-arm`, respectively. The ARM64
-job uses x64-hosted compilers targeting ARM64 because native ARM64 Zig 0.16
-crashes while building Ghostty; the tests themselves remain native ARM64.
-The job also applies a guarded one-line alignment fix to Zig 0.16's Windows
-stack-trace helper, which otherwise fails to compile for ARM64.
+job uses x64-hosted compilers targeting ARM64; the tests themselves remain
+native ARM64.
 The workflow runs on pull requests and pushes to `dev` that touch
 `packages/process-daemon`, independently of the release workflow.
 It checks formatting, builds the executable, runs all enabled tests, and checks

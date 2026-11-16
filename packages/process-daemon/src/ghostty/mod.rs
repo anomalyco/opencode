@@ -45,15 +45,7 @@ impl Terminal {
         let mut raw = ptr::null_mut();
         // SAFETY: options match the pinned C header; NULL selects Ghostty's allocator.
         check(unsafe {
-            ffi::ghostty_terminal_new(
-                ptr::null(),
-                &mut raw,
-                ffi::GhosttyTerminalOptions {
-                    cols: options.cols,
-                    rows: options.rows,
-                    max_scrollback: options.max_scrollback,
-                },
-            )
+            ffi::ghostty_terminal_new(ptr::null(), &mut raw, options.cols, options.rows)
         })?;
         let terminal = Self {
             raw: NonNull::new(raw).context("Ghostty returned a null terminal")?,
@@ -61,9 +53,16 @@ impl Terminal {
             _actor: PhantomData,
         };
 
-        // SAFETY: userdata is an Rc-derived shared pointer retained until after terminal_free.
+        // SAFETY: the scrollback value is a usize for the duration of the call, and
+        // userdata is an Rc-derived shared pointer retained until after terminal_free.
         // These callbacks only copy responses/mark a title change; they never reenter Ghostty.
         unsafe {
+            let max_scrollback = options.max_scrollback;
+            check(ffi::ghostty_terminal_set(
+                raw,
+                ffi::GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES,
+                &max_scrollback as *const usize as *const _,
+            ))?;
             check(ffi::ghostty_terminal_set(
                 raw,
                 ffi::GHOSTTY_TERMINAL_OPT_USERDATA,

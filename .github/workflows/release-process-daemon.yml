@@ -25,7 +25,7 @@ defaults:
 
 env:
   CARGO_TERM_COLOR: always
-  ZIG_VERSION: 0.16.0
+  ZIG_VERSION: 0.17.0
   GNU_GLIBC_VERSION: "2.30"
   CARGO_ZIGBUILD_VERSION: 0.23.2
 
@@ -188,24 +188,16 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
           cache-key: release-${{ matrix.target }}
-      # Zig 0.16 crashes when building Ghostty on the native ARM64 host, so use
+      # Zig 0.16 crashed when building Ghostty on the native ARM64 host, so use
       # the x64-hosted compiler there (matching check-process-daemon.yml).
       - name: Install x64 Zig for ARM64 cross-compilation
         if: matrix.arch == 'arm64'
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'zig-x64.zip'
-          Invoke-WebRequest 'https://ziglang.org/download/0.16.0/zig-x86_64-windows-0.16.0.zip' -OutFile $archive
-          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e') { throw 'Zig archive checksum mismatch' }
+          Invoke-WebRequest 'https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428') { throw 'Zig archive checksum mismatch' }
           Expand-Archive $archive -DestinationPath $env:RUNNER_TEMP
-          Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.16.0' >> $env:GITHUB_PATH
-      - name: Fix Zig 0.16 ARM64 function-pointer alignment
-        if: matrix.arch == 'arm64'
-        run: |
-          $file = Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.16.0/lib/std/debug/SelfInfo/Windows.zig'
-          $source = [System.IO.File]::ReadAllText($file)
-          $old = '@ptrCast(try si.loadNtdllProc(@tagName(proc)))'
-          if (!$source.Contains($old)) { throw 'Zig alignment workaround no longer matches; re-evaluate it' }
-          [System.IO.File]::WriteAllText($file, $source.Replace($old, '@ptrCast(@alignCast(try si.loadNtdllProc(@tagName(proc))))'))
+          Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.17.0' >> $env:GITHUB_PATH
       - name: Install Rust toolchain and target
         run: rustup toolchain install $env:RUSTUP_TOOLCHAIN --force-non-host --profile minimal --target $env:CARGO_BUILD_TARGET
       - name: Build
