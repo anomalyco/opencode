@@ -639,7 +639,19 @@ export function context(base: Base, carrier: Carrier) {
     }
     return names
   }
-  let inline = 0
+  // A command without an `id` is named by its keys, its title and its place among the layer's commands of the same
+  // keys and title, so a component that mounts again names it as it did. A new name each mount is a new manifest, which
+  // reloads the plugin and mounts the component again, without end (CT-1: tokscope's page).
+  const named = (list: Json[]) => {
+    const seen = new Map<string, number>()
+    return list.map((command: Json): [string, Json] => {
+      if (command.id) return [command.id, command]
+      const shape = JSON.stringify([command.bind ?? null, command.title ?? null])
+      const nth = (seen.get(shape) ?? 0) + 1
+      seen.set(shape, nth)
+      return [`${id}.inline-${Bun.hash(`${shape}${nth}`).toString(36)}`, command]
+    })
+  }
 
   const toasts = (options: Json) => ({
     type: "toast",
@@ -731,9 +743,7 @@ export function context(base: Base, carrier: Carrier) {
         let names: string[] = []
         const apply = (layer: Json) => {
           const enabled = typeof layer?.enabled === "function" ? layer.enabled() : layer?.enabled !== false
-          registration.commands = new Map(
-            (enabled ? (layer?.commands ?? []) : []).map((command: Json) => [command.id ?? `${id}.inline-${++inline}`, command]),
-          )
+          registration.commands = new Map(named(enabled ? (layer?.commands ?? []) : []))
           const next = commands(registration, layer?.mode === "global" ? undefined : "base")
           names.forEach((name) => carrier.uncommand(name))
           names = next

@@ -392,6 +392,46 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     assert!(!matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok), "it stayed");
 }
 
+// Expected (CT-1): a page whose layer's commands have no `id`, as tokscope's, draws and settles: its mount after the
+// reload names them as the first did, so the registrations do not change again. They named them anew each mount, and
+// each reload mounted the page again, about 1,000 times a second.
+#[test]
+fn a_page_whose_commands_have_no_id_draws_and_settles() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let tui = &pipe.harness.tui;
+    tui.keymap.dispatch("v2probe.inline", None);
+    pipe.settle();
+    std::thread::sleep(Duration::from_millis(400));
+    pipe.settle();
+    let quiet = opencode_plugin::pipe::crossed();
+    std::thread::sleep(Duration::from_millis(400));
+    for _ in 0..5 {
+        pipe.harness.app.advance(Duration::from_millis(16));
+    }
+    let after = opencode_plugin::pipe::crossed();
+    assert_eq!((after.received, after.trees), (quiet.received, quiet.trees), "the page did not settle");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+    assert!(pipe.harness.app.text().contains("inline page"), "{}", pipe.harness.app.text());
+    pipe.harness.app.press("j");
+    assert_eq!(logged(&pipe, &log, 1), [json!({ "inline": "j" })]);
+}
+
+// Expected (CT-1, containment): a plugin whose registrations change with each mount of its page, which each reload
+// mounts again, fails, named, rather than reload without end; the client goes on.
+#[test]
+fn a_plugin_whose_registrations_never_settle_fails() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    pipe.harness.tui.keymap.dispatch("v2probe.churn", None);
+    pipe.harness.wait("the churn failed the plugin", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        matches!(pipe.status(PROBE), Some(Status::Failed(_)))
+    });
+    let Some(Status::Failed(error)) = pipe.status(PROBE) else { unreachable!() };
+    assert!(error.contains("changed its registrations more than 64 times"), "{error}");
+}
+
 // Expected (carbon-5): a handler of an activation a reload ended that rejects late fails nothing: the reloaded plugin
 // stays active.
 #[test]

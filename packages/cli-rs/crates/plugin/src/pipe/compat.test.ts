@@ -188,6 +188,37 @@ test("a layer keeps its conditions and ends with its component", async () => {
   expect(ran).toEqual(["gated", "mounted"])
 })
 
+// CT-1: a component that mounts again registers its layer's commands without an `id` under the names it gave them
+// before: a new name each mount was a new manifest, which reloaded tokscope and mounted its page again, without end.
+// Two of the same keys and title in one layer stay two, and the newest mount's handler runs.
+test("a layer's commands without an id keep their names when it mounts again", () => {
+  const fake = host()
+  const ctx = plugin("t.inline", fake)
+  const ran: string[] = []
+  const mount = (round: number) => {
+    let dispose = () => {}
+    solid.createRoot((end: () => void) => {
+      dispose = end
+      ctx.keymap.layer(() => ({
+        commands: [
+          { bind: "escape", title: "back", run: () => ran.push(`back ${round}`) },
+          { bind: "j", title: "next", run: () => ran.push(`j ${round}`) },
+          { bind: "j", title: "next", run: () => ran.push(`j again ${round}`) },
+        ],
+      }))
+    })
+    return dispose
+  }
+  const end = mount(1)
+  const first = [...fake.commands.keys()].filter((name) => name.startsWith("t.inline.inline-"))
+  expect(first.length).toBe(3)
+  end()
+  mount(2)
+  expect([...fake.commands.keys()].filter((name) => name.startsWith("t.inline.inline-"))).toEqual(first)
+  for (const name of first) fake.commands.get(name)!()
+  expect(ran).toEqual(["back 2", "j 2", "j again 2"])
+})
+
 // Bigboi P8-7: a dialog the host closes without an answer settles at once with nothing, also with no dialog after it;
 // `clear()` closes an asked dialog on the host too; a new `show` starts from the default size and place.
 test("each dialog settles once, and clear closes it", async () => {

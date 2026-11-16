@@ -3,7 +3,8 @@
 // as an npm plugin is, with JSX over OpenTUI's intrinsics. It logs each call, one JSON line, to the file its `log`
 // option names. Its commands add an item to the list its home footer claim draws, make that render throw, spin, use an
 // intrinsic without a node or bare text, flood the host with toasts, ask the host's dialogs, show a dialog of its own,
-// open its page, toast a theme color, and use what the layer does not map. An event it hears is logged.
+// open its pages (one whose commands have no `id`, one whose registrations never settle), toast a theme color, and use
+// what the layer does not map. An event it hears is logged.
 
 import { Plugin } from "@opencode/plugin/tui"
 import { RGBA } from "@opentui/core"
@@ -110,6 +111,8 @@ export default Plugin.define({
           run: () => context.ui.router.navigate({ type: "plugin", name: "page", data: { n: 3 } }),
         },
         { id: "v2probe.home", run: () => context.ui.router.navigate({ type: "home" }) },
+        { id: "v2probe.inline", run: () => context.ui.router.navigate({ type: "plugin", name: "inline" }) },
+        { id: "v2probe.churn", run: () => context.ui.router.navigate({ type: "plugin", name: "churn" }) },
         // A handler that rejects later, after a reload perhaps (carbon-5).
         {
           id: "v2probe.reject",
@@ -161,6 +164,28 @@ export default Plugin.define({
             </scrollbox>
           </box>
         )
+      },
+    })
+    // A page whose layer's commands have no `id`, as tokscope's (CT-1), and one whose command is new each mount, which
+    // never settles.
+    context.ui.router.register({
+      name: "inline",
+      render: () => {
+        context.keymap.layer(() => ({
+          commands: [
+            { bind: "escape", title: "back", run: () => context.ui.router.navigate({ type: "home" }) },
+            { bind: "j", title: "next", run: () => log({ inline: "j" }) },
+          ],
+        }))
+        return <text>inline page</text>
+      },
+    })
+    let churns = 0
+    context.ui.router.register({
+      name: "churn",
+      render: () => {
+        context.keymap.layer(() => ({ commands: [{ id: `v2probe.churn-${++churns}`, run() {} }] }))
+        return <text>churn page</text>
       },
     })
     context.ui.slot({
