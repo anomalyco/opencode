@@ -23,8 +23,8 @@
   }
 
   .settings-models-console-groups {
+    --console-rail-strip: 8px;
     margin-inline-start: 4px;
-    padding-inline-start: 8px;
   }
 
   .provider-model-group-trigger,
