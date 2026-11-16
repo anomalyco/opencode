@@ -89,6 +89,15 @@ import type { artifactPages } from "./artifact-preview"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
+// A page can retain a removed node. Check in the same renderer call that reads or acts on the ref.
+function connectedFunction(fn: string) {
+  return `function(...args) { if (!this.isConnected) throw new Error('browser.detached_ref'); return (${fn}\n).apply(this,args) }`
+}
+
+function detachedRef() {
+  return new CodedError(Browser.FailureCode.staleRef, "Element is no longer connected. Take a fresh snapshot and choose a current ref.")
+}
+
 const noVisibleArea = "Element has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport."
 
 /** State every page of the pane shares: the element ref allocator and the owner of the app-wide trace. */
@@ -1374,7 +1383,7 @@ export function createBrowserPage(
                 "Runtime.callFunctionOn",
                 {
                   objectId,
-                  functionDeclaration: action.script,
+                  functionDeclaration: connectedFunction(action.script),
                   arguments: [{ objectId }],
                   awaitPromise: true,
                   returnByValue: true,
@@ -1393,6 +1402,7 @@ export function createBrowserPage(
               context?.sessionID,
             ))
 
+        if (element && value.exceptionDetails?.exception?.description?.startsWith("Error: browser.detached_ref\n")) throw detachedRef()
         if (value.exceptionDetails)
           throw new Error(
             `Page JavaScript threw an exception. Check the script and ${action.ref ? "ref" : "frameID"}; inspect the page before repeating code with side effects. Details: ${(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).slice(0, 800)}`,
@@ -1835,7 +1845,7 @@ export function createBrowserPage(
         "Runtime.callFunctionOn",
         {
           objectId,
-          functionDeclaration,
+          functionDeclaration: connectedFunction(functionDeclaration),
           arguments: args.map((value) => ({ value })),
           returnByValue: true,
           awaitPromise: true,
@@ -1843,6 +1853,7 @@ export function createBrowserPage(
         element.sessionID,
       )
 
+      if (result.exceptionDetails?.exception?.description?.startsWith("Error: browser.detached_ref\n")) throw detachedRef()
       if (result.exceptionDetails)
         throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
 
@@ -1856,11 +1867,7 @@ export function createBrowserPage(
   async function resolve(element: Element) {
     const object = await cdp.send("DOM.resolveNode", { backendNodeId: element.backendID }, element.sessionID)
 
-    if (!object.object.objectId)
-      throw new CodedError(
-        Browser.FailureCode.staleRef,
-        "Element is no longer available. Call browser.snapshot({tabID}) and use a fresh ref; the page may have replaced the element.",
-      )
+    if (!object.object.objectId) throw detachedRef()
 
     return object.object.objectId
   }

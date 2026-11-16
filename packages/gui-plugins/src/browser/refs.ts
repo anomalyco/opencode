@@ -15,6 +15,7 @@ export function documentRefs() {
     previous: (frameID: string, sessionID?: string) =>
       frames.get(frame(frameID, sessionID)) ?? new Map<number, string>(),
     add(frameID: string, sessionID: string | undefined, refs: ReadonlyMap<string, number>) {
+      if (!refs.size) return
       const key = frame(frameID, sessionID)
       const previous = frames.get(key) ?? new Map<number, string>()
       frames.set(key, previous)
@@ -22,6 +23,15 @@ export function documentRefs() {
         elements.set(ref, { frameID, sessionID, backendID })
         previous.set(backendID, ref)
       })
+      while (elements.size > 10_000) {
+        const oldest = elements.entries().next().value
+        if (!oldest) break
+        elements.delete(oldest[0])
+        const source = frame(oldest[1].frameID, oldest[1].sessionID)
+        const reverse = frames.get(source)
+        if (reverse?.get(oldest[1].backendID) === oldest[0]) reverse.delete(oldest[1].backendID)
+        if (!reverse?.size) frames.delete(source)
+      }
     },
     clear() {
       elements.clear()
