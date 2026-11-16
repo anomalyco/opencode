@@ -26,6 +26,16 @@ pub(crate) fn install(home: &Path, spec: &str, name: &str, generation: &str) {
 /// The TUI on Home with `plugins` in `cli.json`, the roots of a run with `HOME=home`, and the JS host; the server
 /// lists `server` as its plugins.
 fn open(home: &opencode_util::temp::TempDir, plugins: &[&str], server: serde_json::Value) -> Option<Pipe> {
+    open_in(home, plugins, server, None)
+}
+
+/// [`open`], working in `cwd` when one is given.
+fn open_in(
+    home: &opencode_util::temp::TempDir,
+    plugins: &[&str],
+    server: serde_json::Value,
+    cwd: Option<&Path>,
+) -> Option<Pipe> {
     let config = config()?;
     let fake = Fake::new(move |seen| match seen.path.as_str() {
         "/api/plugin" => {
@@ -42,7 +52,8 @@ fn open(home: &opencode_util::temp::TempDir, plugins: &[&str], server: serde_jso
     };
     let harness = support::mount(120, 30, deps);
     let root = opencode_util::temp::tempdir().unwrap();
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let cwd = cwd.map_or_else(|| root.path().to_path_buf(), Path::to_path_buf);
+    let external = External { config_dir: root.path().join("config"), cwd, dev: Vec::new() };
     external_with(&harness.tui, external, Some(config));
     Some(Pipe { harness, root })
 }
@@ -183,4 +194,37 @@ fn a_server_plugins_tui_part_loads_from_what_the_server_reports() {
     assert_eq!(status(&pipe, "opencode-session-usage@0.1.8"), Some(Status::Active));
     assert_eq!(status(&pipe, "opencode-sidebar-tokens@0.1.3"), None, "a part without a TUI feature was listed");
     assert_eq!(status(&pipe, "not-cached@1.0.0"), None, "a part the cache does not hold was listed");
+}
+
+// Expected (O-146, js-npm): a server plugin's TUI part whose files are inside the project, as a local path in the
+// project's `opencode.json` is, is a project plugin: it waits for the user's approval, and runs once approved. A part
+// the server names by package, from the user's npm cache, loads with none, as TS loads it, even when the project's
+// configuration named it.
+#[test]
+fn a_project_local_server_part_waits_for_approval_and_a_cached_one_does_not() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    install(home.path(), "opencode-sidebar-tokens@0.1.3", "opencode-sidebar-tokens", "1794700000000");
+    let work = home.path().join("work");
+    std::fs::create_dir_all(work.join(".git")).unwrap();
+    let local = work.join("tools").join("prompt");
+    crate::ports::unpack("opencode-sidebar-prompt", &local);
+    let part = |source: serde_json::Value| serde_json::json!({ "source": source, "features": { "server": true, "tui": true }, "state": { "status": "active" } });
+    let target = local.to_string_lossy().into_owned();
+    let server = serde_json::json!([
+        part(serde_json::json!({ "type": "local", "path": target })),
+        part(serde_json::json!({ "type": "package", "target": "opencode-sidebar-tokens@0.1.3" })),
+    ]);
+    let Some(pipe) = open_in(&home, &[], server, Some(&work)) else { return };
+    pipe.active("sidebar.tokens");
+    pipe.harness.wait("the part is held", || {
+        pipe.settle();
+        status(&pipe, &target) == Some(Status::Pending)
+    });
+    assert_eq!(pipe.status("sidebar.prompt"), None, "the project's part ran before its approval");
+    let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(&pipe.harness.tui, &target) else {
+        panic!("no artifact held for {target}")
+    };
+    let decision = opencode_plugin::loader::approval::Decision::Approved;
+    opencode_tui::plugins::host::decide(&pipe.harness.tui, &target, &artifact, decision).unwrap();
+    pipe.active("sidebar.prompt");
 }

@@ -225,9 +225,14 @@ impl Loader {
             None => Vec::new(),
         };
         // A part that does not resolve is left out, as TS leaves out an optional target it cannot load
-        // (`context.tsx:362-363`).
+        // (`context.tsx:362-363`). One whose files are inside the project, as a local path of the project's
+        // configuration is, is the project's and needs approval (O-146); a package of the user's npm cache does not.
+        let project = project_root(&self.cwd);
+        let project = std::fs::canonicalize(&project).unwrap_or(project);
         let server = server.into_iter().filter_map(|target| {
-            Some(Target { local: Some(self.local(&target)?), target, options: None, project: false })
+            let local = self.local(&target)?;
+            let inside = std::fs::canonicalize(&local).unwrap_or_else(|_| local.clone()).starts_with(&project);
+            Some((Target { local: Some(local), target, options: None, project: inside }, true))
         });
         let configured = self.configured.borrow();
         let configured = configured.iter().map(|entry| Target {
@@ -237,22 +242,28 @@ impl Loader {
             project: false,
         });
         let mut targets: Vec<Target> = Vec::new();
-        for target in discovered.chain(server).chain(configured) {
+        let discovered = discovered.map(|target| (target, false));
+        let configured = configured.map(|target| (target, false));
+        for (target, from_server) in discovered.chain(server).chain(configured) {
             let key = |target: &Target| {
                 target
                     .local
                     .as_ref()
                     .map_or_else(|| target.target.clone(), |local| local.to_string_lossy().into_owned())
             };
-            let alias = |known: &Target| {
-                known.project && !target.project && {
-                    // A library's file, or a TypeScript plugin's directory (review carbon-1).
-                    let file = |target: &Target| {
-                        target.library().or_else(|| target.local.clone()).and_then(|file| identity(&file))
-                    };
-                    file(known).is_some_and(|known| file(&target) == Some(known))
-                }
+            // A library's file, or a TypeScript plugin's directory (review carbon-1).
+            let same_file = |known: &Target| {
+                let file = |target: &Target| {
+                    target.library().or_else(|| target.local.clone()).and_then(|file| identity(&file))
+                };
+                file(known).is_some_and(|known| file(&target) == Some(known))
             };
+            let alias = |known: &Target| known.project && !target.project && same_file(known);
+            // A project's server part that names a project's plugin directory another way is that plugin: one target,
+            // one approval.
+            if from_server && target.project && targets.iter().any(|known| known.project && same_file(known)) {
+                continue;
+            }
             match targets.iter_mut().find(|known| key(known) == key(&target) || alias(known)) {
                 Some(known) => *known = target,
                 None => targets.push(target),

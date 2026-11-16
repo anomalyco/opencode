@@ -1989,3 +1989,29 @@ fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
     let watched = loader.watch_dirs();
     assert!(!watched.iter().any(|dir| dir.starts_with(&cache)), "{watched:?}");
 }
+
+// Expected (O-146, js-npm): a server part inside the project is a project target, one from the npm cache is not; a part
+// that names a project's plugin directory another way (a link) is that plugin, one target with one approval.
+#[cfg(unix)]
+#[test]
+fn a_server_part_inside_the_project_is_the_projects() {
+    let project = Project::new();
+    let dir = project.repo().join(".opencode/plugins/js");
+    write(&dir.join("tui.ts"), "export default {}\n");
+    let other = project.repo().join("tools/part");
+    write(&other.join("tui.ts"), "export default {}\n");
+    let link = project.repo().join("linked");
+    std::os::unix::fs::symlink(&dir, &link).unwrap();
+    let cache = project.root.path().join("cache");
+    let cached = cache.join("npm/pkg@1.0.0/1/node_modules/pkg");
+    write(&cached.join("tui.ts"), "export default {}\n");
+    let host = host();
+    let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
+    let loader = project.loader(Rc::new(Fake::default()), Vec::new()).with_npm(cache).with_scripts(scripts);
+    let parts = [&link, &other].map(|path| path.to_string_lossy().into_owned());
+    loader.set_server(vec![parts[0].clone(), parts[1].clone(), "pkg@1.0.0".into()]);
+    let targets: Vec<(String, bool)> =
+        loader.targets().into_iter().map(|target| (target.target, target.project)).collect();
+    let dir = dir.to_string_lossy().into_owned();
+    assert_eq!(targets, [(dir, true), (parts[1].clone(), true), ("pkg@1.0.0".to_owned(), false)]);
+}
