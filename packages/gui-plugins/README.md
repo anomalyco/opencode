@@ -25,8 +25,8 @@ flowchart LR
 
 The desktop `Browser` contract (`@opencode/plugin/gui/browser`) can return a handle to a new tab in the session on screen. Use
 `const id = await browser.experimental.open(session, url)` and `await browser.experimental.close(id)` from the same
-plugin instance. The handle is not a layout or agent tab ID. An unknown or expired handle does nothing; handles
-expire when the pane detaches or someone navigates the tab. The shipped `open(session, url)` is an alias for `experimental.open`.
+plugin instance. The branded handle survives a session rebind, not a plugin/window restart or a takeover navigation.
+Close returns true only for a tab closed now; a page awaiting confirmation remains open. `open(session, url)` stays fire-and-forget.
 
 ```text
 src/pairing/
@@ -339,7 +339,7 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `BuiltinPanel`, `BuiltinPanelTab`                       | `legacy` stored keys of a panel; `first` and stable `dom` ids of a tab                         |
 | `BuiltinCommand`                                        | `follows`: share another command's shortcut inside `scope`                                     |
 | `BuiltinStore`, `BuiltinStoreFrom`                      | Window stores imported from parts of the app's own keys                                        |
-| `builtinContext(ctx)`                                   | `ctx.desktop.forceFocus`, `ctx.locale.setDirection`                                            |
+| `builtinContext(ctx)`                                   | `ctx.desktop.forceFocus`, `ctx.locale.setDirection`, `ctx.provideFor` for per-consumer contracts |
 | `builtinMainContext(ctx)`, `MainStoreFrom`, `Lifecycle` | Main stores imported from settings files or other namespaces, and `lifecycle.restart(handoff)` |
 | `builtinCatalog(catalog)`, `BuiltinCatalog`             | Locales other than English as loaders, loaded when the user picks the locale                   |
 

@@ -854,7 +854,7 @@ function createHost(input: HostInput) {
           const previous = clients.get(signal)
 
           if (previous) return previous
-          const live = { status: "active", value: bind(consumer, signal), generation } as const
+          const live = { status: "active", value: untrack(() => bind(consumer, signal)), generation } as const
           clients.set(signal, live)
 
           return live

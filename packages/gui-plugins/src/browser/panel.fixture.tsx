@@ -51,7 +51,7 @@ import browserEn from "./i18n/en"
 import type definition from "./index"
 import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
-import { BrowserPane, type PaneEvent, type PromptAnswer } from "./ipc"
+import { BrowserPane, PluginTabHandle, type PaneEvent, type PromptAnswer } from "./ipc"
 import { pageShortcut } from "./keys"
 import { normalizeURL, refusal } from "./policy"
 import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
@@ -488,8 +488,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       },
       reveal: async () => undefined,
       openPage: async ({ expected }) => { setStore("external", (items) => [...items, expected]) },
-      createTab: async () => "handle",
-      closeTab: async () => undefined,
+      createTab: async () => PluginTabHandle.make("handle"),
+      closeTab: async () => true,
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
         setStore({ cookies: 0, generation: store.generation + 1 })
@@ -1272,8 +1272,8 @@ export function mountBrowserRegion(input: RegionHost) {
       reveal: async () => undefined,
       close: async () => undefined,
       openPage: async () => undefined,
-      createTab: async () => "handle",
-      closeTab: async () => undefined,
+      createTab: async () => PluginTabHandle.make("handle"),
+      closeTab: async () => true,
       forget: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {

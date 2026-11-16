@@ -105,6 +105,8 @@ export function createBrowserPane(input: {
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
+  // Rebind may restore the same tabs. Close rights stay in memory and never move to another window or session.
+  const owners = new WeakMap<BrowserWindow, Map<string, ReturnType<typeof pluginTabs>>>()
   // Release each tab's registration with the profile's extensions.
   const grants = new WeakMap<BrowserPage, () => void>()
   const searches = new WeakMap<BrowserPage, ReturnType<typeof createPageFind>>()
@@ -158,6 +160,11 @@ export function createBrowserPane(input: {
       win.webContents.once("destroyed", closed)
       win.webContents.on("did-start-navigation", navigate)
 
+      const scopes = owners.get(win) ?? new Map<string, ReturnType<typeof pluginTabs>>()
+      const rights = scopes.get(storageKey) ?? pluginTabs()
+      scopes.set(storageKey, rights)
+      owners.set(win, scopes)
+
       const handle: Handle = {
         previewFailure: previews.failure,
         window,
@@ -175,7 +182,7 @@ export function createBrowserPane(input: {
         },
         pages: new Map(),
         activity: new Map(),
-        pluginTabs: pluginTabs(),
+        pluginTabs: rights,
         requests: new Map(),
       }
 
@@ -484,21 +491,19 @@ export function createBrowserPane(input: {
 
       return grant.id
     },
-    async closeTab(window: number, owner: string, id: string) {
-      for (const [binding, handle] of handles) {
-        if (handle.window !== window) continue
+    async closeTab(window: number, binding: string, owner: string, id: string) {
+      owned(window, binding)
+      const tabID = handles.get(binding)?.pluginTabs.resolve(owner, id)
 
-        const tabID = handle.pluginTabs.resolve(owner, id)
+      if (!tabID || !selectTabSlot(machine.state, binding, tabID)) return false
+      const closing = page(binding, tabID)
 
-        if (!tabID) continue
-        const closing = page(binding, tabID)
+      if (closing && !(await closing.leave())) return false
 
-        if (closing && !(await closing.leave())) return
+      if (handles.get(binding)?.pluginTabs.resolve(owner, id) !== tabID) return false
+      dispatchBinding(binding, { type: "tab.closed", tabID })
 
-        if (handle.pluginTabs.resolve(owner, id) === tabID) dispatchBinding(binding, { type: "tab.closed", tabID })
-
-        return
-      }
+      return true
     },
     forget(server: string, session: string) {
       const storageKey = `${server}\n${session}`

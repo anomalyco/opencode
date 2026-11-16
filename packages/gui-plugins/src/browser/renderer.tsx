@@ -14,7 +14,7 @@ import {
 import { Button } from "@opencode/ui/button"
 import { Command, createKeyed, LinkHandler, MenuItem, SettingsPage, Style, type Plugin } from "@opencode/plugin/gui"
 import { builtinContext, BuiltinCommand, BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
-import { Browser } from "@opencode/plugin/gui/browser"
+import { Browser, type ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import type definition from "./index"
 import type { Model } from "./model"
 import { uuid } from "@opencode/util/uuid"
@@ -142,6 +142,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   builtinContext(ctx).provideFor(Browser, (_consumer, signal) => {
     const owner = uuid()
+    const targets = new Map<ExperimentalBrowserTab, string>()
 
     const experimental: Browser["experimental"] = {
       async open(session, url) {
@@ -151,18 +152,29 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
         if (!pane) throw new Error("browser.pane.unavailable")
 
-        return pane.createTab(session.key, owner, url)
+        const id = await pane.createTab(session.key, owner, url)
+        signal.throwIfAborted()
+        ctx.signal.throwIfAborted()
+        targets.set(id, session.key)
+
+        return id
       },
       async close(id) {
-        if (!id || id.length > 128 || signal.aborted || ctx.signal.aborted) return
-        await model()?.closeOwned(owner, id)
+        const session = targets.get(id)
+
+        if (!session || signal.aborted || ctx.signal.aborted) return false
+        const closed = await model()?.closeOwned(session, owner, id) ?? false
+
+        if (closed) targets.delete(id)
+
+        return closed
       },
     }
 
     return {
       attached: (session) => model()?.attached(session) ?? false,
       canOpen: (session, path) => model()?.canOpen(session, path) ?? false,
-      open: experimental.open,
+      open: (session, url) => model()?.openURL(session, url),
       experimental,
       openFile: (session, path) => model()?.openFile(session, path),
     }

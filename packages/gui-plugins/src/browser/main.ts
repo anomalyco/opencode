@@ -137,7 +137,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     load: async (input, caller) => (await pane()).load(caller.window, input.binding, input.tabID),
     command: async (input, caller) => (await pane()).command(caller.window, input.binding, input.command),
     createTab: async (input, caller) => (await pane()).createTab(caller.window, input.binding, input.owner, input.url),
-    closeTab: async (input, caller) => (await pane()).closeTab(caller.window, input.owner, input.id),
+    closeTab: async (input, caller) => (await pane()).closeTab(caller.window, input.binding, input.owner, input.id),
     find: async (input, caller) => (await pane()).find(caller.window, input.binding, input.tabID, input.action),
     notice: async (input, caller) => (await pane()).notice(caller.window, input.binding, input.tabID, input.token, input.dismiss),
     answer: async (input, caller) =>

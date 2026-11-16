@@ -3,6 +3,7 @@ import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "s
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import { createKeyed, type SessionRef, type SetupContext } from "@opencode/plugin/gui"
 import { readHref } from "./comment"
 import {
@@ -629,13 +630,22 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     openFile,
     openURL,
     async createTab(sessionKey: string, owner: string, url: string) {
+      if (sessions.current()?.key !== sessionKey) throw new Error("browser.pane.notOnScreen")
+      dispatch({ type: "session.wake", sessionKey })
       const target = registrations.get(sessionKey)
 
       if (!target) throw new Error("browser.pane.unavailable")
 
       return target.registration.createTab(owner, url, () => sessions.current()?.key === sessionKey)
     },
-    closeOwned: (owner: string, id: string) => client()?.closeTab({ owner, id }),
+    async closeOwned(sessionKey: string, owner: string, id: ExperimentalBrowserTab) {
+      dispatch({ type: "session.wake", sessionKey })
+      const target = registrations.get(sessionKey)
+
+      if (!target) return false
+
+      return target.registration.closeTab(owner, id)
+    },
     command,
     tab,
     /** Opens a blank tab for the user, whose pane then focuses the address field. */

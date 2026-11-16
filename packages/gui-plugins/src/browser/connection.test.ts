@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
 import { openBinding } from "./connection"
+import { PluginTabHandle } from "./ipc"
 import type { BrowserPane, PaneEvent } from "./ipc"
 
 type Client = IpcClient<(typeof BrowserPane)["spec"]>
@@ -40,8 +41,8 @@ function fixture(reject?: Error) {
     clearSite: async () => undefined,
     reveal: async () => undefined,
     openPage: async () => undefined,
-    createTab: async () => "handle",
-    closeTab: async () => undefined,
+    createTab: async () => PluginTabHandle.make("handle"),
+    closeTab: async () => true,
     close: async (input) => {
       closed.push(input.binding)
     },
@@ -108,5 +109,5 @@ test("a plugin open requires its session on screen, including after registration
   const opening = app.registration.createTab("owner", url, () => route.current)
   route.current = false
   await expect(opening).rejects.toThrow("notOnScreen")
-  expect(await app.registration.createTab("owner", url, () => true)).toBe("handle")
+  expect(await app.registration.createTab("owner", url, () => true)).toBe(PluginTabHandle.make("handle"))
 })

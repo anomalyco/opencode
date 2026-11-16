@@ -1,5 +1,9 @@
 import { Contract } from "./core.js"
+import type { Brand } from "effect"
 import type { SessionRef } from "./host-apis.js"
+
+/** Experimental: an opaque close right, not an agent or layout tab ID. May change without compatibility guarantees. */
+export type ExperimentalBrowserTab = string & Brand.Brand<"ExperimentalBrowserTab">
 
 /** What the built-in browser offers other plugins: a session's desktop browser pane. Read it with `ctx.use(Browser)`. */
 export interface Browser {
@@ -23,10 +27,8 @@ export interface Browser {
    *
    * @param session - The session whose pane opens it.
    * @param url - The URL to open.
-   * @returns An opaque tab handle owned by this plugin instance. Rejects when the pane cannot open the tab.
-   * @deprecated Use `experimental.open`. Removed in the next minor.
    */
-  open(session: SessionRef, url: string): Promise<string>
+  open(session: SessionRef, url: string): void
   /** Experimental: may change without compatibility guarantees. */
   readonly experimental: {
     /**
@@ -34,12 +36,13 @@ export interface Browser {
      * @param session - The session whose pane opens it.
      * @param url - The URL to open.
      */
-    open(session: SessionRef, url: string): Promise<string>
+    open(session: SessionRef, url: string): Promise<ExperimentalBrowserTab>
     /**
-     * Closes the tab this instance opened. Navigating it elsewhere revokes the handle. Unknown, foreign, revoked and already closed handles do nothing.
+     * Requests closure of the tab this instance opened. The handle survives session suspension and rebind, not a plugin or window restart or a takeover navigation.
+     * @returns True if closed now. False for unknown, foreign, revoked or already closed handles, or if beforeunload asks for confirmation. The person can still confirm or cancel in the pane.
      * @param id - The handle returned by this plugin's `open`, not an agent or layout tab ID.
      */
-    close(id: string): Promise<void>
+    close(id: ExperimentalBrowserTab): Promise<boolean>
   }
   /**
    * Opens a workspace file as a browser tab. Local tabs display file: addresses and remote tabs display workspace: addresses. Check `canOpen(session, path)` first.

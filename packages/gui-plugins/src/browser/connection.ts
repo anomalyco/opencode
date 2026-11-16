@@ -1,5 +1,6 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
+import type { ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import { uuid } from "@opencode/util/uuid"
 import type { BrowserPane, FindAction, PaneEvent, PromptAnswer } from "./ipc"
 
@@ -18,7 +19,8 @@ export type Registration = {
   /** Creates a restored tab's page, which then reports its embed. */
   load(tabID: Browser.TabID): void
   command(command: Browser.Action): Promise<void>
-  createTab(owner: string, url: string, onScreen: () => boolean): Promise<string>
+  createTab(owner: string, url: string, onScreen: () => boolean): Promise<ExperimentalBrowserTab>
+  closeTab(owner: string, id: ExperimentalBrowserTab): Promise<boolean>
   inspect(tabID: Browser.TabID, enabled: boolean): void
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
   zoom(tabID: Browser.TabID, zoom: Zoom): void
@@ -69,6 +71,7 @@ export function openBinding(input: {
       void ready.then(() => client.load({ binding, tabID })).catch(() => undefined)
     },
     command: (command) => ready.then(() => client.command({ binding, command })),
+    closeTab: (owner, id) => ready.then(() => client.closeTab({ binding, owner, id })),
     async createTab(owner, url, onScreen) {
       if (!onScreen()) throw new Error("browser.pane.notOnScreen")
       await ready
