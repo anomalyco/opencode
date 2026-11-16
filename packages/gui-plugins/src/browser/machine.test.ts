@@ -94,6 +94,13 @@ const ready = (state = replay(attach()).state) => replay([paneState(state, inven
 const types = (effects: readonly MachineEffect[]) => effects.map((effect) => effect.type)
 
 describe("browser pane machine", () => {
+  test("a cold registration that cannot reach the server keeps main's saved inventory until retry", () => {
+    const start = replay(attach()).state
+    const saved = inventory(tab(tabA, "workspace://ses_a/report.html"))
+    const closed = transition(start, paneState(start, saved, "browser.pane.registration.closed"))
+    expect(attachment(closed.state)?.browser).toEqual(saved)
+    expect(phase(closed.state)?.status).toBe("backoff")
+  })
   test("commands during backoff answer at once and keep the retry timer", () => {
     const start = ready()
     const closed = transition(start, paneState(start, null, "browser.pane.registration.closed"))

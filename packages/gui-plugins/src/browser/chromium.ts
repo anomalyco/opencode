@@ -497,7 +497,7 @@ export function createBrowserPage(
     if (agentDriven) contents.setBackgroundThrottling(false)
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
-    dispatch({ type: "navigation.failed", code, description, url, isMainFrame }),
+    dispatch({ type: "navigation.failed", code, description, url, preview: preview(url), isMainFrame }),
   )
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame) return
@@ -758,6 +758,9 @@ export function createBrowserPage(
   }
 
   const reload = async () => {
+    const tab = state()
+
+    if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url)
     const address = reloadAddress(contents.getURL(), state().url, options.previewHost, policy.fileRoots ?? [], policy.remote)
 
     if (address) return void await load(address)

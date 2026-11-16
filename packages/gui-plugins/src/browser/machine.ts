@@ -734,7 +734,8 @@ function paneState(
   }
 
   // Main closed the binding, or never took it. Keep the tabs and register again with backoff.
-  if (event.error === "browser.pane.registration.closed") return backoff(state, key, attachment, phase)
+  if (event.error === "browser.pane.registration.closed")
+    return backoff(state, key, event.state ? { ...attachment, browser: event.state } : attachment, phase)
 
   // Idle eviction has no retry timer: a user or Session execution wakes it on demand.
   if (event.error === "browser.pane.suspended") {

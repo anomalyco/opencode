@@ -291,7 +291,7 @@ function close(state: ActiveBinding, reason: PaneCloseReason, forget: boolean): 
     binding: state.binding,
     event: {
       type: "state",
-      state: reason === "browser.pane.suspended" ? selectInventory(state) : null,
+      state: reason === "browser.pane.suspended" || (!forget && state.tabs.size > 0 && reason === "browser.pane.registration.closed") ? selectInventory(state) : null,
       error: reason,
     },
   })

@@ -51,6 +51,12 @@ test("a failed local history entry has no address to open, not the previous HTTP
   expect(documentTab(replay([event], shown()).state, history)).toMatchObject({ url: "about:blank", loadError: "ERR_FAILED" })
 })
 
+test.each(["workspace://ses_a/report.html", "file:///work/report.html", "artifact://art_a/"])("a failed restore retains its verified retry address %s", (url) => {
+  const event = { type: "navigation.failed", code: -2, description: "ERR_FAILED", url: "oc-preview://grant/report.html", preview: url, isMainFrame: true } as const
+  expect(documentTab(replay([event], createDocumentState({ url, generation: 1, title: "Report" })).state, history)).toMatchObject({ url, loadError: "ERR_FAILED" })
+  expect(documentTab(replay([event], shown()).state, history).url).toBe("about:blank")
+})
+
 describe("uncommitted navigations keep the document", () => {
   test("a download keeps the generation, refs and the shown page", () => {
     const start = shown()

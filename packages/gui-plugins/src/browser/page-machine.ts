@@ -64,6 +64,7 @@ export type DocumentEvent =
       readonly code: number
       readonly description: string
       readonly url: string
+      readonly preview?: string
       readonly isMainFrame: boolean
     }
   | { readonly type: "navigation.in-page"; readonly url: string; readonly title: string; readonly isMainFrame: boolean }
@@ -260,12 +261,15 @@ function failed(state: Open, event: Extract<DocumentEvent, { type: "navigation.f
   const replaced = state.pending !== undefined || state.status === "restoring"
   // A failed preview never supplied a validated file. The error document has no external destination.
   const local = /^(?:oc-preview|file):/i.test(event.url)
+  // A previous commit (or stored restore) is evidence; navigation.started alone is not. In particular never
+  // promote a failed virtual History API entry or a raw file: URL to an address the OS could reveal.
+  const retained = local && event.preview === state.url
 
   const next: Open = {
     status: "failed",
     generation: replaced && state.status !== "restoring" ? state.generation + 1 : state.generation,
-    url: local ? "about:blank" : event.url,
-    title: local ? "" : state.title,
+    url: retained ? state.url : local ? "about:blank" : event.url,
+    title: local && !retained ? "" : state.title,
     origin: state.origin,
     icon: state.icon,
     iconAttempt: state.iconAttempt,

@@ -72,6 +72,15 @@ function attached(restore?: Browser.State) {
   return play(createPaneState(), registered(restore), on({ type: "server.attached", fileRoots: [] })).state
 }
 
+test("an offline registration returns the saved inventory for retry without forgetting it", () => {
+  const tab = { id: tabA, url: "workspace://ses_x/report.html" }
+  const start = registered()
+
+  if (start.type !== "registered") throw new Error("expected registration")
+  const result = play(createPaneState(), { ...start, saved: { tabs: [tab], focusedTabID: tabA } }, on({ type: "attachment.ended", outcome: "closed" }))
+  expect(closeEvents(result.effects)).toMatchObject([{ state: { tabs: [tab] }, error: "browser.pane.registration.closed" }])
+})
+
 function entry(state: PaneState, binding = "b1") {
   const value = selectBinding(state, binding)
 
