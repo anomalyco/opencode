@@ -601,6 +601,84 @@ fn measure_one_call_on_each_carrier() {
         std::hint::black_box(crate::contain::thread_cpu());
     });
     println!("thread_cpu: {cpu:?}");
+    heavy_calls();
+}
+
+/// The heavy claims' Luau: the first reads a large `Changed` and keeps its node, the second draws 200 rows.
+const HEAVY: &str = r#"
+    local plugin = require("@opencode/plugin")
+    return plugin.define(function(setup)
+        setup:slot({ path = "home.footer" }, function(_read, input, changed)
+            local sessions = changed.sessions or {}
+            return if #sessions > 0 and input.session_id then plugin.KEEP else plugin.HIDE
+        end)
+        setup:slot({ path = "sidebar.content" }, function()
+            local rows = {}
+            for i = 1, 200 do
+                rows[i] = plugin.text({ plugin.span("row ", { fg = "text.muted" }), plugin.span(tostring(i), { bold = true }) })
+            end
+            return plugin.show(plugin.column(rows))
+        end)
+    end)
+"#;
+
+/// The heavy claims in Rust, linked.
+fn heavy(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.slot(abi::Placement::append("home.footer"), |_, input, changed| {
+        match !changed.sessions.is_empty() && input.session_id.is_some() {
+            true => abi::Render::Keep,
+            false => abi::Render::Hide,
+        }
+    });
+    setup.slot(abi::Placement::append("sidebar.content"), |_, _, _| {
+        let rows = (1..=200)
+            .map(|i| abi::Node::text([abi::Span::new("row ").fg("text.muted"), abi::Span::new(i.to_string()).bold()]))
+            .collect();
+        abi::Render::Show(abi::Node::column(rows))
+    });
+    Ok(())
+}
+
+/// One input-heavy call (a render handed a `Changed` of 200 sessions, 200 lists and 200 messages) and one
+/// output-heavy call (a render that returns 200 rows of two spans), on each carrier.
+fn heavy_calls() {
+    let ids: Vec<String> = (0..200).map(|i| format!("ses_{i:04}")).collect();
+    let mut changed = abi::Changed::default();
+    changed.sessions = ids.clone();
+    changed.lists = ids.clone();
+    changed.messages = ids.iter().map(|id| (id.clone(), format!("msg_{id}"))).collect();
+    let input = abi::SlotInput {
+        session_id: Some("ses_0001".into()),
+        prompt: Some(abi::PromptInput { shell: false, show_details: true }),
+        ..abi::SlotInput::default()
+    };
+    let mut linked = abi::Registered::new("test.heavy", None);
+    heavy(&mut linked.setup()).unwrap();
+    let mut luau = abi::Registered::new("test.luau", None);
+    let compiled = Rc::new(vm::Compiled::new(&sources(HEAVY), "init.luau").unwrap());
+    let _plugin = bind::setup(&compiled, &mut luau.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
+    let rounds = 20_000;
+    let plain = abi::SlotInput::default();
+    let little = abi::Changed::everything();
+    for (name, registered) in [("linked", &linked), ("luau", &luau)] {
+        let mut renders = registered.renders().map(|(_, _, render)| render);
+        let (reads, draws) = (renders.next().unwrap(), renders.next().unwrap());
+        let read = each(rounds, || drop(std::hint::black_box(reads(&Nop, &input, &changed))));
+        let drawn = each(rounds / 10, || drop(std::hint::black_box(draws(&Nop, &plain, &little))));
+        println!("{name}: input-heavy {read:?}, output-heavy {drawn:?}");
+    }
+    let mut renders = linked.renders().map(|(_, _, render)| render);
+    let (reads, draws) = (renders.next().unwrap(), renders.next().unwrap());
+    let carried = |render: &abi::RenderFn, input: &abi::SlotInput, changed: &abi::Changed| {
+        let request = abi::Request::Render { claim: 0, input: input.clone(), changed: changed.clone() };
+        let bytes = serde_json::to_vec(&request).unwrap();
+        let abi::Request::Render { input, changed, .. } = serde_json::from_slice(&bytes).unwrap() else { panic!() };
+        let answer = serde_json::to_vec(&render(&Nop, &input, &changed)).unwrap();
+        drop(std::hint::black_box(serde_json::from_slice::<abi::Render>(&answer).unwrap()));
+    };
+    let read = each(rounds, || carried(reads, &input, &changed));
+    let drawn = each(rounds / 10, || carried(draws, &plain, &little));
+    println!("c-abi: input-heavy {read:?}, output-heavy {drawn:?}");
 }
 
 // The spike's memory measure, printed: what an idle VM of each example holds once its setup ran, and what compiling
