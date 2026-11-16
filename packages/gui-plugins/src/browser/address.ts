@@ -96,3 +96,11 @@ export function externalPage(url: string, local: boolean) {
 
   return action === "browser" || (action === "reveal" && /\.html?$/i.test(new URL(url).pathname))
 }
+
+/** `shown` is main's committed address or the URL Chromium reported failing, never a renderer-supplied target. */
+export function pageHandoff(actual: string, display: string, shown: string, failed: boolean, local: boolean) {
+  if (externalAction(shown, local) === "browser" && (failed || actual === shown)) return { kind: "web" as const, url: shown }
+
+  if (!failed && actual.startsWith("oc-preview://") && display === shown && shown.startsWith("file:") && externalPage(shown, local))
+    return { kind: "preview" as const, url: shown }
+}

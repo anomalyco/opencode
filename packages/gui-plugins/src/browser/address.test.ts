@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { addressParts, externalAction, externalPage, resolveAddress } from "./address"
+import { addressParts, externalAction, externalPage, pageHandoff, resolveAddress } from "./address"
 import { remember, suggest } from "./history"
 import { normalizeURL, refusal } from "./policy"
 
@@ -127,6 +127,17 @@ test("a local preview may be revealed by tab ID but never launched by URL", () =
 
   expect(externalAction("https://example.org", false)).toBe("browser")
   expect(externalAction("oc-preview://other/repo/x", true)).toBeUndefined()
+})
+
+test("only a main-reported HTTP(S) failure can be handed off without a matching committed document", () => {
+  const web = "https://localhost:4000/"
+  const file = "file:///work/report.html"
+  const preview = "oc-preview://grant/work/report.html"
+  expect(pageHandoff("chrome-error://chromewebdata/", "about:blank", web, true, true)).toEqual({ kind: "web", url: web })
+  expect(pageHandoff(web, web, "https://other.invalid/", false, true)).toBeUndefined()
+  expect(pageHandoff(preview, file, file, true, true)).toBeUndefined()
+  expect(pageHandoff(preview, file, file, false, true)).toEqual({ kind: "preview", url: file })
+  expect(pageHandoff(file, file, file, false, true)).toBeUndefined()
 })
 
 test.each([

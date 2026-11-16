@@ -81,7 +81,6 @@ export function pageMenu(
     item("back", { type: "back" }, options.back),
     item("forward", { type: "forward" }, options.forward),
     item("reload", { type: "reload" }),
-    ...(options.openPage ? [item("openPage", { type: "openPage" })] : []),
   ]
 
   const links = link
@@ -149,7 +148,9 @@ export function pageMenu(
       ]
     : []
 
-  return [navigation, links, images, spelling, edit, spell, options.extensions]
+  const handoff = [options.openPage ? item("openPage", { type: "openPage" }) : { label: options.t("menu.pageUnavailable"), enabled: false }]
+
+  return [navigation, handoff, links, images, spelling, edit, spell, options.extensions]
     .filter((group) => group.length)
     .flatMap((group, index) => (index ? [{ type: "separator" }, ...group] : group))
 }

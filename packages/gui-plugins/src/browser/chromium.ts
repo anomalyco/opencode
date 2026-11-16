@@ -74,7 +74,7 @@ import { navigationNotice, popupActivated } from "./refusal-notice"
 import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { reloadAddress } from "./preview"
-import { externalPage } from "./address"
+import { pageHandoff } from "./address"
 import { defaultBrowser } from "./default-browser"
 import { FileVerificationError } from "@opencode/util/file-verification"
 import type { workspacePages } from "./workspace-pages"
@@ -923,21 +923,26 @@ export function createBrowserPage(
   const embed = options.embeds.create(view, win)
   constructing.defer(() => embed.dispose())
 
-  const canOpenPage = () => !closed() && !contents.isDestroyed() && !state().loadError &&
-    externalPage(displayURL(contents.getURL()), options.local)
-
-  const openPage = async (expected: string) => {
-    if (!canOpenPage()) throw new Error("browser.menu.failed")
+  const handoff = () => {
+    if (closed() || contents.isDestroyed()) return
+    const tab = state()
     const actual = contents.getURL()
 
-    if (displayURL(actual) !== expected || state().url !== expected) throw new Error("browser.menu.failed")
+    return pageHandoff(actual, displayURL(actual), tab.url, !!tab.loadError, options.local)
+  }
 
-    if (destinationOrigin(actual)) return electron.shell.openExternal(actual)
+  const openPage = async (expected: string) => {
+    const target = handoff()
 
+    if (!target || target.url !== expected) throw new Error("browser.menu.failed")
+
+    if (target.kind === "web") return electron.shell.openExternal(target.url)
+
+    const actual = contents.getURL()
     const launch = await defaultBrowser()
 
     const opened = await options.workspace?.external(actual, async (file) => {
-      if (!canOpenPage() || contents.getURL() !== actual) throw new Error("browser.menu.failed")
+      if (handoff()?.url !== expected || contents.getURL() !== actual) throw new Error("browser.menu.failed")
       await launch(file)
     })
 
@@ -946,8 +951,8 @@ export function createBrowserPage(
 
   const menu = attachPageMenu(win, contents, {
     ...options.menu,
-    canOpenPage,
-    openPage: () => openPage(displayURL(contents.getURL())),
+    canOpenPage: () => !!handoff(),
+    openPage: () => openPage(state().url),
     open: (url) => {
       const current = contents.getURL()
 
