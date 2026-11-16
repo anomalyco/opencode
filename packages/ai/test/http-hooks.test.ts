@@ -106,7 +106,9 @@ describe("http middleware", () => {
     const senders = await Promise.all(
       files.map(async (file) => {
         const source = await Bun.file(`${import.meta.dir}/../${file}`).text()
-        return /yield\* HttpClient\.HttpClient|HttpClient\.execute\(|[^.\w]fetch\(/.test(source)
+        return /HttpClient\.(HttpClient|execute|get|head|post|patch|put|del|options)\b|(^|[^.\w]|globalThis\.|Bun\.)fetch\(/m.test(
+          source,
+        )
           ? [file.replaceAll("\\", "/")]
           : []
       }),
