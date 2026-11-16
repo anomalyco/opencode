@@ -6,6 +6,7 @@ import {
   effectOmitEndpoints,
   groupNames,
   promiseOmitEndpoints,
+  unaliasedEndpoints,
 } from "@opencode/protocol/client"
 import { Agent } from "@opencode/schema/agent"
 import { Artifact } from "@opencode/schema/artifact"
@@ -58,12 +59,14 @@ const promiseContract = compile(ClientApi, {
   omitEndpoints: promiseOmitEndpoints,
   namespace: clientNamespace,
   aliases: true,
+  unaliased: unaliasedEndpoints,
 })
 const effectContract = compile(ClientApi, {
   groupNames,
   omitEndpoints: effectOmitEndpoints,
   namespace: clientNamespace,
   aliases: true,
+  unaliased: unaliasedEndpoints,
 })
 const effectTypeReferences = [
   ...namespaceTypes("Agent", "@opencode/schema/agent", Agent),

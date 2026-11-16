@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
 import { eq } from "drizzle-orm"
-import { Clock, Duration, Effect, Layer, Stream } from "effect"
+import { Clock, Deferred, Duration, Effect, Layer, Stream } from "effect"
 import type { VideoStatus } from "@opencode/ai/effect"
 import { TestClock } from "effect/testing"
 import { BlobStore } from "@opencode/core/blob-store"
@@ -34,9 +34,12 @@ interface Provider {
   status: VideoStatus
   result: Stream.Stream<Uint8Array, Generate.Error>
   start?: Effect.Effect<Generate.VideoJob, Generate.Error>
+  reads: number
+  /** Holds status reads until it opens. */
+  gate?: Deferred.Deferred<void>
 }
 
-const provider = (): Provider => ({ starts: 0, status: { status: "running" }, result: Stream.make(video) })
+const provider = (): Provider => ({ starts: 0, reads: 0, status: { status: "running" }, result: Stream.make(video) })
 
 const generateNode = (state: Provider) =>
   makeLocationNode({
@@ -53,7 +56,11 @@ const generateNode = (state: Provider) =>
               state.starts++
               return state.start ?? Effect.succeed({ id: "provider_1" })
             }),
-          status: () => Effect.sync(() => state.status),
+          status: () =>
+            Effect.suspend(() => {
+              state.reads++
+              return state.gate === undefined ? Effect.void : Deferred.await(state.gate)
+            }).pipe(Effect.map(() => state.status)),
           result: () => Effect.sync(() => ({ mime: "video/mp4", stream: state.result })),
           cancel: () => Effect.die("unused"),
         },
@@ -161,6 +168,45 @@ it.effect("after a restart, fails a job cut off while submitting and resumes a r
       expect(yield* generations.get(submitting)).toMatchObject({ status: "error", reason: "unknown" })
       expect(yield* settled(running)).toMatchObject({ status: "completed" })
       expect(state.starts).toBe(0)
+    }).pipe(Effect.provide(app(dir, state)))
+  }),
+)
+
+it.effect("reads a resumed job's status once even when the server was down past its deadline", () =>
+  Effect.gen(function* () {
+    const dir = (yield* tmpdirScoped("opencode-generation-late-")).path
+    const state = provider()
+    const late = GenerationID.create()
+    yield* Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(GenerationTable)
+        .values({
+          id: late,
+          kind: "video",
+          model,
+          status: "running",
+          provider_job_id: "provider_late",
+          request: { prompt: "a fox", retention: 60_000 },
+          time_created: 0,
+        })
+        .run()
+    }).pipe(Effect.provide(app(dir, state)))
+
+    // Down for three hours, past the 2 hour deadline; the provider finished meanwhile. The first read is slow, so
+    // time passes while it is in flight, and a deadline would win.
+    yield* TestClock.adjust("3 hours")
+    state.status = { status: "completed" }
+    const gate = yield* Deferred.make<void>()
+    state.gate = gate
+    yield* Effect.gen(function* () {
+      yield* eventually(
+        Effect.sync(() => state.reads),
+        (reads) => reads > 0,
+      )
+      yield* TestClock.adjust("1 second")
+      yield* Deferred.succeed(gate, undefined)
+      expect(yield* settled(late)).toMatchObject({ status: "completed" })
     }).pipe(Effect.provide(app(dir, state)))
   }),
 )

@@ -13,7 +13,7 @@ import type { Model } from "@opencode/schema/model"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
 import { and, eq, isNull } from "drizzle-orm"
-import { Clock, Context, Deferred, Duration, Effect, Exit, FiberMap, Layer, Schedule, Schema } from "effect"
+import { Clock, Context, Deferred, Duration, Effect, Exit, FiberMap, Layer, Option, Schedule, Schema } from "effect"
 import { BlobStore } from "./blob-store.js"
 import { Database } from "./database/database.js"
 import { Generate } from "./generate.js"
@@ -162,11 +162,17 @@ export const layer = (options: Options = {}) =>
         )
 
       const poll = Effect.fnUntraced(function* (job: Job) {
+        // The first read runs whatever the deadline: a job resumed after a long restart may have finished, and paid.
+        const first = yield* check(job)
         const remaining = job.created + deadline - (yield* Clock.currentTimeMillis)
-        const settled = yield* check(job).pipe(
-          Effect.repeat({ schedule: Schedule.spaced(interval), until: (status) => status !== undefined }),
-          Effect.timeoutOption(Duration.millis(Math.max(remaining, 0))),
-        )
+        const settled =
+          first === undefined
+            ? yield* check(job).pipe(
+                Effect.delay(interval),
+                Effect.repeat({ schedule: Schedule.spaced(interval), until: (status) => status !== undefined }),
+                Effect.timeoutOption(Duration.millis(Math.max(remaining, 0))),
+              )
+            : Option.some(first)
         if (settled._tag === "None")
           return yield* fail(
             job.id,

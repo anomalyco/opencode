@@ -128,6 +128,8 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
      * the namespaced ones, so moving an endpoint into a namespace does not break callers.
      */
     readonly aliases?: boolean
+    /** Endpoints that never had a pre-namespace path, so {@link aliases} adds none for them. */
+    readonly unaliased?: ReadonlySet<string>
   },
 ): Contract {
   const endpoints: Array<Endpoint> = []
@@ -338,7 +340,7 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
   const aliases = groups.flatMap((group) =>
     group.endpoints.flatMap((endpoint): Array<Alias> => {
       const previous = unnamespaced.get(endpoint)
-      if (previous === undefined) return []
+      if (previous === undefined || options?.unaliased?.has(endpoint.endpoint.identifier)) return []
       return [
         {
           from: [...previous.path, ...endpoint.clientPath],
