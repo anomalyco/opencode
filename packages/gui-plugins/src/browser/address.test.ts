@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { addressParts, externalAction, resolveAddress } from "./address"
+import { addressParts, externalAction, externalPage, resolveAddress } from "./address"
 import { remember, suggest } from "./history"
 import { normalizeURL, refusal } from "./policy"
 
@@ -127,4 +127,19 @@ test("a local preview may be revealed by tab ID but never launched by URL", () =
 
   expect(externalAction("https://example.org", false)).toBe("browser")
   expect(externalAction("oc-preview://other/repo/x", true)).toBeUndefined()
+})
+
+test.each([
+  ["https://example.org/page", false, true],
+  ["http://localhost:4000", true, true],
+  ["http://localhost:4000", false, false],
+  ["file:///work/report.HTM#view", true, true],
+  ["file:///work/report.html.exe", true, false],
+  ["file:///work/report.html", false, false],
+  ["workspace://session/report.html", true, false],
+  ["artifact://item/report.html", true, false],
+  ["oc-preview://unknown/report.html", true, false],
+  ["mailto:hello@example.org", true, false],
+] as const)("the current page %s on this machine %s offers a hand-off: %s", (url, local, open) => {
+  expect(externalPage(url, local)).toBe(open)
 })

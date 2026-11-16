@@ -74,6 +74,7 @@ import { navigationNotice, popupActivated } from "./refusal-notice"
 import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { reloadAddress } from "./preview"
+import { externalPage } from "./address"
 import { FileVerificationError } from "@opencode/util/file-verification"
 import type { workspacePages } from "./workspace-pages"
 import { artifactLinks } from "./artifact-links"
@@ -912,8 +913,28 @@ export function createBrowserPage(
   const embed = options.embeds.create(view, win)
   constructing.defer(() => embed.dispose())
 
+  const canOpenPage = () => !closed() && !contents.isDestroyed() && !state().loadError &&
+    externalPage(displayURL(contents.getURL()), options.local)
+
+  const openPage = async (expected: string) => {
+    if (!canOpenPage()) throw new Error("browser.menu.failed")
+    const actual = contents.getURL()
+
+    if (displayURL(actual) !== expected || state().url !== expected) throw new Error("browser.menu.failed")
+
+    if (destinationOrigin(actual)) return electron.shell.openExternal(actual)
+
+    const opened = await options.workspace?.external(actual, async (file) => {
+      if (!canOpenPage() || contents.getURL() !== actual || await electron.shell.openPath(file)) throw new Error("browser.menu.failed")
+    })
+
+    if (!opened) throw new Error("browser.menu.failed")
+  }
+
   const menu = attachPageMenu(win, contents, {
     ...options.menu,
+    canOpenPage,
+    openPage: () => openPage(displayURL(contents.getURL())),
     open: (url) => {
       const current = contents.getURL()
 
@@ -1055,6 +1076,7 @@ export function createBrowserPage(
     previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
     previewIdentity: () => options.workspace?.identity(),
     answerNotice: notices.answer,
+    openPage,
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,

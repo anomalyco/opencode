@@ -424,6 +424,13 @@ export function createBrowserPane(input: {
       // Reveal a regular file in its folder; never hand even a validated file to its executable association.
       electron.shell.showItemInFolder(file.path)
     },
+    async openPage(window: number, binding: string, tabID: Browser.TabID, expected: string) {
+      owned(window, binding)
+      const tab = page(binding, tabID)
+
+      if (!tab) throw new Error("browser.pane.unavailable")
+      await tab.openPage(expected)
+    },
     async command(window: number, binding: string, command: Browser.Action) {
       owned(window, binding)
       const url = command.type === "navigate" || command.type === "tabs.open" ? command.url : undefined

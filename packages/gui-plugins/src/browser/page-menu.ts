@@ -39,6 +39,7 @@ export type MenuAction =
         | "back"
         | "forward"
         | "reload"
+        | "openPage"
         | "copyImage"
         | "cut"
         | "copy"
@@ -54,6 +55,7 @@ export function pageMenu(
   params: Params,
   options: {
     policy: MenuPolicy
+    openPage: boolean
     back: boolean
     forward: boolean
     spellcheck: boolean
@@ -79,6 +81,7 @@ export function pageMenu(
     item("back", { type: "back" }, options.back),
     item("forward", { type: "forward" }, options.forward),
     item("reload", { type: "reload" }),
+    ...(options.openPage ? [item("openPage", { type: "openPage" })] : []),
   ]
 
   const links = link

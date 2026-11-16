@@ -26,6 +26,7 @@ export type Registration = {
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
   reveal(tabID: Browser.TabID): Promise<void>
+  openPage(tabID: Browser.TabID, expected: string): Promise<void>
   close(): void
 }
 
@@ -85,6 +86,7 @@ export function openBinding(input: {
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
     reveal: (tabID) => ready.then(() => client.reveal({ binding, tabID })),
+    openPage: (tabID, expected) => ready.then(() => client.openPage({ binding, tabID, expected })),
     close() {
       if (status.closed) return
       status.closed = true

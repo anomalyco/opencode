@@ -672,6 +672,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     /** Deletes the page's cookies and stored data, and reloads it. */
     clearSite: (session: Session, tabID: Browser.TabID) => registration(session)?.clearSite(tabID),
     revealFile: (session: Session, tabID: Browser.TabID) => registration(session)?.reveal(tabID),
+    openPage: (session: Session, tabID: Browser.TabID, expected: string) =>
+      registration(session)?.openPage(tabID, expected) ?? Promise.reject(new Error("browser.pane.unavailable")),
     /** Pages the browser showed, newest first. */
     visits: () => history.value.visits.filter((visit) => {
       const session = sessions.current()

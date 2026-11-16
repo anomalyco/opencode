@@ -198,6 +198,8 @@ export default {
   "menu.reload": "Reload",
   "menu.openLink": "Open link in new tab",
   "menu.external": "Open link in system browser",
+  "menu.openPage": "Open in default browser",
+  "menu.failed": "Could not open this page in the default browser.",
   "menu.copyLink": "Copy link address",
   "menu.openImage": "Open image in new tab",
   "menu.saveImage": "Save image as…",

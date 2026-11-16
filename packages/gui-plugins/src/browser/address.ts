@@ -86,3 +86,10 @@ export function externalAction(url: string, local: boolean) {
 
   if (destinationOrigin(url) && (local || !loopback(parsed.hostname))) return "browser"
 }
+
+/** Eligibility of the displayed page; only main can turn a preview grant into a launchable file. */
+export function externalPage(url: string, local: boolean) {
+  const action = externalAction(url, local)
+
+  return action === "browser" || (action === "reveal" && /\.html?$/i.test(new URL(url).pathname))
+}

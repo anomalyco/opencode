@@ -146,6 +146,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     site: async (input, caller) => (await pane()).site(caller.window, input.binding, input.tabID),
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
     reveal: async (input, caller) => (await pane()).reveal(caller.window, input.binding, input.tabID),
+    openPage: async (input, caller) => (await pane()).openPage(caller.window, input.binding, input.tabID, input.expected),
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),
     forget: async (input) => (await load()).forget(input.server,input.session),
   })

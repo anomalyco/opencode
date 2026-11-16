@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test"
+import { Browser } from "@opencode/plugin-browser/rpc"
+import { Schema } from "effect"
+import { externalPage } from "./address"
 import { menuAddress, pageMenu } from "./page-menu"
 import { extensionResource } from "./profile/extension-api/resource"
 
@@ -61,6 +64,7 @@ const basic = {
 
 const options = {
   policy,
+  openPage: true,
   back: false,
   forward: true,
   spellcheck: true,
@@ -70,6 +74,15 @@ const options = {
   run() {},
   extensions: [{ label: "Extension" }],
 }
+
+test.each([
+  ["https://site.test/", true], ["file:///work/page.html", true], ["workspace://session/page.html", false],
+  ["artifact://item/page.html", false], ["file:///work/start.exe", false], ["about:blank", false],
+] as const)("%s: external hand-off is a menu action, never an agent command", (address, offered) => {
+  const menu = pageMenu({ ...basic, dictionarySuggestions: [] }, { ...options, openPage: externalPage(address, true) })
+  expect(menu.some(item => item.label === "openPage")).toBe(offered)
+  expect(Schema.is(Browser.Action)({ type: "openPage", tabID: "tab_aaaaaaaa-1111-1111-1111-111111111111", url: address })).toBe(false)
+})
 
 test.each([
   { name: "plain", params: {}, items: [] },
@@ -99,7 +112,7 @@ test.each([
 
     expect(
       template.filter((x) => x.type !== "separator").map((x) => `${x.enabled === false ? "!" : ""}${x.label}`),
-    ).toEqual(["!back", "forward", "reload", ...items, "Extension"])
+    ).toEqual(["!back", "forward", "reload", "openPage", ...items, "Extension"])
   },
 )
 

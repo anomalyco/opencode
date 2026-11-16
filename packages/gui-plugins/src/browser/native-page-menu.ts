@@ -24,6 +24,8 @@ export function attachPageMenu(
     sessions: () => Iterable<string>
     available: () => boolean
     failed: () => void
+    canOpenPage: () => boolean
+    openPage: () => Promise<void>
   },
 ) {
   const session = contents.session
@@ -56,6 +58,8 @@ export function attachPageMenu(
       if (!current()) return
 
       switch (action.type) {
+        case "openPage":
+          return input.openPage()
         case "back":
         case "forward":
         case "reload":
@@ -138,6 +142,7 @@ export function attachPageMenu(
 
     const template = pageMenu(params, {
       policy,
+      openPage: input.canOpenPage(),
       t: input.t,
       back: contents.navigationHistory.canGoBack(),
       forward: contents.navigationHistory.canGoForward(),

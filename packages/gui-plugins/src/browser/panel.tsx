@@ -23,7 +23,7 @@ import {
   type MountedSession,
   type SessionScreen,
 } from "@opencode/plugin/gui"
-import { addressParts, connection, externalAction } from "./address"
+import { addressParts, connection, externalAction, externalPage } from "./address"
 import { hostDisplay } from "./host-display"
 import { FileSource } from "../file/contract"
 import { remotePath, workspacePrefix } from "./remote-address"
@@ -342,7 +342,14 @@ export default function SessionBrowserPane(props: {
 
     if (externalAction(tab.url, props.session.server.local) === "reveal") return props.model.revealFile(props.session, tab.id)
 
-    if (externalAction(tab.url, props.session.server.local) === "browser") system.openExternal(tab.url)
+    if (externalAction(tab.url, props.session.server.local) === "browser") openPage()
+  }
+
+  const openPage = () => {
+    const tab = state()
+
+    if (tab) void props.model.openPage(props.session, tab.id, tab.url).catch(() =>
+      plugin.toast.show({ variant: "error", title: plugin.t("menu.failed") }))
   }
 
   const closeOverlay = () => dispatchOverlay({ type: "overlay.cancelled" })
@@ -907,9 +914,12 @@ export default function SessionBrowserPane(props: {
                 <Show when={source()}>
                   {(open) => <Menu.Item onSelect={() => open()()}>{plugin.t("preview.source")}</Menu.Item>}
                 </Show>
-                <Show when={!serverFile()}>
+                <Show when={externalPage(address(), props.session.server.local) && !state()?.loadError}>
+                  <Menu.Item onSelect={openPage}>{plugin.t("menu.openPage")}</Menu.Item>
+                </Show>
+                <Show when={reachable() === "reveal"}>
                 <Menu.Item disabled={!reachable()} onSelect={openExternal}>
-                  {plugin.t(address().startsWith("file:") ? "external.reveal" : "external.menu")}
+                  {plugin.t("external.reveal")}
                 </Menu.Item>
                 </Show>
                 <Menu.Separator />

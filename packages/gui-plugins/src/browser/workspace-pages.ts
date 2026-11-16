@@ -11,7 +11,7 @@ import { FileVerificationError } from "@opencode/util/file-verification"
 
 /** Only main's explicit load mints an origin. Page navigation and history can use but never enlarge its grant. */
 export function workspacePages(
-  previews: ReturnType<typeof createPreviews>,
+  previews: Pick<ReturnType<typeof createPreviews>, "grant">,
   root: string,
   source: WorkspaceSource,
   lifetime: AbortSignal,
@@ -113,6 +113,27 @@ export function workspacePages(
         !!file &&
         previewAllowed(root, grant.document, file, grant.document === file, remote ? "" : homedir())
       )
+    },
+    async external(url: string, launch: (file: string) => Promise<void>) {
+      const host = this.host(url)
+      const grant = host && grants.get(host)
+      const display = this.display(url)
+      const file = display && path(display)
+
+      if (source.type !== "local" || !grant || !file || !/\.html?$/i.test(file)) return false
+
+      // Agent previews on this machine also have a server-side read grant.
+      if (grant.reader.type === "remote" && !(await this.exists(url, lifetime))) return false
+      const opened = await openPreviewFile(root, grant.document, file, file === grant.document, grant.identity)
+
+      if (!opened || opened === "denied") return false
+      await using _handle = opened.file
+
+      // Launch the verified physical HTML document, never an HTML-named link's non-HTML target.
+      if (lifetime.aborted || grants.get(host) !== grant || !/\.html?$/i.test(opened.path)) return false
+      await launch(opened.path)
+
+      return true
     },
     async exists(url: string, signal: AbortSignal) {
       const host = this.host(url)

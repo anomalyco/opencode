@@ -487,6 +487,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         emit(store.session, { type: "prompt", tabID: value.tabID, prompt: null })
       },
       reveal: async () => undefined,
+      openPage: async ({ expected }) => { setStore("external", (items) => [...items, expected]) },
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
         setStore({ cookies: 0, generation: store.generation + 1 })
@@ -1268,6 +1269,7 @@ export function mountBrowserRegion(input: RegionHost) {
       answer: async () => undefined,
       reveal: async () => undefined,
       close: async () => undefined,
+      openPage: async () => undefined,
       forget: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {

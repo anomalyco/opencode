@@ -246,6 +246,7 @@ export const BrowserPane = Ipc.define({
     // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     reveal: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
+    openPage: { input: Schema.Struct({ binding, tabID: Browser.TabID, expected: text(16_384) }) },
     close: { input: Schema.Struct({ binding }) },
     forget: { input: Schema.Struct({server:text(16_384),session:text(256).check(Schema.isStartingWith("ses"))}) },
   },

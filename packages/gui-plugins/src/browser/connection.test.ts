@@ -39,6 +39,7 @@ function fixture(reject?: Error) {
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
     reveal: async () => undefined,
+    openPage: async () => undefined,
     close: async (input) => {
       closed.push(input.binding)
     },
