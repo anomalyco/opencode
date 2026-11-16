@@ -36,6 +36,9 @@ export async function servePreview(
         "Content-Security-Policy":
           "sandbox allow-scripts allow-same-origin; default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'",
         "Cross-Origin-Resource-Policy": "same-origin",
+        // Chromium's network policy includes speculative connections and ICE, unlike CSP fetch directives.
+        "Connection-Allowlist": "(response-origin);webrtc=block",
+        "X-DNS-Prefetch-Control": "off",
         "Referrer-Policy": "no-referrer",
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
@@ -44,6 +47,7 @@ export async function servePreview(
   }
 
   const slice = previewRange(request.headers.get("range"), target.size)
+
   if (target.type === "local" && (slice.status === 416 || request.method === "HEAD")) await target.file.close()
 
   const response =

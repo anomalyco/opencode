@@ -4,9 +4,39 @@ import { servePreview } from "./serve"
 
 type Remote = Extract<PreviewSource, { type: "remote" }>
 
+test("artifact responses install Chromium's connection allowlist even for scripts", async () => {
+  const grants = new Map<string, PreviewSource>([
+    [
+      "site",
+      {
+        type: "artifact",
+        id: "art_doc",
+        read: async () => new Response("example", { headers: { "content-type": "text/javascript" } }),
+      },
+    ],
+  ])
+
+  const response = await servePreview(new Request("oc-preview://site/asset.js"), grants)
+  expect(response.headers.get("connection-allowlist")).toBe("(response-origin);webrtc=block")
+  expect(response.headers.get("x-dns-prefetch-control")).toBe("off")
+  expect(await response.text()).toBe("example")
+})
+
 function fixture(read: Remote["read"]) {
   const grants = new Map<string, PreviewSource>([
-    ["test", { type: "remote", root:"/work", document:"index.html",takeEntry:()=>false,denied:()=>{},prefix: "workspace://session/", stat: async () => 10, read }],
+    [
+      "test",
+      {
+        type: "remote",
+        root: "/work",
+        document: "index.html",
+        takeEntry: () => false,
+        denied: () => {},
+        prefix: "workspace://session/",
+        stat: async () => 10,
+        read,
+      },
+    ],
   ])
 
   return {

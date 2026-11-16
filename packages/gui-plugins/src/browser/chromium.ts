@@ -63,6 +63,7 @@ import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { reloadAddress } from "./preview"
 import type { workspacePages } from "./workspace-pages"
+import { artifactLinks } from "./artifact-links"
 import { previewScheme } from "./scheme"
 import type { WorkspaceSource } from "./workspace-file"
 import type { artifactPages } from "./artifact-preview"
@@ -269,6 +270,8 @@ export function createBrowserPage(
 
   const contents = view.webContents
   const preview = (url: string) => options.artifacts?.display(url) ?? options.workspace?.display(url)
+  // Keep the fence across transient blank/error documents. Page JS cannot clear it by navigating itself.
+  let artifactHost: string | undefined
   const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
   contents.on("before-mouse-event", (_event, mouse) => {
@@ -384,6 +387,7 @@ export function createBrowserPage(
 
   const activity: Activity = { agentRuns: 0 }
   const notices = noticeActions(options.refused, options.menu.open)
+  const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
   const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
@@ -444,7 +448,8 @@ export function createBrowserPage(
           break
         case "load-icon":
           // Never rejects: an icon that does not load is none.
-          void loadIcon(effect.favicons, options.network).then((icon) =>
+          // Main's icon fetch is outside the page's network policy. Never proxy an artifact's candidates for it.
+          void loadIcon(effect.favicons, artifactHost ? null : options.network).then((icon) =>
             dispatch({ type: "icon.loaded", attempt: effect.attempt, icon }),
           )
       }
@@ -491,6 +496,9 @@ export function createBrowserPage(
   // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
   // we woke on the first agent command, so wake its replacement too.
   contents.on("did-navigate", () => {
+    const url = contents.getURL()
+
+    if (options.artifacts?.display(url)) artifactHost = new URL(url).host
     notices.clear()
     popupReport = undefined
 
@@ -531,6 +539,14 @@ export function createBrowserPage(
   // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load,
   // except file: documents, which must stay inside the allowed roots at every depth.
   const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
+    if (artifactHost && !event.url.startsWith(`oc-preview://${artifactHost}/`)) {
+      event.preventDefault()
+
+      if (event.isMainFrame && destinationOrigin(event.url)) notices.show({reason:"popup", target:event.url.slice(0,16384), action:event.url.length <= 16384 ? "tab" : undefined})
+
+      return
+    }
+
     if (event.url === "about:blank") return
 
     const local = /^file:/i.test(event.url) || event.url.toLowerCase().startsWith(`${previewScheme}:`)
@@ -550,6 +566,12 @@ export function createBrowserPage(
     const activated = popupActivated(popupReport, url)
     popupReport = undefined
 
+    if (artifactHost) {
+      if (!postBody && destinationOrigin(url) && url.length <= 16384) notices.show({reason:"popup",target:url,action:"tab"})
+
+      return { action: "deny" }
+    }
+
     if (url !== "about:blank" && !destinationOrigin(url) && !extensionURL(url, policy.extensions ?? []) && !preview(url)) {
       refused(url)
 
@@ -560,6 +582,14 @@ export function createBrowserPage(
       const target = displayURL(url)
       const replay = !postBody && target.length <= 16384 && (!!destinationOrigin(target) || !!preview(url))
       notices.show(replay ? { reason: "popup", target, action: "tab" } : { reason: "popup", target: target.slice(0, 16384) })
+
+      return { action: "deny" }
+    }
+
+    const workspace = options.workspace?.display(url)
+
+    if (workspace && !postBody) {
+      void options.menu.open(workspace).catch(() => publish("browser.menu.failed"))
 
       return { action: "deny" }
     }
@@ -586,14 +616,6 @@ export function createBrowserPage(
 
   // Called from the session's one download listener (`guardSession`) for a download this page started. One the user
   // started is left to the system's save flow, so it goes where they save it and the agent never reads it.
-    const workspace = options.workspace?.display(url)
-
-    if (workspace && !postBody) {
-      void options.menu.open(workspace).catch(() => publish("browser.menu.failed"))
-
-      return { action: "deny" }
-    }
-
   const download = (item: Electron.DownloadItem) => {
     const owner = downloadOwner({
       now: Date.now(),
@@ -718,6 +740,17 @@ export function createBrowserPage(
 
   const menu = attachPageMenu(win, contents, {
     ...options.menu,
+    open: (url) => {
+      const current = contents.getURL()
+
+      if (options.workspace?.host(current) && /^(?:file|workspace):/.test(url) && !options.workspace.permits(current, url)) {
+        notices.show({reason:"browser.preview.restricted"})
+
+        return Promise.resolve()
+      }
+
+      return options.menu.open(url)
+    },
     policy: {
       get fileRoots() { return policy.fileRoots },
       get extensions() { return policy.extensions },
@@ -740,26 +773,25 @@ export function createBrowserPage(
 
     if (!closed()) options.hidden?.()
   })
-    open: (url) => {
-      const current = contents.getURL()
 
-      if (options.workspace?.host(current) && /^(?:file|workspace):/.test(url) && !options.workspace.permits(current, url)) {
-        notices.show({reason:"browser.preview.restricted"})
-
-        return Promise.resolve()
-      }
-
-      return options.menu.open(url)
-    },
-
-  const load = (url: string) => {
+  const load = async (url: string) => {
     const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? options.workspace?.load(url, () => notices.show({reason:"browser.preview.restricted"})) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
+
+    if (options.artifacts?.display(destination)) {
+      artifactHost = new URL(destination).host
+      contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
+      await registerArtifactLinks(artifactHost)
+    }
+
     let committed = false
 
     const commit = () => {
       committed = true
+
+      // Only a successful navigation directed by browser chrome (this loadURL), not a renderer callback, may leave.
+      if (!options.artifacts?.display(destination)) artifactHost = undefined
     }
 
     contents.once("did-navigate", commit)
@@ -781,6 +813,7 @@ export function createBrowserPage(
 
     if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url)
     const actual = contents.getURL()
+
     if (options.workspace?.host(actual) && options.workspace.display(actual) === tab.url) return void await load(tab.url)
     const address = reloadAddress(actual, state().url, options.workspace?.host(actual), policy.fileRoots ?? [], policy.remote)
 
@@ -813,7 +846,6 @@ export function createBrowserPage(
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
-
     async inspect(enabled: boolean) {
       if (closed()) return
       await ready
