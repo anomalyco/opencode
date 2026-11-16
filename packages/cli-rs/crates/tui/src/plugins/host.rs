@@ -226,19 +226,20 @@ impl Host for Tui {
     }
 
     fn pending(&self, target: &str) {
-        let script = held(self, target).is_some_and(|(artifact, _)| artifact.is_ok_and(|artifact| artifact.script));
-        let message = match script {
+        let held = held(self, target).and_then(|(artifact, _)| artifact.ok());
+        #[cfg(feature = "luau")]
+        if held.as_ref().is_some_and(opencode_plugin::luau::approves) {
+            let message =
+                "This project wants to run a Luau plugin inside opencode. Run /plugins to approve or decline it.";
+            return pending_toast(self, target, message);
+        }
+        let message = match held.is_some_and(|artifact| artifact.script) {
             true => {
                 "This project wants to run TypeScript code in opencode's JS host. Run /plugins to approve or decline it."
             }
             false => "This project wants to run native code inside opencode. Run /plugins to approve or decline it.",
         };
-        let mut options = ToastOptions::new(Variant::Warning, message).keep();
-        options.title = Some(format!("Plugin needs approval: {target}"));
-        let open = bind!(self, |tui| {
-            tui.keymap.dispatch("plugins.list", None);
-        });
-        self.toasts.show(options.action("Open plugins", open));
+        pending_toast(self, target, message);
     }
 
     fn attention(&self, attention: &abi::Attention) {
@@ -1374,7 +1375,10 @@ fn tell_skipped(tui: &Tui) {
     let mut reasons: Vec<(String, Vec<String>)> = Vec::new();
     for entry in tui.plugins.entries() {
         let Status::Skipped(reason) = &entry.status else { continue };
-        if !entry.key.starts_with("target:") || reason == opencode_plugin::loader::STARTING || !told.insert(entry.key) {
+        let starting = reason == opencode_plugin::loader::STARTING;
+        #[cfg(feature = "luau")]
+        let starting = starting || reason == opencode_plugin::luau::STARTING;
+        if !entry.key.starts_with("target:") || starting || !told.insert(entry.key) {
             continue;
         }
         match reasons.iter_mut().find(|(known, _)| known == reason) {
@@ -1460,6 +1464,16 @@ fn server_name(plugin: &PluginInfo) -> String {
     }
 }
 
+/// The toast that a project's plugin `target` waits for approval, saying `message`.
+fn pending_toast(tui: &Tui, target: &str, message: &str) {
+    let mut options = ToastOptions::new(Variant::Warning, message).keep();
+    options.title = Some(format!("Plugin needs approval: {target}"));
+    let open = bind!(tui, |tui| {
+        tui.keymap.dispatch("plugins.list", None);
+    });
+    tui.toasts.show(options.action("Open plugins", open));
+}
+
 /// What [`external`] needs: the global config directory and the working directory.
 pub struct External {
     pub config_dir: PathBuf,
@@ -1507,7 +1521,13 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
     // Luau plugins (spike `luau-spike`): in a build with them, `OPENCODE_PLUGIN_LUAU=1` turns them on.
     #[cfg(feature = "luau")]
     let loader = match opencode_plugin::luau::enabled() {
-        true => loader.with_luau(),
+        true => {
+            // A walk of a Luau plugin's files that found something new is taken as a change of the plugin directories.
+            let proxy = tui.app.proxy();
+            loader.with_luau(move || {
+                let _ = proxy.send(PluginsChanged);
+            })
+        }
         false => loader,
     };
     // A plugin named by npm package loads from the cache TS installs into, as TS resolves it (js-npm).
@@ -1657,9 +1677,10 @@ pub fn decide(
         }
         done(tui, recorded);
     };
-    let Some(found @ opencode_plugin::loader::Found::Tree(_)) = found else {
+    if !found.as_ref().is_some_and(opencode_plugin::loader::Found::walks) {
         return record(tui, found.map(opencode_plugin::loader::Found::identify));
-    };
+    }
+    let Some(found) = found else { return };
     let weak = tui.weak();
     tui.app.spawn(async move { tokio::task::spawn_blocking(move || found.identify()).await.ok() }, move |_, now| {
         if let Some(tui) = weak.upgrade() {

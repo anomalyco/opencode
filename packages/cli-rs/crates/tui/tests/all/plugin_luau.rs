@@ -138,8 +138,8 @@ fn a_luau_memo_keeps_its_subtree_while_its_value_stays() {
 #[test]
 fn a_refused_luau_tree_fails_the_plugin_the_second_time() {
     let h = page(
-        r#"local same = { type = "text", id = "x", spans = { { text = "twice" } } }
-                return { type = "box", children = { same, same } }"#,
+        r#"local function same() return { type = "text", id = "x", spans = { { text = "twice" } } } end
+                return { type = "box", children = { same(), same() } }"#,
     );
     h.wait("the plugin failed", || {
         frames(&h);

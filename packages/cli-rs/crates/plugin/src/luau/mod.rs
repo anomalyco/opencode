@@ -19,6 +19,7 @@ use std::rc::Rc;
 
 pub use vm::MEMORY;
 
+use crate::loader::approval::Artifact;
 use crate::{Definition, ErrorFn};
 
 /// The run-time flag that turns Luau plugins on, in a build with the feature.
@@ -32,6 +33,29 @@ pub const SOURCES: u64 = 4 << 20;
 
 /// How deep a plugin's modules may nest in directories.
 const DEPTH: usize = 8;
+
+/// Why a Luau plugin is listed and not active while its files are walked, off the UI thread.
+pub const STARTING: &str = "reading its Luau files";
+
+/// What a Luau plugin's approval names apart from a TypeScript plugin's of the same directory: the prefix of its
+/// artifact's hash. A user who approved a sandboxed Luau plugin approved nothing that runs on the JS host.
+pub const TAG: &str = "luau:";
+
+/// The approval artifact of a Luau plugin whose directory hashes to `tree` ([`Artifact::tree`]).
+pub fn artifact(tree: Artifact) -> Artifact {
+    Artifact { sha256: format!("{TAG}{}", tree.sha256), ..tree }
+}
+
+/// The tree a Luau plugin's approval `artifact` names, as [`Artifact::stage`] copies it.
+pub fn tree_of(artifact: &Artifact) -> Artifact {
+    let sha256 = artifact.sha256.strip_prefix(TAG).unwrap_or(&artifact.sha256).to_owned();
+    Artifact { sha256, ..artifact.clone() }
+}
+
+/// Whether `artifact` is a Luau plugin's approval artifact ([`artifact`]).
+pub fn approves(artifact: &Artifact) -> bool {
+    artifact.sha256.starts_with(TAG)
+}
 
 /// Whether `OPENCODE_PLUGIN_LUAU=1` turns Luau plugins on.
 pub fn enabled() -> bool {
@@ -51,11 +75,14 @@ pub struct Sources {
 }
 
 impl Sources {
-    /// Reads the plugin in `dir`: at most [`SOURCES`] bytes, [`DEPTH`] directories deep. Hidden entries are skipped.
+    /// Reads the plugin in `dir`: at most [`SOURCES`] bytes, [`DEPTH`] directories deep. Hidden entries are skipped. A
+    /// link is followed only to a file or directory inside `dir`: one out of it is refused, so what loads is the
+    /// plugin's own (`dir` itself may be a link).
     pub fn read(dir: &Path) -> Result<Self, String> {
+        let root = std::fs::canonicalize(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
         let mut sources = Self::default();
         let mut total = 0;
-        read(dir, "", &mut sources.files, &mut total, 0)?;
+        read(&root, &root, "", &mut sources.files, &mut total, 0)?;
         Ok(sources)
     }
 
@@ -88,6 +115,7 @@ impl Sources {
 }
 
 fn read(
+    root: &Path,
     dir: &Path,
     relative: &str,
     files: &mut BTreeMap<String, Vec<u8>>,
@@ -105,9 +133,17 @@ fn read(
             continue;
         }
         let path = format!("{relative}{name}");
-        let metadata = std::fs::metadata(entry.path()).map_err(error)?;
+        let real = std::fs::canonicalize(entry.path()).map_err(error)?;
+        if !real.starts_with(root) {
+            return Err(format!(
+                "{}: a link out of the plugin directory, to {}",
+                entry.path().display(),
+                real.display()
+            ));
+        }
+        let metadata = std::fs::metadata(&real).map_err(error)?;
         if metadata.is_dir() {
-            read(&entry.path(), &format!("{path}/"), files, total, depth + 1)?;
+            read(root, &real, &format!("{path}/"), files, total, depth + 1)?;
             continue;
         }
         if !(name.ends_with(".luau") || path == MANIFEST) {
@@ -117,7 +153,7 @@ fn read(
         if *total > SOURCES {
             return Err(format!("{}: sources larger than {} MiB", dir.display(), SOURCES >> 20));
         }
-        files.insert(path, std::fs::read(entry.path()).map_err(error)?);
+        files.insert(path, std::fs::read(&real).map_err(error)?);
     }
     Ok(())
 }
@@ -194,6 +230,8 @@ pub fn idle_memory(sources: &Sources) -> Result<usize, String> {
     let mut registered = opencode_plugin_abi::Registered::new(&manifest.id, None);
     let limit = crate::contain::Limits::default().overrun;
     let plugin = bind::setup(&compiled, &mut registered.setup(), limit, MEMORY, None)?;
-    plugin.vm.lua.gc_collect().map_err(|error| error.to_string())?;
-    Ok(plugin.vm.memory())
+    let vm = plugin.vm.borrow();
+    let vm = vm.as_ref().ok_or("the plugin has ended")?;
+    vm.lua.gc_collect().map_err(|error| error.to_string())?;
+    Ok(vm.memory())
 }

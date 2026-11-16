@@ -66,7 +66,24 @@ fn keymap(host: &TestHost) -> &DialogKeymap {
 /// A loader with Luau on, of the global config directory `config` and the working directory `cwd`.
 fn loader(config: &Path, cwd: &Path) -> Loader {
     let native = Rc::new(crate::loader::native::Native) as Rc<dyn Backend>;
-    Loader::new(native, config.to_path_buf(), cwd.to_path_buf(), Vec::<Configured>::new()).with_luau()
+    Loader::new(native, config.to_path_buf(), cwd.to_path_buf(), Vec::<Configured>::new()).with_luau(|| {})
+}
+
+/// Reconciles until a reconcile after a finished walk changes nothing, as the host does on each walk's wake: whether
+/// anything changed. A Luau plugin's files are walked and staged on threads of their own.
+fn settle(loader: &Loader, host: &Rc<TestHost>, registry: &Registry) -> bool {
+    let mut changed = false;
+    for round in 0..200 {
+        let now = loader.reconcile(&dynamic(host), registry);
+        changed |= now;
+        while loader.luau_walking() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        if round > 0 && !now {
+            return changed;
+        }
+    }
+    panic!("the loader never settled")
 }
 
 #[test]
@@ -90,7 +107,12 @@ fn the_luau_quick_start_loads_from_a_plugins_directory_and_runs() {
     install("hello", &dir);
     let (host, registry) = (host(), Registry::define(Vec::new(), []));
     let loader = loader(&config, temp.path());
+    // Before the first walk of its files ended it is starting; no file was hashed on this thread.
+    let hashed = approval::hashed();
     assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert_eq!(entry(&registry.entries(), &dir.to_string_lossy()).status, Status::Skipped(STARTING.to_owned()));
+    assert!(settle(&loader, &host, &registry));
+    assert_eq!(approval::hashed(), hashed);
     let hello = entry(&registry.entries(), &dir.to_string_lossy()).clone();
     assert_eq!((hello.id.as_str(), hello.status), ("example.luau-hello", Status::Active));
     assert!(matches!(keymap(&host).dispatch("hello.greet", None), RunResult::Ok));
@@ -316,27 +338,28 @@ fn a_luau_build_reloads_and_a_broken_one_keeps_the_running_version() {
     install("hello", &dir);
     let (host, registry) = (host(), Registry::define(Vec::new(), []));
     let loader = loader(&config, temp.path());
-    loader.reconcile(&dynamic(&host), &registry);
-    assert!(!loader.reconcile(&dynamic(&host), &registry), "nothing changed");
+    assert!(settle(&loader, &host, &registry));
+    assert!(!settle(&loader, &host, &registry), "nothing changed");
     assert!(loader.watch_dirs().contains(&dir));
     let target = dir.to_string_lossy().into_owned();
     fs::write(dir.join("init.luau"), "return plugin.define(function(setup) end").unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert!(settle(&loader, &host, &registry));
     let status = entry(&registry.entries(), &target).status.clone();
     let Status::Failed(error) = status else { panic!("{status:?}") };
     assert!(error.starts_with("init.luau:") && error.ends_with("(previous version still active)"), "{error}");
     assert!(footer(&host, &registry).contains("hello"));
     let fixed = fs::read_to_string(example("hello").join("init.luau")).unwrap().replace("\"hello\", {", "\"hi\", {");
     fs::write(dir.join("init.luau"), fixed).unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert!(settle(&loader, &host, &registry));
     assert_eq!(entry(&registry.entries(), &target).status, Status::Active);
     let text = footer(&host, &registry);
     assert!(text.contains("hi") && !text.contains("hello"), "{text}");
 }
 
-// Expected (luau-spike 1.5, O-146): a project's Luau plugin waits for the user's approval of its directory, by the
-// artifact a TypeScript plugin has; once approved it runs from the staged copy, and a save after the approval holds it
-// back again.
+// Expected (luau-spike 1.5, O-146, review luau-2 and luau-3): a project's Luau plugin waits for the user's approval of
+// its directory as a Luau plugin; once approved it runs from the staged copy, and a save after the approval holds it
+// back again. The approval is the Luau carrier's: a TypeScript plugin in the same directory is not approved by it. The
+// UI thread hashes and copies none of its files.
 #[test]
 fn a_project_luau_plugin_waits_for_an_approval_of_its_directory() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -344,26 +367,153 @@ fn a_project_luau_plugin_waits_for_an_approval_of_its_directory() {
     fs::create_dir_all(repo.join(".git")).unwrap();
     let dir = repo.join(".opencode").join("plugins").join("hello");
     install("hello", &dir);
+    fs::write(dir.join("tui.ts"), "export default { id: 'unsandboxed', setup() {} }").unwrap();
     let target = dir.to_string_lossy().into_owned();
-    let approvals = Approvals::open(temp.path().join("state").join(approval::FILE), &repo);
-    let loader = loader(&temp.path().join("config"), &repo).with_approvals(approvals);
+    let store = temp.path().join("state").join(approval::FILE);
+    let loader = loader(&temp.path().join("config"), &repo).with_approvals(Approvals::open(store.clone(), &repo));
     let (host, registry) = (host(), Registry::define(Vec::new(), []));
     let status = || entry(&registry.entries(), &target).status.clone();
-    loader.reconcile(&dynamic(&host), &registry);
+    // Every reconcile measured: what this thread hashes in them, a walk or a copy on the UI thread, stays 0.
+    let unhashed = |settled: &dyn Fn() -> bool| {
+        let before = approval::hashed();
+        let changed = settled();
+        assert_eq!(approval::hashed(), before, "the UI thread hashed or copied a plugin's files");
+        changed
+    };
+    unhashed(&|| settle(&loader, &host, &registry));
     assert_eq!(status(), Status::Pending);
     assert!(!footer(&host, &registry).contains("hello"), "nothing of a pending plugin runs");
     let shown = loader.held(&target).and_then(Result::ok).expect("held for approval");
-    assert!(shown.script, "the artifact a TypeScript plugin has");
-    assert_eq!(Ok(shown.clone()), approval::Artifact::tree(&dir));
-    let now = loader.found(&target).map(crate::loader::Found::identify);
-    assert_eq!(loader.decide(&target, &shown, approval::Decision::Approved, now), Ok(true));
-    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let tree = approval::Artifact::tree(&dir).unwrap();
+    assert!(approves(&shown) && shown != tree && tree_of(&shown) == tree, "{shown:?}");
+    // The host checks the disk off the UI thread (`Found::walks`); this thread stands in for that thread.
+    let found = loader.found(&target).unwrap();
+    assert!(found.walks());
+    assert_eq!(loader.decide(&target, &shown, approval::Decision::Approved, Some(found.identify())), Ok(true));
+    assert!(unhashed(&|| settle(&loader, &host, &registry)));
     assert_eq!(status(), Status::Active);
     assert!(footer(&host, &registry).contains("hello"));
+    // A TypeScript plugin of the directory is asked about on its own: the Luau approval names its carrier.
+    let decisions = Approvals::open(store, &repo);
+    assert_eq!(decisions.decision(&shown), Some(approval::Decision::Approved));
+    assert_eq!(decisions.decision(&tree), None);
     // A save after the approval: held back, and what ran stops.
     fs::write(dir.join("init.luau"), "error('not approved')").unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert!(unhashed(&|| settle(&loader, &host, &registry)));
     assert_eq!(status(), Status::Pending);
+}
+
+// Expected (review luau-1): a Luau build the crash list names is held as a library is, and listed failed with why.
+#[test]
+fn a_luau_build_the_crash_list_names_is_held() {
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let config = temp.path().join("config");
+    let dir = config.join("plugins").join("hello");
+    install("hello", &dir);
+    let target = dir.to_string_lossy().into_owned();
+    let host = host();
+    let first = Registry::define(Vec::new(), []);
+    settle(&loader(&config, temp.path()), &host, &first);
+    let digest = first.with_target(&target, |plugin| plugin.definition.digest.clone()).flatten().unwrap();
+    let registry = Registry::define(Vec::new(), []);
+    let reason = "crashed the client in run-command and is disabled".to_owned();
+    let crashed =
+        crate::Crashed { id: "example.luau-hello".into(), target: target.clone(), digest, reason: reason.clone() };
+    registry.set_crashed(vec![crashed], |_| Ok(()));
+    settle(&loader(&config, temp.path()), &host, &registry);
+    assert_eq!(entry(&registry.entries(), &target).status, Status::Failed(reason));
+    assert!(!footer(&host, &registry).contains("hello"));
+}
+
+// Expected (review luau-1): a small DAG of shared tables, which the decoder would expand on the Rust heap with no
+// safepoint of the budget's, is refused at once and fails the plugin with why; so is a value past the limits it is
+// charged against, and a refusal the plugin catches still fails the call.
+#[test]
+fn a_value_past_the_conversion_bounds_is_refused_at_once() {
+    let host = host();
+    let dag = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:slot({ path = "home.footer" }, function()
+                local node = { type = "text", spans = { { text = "leaf" } } }
+                for _ = 1, 30 do node = { type = "box", children = { node, node } } end
+                return plugin.show(node)
+            end)
+        end)
+    "#;
+    let registry = running(&host, define(&sources(dag), None).unwrap().0);
+    let start = Instant::now();
+    let text = footer(&host, &registry);
+    assert!(start.elapsed() < Duration::from_millis(500), "{:?}", start.elapsed());
+    let error = failure(&registry, "test.luau").expect("refused");
+    assert!(error.contains("a table appears twice"), "{error}");
+    assert!(!text.contains("leaf"));
+
+    let caught = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "big" }, function(host)
+                local spans = {}
+                for i = 1, 50 do spans[i] = { text = "x" } end
+                pcall(function() host:toast({ variant = "info", message = "big", title = spans }) end)
+                host:toast({ variant = "info", message = "after the refusal" })
+            end)
+        end)
+    "#;
+    let limits = crate::limits::Limits { nodes: 2, ..crate::limits::Limits::default() };
+    let _restore = crate::limits::set(limits);
+    let registry = running(&host, define(&sources(caught), None).unwrap().0);
+    keymap(&host).dispatch("big", None);
+    host.app.advance(Duration::from_millis(1));
+    let error = failure(&registry, "test.luau").expect("refused");
+    assert!(error.contains("more than 32 parts"), "{error}");
+    assert!(host.toasts.borrow().iter().all(|toast| toast.message != "after the refusal"));
+}
+
+// Expected (review luau-4): a cycle of `require` is an error naming it; `./x`, `@self/x` and `./x/init` are one module,
+// loaded once; and a link out of the plugin directory is refused, where one inside it is read.
+#[test]
+fn require_loads_each_module_once_and_names_a_cycle() {
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        local one, two, three = require("./x"), require("@self/x"), require("./x/init")
+        local ok, cycle = pcall(require, "./a")
+        return plugin.define(function(setup)
+            setup:command({ name = "probe" }, function(host)
+                host:toast({ variant = "info", message = `{one == two and two == three} {one.loads} {tostring(cycle)}` })
+            end)
+        end)
+    "#;
+    let mut sources = sources(init);
+    for (path, text) in [
+        ("x/init.luau", "return { loads = 1 }"),
+        ("a.luau", "return require('./b')"),
+        ("b.luau", "return require('@self/a')"),
+    ] {
+        sources.files.insert(path.into(), text.as_bytes().to_vec());
+    }
+    let registry = running(&host, define(&sources, None).unwrap().0);
+    keymap(&host).dispatch("probe", None);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(failure(&registry, "test.luau"), None);
+    let message = host.toasts.borrow().last().unwrap().message.clone();
+    assert!(message.starts_with("true 1 "), "{message}");
+    assert!(message.contains("require cycle: init -> a -> b -> a"), "{message}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_out_of_the_plugin_directory_is_refused() {
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let dir = temp.path().join("plugin");
+    install("hello", &dir);
+    fs::write(temp.path().join("outside.luau"), "return 1").unwrap();
+    std::os::unix::fs::symlink(dir.join("init.luau"), dir.join("inside.luau")).unwrap();
+    assert!(Sources::read(&dir).is_ok(), "a link inside the directory is read");
+    std::os::unix::fs::symlink(temp.path().join("outside.luau"), dir.join("outside.luau")).unwrap();
+    let error = Sources::read(&dir).unwrap_err();
+    assert!(error.contains("a link out of the plugin directory"), "{error}");
 }
 
 /// A host that reads nothing and does nothing, for the call measures.

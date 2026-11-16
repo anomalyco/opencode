@@ -67,14 +67,15 @@ fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String 
         unsaved.map(|reason| format!("\nYour answer lasts until opencode exits: {reason}.")).unwrap_or_default();
     // The real path as a user would type it: Windows' canonical form starts `\\?\` (`\\?\C:\`, `\\?\UNC\`).
     let path = opencode_util::path::strip_verbatim(&artifact.path.to_string_lossy()).into_owned();
-    // A Luau plugin's directory is held by the same artifact as a TypeScript plugin's (spike `luau-spike`).
+    // A Luau plugin's approval is its own (spike `luau-spike`): it names the directory's tree as a Luau plugin, and
+    // approves nothing of the directory that runs on the JS host.
     #[cfg(feature = "luau")]
-    if artifact.script && opencode_plugin::luau::enabled() && opencode_plugin::luau::is_plugin(&artifact.path) {
+    if opencode_plugin::luau::approves(artifact) {
         return format!(
             "This project wants to run a Luau plugin inside opencode:\n\n{target}\nPlugin directory: {path}\
              {elsewhere}\nSHA-256 of its files: {}…\n\nIt has no direct access to your files, but it acts through \
              opencode with your permissions. Approve it only if you trust this project.{saved}",
-            artifact.short(),
+            opencode_plugin::luau::tree_of(artifact).short(),
         );
     }
     if artifact.script {
@@ -141,5 +142,16 @@ mod tests {
             let text = question(r"C:\work\.opencode\plugins\p", &artifact(path, script), None);
             assert!(text.contains(&format!("{shown}\n")) && !text.contains(r"\\?\"), "{path}: {text}");
         }
+    }
+
+    // Expected (review luau-2): a Luau plugin's approval asks about a Luau plugin, with its tree's hash, and the same
+    // directory's TypeScript approval still asks about TypeScript on the JS host.
+    #[cfg(feature = "luau")]
+    #[test]
+    fn a_luau_plugin_is_asked_about_as_one() {
+        let tree = Artifact { target: "/p".into(), path: "/p".into(), sha256: "ab".repeat(32), script: true };
+        let text = question("/p", &opencode_plugin::luau::artifact(tree.clone()), None);
+        assert!(text.contains("run a Luau plugin") && text.contains(&format!("files: {}…", "ab".repeat(8))), "{text}");
+        assert!(question("/p", &tree, None).contains("TypeScript code in opencode's JS host"));
     }
 }
