@@ -124,6 +124,18 @@ export const SettingsExtensions: Component<{
       </div>
 
       <div class="settings-tab-body">
+        <Show when={browse()}>
+          {(bridge) => (
+            <div class="settings-section settings-extensions-featured">
+              <span class="settings-extension-heading text-13-medium">
+                {language.t("settings.extensions.featured")}
+              </span>
+              <div class="settings-feature-grid">
+                <SettingsBrowse bridge={bridge()} onInstalled={syncMcps} />
+              </div>
+            </div>
+          )}
+        </Show>
         <Tabs
           variant="pill"
           value={props.subtab ?? "mcps"}
@@ -139,7 +151,6 @@ export const SettingsExtensions: Component<{
           </Tabs.List>
 
           <Tabs.Content value="mcps">
-            <Show when={browse()}>{(bridge) => <SettingsBrowse bridge={bridge()} onInstalled={syncMcps} />}</Show>
             <div class="settings-section">
               <div class="flex items-center justify-between">
                 <span class="settings-extension-heading text-13-medium">

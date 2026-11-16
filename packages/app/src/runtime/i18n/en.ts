@@ -1025,7 +1025,7 @@ export const dict = {
   "settings.extensions.availableAll": "Available to all projects",
   "settings.extensions.manageConfig": "Manage in opencode.json",
   "settings.extensions.addSkills": "How to add skills",
-  "settings.extensions.browse.heading": "Recommended",
+  "settings.extensions.featured": "Recommended",
   "settings.extensions.browse.name": "Browse",
   "settings.extensions.browse.description": "Let OpenCode work in your browser with your tabs, logins, and extensions.",
   "settings.extensions.browse.install": "Install",

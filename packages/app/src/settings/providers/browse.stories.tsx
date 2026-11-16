@@ -55,7 +55,7 @@ const bridge = (status: BrowseStatus): BrowseBridge => ({
 function BrowseStory(props: { names: StateName[]; width?: number }) {
   return (
     <DialogStoryRuntime>
-      <div class="flex flex-col gap-6 bg-v2-background-bg-base p-6" style={{ width: `${props.width ?? 720}px` }}>
+      <div class="settings-feature-grid bg-v2-background-bg-base p-6" style={{ width: `${props.width ?? 720}px` }}>
         <For each={props.names}>
           {(name) => <SettingsBrowse bridge={bridge(states[name])} onInstalled={() => {}} />}
         </For>

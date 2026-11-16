@@ -1,11 +1,9 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type Component } from "solid-js"
 import { Button } from "@opencode/ui/button"
-import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { BrowseBridge, BrowseInstallFailure } from "@/runtime/platform/platform"
 import { usePlatform } from "@/runtime/platform/platform"
-import { SettingsList } from "@/settings/list"
 import "@/settings/settings.css"
 import "@/shell/search-list.css"
 import {
@@ -135,65 +133,59 @@ export const SettingsBrowse: Component<{ bridge: BrowseBridge; onInstalled: () =
   }
 
   return (
-    <div class="settings-section settings-browse">
-      <span class="settings-extension-heading text-13-medium">{language.t("settings.extensions.browse.heading")}</span>
-      <SettingsList variant="catalog">
-        <div class="settings-extension-row settings-browse-row" data-phase={view().phase}>
-          <div class="settings-extension-lead">
-            <Icon name="outline-globe" class="text-v2-icon-icon-muted shrink-0" />
-            <div class="settings-browse-text">
-              <span class="settings-extension-name">{language.t("settings.extensions.browse.name")}</span>
-              <span
-                class="settings-browse-detail text-13-regular"
-                data-error={error() ? "" : undefined}
-                role={error() ? "alert" : undefined}
-              >
-                {detail()}
-              </span>
-            </div>
-          </div>
-          <div class="settings-extension-trailing settings-browse-trailing">
-            <Switch>
-              <Match when={view().phase === "checking"}>
-                <Loader aria-label={language.t("common.loading")} />
-              </Match>
-              <Match when={view().phase === "unavailable"}>
-                <Button size="small" variant="ghost-muted" onClick={() => dispatch({ type: "refresh.requested" })}>
-                  {language.t("common.retry")}
+    <div class="settings-feature-card" data-phase={view().phase}>
+      <div class="settings-feature-card-text">
+        <span class="settings-feature-card-name">
+          <span class="settings-extension-name">{language.t("settings.extensions.browse.name")}</span>
+          <Show when={connected()}>
+            <span class="mcp-status-dot" data-status="connected" aria-hidden="true" />
+          </Show>
+        </span>
+        <span
+          class="settings-feature-card-detail text-13-regular"
+          data-error={error() ? "" : undefined}
+          role={error() ? "alert" : undefined}
+        >
+          {detail()}
+        </span>
+      </div>
+      <Show when={view().phase !== "ready"}>
+        <div class="settings-feature-card-actions">
+          <Switch>
+            <Match when={view().phase === "checking"}>
+              <Loader aria-label={language.t("common.loading")} />
+            </Match>
+            <Match when={view().phase === "unavailable"}>
+              <Button size="small" variant="ghost-muted" onClick={() => dispatch({ type: "refresh.requested" })}>
+                {language.t("common.retry")}
+              </Button>
+            </Match>
+            <Match when={view().phase === "absent"}>
+              <Button size="small" variant="neutral" onClick={install}>
+                {language.t(error() ? "common.retry" : "settings.extensions.browse.install")}
+              </Button>
+            </Match>
+            <Match when={view().phase === "installing"}>
+              <Show when={showStore()}>
+                <Button size="small" variant="neutral" onClick={store}>
+                  {language.t("settings.extensions.browse.openStore")}
                 </Button>
-              </Match>
-              <Match when={view().phase === "absent"}>
-                <Button size="small" variant="neutral" onClick={install}>
-                  {language.t(error() ? "common.retry" : "settings.extensions.browse.install")}
+              </Show>
+              <Loader aria-label={language.t("settings.extensions.browse.installing")} />
+            </Match>
+            <Match when={view().phase === "incomplete"}>
+              <Button size="small" variant="neutral" onClick={install}>
+                {language.t("settings.extensions.browse.finish")}
+              </Button>
+              <Show when={showStore()}>
+                <Button size="small" variant="ghost-muted" onClick={store}>
+                  {language.t("settings.extensions.browse.openStore")}
                 </Button>
-              </Match>
-              <Match when={view().phase === "installing"}>
-                <Show when={showStore()}>
-                  <Button size="small" variant="neutral" onClick={store}>
-                    {language.t("settings.extensions.browse.openStore")}
-                  </Button>
-                </Show>
-                <Loader aria-label={language.t("settings.extensions.browse.installing")} />
-              </Match>
-              <Match when={view().phase === "incomplete"}>
-                <Show when={showStore()}>
-                  <Button size="small" variant="ghost-muted" onClick={store}>
-                    {language.t("settings.extensions.browse.openStore")}
-                  </Button>
-                </Show>
-                <Button size="small" variant="neutral" onClick={install}>
-                  {language.t("settings.extensions.browse.finish")}
-                </Button>
-              </Match>
-              <Match when={connected()}>
-                <span class="settings-mcp-status">
-                  <span class="mcp-status-dot" data-status="connected" aria-hidden="true" />
-                </span>
-              </Match>
-            </Switch>
-          </div>
+              </Show>
+            </Match>
+          </Switch>
         </div>
-      </SettingsList>
+      </Show>
     </div>
   )
 }

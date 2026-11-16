@@ -2295,43 +2295,58 @@
   gap: 16px;
 }
 
-/* browse sits above the MCP list, offered until it is set up. */
-.settings-browse {
+/* Featured extensions sit above the subtabs as cards; each fills a column and wraps on narrow widths. */
+.settings-extensions-featured {
   margin-bottom: 32px;
 }
 
-/* When the actions don't fit beside the text, they wrap under it instead of squeezing it. */
-.settings-browse-row {
-  flex-wrap: wrap;
-  gap: 8px 16px;
+.settings-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
 }
 
-.settings-browse-row .settings-extension-lead {
-  flex: 1 1 240px;
+.settings-feature-card {
+  display: flex;
+  min-height: 128px;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
 }
 
-.settings-browse-text {
+.settings-feature-card-text {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
-.settings-browse-detail {
+.settings-feature-card-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-feature-card-detail {
   color: var(--v2-text-text-muted);
   line-height: var(--line-height-compact);
   overflow-wrap: break-word;
 }
 
-.settings-browse-detail[data-error] {
+.settings-feature-card-detail[data-error] {
   color: var(--v2-state-fg-danger);
 }
 
-.settings-browse-trailing {
-  margin-inline-start: auto;
+/* Actions sit at the bottom so cards of different text lengths line up. */
+.settings-feature-card-actions {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  white-space: nowrap;
+  margin-top: auto;
 }
 
 /* The name keeps its own width so the source sits right after it, not against the actions. */
