@@ -14,7 +14,18 @@ test("checked bytes belong to the open handle, not a replacement directory entry
     await mkdir(other)
     await writeFile(join(folder, "page"), "first")
     await writeFile(join(other, "page"), "other")
-    const opened = await openContained(root, "reports/page")
+    // A launcher-supplied environment is not authority to choose a DLL for the handle check.
+    const systemRoot = process.env.SystemRoot
+    const opened = await (async () => {
+      if (process.platform !== "win32") return openContained(root, "reports/page")
+      process.env.SystemRoot = other
+      try {
+        return await openContained(root, "reports/page")
+      } finally {
+        if (systemRoot === undefined) delete process.env.SystemRoot
+        else process.env.SystemRoot = systemRoot
+      }
+    })()
     if (!opened) throw new Error("missing control")
     try {
       // Windows can move the file by name but will not rename a directory containing an open file.

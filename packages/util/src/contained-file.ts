@@ -51,7 +51,8 @@ async function handleResolver() {
     ffi.open({ library: "oc-preview-uv", path: process.execPath })
     ffi.open({
       library: "oc-preview-win",
-      path: join(process.env.SystemRoot ?? "C:\\Windows", "System32", "kernel32.dll"),
+      // Already loaded by Windows as a KnownDLL. Do not turn an environment variable into a native library path.
+      path: "kernel32.dll",
     })
     return (fd: number) => {
       // Bun and Electron own different CRT descriptor tables. Ask the runtime's own libuv for its borrowed HANDLE.
