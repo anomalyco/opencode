@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "Time-out voor {{command}} {{args}} na {{timeout}} ms",
   "error.failedPort": "Kan poort niet ophalen",
   "menu.remove": "Verwijderen",
+  "error.busy": "{{distro}} is bezig met een andere taak. Probeer het opnieuw wanneer die klaar is.",
 }

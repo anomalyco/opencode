@@ -7,8 +7,7 @@ import type { MarkdownPages } from "./markdown-pages"
 
 type MarkdownData = { changelog?: () => ChangelogView | undefined; releases?: () => ChangelogRelease[] }
 
-/** Session storage key: whether the reader has the Markdown view on, so a reload or the next page keeps it. */
-export const markdownKey = "opencode-markdown-view"
+export { markdownKey } from "./markdown-key"
 
 let loaded: MarkdownPages | undefined
 let loading: Promise<MarkdownPages> | undefined

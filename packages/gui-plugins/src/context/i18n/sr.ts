@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Сачувана сесија на {{filename}}",
   "export.failed.title": "Извоз сесије није успео",
   "export.failed.description": "Дошло је до грешке при извозу сесије",
+  "usage.toggle": "Прикажи/сакриј контекст сесије",
 }

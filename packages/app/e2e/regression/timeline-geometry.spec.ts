@@ -767,16 +767,16 @@ async function scrollsBehindComposerRegion(
         content: [
           {
             type: "tool",
-            id: "call_running_subagent",
-            name: "subagent",
+            id: "call_blocking_shell",
+            name: "shell",
             state: {
               status: "running",
-              input: { description: "Trace frame budget", agent: "explore" },
-              metadata: { sessionID: "ses_running_subagent" },
+              input: { command: "bun test" },
+              metadata: {},
             },
             time: { created: 2 },
           },
-          { type: "text", id: "prt_timeline_end", text: "The last answer ends above the composer region." },
+          { type: "text", text: "The last answer ends above the composer region." },
         ],
         time: { created: 2 },
       },
@@ -888,6 +888,41 @@ test("groups consecutive sent prompts under the last one's meta line, with each 
   await bubble(first).hover()
   await expect(first.locator('[data-slot="user-message-menu"]')).toHaveCSS("opacity", "1")
   await expect(first.getByRole("button", { name: "More actions" })).toHaveCount(1)
+})
+
+test("keeps the meta lines under messages reachable in the New timeline", async ({ page }) => {
+  await setupTimeline(page, {
+    settings: { newTimeline: true },
+    messages: [
+      userMessage([userText("Add the footer check.", { id: "prt_msg_0001_footer_text" })], {
+        id: "msg_0001_footer",
+        created: 1700000000000,
+      }),
+      assistantMessage([{ id: "prt_msg_0002_footer_text", type: "text", text: "Added the footer check." }], {
+        id: "msg_0002_footer",
+        parentID: "msg_0001_footer",
+        created: 1700000001000,
+      }),
+    ],
+  })
+
+  const content = page.locator("[data-timeline-virtual-content]")
+  const userRow = '[data-timeline-row="UserMessage"][data-message-id="msg_0001_footer"]'
+  const user = content.locator(userRow)
+  const reply = content.locator('[data-component="text-part"]', { hasText: "Added the footer check." })
+  await expect(reply).toBeVisible()
+
+  // Each virtual row clips to its measured height, so a meta line drawn below its row is cut off.
+  await user.locator('[data-slot="user-message-text"]').hover()
+  const meta = user.locator('[data-slot="user-message-copy-wrapper"]')
+  await expect(meta).toHaveCSS("opacity", "1")
+  const virtualRow = content.locator("[data-timeline-key]", { has: page.locator(userRow) })
+  const metaBox = (await meta.boundingBox())!
+  const rowBox = (await virtualRow.boundingBox())!
+  expect(metaBox.y + metaBox.height).toBeLessThanOrEqual(rowBox.y + rowBox.height)
+
+  // Hover only lands on what paints on top, so a clipped or covered Copy response never receives the pointer.
+  await reply.getByRole("button", { name: "Copy response" }).hover()
 })
 
 test("leaves a long prompt unfolded while Fold long messages is off", async ({ page }) => {

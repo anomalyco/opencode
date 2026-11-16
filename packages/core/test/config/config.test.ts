@@ -911,7 +911,7 @@ describe("Config", () => {
           layer: Layer.succeed(
             Credential.Service,
             Credential.Service.of({
-              lock: () => Effect.die("unused Credential.lock"),
+              refresh: () => Effect.die("unused Credential.refresh"),
               all: () => Effect.die("unused Credential.all"),
               list: () =>
                 Effect.succeed([
@@ -1154,7 +1154,7 @@ describe("Config", () => {
           layer: Layer.succeed(
             Credential.Service,
             Credential.Service.of({
-              lock: () => Effect.die("unused Credential.lock"),
+              refresh: () => Effect.die("unused Credential.refresh"),
               all: () => Effect.die("unused Credential.all"),
               list: () =>
                 Effect.succeed([

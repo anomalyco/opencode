@@ -1,50 +1,211 @@
 name: deploy
 
+# Deploys the legacy Worker and the data site (site, OG Worker, sync Workflow).
+#
+# Each service is split in two:
+# - build runs repository code (bun install, cf build / bun script/build.ts) with
+#   no environment, no secrets and no OIDC token, and uploads the resolved Build
+#   Output with a SHA256SUMS whose digest it reports.
+# - deploy runs in the dev|production environment and mints a short-lived
+#   Cloudflare token from the token issuer. It checks out only .github/release/,
+#   verifies the artifact against the digest the build job reported, installs
+#   the cf CLI pinned in .github/release/cf, and runs only
+#   .github/release/deploy-legacy.sh or deploy-data.sh. Those treat the artifact
+#   as data and refuse anything but the pinned targets in
+#   .github/release/targets/. That is what makes an account-wide token safe: the
+#   data sync Workflow PUT has no per-Worker permission, so only Dax-reviewed
+#   .github code ever holds a token that can write another Worker.
 on:
   push:
     branches:
       - dev
       - production
-      - beta
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  deploy:
-    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production' || github.ref_name == 'beta')
+  legacy-build:
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: ${{ github.ref_name }}
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        working-directory: services/legacy
+        run: ./node_modules/.bin/cf build --mode ${{ github.ref_name }}
+
+      - id: upload
+        uses: ./.github/release/upload
+        with:
+          name: legacy-${{ github.ref_name }}
+          path: services/legacy/.cloudflare/output
+          retention-days: 7
+          include-hidden-files: true
+
+  legacy-deploy:
+    needs: legacy-build
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the deploy scripts
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: /.github/release/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
 
-      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
-        if: github.ref_name != 'beta'
+      - name: Install the pinned cf CLI
+        working-directory: .github/release/cf
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download
+        uses: ./.github/release/download
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          pattern: legacy-${{ github.ref_name }}
+          require-digests: true
+          digests: legacy-${{ github.ref_name }}=${{ needs.legacy-build.outputs.digest }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-${{ github.ref_name }}
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
 
-      - run: bun sst deploy --stage=${{ github.ref_name }}
+      # A 15-minute token for this stage, minted by the token issuer (anomalyco/secrets) from the role above.
+      # It is a step output, so only the Deploy step gets it.
+      - name: Cloudflare token
+        id: cloudflare-token
+        run: bash .github/release/cloudflare-token.sh "$GITHUB_REF_NAME"
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
-          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
-          STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
-          SENTRY_RELEASE: web@${{ github.sha }}
-          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
-          VITE_SENTRY_RELEASE: web@${{ github.sha }}
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
+
+      # The GitHub App secrets are read here, so only this step ever has them. They reach cf through a file in the
+      # runner's temp directory, never argv, and the file is removed when the step ends.
+      - name: Deploy
+        env:
+          STAGE: ${{ github.ref_name }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}
+        # An explicit bash runs with pipefail, so a failed secret read fails the step.
+        shell: bash
+        run: |
+          if [[ "$STAGE" == dev ]]; then
+            exec bash .github/release/deploy-legacy.sh dev "$RUNNER_TEMP/in/legacy-dev"
+          fi
+          umask 077
+          secrets="$RUNNER_TEMP/legacy-secrets.json"
+          trap 'rm -f "$secrets"' EXIT
+          for name in GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY; do
+            aws secretsmanager get-secret-value --secret-id "opencode/production/$name" --output json |
+              jq --arg name "$name" '{($name): .SecretString}'
+          done | jq -s add > "$secrets"
+          bash .github/release/deploy-legacy.sh "$STAGE" "$RUNNER_TEMP/in/legacy-$STAGE" "$secrets"
+
+  data-build:
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        working-directory: services/data
+        run: bun script/build.ts --mode ${{ github.ref_name }}
+
+      - id: upload
+        uses: ./.github/release/upload
+        with:
+          name: data-${{ github.ref_name }}
+          path: services/data/.cloudflare/output
+          retention-days: 7
+          include-hidden-files: true
+
+  # The /data site, its OG image Worker and the sync Workflow (services/data).
+  data-deploy:
+    needs: data-build
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the deploy scripts
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: /.github/release/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      - name: Install the pinned cf CLI
+        working-directory: .github/release/cf
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: data-${{ github.ref_name }}
+          require-digests: true
+          digests: data-${{ github.ref_name }}=${{ needs.data-build.outputs.digest }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-${{ github.ref_name }}
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Cloudflare token
+        id: cloudflare-token
+        run: bash .github/release/cloudflare-token.sh "$GITHUB_REF_NAME"
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
+
+      # The Workers' secrets are read here, so only this step ever has them. They reach cf through files in the
+      # runner's temp directory, never argv, and are removed when the step ends.
+      - name: Deploy
+        env:
+          STAGE: ${{ github.ref_name }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}
+        # An explicit bash runs with pipefail, so a failed secret read fails the step.
+        shell: bash
+        run: |
+          umask 077
+          secrets="$RUNNER_TEMP/data-secrets.json"
+          trap 'rm -f "$secrets" "$secrets".*' EXIT
+          for name in DATA_DATABASE_HOST DATA_DATABASE_USERNAME DATA_DATABASE_PASSWORD R2_SQL_AUTH_TOKEN DATA_HIDDEN_MODELS; do
+            aws secretsmanager get-secret-value --secret-id "opencode/$STAGE/$name" --output json |
+              jq --arg name "$name" '{($name): .SecretString}'
+          done | jq -s add > "$secrets"
+          bash .github/release/deploy-data.sh "$STAGE" "$RUNNER_TEMP/in/data-$STAGE" "$secrets"

@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Додај сервер",
   "menu.delete": "Избриши",
+  "error.unavailable": "SSH е недостапен",
 }

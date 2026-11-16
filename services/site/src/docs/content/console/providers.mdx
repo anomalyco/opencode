@@ -106,6 +106,93 @@ Acme Inc. / Anthropic
 Turn on **Managed providers only** in **Settings › General** to restrict OpenCode to the workspace's providers for
 everyone.
 
+## Send identity
+
+When a provider is a gateway you run, turn on **Send identity** on its page. Console then adds an `x-opencode-actor`
+header to every model request it sends there. The header names the member or service account behind the request, so
+your gateway can log or restrict requests by sender.
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- It's off by default, and changing the base URL turns it off.
+- A provider still at its vendor's own API, such as `https://api.openai.com/v1`, doesn't show the setting, since the
+  vendor ignores the header.
+- Console removes any `x-opencode-*` header a client sends, so the only `x-opencode-actor` your gateway receives is the
+  one Console signed.
+- **Test connection** and model listing call `GET <base URL>/models` with the credential alone, so don't require the
+  header on that route.
+
+### Token
+
+The header is a JWT that Console signs for each request.
+
+| Field        | Value                                            |
+| ------------ | ------------------------------------------------ |
+| `alg`        | `ES256`                                          |
+| `typ`        | `opencode-actor+jwt`                             |
+| `iss`        | `https://opencode.ai/inference`                  |
+| `aud`        | The provider's base URL without trailing slashes |
+| `iat`, `exp` | `exp` is 120 seconds after `iat`                 |
+
+| Claim                | Value                                                                  |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | `user_id` for a member, `service_account_id` otherwise                 |
+| `workspace_id`       | The workspace the request ran in                                       |
+| `user_id`, `email`   | The member, when a member sent the request                             |
+| `service_account_id` | The service account, when a service account sent it (agents included)  |
+| `session_id`         | The client's session ID, when it sent one                              |
+| `request_id`         | The ID the client gets back in the `x-opencode-log-id` response header |
+
+A member's request carries a payload like this:
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### Verify the token
+
+Console publishes its public keys at `https://opencode.ai/inference/.well-known/jwks.json`, served with
+`Cache-Control: public, max-age=300`. Check the signature, issuer, audience, type and age, then the workspace. This
+example uses [jose](https://github.com/panva/jose).
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+Set `audience` to the provider's base URL as saved in Console, without trailing slashes, and replace `org_...` with the
+workspace ID from your Console URL. Console publishes a new signing key before it signs with it, so a verifier that
+looks keys up by `kid`, as `createRemoteJWKSet` does, keeps working through a rotation.
+
 ## Disable or remove
 
 Open the provider's **⋯** menu:

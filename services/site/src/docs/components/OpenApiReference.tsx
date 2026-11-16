@@ -1,7 +1,7 @@
 import { For, Show, type JSX } from "solid-js"
 import { HeadingLink } from "~/component/site/on-this-page"
 import openapi from "../../../../../packages/protocol/openapi.json"
-import { base } from "../config"
+import { latestDocs } from "../config"
 import { DocsLayout, type DocsAssets } from "../layouts/DocsLayout"
 import { formatOpenApiValue, openApiSchemaLabel, type OpenApiOperation, type OpenApiSchema } from "../lib/openapi"
 
@@ -44,6 +44,7 @@ const schemas = Object.entries(openapi.components.schemas) as [string, OpenApiSc
 export function OpenApiReference(props: { assets: DocsAssets }) {
   return (
     <DocsLayout
+      set={latestDocs}
       title="API"
       description="OpenCode HTTP API reference and OpenAPI specification."
       currentSlug="api"
@@ -55,7 +56,7 @@ export function OpenApiReference(props: { assets: DocsAssets }) {
     >
       <p>
         {openapi.info.description} The reference covers {operations.length} operations and {schemas.length} schemas from
-        the <a href={`${base}openapi.json`}>OpenAPI {openapi.openapi} document</a>.
+        the <a href={`${latestDocs.base}openapi.json`}>OpenAPI {openapi.openapi} document</a>.
       </p>
       <For each={groups}>
         {(group) => (
