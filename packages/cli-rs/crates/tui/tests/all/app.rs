@@ -185,7 +185,9 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             Step::Event { event } => memory.emit(event),
             Step::Release { release } => memory.release(release),
             Step::Wait { wait } => {
+                // As long on the app's clock as in real time, as the TS recorder's `Bun.sleep` lets its timers run.
                 app.wait_until(Duration::from_millis(*wait), || false);
+                app.advance(Duration::from_millis(*wait));
             }
             Step::Drag { drag: [from, to] } => app.drag((from[0], from[1]), (to[0], to[1])),
             Step::Ide { ide: message } => {
@@ -196,7 +198,7 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             // The recorded socket sends what the step made the TS fake send.
             Step::Pty { .. } => {}
             Step::Checkpoint(checkpoint) => {
-                let capture = settle(&app, &memory, checkpoint.until.as_deref(), |capture| {
+                let capture = settle(&app, &|| memory.in_flight(), checkpoint.until.as_deref(), |capture| {
                     app::compare_checkpoint(checkpoint, capture.clone()).is_ok_and(|result| {
                         result.comparison.is_equal() || app::allows(&checkpoint.deviation, &result.comparison)
                     })
@@ -592,19 +594,28 @@ fn routes(recording: &Recording) -> Vec<MemoryRoute> {
         .collect()
 }
 
-/// Waits for `until` (bounded by [`UNTIL`]), then until no request is in flight, two renders 25 ms apart are
+/// Waits for `until` (bounded by [`UNTIL`]), then until nothing is in flight (`in_flight`), two renders 25 ms apart are
 /// equal, and the frame is `expected` (bounded by [`SETTLE`]). A frame can stay still before a read that changes it
-/// has even been sent, so stillness alone is not enough.
-fn settle(app: &TestApp, memory: &Memory, until: Option<&str>, expected: impl Fn(&Fixture) -> bool) -> Fixture {
+/// has even been sent, so stillness alone is not enough. Each 25 ms passes on the app's manual clock too: the TS
+/// recorder's settle lets real time pass, 30 ms a poll, three polls at least, and its timers run in it, such as the
+/// 50 ms poll by which the open list follows its prompt (flakes-10). A frozen clock left a list opened before its prompt
+/// laid out one row tall.
+pub(crate) fn settle(
+    app: &TestApp,
+    in_flight: &dyn Fn() -> usize,
+    until: Option<&str>,
+    expected: impl Fn(&Fixture) -> bool,
+) -> Fixture {
     if let Some(until) = until {
-        app.wait_until(UNTIL, || memory.in_flight() == 0 && app.text().contains(until));
+        app.wait_until(UNTIL, || in_flight() == 0 && app.text().contains(until));
     }
     let deadline = Instant::now() + SETTLE;
     let mut previous = None;
     loop {
         app.wait_until(Duration::from_millis(25), || false);
+        app.advance(Duration::from_millis(25));
         let capture = Fixture::from_capture(&app.render());
-        let still = memory.in_flight() == 0 && previous.as_ref() == Some(&capture);
+        let still = in_flight() == 0 && previous.as_ref() == Some(&capture);
         if still && expected(&capture) || Instant::now() >= deadline {
             return capture;
         }

@@ -584,6 +584,29 @@ fn a_list_typed_before_a_remounted_composer_lays_out_shows_every_row() {
     assert_eq!(screen(true), twin);
 }
 
+/// Expected (flakes-10, the lane's `P.8/select-search` again): the P-APP replay's settle, which compares a checkpoint,
+/// shows a list typed into a remounted composer before it laid out with all its rows, as the TS recorder's settle does
+/// once its 50 ms poll ran. On a frozen app clock the follow never ran, and the list stayed one row tall.
+#[test]
+fn the_replay_settles_a_list_typed_before_its_composer_laid_out() {
+    let screen = |remount: bool| {
+        let setup = Setup::new();
+        setup.app.render();
+        if remount {
+            opencode_plugin::Host::remount(&*opencode_tui::plugins::host::host(&setup.tui));
+        }
+        setup.app.type_text("/se");
+        setup.wait_for("Open settings");
+        let settled = crate::app::settle(&setup.app, &|| 0, None, |_| true);
+        // The settled frame is the last one painted: its text is the app's now.
+        (settled, setup.app.render().text())
+    };
+    let (twin, text) = screen(false);
+    assert!(text.contains("/sessions") && text.contains("/settings"), "{text}");
+    let (remounted, after) = screen(true);
+    assert!(remounted == twin, "{after}\nthe twin:\n{text}");
+}
+
 /// Expected (select-search-flake): two remounts before the screen lays out again, as a plugin's load and the reload of
 /// its registrations give in one turn, keep the open list as one remount does: its height, its rows and its selection.
 #[test]
