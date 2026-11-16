@@ -19,7 +19,7 @@ it. Otherwise the registry lists it with status `Skipped`, its slot claims, comm
 - a build without the cargo feature `ts` (on by default, ts-feature) has no JS host: "this build of opencode-native has
   no TypeScript plugin support (built without the ts feature)";
 - with no Bun found: "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun
-  on the path runs it; install Bun or set OPENCODE_BUN".
+  on the path runs it; install Bun 1.4 or newer, or set OPENCODE_BUN to its absolute path".
 
 `scenarios/F16/ts-plugin-loads.pty.ts` drives the default: a plugin in the global `plugins` directory loads in both
 clients, with no variable set.
