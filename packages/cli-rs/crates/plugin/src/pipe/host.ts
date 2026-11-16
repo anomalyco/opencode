@@ -688,7 +688,7 @@ function manifestOf(plugin: Plugin) {
 // It must be one of the plugin's own files (carbon jsnpm-3): a `name` such as `../../x` or an absolute path resolves
 // anywhere, and the module it names would run outside what was approved. A package's `<name>/tui` resolves to the
 // package itself, by self-reference or from the `node_modules` it sits in.
-function resolveEntry(dir: string): { entry: string } | { error: string } | undefined {
+function resolveEntry(dir: string): { entry: string } | { error: string } | { missing: string } {
   let name: string | undefined
   const file = path.join(dir, "package.json")
   if (existsSync(file)) {
@@ -704,7 +704,7 @@ function resolveEntry(dir: string): { entry: string } | { error: string } | unde
     } catch (error) {
       // A confined plugin's resolution the hook refused is its failure; one that finds nothing has no TUI module.
       if (message(error).includes(OUTSIDE)) return { error: message(error) }
-      return undefined
+      return { missing: message(error) }
     }
   })()
   if (typeof entry !== "string") return entry
@@ -806,7 +806,7 @@ const described = new Map<number, Plugin>()
 // a disabled plugin's setup never runs (review carbon-8).
 async function load(seq: number, target: string, dir: string, options: Json, withSetup: boolean, seed?: Json) {
   const resolved = resolveEntry(dir)
-  if (!resolved) return send({ type: "unsupported", seq })
+  if ("missing" in resolved) return send({ type: "unsupported", seq, reason: resolved.missing })
   if ("error" in resolved) return send({ type: "done", seq, error: `cannot load ${target}: ${resolved.error}` })
   const entry = resolved.entry
   // Each load imports the plugin's modules afresh, as a generation of its own: its helpers as much as its entry, so a

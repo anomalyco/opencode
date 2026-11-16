@@ -224,9 +224,11 @@ pub enum Up {
         seq: u64,
         id: String,
     },
-    /// The target of load `seq` has no TUI module.
+    /// The target of load `seq` has no TUI module: `reason` is what its resolution said.
     Unsupported {
         seq: u64,
+        #[serde(default)]
+        reason: String,
     },
     /// The handler of `seq` returned and the views it made due were sent, with the effects it asked for; or it threw,
     /// with nothing. For a mount or an input: its view was sent.

@@ -513,6 +513,24 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
     assert_eq!(local_source("@acme/opencode-tui", dir), None);
     assert_eq!(local_source("file:///D:/a/My%20Plugin", dir), Some(r"D:\a\My Plugin".into()));
     assert_eq!(local_source("file:///D:/a/b/../c", dir), Some(r"D:\a\c".into()));
+    // Expected (win11-runs D2): a verbatim spelling names the same directory, handed on without its prefix.
+    assert_eq!(local_source(r"\\?\D:\abs\x", dir), Some(r"D:\abs\x".into()));
+    assert_eq!(local_source(r"\\?\D:\abs\x\..\y", dir), Some(r"D:\abs\y".into()));
+    assert_eq!(local_source(r"\\?\UNC\server\share\x", dir), Some(r"\\server\share\x".into()));
+}
+
+// Expected (win11-runs D2): what the JS host is handed loses a verbatim prefix, which Bun resolves nothing under; a
+// path without one is unchanged.
+#[test]
+fn a_verbatim_path_is_handed_on_plain() {
+    for (path, plain_path) in [
+        (r"\\?\C:\w11\deep\plug", r"C:\w11\deep\plug"),
+        (r"\\?\UNC\server\share\plug", r"\\server\share\plug"),
+        (r"C:\w11\deep\plug", r"C:\w11\deep\plug"),
+        ("/home/me/plug", "/home/me/plug"),
+    ] {
+        assert_eq!(super::plain(PathBuf::from(path)), PathBuf::from(plain_path), "{path}");
+    }
 }
 
 #[test]

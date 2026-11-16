@@ -23,7 +23,7 @@ use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
 use crate::pipe::{Scripts, Step};
-use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, SKIPPED_JS_OFF, SKIPPED_NO_BUN, Status};
+use crate::{Definition, ErrorFn, Host, NO_TUI_MODULE, Registry, SKIPPED, SKIPPED_JS_OFF, SKIPPED_NO_BUN, Status};
 use approval::{Approvals, Artifact, Decision};
 
 /// The file name of a plugin directory's native build: `plugin.so`, `plugin.dylib`, or `plugin.dll`.
@@ -762,11 +762,15 @@ impl Loader {
             }
             Step::Starting if registry.loaded(name) => false,
             Step::Starting => starting(registry, name, listed),
-            Step::Unsupported => {
+            Step::Unsupported(reason) => {
                 registry.unload(host, name);
                 self.seen.borrow_mut().remove(name);
-                let status = Status::Skipped(SKIPPED.to_owned());
+                let reason = format!("{NO_TUI_MODULE}: {reason}");
+                let status = Status::Skipped(reason.clone());
                 let changed = listed.as_ref() != Some(&status);
+                if changed {
+                    log::warn!("plugin {name} skipped: {reason}");
+                }
                 registry.set_unloaded(name, Some(status));
                 changed
             }
@@ -1156,7 +1160,8 @@ pub fn local_source(target: &str, directory: &Path) -> Option<PathBuf> {
             other => resolved.push(other),
         }
     }
-    Some(resolved)
+    // Bun resolves nothing under a verbatim directory (win11-runs D2): `\\?\C:\x` is handed on as `C:\x`.
+    Some(plain(resolved))
 }
 
 #[cfg(test)]
