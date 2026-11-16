@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+<title id="title">ALjwharah</title><desc id="desc">ALjwharah AI coding agent identity</desc>
+<rect width="1200" height="360" rx="24" fill="#101c22"/>
+<path d="M86 258 174 78h47l89 180h-53l-17-38h-86l-17 38zm86-78h50l-25-57z" fill="#54d7ba"/>
+<path d="m279 91 31-20 57 37v78l-31 19-57-37z" fill="none" stroke="#f2bf5e" stroke-width="10"/>
+<path d="M335 109v96M280 169l55-34 32 21" fill="none" stroke="#f2bf5e" stroke-width="8"/>
+<text x="395" y="190" fill="#f5f7f4" font-family="Arial, sans-serif" font-size="92" font-weight="700">ALjwharah</text>
+<text x="399" y="237" fill="#b5cac5" font-family="Arial, sans-serif" font-size="26">AI CODING AGENT</text>
+</svg>
