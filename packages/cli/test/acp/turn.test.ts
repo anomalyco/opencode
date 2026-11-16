@@ -193,6 +193,43 @@ describe("acp turn events over the wire", () => {
     ])
   })
 
+  test("streams resumed turns after background shells finish", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id, text }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, `call_${text}`, "shell"),
+          toolCalled(sessionID, `call_${text}`, { command: "build", background: true }),
+          toolSucceeded(sessionID, `call_${text}`, { shellID: `sh_${text}`, status: "running" }, "backgrounded"),
+          // The second shell finishes as its turn ends: the notice is queued but wakes the session afterwards.
+          ...(text === "second" ? [shellNotice(sessionID, "msg_notice_second", "sh_second")] : []),
+        ),
+    })
+    const sessionID = acp.sessionId
+
+    expect((await acp.prompt(sessionID, "first")).stopReason).toBe("end_turn")
+    acp.server.send(
+      shellNotice(sessionID, "msg_notice_first", "sh_first"),
+      ...turn(sessionID, "msg_notice_first", textDelta(sessionID, "msg_reaction_1", "first reaction")),
+      textDelta(sessionID, "msg_stale", "stale"),
+    )
+    await acp.waitForUpdate(({ update }) => JSON.stringify(update).includes("first reaction"))
+
+    expect((await acp.prompt(sessionID, "second")).stopReason).toBe("end_turn")
+    acp.server.send(...turn(sessionID, "msg_notice_second", textDelta(sessionID, "msg_reaction_2", "second reaction")))
+    await acp.waitForUpdate(({ update }) => JSON.stringify(update).includes("second reaction"))
+
+    expect(
+      turnUpdates(acp.updates)
+        .map(({ update }) => update)
+        .filter((update) => update.sessionUpdate === "agent_message_chunk"),
+    ).toMatchObject([
+      { messageId: "msg_reaction_1", content: { text: "first reaction" } },
+      { messageId: "msg_reaction_2", content: { text: "second reaction" } },
+    ])
+  })
+
   test("cancels unsupported session forms so execution can continue", async () => {
     await using acp = await startSession({
       onPrompt: ({ sessionID, id }) => [
@@ -233,6 +270,18 @@ describe("acp turn events over the wire", () => {
     expect(acp.server.prompts).toEqual([expect.objectContaining({ text: "redirect", delivery: "steer", resume: false })])
   })
 })
+
+function shellNotice(sessionID: string, inboxID: string, shellID: string) {
+  return durableEvent("session.inbox.enqueued", {
+    sessionID,
+    inboxID,
+    item: {
+      type: "synthetic",
+      payload: { text: `<shell id="${shellID}" state="completed">`, metadata: { source: "shell", shellID } },
+      delivery: "steer",
+    },
+  })
+}
 
 function turnUpdates(updates: readonly SessionNotification[]) {
   return updates.filter(
