@@ -1180,8 +1180,10 @@ export function createTimelineVirtualizer(input: Input) {
         return fractions
       })
 
-      // Marks that would draw over each other share one, as the rail is too short to show both. The list keeps its
-      // identity while the same prompts are drawn, so a reply streaming below them never rebuilds the rail.
+      // Marks closer together than MARKER_GAP would draw over each other, so the first prompt of a run stands for
+      // the run. Keeping the first prompt is also what keeps drawn marks a full gap apart: moving a drawn mark to
+      // the later prompt would leave the next one able to land almost on top of it. The list keeps its identity
+      // while the same prompts are drawn, so a reply streaming below them never rebuilds the rail.
       const promptMarkers = createMemo<PromptMarker[]>((previous) => {
         const fractions = promptFractions()
         const markers: PromptMarker[] = []
@@ -1190,14 +1192,7 @@ export function createTimelineVirtualizer(input: Input) {
         promptRows().forEach((row) => {
           const fraction = fractions.get(row.id) ?? 0
 
-          // The gap is measured from the mark that is drawn, not from the prompt that just joined it, so a long run
-          // of close prompts still spaces a mark every MARKER_GAP instead of collapsing into one.
-          if (last >= 0 && fraction - last < MARKER_GAP) {
-            markers[markers.length - 1] = row
-
-            return
-          }
-
+          if (last >= 0 && fraction - last < MARKER_GAP) return
           markers.push(row)
           last = fraction
         })
