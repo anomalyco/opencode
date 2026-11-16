@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "4f6e16c6-f070-4545-b9d0-19fcb6e5210c",
-  "prevIds": ["0ac88673-a402-45a0-b931-e694d59ccefa"],
+  "id": "e4b3e7c4-0834-4c58-8859-67f61beec4c6",
+  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
   "ddl": [
     {
       "name": "account_state",
@@ -34,6 +34,10 @@
     },
     {
       "name": "kv",
+      "entityType": "tables"
+    },
+    {
+      "name": "marketplace_registry",
       "entityType": "tables"
     },
     {
@@ -625,6 +629,36 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "kv"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "marketplace_registry"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "marketplace_registry"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installed",
+      "entityType": "columns",
+      "table": "marketplace_registry"
     },
     {
       "type": "text",
@@ -2260,6 +2294,13 @@
       "nameExplicit": false,
       "name": "kv_pk",
       "table": "kv",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "marketplace_registry_pk",
+      "table": "marketplace_registry",
       "entityType": "pks"
     },
     {
