@@ -366,10 +366,6 @@ pub struct TuiKeymap<T> {
     /// The layers registered during [`Self::hold`]'s `register`.
     held: RefCell<Option<Vec<u64>>>,
     leader: Option<TimedLeader<T>>,
-    /// The configured `leader.timeout` ([`Self::set_leader_timeout`]).
-    leader_timeout: Cell<Duration>,
-    /// Counts the pending sequence's changes, so a timer knows whether its leader stroke is still the last one.
-    leader_generation: Rc<Cell<u64>>,
     leader_stroke: Option<Stroke>,
     modes: Rc<RefCell<Vec<ModeEntry>>>,
     next_mode: Cell<u64>,
@@ -384,7 +380,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         let textarea_bindings: Vec<Binding<T>> =
             EDIT_COMMANDS.iter().flat_map(|(_, name, _)| keybinds.get(name).iter().cloned()).collect();
         // The order of `keymap.tsx:78-136`. EDIT_COMMANDS lists the 36 `input.*` names in that file's order.
-        let mut addons = vec![
+        let addons = vec![
             addons::comma_bindings(&keymap),
             addons::key_aliases(&keymap, ALIASES),
             addons::base_layout_fallback(&keymap),
@@ -403,9 +399,6 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         let leader = leader_key
             .clone()
             .and_then(|key| addons::timed_leader(&keymap, "leader", key, options.leader_timeout).ok());
-        let leader_generation = Rc::new(Cell::new(0));
-        let generation = leader_generation.clone();
-        addons.push(keymap.on_pending_sequence(move |_| generation.set(generation.get() + 1)));
         let leader_stroke =
             leader_key.as_ref().and_then(|key| keymap.parse_key(key.clone()).ok()).map(|part| part.stroke);
         let format = format_options(leader_key.as_ref());
@@ -417,8 +410,6 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             first_layer: RefCell::default(),
             held: RefCell::default(),
             leader,
-            leader_timeout: Cell::new(options.leader_timeout),
-            leader_generation,
             leader_stroke,
             modes: Rc::new(RefCell::new(Vec::new())),
             next_mode: Cell::new(0),
@@ -500,25 +491,24 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     /// pending sequence changes, schedule a timer for [`Self::leader_timeout`] that passes the generation to
     /// [`Self::expire_leader`] ([`crate::dialog::expire_leader`] does).
     pub fn leader_armed(&self) -> Option<u64> {
-        self.leader.as_ref()?.deadline().map(|_| self.leader_generation.get())
+        self.leader.as_ref()?.armed()
     }
 
+    /// The configured `leader.timeout`; zero without a leader key, which never arms.
     pub fn leader_timeout(&self) -> Duration {
-        self.leader_timeout.get()
+        self.leader.as_ref().map_or(Duration::ZERO, TimedLeader::timeout)
     }
 
     /// Clears the leader sequence if `generation` is still armed. Returns whether it did.
     pub fn expire_leader(&self, generation: u64) -> bool {
-        if self.leader_armed() != Some(generation) {
-            return false;
-        }
-        self.keymap.clear_pending_sequence();
-        true
+        self.leader.as_ref().is_some_and(|leader| leader.expire(generation))
     }
 
     /// `leader.timeout` after a config change; the next leader key takes it.
     pub fn set_leader_timeout(&self, timeout: Duration) {
-        self.leader_timeout.set(timeout);
+        if let Some(leader) = &self.leader {
+            leader.set_timeout(timeout);
+        }
     }
 
     /// Whether `event` is the configured leader key.
