@@ -102,7 +102,8 @@ function fetchIcon(
   login: (auth: Electron.AuthInfo, callback: (username?: string, password?: string) => void) => void,
 ) {
   return new Promise<{ mime: string; data: Buffer } | undefined>((resolve) => {
-    const request = net.request({ url, session: partition, useSessionCookies: true, redirect: "follow" })
+    // The page supplies this URL. The browser chrome must not turn an icon into a credentialed navigation.
+    const request = net.request({ url, session: partition, useSessionCookies: false, credentials: "omit", redirect: "follow" })
     const chunks: Buffer[] = []
 
     const finish = (value?: { mime: string; data: Buffer }) => {
