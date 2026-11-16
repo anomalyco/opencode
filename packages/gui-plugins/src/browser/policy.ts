@@ -103,6 +103,25 @@ export function pagePermission(permission: string, origin: string, declared: (id
 /** How long after an agent command a download that no user input started still counts as the command's. */
 export const DOWNLOAD_GRACE_MS = 30_000
 
+export type TabActivity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number }
+
+/** True from a tab's first agent command (including one inherited from its opener) until the tab closes.
+ * Omit `now` for site permissions. For downloads and external links, pass the event time to use the
+ * shorter running/recent-command window, which ends on subsequent user input in this tab. */
+export function agentDriven(activity: Readonly<TabActivity>, now?: number): boolean {
+  if (activity.agentRuns > 0) return true
+
+  if (activity.agentEndedAt === undefined) return false
+
+  return now === undefined || (now - activity.agentEndedAt <= DOWNLOAD_GRACE_MS &&
+    (activity.userInputAt === undefined || activity.userInputAt < activity.agentEndedAt))
+}
+
+/** A child inherits provenance, not its opener's in-flight run counter. */
+export function childActivity(activity: Readonly<TabActivity>): TabActivity {
+  return activity.agentRuns ? { agentRuns: 0, agentEndedAt: Date.now() } : { ...activity }
+}
+
 /**
  * Whose a download in a tab is. Only one the agent's command caused is the agent's: it began while an agent command ran
  * in the tab, or within `DOWNLOAD_GRACE_MS` after one ended with no click or key press from the user since, and
@@ -125,11 +144,7 @@ export function downloadOwner(download: {
 /** The same running-command and user-input boundary for downloads and opening external apps. */
 export function activityOwner(download: { readonly now: number; readonly agentRunning: boolean; readonly agentEndedAt?: number; readonly userInputAt?: number }): "agent" | "user" {
 
-  if (download.agentRunning) return "agent"
-
-  if (download.agentEndedAt === undefined || download.now - download.agentEndedAt > DOWNLOAD_GRACE_MS) return "user"
-
-  return download.userInputAt !== undefined && download.userInputAt >= download.agentEndedAt ? "user" : "agent"
+  return agentDriven({ agentRuns: Number(download.agentRunning), agentEndedAt: download.agentEndedAt, userInputAt: download.userInputAt }, download.now) ? "agent" : "user"
 }
 
 /** Actions that only take a tab away from its document, which the agent may run on an extension page to leave it. */

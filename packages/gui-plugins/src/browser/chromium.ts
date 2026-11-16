@@ -45,6 +45,8 @@ import type { BrowserNetwork } from "./network"
 import {
   agentFrame,
   agentFrames,
+  agentDriven,
+  childActivity,
   agentRefusal,
   activityOwner,
   allowedDestination,
@@ -57,6 +59,7 @@ import {
   localFileURL,
   normalizeURL,
   type Policy,
+  type TabActivity,
 } from "./policy"
 import type { PaneElement, RefusalNotice } from "./ipc"
 import { navigationNotice, popupActivated } from "./refusal-notice"
@@ -168,9 +171,6 @@ function zoomStep(current: number, direction: "in" | "out" | "reset") {
   return zoomSteps.findLast((step) => step < current - 0.001) ?? current
 }
 
-/** Who may have caused a tab's download: the agent's commands running now, when the last ended, the user's last input. */
-type Activity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number }
-
 /** Ends a running command's wait when it is interrupted. */
 type Interrupted = ReturnType<typeof Promise.withResolvers<never>>
 
@@ -220,7 +220,8 @@ export function createBrowserPage(
     hidden?: () => void
     fail: () => void
     /** Adopts a page the document opened; a background one leaves the current tab selected. */
-    popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean) => WebContents
+    popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean, activity: TabActivity) => WebContents
+    activity: TabActivity
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
@@ -382,13 +383,11 @@ export function createBrowserPage(
       filter: [{ type: "iframe", exclude: false }, { exclude: true }],
     }, sessionID)
 
-  const activity: Activity = { agentRuns: 0 }
+  const activity = options.activity
   const notices = noticeActions(options.refused, options.menu.open)
   const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
-  // Set by the agent's first command; until then the tab renders as any other.
-  let agentDriven = false
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
   const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
@@ -494,7 +493,7 @@ export function createBrowserPage(
     notices.clear()
     popupReport = undefined
 
-    if (agentDriven) contents.setBackgroundThrottling(false)
+    if (agentDriven(activity)) contents.setBackgroundThrottling(false)
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
     dispatch({ type: "navigation.failed", code, description: options.remote?.needsUpdate?.() && preview(url)?.startsWith("workspace:") ? "browser.preview.unsupported" : description, url, preview: preview(url), isMainFrame }),
@@ -584,7 +583,7 @@ export function createBrowserPage(
           partition: options.partition,
         },
       },
-      createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab"),
+      createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab", childActivity(activity)),
     }
   })
 
@@ -792,6 +791,7 @@ export function createBrowserPage(
     view,
     contents,
     state,
+    childActivity: () => childActivity(activity),
     answerNotice: notices.answer,
     ready,
     /** The host embed the renderer lays this page out with. */
@@ -862,13 +862,11 @@ export function createBrowserPage(
       const cancel = () => dispatchDialog({ type: "run.cancelled", runID })
       signal.addEventListener("abort", cancel, { once: true })
 
-      if (origin === "agent") {
-        activity.agentRuns++
+      if (origin === "user") activity.userInputAt = Date.now()
 
-        if (!agentDriven) {
-          agentDriven = true
-          contents.setBackgroundThrottling(false)
-        }
+      if (origin === "agent") {
+        if (!agentDriven(activity)) contents.setBackgroundThrottling(false)
+        activity.agentRuns++
       }
 
       try {
