@@ -32,6 +32,8 @@ export interface Interface extends State.Transformable<Editor> {
   readonly directory: AbsolutePath
   readonly get: () => {
     readonly directory: AbsolutePath
+    /** Whether config set `directory`, rather than it being the data-directory default. */
+    readonly configured: boolean
     readonly strategies: ReadonlyMap<Worktree.StrategyID, Strategy>
     readonly selected: Worktree.StrategyID
   }
@@ -49,12 +51,14 @@ const layer = Layer.effect(
       name: "worktree",
       initial: () => ({
         directory: AbsolutePath.make(path.join(global.data, "worktree", location.project.id.slice(0, 6))),
+        configured: false,
         strategies: new Map<Worktree.StrategyID, Strategy>([[git.id, git]]),
         selected: git.id,
       }),
       editor: (value): Editor => ({
         configure: (settings) => {
           value.directory = settings.directory
+          value.configured = true
         },
         add: (strategy) => {
           value.strategies.delete(strategy.id)

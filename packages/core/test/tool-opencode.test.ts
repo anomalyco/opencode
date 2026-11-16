@@ -1,10 +1,11 @@
 import { expect } from "bun:test"
-import fs from "fs/promises"
 import path from "path"
+import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
@@ -12,8 +13,10 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
+import { Worktree } from "@opencode/core/worktree"
 import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
 import { Effect } from "effect"
 import { initRepo } from "./fixture/git"
@@ -144,40 +147,70 @@ it.effect("groups available models by provider with paging", () =>
   }),
 )
 
-const approvals = { assertions: [] as Permission.AssertInput[], rejectEdit: false }
-const worktreeIt = testEffect(
-  makePluginTestLayer(
-    permissionLayer({
-      assert: (input) =>
-        Effect.sync(() => approvals.assertions.push(input)).pipe(
-          Effect.andThen(
-            approvals.rejectEdit && input.action === "edit"
-              ? Effect.fail(new Permission.CorrectedError({ feedback: "Keep this worktree" }))
-              : Effect.void,
-          ),
-        ),
-    }),
-  ),
+const worktreeContext = (): SessionHooks["context"] => ({
+  sessionID: Session.ID.make("ses_worktree_guidance"),
+  agent: Agent.ID.make("build"),
+  model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("test") }),
+  system: [],
+  messages: [],
+  tools: {},
+  options: {},
+})
+
+it.effect("tells the model where to create worktrees only for a configured directory and the git strategy", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const hooks = yield* PluginHooks.Service
+    const strategies = yield* WorktreeStrategies.Service
+    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
+    const system = () =>
+      Effect.gen(function* () {
+        const event = worktreeContext()
+        yield* hooks.trigger("session", "context", event)
+        return event.system.map((part) => part.text).filter((text) => text.includes("worktree"))
+      })
+    const moveHint =
+      "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory."
+
+    // Without configuration, models aren't steered to the data-directory default.
+    expect(yield* system()).toEqual([moveHint])
+
+    const directory = AbsolutePath.make(path.join(path.sep, "work", "trees"))
+    yield* strategies.transform((editor) => editor.configure({ directory }))
+    expect(yield* system()).toEqual([
+      `Unless the user asks otherwise, create worktrees in \`${directory}\` with \`git worktree add ${path.join(directory, "<name>")}\` (add \`-b <branch>\` for a new branch). List them with \`git worktree list\` and remove one with \`git worktree remove <path>\`.`,
+      moveHint,
+    ])
+
+    // A strategy plugin replaces git, so its own instructions apply instead.
+    yield* strategies.transform((editor) =>
+      editor.add({
+        id: Worktree.StrategyID.make("rift"),
+        create: () => Effect.die("unused"),
+        remove: () => Effect.die("unused"),
+        list: () => Effect.succeed([]),
+      }),
+    )
+    expect(yield* system()).toEqual([moveHint])
+  }),
 )
 
-worktreeIt.live("creates, lists, and removes worktrees for the plugin's project", () =>
+const assertions: Permission.AssertInput[] = []
+const recordingIt = testEffect(
+  makePluginTestLayer(permissionLayer({ assert: (input) => Effect.sync(() => void assertions.push(input)) })),
+)
+
+recordingIt.live("moves a session into a worktree made with git without asking to leave the project", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
     const location = yield* Location.Service
-    const strategies = yield* WorktreeStrategies.Service
     const database = yield* Database.Service
     const parent = yield* tmpdirScoped()
     yield* Effect.promise(() => initRepo(location.directory))
     yield* database.db
       .insert(ProjectTable)
-      .values({
-        id: location.project.id,
-        worktree: location.directory,
-        sandboxes: [],
-        time_created: 1,
-        time_updated: 1,
-      })
+      .values({ id: location.project.id, worktree: location.directory, sandboxes: [], time_created: 1, time_updated: 1 })
       .onConflictDoUpdate({ target: ProjectTable.id, set: { worktree: location.directory } })
       .run()
       .pipe(Effect.orDie)
@@ -187,77 +220,24 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
-    yield* strategies.transform((editor) => editor.configure({ directory: AbsolutePath.make(parent.path) }))
+    const directory = path.join(parent.path, "task")
+    yield* Effect.promise(() => Bun.$`git worktree add -q ${directory}`.cwd(location.directory).quiet())
     yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
     const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
     const registry = yield* Tool.Service
-    const program = (code: string) =>
-      executeTool(registry, {
-        sessionID: session.id,
-        ...toolIdentity,
-        call: { type: "tool-call", id: `call-${code}`, name: "execute", input: { code } },
-      })
-    const call = (name: string, input: Record<string, unknown>) =>
-      program(`return await tools.opencode.${name}(${JSON.stringify(input)})`)
-    const run = (name: string, input: Record<string, unknown>) =>
-      call(name, input).pipe(
-        Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")),
-      )
-    const directory = path.join(parent.path, "task")
+    assertions.length = 0
 
-    expect(yield* run("worktree_create", { name: " task " })).toEqual({ directory })
-    expect(yield* Effect.promise(() => fs.stat(directory).then((stat) => stat.isDirectory()))).toBe(true)
-    expect((yield* run("worktree_list", {})).worktrees).toContainEqual({ directory, strategy: "git" })
-
-    // The project checkout is not a removable worktree.
-    expect(yield* call("worktree_remove", { directory: location.directory })).toMatchObject({
-      content: [
-        {
-          type: "text",
-          text: `Unable to remove ${location.directory}: it is not a worktree of this project. Use worktree_list to see the project's worktrees.`,
-        },
-      ],
-      metadata: { error: true },
+    const result = yield* executeTool(registry, {
+      sessionID: session.id,
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call-move",
+        name: "execute",
+        input: { code: `return await tools.opencode.session_move(${JSON.stringify({ directory })})` },
+      },
     })
-    expect(yield* Effect.promise(() => fs.stat(location.directory).then((stat) => stat.isDirectory()))).toBe(true)
-
-    // A dirty worktree is kept, and the failure leaves the choice to force removal to the model.
-    yield* Effect.promise(() => fs.writeFile(path.join(directory, "draft.txt"), "draft"))
-    expect(yield* call("worktree_remove", { directory })).toMatchObject({
-      content: [{ type: "text", text: `Unable to remove worktree ${directory}: it has modified or untracked files.` }],
-    })
-    expect(yield* Effect.promise(() => Bun.file(path.join(directory, "draft.txt")).exists())).toBe(true)
-    yield* Effect.promise(() => fs.rm(path.join(directory, "draft.txt")))
-
-    // Removal requires the same approval as editing files in the worktree. Rejection feedback reaches the
-    // program and the execute result, as it would reach the model from a direct call.
-    approvals.assertions.length = 0
-    approvals.rejectEdit = true
-    expect(yield* call("worktree_remove", { directory })).toMatchObject({
-      content: [{ type: "text", text: "Keep this worktree" }],
-      metadata: { error: true },
-    })
-    expect(
-      yield* program(
-        `try { await tools.opencode.worktree_remove(${JSON.stringify({ directory })}) } catch (error) { return error.message }`,
-      ),
-    ).toMatchObject({ content: [{ type: "text", text: "Keep this worktree" }] })
-    expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(true)
-    approvals.rejectEdit = false
-
-    // Relative paths resolve from the session's directory for both approval and removal.
-    expect(yield* run("worktree_remove", { directory: path.relative(location.directory, directory) })).toEqual({
-      directory,
-      removed: true,
-    })
-    expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(false)
-    // Permission resources always use forward slashes, including on Windows.
-    const resource = directory.replaceAll("\\", "/")
-    expect(approvals.assertions).toMatchObject([
-      { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
-      { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
-      { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
-    ])
-    expect((yield* run("worktree_list", {})).worktrees).not.toContainEqual({ directory, strategy: "git" })
+    expect(result.metadata?.error).toBeUndefined()
+    expect(assertions.filter((input) => input.action === "external_directory")).toEqual([])
   }),
 )
