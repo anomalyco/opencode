@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -66,7 +65,7 @@ const STATUS = {
   done: "completed",
   failed: "failed",
   expired: "expired",
-} as const satisfies Record<string, Status>
+} as const satisfies Record<string, MediaProtocol.State>
 
 // Documented video error codes; `service_unavailable`, `internal_error`, and unknown codes are provider-side.
 const FAILURE = {
@@ -148,8 +147,11 @@ const decodeStatus = Effect.fn("XAIVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeVideoStatus(response)
-  const status = MediaProtocol.status(STATUS, output.value.status)
-  return { id: context.token, status, progress: fraction(output.value.progress) }
+  return {
+    id: context.token,
+    ...MediaProtocol.status(STATUS, output.value.status),
+    progress: fraction(output.value.progress),
+  }
 })
 
 const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
@@ -158,7 +160,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeVideoStatus(response)
   const decoded = output.value
-  const status = MediaProtocol.status(STATUS, decoded.status)
+  const status = MediaProtocol.state(STATUS, decoded.status)
   if (status === "running") return yield* output.pending(context.token)
   if (status === "failed") {
     const code = decoded.error?.code ?? undefined

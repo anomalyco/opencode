@@ -21,6 +21,7 @@ export const goModels: GoModel[] = [
     featured: true,
   },
   { id: "qwen3.8-max", name: "Qwen3.8 Max", requests: 160, allowance: 15 },
+  { id: "qwen4-max", name: "Qwen4 Max", requests: 460, allowance: 15, featured: true, fresh: true },
   { id: "grok-4.7", name: "Grok 4.7", requests: 169, allowance: 15 },
   { id: "glm-5.3", name: "GLM-5.3", requests: 220, allowance: 15 },
   { id: "step-5-preview", name: "Step 5 Preview", requests: 430, allowance: 15 },
@@ -34,7 +35,7 @@ export const goModels: GoModel[] = [
   { id: "glm-5.2", name: "GLM-5.2", requests: 880, allowance: 60 },
   { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", requests: 1050, allowance: 15 },
   { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", requests: 1350, allowance: 60, featured: true },
-  { id: "hy4", name: "Hy4", requests: 2710, allowance: 60, featured: true, fresh: true },
+  { id: "hy4", name: "Hy4", requests: 2710, allowance: 60, featured: true },
   { id: "hy4-preview", name: "Hy4 preview", requests: 1350, allowance: 30 },
   { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", requests: 2050, allowance: 15 },
   { id: "minimax-m3", name: "MiniMax M3", requests: 3200, allowance: 60, featured: true },
@@ -102,6 +103,15 @@ export const goModels: GoModel[] = [
     featured: true,
     limitedTime: true,
   },
+  {
+    id: "hy4-flash-free",
+    name: "Hy4 flash Free",
+    requests: Infinity,
+    allowance: Infinity,
+    featured: true,
+    fresh: true,
+    limitedTime: true,
+  },
 ].sort((a, b) => a.requests - b.requests)
 
 // Go Plus and Go Teams limits are published per model in the Console (packages/shared/src/domain/go-published-limits.ts).
@@ -109,6 +119,7 @@ const plusLimits: Record<string, [number, number]> = {
   "kimi-k3": [440, 60],
   "kimi-k3.1-pro": [588, 60],
   "qwen3.8-max": [640, 60],
+  "qwen4-max": [1840, 60],
   "grok-4.7": [676, 60],
   "glm-5.3": [1760, 120],
   "step-5-preview": [1720, 60],
@@ -138,12 +149,14 @@ const plusLimits: Record<string, [number, number]> = {
   "beam-free": [Infinity, Infinity],
   "iceman-contributor-free": [Infinity, Infinity],
   "longcat-2.5-free": [Infinity, Infinity],
+  "hy4-flash-free": [Infinity, Infinity],
 }
 
 const teamsLimits: Record<string, [number, number]> = {
   "kimi-k3": [147, 20],
   "kimi-k3.1-pro": [196, 20],
   "qwen3.8-max": [213, 20],
+  "qwen4-max": [613, 20],
   "grok-4.7": [225, 20],
   "glm-5.3": [293, 20],
   "step-5-preview": [573, 20],
@@ -173,6 +186,7 @@ const teamsLimits: Record<string, [number, number]> = {
   "beam-free": [Infinity, Infinity],
   "iceman-contributor-free": [Infinity, Infinity],
   "longcat-2.5-free": [Infinity, Infinity],
+  "hy4-flash-free": [Infinity, Infinity],
 }
 
 // A bonus multiplies a model's usual allowance, which is shown crossed out beside the current limits.
