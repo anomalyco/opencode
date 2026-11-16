@@ -188,7 +188,7 @@ describe("Config.Entry", () => {
   })
 })
 
-test("no flag is named after the everything-on switches", () => {
+test("wildcard switches are reserved flag names", () => {
   expect(ConfigFlag.registry).not.toHaveProperty("all_flags")
   expect(ConfigFlag.registry).not.toHaveProperty(ConfigFlag.wildcard)
 })

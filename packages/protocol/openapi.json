@@ -16541,6 +16541,9 @@
               "auto": {
                 "type": "boolean"
               },
+              "background": {
+                "type": "boolean"
+              },
               "keep": {
                 "type": "object",
                 "properties": {
@@ -16659,9 +16662,6 @@
               "todo": {
                 "type": "boolean"
               },
-              "background_compaction": {
-                "type": "boolean"
-              },
               "media_blob": {
                 "type": "boolean"
               },
@@ -16675,6 +16675,9 @@
                 "type": "boolean"
               },
               "mcp_events": {
+                "type": "boolean"
+              },
+              "full_codemode": {
                 "type": "boolean"
               },
               "part_rows": {
