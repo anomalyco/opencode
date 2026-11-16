@@ -143,6 +143,7 @@ struct Files {
     config: CliConfig,
     storage: Option<Storage>,
     state: std::path::PathBuf,
+    cache: std::path::PathBuf,
 }
 
 /// Posted when the store flushed; at most one is queued.
@@ -191,6 +192,12 @@ impl Tui {
     /// The state directory (TS `useTuiPaths().state`), when the TUI has real roots.
     pub fn state_dir(&self) -> Option<std::path::PathBuf> {
         self.files.as_ref().map(|files| files.state.clone())
+    }
+
+    /// The global cache directory (TS `Global.Path.cache`, `~/.cache/opencode`), when the TUI has real roots: where TS
+    /// installs the packages plugins are named by.
+    pub fn cache_dir(&self) -> Option<std::path::PathBuf> {
+        self.files.as_ref().map(|files| files.cache.clone())
     }
 
     /// The event connection's state while it is open.
@@ -468,6 +475,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
             .inspect_err(|error| log::warn!("TUI storage is unavailable: {error}"))
             .ok(),
         state: roots.paths.state.clone(),
+        cache: roots.paths.cache.clone(),
     });
     let theme = ThemeState::new(theme_options(app, &deps.config.info, files.as_ref()));
 

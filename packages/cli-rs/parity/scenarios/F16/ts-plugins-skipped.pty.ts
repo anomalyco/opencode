@@ -53,11 +53,11 @@ export default definePty({
   steps: [
     { until: { screen: "█▀▀█" }, settle: 1_000, timeout: 30_000 },
     // The notice, over the home's top rows.
-    { checkpoint: "home", deviation: { file: "F16-typescript-plugins-skipped", lines: 7 } },
+    { checkpoint: "home", deviation: { file: "F16-typescript-plugins-skipped", lines: 8 } },
     { keys: "/plugins", until: { screen: "/plugins" }, settle: 300 },
     { keys: "\r", until: { screen: "Server" }, settle: 1_000, timeout: 10_000 },
     // The notice, and the TUI row: `parity.energy` active in TS, `./energy` skipped with its error to view in Rust.
-    { checkpoint: "plugins", deviation: { file: "F16-typescript-plugins-skipped", lines: 9 } },
+    { checkpoint: "plugins", deviation: { file: "F16-typescript-plugins-skipped", lines: 10 } },
   ],
   masks: [{ pattern: /Ask anything… .*$/, reason: "the placeholder example: random in TS and Rust" }],
   osc: [],
