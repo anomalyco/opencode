@@ -28,6 +28,7 @@ import {
   type BrowserModelEvent,
 } from "./model-machine"
 import { PageIcon } from "./page-icon"
+import { artifactLink, artifactWebURL } from "./artifact-link"
 import barStyles from "./bar.css?inline"
 import commentStyles from "./comment.css?inline"
 import tabStyles from "./tabs.css?inline"
@@ -54,6 +55,30 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       enabled: !!value?.available(view),
       run: () => value?.open(view),
     }
+  })
+
+  // Artifacts have a relative API link, not a workspace path. An external provider's ordinary web URL falls through.
+  ctx.add(LinkHandler, {
+    priority: 6,
+    match: (link) => link.origin === undefined && !!link.session && !!artifactLink(link.href, link.session.server.url),
+    open(link) {
+      const session = link.session
+      const url = session && artifactLink(link.href, session.server.url)
+
+      if (session && url) {
+        if (ctx.app.platform !== "desktop") {
+          const external = artifactWebURL(url, session.server.url)
+
+          if (external) return ctx.system.openExternal(external)
+        }
+
+        const pane = model()
+
+        if (pane?.available(session)) return pane.openURL(session, url)
+      }
+
+      ctx.toast.show({ variant: "error", title: ctx.t("artifact.unavailable") })
+    },
   })
 
   // The native pane is a desktop feature.

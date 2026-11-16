@@ -64,6 +64,7 @@ import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { previewAddress, previewFile, reloadAddress } from "./preview"
 import { previewScheme } from "./scheme"
 import { workspaceFile, type PreviewSource } from "./workspace-file"
+import type { artifactPages } from "./artifact-preview"
 import { remotePath } from "./remote-address"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
@@ -227,6 +228,7 @@ export function createBrowserPage(
     fileRoots?: () => ReadonlyArray<string>
     /** This binding's isolated origin for workspace previews. */
     previewHost?: string
+    artifacts?: ReturnType<typeof artifactPages>
     remote?: Extract<PreviewSource, { type: "remote" }>
     /** The server runs on this machine, so its loopback addresses are this machine's and the system browser reaches them. */
     local: boolean
@@ -241,6 +243,7 @@ export function createBrowserPage(
   const policy: Policy = {
     home: homedir(),
     remote: options.remote?.prefix,
+    artifacts: !!options.artifacts,
     get fileRoots() {
       return options.fileRoots?.() ?? []
     },
@@ -265,7 +268,7 @@ export function createBrowserPage(
   })
 
   const contents = view.webContents
-  const preview = (url: string) => previewFile(url, options.previewHost, policy.fileRoots ?? [], policy.remote)
+  const preview = (url: string) => options.artifacts?.display(url) ?? previewFile(url, options.previewHost, policy.fileRoots ?? [], policy.remote)
   const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
   contents.on("before-mouse-event", (_event, mouse) => {
@@ -507,7 +510,7 @@ export function createBrowserPage(
     // History API routes never pass the protocol handler. Keep the last validated address for virtual routes.
     const path = options.remote && remotePath(file, options.remote.prefix)
 
-    const exists = options.remote
+    const exists = file.startsWith("artifact:") ? options.artifacts?.exists(file) : options.remote
       ? path && options.remote.stat(path, options.signal).then((size) => size !== null)
       : workspaceFile(file, policy.fileRoots ?? [])
 
@@ -735,7 +738,7 @@ export function createBrowserPage(
   })
 
   const load = (url: string) => {
-    const destination = localFileURL(url) || url.startsWith("workspace:") ? previewAddress(url, options.previewHost, policy.fileRoots ?? [], policy.remote) : url
+    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? previewAddress(url, options.previewHost, policy.fileRoots ?? [], policy.remote) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
     let committed = false
@@ -878,6 +881,7 @@ export function createBrowserPage(
       if (closed()) return
       dispatch({ type: "disposed" })
       menu.dispose()
+      options.artifacts?.dispose()
       dispatchDialog({ type: "disposed" })
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)

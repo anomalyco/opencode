@@ -373,7 +373,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       history.set({
         visits: remember(
           history.value.visits,
-          { url: tab.url, title: tab.title },
+          tab.url.startsWith("artifact:") ? { url: tab.url, title: tab.title, session: sessionKey } : { url: tab.url, title: tab.title },
           state.pages[sessionKey]?.[tab.id]?.icon,
         ),
       })
@@ -661,6 +661,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const session = sessions.current()
 
       if (visit.url.startsWith("file:")) return session?.server.builtin
+
+      if (visit.session) return visit.session === session?.key
 
       return !visit.url.startsWith("workspace:") || (!!session?.id && visit.url.startsWith(workspacePrefix(session.id)))
     }),

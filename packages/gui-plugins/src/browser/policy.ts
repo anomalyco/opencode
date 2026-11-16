@@ -3,6 +3,7 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { encodeFilePath } from "@opencode/util/path"
 import { remotePath } from "./remote-address"
+import { artifactAddress } from "./artifact-link"
 
 export function destinationOrigin(input: string) {
   if (!URL.canParse(input)) return
@@ -281,7 +282,7 @@ export function agentFrame(trees: FrameTrees, frameID: string): AgentFrameAccess
   }
 }
 
-export type Policy = { readonly fileRoots?: ReadonlyArray<string>; readonly extensions?: ReadonlyArray<string>; readonly home?: string; readonly remote?: string }
+export type Policy = { readonly fileRoots?: ReadonlyArray<string>; readonly extensions?: ReadonlyArray<string>; readonly home?: string; readonly remote?: string; readonly artifacts?: boolean }
 
 export function allowedDestination(input: string, policy?: Policy) {
   return (
@@ -317,7 +318,7 @@ export function normalizeURL(input: string, policy?: Policy) {
 export function refusal(input: string, policy?: Policy) {
   const url = withScheme(input, policy)
 
-  if (url === "about:blank" || allowedDestination(url, policy) || (policy?.remote && remotePath(url, policy.remote))) return
+  if (url === "about:blank" || allowedDestination(url, policy) || (policy?.artifacts && artifactAddress(url)) || (policy?.remote && remotePath(url, policy.remote))) return
 
   // A web page is refused only for its credentials.
   if (URL.canParse(url) && /^https?:$/.test(new URL(url).protocol)) return "browser.address.credentials"

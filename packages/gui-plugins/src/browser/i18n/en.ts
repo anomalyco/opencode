@@ -213,4 +213,5 @@ export default {
   "preview.source": "View source",
   "preview.workspace": "Server workspace file",
   "preview.offline": "The workspace server is disconnected. Reconnect to load this preview.",
+  "artifact.unavailable": "The artifact cannot be opened right now. Check the server connection and try again.",
 }

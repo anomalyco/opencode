@@ -4,9 +4,11 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import { fileURLWithin } from "./policy"
 import { previewResource } from "./preview"
 import { remotePath } from "./remote-address"
+import { artifactResource } from "./artifact-link"
 
 export type PreviewSource =
   | { type: "local"; roots(): readonly string[] }
+  | { type: "artifact"; id: string; read(route: string, method: string, signal: AbortSignal): Promise<Response> }
   | {
       type: "remote"
       prefix: string
@@ -21,6 +23,13 @@ export async function resolvePreviewRequest(url: string, method: string, initiat
   const grant = grants.get(host)
 
   if (!grant || signal.aborted) return
+
+  if (grant.type === "artifact") {
+    if (initiator !== undefined && initiator !== `oc-preview://${host}`) return
+    const item = artifactResource(url, host, grant.id)
+
+    return item && { type: "artifact" as const, route: item.route, read: grant.read }
+  }
 
   if (grant.type === "remote") {
     const origin = `oc-preview://${host}`

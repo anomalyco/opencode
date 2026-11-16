@@ -87,7 +87,8 @@ export default function SessionBrowserPane(props: {
   const state = () => props.model.tab(props.session, props.tab().id)
   const address = () => (state()?.url === "about:blank" ? "" : (state()?.url ?? ""))
   const failed = () => !!state()?.loadError
-  const offline = () => address().startsWith("workspace:") && !props.session.server.connected
+  const serverFile = () => /^(workspace|artifact):/.test(address())
+  const offline = () => serverFile() && !props.session.server.connected
   const suspended = () => offline() || props.model.suspended(props.session)
   const command = (action: Browser.Action) => props.model.command(props.session, action)
   const profile = plugin.use(BrowserProfile)
@@ -703,7 +704,7 @@ export default function SessionBrowserPane(props: {
                     icon={<Icon name="outline-globe-plus" />}
                   />
                 </Tooltip>
-                <Show when={!address().startsWith("workspace:")}>
+                <Show when={!serverFile()}>
                 <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
                   <IconButton
                     type="button"
@@ -854,7 +855,7 @@ export default function SessionBrowserPane(props: {
                 <Show when={source()}>
                   {(open) => <Menu.Item onSelect={() => open()()}>{plugin.t("preview.source")}</Menu.Item>}
                 </Show>
-                <Show when={!address().startsWith("workspace:")}>
+                <Show when={!serverFile()}>
                 <Menu.Item disabled={!reachable()} onSelect={openExternal}>
                   {plugin.t(address().startsWith("file:") ? "external.reveal" : "external.menu")}
                 </Menu.Item>

@@ -45,6 +45,7 @@ import { artifactKind } from "@opencode/util/artifact"
 import { workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
 import { remotePreview } from "./remote-preview"
+import { artifactPages } from "./artifact-preview"
 
 type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
 
@@ -56,6 +57,7 @@ type Handle = {
   /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
   shared: boolean
   previewHost?: string
+  artifacts?: () => ReturnType<typeof artifactPages>
   source?: PreviewSource
   abort: AbortController
   registered: ReturnType<typeof Promise.withResolvers<void>>
@@ -201,6 +203,7 @@ export function createBrowserPane(input: {
 
             const grant = yield* Effect.acquireRelease(Effect.sync(() => previews.grant(source, abort.signal)), (grant) => Effect.sync(grant.release))
             handle.source = source
+            handle.artifacts = () => artifactPages(previews, server, session.location.directory, abort.signal)
             handle.previewHost = grant.host
 
             if (shared) handle.network = createDirectNetwork(input.profile.session)
@@ -406,7 +409,7 @@ export function createBrowserPane(input: {
       const reason =
         url === undefined
           ? undefined
-          : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding), home: homedir(), remote: remoteSource(binding)?.prefix })
+          : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding), home: homedir(), remote: remoteSource(binding)?.prefix, artifacts: true })
 
       if (reason) throw new Error(reason)
       // A navigation that the next one replaced, such as a second submit or a redirect, rejects with ERR_ABORTED while
@@ -606,6 +609,7 @@ export function createBrowserPane(input: {
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
       previewHost: handle.previewHost,
+      artifacts: handle.artifacts?.(),
       remote: remoteSource(binding),
       local: handle.shared,
       signal: handle.abort.signal,
