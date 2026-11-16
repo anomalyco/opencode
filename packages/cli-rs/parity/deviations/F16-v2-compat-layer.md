@@ -33,11 +33,13 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   screen mounts again. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
   next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`) and
   a command's `enabled` are kept; its `priority`, `bindings`, `target` and slash `aliases` are not mapped. A command
-  without an `id` is named by its keys, its title and its place among the layer's commands of the same keys and title,
-  so a component that mounts again names it as before and does not reload the plugin again (CT-1). A plugin whose
-  registrations change more than 64 times within 5 s, as one that names a command anew on each mount does, fails with
-  "it changed its registrations … and never settled", where TS would keep it running. A reply the plugin waits for
-  across a reload reaches it (CT-1).
+  without an `id` is named by what the host lists of it (its layer's mode, its keys, title, slash name and the rest) and
+  its place among the layer's commands that list the same, so a component that mounts again names it as before and does
+  not reload the plugin again (CT-1). Two live commands that list the same in every part are one, the newest running,
+  as the topmost layer's runs in TS. A plugin whose registrations change more than 64 times within 5 s, counted for
+  the plugin across its builds, as one that names a command anew on each mount does, fails with "it changed its
+  registrations … and never settled", where TS would keep it running. A fetch the plugin waits for across a reload
+  settles once (CT-1).
 - **Server RPC** (CT-4): `@opencode/plugin/rpc` gives `Rpc.define`, and `client.rpc(definition)` calls each method as
   TS's client does (`/api/rpc/<id>/<method>`, the output answered), with its events heard as the host's events of type
   `rpc.<id>.<name>`. An error the server gives an RPC reaches the plugin as the client's error, not as TS's
