@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks"
 import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
 import type { OpenCodeEvent } from "@opencode/client"
@@ -29,6 +30,11 @@ interface CompiledEndpoint {
 
 const compiledEndpoints = new WeakMap<object, CompiledEndpoint>()
 const JsonInput = Schema.fromJsonString(Schema.Unknown)
+
+// Permission assertions and borrowed Effect tools inherit the current Promise call's context and cancellation.
+const permissionInvocation = new AsyncLocalStorage<{
+  readonly run: <A, E>(effect: Effect.Effect<A, E>, signal?: AbortSignal) => Promise<A>
+}>()
 
 interface HostRpcCallContext {
   readonly error: (type: string, message: string, data?: unknown) => unknown
@@ -250,17 +256,18 @@ export function fromPromise(plugin: Plugin) {
             dispose: () => Effect.runPromiseWith(runtime)(registration.dispose),
           }))
 
-        const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(runtime)(effect)
+        const run = <A, E>(effect: Effect.Effect<A, E>, signal?: AbortSignal) =>
+          Effect.runPromiseWith(runtime)(effect, { signal })
 
         const promiseExecutor =
           (execute: Tool.Info["execute"]): Info["execute"] =>
           (input, context) =>
-            Effect.runPromiseWith(runtime)(
+            (permissionInvocation.getStore()?.run ?? run)(
               execute(input, {
                 ...context,
                 progress: (update) => Effect.promise(() => context.progress(update)),
               }),
-              { signal: context.signal },
+              context.signal,
             )
 
         const adaptApiMethod = <PromiseMethod>(
@@ -489,7 +496,9 @@ export function fromPromise(plugin: Plugin) {
             get: adaptApiMethod(PermissionEndpoints["session.permission.get"], host.permission.get),
             reply: adaptApiMethod(PermissionEndpoints["session.permission.reply"], host.permission.reply),
             assert: (input) =>
-              run(Schema.decodeUnknownEffect(AssertInput)(input).pipe(Effect.flatMap(host.permission.assert))),
+              (permissionInvocation.getStore()?.run ?? run)(
+                Schema.decodeUnknownEffect(AssertInput)(input).pipe(Effect.flatMap(host.permission.assert)),
+              ),
           },
           plugin: {
             list: adaptApiMethod(PluginEndpoints["plugin.list"], host.plugin.list),
@@ -694,39 +703,78 @@ const toolError = (error: unknown) =>
 const toolHook: {
   readonly [Name in keyof ToolHooks]: (run: () => Promise<void>) => Effect.Effect<void, ToolFailures[Name]>
 } = {
-  "execute.before": (run) => Effect.tryPromise({ try: run, catch: toolError }),
-  "execute.after": (run) => Effect.promise(run),
+  "execute.before": (run) => withPermissionInvocation(run, toolError),
+  "execute.after": (run) => withPermissionInvocation(run, (error) => error).pipe(Effect.orDie),
 }
 
 const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
-  Effect.tryPromise({
-    try: (interrupted) => {
-      // `signal` aborts when the call is interrupted, and also when the user stops the call once the tool has read
-      // it. Reading it awaits `cancel`, which tells the step this tool stops on its own instead of being interrupted.
-      const stopped = new AbortController()
-      const finished = new AbortController()
-      const signal = AbortSignal.any([interrupted, stopped.signal])
-      // `cancel` stays out of the promise context; promise tools stop through `signal`.
-      const { cancel, ...rest } = context
-      let listening = false
-      const listen = () => {
-        if (listening || !cancel) return
-        listening = true
-        Effect.runPromise(cancel, { signal: AbortSignal.any([interrupted, finished.signal]) }).then(
-          () => stopped.abort(),
-          () => {},
-        )
-      }
-      return Promise.resolve(
-        tool.execute(input, {
-          ...rest,
-          get signal() {
-            listen()
-            return signal
-          },
-          progress: (update) => Effect.runPromise(context.progress(update), { signal: interrupted }),
-        }),
-      ).finally(() => finished.abort())
-    },
-    catch: toolError,
+  Effect.gen(function* () {
+    // `signal` aborts when the call is interrupted, and also when the user stops the call once the tool has read
+    // it. Reading it awaits `cancel`, which tells the step this tool stops on its own instead of being interrupted.
+    const stopped = new AbortController()
+    const finished = new AbortController()
+    return yield* withPermissionInvocation(
+      (signal, interrupted) => {
+        // `cancel` stays out of the promise context; promise tools stop through `signal`.
+        const { cancel, ...rest } = context
+        let listening = false
+        const listen = () => {
+          if (listening || !cancel) return
+          listening = true
+          Effect.runPromise(cancel, { signal: AbortSignal.any([interrupted, finished.signal]) }).then(
+            () => stopped.abort(),
+            () => {},
+          )
+        }
+        return Promise.resolve(
+          tool.execute(input, {
+            ...rest,
+            get signal() {
+              listen()
+              return signal
+            },
+            progress: (update) => Effect.runPromise(context.progress(update), { signal: interrupted }),
+          }),
+        ).finally(() => finished.abort())
+      },
+      toolError,
+      stopped.signal,
+    )
   })
+
+function withPermissionInvocation<A, E>(
+  execute: (signal: AbortSignal, interrupted: AbortSignal) => PromiseLike<A>,
+  onError: (error: unknown) => E,
+  stopped?: AbortSignal,
+) {
+  return Effect.gen(function* () {
+    const runtime = yield* Effect.context()
+    const pending = new Set<Promise<unknown>>()
+    return yield* Effect.tryPromise({
+      try: (interrupted) => {
+        const signal = stopped ? AbortSignal.any([interrupted, stopped]) : interrupted
+        return permissionInvocation.run(
+          {
+            run: (effect, supplied) => {
+              const combined = supplied ? AbortSignal.any([signal, supplied]) : signal
+              // runPromiseWith starts synchronously before checking its signal; do not create a late approval.
+              if (combined.aborted) return Effect.runPromiseWith(runtime)(Effect.interrupt)
+              const promise = Effect.runPromiseWith(runtime)(effect, { signal: combined })
+              pending.add(promise)
+              void promise.then(
+                () => void pending.delete(promise),
+                () => void pending.delete(promise),
+              )
+              return promise
+            },
+          },
+          () => execute(signal, interrupted),
+        )
+      },
+      catch: onError,
+    }).pipe(
+      // Wait for nested host cleanup, including approval withdrawal, without waiting for arbitrary plugin code.
+      Effect.onInterrupt(() => Effect.promise(() => Promise.allSettled(pending))),
+    )
+  })
+}

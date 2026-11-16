@@ -2589,6 +2589,7 @@ export type ConfigEntry =
           codemode_vm?: boolean
           all_flags?: boolean
           todo?: boolean
+          codemode_tool_timeouts?: boolean
           background_compaction?: boolean
           media_blob?: boolean
           schedules?: boolean

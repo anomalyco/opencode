@@ -360,7 +360,7 @@ function resourceServer(
 const poolLayer = McpPool.layer.pipe(Layer.provide(LayerNode.compile(CrossSpawnSpawner.node)))
 
 function resourceMcpLayer(
-  server: string | typeof ConfigMCP.Server.Type,
+  server: string | typeof ConfigMCP.Server.Type | undefined,
   onFormCreated?: (form: Form.Info) => Effect.Effect<void>,
   options?: Mcp.Options,
   overrides?: {
@@ -413,12 +413,15 @@ function resourceMcpLayer(
                 info: new Info({
                   policies: overrides?.policies ?? [],
                   mcp: new ConfigMCP.Info({
-                    servers: {
-                      [overrides?.name ?? "resources"]:
-                        typeof server === "string"
-                          ? new ConfigMCP.Remote({ type: "remote", url: server, oauth: false })
-                          : server,
-                    },
+                    servers:
+                      server === undefined
+                        ? {}
+                        : {
+                            [overrides?.name ?? "resources"]:
+                              typeof server === "string"
+                                ? new ConfigMCP.Remote({ type: "remote", url: server, oauth: false })
+                                : server,
+                          },
                   }),
                 }),
               }),
@@ -653,6 +656,99 @@ test("MCP tool names match V1 sanitization", () => {
   expect(McpTool.namespace("context 7")).toBe("context_7")
   expect(McpTool.name("context 7", "resolve.library/id")).toBe("context_7_resolve_library_id")
 })
+
+testEffect(
+  AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Mcp.node]), [
+    ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+    Mcp.node.replace(resourceMcpLayer(undefined)),
+    Bus.node.replace(events),
+    Global.node.replace(Global.layerWith({ data: outputData })),
+  ]).pipe(Layer.provide(Layer.succeed(Flag.Overrides, "codemode_tool_timeouts"))),
+).effect("aborts only a timed-out Code Mode MCP request and preserves the connection", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const registry = yield* Tool.Service
+    const registration = yield* McpTool.Service
+    const started = yield* Deferred.make<void>()
+    const finished = yield* Deferred.make<void>()
+    const signals = new Map<string, AbortSignal>()
+    const server = new Server({ name: "timeout-tools", version: "1.0.0" }, { capabilities: { tools: {} } })
+    server.setRequestHandler("tools/list", () =>
+      Promise.resolve({
+        tools: ["first", "second", "blocked"].map((name) => ({ name, inputSchema: { type: "object" as const } })),
+      }),
+    )
+    server.setRequestHandler("tools/call", (request, context) => {
+      signals.set(request.params.name, context.mcpReq.signal)
+      if (request.params.name !== "blocked")
+        return Promise.resolve({ content: [{ type: "text", text: request.params.name }] })
+      return new Promise((resolve) => {
+        context.mcpReq.signal.addEventListener(
+          "abort",
+          () => {
+            resolve({ content: [{ type: "text", text: "late blocked result" }] })
+          },
+          { once: true },
+        )
+        Deferred.doneUnsafe(started, Exit.void)
+      })
+    })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    yield* Effect.acquireRelease(
+      Effect.promise(() => server.connect(serverTransport)),
+      () => Effect.promise(() => server.close()),
+    )
+    yield* mcp.attach("timeout_mcp", clientTransport)
+    yield* registration.flush
+    const run = yield* executeTool(registry, {
+      sessionID: Session.ID.make("ses_mcp_call_timeout"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call-mcp-timeout",
+        name: "execute",
+        input: {
+          code: `return (await Promise.allSettled([
+          tools.timeout_mcp.first({}),
+          tools.timeout_mcp.second({}),
+          tools.timeout_mcp.blocked({}, { timeoutMs: 100 }),
+        ])).map((result) => result.status === "fulfilled"
+          ? result
+          : { status: result.status, reason: result.reason.message })`,
+        },
+      },
+    }).pipe(Effect.ensuring(Deferred.succeed(finished, undefined)), Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(started).pipe(Effect.raceFirst(Fiber.join(run)))
+    expect(yield* Deferred.isDone(started)).toBe(true)
+    yield* Effect.yieldNow
+    yield* TestClock.adjust("99 millis")
+    expect(signals.get("blocked")?.aborted).toBe(false)
+    expect(yield* Deferred.isDone(finished)).toBe(false)
+
+    yield* TestClock.adjust("1 millis")
+    const result = yield* Fiber.join(run)
+    yield* Effect.yieldNow
+
+    expect(result.status).toBe("completed")
+    expect(JSON.parse(result.output?.output ?? "null")).toEqual([
+      { status: "fulfilled", value: "first" },
+      { status: "fulfilled", value: "second" },
+      { status: "rejected", reason: expect.stringMatching(/timed out.*100/i) },
+    ])
+    expect(result.metadata?.toolCalls).toEqual([
+      { tool: "timeout_mcp.first", status: "completed" },
+      { tool: "timeout_mcp.second", status: "completed" },
+      { tool: "timeout_mcp.blocked", status: "error" },
+    ])
+    expect(signals.get("blocked")?.aborted).toBe(true)
+    expect(signals.get("first")?.aborted).toBe(false)
+    expect(signals.get("second")?.aborted).toBe(false)
+    expect(yield* mcp.callTool({ server: "timeout_mcp", name: "first" })).toMatchObject({
+      isError: false,
+      content: [{ type: "text", text: "first" }],
+    })
+  }),
+)
 
 test("passes session IDs as MCP request metadata", async () => {
   await Effect.runPromise(

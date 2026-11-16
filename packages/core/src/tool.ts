@@ -10,6 +10,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
 import { CodeModeTool } from "./codemode/tool.js"
+import { Flag } from "./flag.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
 import { PluginHooks } from "./plugin/hooks.js"
@@ -89,6 +90,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
     const permission = yield* Permission.Service
+    const flags = yield* Flag.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -188,6 +190,7 @@ const layer = Layer.effect(
       | {
           data: Data
           names: string
+          toolTimeouts: boolean
           inventory: CodeModeTool.Inventory
           value: CodeModeCatalog.Inventory
           definition: ToolDefinition
@@ -252,7 +255,7 @@ const layer = Layer.effect(
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
       snapshot: Effect.fn("Tool.snapshot")((permissions) =>
-        Effect.sync(() => {
+        Effect.map(flags.enabled("codemode_tool_timeouts"), (toolTimeouts) => {
           const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
@@ -267,11 +270,18 @@ const layer = Layer.effect(
             : active
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
           const names = Array.from(codeModeTools.keys()).join("\0")
-          // Discovery is immutable for a registry revision and visible tool set. Keep executors
+          // Discovery is immutable for a registry revision, visible tool set, and capability. Keep executors
           // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
           // are cached by identity, and the execute tool's definition across steps.
-          const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
-          const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
+          const cached =
+            catalog?.data === data && catalog.names === names && catalog.toolTimeouts === toolTimeouts
+              ? catalog
+              : undefined
+          const codeModeInventory = cached?.inventory ?? {
+            tools: codeModeTools,
+            namespaces: data.namespaces,
+            toolTimeouts,
+          }
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
                 codeModeInventory,
@@ -287,6 +297,7 @@ const layer = Layer.effect(
             catalog = {
               data,
               names,
+              toolTimeouts,
               inventory: codeModeInventory,
               value: codeModeCatalog,
               definition: codeModeDefinition,
@@ -426,5 +437,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node, Permission.node],
+  deps: [PluginHooks.node, Image.node, Permission.node, Flag.node],
 })

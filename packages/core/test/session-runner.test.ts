@@ -35,6 +35,7 @@ import { EventTable } from "@opencode/core/event/sql"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Form } from "@opencode/core/form"
+import { Flag } from "@opencode/core/flag"
 import { Job } from "@opencode/core/job"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -112,8 +113,9 @@ type ToolBarrier = {
   maxActive: number
 }
 class LLMRequests extends Context.Service<LLMRequests, LLMRequest[]>()("test/LLMRequests") {}
+const CodeModeRequests = Context.Reference<boolean>("test/CodeModeRequests", { defaultValue: () => false })
 const testLLM = Layer.unwrap(
-  Effect.sync(() => {
+  Effect.map(CodeModeRequests, (codeMode) => {
     const requests: LLMRequest[] = []
     return TestLLM.testLayer({
       fallback: [],
@@ -124,7 +126,7 @@ const testLLM = Layer.unwrap(
             ...part,
             text: part.text.replace(emptyCodeMode, ""),
           })),
-          tools: request.tools.filter((tool) => tool.name !== "execute"),
+          tools: codeMode ? request.tools : request.tools.filter((tool) => tool.name !== "execute"),
         }
         requests.push(transformed)
         return transformed
@@ -635,8 +637,21 @@ type Scenario = Effect.Success<typeof setup>
 const scenario = (
   name: string,
   body: (s: Scenario) => Effect.gen.Return<void, unknown, Layer.Success<typeof layer> | Scope.Scope>,
+  options?: { readonly codeMode?: boolean; readonly flags?: string },
 ) =>
-  it.effect(
+  (options
+    ? testEffect(
+        layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              Layer.succeed(CodeModeRequests, options.codeMode ?? false),
+              Layer.succeed(Flag.Overrides, options.flags),
+            ),
+          ),
+        ),
+      )
+    : it
+  ).effect(
     name,
     Effect.gen(function* () {
       const s = yield* setup
@@ -4653,6 +4668,131 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[1])).toEqual(["Start working", "Change direction"])
     expect((yield* s.context).map((message) => message.type)).toEqual(["user", "assistant", "user", "assistant"])
   })
+
+  scenario(
+    "delivers steering after one Code Mode child times out while its siblings succeed",
+    function* (s) {
+      const registry = yield* Tool.Service
+      const started = yield* Deferred.make<void>()
+      const interrupted = yield* Deferred.make<void>()
+      const finished = yield* Deferred.make<void>()
+      const completed: string[] = []
+      yield* transformTools(
+        registry,
+        {
+          ...Object.fromEntries(
+            ["first", "second"].map((name) => [
+              name,
+              {
+                name,
+                description: `Return ${name}`,
+                input: Schema.Struct({}),
+                output: Schema.String,
+                execute: () =>
+                  Effect.sync(() => {
+                    completed.push(name)
+                    return { output: name }
+                  }),
+              },
+            ]),
+          ),
+          blocked: {
+            name: "blocked",
+            description: "Wait until interrupted",
+            input: Schema.Struct({}),
+            output: Schema.String,
+            execute: () =>
+              Deferred.succeed(started, undefined).pipe(
+                Effect.andThen(Effect.never),
+                Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+              ),
+          },
+        },
+        { namespace: "controlled_mcp", codemode: true },
+      )
+      yield* s.admit("Run three independent calls")
+      yield* s.llm.push(
+        TestLLM.toolCall("call-execute", "execute", {
+          code: `return (await Promise.allSettled([
+            tools.controlled_mcp.first({}),
+            tools.controlled_mcp.second({}),
+            tools.controlled_mcp.blocked({}, { timeoutMs: 100 }),
+          ])).map((result) => result.status === "fulfilled"
+            ? result
+            : { status: result.status, reason: result.reason.message })`,
+        }),
+        TestLLM.text("Completed after timeout", "text-timeout-final"),
+      )
+      const run = yield* s.resume.pipe(
+        Effect.ensuring(Deferred.succeed(finished, undefined)),
+        Effect.forkChild({ startImmediately: true }),
+      )
+      // A rejected second argument finishes execute before the child starts; fail without waiting out Bun's timeout.
+      yield* Deferred.await(started).pipe(Effect.raceFirst(Fiber.join(run)))
+      expect(requireAssistant(yield* s.context).content).toMatchObject([
+        { type: "tool", id: "call-execute", state: { status: "running" } },
+      ])
+      expect(yield* Deferred.isDone(started)).toBe(true)
+      const next = yield* s.llm.gate()
+      const steer = yield* s.session.prompt({ sessionID, text: "Use the two completed results" })
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("99 millis")
+
+      expect(s.requests).toHaveLength(1)
+      expect(s.requests[0].tools.some((tool) => tool.name === "execute")).toBe(true)
+      expect(completed.toSorted()).toEqual(["first", "second"])
+      expect(yield* Deferred.isDone(finished)).toBe(false)
+      expect(yield* Deferred.isDone(interrupted)).toBe(false)
+      expect((yield* s.inbox).map((item) => item.id)).toEqual([steer.id])
+      expect((yield* s.messages).some((message) => message.id === steer.id)).toBe(false)
+
+      yield* TestClock.adjust("1 millis")
+      yield* next.started
+
+      expect(yield* Deferred.isDone(interrupted)).toBe(true)
+      expect(s.requests).toHaveLength(2)
+      expect(s.requests.map(userTexts)).toEqual([
+        ["Run three independent calls"],
+        ["Run three independent calls", "Use the two completed results"],
+      ])
+      expect(yield* s.inbox).toEqual([])
+      expect((yield* s.messages).filter((message) => message.id === steer.id)).toHaveLength(1)
+      const assistant = requireAssistant(yield* s.context)
+      expect(assistant.content).toMatchObject([
+        Expected.completedTool(
+          { id: "call-execute", name: "execute" },
+          {
+            metadata: {
+              toolCalls: [
+                { tool: "controlled_mcp.first", status: "completed" },
+                { tool: "controlled_mcp.second", status: "completed" },
+                { tool: "controlled_mcp.blocked", status: "error" },
+              ],
+            },
+          },
+        ),
+      ])
+      const output = assistant.content.flatMap((part) =>
+        part.type === "tool" && part.state.status === "completed"
+          ? part.state.content.flatMap((content) => (content.type === "text" ? [content.text] : []))
+          : [],
+      )
+      expect(output).toHaveLength(1)
+      expect(JSON.parse(output[0]!)).toEqual([
+        { status: "fulfilled", value: "first" },
+        { status: "fulfilled", value: "second" },
+        { status: "rejected", reason: expect.stringMatching(/timed out.*100/i) },
+      ])
+
+      yield* next.release
+      yield* Fiber.join(run)
+      expect(s.requests).toHaveLength(2)
+      expect((yield* s.context).at(-1)).toMatchObject(
+        Expected.assistant({ finish: "stop" }, [Expected.text("Completed after timeout")]),
+      )
+    },
+    { codeMode: true, flags: "codemode_tool_timeouts" },
+  )
 
   scenario("promotes queued input after continuation ends", function* (s) {
     yield* s.admit("Start working")
