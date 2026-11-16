@@ -25,6 +25,7 @@ function CustomManagedProviderIcon(props: { class?: string }) {
 }
 
 export function ProviderModelIcon(props: { provider: ModelProvider; class?: string }) {
+  // SAFETY: the cast only lets `includes` look up any string; the type guard narrows on the result.
   const icon = () =>
     [
       props.provider.canonical,
