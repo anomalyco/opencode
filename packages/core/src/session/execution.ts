@@ -208,6 +208,13 @@ export const layer = Layer.effect(
       Effect.forkScoped({ startImmediately: true }),
     )
 
+    yield* bus.subscribe(SessionEvent.PermissionResolution.Resolved).pipe(
+      Stream.runForEach((event) =>
+        event.data.reply === "reject" ? Effect.void : coordinator.wake(event.data.sessionID),
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+
     interruption = coordinator.interruption
     return Service.of({
       active: coordinator.active,
