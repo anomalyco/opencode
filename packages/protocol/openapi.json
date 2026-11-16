@@ -16541,6 +16541,9 @@
               "auto": {
                 "type": "boolean"
               },
+              "background": {
+                "type": "boolean"
+              },
               "keep": {
                 "type": "object",
                 "properties": {
@@ -16657,9 +16660,6 @@
                 "type": "boolean"
               },
               "todo": {
-                "type": "boolean"
-              },
-              "background_compaction": {
                 "type": "boolean"
               },
               "media_blob": {
