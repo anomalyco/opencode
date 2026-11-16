@@ -410,6 +410,10 @@ export function createBrowserPane(input: {
 
       return (await page(binding, tabID)?.site()) ?? { cookies: 0 }
     },
+    async clearCache(window: number, binding: string, tabID: Browser.TabID, address: string) {
+      owned(window, binding)
+      await page(binding, tabID)?.clearCache(address)
+    },
     async clearSite(window: number, binding: string, tabID: Browser.TabID) {
       owned(window, binding)
       await page(binding, tabID)?.clearSite()
@@ -684,7 +688,11 @@ export function createBrowserPane(input: {
       menu: {
         t: input.t,
         extensions: (contents, params) => handle.shared ? input.profile.extensionMenu(contents, params) : [],
-        navigate: async (type) => { if (current()) await execute(binding, { action: { type, tabID: id }, files: [] }, handle.abort.signal, "user") },
+        navigate: async (type) => {
+          const action = type === "hardReload" ? { type: "reload", tabID: id, ignoreCache: true } as const : { type, tabID: id }
+
+          if (current()) await execute(binding, { action, files: [] }, handle.abort.signal, "user")
+        },
         open: async (url) => { if (current()) await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", childActivity(activity)) },
       },
       embeds: input.embeds,

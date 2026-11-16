@@ -196,6 +196,8 @@ export default {
   "menu.back": "Back",
   "menu.forward": "Forward",
   "menu.reload": "Reload",
+  "menu.hardReload": "Reload ignoring cache",
+  "site.clearCache": "Clear cache for this site",
   "menu.openLink": "Open link in new tab",
   "menu.external": "Open link in system browser",
   "menu.copyLink": "Copy link address",

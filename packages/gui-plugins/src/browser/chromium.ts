@@ -345,9 +345,11 @@ export function createBrowserPage(
     activity.userInputAt = Date.now()
     void choosers.update().catch(() => undefined)
 
-    if (pageReload(input, process.platform === "darwin")) {
+    const refresh = pageReload(input, process.platform === "darwin")
+
+    if (refresh) {
       event.preventDefault()
-      void reload().catch((error: Error) => publish(error.message))
+      void reload(options.signal, refresh === "hard").catch((error: Error) => publish(error.message))
 
       return
     }
@@ -1009,7 +1011,7 @@ export function createBrowserPage(
       .finally(() => contents.off("did-navigate", commit))
   }
 
-  const reload = async (signal = options.signal) => {
+  const reload = async (signal = options.signal, ignoreCache = false) => {
     const tab = state()
 
     if (navigation.interrupt("reload", documentState.status === "restoring" ? documentState.url : undefined)) return
@@ -1022,7 +1024,7 @@ export function createBrowserPage(
 
     if (address) return void await load(address, true, signal)
 
-    return begin(signal)(actual, () => contents.reload())
+    return begin(signal)(actual, () => ignoreCache ? contents.reloadIgnoringCache() : contents.reload())
   }
 
   const ready = navigationDeadline(Promise.all([
@@ -1102,6 +1104,18 @@ export function createBrowserPage(
       await waitFor(() => closed() || !contents.isLoading(), new AbortController().signal, 30_000).catch(
         () => undefined,
       )
+    },
+    async clearCache(address: string) {
+      const origin = destinationOrigin(address)
+
+      if (closed() || !origin || destinationOrigin(contents.getURL()) !== origin) throw new Error("browser.site.changed")
+      // Session.clearCache() clears the entire partition; clearData can filter the HTTP cache by origin.
+      await contents.session.clearData({
+        origins: [origin], originMatchingMode: "origin-in-all-contexts", dataTypes: ["cache", "serviceWorkers"],
+      })
+      await contents.session.clearStorageData({ origin, storages: ["cachestorage"] })
+
+      if (!closed() && destinationOrigin(contents.getURL()) === origin) await reload(options.signal, true)
     },
     /** Reports the page's icon and zoom when either changed since the last report. */
     detail,
@@ -1324,7 +1338,7 @@ export function createBrowserPage(
           if (entry) await begin(signal)(entry.url, () => history.goToIndex(index), () => !closed() && contents.isLoading())
         }
 
-        if (action.type === "reload" && !saved) await reload(signal)
+        if (action.type === "reload" && (!saved || action.ignoreCache)) await reload(signal, action.ignoreCache)
 
         if (action.type === "stop") {
           navigation.cancel()

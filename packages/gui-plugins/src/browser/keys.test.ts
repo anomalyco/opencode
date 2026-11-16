@@ -74,8 +74,8 @@ test("forwards browser and shell shortcuts while leaving page editing, reload an
     ["mod", ",", true, ","],
     ["mod", "\\", false, "\\"],
     ["mod+shift", "T", true, "t"],
-    ["mod+shift", "R", true, "r"],
-    ["mod+shift", "R", false, "r"],
+    ["mod+shift", "R", true, undefined],
+    ["mod+shift", "R", false, undefined],
     ["mod+shift", "P", true, "p"],
     ["mod+shift", "L", true, "l"],
     ["mod+shift", "E", true, "e"],
@@ -152,21 +152,22 @@ test("forwards browser and shell shortcuts while leaving page editing, reload an
 })
 
 test("reloads the focused page on F5 and the platform's reload chord, leaving other R chords to the window", () => {
-  const cases: [modifiers: string, key: string, mac: boolean, reloads: boolean, code?: string][] = [
-    ["", "F5", true, true],
-    ["", "F5", false, true],
-    ["mod", "r", true, true],
-    ["mod", "r", false, true],
+  const cases: [modifiers: string, key: string, mac: boolean, reloads: ReturnType<typeof pageReload>, code?: string][] = [
+    ["", "F5", true, "normal"],
+    ["", "F5", false, "normal"],
+    ["mod", "r", true, "normal"],
+    ["mod", "r", false, "normal"],
     // Dvorak: R is on the physical O key; the character decides.
-    ["mod", "r", true, true, "KeyO"],
-    ["mod", "\u043a", true, true, "KeyR"],
-    // ⇧⌘R toggles review, and macOS Control+R is the page's own.
-    ["mod+shift", "R", true, false],
-    ["mod+shift", "R", false, false],
-    ["mod+alt", "r", true, false],
-    ["ctrl", "r", true, false],
-    ["mod", "F5", true, false],
-    ["", "r", true, false],
+    ["mod", "r", true, "normal", "KeyO"],
+    ["mod", "\u043a", true, "normal", "KeyR"],
+    ["mod+shift", "R", true, "hard"],
+    ["mod+shift", "R", false, "hard"],
+    ["mod", "F5", false, "hard"],
+    ["mod+alt", "r", true, undefined],
+    ["ctrl", "r", true, undefined],
+    ["mod", "F5", true, undefined],
+    ["ctrl", "F5", true, undefined],
+    ["", "r", true, undefined],
   ]
 
   const results = cases.map(([modifiers, key, mac, , code]) => [

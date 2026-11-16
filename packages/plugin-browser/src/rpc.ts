@@ -286,8 +286,8 @@ export const Operations = [
   operation("forward", "Go forward in this tab and wait for loading to finish.", tab, Tab),
   operation(
     "reload",
-    "Reload this tab and wait for loading to finish. Use after starting a performance capture.",
-    tab,
+    "Reload this tab and wait for loading to finish. Set ignoreCache to bypass cached resources for this reload. Use after starting a performance capture.",
+    { ...tab, ignoreCache: optional(Schema.Boolean) },
     Tab,
   ),
   operation("stop", "Stop loading this tab. This does not stop a trace or CPU recording.", tab, Tab),
