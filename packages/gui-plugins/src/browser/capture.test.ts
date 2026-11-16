@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { cropPixels, pngFits, undrawable, undrawableMessage } from "./capture"
+import { captureCoordinator, cropPixels, pngFits, undrawable, undrawableMessage } from "./capture"
 
 const shown = { minimized: false, visible: true, appHidden: false }
 
@@ -11,6 +11,76 @@ test("crop uses the returned pixels, including fractional edge overlaps at non-d
   expect(crop(-2, -2, 2.05, 2.05)).toEqual({ x: 0, y: 0, width: 1, height: 1 })
   expect(crop(100, 0, 1, 1)).toBeUndefined()
   expect(crop(0, 80, 1, 1)).toBeUndefined()
+})
+
+function coordinator() {
+  let now = 0
+  const jobs = new Set<{ at: number; run: () => void }>()
+  const events: string[] = []
+
+  const capture = captureCoordinator(() => events.push("begin"), () => events.push("end"), (ms, run) => {
+    const task = { at: now + ms, run }
+    jobs.add(task)
+
+    return () => jobs.delete(task)
+  })
+
+  const advance = (ms: number) => {
+    now += ms
+
+    for (const job of [...jobs].sort((a, b) => a.at - b.at)) {
+      if (job.at > now || !jobs.delete(job)) continue
+      job.run()
+    }
+  }
+
+  return { capture, advance, events, jobs }
+}
+
+test("overlapping hidden and stalled visible captures share a subscription until the last release", async () => {
+  const c = coordinator()
+  const one = Promise.withResolvers<void>()
+  const two = Promise.withResolvers<void>()
+  const signal = new AbortController().signal
+  const visible = c.capture(true, signal, () => one.promise)
+  c.advance(99)
+  expect(c.events).toEqual([])
+  c.advance(1)
+  expect(c.events).toEqual(["begin"])
+  const hidden = c.capture(false, signal, () => two.promise)
+  one.reject(new Error("navigation"))
+  await expect(visible).rejects.toThrow("navigation")
+  expect(c.events).toEqual(["begin"])
+  two.resolve()
+  await hidden
+  expect(c.events).toEqual(["begin", "end"])
+  expect(c.jobs.size).toBe(0)
+})
+
+test("timeout aborts the redraw and releases once; successful or cancelled visible calls leave no fallback", async () => {
+  const c = coordinator()
+  const controller = new AbortController()
+  const later = Promise.withResolvers<void>()
+  const stopped: boolean[] = []
+
+  const hidden = c.capture(false, controller.signal, stop => {
+    stop.addEventListener("abort", () => stopped.push(true))
+
+    return later.promise
+  })
+
+  expect(c.events).toEqual(["begin"])
+  c.advance(2500)
+  await expect(hidden).rejects.toThrow("No fresh frame")
+  expect(stopped).toEqual([true])
+  later.resolve()
+  await c.capture(true, controller.signal, () => Promise.resolve())
+  const cancelled = c.capture(true, controller.signal, () => new Promise<void>(() => {}))
+  controller.abort()
+  await expect(cancelled).rejects.toThrow("cancelled")
+  c.advance(3000)
+  expect(c.events).toEqual(["begin", "end"])
+  expect(c.jobs.size).toBe(0)
 })
 
 test("reuse the redraw's PNG only when its actual dimensions and transfer size fit", () => {

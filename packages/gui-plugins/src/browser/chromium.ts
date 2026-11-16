@@ -5,7 +5,7 @@ import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
-import { CAPTURE_DEADLINE_MS, cropPixels, pngFits, undrawable, undrawableMessage } from "./capture"
+import { captureCoordinator, cropPixels, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
@@ -309,10 +309,10 @@ export function createBrowserPage(
 
   const contents = view.webContents
   constructing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })
-  constructing.defer(() => options.workspace?.dispose())
-  constructing.defer(() => options.artifacts?.dispose())
 
   if (agentDriven(options.activity)) contents.setBackgroundThrottling(false)
+  constructing.defer(() => options.workspace?.dispose())
+  constructing.defer(() => options.artifacts?.dispose())
   const preview = (url: string) => options.artifacts?.display(url) ?? options.workspace?.display(url)
   // Keep the fence across transient blank/error documents. Page JS cannot clear it by navigating itself.
   let artifactHost: string | undefined
@@ -393,7 +393,12 @@ export function createBrowserPage(
 
   let documentState = createDocumentState(options.restore)
   const closed = () => isDocumentClosed(documentState)
-  let captures = 0
+
+  const withFrames = captureCoordinator(
+    () => contents.beginFrameSubscription(true, () => {}),
+    () => { if (!contents.isDestroyed()) contents.endFrameSubscription() },
+  )
+
   let reported = ""
 
   const detail = () => {
@@ -1870,59 +1875,17 @@ export function createBrowserPage(
   }
 
   async function captureFrame(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {
-    abortError(signal)
-    const expired = AbortSignal.timeout(CAPTURE_DEADLINE_MS)
-    const stop = AbortSignal.any([expired, signal])
-    const interrupted = Promise.withResolvers<never>()
-    const cancel = () => interrupted.reject(new Error(expired.aborted ? undrawableMessage("stalled") : "Browser capture was cancelled."))
+    return withFrames(view.getVisible() && win.isVisible() && !win.isMinimized(), signal, async stop => {
+      if (isNavigationPending(documentState)) await waitFor(() => !isNavigationPending(documentState), stop)
+      abortError(stop)
+      const before = documentState
+      const frame = await screenshot(action, stop)
+      abortError(stop)
 
-    // A temporary compositor consumer keeps a hidden surface producing frames. Ignore subscription frames: the
-    // first can be cached. Page.captureScreenshot requests a renderer redraw and copies the resulting surface.
-    let subscribed = false
+      if (!frameStillCurrent(before, documentState)) throw new CodedError(Browser.FailureCode.documentChanged, "The document changed during capture. Check the tab and take a new screenshot.")
 
-    const subscribe = () => {
-      if (stop.aborted || contents.isDestroyed()) return
-
-      if (!captures) contents.beginFrameSubscription(true, () => {})
-      captures++
-      subscribed = true
-    }
-
-    // A presented surface already has a consumer. Only add one if presentation stalls (e.g. the window
-    // becomes occluded during the call). A known hidden view needs the consumer from the start.
-    let fallback: ReturnType<typeof setTimeout> | undefined
-
-    if (view.getVisible() && win.isVisible() && !win.isMinimized()) {
-      fallback = setTimeout(() => {
-        try {
-          subscribe()
-        } catch (error) {
-          interrupted.reject(error)
-        }
-      }, 100)
-    } else subscribe()
-    stop.addEventListener("abort", cancel, { once: true })
-
-    try {
-      const capture = async () => {
-        if (isNavigationPending(documentState)) await waitFor(() => !isNavigationPending(documentState), stop, CAPTURE_DEADLINE_MS)
-        abortError(stop)
-        const before = documentState
-        const frame = await screenshot(action, stop)
-        abortError(stop)
-
-        if (!frameStillCurrent(before, documentState)) throw new CodedError(Browser.FailureCode.documentChanged, "The document changed during capture. Check the tab and take a new screenshot.")
-
-        return frame
-      }
-
-      return await Promise.race([capture(), interrupted.promise])
-    } finally {
-      stop.removeEventListener("abort", cancel)
-      clearTimeout(fallback)
-
-      if (subscribed && --captures === 0 && !contents.isDestroyed()) contents.endFrameSubscription()
-    }
+      return frame
+    })
   }
 
   async function screenshot(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {

@@ -20,6 +20,65 @@ export function cropPixels(clip: Rect, image: Size, viewWidth: number, zoom: num
   if (right > x && bottom > y) return { x, y, width: right - x, height: bottom - y }
 }
 
+type Schedule = (ms: number, run: () => void) => () => void
+
+const schedule: Schedule = (ms, run) => {
+  const timer = setTimeout(run, ms)
+
+  return () => clearTimeout(timer)
+}
+
+/** One native frame consumer per tab, held only by outstanding captures that need it. */
+export function captureCoordinator(begin: () => void, end: () => void, after: Schedule = schedule) {
+  let holders = 0
+
+  return async <T>(presented: boolean, signal: AbortSignal, redraw: (stop: AbortSignal) => Promise<T>) => {
+    const cancel = () => new Error("Browser capture was cancelled.")
+
+    if (signal.aborted) throw cancel()
+    const stop = new AbortController()
+    const interrupted = Promise.withResolvers<never>()
+
+    const interrupt = (error: Error) => {
+      interrupted.reject(error)
+      stop.abort()
+    }
+
+    const aborted = () => interrupt(cancel())
+    let held = false
+
+    const acquire = () => {
+      if (!holders) begin()
+      holders++
+      held = true
+    }
+
+    // A visible surface may become occluded after the redraw starts.
+    const fallback = presented ? after(100, () => {
+      try {
+        acquire()
+      } catch (error) {
+        interrupt(error instanceof Error ? error : new Error(String(error)))
+      }
+    }) : undefined
+
+    const timeout = after(CAPTURE_DEADLINE_MS, () => interrupt(new Error(undrawableMessage("stalled"))))
+    signal.addEventListener("abort", aborted, { once: true })
+
+    try {
+      if (!presented) acquire()
+
+      return await Promise.race([redraw(stop.signal), interrupted.promise])
+    } finally {
+      signal.removeEventListener("abort", aborted)
+      timeout()
+      fallback?.()
+
+      if (held && --holders === 0) end()
+    }
+  }
+}
+
 /** CDP produced a PNG. Read its IHDR dimensions before deciding whether decoding and resizing are necessary. */
 export function pngFits(png: Buffer, maxWidth: number, maxBytes: number) {
   if (png.length < 24 || png.length > maxBytes) return false
