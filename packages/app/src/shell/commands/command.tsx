@@ -1,5 +1,6 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { keyboardOwned } from "@opencode/ui/hooks"
 import { type Accessor, batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Predicate, Schema } from "effect"
@@ -368,15 +369,6 @@ export function formatKeybind(config: string, t?: (key: KeyLabel) => string): st
   return IS_MAC ? parts.join("") : parts.join("+")
 }
 
-/**
- * Whether `target` is inside a surface that owns the keyboard (`data-owns-keyboard`), such as a page's prompt in the
- * browser pane, which is modal for its tab only: no command keybind or native menu key equivalent runs there, as none
- * runs while one of the app's own dialogs is open (`dialog.active`). Keys pressed elsewhere in the window are the app's.
- */
-export function keyboardOwned(target: EventTarget | null) {
-  return target instanceof Element && !!target.closest("[data-owns-keyboard]")
-}
-
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
 
@@ -523,6 +515,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // A surface that owns the keyboard, such as a page's prompt in the browser pane, is modal for less than the window.
       if (suspended() || dialog.active || keyboardOwned(event.target)) return
 
       const sig = signatureFromEvent(event)

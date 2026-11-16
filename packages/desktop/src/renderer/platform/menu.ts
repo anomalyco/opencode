@@ -1,4 +1,5 @@
-import { keyboardOwned, type Platform } from "@opencode/app/desktop"
+import type { Platform } from "@opencode/app/desktop"
+import { keyboardOwned } from "@opencode/ui/hooks"
 import type { ElectronAPI } from "../api-types"
 import { resetZoom, zoomIn, zoomOut } from "../window/zoom"
 import {

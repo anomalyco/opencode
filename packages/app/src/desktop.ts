@@ -1,6 +1,6 @@
 export { AppBaseProviders, AppInterface, preloadRoute } from "./app"
 
-export { keyboardOwned, useCommand } from "./shell/commands/command"
+export { useCommand } from "./shell/commands/command"
 
 export { currentRoute, type LayoutRoute, useCurrentRoute } from "./shell/state/layout"
 

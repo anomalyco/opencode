@@ -761,11 +761,13 @@ story(
     await never.press("Escape")
     await expect(bar).toBeHidden()
 
-    // Another modal surface, as a mobile drawer, keeps the app's shortcuts.
+    // Another modal surface, as a mobile drawer, keeps the app's shortcuts; markup alone, as a chat message's, cannot
+    // claim the keyboard.
     await page.evaluate(() => {
       const drawer = document.createElement("div")
       drawer.setAttribute("role", "dialog")
       drawer.setAttribute("aria-modal", "true")
+      drawer.setAttribute("data-owns-keyboard", "")
       drawer.append(Object.assign(document.createElement("button"), { textContent: "Drawer action" }))
       document.body.append(drawer)
     })
