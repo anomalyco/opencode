@@ -12,6 +12,7 @@ import {
   ProjectAvatar,
 } from "@opencode/ui/project-avatar"
 import { TextInput } from "@opencode/ui/text-input"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { createTypeahead } from "@opencode/ui/typeahead"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { getFilename } from "@opencode/util/path"
@@ -482,7 +483,7 @@ function NewSessionLocationDialog(props: {
   }
 
   return (
-    <Dialog class="command-palette new-session-location" size="large">
+    <Dialog class="command-palette new-session-location" size="large" fit>
       <DialogBody class="command-palette-body">
         <div class="palette-menu-search">
           <TextInput
@@ -494,7 +495,21 @@ function NewSessionLocationDialog(props: {
             appearance="large"
             aria-label={placeholder()}
             placeholder={placeholder()}
-            leadingIcon={<Icon name="magnifying-glass" />}
+            leadingIcon={
+              <Show when={view().ownsEscape && !view().titleKey} fallback={<Icon name="magnifying-glass" />}>
+                <Tooltip value={language.t("session.new.location.back")} placement="bottom-start">
+                  <button
+                    type="button"
+                    class="new-session-location-search-back"
+                    aria-label={language.t("session.new.location.back")}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={back}
+                  >
+                    <Icon name="arrow-left" />
+                  </button>
+                </Tooltip>
+              </Show>
+            }
             role="combobox"
             aria-expanded="true"
             aria-busy={step().type === "branches" && selectBranchBusy(picker()) ? "true" : undefined}

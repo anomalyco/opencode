@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Илова кардани сервер",
   "menu.delete": "Нобуд кунед",
+  "error.unavailable": "SSH дастрас нест",
 }

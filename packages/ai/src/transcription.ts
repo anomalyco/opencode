@@ -1,5 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
-import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
+import { Generation, ProgressEvent, type AwaitOptions } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
@@ -153,7 +153,6 @@ export const TranscriptionFinishEvent = Schema.Struct({
 }).annotate({ identifier: "Transcription.Event.Finish" })
 
 const transcriptionEventTagged = Schema.Union([
-  QueuedEvent,
   ProgressEvent,
   TranscriptionTextDeltaEvent,
   TranscriptionSegmentEvent,
@@ -161,7 +160,6 @@ const transcriptionEventTagged = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"))
 export const TranscriptionEvent = Object.assign(transcriptionEventTagged, {
   is: {
-    generationQueued: transcriptionEventTagged.guards["generation-queued"],
     generationProgress: transcriptionEventTagged.guards["generation-progress"],
     textDelta: transcriptionEventTagged.guards["text-delta"],
     segment: transcriptionEventTagged.guards.segment,

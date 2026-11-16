@@ -205,6 +205,8 @@ export function DialogServer(props: {
             <ConnectMethodSwitch
               method={view().draft.method}
               disabled={view().disabled}
+              align="start"
+              class="-mt-4"
               onChange={(method) => form.dispatch({ type: "method.changed", method })}
             />
           </div>

@@ -40,4 +40,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Adaugă server",
   "menu.delete": "Șterge",
+  "error.unavailable": "SSH nu este disponibil",
 }

@@ -36,4 +36,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "서버 추가",
   "menu.delete": "삭제",
+  "error.unavailable": "SSH를 사용할 수 없습니다",
 }
