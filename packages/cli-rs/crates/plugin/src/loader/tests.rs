@@ -486,6 +486,8 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
     assert_eq!(local_source("/abs/x", dir), Some("/abs/x".into()));
     assert_eq!(local_source("file:///abs/y.wasm", dir), Some("/abs/y.wasm".into()));
     assert_eq!(local_source("@acme/opencode-tui", dir), None);
+    // `\` is no separator here: `..\x` names a package, which the cache refuses.
+    assert_eq!(local_source(r"..\x", dir), None);
     // Expected (r2 review, bigboi-ui-8 and carbon-ui-8): a file URL means what `fileURLToPath(new URL(spec))` says.
     assert_eq!(local_source("file:///a/My%20Plugin", dir), Some("/a/My Plugin".into()));
     assert_eq!(local_source("file://localhost/a/b", dir), Some("/a/b".into()));
@@ -500,6 +502,9 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
     let dir = Path::new(r"C:\Users\me\.config\opencode");
     assert_eq!(local_source("./plugins/x", dir), Some(r"C:\Users\me\.config\opencode\plugins\x".into()));
     assert_eq!(local_source("../x.wasm", dir), Some(r"C:\Users\me\.config\x.wasm".into()));
+    // Windows' own relative forms (carbon jsnpm-4), which climb no further than a `/` form does.
+    assert_eq!(local_source(r".\plugins\x", dir), Some(r"C:\Users\me\.config\opencode\plugins\x".into()));
+    assert_eq!(local_source(r"..\..\..\x", dir), Some(r"C:\Users\x".into()));
     assert_eq!(local_source("/abs/x", dir), Some(r"C:\abs\x".into()));
     assert_eq!(local_source(r"\abs\x", dir), Some(r"C:\abs\x".into()));
     assert_eq!(local_source(r"D:\abs\x", dir), Some(r"D:\abs\x".into()));

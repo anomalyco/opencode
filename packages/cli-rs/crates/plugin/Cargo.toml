@@ -20,6 +20,8 @@ serde.workspace = true
 serde_json.workspace = true
 unicode-width.workspace = true
 opencode-api-types.workspace = true
+# The URLs of git specs, parsed as `new URL` parses them (the npm cache's keys, js-npm).
+url.workspace = true
 # The hash an approval of a project plugin names (rich-plugins 3.9).
 ring.workspace = true
 

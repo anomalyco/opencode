@@ -804,6 +804,7 @@ dependencies = [
  "serde",
  "serde_json",
  "unicode-width",
+ "url",
 ]
 
 [[package]]
