@@ -52,7 +52,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: '24'
+          node-version: "24"
       - working-directory: .github/release/cf
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./.github/release/download

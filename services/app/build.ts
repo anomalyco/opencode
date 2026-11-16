@@ -12,8 +12,14 @@ await cp("../../packages/app/dist", `${worker}/assets`, {
   recursive: true,
   filter: (file) => !file.endsWith(".map"),
 })
-await Bun.write(`${out}/config.json`, JSON.stringify({ accountId: config.accountId, buildContext: { isPreview: false, mode: "v1" } }))
-await Bun.write(`${worker}/worker.config.json`, JSON.stringify({
-  ...config.worker,
-  manifest: { type: "complete", mainModule: "index.mjs", modules: { "index.mjs": { type: "esm" } } },
-}))
+await Bun.write(
+  `${out}/config.json`,
+  JSON.stringify({ accountId: config.accountId, buildContext: { isPreview: false, mode: "v1" } }),
+)
+await Bun.write(
+  `${worker}/worker.config.json`,
+  JSON.stringify({
+    ...config.worker,
+    manifest: { type: "complete", mainModule: "index.mjs", modules: { "index.mjs": { type: "esm" } } },
+  }),
+)

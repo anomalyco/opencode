@@ -7,7 +7,7 @@ on:
       version: { type: string, required: true }
       signed_digest: { type: string, required: false }
     outputs:
-      digest: { value: '${{ jobs.pack.outputs.digest }}' }
+      digest: { value: "${{ jobs.pack.outputs.digest }}" }
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: '24'
+          node-version: "24"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version-file: package.json

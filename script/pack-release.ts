@@ -31,9 +31,24 @@ const wrapper = `${out}/wrapper`
 await mkdir(`${wrapper}/bin`, { recursive: true })
 await cp("packages/opencode/script/postinstall.mjs", `${wrapper}/postinstall.mjs`)
 await cp("LICENSE", `${wrapper}/LICENSE`)
-await Bun.write(`${wrapper}/bin/opencode.exe`, '#!/bin/sh\necho "opencode-ai requires its postinstall script" >&2\nexit 1\n')
+await Bun.write(
+  `${wrapper}/bin/opencode.exe`,
+  '#!/bin/sh\necho "opencode-ai requires its postinstall script" >&2\nexit 1\n',
+)
 await $`chmod 755 ${wrapper}/bin/opencode.exe`
-await Bun.write(`${wrapper}/package.json`, JSON.stringify({ name: "opencode-ai", version, license: "MIT", os: ["darwin", "linux", "win32"], cpu: ["arm64", "x64"], bin: { opencode: "./bin/opencode.exe" }, scripts: { postinstall: "node ./postinstall.mjs" }, optionalDependencies: binaries }))
+await Bun.write(
+  `${wrapper}/package.json`,
+  JSON.stringify({
+    name: "opencode-ai",
+    version,
+    license: "MIT",
+    os: ["darwin", "linux", "win32"],
+    cpu: ["arm64", "x64"],
+    bin: { opencode: "./bin/opencode.exe" },
+    scripts: { postinstall: "node ./postinstall.mjs" },
+    optionalDependencies: binaries,
+  }),
+)
 await $`bun pm pack --destination ${out}/npm`.cwd(wrapper)
 
 await $`bun packages/sdk/js/script/build.ts`
