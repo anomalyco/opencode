@@ -1,6 +1,7 @@
 // P-ORACLE for U.1: resolves every built-in theme in every mode it supports, the generated `system` theme over a few
-// terminal palettes, and a few broken custom themes, through the TypeScript TUI's own functions. Writes
-// parity/fixtures/U.1/tokens.json; crates/ui/tests/all/theme_oracle.rs resolves the same inputs in Rust and compares.
+// terminal palettes, the V1 built-ins and the `system` theme again as mini parses them, and a few broken custom themes,
+// through the TypeScript TUI's own functions. Writes parity/fixtures/U.1/tokens.json;
+// crates/ui/tests/all/theme_oracle.rs resolves the same inputs in Rust and compares.
 //
 // Colors are packed as 8 hex digits (rrggbbaa) in the order of `paths` (tokens) and `hues` (one 9-step scale per
 // named hue), so the fixture stays small. The Rust test unpacks them and reports mismatches by path.
@@ -112,6 +113,22 @@ for (const [name, palette] of Object.entries(palettes)) {
   }
 }
 
+// Mini parses without the experiment (`resolveRunTheme` in packages/tui/src/mini/theme.ts), so V1 themes take
+// migrateV1. Its views keep the tokens mini reads: the hues and the base surface.
+const mini: Record<string, Pick<ReturnType<typeof entry>, "modes" | "hues" | "hue" | "categorical" | "base">> = {}
+const miniView = (source: ThemeDocumentSource, name: string, mode: "dark" | "light") => {
+  const document = parseTheme(source, name)
+  const view = entry(resolveThemeDocument(document, mode), themeModes(document))
+  return { modes: view.modes, hues: view.hues, hue: view.hue, categorical: view.categorical, base: view.base }
+}
+for (const [name, source] of Object.entries(allThemes()).filter(([, source]) => "theme" in source)) {
+  for (const mode of themeModes(parseTheme(source, name))) mini[`${name}/${mode}`] = miniView(source, name, mode)
+}
+for (const [name, palette] of Object.entries(palettes)) {
+  for (const mode of ["dark", "light"] as const)
+    mini[`system:${name}/${mode}`] = miniView(generateSystem(palette as TerminalColors, mode), "system", mode)
+}
+
 // Custom themes that fail to load, with the message the theme-error toast shows.
 const valid = allThemes().opencode as Record<string, unknown>
 const broken: Record<string, unknown> = {
@@ -148,12 +165,15 @@ const errors = Object.fromEntries(
 
 await Bun.write(
   output,
-  records({ paths, builtins, system, palettes, errors }, [
+  records({ paths, builtins, system, mini, palettes, errors }, [
     "paths[]",
     "builtins.*.*",
     "system.*.*",
+    "mini.*.*",
     "palettes.*.*",
     "errors.*.*",
   ]),
 )
-console.log(`oracle U.1: ${Object.keys(builtins).length} built-in views, ${Object.keys(system).length} system views`)
+console.log(
+  `oracle U.1: ${Object.keys(builtins).length} built-in views, ${Object.keys(system).length} system views, ${Object.keys(mini).length} mini views`,
+)
