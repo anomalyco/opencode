@@ -624,7 +624,7 @@ export function createBrowserPage(
   contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
   contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: pageTitle() }))
   contents.on("did-start-navigation", (event) => {
-    if (event.isMainFrame) navigation.cancel()
+    navigation.nativeStart(event)
     dispatch({
       type: "navigation.started",
       url: displayURL(event.url),
@@ -998,16 +998,17 @@ export function createBrowserPage(
   }
 
   const reload = async (signal = options.signal) => {
-    navigation.cancel()
     const tab = state()
 
-    if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url, true)
+    if (navigation.interrupt("reload", documentState.status === "restoring" ? documentState.url : undefined)) return
+
+    if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url, true, signal)
     const actual = contents.getURL()
 
-    if (options.workspace?.host(actual) && options.workspace.display(actual) === tab.url) return void await load(tab.url, true)
-    const address = reloadAddress(actual, state().url, options.workspace?.host(actual), policy.fileRoots ?? [], policy.remote)
+    if (options.workspace?.host(actual) && options.workspace.display(actual) === tab.url) return void await load(tab.url, true, signal)
+    const address = reloadAddress(actual, tab.url, options.workspace?.host(actual), policy.fileRoots ?? [], policy.remote)
 
-    if (address) return void await load(address, true)
+    if (address) return void await load(address, true, signal)
 
     return begin(signal)(actual, () => contents.reload())
   }
@@ -1105,7 +1106,7 @@ export function createBrowserPage(
      * would run with that extension's privileges; every agent operation reaches the page through here.
      */
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
-      if (["stop", "back", "forward", "reload", "navigate"].includes(command.action.type)) navigation.cancel()
+      const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined)
       await ready
       const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
 
@@ -1143,7 +1144,7 @@ export function createBrowserPage(
           choosers.update().then(() => {
             abortError(run.controller.signal)
 
-            return perform(command, run.controller.signal, origin)
+            return perform(command, run.controller.signal, origin, saved)
           }),
           run.interrupted.promise,
           ...(signIn ? [signIn.promise] : []),
@@ -1189,8 +1190,8 @@ export function createBrowserPage(
     },
   }
 
-  async function perform(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user") {
-    if (origin === "user") return attempt(command, signal, origin)
+  async function perform(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", saved?: string) {
+    if (origin === "user") return attempt(command, signal, origin, saved)
 
     // An error document has no inspectable frame. Report the artifact failure before querying Chromium.
     if (state().loadError === FileVerificationError.code && !leavable.includes(command.action.type)) throw new FileVerificationError()
@@ -1203,7 +1204,7 @@ export function createBrowserPage(
     const framed = await extensionFrameRefusal(used)
 
     if (framed) throw new Error(framed)
-    const result = await attempt(command, signal, origin)
+    const result = await attempt(command, signal, origin, saved)
     // A redirect, or a navigation while it ran, may have brought an extension page in, in the tab or in a frame the
     // action used; its result stays here.
     const moved = agentRefusal({ type: "snapshot" }, mainDocument()) ?? (await extensionFrameRefusal(used))
@@ -1229,7 +1230,7 @@ export function createBrowserPage(
     return context
   }
 
-  async function attempt(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
+  async function attempt(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", saved?: string): Promise<Browser.Result> {
     if (command.expectedSite && destinationOrigin(contents.mainFrame.url) !== command.expectedSite)
       throw new Error("The tab is no longer at the approved site; request the action again.")
 
@@ -1254,7 +1255,7 @@ export function createBrowserPage(
       )
     abortError(signal)
 
-    return execute(command.action, command.files, signal, origin, command.target)
+    return execute(command.action, command.files, signal, origin, command.target, saved)
   }
 
   async function execute(
@@ -1263,6 +1264,7 @@ export function createBrowserPage(
     signal: AbortSignal,
     origin: "agent" | "user",
     approved?: Browser.Target,
+    saved?: string,
   ): Promise<Browser.Result> {
     const captureSources = sourceURLs()
     const transfer = (id: Browser.FileID) => files.transfer(id, approved?.resources)
@@ -1307,10 +1309,10 @@ export function createBrowserPage(
           const index = history.getActiveIndex() + (action.type === "back" ? -1 : 1)
           const entry = index >= 0 && index < history.length() && history.getEntryAtIndex(index)
 
-          if (entry) await begin(signal)(entry.url, () => history.goToIndex(index))
+          if (entry) await begin(signal)(entry.url, () => history.goToIndex(index), () => !closed() && contents.isLoading())
         }
 
-        if (action.type === "reload") await reload(signal)
+        if (action.type === "reload" && !saved) await reload(signal)
 
         if (action.type === "stop") {
           navigation.cancel()
