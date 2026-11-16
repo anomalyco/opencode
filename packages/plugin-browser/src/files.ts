@@ -94,9 +94,13 @@ export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, 
   )
   if (target === null) return missing
   if (!target) return { ...missing, outside: true }
-  if (target !== absolute) yield* approve(target)
+  // The physical file, named under the workspace as the session spells it: a workspace reached through a symlink
+  // (macOS's /var is /private/var) keeps its own path, and only a link inside it to another entry needs approval.
+  const root = yield* Effect.tryPromise({ try: () => realpath(directory), catch: invalid })
+  const physical = resolve(directory, relative(root, target))
+  if (physical !== absolute) yield* approve(physical)
   const info = yield* Effect.tryPromise({ try: () => stat(target), catch: invalid })
-  return { absolute: target, found: info.isFile(), directory: info.isDirectory() }
+  return { absolute: physical, found: info.isFile(), directory: info.isDirectory() }
 })
 
 /** Whether a preview path is an address with a scheme, such as https:, skill: or file:. A drive letter is no scheme. */

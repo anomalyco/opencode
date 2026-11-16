@@ -311,7 +311,19 @@ test("preview paths resolve the way the Review pane resolves them", async () => 
       expect(await locate(path)).toEqual({ absolute: join(directory, "site", "docs"), found: false, directory: true })
     for (const path of ["https://example.com/report.html", "skill://browser/SKILL.md"])
       expect(await locate(path)).toBeUndefined()
+    // A workspace reached through a link (macOS's tmpdir is under /private) keeps its own spelling and asks once.
+    const linked = `${directory}-link`
+    await symlink(directory, linked, process.platform === "win32" ? "junction" : "dir")
+    const approved: string[] = []
+
+    const through = await Effect.runPromise(
+      BrowserFiles.locate("site/index.html", linked, (absolute) => Effect.sync(() => void approved.push(absolute))),
+    )
+
+    expect(through).toEqual({ absolute: join(linked, "site", "index.html"), found: true, directory: false })
+    expect(approved).toEqual([join(linked, "site", "index.html")])
   } finally {
+    await rm(`${directory}-link`, { recursive: true, force: true })
     await rm(directory, { recursive: true, force: true })
   }
 })
