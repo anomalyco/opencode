@@ -14,14 +14,23 @@
   flex: none;
 }
 
+/* The 20px close button would add 2px below the 16px title row. */
+[data-component="dialog-v2"]
+  [data-slot="dialog-container"]
+  .directory-picker
+  [data-slot="dialog-header"]
+  [data-slot="dialog-close-button"] {
+  margin-block: -2px;
+}
+
 .directory-picker-server {
   display: inline-flex;
   min-width: 0;
   max-width: 240px;
-  height: 20px;
+  height: 16px;
   align-items: center;
   gap: 4px;
-  padding: 0 6px;
+  padding: 0 4px;
   border-radius: 4px;
   background: var(--v2-overlay-simple-overlay-hover);
   color: var(--v2-text-text-base);
@@ -50,7 +59,6 @@
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 
 .directory-picker-input {
@@ -75,14 +83,26 @@
   white-space: nowrap;
 }
 
-.directory-picker-recent-trigger {
-  flex-shrink: 0;
-  gap: 4px;
-  padding-inline: 10px 8px;
+.directory-picker-recent {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.directory-picker-recent-item {
+  max-width: 160px;
+  gap: 6px;
+  padding-inline: 4px 8px;
 }
 
 .directory-picker-recent-menu {
   max-width: 420px;
+}
+
+.directory-picker-recent + .directory-picker-folder {
+  margin-top: 4px;
 }
 
 .directory-picker-folder {

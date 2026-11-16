@@ -14,6 +14,7 @@ import {
   ProjectAvatar,
 } from "@opencode/ui/project-avatar"
 import { TextInput } from "@opencode/ui/text-input"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { useServer } from "@/runtime/server/current"
@@ -29,6 +30,7 @@ import {
   pickerMode,
   createPriorityTaskQueue,
   createDirectorySearch,
+  displayPickerPath,
   shortenPickerRecentPath,
   pickerBreadcrumbs,
   pickerParent,
@@ -154,7 +156,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
         return true
       })
-      .slice(0, 5)
+      .slice(0, 10)
   })
 
   const search = createDirectorySearch({ sdk, home, location, base: () => treeView().root || start() })
@@ -169,6 +171,11 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
     return [...crumbs.slice(0, lead), { label: "…", path: crumbs[crumbs.length - 3].path }, ...crumbs.slice(-2)]
   })
+
+  function choose(directory: string) {
+    dispatchCombobox({ type: "dismissed" })
+    dispatchTree({ type: "directory.chosen", ...navigation(directory), fromInput: false })
+  }
 
   function navigation(path: string) {
     return { path, home: home(), fallback: start() || home(), located: Boolean(location()) }
@@ -518,17 +525,22 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
           -webkit-mask-image: ${FOLDER_OPEN_MASK};
           mask-image: ${FOLDER_OPEN_MASK};
         }
+        /* The tree renders rows in its shadow root, which only takes text decorations, so this repeats Badge's neutral compact style. */
         [data-item-section="decoration"] > span {
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
           height: 16px;
           padding: 0 4px;
-          border-radius: 4px;
-          background: var(--v2-background-bg-base);
-          box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+          border-radius: 2px;
+          border: 0.5px solid var(--v2-border-border-base);
+          background: var(--v2-background-bg-layer-02);
           color: var(--v2-text-text-muted);
           font-size: 11px;
           font-weight: 530;
-          line-height: 16px;
+          line-height: 1;
           letter-spacing: 0.05px;
+          font-variant-numeric: tabular-nums;
         }
         [data-item-section="spacing"] {
           padding-inline-start: 6.5px;
@@ -673,55 +685,82 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
               </MenuScroll>
             </div>
           </Show>
-          <Show when={recentProjects().length > 0}>
-            <Menu gutter={4} modal={false} placement="bottom-end">
-              <Menu.Trigger as={Button} variant="neutral" size="large" class="directory-picker-recent-trigger">
-                {language.t("dialog.directory.recent")}
-                <Icon name="chevron-down" size="small" />
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Content class="directory-picker-recent-menu">
-                  <For each={recentProjects()}>
-                    {(project) => {
-                      const name = () => displayName(project)
-                      const shortPath = () => shortenPickerRecentPath(project.worktree, home())
-
-                      return (
-                        <Menu.Item
-                          aria-label={language.t("dialog.directory.recentProject", {
-                            name: name(),
-                            path: shortPath(),
-                          })}
-                          onSelect={() => {
-                            dispatchCombobox({ type: "dismissed" })
-                            dispatchTree({
-                              type: "directory.chosen",
-                              ...navigation(project.worktree),
-                              fromInput: false,
-                            })
-                          }}
-                        >
-                          <ProjectAvatar
-                            class="shrink-0"
-                            aria-hidden="true"
-                            fallback={name()}
-                            src={getProjectAvatarSource(project.id, project.icon)}
-                            variant={getProjectAvatarVariant(project.icon?.color)}
-                            generated={getProjectAvatarGenerated(project)}
-                          />
-                          <span class="directory-picker-item-name">{name()}</span>
-                          <bdi dir="ltr" class="directory-picker-item-path">
-                            {shortPath()}
-                          </bdi>
-                        </Menu.Item>
-                      )
-                    }}
-                  </For>
-                </Menu.Content>
-              </Menu.Portal>
-            </Menu>
-          </Show>
         </div>
+        <Show when={recentProjects().length > 0}>
+          <div class="directory-picker-recent" aria-label={language.t("dialog.directory.recent")} role="group">
+            <For each={recentProjects().slice(0, 3)}>
+              {(project) => {
+                const name = () => displayName(project)
+                const shortPath = () => shortenPickerRecentPath(project.worktree, home())
+
+                return (
+                  <Tooltip
+                    placement="top"
+                    value={<bdi dir="ltr">{displayPickerPath(project.worktree, "", home())}</bdi>}
+                  >
+                    <Button
+                      size="small"
+                      variant="neutral"
+                      class="directory-picker-recent-item"
+                      aria-label={language.t("dialog.directory.recentProject", { name: name(), path: shortPath() })}
+                      onClick={() => choose(project.worktree)}
+                    >
+                      <ProjectAvatar
+                        class="shrink-0"
+                        aria-hidden="true"
+                        fallback={name()}
+                        src={getProjectAvatarSource(project.id, project.icon)}
+                        variant={getProjectAvatarVariant(project.icon?.color)}
+                        generated={getProjectAvatarGenerated(project)}
+                      />
+                      <span class="min-w-0 truncate">{name()}</span>
+                    </Button>
+                  </Tooltip>
+                )
+              }}
+            </For>
+            <Show when={recentProjects().length > 3}>
+              <Menu gutter={4} modal={false} placement="bottom-start">
+                <Menu.Trigger as={Button} size="small" variant="neutral">
+                  {language.t("dialog.directory.moreProjects")}
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content class="directory-picker-recent-menu">
+                    <For each={recentProjects().slice(3)}>
+                      {(project) => {
+                        const name = () => displayName(project)
+                        const shortPath = () => shortenPickerRecentPath(project.worktree, home())
+
+                        return (
+                          <Menu.Item
+                            aria-label={language.t("dialog.directory.recentProject", {
+                              name: name(),
+                              path: shortPath(),
+                            })}
+                            onSelect={() => choose(project.worktree)}
+                          >
+                            <ProjectAvatar
+                              class="shrink-0"
+                              aria-hidden="true"
+                              fallback={name()}
+                              src={getProjectAvatarSource(project.id, project.icon)}
+                              variant={getProjectAvatarVariant(project.icon?.color)}
+                              generated={getProjectAvatarGenerated(project)}
+                            />
+                            <span class="directory-picker-item-name">{name()}</span>
+                            <bdi dir="ltr" class="directory-picker-item-path">
+                              {shortPath()}
+                            </bdi>
+                          </Menu.Item>
+                        )
+                      }}
+                    </For>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu>
+            </Show>
+          </div>
+        </Show>
         <div class="directory-picker-folder">
           <div class="directory-picker-folder-header">
             <nav class="directory-picker-breadcrumbs" aria-label={language.t("dialog.directory.breadcrumbs")} dir="ltr">
