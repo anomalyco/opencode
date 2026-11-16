@@ -11,6 +11,7 @@ import { createExtensionApis } from "./extension-api"
 import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
 import { cookiesPersist } from "./probe"
+import { extensionDigest } from "./integrity"
 import { createPreviews } from "./previews"
 import {
   displayName,
@@ -40,6 +41,8 @@ const StoredExtension = Schema.Struct({
   source: Schema.Literals(["folder", "store", "browser"]),
   origin: Schema.optional(Schema.String),
   localKey: Schema.optional(Schema.String),
+  digest: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
 })
 
 type StoredExtension = typeof StoredExtension.Type
@@ -102,6 +105,7 @@ export async function createBrowserProfile(input: {
   }
 
   const errors = new Map<string, string>()
+  const changed = new Set<string>()
   const details = new Map<string, ProfileExtension>()
   // Browser icons by application path, read once; undefined for an application without one.
   const icons = new Map<string, string | undefined>()
@@ -119,6 +123,10 @@ export async function createBrowserProfile(input: {
   }
 
   const describe = async (record: StoredExtension): Promise<ProfileExtension | undefined> => {
+    if (changed.has(record.id) || !record.digest) return {
+      id: record.id, name: record.name ?? record.id, version: "", enabled: false, source: record.source,
+      changed: true, access: [], compatibility: { level: "partial", missing: [] },
+    }
     const manifest = await readManifest(record.directory)
 
     if (!manifest) return undefined
@@ -173,6 +181,21 @@ export async function createBrowserProfile(input: {
   const load = async (record: StoredExtension) => {
     if (session.extensions.getExtension(record.id)) return
 
+    const managed = /^[a-p]{32}$/.test(record.id) && record.directory === path.join(directory, record.id) &&
+      await realpath(record.directory).catch(() => undefined) === path.join(await realpath(directory), record.id)
+
+    // Chromium writes compiled DNR rules into this reserved directory after a load. Never trust or load an on-disk
+    // rules cache: regenerate it from the approved rules. A failure to clear it must fail the digest comparison.
+    if (managed && record.digest) await rm(path.join(record.directory, "_metadata"), { recursive: true, force: true }).catch(() => undefined)
+
+    if (!managed || !record.digest || await extensionDigest(record.directory) !== record.digest) {
+      changed.add(record.id)
+
+      return
+    }
+
+    changed.delete(record.id)
+
     const loaded = await session.extensions.loadExtension(record.directory, { allowFileAccess: false }).then(
       (extension) => extension,
       (cause: unknown) => {
@@ -188,7 +211,10 @@ export async function createBrowserProfile(input: {
     session.extensions.getAllExtensions().forEach((extension) => session.extensions.removeExtension(extension.id))
 
   await clearStaging(directory)
-    .then(() => Promise.all(stored.value.filter((record) => record.enabled).map(load)))
+    .then(async () => {
+      // Bound open handles and read buffers across the profile, not just inside each extension.
+      for (const record of stored.value) if (record.enabled) await load(record)
+    })
     .then(refresh)
     .catch((cause: unknown) => {
       apis.dispose()
@@ -216,7 +242,7 @@ export async function createBrowserProfile(input: {
     // Chromium keeps the loaded copy's files open; the new one loads in its place.
     if (known && session.extensions.getExtension(known.id)) session.extensions.removeExtension(known.id)
 
-    if (!force && !known) {
+    if (!force && (!known || changed.has(known.id) || !known.digest)) {
       const name = await displayName(folder, manifest)
       const icon = await extensionIcon(folder, manifest)
 
@@ -224,6 +250,11 @@ export async function createBrowserProfile(input: {
 
       return { type: review, name, icon, compatibility, access }
     }
+
+    const digest = await extensionDigest(folder)
+
+    if (!digest) return { type: "failed", reason: "manifest" }
+    const name = await displayName(folder, manifest)
 
     const extension = await session.extensions.loadExtension(folder, { allowFileAccess: false }).then(
       (value) => value,
@@ -238,7 +269,8 @@ export async function createBrowserProfile(input: {
       return { type: "failed", reason: "manifest" }
     }
 
-    stored.set([...stored.value.filter((item) => item.id !== record.id), record])
+    stored.set([...stored.value.filter((item) => item.id !== record.id), { ...record, digest, name }])
+    changed.delete(record.id)
     errors.delete(record.id)
     await refresh()
     const described = details.get(record.id)
@@ -469,6 +501,8 @@ export async function createBrowserProfile(input: {
 
       return replace({ id: target.id, directory: path.join(directory, target.id), enabled: true, source: "store" }, request.force, async (staging) => {
         await unzip(parsed.zip, staging)
+        // Electron discards store metadata on unpacked loads. Remove it before approval, not from the digest check.
+        await rm(path.join(staging, "_metadata"), { recursive: true, force: true })
 
         return pinKey(staging, parsed.key)
       })

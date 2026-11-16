@@ -229,7 +229,7 @@ function ExtensionRow(props: {
           fallback="extensions"
           name={props.extension.name}
           detail={props.extension.version}
-          message={props.extension.error ? { text: props.extension.error, error: true } : undefined}
+          message={props.extension.changed ? { text: ctx.t("settings.extensions.changed"), error: true } : props.extension.error ? { text: props.extension.error, error: true } : undefined}
         />
       }
     >
@@ -247,7 +247,7 @@ function ExtensionRow(props: {
           label={ctx.t("settings.extensions.enable", { name: props.extension.name })}
           hideLabel
           checked={props.extension.enabled}
-          disabled={props.disabled}
+          disabled={props.disabled || props.extension.changed}
           onChange={props.onEnable}
         />
       </div>

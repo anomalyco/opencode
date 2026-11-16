@@ -78,6 +78,7 @@ export const ProfileExtension = Schema.Struct({
   options: Schema.optional(Schema.String),
   /** Why an enabled extension did not load. */
   error: Schema.optional(Schema.String),
+  changed: Schema.optional(Schema.Boolean),
   compatibility: ExtensionCompatibility,
   access: Schema.Array(ExtensionAccess),
   /**
