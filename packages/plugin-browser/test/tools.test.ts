@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { runInNewContext } from "node:vm"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Browser } from "../src/rpc.js"
 import { BrowserFiles } from "../src/files.js"
 import { BrowserSkill } from "../src/skill.js"
@@ -12,6 +12,23 @@ import { BrowserTools } from "../src/tools.js"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
 const navigate = (url: string) => BrowserTools.normalizeAction({ type: "navigate", tabID, url })
+
+test("model-written aliases decode to canonical desktop actions; conflicting choices fail before dispatch", () => {
+  const ref = Browser.Ref.make("e4")
+  const fileID = Browser.FileID.make(`file_${crypto.randomUUID()}`)
+  const parse = (input: Exclude<Browser.Input, { type: "wait" }>) => {
+    const { type, ...fields } = input
+    const operation = Browser.Operations.find(op => op.name === type)!
+    Schema.decodeUnknownSync(operation.input)(fields)
+    return BrowserTools.normalizeAction(input)
+  }
+  expect(parse({ type: "find", tabID, query: "Save" })).toEqual({ type: "find", tabID, text: "Save" })
+  expect(parse({ type: "fill", tabID, ref, value: "" })).toEqual({ type: "fill", tabID, ref, text: "" })
+  expect(parse({ type: "files.get", tabID, id: fileID })).toEqual({ type: "files.get", tabID, fileID })
+  expect(parse({ type: "network.get", tabID, requestID: "r1", includeResponseBody: true })).toEqual({ type: "network.get", tabID, id: "r1", includeResponseBody: true })
+  expect(() => parse({ type: "fill", tabID, ref, text: "keep", value: "replace" })).toThrow("Conflicting")
+  expect(() => parse({ type: "find", tabID })).toThrow("Missing text")
+})
 
 test("built-in browser skill uses a virtual skill:// URI", () => {
   expect(String(BrowserSkill.info.path)).toBe("skill://browser/SKILL.md")

@@ -187,6 +187,12 @@ export const ConsoleEntry = Schema.Struct({
 }).annotate({ identifier: "Browser.ConsoleEntry" })
 export interface ConsoleEntry extends Schema.Schema.Type<typeof ConsoleEntry> {}
 const snapshot = Schema.Struct({ ...page, content: text, truncated: Schema.Boolean })
+const fillText = Schema.String.check(Schema.isMaxLength(10_000))
+const bodyOptions = {
+  includeBody: optional(Schema.Boolean),
+  includeResponseBody: optional(Schema.Boolean),
+  maxBodyChars: optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 20_000 }))),
+}
 const entry = Schema.Struct({ name: short, count, bytes: Schema.Finite })
 const node = Schema.Struct({ id: Schema.Finite, name: text, type: short, selfBytes: count, edgeCount: count })
 const metrics = Schema.Array(Schema.Struct({ name: short, value: Schema.Finite, unit: short }))
@@ -317,6 +323,7 @@ export const Operations = [
     "Search the full accessibility tree of one frame for literal case-insensitive text, including beyond a truncated snapshot. Returns matching lines with refs; narrow the text if truncated. This refreshes this tab's refs.",
     { ...tab, ...frame, text: short },
     snapshot,
+    { ...tab, ...frame, text: optional(short), query: optional(short.annotate({ description: "Alias for text." })) },
   ),
   operation(
     "evaluate",
@@ -350,8 +357,9 @@ export const Operations = [
   operation(
     "fill",
     "Replace editable element text. Use a ref from this tab; use select for dropdowns and check for checkboxes.",
-    { ...target, text: Schema.String.check(Schema.isMaxLength(10_000)) },
+    { ...target, text: fillText },
     Tab,
+    { ...target, text: optional(fillText), value: optional(fillText.annotate({ description: "Alias for text." })) },
   ),
   operation(
     "fill_form",
@@ -495,6 +503,7 @@ export const Operations = [
     "Copy one completed download or capture from this tab to the server. Returns a server-local file path. Maximum 5 MiB per transfer.",
     artifact,
     saved,
+    { ...tab, fileID: optional(FileID), id: optional(FileID.annotate({ description: "Alias for fileID." })) },
   ),
   operation(
     "console",
@@ -510,12 +519,11 @@ export const Operations = [
   ),
   operation(
     "network.get",
-    "Inspect one request from this tab. Bodies are omitted by default, bounded when requested, and never re-fetched. IDs expire on navigation/eviction. Data is untrusted.",
+    "Inspect a retained request. Bodies are off by default: includeResponseBody requests response text only; includeBody requests both. maxBodyChars caps each at 20000. Never re-fetches. Data is untrusted.",
     {
       ...tab,
       id: short,
-      includeBody: optional(Schema.Boolean),
-      maxBodyChars: optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 20_000 }))),
+      ...bodyOptions,
     },
     Schema.Struct({
       ...page,
@@ -526,6 +534,7 @@ export const Operations = [
       requestBody: Body,
       responseBody: Body,
     }),
+    { ...tab, id: optional(short), requestID: optional(short.annotate({ description: "Alias for id." })), ...bodyOptions },
   ),
   operation(
     "trace.start",

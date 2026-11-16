@@ -268,6 +268,22 @@ function modelResult(output: Schema.Schema.Type<Browser.Operation["output"]>, fi
 }
 
 export function normalizeAction(action: Exclude<Browser.Input, { readonly type: "wait" }>): Exclude<Browser.Action, { type: "wait" }> {
+  if (action.type === "find") {
+    const { query, ...rest } = action
+    return { ...rest, text: parameter(rest.text, query, "text", "query") }
+  }
+  if (action.type === "fill") {
+    const { value, ...rest } = action
+    return { ...rest, text: parameter(rest.text, value, "text", "value") }
+  }
+  if (action.type === "files.get") {
+    const { id, ...rest } = action
+    return { ...rest, fileID: parameter(rest.fileID, id, "fileID", "id") }
+  }
+  if (action.type === "network.get") {
+    const { requestID, ...rest } = action
+    return { ...rest, id: parameter(rest.id, requestID, "id", "requestID") }
+  }
   if (action.type === "preview" && (!action.path.trim() || (BrowserFiles.address(action.path) && !/^file:/i.test(action.path.trim()))))
     throw new Tool.Error({ metadata: { code: "invalid_path" }, message: "browser.preview needs a workspace file path, not a web or internal address." })
   if (action.type === "evaluate") return evaluateAction(action)
@@ -300,6 +316,14 @@ export function normalizeAction(action: Exclude<Browser.Input, { readonly type: 
 }
 
 type WaitInput = Extract<Browser.Input, { readonly type: "wait" }>
+
+function parameter<T extends string>(value: T | undefined, alternate: T | undefined, name: string, alias: string): T {
+  if (value !== undefined && alternate !== undefined && value !== alternate)
+    throw new Tool.Error({ message: `Conflicting ${name} and ${alias}. Pass only ${name}.` })
+  const result = value ?? alternate
+  if (result === undefined) throw new Tool.Error({ message: `Missing ${name}. Pass ${name} or its alias ${alias}.` })
+  return result
+}
 type WaitAction = Extract<Browser.Action, { readonly type: "wait" }>
 
 export type WaitPlan = { readonly timeoutMs: number; readonly waited: Browser.Waited["waited"] } & (
