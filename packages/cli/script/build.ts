@@ -165,6 +165,23 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       }))
     },
   }
+  // ffi-rs probes every optional binding at runtime. A standalone executable needs exactly the target's binding,
+  // even when the build host has installed several (Windows x64 also installs the ia32 package).
+  const ffiBinding = `@yuuang/ffi-rs-${item.os}-${item.arch}${item.os === "linux" ? `-${item.abi ?? "gnu"}` : item.os === "win32" ? "-msvc" : ""}`
+  const ffiPlugin: BunPlugin = {
+    name: "ffi-rs-binding",
+    setup(build) {
+      build.onLoad({ filter: /[/\\]ffi-rs[/\\]index\.js$/ }, async (args) => {
+        const code = await Bun.file(args.path).text()
+        const start = code.indexOf("if (!nativeBinding) {")
+        if (start === -1) throw new Error("Failed to rewrite ffi-rs native binding loader")
+        return {
+          contents: `const nativeBinding = require(${JSON.stringify(ffiBinding)}); const loadError = undefined;\n${code.slice(start)}`,
+          loader: "js",
+        }
+      })
+    },
+  }
   const target = targetName(item)
   const name = target.replace(binary, "cli")
   const executablePath = await compileExecutable(item)
@@ -176,6 +193,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       appAssetsPlugin,
       solidPlugin,
       parcelWatcherPlugin,
+      ffiPlugin,
       opencodePtyPlugin,
       pluginRuntimePlugin,
       wsReexportPlugin,
