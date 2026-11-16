@@ -58,7 +58,10 @@ async function runSuite(suite: string, side: Side) {
   const dir = path.join(tmpdir(), "opencode-parity/acp", `${suite}-${side}`)
   await rm(dir, { recursive: true, force: true })
   await mkdir(dir, { recursive: true })
-  const proc = Bun.spawn(["bun", "test", `test/acp/${suite}.subprocess.test.ts`], {
+  // A suite whose server can take either of two correct paths gets a preload that fixes the fixture's timing.
+  const preload = path.join(import.meta.dir, `${suite}.preload.ts`)
+  const preloads = (await Bun.file(preload).exists()) ? ["--preload", preload] : []
+  const proc = Bun.spawn(["bun", "test", ...preloads, `test/acp/${suite}.subprocess.test.ts`], {
     cwd: cli,
     env: {
       ...process.env,
