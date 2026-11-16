@@ -19,6 +19,7 @@ import {
   Result,
   Schedule,
   Schema,
+  Semaphore,
   Stream,
 } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -737,6 +738,11 @@ const layer = Layer.effect(
       })
 
     const watch = Effect.fnUntraced(function* (id: ID, expires: number | null) {
+      // Expiry stops admission, but cannot cut a delivery between its inbox write and cursor commit.
+      const delivery = yield* Semaphore.make(1)
+      const expire = Effect.gen(function* () {
+        yield* expireWatch(yield* find(id), yield* Clock.currentTimeMillis)
+      })
       const open = Effect.gen(function* () {
         const row = yield* find(id)
         const trigger = row.trigger
@@ -780,7 +786,7 @@ const layer = Layer.effect(
               if (current.event_position?.id === message.eventId) return true
               yield* runAction(current, at, message)
               return (yield* find(id)).status === "active"
-            }),
+            }, delivery.withPermit),
           ),
         )
       }).pipe(
@@ -808,7 +814,7 @@ const layer = Layer.effect(
               open,
               Effect.gen(function* () {
                 yield* Effect.sleep(Math.max(0, expires - (yield* Clock.currentTimeMillis)))
-                yield* expireWatch(yield* find(id), yield* Clock.currentTimeMillis)
+                yield* delivery.withPermit(expire)
               }),
             )
       yield* run.pipe(

@@ -2,6 +2,7 @@ export * as AutomationEvent from "./event.js"
 
 import type { Automation } from "@opencode/schema/automation"
 import { Effect, Option, Schema, Stream } from "effect"
+import { LocationLifecycle } from "../location-lifecycle.js"
 import { McpClient } from "../mcp/client.js"
 import { Mcp } from "../mcp/index.js"
 import { codecFor } from "../tool/runtime.js"
@@ -38,17 +39,20 @@ export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event) {
     return yield* Effect.fail(new Error("Event arguments do not match inputSchema"))
   const valid = validator(type.payloadSchema)
   if (!valid) return yield* Effect.fail(new Error("Unsupported event payloadSchema"))
+  const lifecycle = yield* LocationLifecycle.Service
   return (cursor?: string) =>
     events.stream({ name: trigger.event, arguments: trigger.args, cursor }).pipe(
+      Stream.onStart(lifecycle.retain),
+      Stream.scoped,
+      Stream.interruptWhen(lifecycle.awaitShutdown),
       Stream.concat(Stream.fail(new Error("MCP event stream closed"))),
       Stream.mapError((error) =>
         error instanceof McpClient.EventStreamRejectedError || error instanceof McpClient.EventStreamTerminatedError
           ? error
           : new Disconnected({ message: error.message }),
       ),
+      Stream.filter((message) => message.type !== "error"),
       Stream.mapEffect((message) => {
-        if (message.type === "error")
-          return Effect.fail(new Error(`MCP event error: ${message.error.message.slice(0, 512)}`))
         if (message.cursor && message.cursor.length > 4096) return Effect.fail(new Error("Oversized event cursor"))
         if ((message.type === "active" && message.truncated) || (cursor !== undefined && message.cursor === null))
           return Effect.fail(

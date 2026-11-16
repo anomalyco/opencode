@@ -1,11 +1,14 @@
 import { expect } from "bun:test"
 import { Automation } from "@opencode/core/automation"
+import { AutomationTable } from "@opencode/core/automation/sql"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
+import { LocationActivity } from "@opencode/core/location-activity"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
 import { Plugin } from "@opencode/core/plugin"
@@ -21,7 +24,7 @@ import { Tool } from "@opencode/schema/tool"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Clock, Effect, Fiber, Layer, Schedule, Schema } from "effect"
+import { Clock, Context, Duration, Effect, Fiber, Latch, Layer, Schedule, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { eventProducer } from "./fixture/event-server"
 import { hostEnvironmentLayer } from "./fixture/environment"
@@ -31,10 +34,18 @@ import { testEffect } from "./lib/effect"
 import { advance } from "./lib/clock"
 
 const wakes: Session.ID[] = []
+const Wake = Context.Reference<Effect.Effect<void>>("test/automation/wake", { defaultValue: () => Effect.void })
 let current: McpClient.Events | undefined
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Automation.node, Database.node, LocationServiceMap.node, Session.node, SessionProjector.node]),
+    LayerNode.group([
+      Automation.node,
+      Database.node,
+      LocationActivity.node,
+      LocationServiceMap.node,
+      Session.node,
+      SessionProjector.node,
+    ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       offlineModels,
@@ -52,6 +63,7 @@ const it = testEffect(
             info: new Info({
               experimental: new ConfigExperimental.Info({
                 automations: true,
+                location_idle_timeout: Duration.seconds(1),
                 mcp_events: true,
               }),
             }),
@@ -61,10 +73,11 @@ const it = testEffect(
       Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
       SessionExecution.node.replace(
         Layer.mock(SessionExecution.Service, {
+          active: Effect.succeed(new Set<Session.ID>()),
           wake: (id) =>
             Effect.sync(() => {
               wakes.push(id)
-            }),
+            }).pipe(Effect.andThen(Wake), Effect.flatten),
         }),
       ),
     ],
@@ -256,6 +269,93 @@ it.effect("a timer added to a running watch fires without reopening its stream",
     expect(wakes).toEqual([sessionID, sessionID])
   }),
 )
+
+it.effect("continues on the same stream after a nonterminal producer error", () =>
+  Effect.gen(function* () {
+    const f = yield* setup()
+    const a = yield* f.create()
+    yield* f.start
+    const stream = yield* f.opened
+    yield* f.notify("error", stream.id, { error: { code: -32000, message: "temporarily unavailable" } })
+    yield* f.event(stream.id, "next", "pending")
+    const row = yield* f.settled(a.id, (row) => row.status !== "active" || row.runCount > 0)
+    expect(row).toMatchObject({ status: "active", runCount: 1, state: { first: "next" } })
+    expect(f.state.streams).toHaveLength(1)
+  }),
+)
+
+it.effect("retains the location only while its quiet subscription is open", () =>
+  Effect.gen(function* () {
+    const f = yield* setup()
+    const a = yield* f.create()
+    const locations = yield* LocationServiceMap.Service
+    const lifecycle = yield* LocationLifecycle.Service.pipe(Effect.provide(locations.get(f.location)))
+    expect(lifecycle.isRetained()).toBe(false)
+    yield* f.start
+    const stream = yield* f.opened
+    // Cross two idle sweeps without tripping the MCP transport's missing-heartbeat timeout.
+    for (let i = 0; i < 3; i++) {
+      yield* TestClock.adjust("40 seconds")
+      yield* f.notify("active", stream.id, { cursor: null })
+    }
+    expect(lifecycle.isClosed()).toBe(false)
+    expect(lifecycle.isRetained()).toBe(true)
+    yield* locations.invalidate(f.location)
+    expect(yield* f.cancelled).toBe(stream.id)
+    expect((yield* f.settled(a.id, (row) => row.status === "paused")).lastOutput).toContain("No replay cursor")
+    expect(lifecycle.isRetained()).toBe(false)
+  }),
+)
+
+for (const outcome of ["continue", "done", "reject"]) {
+  it.effect(`settles a durable handoff before expiry: ${outcome}`, () =>
+    Effect.gen(function* () {
+      const f = yield* setup()
+      const a = yield* f.create({
+        expires: "in 10 seconds",
+        action: {
+          type: "code",
+          code: `return { state: input.event.id, send: { prompt: "Delivered" }, done: ${outcome === "done"} }`,
+        },
+      })
+      const entered = yield* Latch.make()
+      const release = yield* Latch.make()
+      yield* f.start.pipe(
+        Effect.provideService(
+          Wake,
+          entered.open.pipe(
+            Effect.andThen(release.await),
+            Effect.andThen(outcome === "reject" ? Effect.die(new Error("Wake failed")) : Effect.void),
+          ),
+        ),
+      )
+      const stream = yield* f.opened
+      yield* f.event(stream.id, "first", "success")
+      yield* entered.await
+      const { db } = yield* Database.Service
+      expect(yield* db.select().from(SessionInboxTable).all()).toHaveLength(1)
+      yield* TestClock.adjust("10 seconds")
+      if (outcome !== "continue") yield* f.event(stream.id, "late", "success")
+      yield* release.open
+      const row = yield* f.settled(a.id, (row) => row.status !== "active")
+      const position = (yield* db.select().from(AutomationTable).get())?.event_position
+      if (outcome === "reject") {
+        expect(row).toMatchObject({ status: "paused", lastOutcome: "failed", lastOutput: "Wake failed", runCount: 0 })
+        expect(position?.cursor).toBeNull()
+      } else {
+        expect(row).toMatchObject({
+          status: "done",
+          lastOutcome: outcome === "done" ? "fired" : "expired",
+          runCount: 1,
+          state: "first",
+        })
+        expect(position).toMatchObject({ cursor: "first", id: "first" })
+      }
+      expect(yield* f.cancelled).toBe(stream.id)
+      expect(wakes).toEqual([sessionID])
+    }),
+  )
+}
 
 it.effect("a broken stream opens on the replacement connection, replaying from the last committed event", () =>
   Effect.gen(function* () {
