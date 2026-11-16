@@ -3,21 +3,44 @@ import { workspaceTarget } from "@opencode/plugin-browser/workspace"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { fileURLWithin } from "./policy"
 import { previewResource } from "./preview"
+import { remotePath } from "./remote-address"
+
+export type PreviewSource =
+  | { type: "local"; roots(): readonly string[] }
+  | {
+      type: "remote"
+      prefix: string
+      stat(path: string, signal: AbortSignal): Promise<number | null>
+      read(path: string, range: string | undefined, signal: AbortSignal): Promise<Response>
+    }
 
 /** The grant must still belong to this binding after asynchronous path resolution. */
-export async function resolvePreviewRequest(url: string, method: string, initiator: string | undefined, grants: ReadonlyMap<string, () => readonly string[]>) {
+export async function resolvePreviewRequest(url: string, method: string, initiator: string | undefined, grants: ReadonlyMap<string, PreviewSource>, signal: AbortSignal) {
   if ((method !== "GET" && method !== "HEAD") || !URL.canParse(url)) return
   const host = new URL(url).host
   const grant = grants.get(host)
 
-  if (!grant) return
-  const roots = grant()
+  if (!grant || signal.aborted) return
+
+  if (grant.type === "remote") {
+    const origin = `oc-preview://${host}`
+
+    if (initiator !== undefined && initiator !== origin) return
+    const path = remotePath(url, `${origin}/`)
+
+    if (!path) return
+    const size = await grant.stat(path, signal)
+
+    return size !== null && grants.get(host) === grant && !signal.aborted ? { type: "remote" as const, path, size, read: grant.read } : undefined
+  }
+
+  const roots = grant.roots()
   const file = previewResource(url, host, initiator, roots)
 
   if (!file) return
   const target = await workspaceFile(file, roots)
 
-  return grants.get(host) === grant ? target : undefined
+  return target && grants.get(host) === grant && !signal.aborted ? { type: "local" as const, ...target } : undefined
 }
 
 /** Resolve again at each authority boundary. A path checked when displayed may no longer name the same file. */

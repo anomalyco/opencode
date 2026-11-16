@@ -22,7 +22,7 @@ const MAX_STORED_ICON = 6_000
 
 /** The pages the history records: web pages and workspace files, not blank or internal ones. */
 export function recordable(url: string) {
-  return /^(?:https?|file):\/\//i.test(url)
+  return /^(?:https?|file|workspace):\/\//i.test(url)
 }
 
 /**

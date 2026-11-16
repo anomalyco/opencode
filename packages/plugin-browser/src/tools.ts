@@ -4,7 +4,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect"
 import { Base64 } from "effect/encoding"
-import { resolve } from "node:path"
+import { relative, resolve, sep } from "node:path"
 import { Script } from "node:vm"
 import type { BrowserConnection } from "./connection.js"
 import { BrowserFiles } from "./files.js"
@@ -115,21 +115,24 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     )
   })
 
-  // The desktop acknowledges a preview before the pane opens it, so a missing file used to report success (#61625).
+  // Send the exact workspace entry we checked, not the unverified input (which might be a suffix or line link).
   const previewable = Effect.fn("BrowserTools.previewable")(function* (path: string) {
     const located = yield* BrowserFiles.locate(path, ctx.location.directory)
-    if (located?.outside)
-      return yield* new Tool.Error({ message: "browser.preview cannot show a file outside this session's workspace. Choose a file inside the workspace." })
-    if (located && located.found === undefined)
-      return yield* new Tool.Error({ message: "browser.preview could not verify the file. Pass its exact workspace-relative path." })
-    if (located?.directory)
+    if (!located || located.outside)
+      return yield* new Tool.Error({ metadata: { code: "outside_workspace" }, message: "browser.preview cannot show a file outside this session's workspace. Choose a file inside the workspace." })
+    if (located.found === undefined)
+      return yield* new Tool.Error({ metadata: { code: "unresolved_path" }, message: "browser.preview could not verify the file. Pass its exact workspace-relative path." })
+    if (located.directory)
       return yield* new Tool.Error({
+        metadata: { code: "is_directory" },
         message: `${located.absolute} is a folder. browser.preview shows one file: pass the path of a file in it.`,
       })
-    if (located?.found === false)
+    if (!located.found)
       return yield* new Tool.Error({
+        metadata: { code: "file_not_found" },
         message: `browser.preview found no file at ${located.absolute}. Paths are on the server, relative to the workspace (${ctx.location.directory}) or absolute. Check the path, for example with glob, then call browser.preview again.`,
       })
+    return relative(ctx.location.directory, located.absolute).split(sep).join("/")
   })
 
   // Authorization comes before anything that reads the session's tabs or the server's files: a caller that a policy
@@ -163,15 +166,17 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       })
     }
     yield* admit(tool, action.type)
-    if (action.type === "preview") yield* previewable(action.path)
-    const target = yield* connection.target(tool.sessionID, action)
+    const checked = action.type === "preview" ? { ...action, path: yield* previewable(action.path) } : action
+    const target = yield* connection.target(tool.sessionID, checked)
     const uploads =
       action.type === "files.upload" || action.type === "files.drop"
         ? yield* BrowserFiles.read(action.paths, ctx.location.directory)
         : []
     const response = yield* target.request(uploads)
     const output = yield* Effect.fromResult(decodeResult<Browser.Operation["output"]>(operation, response))
-    return yield* exportResult(output, response.files)
+    if (checked.type === "preview" && /\.html?$/i.test(checked.path) && (!("tabID" in output) || !output.tabID || !("url" in output) || !output.url))
+      return yield* new Tool.Error({ metadata: { code: "unsupported" }, message: "This desktop acknowledged the HTML preview but did not return its tab. Update the desktop before driving this preview." })
+    return yield* exportResult(action.type === "preview" ? { ...output, path: action.path } : output, response.files)
   })
 
   yield* ctx.skill.transform((editor) => editor.add(BrowserSkill.info))
@@ -275,6 +280,8 @@ function exportResult(output: Schema.Schema.Type<Browser.Operation["output"]>, f
 }
 
 export function normalizeAction(action: Exclude<Browser.Input, { readonly type: "wait" }>): Browser.Action {
+  if (action.type === "preview" && (!action.path.trim() || (BrowserFiles.address(action.path) && !/^file:/i.test(action.path.trim()))))
+    throw new Tool.Error({ metadata: { code: "invalid_path" }, message: "browser.preview needs a workspace file path, not a web or internal address." })
   if (action.type === "evaluate") return evaluateAction(action)
   if (action.type !== "navigate" && action.type !== "tabs.open") return action
   if (action.type === "tabs.open" && action.url === undefined) return action

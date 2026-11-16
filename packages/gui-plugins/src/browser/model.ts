@@ -16,6 +16,7 @@ import {
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
+import { workspacePrefix } from "./remote-address"
 import { BrowserPane, type FindAction, type FindView, type PaneEvent, type RefusalNotice } from "./ipc"
 import {
   addressFocusTab,
@@ -570,10 +571,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     return screen && sessions.current()?.key === session.key ? screen.file : undefined
   }
 
-  // The desktop's own sidecar shares this disk, and its browser pane accepts file:// URLs inside the
-  // session workspace only. Forwarded loopback servers do not qualify, matching the desktop policy.
+  // Both kinds of binding can open workspace files. Only the disk owner interprets their paths.
   const canOpen = (session: SessionRef, path?: string) => {
-    if (!session.server.builtin || !available(session) || !attached(session)) return false
+    if (!available(session) || !attached(session)) return false
 
     if (path === undefined) return true
     const current = files(session)
@@ -581,14 +581,13 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     return !!current && !current.absolute(path)
   }
 
-  const openFile = (session: Session, path: string) => {
+  const openFile = (session: SessionRef, path: string) => {
     const current = files(session)
 
-    if (current) openURL(session, workspaceFileURL(current, path))
+    if (current) openURL(session, workspaceFileURL(current.root, path, session.server.builtin ? undefined : session.id))
   }
 
-  // The agent's browser.preview tool: the file plugin opens HTML in the browser, other files in the file panel. Only the
-  // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it.
+  // Main handles browser documents itself. File panel requests wait for the session's file model.
   const preview = (drive: Drive, path: string) => {
     const view = sessions.current()
 
@@ -644,7 +643,13 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     clearSite: (session: Session, tabID: Browser.TabID) => registration(session)?.clearSite(tabID),
     revealFile: (session: Session, tabID: Browser.TabID) => registration(session)?.reveal(tabID),
     /** Pages the browser showed, newest first. */
-    visits: () => history.value.visits,
+    visits: () => history.value.visits.filter((visit) => {
+      const session = sessions.current()
+
+      if (visit.url.startsWith("file:")) return session?.server.builtin
+
+      return !visit.url.startsWith("workspace:") || (!!session?.id && visit.url.startsWith(workspacePrefix(session.id)))
+    }),
     clearHistory: () => {
       recorded.clear()
       history.set({ visits: [] })

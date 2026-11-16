@@ -3,7 +3,7 @@ import { link, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { resolvePreviewRequest, workspaceFile } from "./workspace-file"
+import { resolvePreviewRequest, workspaceFile, type PreviewSource } from "./workspace-file"
 
 test("preview and reveal resolve existing regular files under the real workspace, including a linked root", async () => {
   const temp = await mkdtemp(path.join(tmpdir(), "preview-"))
@@ -29,9 +29,9 @@ test("preview and reveal resolve existing regular files under the real workspace
     await link(file, path.join(repo, "hardlink"))
     expect(await lookup(path.join(repo, "hardlink"))).toMatchObject({ size: 6 })
 
-    const grants = new Map([["first", () => [repo]]])
+    const grants = new Map([["first", { type: "local" as const, roots: () => [repo] }]])
     const url = pathToFileURL(file).href.replace("file://", "oc-preview://first")
-    const request = (method: string) => resolvePreviewRequest(url, method, "oc-preview://first", grants)
+    const request = (method: string) => resolvePreviewRequest(url, method, "oc-preview://first", grants, new AbortController().signal)
 
     for (const method of ["GET", "HEAD"]) expect(await request(method)).toMatchObject({ size: 6 })
 
@@ -40,6 +40,34 @@ test("preview and reveal resolve existing regular files under the real workspace
     grants.delete("first")
     expect(await pending).toBeUndefined()
     expect(await request("HEAD")).toBeUndefined()
+
+    const remotePaths: string[] = []
+
+    const sources = new Map<string, PreviewSource>([
+      ["local", { type: "local", roots: () => [repo] }],
+      ["remote", { type: "remote", prefix: "workspace://session/", stat: async (path) => {
+        remotePaths.push(path)
+
+        return path === "server-only.html" ? 17 : null
+      }, read: () => Promise.reject(new Error("unexpected byte read")) }],
+    ])
+
+    const resolve = (address: string, method = "GET", initiator?: string) => resolvePreviewRequest(address, method, initiator, sources, new AbortController().signal)
+    expect(await resolve("oc-preview://remote/server-only.html")).toMatchObject({ type: "remote", size: 17 })
+    expect(await resolve("oc-preview://local/server-only.html")).toBeUndefined()
+    const disk = pathToFileURL(file).href.replace("file://", "oc-preview://local")
+    expect(await resolve(disk)).toMatchObject({ type: "local", size: 6 })
+    expect(await resolve(disk.replace("//local", "//remote"))).toBeUndefined()
+    remotePaths.length = 0
+
+    for (const path of ["%2e%2e/x", "a%2fb", "a%5cb", "/x", "a/../x", "nul.txt", "c:/x"])
+      expect(await resolve(`oc-preview://remote/${path}`)).toBeUndefined()
+    expect(await resolve("oc-preview://remote/server-only.html", "GET", "oc-preview://local")).toBeUndefined()
+    expect(await resolve("oc-preview://remote/server-only.html", "POST")).toBeUndefined()
+    expect(remotePaths).toEqual([])
+    const resolving = resolve("oc-preview://remote/server-only.html", "HEAD", "oc-preview://remote")
+    sources.delete("remote")
+    expect(await resolving).toBeUndefined()
 
     // Junctions above exercise real directory links on Windows without SeCreateSymbolicLinkPrivilege.
     if (process.platform !== "win32") {

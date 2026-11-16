@@ -9,7 +9,7 @@ import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
-import { browserFailure } from "./errors"
+import { browserFailure, CodedError } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
 import { agentRefusal, destinationOrigin, refusal } from "./policy"
 import type { Profile } from "./profile"
@@ -40,7 +40,11 @@ import {
 } from "./pane-machine"
 import { createBrowserRestoreStore } from "./restore"
 import { guardSession } from "./session-guard"
-import { workspaceFile } from "./workspace-file"
+import { workspaceFile, type PreviewSource } from "./workspace-file"
+import { artifactKind } from "@opencode/util/artifact"
+import { workspaceFileURL } from "./link"
+import { createPreviews } from "./profile/previews"
+import { remotePreview } from "./remote-preview"
 
 type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
 
@@ -52,6 +56,7 @@ type Handle = {
   /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
   shared: boolean
   previewHost?: string
+  source?: PreviewSource
   abort: AbortController
   registered: ReturnType<typeof Promise.withResolvers<void>>
   cleanup: () => void
@@ -118,7 +123,8 @@ export function createBrowserPane(input: {
       const partition = shared ? input.profile.partition : `opencode-browser-${crypto.randomUUID()}`
 
       const remote = shared ? undefined : electron.session.fromPartition(partition)
-      const preview = shared ? input.profile.previews.grant(() => selectFileRoots(machine.state, binding)) : undefined
+      const abort = new AbortController()
+      const previews = remote ? createPreviews(remote, abort.signal) : input.profile.previews
       const unguard = remote ? guardSession(remote, downloads) : () => undefined
 
       const closed = () => dispatchBinding(binding, { type: "owner.closed" })
@@ -135,11 +141,9 @@ export function createBrowserPane(input: {
         win,
         partition,
         shared,
-        previewHost: preview?.host,
-        abort: new AbortController(),
+        abort,
         registered: Promise.withResolvers(),
         cleanup: () => {
-          preview?.release()
           unguard()
 
           if (win.isDestroyed()) return
@@ -179,7 +183,8 @@ export function createBrowserPane(input: {
 
             // The agent can already read this workspace, so showing its files adds no access. A forwarded or explicit
             // loopback server does not share this machine's disk.
-            const fileRoots = server.sameMachine ? [session.location.directory] : []
+            const builtin = server.id === "sidecar"
+            const fileRoots = builtin ? [session.location.directory] : []
 
             const options = {
               location: { directory: session.location.directory, workspace: session.location.workspaceID },
@@ -187,6 +192,15 @@ export function createBrowserPane(input: {
 
             const attachment = { sessionID, connectionID: crypto.randomUUID() }
             const rpc = client.rpc(Browser.Definition)
+
+            const source: PreviewSource = builtin
+              ? { type: "local", roots: () => selectFileRoots(machine.state, binding) }
+              : remotePreview(server, sessionID, options.location, abort.signal, (path, signal) =>
+                  runtime.runPromise(rpc["preview.stat"]({ ...attachment, path }, options), { signal }))
+
+            const grant = yield* Effect.acquireRelease(Effect.sync(() => previews.grant(source, abort.signal)), (grant) => Effect.sync(grant.release))
+            handle.source = source
+            handle.previewHost = grant.host
 
             if (shared) handle.network = createDirectNetwork(input.profile.session)
 
@@ -386,7 +400,7 @@ export function createBrowserPane(input: {
       const reason =
         url === undefined
           ? undefined
-          : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding), home: homedir() })
+          : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding), home: homedir(), remote: remoteSource(binding)?.prefix })
 
       if (reason) throw new Error(reason)
       // A navigation that the next one replaced, such as a second submit or a redirect, rejects with ERR_ABORTED while
@@ -510,6 +524,12 @@ export function createBrowserPane(input: {
     return entry ? selectInventory(entry) : { tabs: [], focusedTabID: null }
   }
 
+  function remoteSource(binding: string) {
+    const source = handles.get(binding)?.source
+
+    return source?.type === "remote" ? source : undefined
+  }
+
   /** The tab's current page. */
   function page(binding: string, tabID: Browser.TabID) {
     const attempt = selectPageAttempt(machine.state, binding, tabID)
@@ -580,6 +600,8 @@ export function createBrowserPane(input: {
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
       previewHost: handle.previewHost,
+      remote: remoteSource(binding),
+      signal: handle.abort.signal,
       extensions: () => extensions(binding),
       shared,
       embeds: input.embeds,
@@ -702,7 +724,7 @@ export function createBrowserPane(input: {
     dispatchBinding(binding, { type: "tab.published", tabID, attempt, tab: page.state() })
   }
 
-  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user") {
+  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
     const action = command.action
 
     if (signal.aborted)
@@ -713,7 +735,28 @@ export function createBrowserPane(input: {
     if (action.type === "tabs.list") return { value: inventory(binding), files: [] }
 
     if (action.type === "preview") {
-      // The renderer owns file tabs; it resolves the path against the session's workspace.
+      if (artifactKind(action.path) === "html") {
+        const roots = selectFileRoots(machine.state, binding)
+        const remote = remoteSource(binding)
+        const url = remote ? `${remote.prefix}${action.path.split("/").map(encodeURIComponent).join("/")}` : roots[0] && workspaceFileURL(roots[0], action.path)
+
+        if (!url || !(remote ? await remote.stat(action.path, signal) !== null : await workspaceFile(url, roots)))
+          throw new CodedError(Browser.FailureCode.previewUnavailable, "The workspace file no longer exists or cannot be read by this session.")
+        signal.throwIfAborted()
+        const existing = inventory(binding).tabs.find((tab) => tab.url === url)
+        const tab = existing ? load(binding, existing.id) : create(binding)
+
+        if (!tab) throw new Error("Workspace preview tab is unavailable.")
+        const tabID = tab.state().id
+        dispatchBinding(binding, { type: "tab.focused", tabID })
+        await tab.ready
+        await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
+        refresh(binding, tabID, tab)
+
+        return { value: { path: action.path, tabID, url: tab.state().url }, files: [] }
+      }
+
+      // The window owns file tabs; an off-screen session processes this request when its file panel mounts.
       emit(binding, { type: "preview", path: action.path })
 
       return { value: { path: action.path }, files: [] }

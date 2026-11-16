@@ -4,6 +4,18 @@ import { Browser } from "./rpc.js"
 import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
 import { workspaceTarget } from "./workspace.js"
+import { previewPath } from "./preview-path.js"
+
+/** Exact lookup only: each request, including an asset or a History API route, checks the server's current disk. */
+export async function previewSize(path: string, directory: string) {
+  if (!previewPath(path)) return
+  const { resolve } = await import("node:path")
+  const { stat } = await import("node:fs/promises")
+  const target = await workspaceTarget(resolve(directory, path), [directory])
+  const info = target && await stat(target)
+
+  return info && info.isFile() ? info.size : undefined
+}
 
 // Files cross machines as bytes. Only this endpoint interprets its local paths.
 export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], directory: string) =>
@@ -54,37 +66,35 @@ export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, 
   if (address(value) && !/^file:/i.test(value)) return undefined
   return yield* Effect.tryPromise(async (): Promise<Located> => {
     const { stat } = await import("node:fs/promises")
-    const { isAbsolute, resolve } = await import("node:path")
+    const { isAbsolute, relative, resolve } = await import("node:path")
     const { fileURLToPath } = await import("node:url")
-    const local = /^file:/i.test(value) ? (URL.canParse(value) ? fileURLToPath(new URL(value)) : value) : value
+    const url = /^file:/i.test(value) ? new URL(value) : undefined
+    if (url?.hostname) return { absolute: value, found: false, directory: false, outside: true }
+    const local = (url ? fileURLToPath(url) : value).replaceAll("\\", "/")
     const plain = local.replace(/(?:#L\d+(?:C\d+)?(?:-L?\d+(?:C\d+)?)?|:\d+(?::\d+)?(?:-\d+(?::\d+)?)?:?)$/i, "")
-    // A model whose user is on Windows writes site\index.html to a server on any system; the pane reads a backslash as
-    // a separator everywhere, so this does too once the path as written names nothing.
-    const slashed = plain.replaceAll("\\", "/")
-    const candidates = [local, plain, slashed]
-    const kinds = await Promise.all(
-      candidates.map((candidate) =>
-        stat(resolve(directory, candidate)).then(
-          (info) => (info.isFile() ? "file" : info.isDirectory() ? "directory" : "other"),
-          () => undefined,
-        ),
-      ),
-    )
-    const index = [kinds.indexOf("file"), kinds.indexOf("directory"), kinds.indexOf("other")].find((at) => at >= 0)
-    const absolute = resolve(directory, candidates[index ?? 2] ?? slashed)
-    if (index !== undefined && !(await workspaceTarget(absolute, [directory])))
-      return { absolute, found: false, directory: false, outside: true }
-    if (kinds.includes("file")) return { absolute, found: true, directory: false }
-    if (kinds.includes("directory")) return { absolute, found: false, directory: true }
+    const check = async (candidate: string): Promise<Located | undefined> => {
+      const absolute = resolve(directory, candidate)
+      const path = relative(directory, absolute).replaceAll("\\", "/")
+      if (isAbsolute(path) || (path && !previewPath(path))) return { absolute, found: false, directory: false, outside: true }
+      try {
+        const target = await workspaceTarget(absolute, [directory])
+        if (!target) return { absolute, found: false, directory: false, outside: true }
+        const info = await stat(target)
+        return { absolute, found: info.isFile(), directory: info.isDirectory() }
+      } catch (cause) {
+        if (cause instanceof Error && "code" in cause && (cause.code === "ENOENT" || cause.code === "ENOTDIR")) return
+        throw cause
+      }
+    }
+    const exact = await check(plain)
+    if (exact) return exact
+    const absolute = resolve(directory, plain)
     if (isAbsolute(plain)) return { absolute, found: false, directory: false }
     const match = await findBySuffix(directory, plain)
     if (typeof match !== "string") return { absolute, found: match, directory: false }
-    const matched = resolve(directory, match)
-    return await workspaceTarget(matched, [directory])
-      ? { absolute: matched, found: true, directory: false }
-      : { absolute: matched, found: false, directory: false, outside: true }
+    return await check(match) ?? { absolute, found: false, directory: false }
   }).pipe(
-    Effect.mapError(() => new Tool.Error({ message: "browser.preview could not resolve this file inside the workspace." })),
+    Effect.mapError(() => new Tool.Error({ metadata: { code: "unresolved_path" }, message: "browser.preview could not resolve this file inside the workspace." })),
   )
 })
 
@@ -101,6 +111,7 @@ async function findBySuffix(directory: string, relative: string) {
   const { join } = await import("node:path")
   const target = relative.replaceAll("\\", "/").replace(/^(?:\.\/)+/, "")
   const queue = [""]
+  const matches: string[] = []
   const budget = { entries: 20_000 }
   while (queue.length > 0) {
     const folder = queue.shift() ?? ""
@@ -108,8 +119,8 @@ async function findBySuffix(directory: string, relative: string) {
     budget.entries -= entries.length
     if (budget.entries < 0) return undefined
     const files = entries.map((entry) => ({ entry, path: folder ? `${folder}/${entry.name}` : entry.name }))
-    const match = files.find((file) => file.entry.isFile() && (file.path === target || file.path.endsWith(`/${target}`)))
-    if (match) return match.path
+    matches.push(...files.filter((file) => file.entry.isFile() && file.path.endsWith(`/${target}`)).map((file) => file.path))
+    if (matches.length > 1) return undefined
     queue.push(
       ...files
         .filter(
@@ -118,7 +129,7 @@ async function findBySuffix(directory: string, relative: string) {
         .map((file) => file.path),
     )
   }
-  return false
+  return matches[0] ?? false
 }
 
 const types: Record<string, string> = {

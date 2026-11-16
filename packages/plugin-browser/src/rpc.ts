@@ -16,6 +16,8 @@ export const FailureCode = {
   documentChanged: "document_changed",
   /** An element ref names no element any more: it is stale, or its element left the page. */
   staleRef: "stale_ref",
+  /** A workspace file could not be validated by the owner of its disk. */
+  previewUnavailable: "preview_unavailable",
 } as const
 
 /**
@@ -242,7 +244,7 @@ export const Operations = [
   ),
   operation(
     "tabs.open",
-    "Open an HTTP(S) tab in the Review pane. Defaults to about:blank. Website traffic uses the connected server's network; localhost reaches that server. To open another workspace file, use browser.preview({ path }) with its workspace-relative path, not a file: or internal preview URL.",
+    "Open an HTTP(S) tab in the Review pane. Defaults to about:blank. Website traffic uses the connected server's network; localhost reaches that server. For workspace HTML, use browser.preview({ path }) and its returned tabID instead.",
     {
       url: optional(short.annotate({ description: "An http:// or https:// address, or about:blank." })),
       focus: optional(
@@ -268,13 +270,13 @@ export const Operations = [
   ),
   operation(
     "preview",
-    'Show a file to the user. Opens the file in the Review pane and focuses its tab for viewing. Images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, HTML pages, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as a media preview; code and other text files display highlighted source. Use this to present an artifact, output, or result you created or changed instead of pasting its contents, describing it, or opening a file:// URL in a browser tab; it is the way to show a local HTML file. The path is server-local: relative to the workspace or absolute, for example preview({ path: "out/report.html" }). Fails when no file is there, or when no desktop app is connected (then tell the user the path).',
+    "Show a workspace file to the user. Present an artifact, result, or output on the attached desktop. An HTML page opens in the session browser even off screen. The same file reloads in its existing tab. Use the returned tabID and url, e.g. snapshot({tabID}). Other files are requested in the file panel for display when the session is on screen: images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as media previews; text and code show source. Use a server-local path, relative to the workspace or absolute. A missing file, folder or path outside the workspace fails.",
     { path: short.annotate({ description: "Server-local path, relative to the workspace or absolute. Pass another workspace path to move to another file; do not pass a file: or oc-preview: URL." }) },
-    Schema.Struct({ path: short }),
+    Schema.Struct({ path: short, tabID: optional(TabID), url: optional(Tab.fields.url) }),
   ),
   operation(
     "navigate",
-    "Navigate this tab to HTTP(S) or about:blank and wait for the document load. Element refs expire. In a workspace preview, click a relative link or call browser.preview({ path }) for another workspace file. Do not navigate to the file: display address or the isolated origin returned by page JavaScript.",
+    "Navigate this tab to HTTP(S) or about:blank and wait for the document load. Element refs expire. For workspace HTML, click a relative link or call browser.preview({ path }) and use its returned tabID. Preview addresses are not navigation arguments.",
     { ...tab, url: short },
     Tab,
   ),
@@ -682,6 +684,7 @@ export const Definition = Rpc.define({
     state: { input: Schema.Struct({ ...attachment, state: State }), output: Schema.Void, errors },
     command: { input: Schema.Struct(request), output: Command, errors },
     result: { input: Schema.Struct({ ...request, outcome: Outcome }), output: Schema.Void, errors },
+    "preview.stat": { input: Schema.Struct({ ...attachment, path: text }), output: Schema.NullOr(count), errors },
     "tunnel.open": { input: Schema.Struct({ ...attachment, target: TunnelTarget }), output: short, errors },
     "tunnel.read": { input: Schema.Struct(tunnel), output: TunnelRead, errors },
     "tunnel.write": {

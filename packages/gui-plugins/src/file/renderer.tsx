@@ -34,6 +34,7 @@ import { artifactKind } from "@opencode/util/artifact"
 import { uuid } from "@opencode/util/uuid"
 import { resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
+import { FileSource } from "./contract"
 import {
   FileTree,
   OpenInApp,
@@ -66,7 +67,7 @@ import {
   type OpenInAppEffect,
   type OpenInAppEvent,
 } from "./open-in-app-machine"
-import { fileTabId, fileTabPath, isFileTab, openInAppParentPath, workspaceFileUrl } from "./path"
+import { fileTabId, fileTabPath, isFileTab, openInAppParentPath } from "./path"
 import {
   createPickerState,
   pickerBrowsing,
@@ -234,7 +235,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   }
 
   // Opens on the session screen, whose file model serves the routed session `session` is.
-  const open = (session: MountedSession, path: string, options?: OpenOptions) => {
+  const openSource = (session: MountedSession, path: string, options?: OpenOptions) => {
     const screen = ctx.screen.current()
 
     if (!screen) return
@@ -244,6 +245,29 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     layout.open(key(screen.file, path), session, options)
     dispatchPicker({ type: "file.opened", sessionKey: session.key })
     void screen.file.sync(path)
+  }
+
+  ctx.provide(FileSource, { open(session, address) {
+    const files = ctx.screen.current()?.file
+    const path = files?.resolve(address)
+
+    if (!files || !path || files.absolute(path) || path.split(/[\\/]/).includes("..") || sessions.current()?.key !== session.key)
+      return ctx.toast.show({ variant: "error", title: ctx.t("load.failed") })
+
+    openSource(session, address)
+  } })
+
+  const open = (session: MountedSession, path: string, options?: OpenOptions) => {
+    if (!desktop || artifactKind(path) !== "html") return openSource(session, path, options)
+    const pane = shared.browser()
+
+    if (pane.status === "active" && pane.value.canOpen(session, path)) return pane.value.openFile(session, path)
+
+    ctx.toast.show({ variant: "error", title: ctx.t("preview.unavailable"), actions: [{
+      label: ctx.t("view.viewSource"), run: () => {
+        if (sessions.current() === session) openSource(session, path)
+      },
+    }] })
   }
 
   const applySelection = (session: MountedSession, files: Files, path: string, selection: LineRange | undefined) => {
@@ -834,13 +858,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
     if (effect.type === "open-picker") return openPicker(routed, effect.query, { background: effect.background })
 
-    if (effect.type === "open-browser") {
-      const pane = shared.browser()
-
-      if (pane.status === "active") pane.value.open(routed, effect.url)
-
-      return
-    }
+    if (effect.type === "open-browser") return open(routed, effect.path)
 
     batch(() => {
       applySelection(routed, screen.file, effect.path, effect.selection)
@@ -866,26 +884,19 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
     // Absolute paths, links written relative to a document, and agent previews name one exact file.
     if (isAbsoluteLink(parsed.path) || link.base !== undefined || link.background)
-      return fileOrPage(screen, direct, parsed.selection)
+      return fileOrPage(direct, parsed.selection)
 
     const target = await findFileLink({ files: screen.file, path: parsed.path, signal })
 
     if (target?.kind === "picker") return { kind: "picker", query: target.query }
 
     // With no match, the literal path still covers files the search index skips, such as an ignored `.env`.
-    return fileOrPage(screen, target?.path ?? direct, parsed.selection)
+    return fileOrPage(target?.path ?? direct, parsed.selection)
   }
 
-  // The browser pane shows HTML it can load. While it is pending or off, the file opens as a tab instead.
-  const fileOrPage = (screen: SessionScreen, path: string, selection: LineRange | undefined): LinkResolution => {
-    const pane = shared.browser()
-    const routed = sessions.current()
-
-    if (routed && artifactKind(path) === "html" && pane.status === "active" && pane.value.canOpen(routed, path))
-      return { kind: "browser", url: workspaceFileUrl(screen.file.root, path) }
-
-    return { kind: "file", path, selection }
-  }
+  // Browser documents stream from their origin, not through the file viewer's full-content read.
+  const fileOrPage = (path: string, selection: LineRange | undefined): LinkResolution =>
+    desktop && artifactKind(path) === "html" ? { kind: "browser", path } : { kind: "file", path, selection }
 
   onCleanup(() => {
     dispatchLink({ type: "disposed" })
@@ -893,8 +904,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     dispatchOpenInApp({ type: "disposed" })
   })
 
-  // Opens files the agent references as side panel tabs, inside or outside the workspace, or as
-  // a browser tab for HTML when the desktop can load the file directly. Web links are not files.
+  // File references open as side panel tabs. Desktop HTML opens in the session browser. Web links are not files.
   ctx.add(LinkHandler, {
     match: (link) => !/^https?:\/\//i.test(link.href),
     exists: linkExists,

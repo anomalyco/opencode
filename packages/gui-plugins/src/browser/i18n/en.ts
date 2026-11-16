@@ -190,4 +190,7 @@ export default {
   "settings.cookies.count.other": "{{count}} cookies, shared by every session",
   "settings.cookies.clear": "Sign out everywhere",
   "settings.cleared": "Signed out everywhere.",
+  "preview.source": "View source",
+  "preview.workspace": "Server workspace file",
+  "preview.offline": "The workspace server is disconnected. Reconnect to load this preview.",
 }

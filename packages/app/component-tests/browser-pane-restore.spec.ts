@@ -214,6 +214,18 @@ story.beforeEach(async ({ mount, page }) => {
   }, modules)
 })
 
+story("routes an exact HTML file to the pane and reports an unavailable pane instead of opening a file preview", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  const open = root.getByRole("button", { name: "Open workspace HTML" })
+  await open.click()
+  await expect(root.getByText("file:///repo/report.html", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Pane away" }).click()
+  await open.click()
+  await expect(root.getByText(/Can't open this workspace file in the browser pane/)).toBeVisible()
+  await expect(root.getByRole("tab", { name: "report.html" })).toHaveCount(0)
+})
+
 story("closes a blank browser tab from its address field without closing the session", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const outside = root.getByRole("button", { name: "Beta", exact: true })

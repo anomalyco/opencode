@@ -1,8 +1,10 @@
 import { previewScheme } from "./scheme"
 import { fileURLWithin, localFileURL } from "./policy"
+import { remotePath } from "./remote-address"
 
 /** A file: address is for display and restore only. Never hand Chromium a native file origin, even briefly. */
-export function previewAddress(address: string, host: string | undefined, roots: readonly string[]) {
+export function previewAddress(address: string, host: string | undefined, roots: readonly string[], remote?: string) {
+  if (remote) return host && remotePath(address, remote) ? `${previewScheme}://${host}/${address.slice(remote.length)}` : undefined
   const file = localFileURL(address)
 
   if (!file || !host || !fileURLWithin(file, roots)) return
@@ -10,10 +12,12 @@ export function previewAddress(address: string, host: string | undefined, roots:
   return `${previewScheme}://${host}${file.slice("file://".length)}`
 }
 
-export function previewFile(address: string, host: string | undefined, roots: readonly string[]) {
+export function previewFile(address: string, host: string | undefined, roots: readonly string[], remote?: string) {
   const prefix = `${previewScheme}://${host}/`
 
   if (!host || !address.startsWith(prefix) || address.startsWith(`${prefix}/`) || address.split(/[?#]/, 1)[0]?.includes("\\")) return
+
+  if (remote) return remotePath(address, prefix) ? `${remote}${address.slice(prefix.length)}` : undefined
 
   const file = `file:///${address.slice(prefix.length)}`
 
@@ -28,9 +32,9 @@ export function previewResource(address: string, host: string, initiator: string
 }
 
 /** A History API route without a corresponding file keeps the last validated address in the bar. Reload that file. */
-export function reloadAddress(actual: string, shown: string, host: string | undefined, roots: readonly string[]) {
+export function reloadAddress(actual: string, shown: string, host: string | undefined, roots: readonly string[], remote?: string) {
   if (!host || !actual.startsWith(`${previewScheme}://${host}/`)) return
-  const destination = previewAddress(shown, host, roots)
+  const destination = previewAddress(shown, host, roots, remote)
 
   return destination && destination !== actual ? shown : undefined
 }
