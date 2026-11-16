@@ -13,16 +13,6 @@ const Image = Schema.Struct({
   path: Schema.String,
   model: Schema.String,
 })
-const Video = Schema.Struct({
-  kind: Schema.Literal("video"),
-  sessionID: SessionSchema.ID,
-  /** The video's ID, which `GET /api/experimental/generate/video/:id` and its stored file use. */
-  videoID: Schema.String,
-  /** `providerID/modelID`. */
-  model: Schema.String,
-  /** The provider's job ID, so a restarted server keeps polling the same job instead of submitting again. */
-  providerJobID: Schema.String,
-})
 const subagent = {
   kind: Schema.Literal("subagent"),
   childSessionID: SessionSchema.ID,
@@ -36,7 +26,6 @@ export type OutstandingItem = typeof OutstandingItem.Type
 export const RecoverySchema = Schema.Union([
   Shell,
   Image,
-  Video,
   Schema.Struct({
     ...subagent,
     parentSessionID: SessionSchema.ID,

@@ -39,9 +39,7 @@ export const outstanding = Effect.fnUntraced(function* (
   active?: ReadonlySet<SessionSchema.ID>,
 ) {
   const parents = new Map<SessionSchema.ID, SessionSchema.ID | null>()
-  // A video job reports to its session without waking it, so it isn't work the session waits on.
-  const waking = (yield* jobs.runningBackground).filter((recovery) => recovery.kind !== "video")
-  const owned = yield* Effect.filter(waking, (recovery) =>
+  const owned = yield* Effect.filter(yield* jobs.runningBackground, (recovery) =>
     descends(store, parents, recovery.kind === "subagent" ? recovery.parentSessionID : recovery.sessionID, sessionID),
   )
   const items: OutstandingItem[] = owned.map((recovery) => {

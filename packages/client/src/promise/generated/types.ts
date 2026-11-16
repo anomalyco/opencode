@@ -1006,16 +1006,6 @@ export type JobImage = {
   model: string
 }
 
-export type JobVideo = {
-  kind: "video"
-  id: string
-  sessionID: SessionID
-  status: JobStatus
-  title?: string
-  time: JobTime
-  model: string
-}
-
 export type VcsInfo = { provider?: string; branch: VcsBranch }
 
 export type WebSearchProvider = { id: WebSearchID; name: string }
@@ -2308,7 +2298,7 @@ export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery |
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
-export type JobInfo = JobShell | JobSubagent | JobImage | JobVideo
+export type JobInfo = JobShell | JobSubagent | JobImage
 
 export type SessionInboxMove = {
   id: SessionMessageID
@@ -4054,7 +4044,6 @@ export type ExperimentalGenerateVideoCreateInput = {
   readonly aspect?: (`${number}${":"}${number}` | "auto") | undefined
   readonly resolution?: ("480p" | "720p" | "1080p" | "4k" | (string & {})) | undefined
   readonly sound?: boolean | undefined
-  readonly sessionID?: string | undefined
 }
 
 export type ExperimentalGenerateVideoCreateOutput = GenerateVideoCreateResponse["data"]
@@ -4826,7 +4815,7 @@ export type ExperimentalArtifactsViewOutput = globalThis.Uint8Array
 
 export type ExperimentalJobListInput = {
   readonly sessionID?: string | undefined
-  readonly kind?: ("shell" | "subagent" | "image" | "video") | undefined
+  readonly kind?: ("shell" | "subagent" | "image") | undefined
   readonly status?: ("running" | "completed" | "error" | "cancelled") | undefined
   readonly descendants?: boolean | undefined
 }

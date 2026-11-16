@@ -5517,7 +5517,7 @@
             }
           },
           "404": {
-            "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError | SessionNotFoundError",
+            "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -5530,9 +5530,6 @@
                     },
                     {
                       "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                     }
                   ]
                 }
@@ -5570,7 +5567,7 @@
             }
           }
         },
-        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. With sessionID, the job is recorded with that session, survives a server restart, and ends with a notice in the session that does not wake its agent; without it, the job is kept in memory only. The server polls the job and stores the video for 7 days; read its state with GET /api/experimental/generate/video/:id and its bytes with GET /api/experimental/generate/video/:id/content. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the video for 7 days; read its state with GET /api/experimental/generate/video/:id and its bytes with GET /api/experimental/generate/video/:id/content. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
         "summary": "Create a video generation",
         "requestBody": {
           "content": {
@@ -13661,7 +13658,7 @@
                   "$ref": "#/components/schemas/Job.Kind"
                 }
               ],
-              "description": "Filter by background job kind (shell, subagent, image, or video)."
+              "description": "Filter by background job kind (shell, subagent, or image)."
             },
             "required": false
           },
@@ -19575,9 +19572,6 @@
           },
           "sound": {
             "type": "boolean"
-          },
-          "sessionID": {
-            "$ref": "#/components/schemas/Session.ID"
           }
         },
         "required": ["model", "prompt"],
@@ -20463,15 +20457,12 @@
           },
           {
             "$ref": "#/components/schemas/Job.Image"
-          },
-          {
-            "$ref": "#/components/schemas/Job.Video"
           }
         ]
       },
       "Job.Kind": {
         "type": "string",
-        "enum": ["shell", "subagent", "image", "video"]
+        "enum": ["shell", "subagent", "image"]
       },
       "Job.Shell": {
         "type": "object",
@@ -20556,35 +20547,6 @@
           }
         },
         "required": ["started"],
-        "additionalProperties": false
-      },
-      "Job.Video": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": ["video"]
-          },
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "$ref": "#/components/schemas/Session.ID"
-          },
-          "status": {
-            "$ref": "#/components/schemas/Job.Status"
-          },
-          "title": {
-            "type": "string"
-          },
-          "time": {
-            "$ref": "#/components/schemas/Job.Time"
-          },
-          "model": {
-            "type": "string"
-          }
-        },
-        "required": ["kind", "id", "sessionID", "status", "time", "model"],
         "additionalProperties": false
       },
       "Location.PublicInfo": {
