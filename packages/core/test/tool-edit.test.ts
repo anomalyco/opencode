@@ -480,6 +480,28 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("truncates oversized hint lines without splitting a surrogate pair", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "miss.ts")
+      const miss = (oldString: string, newString: string) =>
+        withTool(tmp.path, edit, (registry) => executeTool(registry, call({ path: "miss.ts", oldString, newString })))
+      // 199 'a's + '😀' (2 code units, offset 199-200) + 'tail'. hintLineLength is 200, so cutting at 200 splits the emoji.
+      const longLine = `${"a".repeat(199)}😀tail`
+      return Effect.promise(() => fs.writeFile(target, `first\n${longLine}\nlast\n`)).pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            const result = yield* miss("first\nwrong\nlast\n", "x")
+            expect(result.status).toBe("error")
+            if (result.status !== "error" || !result.error) return
+            expect(result.error.message.isWellFormed()).toBe(true)
+            expect(result.error.message).toContain(`2: ${"a".repeat(199)}…`)
+          }),
+        ),
+      )
+    }),
+  )
+
   it.live("returns specific missing file and directory errors", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()

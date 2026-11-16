@@ -71,6 +71,18 @@ test("closes the connection on a line one byte over 16 MiB", async () => {
   expect(output.messages).toEqual([])
 })
 
+test("keeps the stderr tail well formed when truncated at a surrogate pair", async () => {
+  const output = await read([], {
+    stderr: Stream.make(encoder.encode("😀" + "a".repeat(999))),
+    exitCode: 1,
+    captureExitError: true,
+  })
+
+  expect(output.errors).toHaveLength(1)
+  expect(output.errors[0]?.isWellFormed()).toBe(true)
+  expect(output.errors[0]).toBe(`MCP server process exited with code 1: ${"a".repeat(999)}`)
+})
+
 function frame(size: number) {
   const prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"'
   const suffix = '"}}\n'
@@ -84,7 +96,10 @@ function chunks(bytes: Uint8Array, size: number) {
 }
 
 /** Runs the transport against a process whose stdout yields `output`, then ends or, with `open`, waits to be killed. */
-async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean }) {
+async function read(
+  output: ReadonlyArray<Uint8Array>,
+  options?: { open?: boolean; stderr?: Stream.Stream<Uint8Array>; exitCode?: number; captureExitError?: boolean },
+) {
   const killed = Deferred.makeUnsafe<void>()
   const messages: Array<JSONRPCMessage> = []
   const errors: Array<string> = []
@@ -97,7 +112,7 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
         Effect.succeed(
           makeHandle({
             pid: ProcessId(1),
-            exitCode: Effect.succeed(ExitCode(0)),
+            exitCode: Effect.succeed(ExitCode(options?.exitCode ?? 0)),
             isRunning: Effect.succeed(false),
             kill: () => Deferred.succeed(killed, undefined),
             stdin: Sink.drain,
@@ -106,7 +121,7 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
                 options?.open ? Stream.fromEffect(Deferred.await(killed)).pipe(Stream.drain) : Stream.empty,
               ),
             ),
-            stderr: Stream.empty,
+            stderr: options?.stderr ?? Stream.empty,
             all: Stream.empty,
             getInputFd: () => Sink.drain,
             getOutputFd: () => Stream.empty,
@@ -131,7 +146,8 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
         transport.onmessage = (message) => messages.push(message)
         // stdout ending reports the exit; only framing errors matter here.
         transport.onerror = (error) => {
-          if (!error.message.startsWith("MCP server process exited")) errors.push(error.message)
+          if (options?.captureExitError || !error.message.startsWith("MCP server process exited"))
+            errors.push(error.message)
         }
         yield* Effect.promise(() => transport.start())
         yield* Effect.promise(() => closed)

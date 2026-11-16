@@ -179,6 +179,23 @@ describe("watch_mcp_event", () => {
     }),
   )
 
+  it.live("truncates event data without splitting a surrogate pair", () =>
+    Effect.gen(function* () {
+      const { state, wakes, watch, event } = yield* setup()
+      yield* watch({ server: "jobs", event: "job.finished", once: true })
+      yield* until(() => state.streams.length === 1)
+      const id = state.streams[0].id
+      // {"big":" is 8 chars, 16384 - 8 - 1 = 16375 'x's puts '😀' across the 16384 boundary.
+      const big = "x".repeat(16_375) + "😀tail"
+      yield* event(id, "e1", "c1", { name: "job.finished", data: { big } })
+      yield* until(() => state.cancelled.includes(id))
+      expect(wakes).toHaveLength(1)
+      expect(wakes[0]?.text.isWellFormed()).toBe(true)
+      expect(wakes[0]?.text).toContain("x".repeat(16_375))
+      expect(wakes[0]?.text).not.toContain("\ud83d")
+    }),
+  )
+
   it.live("gives a replayed event the same message, and stops when the session is deleted", () =>
     Effect.gen(function* () {
       const { state, wakes, watch, event, deleted } = yield* setup()

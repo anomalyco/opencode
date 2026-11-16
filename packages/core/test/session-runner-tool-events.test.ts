@@ -715,3 +715,26 @@ test("content-filter failure explains the refusal when the provider gives a reas
     },
   })
 })
+
+test("malformed tool input excerpt stays well formed when cut at a surrogate pair", async () => {
+  const { published, publisher } = capture()
+  const raw = `${"x".repeat(2047)}😀tail`
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.toolInputStart({ id: "call", name: "read" }),
+        LLMEvent.toolInputError({ id: "call", name: "read", raw }),
+      ],
+      publisher.publish,
+      { discard: true },
+    ),
+  )
+  await Effect.runPromise(publisher.flush())
+
+  const failed = published.find((event) => event.type === "session.tool.failed.2")
+  expect(failed).toBeDefined()
+  const message = (failed?.data as { error: { message: string } }).error.message
+  expect(message.isWellFormed()).toBe(true)
+  expect(message).toContain(`first 2047 of ${raw.length} characters`)
+  expect(message).toContain(`${"x".repeat(2047)}\n[truncated]`)
+})
