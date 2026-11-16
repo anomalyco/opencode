@@ -53,6 +53,9 @@ export function protocolError(method: string, cause: unknown) {
 
 export function browserFailure(action: Browser.Action, cause: unknown): Extract<Browser.Outcome, { type: "failure" }> {
   const detail = message(cause, 1_700)
+  // Native and CDP errors may quote more than one internal URL. Never relay the raw error as recovery detail.
+  if (/oc-preview:/i.test(detail))
+    return { type: "failure", code: Browser.FailureCode.previewUnavailable, message: `browser.${action.type} failed. The preview is unavailable.` }
   const navigation = ["tabs.open", "navigate", "back", "forward", "reload"].includes(action.type)
   const network = navigation ? detail.match(/\bERR_[A-Z_]+\b/)?.[0] : undefined
 

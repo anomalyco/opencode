@@ -5,6 +5,13 @@ import { browserFailure, CodedError, protocolError } from "./errors"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
 
+test("native preview failures never export the private loader address", () => {
+  const failure = browserFailure({ type: "preview", path: "report.html" }, new Error("ERR_FAILED loading 'oc-preview://grant/C:/repo/report.html'"))
+  expect(failure.code).toBe("preview_unavailable")
+  expect(failure.message).not.toContain("grant")
+  expect(failure.message).not.toContain("C:/repo")
+})
+
 test("navigation failures explain the server network and never recommend disabling TLS", () => {
   const action: Browser.Action = { type: "navigate", tabID, url: "https://example.com" }
   const refused = browserFailure(action, new Error("net::ERR_CONNECTION_REFUSED"))

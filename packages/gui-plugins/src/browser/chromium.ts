@@ -752,7 +752,11 @@ export function createBrowserPage(
     return contents
       .loadURL(destination)
       .catch((error: Error) => {
-        if (!committedLoad(error, committed)) throw error
+        if (committedLoad(error, committed)) return
+
+        if (destination.startsWith(`${previewScheme}://`))
+          throw new CodedError(Browser.FailureCode.previewUnavailable, `The preview could not be loaded: ${url}`)
+        throw error
       })
       .finally(() => contents.off("did-navigate", commit))
   }

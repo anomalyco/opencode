@@ -39,7 +39,7 @@ export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string)
       id: `${scope}:${++sequence}`,
       timestampMs,
       level,
-      text: text.slice(0, 2_000),
+      text: text.slice(0, 2_000).replace(/oc-preview:\/\/[^\s"'<>()[\]]+/gi, displayURL).slice(0, 2_000),
       textTruncated: text.length > 2_000,
     }
 
