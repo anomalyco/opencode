@@ -51,6 +51,8 @@ export type PtyStep = {
   deviation?: { file: string; lines: number }
   // Records each row's background runs under this name (see `backgrounds`).
   backgrounds?: string
+  // Records each row's foreground runs under this name, as `backgrounds` does the backgrounds.
+  foregrounds?: string
   // With `checkpoint`, also records each row's text attribute runs as `<name>:attributes` (see `attributes`).
   attributes?: boolean
   // With `checkpoint`, also records this many scrollback rows above the screen as `<name>:scrollback`.
@@ -71,8 +73,9 @@ export type PtyCase = {
   cols?: number
   rows?: number
   // The terminal's colors, as `#rrggbb`: the harness answers OSC 10, 11 and 4 queries with them instead of the
-  // emulator, whose answers are fixed. `colors` are slots 0-15; the others answer xterm's.
-  palette?: { foreground: string; background: string; colors: string[] }
+  // emulator, whose answers are fixed. `colors` are slots 0-15; the others answer xterm's. Without `foreground` or
+  // `background` that query gets no reply, as from a terminal that reports its palette but not its default colors.
+  palette?: { foreground?: string; background?: string; colors: string[] }
   steps: PtyStep[]
   // The OSC kinds the comparison keeps. Terminal queries (colors, pointer shape) are `other`.
   osc?: OscKind[]
@@ -216,6 +219,11 @@ export async function runPty(side: Side, value: PtyCase) {
       await setup.renderOnce()
       checkpoints[step.backgrounds] = backgrounds(setup.captureSpans().lines.slice(0, terminal.height), terminal.width)
     }
+    if (step.foregrounds) {
+      await setup.renderOnce()
+      const lines = setup.captureSpans().lines.slice(0, terminal.height)
+      checkpoints[step.foregrounds] = backgrounds(lines, terminal.width, "fg")
+    }
     if (step.checkpoint && step.scrollback) checkpoints[`${step.checkpoint}:scrollback`] = await back(step.scrollback)
   }
   const exit =
@@ -327,8 +335,8 @@ function colorReplies(query: string, palette: NonNullable<PtyCase["palette"]>, e
     return `rgb:${r}/${g}/${b}`
   }
   const [code, ...rest] = query.split(";")
-  if (code === "10") return `\x1b]10;${rgb(palette.foreground)}${end}`
-  if (code === "11") return `\x1b]11;${rgb(palette.background)}${end}`
+  if (code === "10") return palette.foreground ? `\x1b]10;${rgb(palette.foreground)}${end}` : ""
+  if (code === "11") return palette.background ? `\x1b]11;${rgb(palette.background)}${end}` : ""
   return rest
     .flatMap((part, index) => (index % 2 === 0 && rest[index + 1] === "?" ? [Number(part)] : []))
     .map((slot) => `\x1b]4;${slot};${rgb(palette.colors[slot] ?? xterm(slot))}${end}`)
@@ -344,12 +352,12 @@ function xterm(slot: number) {
   return `#${[Math.floor(index / 36), Math.floor(index / 6) % 6, index % 6].map((step) => hex(cube[step])).join("")}`
 }
 
-// Each row's background runs as `<from>-<to> <color>`, columns end-exclusive. The emulator's default background
-// (black) reads `default`; a color the program wrote reads `#rrggbb`.
-function backgrounds(lines: CapturedLine[], width: number) {
+// Each row's background runs (or with `fg` its foreground runs) as `<from>-<to> <color>`, columns end-exclusive. The
+// emulator's default background (black) reads `default`; a color the program wrote reads `#rrggbb`.
+function backgrounds(lines: CapturedLine[], width: number, channel: "bg" | "fg" = "bg") {
   return lines.map((line) => {
     const runs = line.spans.reduce<{ from: number; to: number; color: string }[]>((all, span) => {
-      const [r, g, b] = span.bg.toInts()
+      const [r, g, b] = span[channel].toInts()
       const color =
         r + g + b === 0 ? "default" : `#${[r, g, b].map((value) => value.toString(16).padStart(2, "0")).join("")}`
       const from = all.at(-1)?.to ?? 0
