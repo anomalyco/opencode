@@ -94,11 +94,7 @@ export const protocol = Protocol.make({
 })
 
 export const compact = ResponsesCompaction.make(adapter, (request) =>
-  request.tools.length === 0
-    ? Effect.succeed({ head: [], tools: undefined })
-    : OpenResponses.lowerTools(ProviderShared.flattenTools(request.tools), adapter, OpenAIFreeform.tools(request)).pipe(
-        Effect.map((tools) => ({ head: [], tools })),
-      ),
+  OpenResponses.lowerTools(ProviderShared.flattenTools(request.tools), adapter, OpenAIFreeform.tools(request)),
 )
 
 export * as XAIResponses from "./xai-responses.js"

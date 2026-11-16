@@ -178,10 +178,12 @@ const supportsEffortUpdates = (request: LLMRequest) => {
 
 // `additional_tools` adds tools, and redefines one by name only when that one was declared through `additional_tools`
 // too. It can't remove a tool. So a model that adds tools in place gets every tool the request declares in a leading
-// `additional_tools` item instead of top-level `tools`, and removals fold. Hosted tools stay in `tools`, since the
-// model doesn't use one declared in `additional_tools`, and changing one folds.
+// `additional_tools` item instead of top-level `tools`, and removals fold. Without that layout (no "add") nothing
+// goes in place. Hosted tools stay in `tools`, since the model doesn't use one declared in `additional_tools`, and
+// changing one folds.
 const toolUpdates = {
   kinds: ["add", "replace"],
+  placeable: (request) => declaresTools(request),
   declarable: (tool) => !isHostedTool(tool),
 } satisfies ToolUpdateEncoding
 
@@ -381,7 +383,10 @@ export const transport = channelTransport({
 
 export const route = Route.make({
   compact: {
-    endpoint: ResponsesCompaction.make(adapter, lowerToolLayout),
+    endpoint: ResponsesCompaction.make(adapter, (request) => {
+      const custom = OpenAIFreeform.tools(request)
+      return Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, custom))
+    }),
     trigger: ResponsesCheckpoint.make(checkpointBody),
   },
   id: ADAPTER,

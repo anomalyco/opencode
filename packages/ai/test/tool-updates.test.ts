@@ -608,6 +608,24 @@ describe("OpenAI Responses tool updates", () => {
     }),
   )
 
+  it.effect("folds redefinitions when the model lists replace without add", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: openai("gpt-6-astra", ["replace"]),
+          tools: [read, edit],
+          messages: [Message.user("Go."), Message.tools({ add: [defineTool("edit", "edit v2")] })],
+        }),
+      )
+
+      expect(additional(prepared.body)).toEqual([])
+      expect(prepared.body.tools?.map((entry) => ("description" in entry ? entry.description : entry.type))).toEqual([
+        "read tool",
+        "edit v2",
+      ])
+    }),
+  )
+
   it.effect("folds redefinitions when the model only lists add", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -728,18 +746,12 @@ describe("OpenAI Responses tool updates", () => {
       Effect.sync(() => {
         expect(new URL(request.url).pathname).toEndWith("/responses/compact")
         const body = JSON.parse(text)
-        expect(body.tools).toBeUndefined()
-        expect(body.input.map((item: { type: string }) => item.type)).toEqual([
-          "additional_tools",
-          "message",
-          "message",
-          "message",
-          "additional_tools",
-        ])
+        expect(body.tools.map((entry: { name: string }) => entry.name)).toEqual(["read", "write", "jira"])
+        expect(body.input.map((item: { type: string }) => item.type)).toEqual(["message", "message", "message"])
         return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
       }),
     ),
-  ).effect("lays out tools on the compaction endpoint like a normal request", () =>
+  ).effect("folds every tool into top-level tools on the compaction endpoint", () =>
     Effect.gen(function* () {
       const result = yield* ai.compact(
         ai.request({

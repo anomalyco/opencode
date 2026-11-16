@@ -12,6 +12,7 @@ import {
 } from "../../schema/index.js"
 import type { CompactOperation } from "../../route/client.js"
 import { stripEffortUpdates } from "../../effort-updates.js"
+import { foldToolUpdates } from "../../tool-updates.js"
 import { Endpoint } from "../../route/endpoint.js"
 import { RequestExecutor } from "../../route/executor.js"
 import { HttpTransport } from "../../route/transport/index.js"
@@ -82,24 +83,17 @@ const Response = Schema.Struct({
 
 export const make = (
   adapter: OpenResponses.ProviderAdapter,
-  /** The leading tool declaration: items to put before the conversation, and top-level `tools`. */
-  lowerToolLayout: (request: LLMRequest) => Effect.Effect<
-    {
-      readonly head: ReadonlyArray<Schema.Schema.Type<typeof OpenResponses.InputItem>>
-      readonly tools: ReadonlyArray<Record<string, unknown>> | undefined
-    },
-    AIError
-  >,
+  lowerTools: (request: LLMRequest) => Effect.Effect<ReadonlyArray<Record<string, unknown>>, AIError>,
 ): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {
     const route = request.model.route
-    // The standalone compaction endpoint rejects effort updates (`configuration_update`). Tools go where a normal
-    // request puts them, so the request shares its cached prefix.
-    const conversation = yield* OpenResponses.lowerConversation(stripEffortUpdates(request), adapter)
-    const layout = yield* lowerToolLayout(request)
-    const native = { ...conversation, input: [...layout.head, ...conversation.input] }
+    // The standalone compaction endpoint rejects effort updates (`configuration_update`). Every tool goes in
+    // top-level `tools`: after compacting a history whose tools were only in `additional_tools`, small models lost
+    // track of them more often.
+    const folded = foldToolUpdates(stripEffortUpdates(request))
+    const native = yield* OpenResponses.lowerConversation(folded, adapter)
     const generation = OpenResponses.lowerGeneration(request)
-    const tools = layout.tools
+    const tools = folded.tools.length === 0 ? undefined : yield* lowerTools(folded)
     const body = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
       mergeJsonRecords(
         {

@@ -52,10 +52,20 @@ export const toolDeclarations = (request: LLMRequest): ReadonlyArray<ToolDeclara
  * Removing a name that matches no current tool does nothing.
  */
 export const planToolUpdates = (request: LLMRequest): LLMRequest => {
+  const encoding = request.model.route.toolUpdates
+  return plan(
+    request,
+    (request.model.capabilities?.tools?.updates ?? []).filter((kind) => encoding?.kinds.includes(kind)),
+  )
+}
+
+/** Fold every marker into the top-level tools, as a route without in-place tool changes sends them. */
+export const foldToolUpdates = (request: LLMRequest): LLMRequest => plan(request, [])
+
+const plan = (request: LLMRequest, supported: ReadonlyArray<ToolUpdate>): LLMRequest => {
   const [leading, ...changes] = toolDeclarations(request)
   if (leading === undefined || changes.length === 0) return request
   const encoding = request.model.route.toolUpdates
-  const supported = (request.model.capabilities?.tools?.updates ?? []).filter((kind) => encoding?.kinds.includes(kind))
   const firstTurn = request.messages.findIndex((message) => message.role !== "system")
   const steps = changes.reduce(
     (state, change) => {
