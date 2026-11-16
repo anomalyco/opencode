@@ -215,6 +215,11 @@ describe("web UI", () => {
           const fallback = yield* Effect.promise(() => fetch(`${origin}/workspace/example`))
           expect(yield* Effect.promise(() => fallback.text())).toContain("embedded")
           expect(fallback.headers.get("content-security-policy")).toContain("default-src 'self'")
+          // Plugin GUI bundles run as blob: modules on the web; the policy still forbids eval.
+          expect(fallback.headers.get("content-security-policy")).toContain(
+            "script-src 'self' 'wasm-unsafe-eval' blob:",
+          )
+          expect(fallback.headers.get("content-security-policy")).not.toContain("'unsafe-eval'")
           expect(fallback.headers.get("content-security-policy")).toContain("connect-src * data: blob:")
           expect(fallback.headers.get("content-security-policy")).toContain("worker-src 'self' blob:")
           expect(fallback.headers.get("content-security-policy")).toContain("frame-src 'self' blob:")
