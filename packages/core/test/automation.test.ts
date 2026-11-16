@@ -38,7 +38,6 @@ import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
-import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 
@@ -100,7 +99,7 @@ const toggled = Layer.succeed(
   }),
 )
 const folders = { missingNow: false }
-const slack = { replies: 0, reads: 0, posts: [] as string[], failing: false }
+const slack = { replies: 0, reads: 0, posts: [] as string[], failing: false, messageIDs: [] as SessionMessage.ID[] }
 let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
 let activationGate: Effect.Effect<void> = Effect.void
 let helperGone = false
@@ -143,6 +142,7 @@ const configureAgent = Layer.effectDiscard(
               Effect.flatMap(() => {
                 if (slack.failing) return Effect.fail(new Tool.Error({ message: "Slack is down" }))
                 slack.reads++
+                slack.messageIDs.push(context.messageID)
                 return Effect.succeed({ output: { replies: slack.replies } })
               }),
             ),
@@ -181,8 +181,20 @@ const locations = makeGlobalNode({
       const bus = yield* Bus.Service
       const store = yield* SessionStore.Service
       const saved = yield* PermissionSaved.Service
+      const projects = yield* Project.Service
+      // Resolve our virtual directories before the scheduler starts: real filesystem I/O during a TestClock step
+      // can outlive the step while a tick is still acquiring the Location.
+      const places = new Map(
+        yield* Effect.forEach([enabledDirectory, disabledDirectory, toggleDirectory, missingDirectory], (dir) =>
+          projects
+            .resolve(AbsolutePath.make(dir), { persist: false })
+            .pipe(Effect.map((project) => [dir, project] as const)),
+        ),
+      )
       return yield* LayerMap.make(
         (ref: Location.Ref): Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError> => {
+          const project = places.get(ref.directory)
+          if (!project) throw new Error(`Unknown test location: ${ref.directory}`)
           if (ref.directory === missingDirectory && folders.missingNow) {
             return Layer.effectDiscard(
               Effect.fail(
@@ -219,7 +231,7 @@ const locations = makeGlobalNode({
                       ),
                       SessionStore.node.replace(Layer.succeed(SessionStore.Service, store)),
                       PermissionSaved.node.replace(Layer.succeed(PermissionSaved.Service, saved)),
-                      Location.node.replace(Layer.succeed(Location.Service, location(ref))),
+                      Location.node.replace(Layer.succeed(Location.Service, { ...ref, project })),
                       Image.node.replace(imagePassthrough),
                     ],
                   },
@@ -235,7 +247,7 @@ const locations = makeGlobalNode({
       )
     }),
   ),
-  deps: [App.node, Bus.node, SessionStore.node, PermissionSaved.node],
+  deps: [App.node, Bus.node, SessionStore.node, PermissionSaved.node, Project.node],
 })
 const it = testEffect(
   AppNodeBuilder.build(
@@ -261,23 +273,12 @@ const sessionID = Session.ID.make("ses_automation_test")
 const otherID = Session.ID.make("ses_automation_other")
 
 const insertSession = (id: Session.ID, directory: string) =>
-  Database.Service.use(({ db }) =>
-    db
-      .insert(SessionTable)
-      .values({ id, project_id: Project.ID.global, slug: id, directory, title: "test", version: "test" })
-      .run()
-      .pipe(Effect.orDie),
-  )
+  Session.Service.use((sessions) => sessions.create({ id, location: { directory: AbsolutePath.make(directory) } }))
+
+const creator = Session.Service.use((sessions) => sessions.get(sessionID))
 
 const setup = (directory = enabledDirectory) =>
   Effect.gen(function* () {
-    const { db } = yield* Database.Service
-    yield* db
-      .insert(ProjectTable)
-      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/"), sandboxes: [] })
-      .onConflictDoNothing()
-      .run()
-      .pipe(Effect.orDie)
     yield* insertSession(sessionID, directory)
     wakes.length = 0
     duringWake = Effect.void
@@ -286,6 +287,7 @@ const setup = (directory = enabledDirectory) =>
     folders.missingNow = false
     slack.replies = 0
     slack.reads = 0
+    slack.messageIDs = []
     slack.posts = []
     slack.failing = false
     agentRules = [{ action: "*", resource: "*", effect: "allow" }]
@@ -308,7 +310,8 @@ const deliver = Effect.gen(function* () {
   const { db } = yield* Database.Service
   yield* SessionInbox.promote(db, yield* Bus.Service, sessionID, "steer")
 })
-const messageID = (automation: Automation.Info, run: number) => SessionMessage.ID.make(`msg_${automation.id}_${run}`)
+const messageID = (automation: Automation.Info, run: number) =>
+  SessionMessage.ID.make(`msg_${automation.id}_${run}${automation.action.type === "code" ? "_send" : ""}`)
 const iso = (time: DateTime.Utc | undefined) => time && DateTime.formatIso(time)
 const prompt = (text: string) => ({ type: "prompt" as const, prompt: text })
 const code = (text: string, args?: Schema.Json) => ({ type: "code" as const, code: text, args })
@@ -327,7 +330,7 @@ describe("Automation", () => {
       expect(automation).toMatchObject({
         tz: "America/New_York",
         directory: enabledDirectory,
-        projectID: Project.ID.global,
+        projectID: (yield* creator).projectID,
         sessionID,
         trigger: { type: "at", at: new Date(5 * 60_000).toISOString() },
         action: { type: "prompt", prompt: "check the build", to: { session: sessionID } },
@@ -390,7 +393,7 @@ describe("Automation", () => {
         trigger: every("1 minute"),
         action: prompt("poll"),
       })
-      expect((yield* automations.list({ projectID: Project.ID.global })).map((item) => item.id)).toEqual([
+      expect((yield* automations.list({ projectID: (yield* creator).projectID })).map((item) => item.id)).toEqual([
         automation.id,
       ])
       expect((yield* automations.list({ sessionID: otherID })).map((item) => item.id)).toEqual([])
@@ -507,7 +510,7 @@ describe("Automation", () => {
       yield* TestClock.adjust("1 minute")
       // The previous process started run 1's child, admitted its prompt, and died before advancing the row.
       const child = Session.ID.make(`ses_${automation.id}_1`)
-      yield* sessions.create({ id: child, parentID: sessionID, title: "triage" })
+      yield* sessions.create({ id: child, parentID: sessionID, agent: Agent.ID.make("helper"), title: "triage" })
       yield* sessions.prompt({ sessionID: child, id: messageID(automation, 1), text: "once", resume: false })
 
       yield* automations.tick
@@ -1025,7 +1028,7 @@ describe("Automation", () => {
         .insert(AutomationTable)
         .values({
           id: externalID,
-          project_id: Project.ID.global,
+          project_id: (yield* creator).projectID,
           session_id: sessionID,
           directory: enabledDirectory,
           name: "external",
@@ -1110,7 +1113,7 @@ describe("Automation", () => {
         yield* automations.tick
         expect(slack.posts).toEqual(["#ops: 4"])
         expect(yield* automations.get(automation.id)).toMatchObject({ runCount: 2, state: { replies: 4, runs: 1 } })
-        // A code action never prompts a Session.
+        // No send was returned.
         expect(yield* pendingIDs).toEqual([])
 
         slack.replies = 10
@@ -1202,8 +1205,198 @@ describe("Automation", () => {
           status: "paused",
           runCount: 0,
           lastOutcome: "failed",
-          lastOutput: expect.stringContaining("must return nothing or { state?, done? }"),
+          lastOutput: expect.stringContaining("must return nothing or { state?, done?, send? }"),
         })
+      }),
+    )
+
+    const tick = (automations: Automation.Interface) =>
+      TestClock.adjust("1 minute").pipe(Effect.andThen(automations.tick))
+
+    it.effect("stays quiet while pending, then admits both a progress and a terminal send to the creator", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const automation = yield* automations.create({
+          sessionID,
+          name: "checks",
+          trigger: every("1 minute"),
+          action: code(`
+          const t = await tools.slack.read_thread({})
+          if (!t.replies) return
+          if (t.replies === 1) return { state: "in progress", send: { prompt: "First reply" } }
+          return { done: true, send: { prompt: "All checks passed" } }
+        `),
+        })
+        yield* tick(automations)
+        expect(wakes).toEqual([])
+        expect(yield* pending).toEqual([])
+        slack.replies = 1
+        yield* tick(automations)
+        expect(yield* automations.get(automation.id)).toMatchObject({
+          status: "active",
+          runCount: 2,
+          state: "in progress",
+        })
+        slack.replies = 2
+        yield* tick(automations)
+        expect(yield* pending).toEqual([2, 3].map((run) => ({ id: messageID(automation, run), sessionID })))
+        expect(wakes).toEqual([sessionID, sessionID])
+        const { db } = yield* Database.Service
+        expect(yield* SessionInbox.find(db, messageID(automation, 3))).toMatchObject({
+          type: "user",
+          delivery: "steer",
+          payload: { text: "All checks passed", metadata: { automation: { id: automation.id, run: 3 } } },
+        })
+        expect(yield* automations.get(automation.id)).toMatchObject({
+          status: "done",
+          runCount: 3,
+          state: "in progress",
+        })
+      }),
+    )
+
+    it.effect("hands a failed check to one quiet child with the creator's permissions", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const sessions = yield* Session.Service
+        const permissions: Permission.Ruleset = [{ action: "edit", resource: "*", effect: "deny" }]
+        yield* sessions.setPermissions({ sessionID, permissions })
+        const automation = yield* automations.create({
+          sessionID,
+          name: "triage",
+          trigger: every("1 minute"),
+          action: code(`
+          const t = await tools.slack.read_thread({})
+          if (t.replies < 0) return { send: { to: { subagent: "helper" }, prompt: "Investigate the failed check" } }
+        `),
+        })
+        slack.replies = -1
+        yield* tick(automations)
+        const child = Session.ID.make(`ses_${automation.id}_1`)
+        expect(wakes).toEqual([child])
+        expect(yield* pending).toEqual([{ id: messageID(automation, 1), sessionID: child }])
+        expect(slack.messageIDs).toEqual([SessionMessage.ID.make(`msg_${automation.id}_1`)])
+        expect(slack.messageIDs).not.toContain(messageID(automation, 1))
+        expect(yield* sessions.get(child)).toMatchObject({ agent: "helper", parentID: sessionID, permissions })
+        expect(yield* automations.get(automation.id)).toMatchObject({ status: "active", runCount: 1 })
+      }),
+    )
+
+    it.effect("bad targets and session or agent policy never deliver or commit the rest of the result", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const sessions = yield* Session.Service
+        agentRules = [...agentRules, { action: "subagent", resource: "helper", effect: "ask" }]
+        const nested = yield* sessions.create({ parentID: sessionID })
+        const targets: Schema.Json[] = [
+          { session: otherID },
+          { subagent: "internal" },
+          { subagent: Agent.defaultID },
+          { subagent: "missing" },
+          { subagent: "helper" },
+        ]
+        const create = (id: Session.ID, to: Schema.Json) =>
+          automations.create({
+            sessionID: id,
+            name: "invalid",
+            trigger: every("1 minute"),
+            action: code(
+              `if (runs === 0) return { state: "before" }; return { state: "after", done: true, send: { prompt: "act", to: args } }`,
+              to,
+            ),
+          })
+        const rows = yield* Effect.forEach(targets, (to) => create(sessionID, to))
+        // Explicitly allow this child on the nested session: depth alone must still block it.
+        yield* sessions.setPermissions({
+          sessionID: nested.id,
+          permissions: [{ action: "subagent", resource: "helper", effect: "allow" }],
+        })
+        const deep = yield* create(nested.id, { subagent: "helper" })
+        const denied = yield* sessions.create({
+          location: { directory: AbsolutePath.make(enabledDirectory) },
+          permissions: [{ action: "subagent", resource: "helper", effect: "deny" }],
+        })
+        const blocked = yield* create(denied.id, { subagent: "helper" })
+        yield* tick(automations)
+        yield* tick(automations)
+        for (const row of [...rows, deep, blocked])
+          expect(yield* automations.get(row.id)).toMatchObject({
+            status: "paused",
+            lastOutcome: "failed",
+            lastOutput: expect.stringContaining("Paused:"),
+            runCount: 1,
+            state: "before",
+          })
+        expect(yield* pending).toEqual([])
+        expect(wakes).toEqual([])
+        expect((yield* sessions.list({ parentID: sessionID })).data.map((session) => session.id)).toEqual([nested.id])
+        expect((yield* sessions.list({ parentID: nested.id })).data).toEqual([])
+        expect((yield* sessions.list({ parentID: denied.id })).data).toEqual([])
+      }),
+    )
+
+    it.effect("retries failed admission without committing state or done, then settles the handoff once", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const sessions = yield* Session.Service
+        yield* insertSession(otherID, enabledDirectory)
+        const automation = yield* automations.create({
+          sessionID,
+          name: "retry",
+          trigger: every("1 minute"),
+          action: code(`return { state: 42, done: true, send: { prompt: "ready" } }`),
+        })
+        const id = messageID(automation, 1)
+        // A cross-session conflict rejects the admission, before any wake. Remove the conflicting item to retry.
+        yield* sessions.prompt({ sessionID: otherID, id, text: "other", resume: false })
+        yield* tick(automations)
+        expect(yield* pending).toEqual([{ id, sessionID: otherID }])
+        expect(wakes).toEqual([])
+        expect(yield* automations.get(automation.id)).toMatchObject({
+          status: "active",
+          runCount: 0,
+          state: undefined,
+          lastOutcome: "failed",
+        })
+        yield* sessions.cancelInbox({ sessionID: otherID, inboxID: id })
+        yield* TestClock.adjust("59 seconds")
+        yield* automations.tick
+        expect(yield* pending).toEqual([])
+        yield* TestClock.adjust("1 second")
+        yield* automations.tick
+        expect(yield* pending).toEqual([{ id, sessionID }])
+        expect(wakes).toEqual([sessionID])
+        expect(yield* automations.get(automation.id)).toMatchObject({ status: "done", runCount: 1, state: 42 })
+      }),
+    )
+
+    it.effect("reconciles a child handoff already delivered before settlement", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const sessions = yield* Session.Service
+        const { db } = yield* Database.Service
+        const bus = yield* Bus.Service
+        const automation = yield* automations.create({
+          sessionID,
+          name: "triage",
+          trigger: every("1 minute"),
+          action: code(`return { done: true, send: { to: { subagent: "helper" }, prompt: "Triage the failure" } }`),
+        })
+        const child = Session.ID.make(`ses_${automation.id}_1`)
+        // The first admission was consumed but the scheduler never recorded the run.
+        yield* sessions.create({ id: child, parentID: sessionID, agent: Agent.ID.make("helper") })
+        yield* sessions.prompt({
+          sessionID: child,
+          id: messageID(automation, 1),
+          text: "Triage the failure",
+          resume: false,
+        })
+        yield* SessionInbox.promote(db, bus, child, "steer")
+        yield* tick(automations)
+        expect(yield* pending).toEqual([])
+        expect(wakes).toEqual([child])
+        expect((yield* sessions.list({ parentID: sessionID })).data.map((item) => item.id)).toEqual([child])
+        expect(yield* automations.get(automation.id)).toMatchObject({ runCount: 1, status: "done" })
       }),
     )
 

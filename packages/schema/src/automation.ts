@@ -75,10 +75,23 @@ export const PromptAction = Schema.Struct({ type: Schema.tag("prompt"), prompt: 
 })
 export type PromptAction = typeof PromptAction.Type
 
+/** Code can hand off one prompt, but cannot choose a Session by id. Reject unknown keys rather than dropping a target. */
+export const CodeResult = Schema.Struct({
+  state: Schema.Json.pipe(optional),
+  done: Schema.Boolean.pipe(optional),
+  send: Schema.Struct({
+    prompt: Schema.String.check(Schema.isPattern(/\S/)),
+    to: Schema.Struct({ subagent: Agent.ID.check(Schema.isPattern(/\S/)) }).pipe(optional),
+  }).pipe(optional),
+}).annotate({ identifier: "Automation.CodeResult" })
+export interface CodeResult extends Schema.Schema.Type<typeof CodeResult> {}
+// Code Mode represents a program that returns nothing as JSON null.
+export const decodeCodeResult = Schema.decodeUnknownResult(Schema.NullOr(CodeResult), { onExcessProperty: "error" })
+
 /**
  * Runs `code` in a confined Code Mode runtime with no model call and no `fetch`. Tools called statically as
  * `tools.<path>(...)` are extracted from the AST and authorized at creation. The program receives
- * `input = { state, now, runs, args }` (also bound as globals) and returns nothing or `{ state?, done? }`.
+ * `input = { state, now, runs, args }` (also bound as globals) and returns nothing or a `CodeResult`.
  */
 export const CodeAction = Schema.Struct({
   type: Schema.tag("code"),
@@ -141,8 +154,9 @@ export const CodeActionInput = Schema.Struct({
       "Code Mode JavaScript run on each trigger with no model (no fetch; 30s, 20 tool calls, 32 KB output cap).",
       'Call tools statically as tools.<ns>.<tool>(...) or tools["ns-name"].tool(...); each is authorized once at creation to run unattended.',
       "Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs.",
-      "Return nothing, or { state?, done? }: state is kept for the next run, done: true stops the automation. Logs become lastOutput, e.g.:",
-      'const t = await tools.slack.read_thread({ id: args.id }); if (state !== null && t.count > state.count) await tools.slack.post({ text: "New reply" }); return { state: { count: t.count } }',
+      "Return nothing, or { state?, done?, send? }. JSON state is kept for the next run; done: true stops. Logs become lastOutput.",
+      "Return { send: { prompt } } to steer the creating session, or { send: { prompt, to: { subagent } } } for one permitted child that does not report back. No session IDs. Omit send to stay quiet. A rejected send commits neither state nor done.",
+      'Example code string: if (runs < 2) return; return { done: true, send: { prompt: "Three checks elapsed. Review the build." } }',
     ].join(" "),
   }),
   args: Schema.Json.pipe(optional).annotate({ description: "JSON passed to every run as input.args." }),

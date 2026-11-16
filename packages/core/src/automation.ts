@@ -3,6 +3,7 @@ export * as Automation from "./automation.js"
 import { randomUUID } from "node:crypto"
 import os from "node:os"
 import path from "node:path"
+import { isDeepStrictEqual } from "node:util"
 import { and, asc, eq, gt, isNull, lte, min, ne, or, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -32,7 +33,9 @@ import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
 import { Flag } from "./flag.js"
+import { Instance } from "./instance/service.js"
 import { KVTable } from "./kv/sql.js"
+import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
@@ -42,6 +45,7 @@ import { SessionExecution } from "./session/execution.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { SessionInboxTable } from "./session/sql.js"
+import { SubagentDepth } from "./session/subagent-depth.js"
 
 export { Action, ActionInput, CreateInput, ID, Info, Outcome, Request, Status, Target, Trigger }
 
@@ -212,34 +216,38 @@ const layer = Layer.effect(
     const sessions = yield* Session.Service
     const projects = yield* Project.Service
     const locations = yield* LocationServiceMap.Service
+    const instances = yield* Instance.Service
     const execution = yield* SessionExecution.Service
     const doorbell = yield* Latch.make()
 
     /**
      * The agent a run's child Session starts with, if `owner` could start it with the subagent tool: not hidden, not
-     * primary-only, and not denied by the `subagent` permission. Waits for plugins, which add agents, so a cold
-     * location doesn't read as a missing agent.
+     * primary-only, within the depth limit and already allowed in the owner's current Location. The code/tools
+     * authorized when the automation was created do not grant permission to start a child.
      */
     const subagent = (owner: SessionSchema.Info, id: Agent.ID) =>
       Effect.gen(function* () {
         yield* Plugin.awaitActivation
+        const location = yield* Location.Service
+        if (location.project.id !== owner.projectID) return undefined
+        const config = yield* Config.Service
+        if ((yield* SubagentDepth.reached(owner, sessions, config)) !== undefined) return undefined
         const agents = yield* Agent.Service
         const agent = yield* agents.resolve(id)
         if (agent === undefined || agent.mode === "primary" || agent.hidden) return undefined
+        const creator = yield* agents.resolve(owner.agent)
+        if (!creator) return undefined
         const permission = yield* Permission.Service
-        const denied = yield* permission
-          .assertNotDenied({
+        const allowed = yield* permission
+          .allows({
             action: "subagent",
             resources: [agent.id],
             sessionID: owner.id,
-            agent: (yield* agents.select(owner.agent)).id,
+            agent: creator.id,
           })
-          .pipe(
-            Effect.as(false),
-            Effect.catchTag("Permission.BlockedError", () => Effect.succeed(true)),
-          )
-        return denied ? undefined : agent
-      })
+          .pipe(Effect.provideService(Permission.Unattended, undefined))
+        return allowed ? agent : undefined
+      }).pipe(instances.provide(owner))
 
     /** Runs `effect` in the Location of `directory`; fails with DirectoryNotFoundError when the folder is gone. */
     const inDirectory =
@@ -318,44 +326,65 @@ const layer = Layer.effect(
       return { ...(ended ? { status: "done" as const } : {}), next_due_at: ended ? null : next }
     })
 
-    const runPrompt = Effect.fnUntraced(function* (row: Row, action: PromptAction, due: number, now: number) {
-      const run = row.run_count + 1
-      const fire = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
-        // The id is derived from the run, so retrying it after a crash reconciles with the earlier admission.
-        const id = SessionMessage.ID.make(`msg_${row.id}_${run}`)
-        const late = now - due >= LATE_AFTER
-        yield* sessions.prompt({
-          sessionID,
-          id,
-          text: action.prompt,
-          delivery: "steer",
-          metadata: { automation: { id: row.id, name: row.name, run, dueAt: due, late } },
-        })
-        // Record the run even if a pause landed during the prompt, or the next run would reuse this message id.
-        yield* settle(
-          row,
-          {
-            run_count: run,
-            last_message_id: id,
-            last_run_at: now,
-            last_outcome: late ? "late" : "fired",
-            last_output: `${action.to.session === undefined ? "Started subagent" : "Prompted"} ${sessionID}`,
-            retry_at: null,
-            ...(yield* advance(row)),
-            time_updated: now,
-          },
-          { evenIfPaused: true },
-        )
-      })
-
-      if (action.to.session !== undefined) {
-        const target = yield* existing(action.to.session)
-        if (!target) return yield* pauseWith(row, now, `Target session ${action.to.session} no longer exists`)
+    const promptTarget = Effect.fnUntraced(function* (row: Row, to: Target) {
+      if (to.session !== undefined) {
+        const target = yield* existing(to.session)
+        if (!target) return yield* new InvalidError({ reason: `Target session ${to.session} no longer exists` })
         if (target.projectID !== row.project_id)
-          return yield* pauseWith(row, now, `Target session ${action.to.session} moved to another project`)
-        if (row.last_message_id !== null && (yield* pending(row.last_message_id))) {
+          return yield* new InvalidError({ reason: `Target session ${to.session} moved to another project` })
+        return target.id
+      }
+
+      // The child hangs off the creating Session, so a run needs that Session.
+      const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
+      if (!owner)
+        return yield* new InvalidError({ reason: "The session that created this automation no longer exists" })
+      if (owner.projectID !== row.project_id)
+        return yield* new InvalidError({ reason: "The session that created this automation moved to another project" })
+      const agent = yield* subagent(owner, to.subagent)
+      if (agent === undefined)
+        return yield* new InvalidError({ reason: `Agent ${to.subagent} is no longer available as a subagent` })
+      // The id is derived from the run too, so a retry adopts the child it already started instead of leaking one.
+      // Like the subagent tool's children it inherits the parent's location and permissions, but it reports to no one.
+      const child = yield* sessions.create({
+        id: runSessionID(row.id, row.run_count + 1),
+        parentID: owner.id,
+        agent: agent.id,
+        model: agent.model ?? owner.model,
+        title: row.name,
+      })
+      // Session.create adopts an existing ID, even if its caller requested a different parent or agent.
+      if (
+        child.parentID !== owner.id ||
+        child.agent !== agent.id ||
+        child.projectID !== row.project_id ||
+        !isDeepStrictEqual(child.location, owner.location) ||
+        !isDeepStrictEqual(child.permissions, owner.permissions)
+      )
+        return yield* new InvalidError({ reason: `Run child ${child.id} no longer matches the requested target` })
+      return child.id
+    })
+
+    /** Admission is shared; each action settles its own run once, only after the prompt is durable. */
+    const admit = (row: Row, sessionID: SessionSchema.ID, text: string, due: number, now: number) => {
+      const run = row.run_count + 1
+      return sessions.prompt({
+        sessionID,
+        // Keep existing plain prompt IDs. For code, the unsuffixed ID already identifies tool invocations in the
+        // creator; its returned prompt is a different inbox record, potentially in a different Session.
+        id: SessionMessage.ID.make(`msg_${row.id}_${run}${row.action.type === "code" ? "_send" : ""}`),
+        text,
+        delivery: "steer",
+        metadata: { automation: { id: row.id, name: row.name, run, dueAt: due, late: now - due >= LATE_AFTER } },
+      })
+    }
+
+    const runPrompt = Effect.fnUntraced(
+      function* (row: Row, action: PromptAction, due: number, now: number) {
+        const target = yield* promptTarget(row, action.to)
+        if (action.to.session !== undefined && row.last_message_id !== null && (yield* pending(row.last_message_id))) {
           // The wake that followed admission may have been lost; waking again is harmless.
-          yield* execution.wake(target.id)
+          yield* execution.wake(target)
           return yield* settle(row, {
             last_outcome: "skipped",
             retry_at: null,
@@ -363,27 +392,56 @@ const layer = Layer.effect(
             time_updated: now,
           })
         }
-        return yield* fire(target.id)
-      }
+        const item = yield* admit(row, target, action.prompt, due, now)
+        yield* settle(
+          row,
+          {
+            run_count: row.run_count + 1,
+            last_message_id: item.id,
+            last_run_at: now,
+            last_outcome: now - due >= LATE_AFTER ? "late" : "fired",
+            last_output: `${action.to.session === undefined ? "Started subagent" : "Prompted"} ${item.sessionID}`,
+            retry_at: null,
+            ...(yield* advance(row)),
+            time_updated: now,
+          },
+          { evenIfPaused: true },
+        )
+      },
+      (effect, row, _action, _due, now) =>
+        effect.pipe(Effect.catchTag("Automation.InvalidError", (error) => pauseWith(row, now, error.reason))),
+    )
 
-      // The child hangs off the creating Session, so a run needs that Session.
-      const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
-      if (!owner) return yield* pauseWith(row, now, "The session that created this automation no longer exists")
-      if (owner.projectID !== row.project_id)
-        return yield* pauseWith(row, now, "The session that created this automation moved to another project")
-      const agent = yield* subagent(owner, action.to.subagent).pipe(inDirectory(row.directory))
-      if (agent === undefined)
-        return yield* pauseWith(row, now, `Agent ${action.to.subagent} is no longer available as a subagent`)
-      // The id is derived from the run too, so a retry adopts the child it already started instead of leaking one.
-      // Like the subagent tool's children it inherits the parent's location and permissions, but it reports to no one.
-      const child = yield* sessions.create({
-        id: runSessionID(row.id, run),
-        parentID: owner.id,
-        agent: agent.id,
-        model: agent.model ?? owner.model,
-        title: row.name,
-      })
-      yield* fire(child.id)
+    const codeFailed = Effect.fnUntraced(function* (
+      row: Row,
+      now: number,
+      outcome: Extract<AutomationCode.Outcome, { ok: false }>,
+    ) {
+      const ended = yield* Clock.currentTimeMillis
+      const strikes = row.failures + 1
+      const output = outcome.output === undefined ? outcome.error : `${outcome.output}\n${outcome.error}`
+      if (!outcome.invalid && strikes < MAX_CODE_FAILURES) {
+        return yield* settle(row, {
+          failures: strikes,
+          last_outcome: "failed",
+          last_output: output,
+          retry_at: ended + CODE_FAILED_RETRY,
+          time_updated: ended,
+        })
+      }
+      return yield* settle(
+        row,
+        {
+          status: "paused",
+          failures: strikes,
+          last_run_at: now,
+          last_outcome: "failed",
+          last_output: outcome.invalid ? `Paused: ${output}` : `Paused after ${strikes} failed runs: ${output}`,
+          retry_at: null,
+          time_updated: ended,
+        },
+        { evenIfPaused: true },
+      )
     })
 
     const runCode = Effect.fnUntraced(function* (row: Row, action: CodeAction, due: number, now: number) {
@@ -391,6 +449,12 @@ const layer = Layer.effect(
       const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
       if (!owner)
         return yield* pauseWith(row, now, `The session that authorized this automation's tools no longer exists`)
+      if (owner.projectID !== row.project_id)
+        return yield* pauseWith(
+          row,
+          now,
+          "The session that authorized this automation's tools moved to another project",
+        )
       const run = row.run_count + 1
       const outcome = yield* AutomationCode.run(owner, action, {
         messageID: SessionMessage.ID.make(`msg_${row.id}_${run}`),
@@ -398,40 +462,29 @@ const layer = Layer.effect(
         now,
         runs: row.run_count,
       }).pipe(inDirectory(row.directory))
-      const ended = yield* Clock.currentTimeMillis
+      if (!outcome.ok) return yield* codeFailed(row, now, outcome)
 
-      if (!outcome.ok) {
-        // State is kept: only a successful run replaces it.
-        const strikes = row.failures + 1
-        const output = outcome.output === undefined ? outcome.error : `${outcome.output}\n${outcome.error}`
-        if (!outcome.invalid && strikes < MAX_CODE_FAILURES) {
-          return yield* settle(row, {
-            failures: strikes,
-            last_outcome: "failed",
-            last_output: output,
-            retry_at: ended + CODE_FAILED_RETRY,
-            time_updated: ended,
-          })
-        }
-        return yield* settle(
-          row,
-          {
-            status: "paused",
-            failures: strikes,
-            last_run_at: now,
-            last_outcome: "failed",
-            last_output: outcome.invalid ? `Paused: ${output}` : `Paused after ${strikes} failed runs: ${output}`,
-            retry_at: null,
-            time_updated: ended,
-          },
-          { evenIfPaused: true },
-        )
-      }
+      // Unlike an unchanging prompt action, this decision (possibly the terminal one) must not be coalesced.
+      const send = outcome.send
+      const sent =
+        send &&
+        (yield* promptTarget(row, send.to ?? { session: owner.id }).pipe(
+          Effect.flatMap((target) => admit(row, target, send.prompt, due, now)),
+          Effect.result,
+        ))
+      if (sent && Result.isFailure(sent))
+        return yield* codeFailed(row, now, {
+          ok: false,
+          output: outcome.output,
+          error: sent.failure.message,
+          invalid: sent.failure instanceof InvalidError,
+        })
 
       yield* settle(
         row,
         {
           run_count: run,
+          ...(sent && { last_message_id: sent.success.id }),
           failures: 0,
           ...(outcome.state === undefined ? {} : { state: outcome.state }),
           last_run_at: now,
@@ -439,7 +492,7 @@ const layer = Layer.effect(
           last_output: outcome.output ?? null,
           retry_at: null,
           ...(yield* advance(row, outcome.done)),
-          time_updated: ended,
+          time_updated: yield* Clock.currentTimeMillis,
         },
         { evenIfPaused: true },
       )
@@ -709,7 +762,7 @@ const layer = Layer.effect(
           // The child of each run hangs off the creating Session.
           if (owner === undefined)
             return yield* new InvalidError({ reason: "A prompt to a subagent needs a session to be its parent" })
-          const agent = yield* subagent(owner, to.subagent).pipe(inDirectory(directory))
+          const agent = yield* subagent(owner, to.subagent)
           if (agent === undefined)
             return yield* new InvalidError({
               reason: `Unknown agent, or one that can't run as a subagent: ${to.subagent}`,
@@ -845,5 +898,5 @@ const layer = Layer.effect(
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Database.node, Session.node, SessionExecution.node, Project.node, LocationServiceMap.node],
+  deps: [Database.node, Session.node, SessionExecution.node, Project.node, LocationServiceMap.node, Instance.node],
 })

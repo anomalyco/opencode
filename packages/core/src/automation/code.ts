@@ -1,7 +1,7 @@
 export * as AutomationCode from "./code.js"
 
 import { CodeMode } from "@opencode/codemode"
-import type { Automation } from "@opencode/schema/automation"
+import { Automation } from "@opencode/schema/automation"
 import { Array, Effect, Option, Result, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { CodeModeTool } from "../codemode/tool.js"
@@ -35,15 +35,6 @@ const FORBIDDEN_TOOLS = new Set([
   "opencode.worktree_remove",
 ])
 
-const decodeReturn = Schema.decodeUnknownResult(
-  Schema.NullOr(
-    Schema.Struct({
-      state: Schema.optionalKey(Schema.Json),
-      done: Schema.optionalKey(Schema.Boolean),
-    }),
-  ),
-)
-
 export interface RunInput {
   readonly messageID: SessionMessage.ID
   readonly state: Schema.Json
@@ -52,13 +43,7 @@ export interface RunInput {
 }
 
 export type Outcome =
-  | {
-      readonly ok: true
-      /** Absent when the program returned no state, so the previous state stands. */
-      readonly state?: Schema.Json
-      readonly done: boolean
-      readonly output?: string
-    }
+  | (Automation.CodeResult & { readonly ok: true; readonly output?: string })
   | {
       readonly ok: false
       readonly error: string
@@ -203,21 +188,16 @@ export const run = Effect.fnUntraced(
         result.error.message.includes("needs approval")
       return { ok: false as const, error: result.error.message, output, ...(invalid ? { invalid: true } : {}) }
     }
-    const decoded = decodeReturn(result.value)
+    const decoded = Automation.decodeCodeResult(result.value)
     if (Result.isFailure(decoded)) {
       return {
         ok: false as const,
-        error: `An automation must return nothing or { state?, done? }: ${decoded.failure}`,
+        error: `An automation must return nothing or { state?, done?, send? }: ${decoded.failure}`,
         output,
         invalid: true,
       }
     }
-    return {
-      ok: true as const,
-      ...(decoded.success?.state === undefined ? {} : { state: decoded.success.state }),
-      done: decoded.success?.done === true,
-      output,
-    }
+    return { ok: true as const, ...decoded.success, output }
   },
   Effect.timeoutOption(TIMEOUT_MS),
   Effect.map(

@@ -83,7 +83,7 @@ export const Plugin = {
         editor.add({
           name: "automation_create",
           description:
-            "Create an automation in this project: a trigger (at a time or after a delay, every interval, or on a cron) and an action, either a prompt sent to this session, another session or a new subagent child of this session, or a Code Mode program that runs with no model. Returns the automation with its next run.",
+            "Schedule a prompt or a Code Mode check in this project. A prompt can target this session, another session or a new subagent child. A code string runs without a model; return { send: { prompt } } when this session should act, or add to: { subagent } inside send for a permitted quiet child. Returns the automation with its next run.",
           input: Automation.Request,
           output: View,
           options: { namespace: "opencode", codemode: true },
