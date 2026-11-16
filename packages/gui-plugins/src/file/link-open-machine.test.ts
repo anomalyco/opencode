@@ -115,6 +115,8 @@ describe("transitionLinkOpen", () => {
   })
 
   test("an exact link supersedes the click in flight, whose late results change nothing", () => {
+    const source = { type: "link.exact", href: "b.html", path: "b.html", background: true, origin: "file" } as const
+    expect(replay([source]).effects).toEqual([{ type: "open-source", path: "b.html", background: true }])
     const exact = replay([click, { type: "link.exact", href: "b.ts", path: "b.ts", background: false }])
 
     expect(exact.state).toEqual({ status: "idle", issued: 2 })

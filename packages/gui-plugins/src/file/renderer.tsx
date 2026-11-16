@@ -856,6 +856,8 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
     if (effect.type === "open-exact") return open(routed, effect.path, { background: effect.background })
 
+    if (effect.type === "open-source") return openSource(routed, effect.path, { background: effect.background })
+
     if (effect.type === "open-picker") return openPicker(routed, effect.query, { background: effect.background })
 
     if (effect.type === "open-browser") return open(routed, effect.path)
@@ -919,6 +921,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       if (link.exact || link.origin === "file")
         return dispatchLink({
           type: "link.exact",
+          origin: link.origin,
           href: link.href,
           path: files.resolve(link.href),
           background: Boolean(link.background),

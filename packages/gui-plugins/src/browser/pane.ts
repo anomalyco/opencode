@@ -93,6 +93,8 @@ export function createBrowserPane(input: {
   // Release each tab's registration with the profile's extensions.
   const grants = new WeakMap<BrowserPage, () => void>()
   const searches = new WeakMap<BrowserPage, ReturnType<typeof createPageFind>>()
+  // A second click can arrive before even about:blank has committed in the first click's new tab.
+  const openingFiles = new WeakMap<BrowserPage, string>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
@@ -784,18 +786,39 @@ export function createBrowserPane(input: {
       const refused = origin === "agent" ? agentRefusal(action, { url: "about:blank", origin: "null" }) : undefined
 
       if (refused) throw new Error(refused)
-      const page = create(binding)
-      const tabID = page.state().id
+      const file = origin === "user" && action.url && /^(?:file|workspace):/.test(action.url) ? action.url : undefined
+
+      if (file) {
+        const existing = inventory(binding).tabs.find((tab) => {
+          const live = page(binding, tab.id)
+
+          return tab.url === file || (!!live && openingFiles.get(live) === file)
+        })
+
+        if (existing) {
+          dispatchBinding(binding, { type: "tab.focused", tabID: existing.id })
+
+          return { value: existing, files: [] }
+        }
+      }
+      const opened = create(binding)
+      const tabID = opened.state().id
+
+      if (file) openingFiles.set(opened, file)
 
       if (action.focus !== false) dispatchBinding(binding, { type: "tab.focused", tabID })
-      await page.ready
+      try {
+        await opened.ready
 
-      // A new page already loads about:blank, so only another address needs a navigation.
-      if (action.url !== undefined)
-        await page.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
-      refresh(binding, tabID, page)
+        // A new page already loads about:blank, so only another address needs a navigation.
+        if (action.url !== undefined)
+          await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
+        refresh(binding, tabID, opened)
 
-      return { value: page.state(), files: [] }
+        return { value: opened.state(), files: [] }
+      } finally {
+        openingFiles.delete(opened)
+      }
     }
 
     const slot = selectTabSlot(machine.state, binding, action.tabID)

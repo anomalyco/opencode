@@ -49,6 +49,7 @@ export type LinkOpenEvent =
   /** A known workspace file (the palette, a file comment) opens at once. `path` is empty when it resolves to none. */
   | {
       readonly type: "link.exact"
+      readonly origin?: string
       readonly href: string
       readonly path: string
       readonly background: boolean
@@ -99,6 +100,7 @@ export type LinkOpenEffect =
   /** Ends the attempt's controller and timeout. */
   | { readonly type: "abort"; readonly attempt: number }
   | { readonly type: "open-exact"; readonly path: string; readonly background: boolean }
+  | { readonly type: "open-source"; readonly path: string; readonly background: boolean }
   | {
       readonly type: "open-file"
       readonly path: string
@@ -133,7 +135,7 @@ export function transitionLinkOpen(state: LinkOpenState, event: LinkOpenEvent): 
       effects: [
         ...abortActive(state),
         event.path
-          ? { type: "open-exact", path: event.path, background: event.background }
+          ? { type: event.origin === "file" ? "open-source" : "open-exact", path: event.path, background: event.background }
           : { type: "toast-failed", path: event.href },
       ],
     }
