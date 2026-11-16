@@ -5039,6 +5039,18 @@ export type GenerateImageInput = ExperimentalGenerateImageInput
 /** @deprecated Use `ExperimentalGenerateImageOutput`. Removed in the next minor. */
 export type GenerateImageOutput = ExperimentalGenerateImageOutput
 
+/** @deprecated Use `ExperimentalGenerateVideoStartInput`. Removed in the next minor. */
+export type GenerateVideoStartInput = ExperimentalGenerateVideoStartInput
+
+/** @deprecated Use `ExperimentalGenerateVideoStartOutput`. Removed in the next minor. */
+export type GenerateVideoStartOutput = ExperimentalGenerateVideoStartOutput
+
+/** @deprecated Use `ExperimentalGenerateVideoGetInput`. Removed in the next minor. */
+export type GenerateVideoGetInput = ExperimentalGenerateVideoGetInput
+
+/** @deprecated Use `ExperimentalGenerateVideoGetOutput`. Removed in the next minor. */
+export type GenerateVideoGetOutput = ExperimentalGenerateVideoGetOutput
+
 /** @deprecated Use `ExperimentalGenerateDecisionsInput`. Removed in the next minor. */
 export type GenerateDecisionsInput = ExperimentalGenerateDecisionsInput
 

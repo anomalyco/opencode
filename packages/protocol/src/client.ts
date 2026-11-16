@@ -74,10 +74,6 @@ export const groupNames = {
 export const clientNamespace = (endpoint: { readonly path: string }) =>
   endpoint.path === "/api/experimental" || endpoint.path.startsWith("/api/experimental/") ? "experimental" : undefined
 
-// Experimental endpoints added after the move to `client.experimental`: they never had another client path, so
-// they get no deprecated alias.
-export const unaliasedEndpoints = new Set(["generate.video.start", "generate.video.get"])
-
 export const promiseOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",
