@@ -66,6 +66,9 @@ export type AppScenario = {
   }
   // Environment variables the TUI reads at startup, such as `OPENCODE_ROUTE`.
   env?: Record<string, string>
+  // js-npm: packages installed in TS's npm cache, by spec, each the pinned tarball `plugins/npm/<name>.tgz` of its
+  // name. Both clients resolve plugins named by npm package there (`Npm.resolve`), and install nothing.
+  cache?: Record<string, string>
   routes?: Route[]
   // Runs a fake IDE MCP server at OPENCODE_EDITOR_SSE_PORT (E.5); the recording keeps what the TUI sent it.
   ide?: boolean
