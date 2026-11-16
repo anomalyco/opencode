@@ -2375,6 +2375,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const themes = useThemes()
   const theme = useTheme()
   const mode = themes.mode
+  const syntax = themes.currentSyntax
+  const plugins = usePlugin()
+  const markdown = createMemo(() => ctx.config.session?.user_markdown ?? "plain")
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
   const delivery = createMemo(() => ctx.pendingDelivery(props.message.id))
@@ -2430,7 +2433,22 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
-          <text fg={theme.text.base}>{props.message.text}</text>
+          <Show
+            when={markdown() !== "plain" && props.message.text.trim()}
+            fallback={<text fg={theme.text.base}>{props.message.text}</text>}
+          >
+            <markdown
+              ref={useSessionLinks()}
+              syntaxStyle={syntax()}
+              renderNode={plugins.markdown()}
+              content={props.message.text.trim()}
+              internalBlockMode="top-level"
+              tableOptions={{ style: "grid", cellPaddingX: 1 }}
+              conceal={markdown() === "rendered"}
+              fg={theme.text.base}
+              bg={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
+            />
+          </Show>
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>
