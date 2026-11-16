@@ -183,15 +183,17 @@ const layer = Layer.effect(
     const run = (tool: Tool.Info, name: string, input: unknown, context: Tool.Context) =>
       beforeExecute(name, input, context).pipe(Effect.flatMap((event) => executeTool(tool, name, event.input, context)))
 
-    let catalog:
-      | {
-          data: Data
-          names: string
-          inventory: CodeModeTool.Inventory
-          value: CodeModeCatalog.Inventory
-          definition: ToolDefinition
-        }
-      | undefined
+    // Keyed by the visible tool names. Sessions whose agents see different tool sets, such as one denied the browser
+    // and one not, alternate steps; with one entry each step rebuilt a large catalog (about 90 ms for 3,000 tools).
+    const catalogs = new Map<
+      string,
+      {
+        data: Data
+        inventory: CodeModeTool.Inventory
+        value: CodeModeCatalog.Inventory
+        definition: ToolDefinition
+      }
+    >()
     const state = State.create<Data, Editor>({
       name: "tool",
       initial: () => ({
@@ -232,7 +234,7 @@ const layer = Layer.effect(
         },
       }),
       notify: (value) => {
-        catalog = undefined
+        catalogs.clear()
         return Effect.forEach(
           value.errors,
           ({ kind, name, namespace, error }) =>
@@ -269,7 +271,8 @@ const layer = Layer.effect(
           // Discovery is immutable for a registry revision and visible tool set. Keep executors
           // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
           // are cached by identity, and the execute tool's definition across steps.
-          const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
+          const entry = catalogs.get(names)
+          const cached = entry?.data === data ? entry : undefined
           const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
@@ -282,14 +285,17 @@ const layer = Layer.effect(
             ? undefined
             : (cached?.value ?? CodeModeTool.catalog(codeModeInventory))
           const codeModeDefinition = codeModeTool && (cached?.definition ?? definition(codeModeTool))
-          if (codeModeCatalog && codeModeDefinition)
-            catalog = {
+          if (codeModeCatalog && codeModeDefinition) {
+            // Least recently used goes first: a hit moves its entry to the end.
+            catalogs.delete(names)
+            catalogs.set(names, {
               data,
-              names,
               inventory: codeModeInventory,
               value: codeModeCatalog,
               definition: codeModeDefinition,
-            }
+            })
+            if (catalogs.size > CATALOG_CACHE_SIZE) catalogs.delete(catalogs.keys().next().value!)
+          }
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
@@ -380,6 +386,9 @@ function commit(editor: Data, id: string, input: Tool.Info & { readonly id: stri
   editor.tools.set(id, tool)
   editor.definitions.set(id, registered.success)
 }
+
+/** Visible tool sets whose Code Mode catalog stays prepared. */
+const CATALOG_CACHE_SIZE = 8
 
 const whollyDisabled = (action: string, rules: Permission.Ruleset) =>
   Permission.deniesAll(action, rules, process.platform === "win32")
