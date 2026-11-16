@@ -1,4 +1,5 @@
 import { homedir } from "node:os"
+import { navigationTurn } from "./navigation-turn"
 import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
@@ -622,14 +623,15 @@ export function createBrowserPage(
 
   contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
   contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: pageTitle() }))
-  contents.on("did-start-navigation", (event) =>
+  contents.on("did-start-navigation", (event) => {
+    if (event.isMainFrame) navigation.cancel()
     dispatch({
       type: "navigation.started",
       url: displayURL(event.url),
       isMainFrame: event.isMainFrame,
       isSameDocument: event.isSameDocument,
-    }),
-  )
+    })
+  })
   contents.on("did-navigate", (_event, url, status, statusText) =>
     dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: pageTitle(displayURL(url)) }),
   )
@@ -946,28 +948,23 @@ export function createBrowserPage(
     if (!closed()) options.hidden?.()
   })
 
+  const navigation = navigationTurn(options.waitForFilters, url => {
+    dispatch({ type: "navigation.started", url, isMainFrame: true, isSameDocument: false })
+    dispatch({ type: "loading.started" })
+  }, () => { if (!closed()) dispatch({ type: "loading.stopped", title: pageTitle() }) })
+
+  const begin = (signal = options.signal) => navigation.begin(AbortSignal.any([pageLifetime.signal, signal, options.signal]))
+
   const load = async (url: string, retry = false, commandSignal = options.signal) => {
+    const visit = begin(commandSignal)
     const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, (guarded) => notices.show({reason: guarded ? "browser.preview.agentRestricted" : "browser.preview.restricted"}), retry ? contents.getURL() : undefined) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
-    const signal = AbortSignal.any([pageLifetime.signal, commandSignal, options.signal])
-    signal.throwIfAborted()
-    const waiting = options.waitForFilters?.(destination, signal)
 
-    if (waiting) {
-      // Publish after the pane has taken ownership of a newly constructed restored page.
-      await Promise.resolve()
-      dispatch({ type: "navigation.started", url, isMainFrame: true, isSameDocument: false })
-      dispatch({ type: "loading.started" })
+    return visit(destination, () => loadDestination(destination, url))
+  }
 
-      try { await waiting } catch (cause) {
-        if (!closed()) dispatch({ type: "loading.stopped", title: pageTitle() })
-        throw cause
-      }
-
-      signal.throwIfAborted()
-    }
-
+  const loadDestination = (destination: string, url: string) => {
     if (options.artifacts?.display(destination)) {
       artifactHost = new URL(destination).host
       contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
@@ -1000,7 +997,8 @@ export function createBrowserPage(
       .finally(() => contents.off("did-navigate", commit))
   }
 
-  const reload = async () => {
+  const reload = async (signal = options.signal) => {
+    navigation.cancel()
     const tab = state()
 
     if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url, true)
@@ -1010,7 +1008,8 @@ export function createBrowserPage(
     const address = reloadAddress(actual, state().url, options.workspace?.host(actual), policy.fileRoots ?? [], policy.remote)
 
     if (address) return void await load(address, true)
-    contents.reload()
+
+    return begin(signal)(actual, () => contents.reload())
   }
 
   const ready = navigationDeadline(Promise.all([
@@ -1085,7 +1084,7 @@ export function createBrowserPage(
       await contents.session.clearAuthCache()
 
       if (closed()) return
-      contents.reload()
+      await reload()
       // A slow page still cleared; the count then reads what it set so far.
       await waitFor(() => closed() || !contents.isLoading(), new AbortController().signal, 30_000).catch(
         () => undefined,
@@ -1106,6 +1105,7 @@ export function createBrowserPage(
      * would run with that extension's privileges; every agent operation reaches the page through here.
      */
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
+      if (["stop", "back", "forward", "reload", "navigate"].includes(command.action.type)) navigation.cancel()
       await ready
       const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
 
@@ -1302,14 +1302,20 @@ export function createBrowserPage(
       case "forward":
       case "reload":
       case "stop": {
-        if (action.type === "back" && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack()
+        if (action.type === "back" || action.type === "forward") {
+          const history = contents.navigationHistory
+          const index = history.getActiveIndex() + (action.type === "back" ? -1 : 1)
+          const entry = index >= 0 && index < history.length() && history.getEntryAtIndex(index)
 
-        if (action.type === "forward" && contents.navigationHistory.canGoForward())
-          contents.navigationHistory.goForward()
+          if (entry) await begin(signal)(entry.url, () => history.goToIndex(index))
+        }
 
-        if (action.type === "reload") await reload()
+        if (action.type === "reload") await reload(signal)
 
-        if (action.type === "stop") contents.stop()
+        if (action.type === "stop") {
+          navigation.cancel()
+          contents.stop()
+        }
 
         if (action.type !== "stop") await waitFor(() => !contents.isLoading(), signal, 30_000)
 
