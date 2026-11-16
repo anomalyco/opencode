@@ -89,6 +89,7 @@ test.each([
 
 // A remote server's preview: its files show as `workspace:` display addresses; nothing names the server or its URL.
 const remote = { previewHost: "binding", remote: "workspace://ses_1/", local: false }
+
 const remotePage = "oc-preview://binding/site/page.html"
 
 test.each([
