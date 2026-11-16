@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import { join } from "node:path"
+import { mkdir, stat, symlink } from "node:fs/promises"
 import { Context, Deferred, Effect, Schedule, Schema, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Agent } from "@opencode/schema/agent"
@@ -54,10 +55,16 @@ const success = (value: typeof Schema.Json.Type): typeof Browser.Outcome.Encoded
  * The browser plugin as the server runs it, driven through Code Mode with input repair and validation. `respond` plays
  * the desktop; `attach: false` leaves the session without one.
  */
-const setup = (respond: Respond, options: { readonly attach?: boolean } = {}) =>
+const setup = (respond: Respond, options: { readonly attach?: boolean; readonly linked?: boolean } = {}) =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
-    const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+    const directory = options.linked ? yield* Effect.promise(async () => {
+      await mkdir(join(dir.path, "physical", "Project"), {recursive:true})
+      await symlink(join(dir.path, "physical"), join(dir.path, "alias"), process.platform === "win32" ? "junction" : "dir")
+      const alternate = join(dir.path, "ALIAS", "pRoJeCt")
+      return await stat(alternate).then(() => alternate, () => join(dir.path, "alias", "Project"))
+    }) : dir.path
+    const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
     const locations = yield* LocationServiceMap.Service
     const context = yield* locations.contextEffect(ref).pipe(Effect.scoped)
     yield* Plugin.awaitActivation.pipe(Effect.provideContext(context))
@@ -105,7 +112,7 @@ const setup = (respond: Respond, options: { readonly attach?: boolean } = {}) =>
       })
       return (result.output as { readonly output: string }).output
     })
-    return { directory: dir.path, commands, cancelled, run }
+    return { directory, commands, cancelled, run }
   })
 
 const evaluated = (value: typeof Schema.Json.Type) => success({ tab, value })
@@ -278,7 +285,7 @@ it.live("HTML preview passes the checked relative path and requires a usable tab
   Effect.gen(function* () {
     const url = "workspace://ses_fixture/page.html"
     const browser = yield* setup((action) => success(action.type === "preview" && action.path === "page.html"
-      ? {path: action.path, tabID, url} : {path:"older.html"}))
+      ? {path: action.path, tabID, url} : {path:"older.html"}), {linked:true})
     yield* Effect.promise(() => Promise.all(["page.html", "older.html"].map(path => Bun.write(join(browser.directory, path), "<!doctype html>"))))
     expect(JSON.parse(yield* browser.run(`return await tools.browser.preview({path:"page.html#L2"})`))).toEqual({path:"page.html#L2",tabID,url})
     expect(browser.commands).toEqual([{type:"preview",path:"page.html"}])
