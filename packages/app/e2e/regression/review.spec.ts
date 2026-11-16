@@ -55,6 +55,14 @@ for (const view of ["desktop", "mobile"] as const) {
 
     if (view === "desktop") await openReviewLauncher(panel)
     await expect(panel.getByText("Track, review, and undo changes in this project")).toBeVisible()
+
+    if (view === "desktop") {
+      const toggle = panel.getByRole("button", {name:"Toggle file tree"})
+
+      if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click()
+      await expect(panel.getByText("No changed files. Use Open file to browse the workspace.")).toBeVisible()
+    }
+
     await expect(panel.getByRole("button", { name: "Git changes" })).toHaveCount(0)
     const init = panel.getByRole("button", { name: "Create Git repository" })
     await init.click()
