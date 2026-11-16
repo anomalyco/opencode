@@ -35,7 +35,7 @@ export function consumeTerminalMetaKey(
 
 /**
  * Where a click on a terminal link goes: nowhere without Ctrl, Cmd or Shift; a web link to the app's links (such as
- * the browser pane); anything else, and any link clicked with Shift, to the system, as Shift does for links elsewhere.
+ * the browser pane); a workspace file only to an app viewer. Never interpret terminal output as an OS command.
  */
 export function terminalLinkTarget(
   event: Pick<MouseEvent, "shiftKey" | "ctrlKey" | "metaKey" | "altKey" | "button">,
@@ -43,5 +43,16 @@ export function terminalLinkTarget(
 ) {
   if ((!event.shiftKey && !event.ctrlKey && !event.metaKey) || event.altKey || event.button !== 0 || !text) return
 
-  return !event.shiftKey && /^https?:\/\//i.test(text) ? "app" : "system"
+  if (text.length > 4096 || text.trim() !== text || /[\\\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]/u.test(text) || !URL.canParse(text)) return "blocked"
+  const url = new URL(text)
+
+  if (url.username || url.password) return "blocked"
+
+  if (/^https?:\/\//i.test(text)) return event.shiftKey ? "system" : "app"
+
+  if (url.protocol === "mailto:") return "system"
+
+  if (url.protocol === "file:" && /^file:\/\/\/(?!\/)/i.test(text) && !url.host && !/%(?:2f|5c)/i.test(url.pathname)) return "file"
+
+  return "blocked"
 }

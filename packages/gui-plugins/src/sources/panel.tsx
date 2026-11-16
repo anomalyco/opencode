@@ -14,6 +14,12 @@ export default function SourcesTab(props: { session: MountedSession; from: strin
   )
 
   const open = (url: string) => {
+    if (/^file:/i.test(url)) {
+      ctx.links.open({href:url, exact:true, session: props.session})
+
+      return
+    }
+
     const pane = ctx.use(Browser)()
 
     if (pane.status === "active" && pane.value.canOpen(props.session)) return pane.value.open(props.session, url)

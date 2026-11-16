@@ -1098,8 +1098,8 @@ export interface System {
     readonly content: string
   }): Promise<boolean>
   /**
-   * Opens a URL in the system browser; desktop opens file:// URLs with the default app. For links inside the app,
-   * use `Links.open`.
+   * Opens an HTTP, HTTPS or mail URL in the system application. Files and other schemes are not launched. For links
+   * inside the app, use `Links.open`.
    *
    * @param url - The URL to open.
    */

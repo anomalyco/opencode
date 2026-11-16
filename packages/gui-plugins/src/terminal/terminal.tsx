@@ -21,6 +21,7 @@ import {
 } from "./pane-machine"
 import type { TerminalProps } from "./props"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
+import { terminalLinkLabel } from "./hover-label"
 import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
 import { TerminalQuote } from "./quote"
 
@@ -308,16 +309,34 @@ export const Terminal = (props: TerminalProps) => {
     focusTerminal(t)
   }
 
-  const handleLinkClick = (t: Term, event: MouseEvent) => {
+  const handleLinkClick = async (t: Term, event: MouseEvent) => {
     const text = getHoveredLinkText(t)
     const target = terminalLinkTarget(event, text)
 
-    if (!target || !text) return
+    if (!text || (!event.ctrlKey && !event.metaKey && !event.shiftKey)) return
 
     event.preventDefault()
     event.stopImmediatePropagation()
 
-    if (target === "app" && links.open({ href: text, session: plugin.sessions.current() })) return
+    if (!target || target === "blocked") return
+    const session = plugin.sessions.current()
+    const label = terminalLinkLabel(t)
+
+    if (label !== text && !await plugin.dialogs.confirm({title:plugin.t("link.confirm"), description:text, confirm:plugin.t("link.open")})) return
+
+    if (plugin.signal.aborted || session?.key !== plugin.sessions.current()?.key) return
+
+    if (target === "file") {
+      const files = plugin.screen.current()?.file
+      const href = new URL(text).href
+      const path = files?.resolve(href)
+
+      if (path && files && !files.absolute(path) && !path.split(/[\\/]/).includes("..")) links.open({href,session,exact:true})
+
+      return
+    }
+
+    if (target === "app" && links.open({ href: text, session })) return
     system.openExternal(text)
   }
 

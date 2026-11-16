@@ -7,7 +7,7 @@ import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions }
 import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
-import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { resolveExternalURL } from "./external-url"
 
 export type Interface = ReturnType<typeof make>
 
@@ -215,20 +215,6 @@ export const openExternalURL = Effect.fn("DesktopFiles.openExternalURL")(functio
       scoped("window", Effect.logError("failed to open external target", { url, error })).pipe(Effect.as(false)),
     ),
   )
-})
-
-export const openLocalFileURL = Effect.fn("DesktopFiles.openLocalFileURL")(function* (value: string) {
-  const path = resolveLocalFilePath(value)
-
-  if (!path) {
-    yield* scoped("window", Effect.logWarning("blocked local file target", { url: value }))
-
-    return
-  }
-
-  const error = yield* Effect.promise(() => shell.openPath(path))
-
-  if (error) yield* scoped("window", Effect.logError("failed to open local file", { path, error }))
 })
 
 function pickerFilters(extensions?: string[]) {
