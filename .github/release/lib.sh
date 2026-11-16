@@ -23,6 +23,14 @@ dry_run() {
   [ "${OPENCODE_DRY_RUN:-false}" = true ]
 }
 
+stage_account() {
+  case "$1" in
+    dev) echo d8e944f537ceef3f06a5bd3aec1d7a53 ;;
+    production) echo 15d29c8639fd3733b1b5486a2acfd968 ;;
+    *) die "Unknown Cloudflare stage: $1" ;;
+  esac
+}
+
 sha256() {
   if command -v sha256sum > /dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi
 }
@@ -133,4 +141,12 @@ push_git() {
   git -C "$dir" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
     commit -q -m "$message"
   git -C "$dir" push -q origin HEAD:master
+}
+
+# expect_json <artifact-file> <pinned-target> <label>: the artifact's resolved
+# config must equal the pinned target exactly before anything is deployed.
+# Deploy scripts use this with targets/; release scripts do not.
+expect_json() {
+  jq -e --slurp '.[0] == .[1]' "$1" "$2" > /dev/null ||
+    die "$3 in the artifact is not the pinned target ($2)"
 }

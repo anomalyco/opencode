@@ -226,16 +226,15 @@ describe("ClaudeAgentPlugin models", () => {
     }),
   )
 
-  it.live("binds chats to plugin storage, and a chat's startup report keeps saved context sizes", () =>
+  it.live("binds chats to plugin storage, and checks context sizes for models a chat reports without one", () =>
     Effect.gen(function* () {
       const store = yield* storage
       yield* store.set("models", { models: [{ id: "haiku", name: "Haiku", efforts: [], contextWindow: 123_456 }] })
       yield* connect
-      const claude = FakeClaude.make([
-        FakeClaude.expectStartup(),
-        FakeClaude.expectTurn(),
-        FakeClaude.expectInterrupt(),
-      ])
+      const claude = FakeClaude.make(
+        [FakeClaude.expectStartup(), FakeClaude.expectTurn(), FakeClaude.expectInterrupt()],
+        { probes: true },
+      )
       const registry = yield* addPlugin(FakeIO.make({ claude }))
 
       const aisdk = yield* AISDK.Service
@@ -258,8 +257,9 @@ describe("ClaudeAgentPlugin models", () => {
       expect(TestSessions.text(yield* Effect.promise(() => TestSessions.collect(result.stream)))).toBe("COPPER-OTTER")
       expect(yield* store.get("sessions/session-a")).toMatchObject({ claudeSessionID: expect.any(String) })
 
-      const models = yield* eventually(claudeModels, (models) => models.length > 1)
-      expect(find(models, "haiku").limit.context).toBe(123_456)
+      yield* eventually(claudeModels, (models) =>
+        models.some((model) => model.id === "sonnet" && model.limit.context === 1_000_000),
+      )
       yield* registry.close()
       claude.check()
     }),

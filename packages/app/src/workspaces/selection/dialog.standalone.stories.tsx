@@ -5,7 +5,7 @@ import { createStore } from "solid-js/store"
 import { DialogStoryRuntime, STORY_DIRECTORY, STORY_SERVER } from "@/components-lab/dialog-story-runtime"
 import { DirectoryPickerDialog } from "./dialog"
 
-function DirectoryPickerStory(props: { mode?: "directory" | "file" }) {
+function DirectoryPickerStory(props: { mode?: "directory" | "file"; start?: string }) {
   const dialog = useDialog()
 
   const [store, setStore] = createStore({ selected: "No path selected" })
@@ -15,7 +15,7 @@ function DirectoryPickerStory(props: { mode?: "directory" | "file" }) {
       <DirectoryPickerDialog
         server={STORY_SERVER}
         location={{ directory: STORY_DIRECTORY }}
-        start={STORY_DIRECTORY}
+        start={props.start ?? STORY_DIRECTORY}
         mode={props.mode}
         onSelect={(result) => {
           const text = Array.isArray(result) ? result.join(", ") : (result ?? "Cancelled")
@@ -53,6 +53,14 @@ export const SelectFile = {
   render: () => (
     <DialogStoryRuntime>
       <DirectoryPickerStory mode="file" />
+    </DialogStoryRuntime>
+  ),
+}
+
+export const MissingDirectory = {
+  render: () => (
+    <DialogStoryRuntime>
+      <DirectoryPickerStory start={`${STORY_DIRECTORY}/removed-folder`} />
     </DialogStoryRuntime>
   ),
 }

@@ -15,4 +15,13 @@ export default {
   "settings.wrapLines.title": "Преламај редове",
   "settings.wrapLines.description":
     "Умотајте дугачке редове у разлике између мобилних уређаја уместо хоризонталног померања",
+  "menu.count.one": "{{count}} датотека је измењена",
+  "menu.count.few": "{{count}} датотеке су измењене",
+  "menu.count.other": "{{count}} датотека је измењено",
+  "folder.more": "{{count}} · остало није приказано",
+  "folder.failed": "Учитавање промена није успело",
+  "command.open": "Отвори преглед",
+  "load.failed": "Учитавање промена није успело",
+  "load.timeout": "Сервер је предуго одговарао",
+  offline: "Сервер није доступан",
 }

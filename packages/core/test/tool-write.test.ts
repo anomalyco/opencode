@@ -115,16 +115,14 @@ describe("WriteTool", () => {
       const fixture = makeWriteFixture()
       return withTool(tmp.path, fixture, (registry) =>
         Effect.gen(function* () {
-          expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["write", "execute"])
+          expect(yield* toolDefinitions(registry)).toMatchObject([
+            { name: "write", outputSchema: { type: "string" } },
+            { name: "execute" },
+          ])
           const settled = yield* executeTool(registry, call({ path: "src/new.txt", content: "created" }))
           expect(settled).toEqual({
             status: "completed",
-            output: {
-              operation: "write",
-              target: path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt"),
-              resource: "src/new.txt",
-              existed: false,
-            },
+            output: "Created file successfully: src/new.txt",
             content: [{ type: "text", text: "Created file successfully: src/new.txt" }],
           })
           expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "src", "new.txt"), "utf8"))).toBe(
@@ -183,10 +181,11 @@ describe("WriteTool", () => {
         ),
         Effect.andThen((settled) =>
           Effect.gen(function* () {
-            expect(settled.status).toBe("completed")
-            if (settled.status !== "completed") return
-            expect(settled.content).toEqual([{ type: "text", text: "Wrote file successfully: existing.txt" }])
-            expect(settled.output).toMatchObject({ resource: "existing.txt", existed: true })
+            expect(settled).toEqual({
+              status: "completed",
+              output: "Wrote file successfully: existing.txt",
+              content: [{ type: "text", text: "Wrote file successfully: existing.txt" }],
+            })
             expect(fixture.assertions[0]?.metadata).toMatchObject({
               files: [
                 {
@@ -315,11 +314,7 @@ describe("WriteTool", () => {
               })
               expect(settled).toMatchObject({
                 status: "completed",
-                output: {
-                  target: absoluteTarget,
-                  resource: absoluteTarget.replaceAll("\\", "/"),
-                  existed: false,
-                },
+                output: `Created file successfully: ${absoluteTarget.replaceAll("\\", "/")}`,
               })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("external")
               expect(fixture.writes).toEqual([absoluteTarget])

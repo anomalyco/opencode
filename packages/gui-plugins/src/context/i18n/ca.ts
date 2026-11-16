@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Sessió desada a {{filename}}",
   "export.failed.title": "No s'ha pogut exportar la sessió",
   "export.failed.description": "S'ha produït un error en exportar la sessió",
+  "usage.toggle": "Commuta el context de la sessió",
 }

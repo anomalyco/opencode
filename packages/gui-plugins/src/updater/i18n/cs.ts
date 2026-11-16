@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Další",
   "releaseNotes.action.hideFuture": "V budoucnu je nezobrazujte",
   "releaseNotes.media.alt": "Náhled vydání",
+  "action.reload": "Aktualizovat opětovným načtením",
+  "action.reloading": "Opětovné načítání…",
+  "web.ready.title": "Aktualizace připravena",
+  "web.ready.message":
+    "Nová verze OpenCode je připravena. Znovu načtěte, abyste ji používali ve všech otevřených oknech.",
+  "web.reload": "Znovu načíst",
+  "web.reset.title": "Znovu načíst ze serveru",
+  "web.reset.description": "Vymazat uloženou kopii aplikace a načíst aktuální verzi ze serveru",
+  "web.reset.action": "Znovu načíst ze serveru",
 }

@@ -134,23 +134,34 @@ unknown id. Both refresh a PTY's foreground process first.
 `create_pty { program, args, cwd, env, group_id, title, cols, rows }` starts a
 PTY. `create_pipe { program, args, cwd, env, group_id, output_path, metadata }`
 starts a pipe process: any command without a terminal. Both return
-`Created { process }`. Pipe processes are Unix-only for now; a Windows daemon
-answers `create_pipe` with an error.
+`Created { process }`. Pipe processes work on Unix and Windows.
 
 - The child gets exactly `env`: the daemon's own environment is not
   inherited, and no `TERM` or `COLORTERM` is added. `cwd` must be absolute.
-- The child gets its own process group, an empty signal mask with default
-  actions (the daemon blocks SIGTERM and SIGINT, and std keeps the mask across
-  exec), stdin on `/dev/null`, and one pipe for both stdout and stderr, so
-  their bytes stay in order. Nothing parses the output: there is no emulator,
-  no terminal replies, no OSC title and no foreground process.
+- The child gets no terminal: stdin is `/dev/null` on Unix and `NUL` on
+  Windows, and both stdout and stderr share one pipe, so their bytes stay in
+  order. Nothing parses the output: there is no emulator, no terminal replies,
+  no OSC title and no foreground process.
+- On Unix the child gets its own process group and an empty signal mask with
+  default actions (the daemon blocks SIGTERM and SIGINT, and std keeps the
+  mask across exec). On Windows it is created with `CREATE_NO_WINDOW` (no
+  console) inside a kill-on-close job. For a bare executable name,
+  `CreateProcessW` searches the directory containing the daemon executable,
+  the daemon's current directory, the 32-bit and then 16-bit Windows system
+  directories, the Windows directory, and finally the directories in the
+  daemon's `PATH`. This search is independent of the request's `cwd` and `env`,
+  which set the child's working directory and environment. To invoke a shell,
+  the caller must request one explicitly, e.g. `cmd.exe` with `["/c", command]`.
 - `output_path` must be absolute. The daemon opens it before spawning,
-  truncating an existing file or creating one with mode `0666` minus the
-  daemon's umask, and refuses a symlink as the final path component. The
-  request is validated (program, absolute paths, metadata size) before the
-  file is opened, so such a rejected request never creates or truncates it; a
-  path that cannot be opened fails the request without starting the process.
-  A missing program or `cwd` fails at spawn, after the file was opened.
+  truncating an existing file or creating one (mode `0666` minus the daemon's
+  umask on Unix), and refuses a symlink or other reparse point as the final
+  path component. The request is validated (program, absolute paths, metadata
+  size) before the file is opened, so such a rejected request never creates or
+  truncates it; a path that cannot be opened fails the request without
+  starting the process. A missing program or `cwd` fails at spawn, after the
+  file was opened. The file is opened for reading, writing and deletion by
+  other handles, so a reader can follow it and the owner can delete it while
+  the process still runs.
 - The reader writes every output byte to the file before handing it to the
   actor. The file is the only copy of the output: a pipe process has no replay
   buffer, so `replay` and `subscribe` return an empty replay (with correct
@@ -162,18 +173,22 @@ answers `create_pipe` with an error.
 - Exit is published once both the exit status and the end of output are known.
   A descendant that keeps the pipe open (`cmd &`, dev servers) delays that by
   at most one second after the child exits; the reader then closes the pipe,
-  so leftover writers get `SIGPIPE`/`EPIPE`. This is deliberate: the process
-  is reported as finished, and nothing reads what comes later. The file is
-  closed before the exit is published.
+  so leftover writers get `SIGPIPE`/`EPIPE` on Unix and a broken pipe on
+  Windows. This is deliberate: the process is reported as finished, and
+  nothing reads what comes later. The file is closed before the exit is
+  published.
 - `Exited` and the lifecycle carry `signal`, the signal's name such as
-  `"SIGTERM"`, when the process was killed by one; `exit_code` is then null.
-  `signal` is left out when there is none.
-- An exited pipe process stays listed, as a zombie, until `terminate`. The
-  zombie keeps its PID and process group ID reserved, so killing the group can
-  never reach an unrelated process. `terminate` sends SIGKILL to the group and
-  to the child, reaps it and removes the process; it never waits on a
-  descendant that left the group and still holds the pipe. The daemon never
-  deletes output files.
+  `"SIGTERM"`, when a signal ended the process (on Windows, when the daemon
+  signalled it); `exit_code` is then null. `signal` is left out when there is
+  none.
+- On Unix an exited pipe process stays listed, as a zombie, until `terminate`.
+  The zombie keeps its PID and process group ID reserved, so killing the group
+  can never reach an unrelated process. On Windows the process object and job
+  handle stay open until `terminate`, so the PID is not reused either.
+  `terminate` kills the whole tree (SIGKILL on Unix; the job on Windows),
+  reaps it and removes the process; it never waits on a descendant that left
+  the process group or job and still holds the pipe. The daemon never deletes
+  output files.
 
 ### Line count
 
@@ -205,11 +220,19 @@ only; left out for PTYs), `output_error` (left out when there is none) and
 `exited_at`. PTY subscriptions send the same response.
 
 `signal { id, signal }` (pipe only; `"SIGTERM"`, `"SIGINT"` or `"SIGKILL"`)
-signals the process group and the child, and returns `Ok`. Unlike
-`terminate`, it keeps the process: `wait` then gets a normal `Exited` with
-`signal`. Signalling an exited process is allowed and reaches whatever is left
-of its group (an empty group is not an error); after `terminate` the process
-is gone and `signal` fails.
+signals the process tree and returns `Ok`. On Unix the signal goes to the
+process group and the child, as a real signal. **On Windows every signal is a
+hard kill** of the job: there is no console, so SIGTERM and SIGINT cannot be
+caught, and the exit reports the signal that was sent, not a platform exit
+code. Unlike `terminate`, `signal` keeps the process: `wait` then gets a normal
+`Exited` with `signal`. Signalling an exited process is allowed and reaches
+whatever is left of its group or job (an empty group is not an error); after
+`terminate` the process is gone and `signal` fails.
+
+If an outer job refuses the child (`ERROR_ACCESS_DENIED`, for example a job
+with UI restrictions), the daemon runs the command anyway without a job, logs
+a warning once, and kills only the main process; descendants then survive a
+signal or terminate.
 
 `metadata` on `create_pipe` is an opaque JSON object the daemon stores and
 returns as `pipe.metadata` without interpreting it. `set_metadata { id,

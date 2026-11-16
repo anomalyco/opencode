@@ -14,6 +14,49 @@ export default function changelog(root: HTMLElement) {
   if (list) timelineRail(list)
   $$('[data-component="changelog-entry"] > [data-slot="media"]', root).forEach(media)
   copyLinks(root)
+  deferredLists(root)
+}
+
+// A collapsed list the changelog leaves out of its HTML (NoteGroup's `defer`) holds a link to the
+// entry's page. Opening it moves the list in from that page, loaded once per entry, as soon as the
+// pointer reaches the heading. While it loads the group is busy; if loading fails, the link stays.
+function deferredLists(root: HTMLElement) {
+  const pages = new Map<string, Promise<Document | undefined>>()
+  const load = (href: string) => {
+    if (!pages.has(href))
+      pages.set(
+        href,
+        fetch(href)
+          .then((response) => (response.ok ? response.text() : Promise.reject(new Error(String(response.status)))))
+          .then((html) => new DOMParser().parseFromString(html, "text/html"))
+          .catch(() => void pages.delete(href)),
+      )
+    return pages.get(href)!
+  }
+  const link = (group: HTMLElement) => $<HTMLAnchorElement>(':scope > [data-slot="show-more"]', group)
+  const open = (group: HTMLElement) => {
+    const more = link(group)
+    if (!more || group.hasAttribute("aria-busy")) return
+    group.setAttribute("aria-busy", "true")
+    void load(more.href).then((page) => {
+      group.removeAttribute("aria-busy")
+      const list = page?.querySelector(`[data-slot="group"][data-kind="${group.dataset.kind}"] > ul`)
+      if (list) more.replaceWith(list)
+    })
+  }
+  const group = (event: Event) =>
+    target(event).closest('details[data-slot="group"] > summary')?.parentElement as HTMLDetailsElement | null
+  // A click (Enter and Space too) on the heading comes before the group opens, so the link never shows.
+  root.addEventListener("click", (event) => {
+    const details = group(event)
+    if (details && !details.open) open(details)
+  })
+  root.addEventListener("pointerover", (event) => {
+    const details = group(event)
+    const more = details && link(details)
+    if (more) void load(more.href)
+  })
+  $$('details[data-slot="group"][open]', root).forEach(open)
 }
 
 // An entry's media (EntryCarousel): with several slides, dragged or swiped sideways (changelog-motion.ts),

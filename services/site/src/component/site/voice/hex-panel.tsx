@@ -1,8 +1,8 @@
 import "./voice-mode.css"
-import { createEffect, onCleanup, onMount, type Setter, Show } from "solid-js"
+import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useI18n } from "~/context/i18n-context"
 import { ExternalArrow, HexMark, NewTab } from "../icons"
-import { menuOpen } from "../menu-open"
+import { watchMenus } from "../menu-watch"
 import { prefersSheet, Sheet, type SheetControl } from "../sheet"
 
 const hexUrl = "https://anoma.ly/hex"
@@ -10,17 +10,17 @@ const hexUrl = "https://anoma.ly/hex"
 /**
  * The Hex promo's pop-up (hex-promo.tsx): voice mode's Hex section (the square icon, title, line and
  * actions, as they look in the voice panel), anchored to the orb on desktop and in a bottom sheet on
- * touch phones. Its code and voice-mode.css load once the orb is hovered, focused or pressed.
+ * touch phones. Its code and voice-mode.css load once the orb is hovered, focused or pressed. It
+ * shows whether it is open on the orb (hex-orb.ts), which the sheet does itself on phones.
  */
 export default function HexPanel(props: {
   orb: HTMLButtonElement
-  open: boolean
-  setOpen: Setter<boolean>
   /** Hands the orb what its click does. */
   toggle: (run: () => void) => void
 }) {
   const i18n = useI18n()
   const sheetMode = prefersSheet()
+  const [open, setOpen] = createSignal(false)
   const title = () =>
     i18n.t(matchMedia("(pointer: coarse)").matches ? "site.hexPromo.titleDevice" : "site.hexPromo.titleComputer")
   let panel: HTMLElement | undefined
@@ -28,33 +28,34 @@ export default function HexPanel(props: {
 
   const show = () => {
     if (sheetMode) return sheet?.open(props.orb)
-    props.setOpen(true)
+    setOpen(true)
     queueMicrotask(() => panel?.querySelector<HTMLElement>("a, button")?.focus({ preventScroll: true }))
   }
   const hide = (refocus = true) => {
-    if (!props.open) return
-    props.setOpen(false)
+    if (!open()) return
+    setOpen(false)
     if (sheetMode) return sheet?.close()
     if (refocus) props.orb.focus({ preventScroll: true })
   }
-  props.toggle(() => (props.open ? hide() : show()))
+  props.toggle(() => (open() ? hide() : show()))
 
   onMount(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !props.open || sheetMode) return
+      if (event.key !== "Escape" || !open() || sheetMode) return
       event.preventDefault()
       hide()
     }
     const onPointer = (event: PointerEvent) => {
-      if (!props.open || sheetMode) return
+      if (!open() || sheetMode) return
       const target = event.target as Node
       if (panel?.contains(target) || props.orb.contains(target)) return
       // Back to the orb, unless the click lands on something that takes focus itself.
       hide(!(target instanceof Element && target.closest("a, button, input, textarea, select, [tabindex]")))
     }
     // The sheet sets the orb's aria-expanded itself, and closes on a drag, a backdrop tap or Escape.
-    const expanded = new MutationObserver(() => props.setOpen(props.orb.getAttribute("aria-expanded") === "true"))
+    const expanded = new MutationObserver(() => setOpen(props.orb.getAttribute("aria-expanded") === "true"))
     if (sheetMode) expanded.observe(props.orb, { attributes: true, attributeFilter: ["aria-expanded"] })
+    if (!sheetMode) props.orb.setAttribute("aria-controls", "hex-promo")
     document.addEventListener("keydown", onKey)
     document.addEventListener("pointerdown", onPointer, true)
     onCleanup(() => {
@@ -64,12 +65,16 @@ export default function HexPanel(props: {
     })
   })
 
-  // Another menu opening closes the pop-up (hex-promo.tsx fades the orb).
-  createEffect(() => menuOpen() && hide(false))
+  // Another menu opening closes the pop-up (the orb fades, hex-orb.ts).
+  onMount(() => onCleanup(watchMenus("[data-component='voice-mode']", (menu) => menu && hide(false))))
+  createEffect(() => {
+    props.orb.toggleAttribute("data-open", open())
+    if (!sheetMode) props.orb.setAttribute("aria-expanded", String(open()))
+  })
 
   // Voice mode's Hex section, unchanged: the wrapper opens with its height and staggered parts.
   const section = () => (
-    <div data-slot="hex-wrap" data-open={props.open ? "" : undefined}>
+    <div data-slot="hex-wrap" data-open={open() ? "" : undefined}>
       <div data-slot="hex-clip">
         <aside data-slot="hex-sell" aria-label="Hex">
           {/* The product list's tile: the flat white Hex mark on a black square. */}
@@ -106,9 +111,9 @@ export default function HexPanel(props: {
           data-slot="popover"
           data-explainer=""
           data-promo-panel=""
-          aria-hidden={props.open ? undefined : "true"}
-          inert={!props.open}
-          data-hidden={props.open ? undefined : ""}
+          aria-hidden={open() ? undefined : "true"}
+          inert={!open()}
+          data-hidden={open() ? undefined : ""}
         >
           {section()}
         </section>

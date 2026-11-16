@@ -1,5 +1,6 @@
 /**
- * A steer moves the run's blocking shells and subagents to the background, so the agent reads it at its next step.
+ * A steer moves the run's blocking shells to the background, so the agent reads it at its next step. Subagents always
+ * run in the background already, so a steer never moves them.
  * The move reads the blocking work once the steer is admitted, so work that started during admission moves too.
  * Nothing is claimed: the server moves each job once and ignores repeated moves, so overlapping steers, a failed
  * move, or one that ran before a job started never leave work for a later steer to skip.
