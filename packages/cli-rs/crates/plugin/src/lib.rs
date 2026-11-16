@@ -386,13 +386,23 @@ impl From<abi::Plugin> for Definition {
 
 /// A plugin of the one API, run in process: its closures get Rust values, with no JSON step.
 fn in_process(plugin: abi::Plugin) -> Definition {
+    linked(plugin.id, Rc::new(move |setup, _| (plugin.setup)(setup)), false)
+}
+
+/// What a linked plugin's setup is given beside the registration: the limits of the budget, for a carrier that
+/// enforces them itself (Luau's interrupt).
+pub(crate) type LinkedSetup = Rc<dyn Fn(&mut abi::Setup<'_>, contain::Limits) -> Result<(), String>>;
+
+/// A plugin whose closures run in process on the built-ins' [`Scope`]: a built-in, or an `external` plugin whose
+/// carrier is in process too (Luau), which an overrun fails as it fails a library.
+pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) -> Definition {
     // The failure of the running activation: a call that panicked.
     let failure: Rc<RefCell<Option<String>>> = Rc::default();
     let error: ErrorFn = {
         let failure = failure.clone();
         Rc::new(move || failure.borrow().clone())
     };
-    let mut definition = Definition::fallible(plugin.id, move |setup: &mut Setup<'_>| {
+    let mut definition = Definition::fallible(id, move |setup: &mut Setup<'_>| {
         *failure.borrow_mut() = None;
         let failed = failure.clone();
         setup.failure(Rc::new(move || failed.borrow().clone()));
@@ -414,14 +424,16 @@ fn in_process(plugin: abi::Plugin) -> Definition {
             monitor: setup.monitor.clone(),
             slot: setup.monitor.slot(&setup.artifact()),
             owners: Owners::new(setup.id(), Rc::downgrade(setup.host()), &activation),
+            external,
         });
+        let limits = setup.monitor.limits();
         let mut api = abi::Registered::new(setup.id(), None);
         api.set_waker(activation.waker());
         api.set_link(mailbox);
         // Setup reaches the host as a command does: its effects wait on the one queue. A setup that panics runs its
         // dispose callbacks within the same call, as the C ABI's `create` does, so nothing either asked for happens.
         let (set_up, _) = scope.monitor.call(scope.slot, "setup", || {
-            scope.attempt(&**setup.host(), |host| match contain::catch(|| (plugin.setup)(&mut api.setup_with(host))) {
+            scope.attempt(&**setup.host(), |host| match contain::catch(|| run(&mut api.setup_with(host), limits)) {
                 Ok(set_up) => set_up,
                 Err(panic) => {
                     api.dispose(Some(host));
@@ -714,6 +726,9 @@ struct Scope {
     slot: contain::Slot,
     /// What its calls hold of the input (P2).
     owners: Rc<Owners>,
+    /// An external plugin on an in-process carrier (Luau): an overrun fails it, as it fails a library; a built-in's is
+    /// a host bug.
+    external: bool,
 }
 
 /// Mounts an overlay surface into its frame.
@@ -961,14 +976,26 @@ impl Scope {
         }
         let (out, timed) = self.monitor.call(self.slot, export, || behave::calling(export, || self.attempt(host, f)));
         let panicked = matches!(out, Some(Err(_)));
-        budget(&self.host, &self.monitor, &self.id, &timed, panicked);
-        if timed.overrun {
+        budget(&self.host, &self.monitor, &self.id, &timed, panicked || (timed.overrun && self.external));
+        if timed.overrun && !self.external {
             self.monitor.host_overran();
             let took = timed.cpu.unwrap_or(timed.took).as_millis();
             log::error!("plugin {}: {export} took {took} ms, a host bug in a built-in", self.id);
         }
-        if let Some(Err(panic)) = out {
-            let (revoked, error) = (self.revoked.take(), format!("{export} panicked: {panic}"));
+        let error = match out {
+            Some(Err(panic)) => Some(format!("{export} panicked: {panic}")),
+            // A call that returned late did return: what it asked for happens, then it fails, as over the C ABI.
+            _ if timed.overrun && self.external => {
+                let limit = self.monitor.limits().overrun.as_millis();
+                Some(match timed.cpu {
+                    Some(cpu) => format!("{export} used {} ms of CPU, over the limit of {limit} ms", cpu.as_millis()),
+                    None => format!("{export} took {} ms, over the limit of {limit} ms", timed.took.as_millis()),
+                })
+            }
+            _ => None,
+        };
+        if let Some(error) = error {
+            let revoked = self.revoked.take();
             fail(&self.host, &self.id, &self.failure, revoked, &self.activation, error);
         }
         timed.overrun
