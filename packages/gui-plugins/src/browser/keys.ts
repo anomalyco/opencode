@@ -30,12 +30,12 @@ export type PageShortcut = {
 
 // Unshifted chords with the platform's modifier that belong to the app shell or browser pane rather than the page:
 // opening, closing or switching tabs, focusing the address field, opening settings, and toggling the file tree.
-const shellKeys = ["t", "w", "l", "f", "n", "1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "\\"]
+const shellKeys = ["t", "w", "l", "f", "g", "n", "1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "\\"]
 
 // Shifted chords with the platform's modifier that belong to the app shell rather than the page: reopening a tab,
 // switching side-panel tabs, toggling the side panel, opening the command palette, or running session commands. New Window and Close Window
 // (⇧⌘N, ⇧⌘W) stay unclaimed: only their menu accelerators handle them, and claiming a chord also blocks the menu.
-const shellShiftKeys = ["t", "[", "]", "r", "p", "l", "e", "o", "s"]
+const shellShiftKeys = ["t", "[", "]", "r", "g", "p", "l", "e", "o", "s"]
 
 // The side panel's launchers: Review, Browser and Open file, with ⌃⌘ on macOS and Ctrl+Alt elsewhere. Only a typed
 // Latin letter counts, so AltGr (Ctrl+Alt) typing on other layouts stays with the page.
@@ -82,6 +82,7 @@ export function pageShortcut(input: PageKey, mac: boolean): PageShortcut | undef
   const launcher = mac ? input.meta && input.control && !input.alt : input.control && input.alt && !input.meta
 
   const matched =
+    (!mac && key === "f3" && !input.control && !input.meta && !input.alt) ||
     (input.control && !input.meta && !input.alt && (key === "tab" || (key === "`" && !input.shift))) ||
     (launcher && !input.shift && launcherKeys.includes(input.key.toLowerCase())) ||
     (mod &&

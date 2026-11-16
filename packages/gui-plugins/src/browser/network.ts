@@ -25,7 +25,7 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
           Effect.runPromise(input.rpc["tunnel.read"]({ ...input.attachment, tunnelID }, options), { signal }),
         write: (tunnelID, data, end, signal) =>
           Effect.runPromise(
-            input.rpc["tunnel.write"]({ ...input.attachment, tunnelID, data: Base64.encode(data), end }, options),
+              input.rpc["tunnel.write"]({ ...input.attachment, tunnelID, data: Base64.encode(data), ...(end !== undefined && { end }) }, options),
             { signal },
           ),
         close: (tunnelID) =>

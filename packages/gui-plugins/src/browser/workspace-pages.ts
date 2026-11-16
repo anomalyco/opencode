@@ -46,6 +46,13 @@ export function workspacePages(
       const identity = prior ?? previousRoot ?? (reader.type === "remote" ? await reader.pin(document, lifetime) : await previewRoot(root).then(pin => pin.id, () => undefined))
 
       if (lifetime.aborted || disposed) return
+
+      // Reconnect/reload replaces this document; its origin and storage are not a second live grant.
+      if (old) {
+        grants.get(old)?.release()
+        grants.delete(old)
+      }
+
       previousRoot = undefined
       lastRoot = identity
       let first = true

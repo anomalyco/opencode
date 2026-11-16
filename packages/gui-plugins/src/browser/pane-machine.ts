@@ -203,10 +203,20 @@ export function transitionPane(state: PaneState, event: PaneMachineEvent): PaneT
 
   if (event.type === "registered") {
     if (state.bindings.has(event.binding)) return { state, effects: [] }
+    // A reconnect can arrive before the old attach stream observes the disconnect. The window owns one
+    // native pane for this session, even when the renderer lost the IPC that would normally close it.
+    const bindings = new Map(state.bindings)
+    const effects: PaneEffect[] = []
+
+    for (const [id, old] of bindings) {
+      if (old.window !== event.window || old.storageKey !== event.storageKey) continue
+      bindings.delete(id)
+      effects.push(...close(old, "browser.pane.replaced", false).effects)
+    }
 
     return {
-      state: { status: "active", bindings: new Map(state.bindings).set(event.binding, createConnecting(event)) },
-      effects: [{ type: "start-timer", binding: event.binding, ms: REGISTER_TIMEOUT_MS }],
+      state: { status: "active", bindings: bindings.set(event.binding, createConnecting(event)) },
+      effects: [...effects, { type: "start-timer", binding: event.binding, ms: REGISTER_TIMEOUT_MS }],
     }
   }
 
@@ -480,7 +490,7 @@ function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "reg
       {
         status: "unloaded",
         // A restored page's first navigation takes the next generation.
-        tab: { ...tab, loadError: undefined, loading: false, canGoBack: false, canGoForward: false, generation: tab.generation + 1 },
+        tab: { id: tab.id, url: tab.url, title: tab.title, loading: false, canGoBack: false, canGoForward: false, generation: tab.generation + 1 },
       },
     ]),
   )

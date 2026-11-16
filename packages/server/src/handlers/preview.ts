@@ -1,10 +1,12 @@
 import { Session } from "@opencode/core/session"
 import { FileAccess } from "@opencode/core/file-access"
 import { Permission } from "@opencode/core/permission"
+import { Plugin } from "@opencode/core/plugin"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Agent } from "@opencode/schema/agent"
 import { openPreviewFile, previewRoot } from "@opencode/util/preview-scope"
 import { Effect, Stream } from "effect"
+import path from "node:path"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ContentHeaders } from "../content-headers"
 import { parseRange } from "./fs"
@@ -54,11 +56,16 @@ export const makePreviewRead = Effect.gen(function* () {
       // Authorize the spelling requested AND the physical name of the handle that supplies the bytes.
       // Evaluate anew for HEAD and GET, including ranges. Never turn an ask into a page-initiated prompt.
       const allowed = yield* Effect.gen(function* () {
+        // A cold Location can already list the built-in agent before its configured read policy exists.
+        const plugins = yield* Plugin.Service
+        if (!(yield* plugins.list()).some(item => item.id === "opencode.config.agent" && item.state.status === "active")) return false
         const access = yield* FileAccess.Service
         const permission = yield* Permission.Service
         const id = req.headers["x-opencode-preview-agent"]
         const agent = id ? Agent.ID.make(decodeURIComponent(id)) : session.agent
-        const paths = [query.path, opened.relativePath, opened.path]
+        // Both names are inside the pinned root. Only their suffixes are permission resources;
+        // an absolute kernel name (e.g. /private/var/...) need not start with the session's spelling.
+        const paths = [query.path, opened.relativePath].map(name => path.join(session.location.directory, name))
         const resources = new Set<string>()
         const external = new Set<string>()
         for (const path of new Set(paths)) {

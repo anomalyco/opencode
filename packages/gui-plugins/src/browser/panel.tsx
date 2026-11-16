@@ -206,7 +206,7 @@ export default function SessionBrowserPane(props: {
     const tab = state()
 
     // Nothing to search while a dialog blocks the page; the bar would also sit beside the dialog's focus trap.
-    if (!tab || (action.type === "open" && promptKey(true))) return
+    if (!tab || (action.type !== "close" && promptKey(true))) return
 
     if (action.type === "open" && findInput?.isConnected) {
       findInput.focus()
@@ -426,6 +426,7 @@ export default function SessionBrowserPane(props: {
       inspect: toggleInspect,
       focusAddress,
       find: () => find({ type: "open" }),
+      findMatch: (type) => find({ type }),
       // Dispatched inside the pane, so keybinds scoped to it, such as closing the browser tab, apply.
       press: (event) => {
         if (!visible()) return

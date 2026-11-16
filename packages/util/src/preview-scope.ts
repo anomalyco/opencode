@@ -29,7 +29,8 @@ export function previewAllowed(root: string, document: string, path: string, ent
     )
   )
     return false
-  return ![...split(root), ...file].some(
+  // The grant already names this workspace. Protect hidden and secret paths beneath it, not its ancestors.
+  return !file.some(
     (part) =>
       part.startsWith(".") ||
       /^(?:id_(?:rsa|dsa|ecdsa|ed25519)|credentials|secrets\..*|.*\.(?:pem|key|pfx|p12))$/i.test(part),

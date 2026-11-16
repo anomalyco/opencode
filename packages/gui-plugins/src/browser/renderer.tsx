@@ -199,6 +199,21 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }
   })
 
+  for (const direction of ["next", "previous"] as const) {
+    const shift = direction === "previous" ? "shift+" : ""
+    ctx.add(Command, (): Command | undefined => {
+      const pane = model()?.pane()
+
+      if (!pane) return
+
+      return {
+        id: `find.${direction}`, title: ctx.t(`find.${direction}`), group: ctx.t("command.category.view"),
+        bind: mac ? `mod+${shift}g` : `mod+${shift}g,${shift}f3`, scope: "#browser-panel", editable: true,
+        enabled: pane.visible() && pane.inspectable(), run: () => pane.findMatch(direction),
+      }
+    })
+  }
+
   // The system browser's address shortcut, in the pane and, forwarded like mod+t and mod+w, from a page with focus.
   // Ctrl+L focuses the composer outside the pane on Windows and Linux.
   ctx.add(Command, (): Command | undefined => {
