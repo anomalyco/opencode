@@ -1562,17 +1562,37 @@ pub fn reconcile(tui: &Rc<Tui>) {
     }
 }
 
-/// Records the user's `decision` on `artifact`, the build of `target` they were shown, and applies it: an approved
-/// build loads at once. `Ok(false)` records nothing when the build changed since (bigboi-1); an error when the decision
-/// cannot be saved (bigboi-7).
-pub fn decide(tui: &Rc<Tui>, target: &str, artifact: &Artifact, decision: Decision) -> Result<bool, String> {
-    let Some(loader) = tui.plugins.loader.borrow().clone() else { return Ok(false) };
-    let recorded = loader.decide(target, artifact, decision)?;
-    if recorded {
-        loader.reconcile(&host(tui), &tui.plugins);
-        tell_plugins(tui);
-    }
-    Ok(recorded)
+/// Records the user's `decision` on `artifact`, the build of `target` they were shown, once the build on the disk is
+/// identified again, and applies it: an approved build loads at once. `done` gets `Ok(false)` when nothing was recorded
+/// as the build changed since (bigboi-1), and an error when the decision cannot be saved (bigboi-7). A TypeScript
+/// plugin's tree is hashed off the UI thread (FT-2), so `done` runs in a later turn; a library's, at once.
+pub fn decide(
+    tui: &Rc<Tui>,
+    target: &str,
+    artifact: &Artifact,
+    decision: Decision,
+    done: impl FnOnce(&Rc<Tui>, Result<bool, String>) + 'static,
+) {
+    let Some(loader) = tui.plugins.loader.borrow().clone() else { return done(tui, Ok(false)) };
+    let found = loader.found(target);
+    let (target, artifact) = (target.to_owned(), artifact.clone());
+    let record = move |tui: &Rc<Tui>, now: Option<Result<Artifact, String>>| {
+        let recorded = loader.decide(&target, &artifact, decision, now);
+        if recorded == Ok(true) {
+            loader.reconcile(&host(tui), &tui.plugins);
+            tell_plugins(tui);
+        }
+        done(tui, recorded);
+    };
+    let Some(found @ opencode_plugin::loader::Found::Tree(_)) = found else {
+        return record(tui, found.map(opencode_plugin::loader::Found::identify));
+    };
+    let weak = tui.weak();
+    tui.app.spawn(async move { tokio::task::spawn_blocking(move || found.identify()).await.ok() }, move |_, now| {
+        if let Some(tui) = weak.upgrade() {
+            record(&tui, now);
+        }
+    });
 }
 
 /// The entries that name no plugin, with their `options` as JSON text.

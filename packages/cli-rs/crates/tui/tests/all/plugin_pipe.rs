@@ -186,6 +186,26 @@ pub fn walked(harness: &Harness, scripts: &Scripts) {
     }
 }
 
+/// The user's `decision` on `artifact`, the build of `target` held back, as the manager's question gives it: what was
+/// recorded once the tree was hashed again, off the UI thread (FT-2).
+pub fn decide(
+    harness: &Harness,
+    target: &str,
+    artifact: &opencode_plugin::loader::approval::Artifact,
+    decision: opencode_plugin::loader::approval::Decision,
+) -> Result<bool, String> {
+    let recorded = Rc::new(std::cell::RefCell::new(None));
+    let answer = recorded.clone();
+    opencode_tui::plugins::host::decide(&harness.tui, target, artifact, decision, move |_, recorded| {
+        answer.replace(Some(recorded));
+    });
+    harness.wait("the decision was recorded", || {
+        turn(harness);
+        recorded.borrow().is_some()
+    });
+    recorded.take().unwrap()
+}
+
 /// One turn of the UI thread, and its frame when it wants one, as the run loop paints: a revision past a frame's rows
 /// waits for the next paint (Pl).
 fn turn(harness: &Harness) {
@@ -1191,7 +1211,7 @@ impl Project {
         let tui = &self.pipe.harness.tui;
         let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(tui, &self.target()) else { return false };
         assert!(artifact.script, "{artifact:?}");
-        let recorded = opencode_tui::plugins::host::decide(tui, &self.target(), &artifact, decision).unwrap();
+        let recorded = decide(&self.pipe.harness, &self.target(), &artifact, decision).unwrap();
         self.settle();
         recorded
     }
@@ -2648,6 +2668,101 @@ fn the_first_frame_does_not_wait_on_a_plugins_files() {
     let walked = pipe.scripts().hashed();
     assert!(walked > 0 && walked < 64 << 10, "the walk read {walked} bytes");
     assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the plugin's files");
+}
+
+// Expected (FT-2, js-followups): the user's Approve on a project's TypeScript plugin with 16 MB of dependencies returns
+// before its tree is hashed again, and the UI thread reads none of its files for it: the answer is recorded once the
+// hash off the UI thread ends, as the build shown, and the plugin then loads.
+#[test]
+fn an_approval_does_not_wait_on_a_plugins_files() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let work = root.path().join("work");
+    std::fs::create_dir_all(work.join(".git")).unwrap();
+    let dir = work.join(".opencode").join("plugins").join("heavy");
+    let lib = dir.join("node_modules/dep/lib");
+    std::fs::create_dir_all(&lib).unwrap();
+    std::fs::write(dir.join("node_modules/dep/package.json"), r#"{ "name": "dep", "version": "1.0.0" }"#).unwrap();
+    let chunk = vec![b'x'; 8 << 10];
+    for index in 0..2000 {
+        std::fs::write(lib.join(format!("{index}.js")), &chunk).unwrap();
+    }
+    std::fs::write(dir.join("tui.ts"), "export default { id: \"example.heavy\", setup() {} }\n").unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    walked(&pipe.harness, &pipe.scripts());
+    let target = dir.to_string_lossy().into_owned();
+    let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(&pipe.harness.tui, &target) else {
+        panic!("nothing is held")
+    };
+    let before = opencode_plugin::loader::approval::hashed();
+    let recorded = Rc::new(std::cell::RefCell::new(None));
+    let answer = recorded.clone();
+    let decision = opencode_plugin::loader::approval::Decision::Approved;
+    opencode_tui::plugins::host::decide(&pipe.harness.tui, &target, &artifact, decision, move |_, recorded| {
+        answer.replace(Some(recorded));
+    });
+    assert!(recorded.borrow().is_none(), "the approval waited on the plugin's tree");
+    pipe.harness.wait("the decision was recorded", || {
+        turn(&pipe.harness);
+        recorded.borrow().is_some()
+    });
+    assert_eq!(recorded.take(), Some(Ok(true)));
+    pipe.active("example.heavy");
+    assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the plugin's files");
+}
+
+// Expected (FT-2, js-followups): a project plugin's file rewritten after its approval with its size and time kept, so
+// the walk's stamp cannot tell, fails the stage of the approved copy; the plugin is held back, its tree is hashed again
+// off the UI thread, and the new build is asked about. Nothing of it runs, and the UI thread reads none of its files.
+#[test]
+fn a_stage_that_finds_other_bytes_hashes_off_the_ui_thread() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let work = root.path().join("work");
+    std::fs::create_dir_all(work.join(".git")).unwrap();
+    let dir = work.join(".opencode").join("plugins").join("staged");
+    std::fs::create_dir_all(&dir).unwrap();
+    let (marker, data) = (root.path().join("staged.ran"), dir.join("data.js"));
+    std::fs::write(&data, "export const made = \"approved\"\n").unwrap();
+    let module = format!(
+        "import {{ made }} from \"./data.js\"\nexport default {{ id: \"example.staged\", setup() {{ require(\"node:fs\").appendFileSync({marker:?}, made + \" \" + import.meta.dir + \"\\n\") }} }}\n"
+    );
+    std::fs::write(dir.join("tui.ts"), module).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.settle();
+    let target = dir.to_string_lossy().into_owned();
+    let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(&pipe.harness.tui, &target) else {
+        panic!("nothing is held")
+    };
+    let approved = opencode_plugin::loader::approval::Decision::Approved;
+    assert_eq!(decide(&pipe.harness, &target, &artifact, approved), Ok(true));
+    pipe.active("example.staged");
+    let ran = std::fs::read_to_string(&marker).unwrap();
+    let staged = PathBuf::from(ran.trim().strip_prefix("approved ").unwrap());
+    // Past the time a recent change makes the stamp racy; the approved copy goes, so the next load stages it again.
+    std::thread::sleep(Duration::from_millis(2100));
+    let modified = std::fs::metadata(&data).unwrap().modified().unwrap();
+    std::fs::write(&data, "export const made = \"replaced\"\n").unwrap();
+    std::fs::File::options().write(true).open(&data).unwrap().set_modified(modified).unwrap();
+    std::fs::remove_dir_all(&staged).unwrap();
+    let before = opencode_plugin::loader::approval::hashed();
+    opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
+    pipe.settle();
+    let listed =
+        || pipe.harness.tui.plugins.entries().into_iter().find(|entry| entry.target.as_deref() == Some(&target));
+    assert_eq!(listed().map(|entry| entry.status), Some(Status::Pending));
+    let Some((Ok(held), _)) = opencode_tui::plugins::host::held(&pipe.harness.tui, &target) else {
+        panic!("the new build is not asked about")
+    };
+    assert_ne!(held.sha256, artifact.sha256);
+    assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the plugin's files");
+    assert_eq!(std::fs::read_to_string(&marker).unwrap(), ran, "what changed ran");
 }
 
 // Expected (carbon-1, the flag on): a project the client works in loads nothing into the JS host as it starts for the

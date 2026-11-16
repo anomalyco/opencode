@@ -10,7 +10,8 @@ use crate::prelude::*;
 /// Asks whether the build of the project plugin of `target` that the loader holds back now may run. The answer names
 /// that build, so it records nothing when the build changed meanwhile (bigboi-1, carbon-1). Approve and Decline keep
 /// the answer for this build; Escape, Ctrl+C, the header and the backdrop leave it pending (carbon-6). However the
-/// question closes, `back` runs once the answer is applied.
+/// question closes, `back` runs after it, once a library's answer is applied; a TypeScript plugin's tree may still be
+/// hashed for its answer then.
 pub(super) fn ask(tui: &Tui, target: &str, back: impl Fn() + 'static) {
     let Some((held, unsaved)) = super::host::held(tui, target) else { return };
     let artifact = match held {
@@ -22,16 +23,17 @@ pub(super) fn ask(tui: &Tui, target: &str, back: impl Fn() + 'static) {
         Rc::new(move || {
             let Some(tui) = weak.upgrade() else { return };
             let (target, artifact) = (target.clone(), artifact.clone());
-            // After the confirm has closed, and before the list comes back.
+            // After the confirm has closed, and before the list comes back; a TypeScript plugin's answer applies once its
+            // tree is hashed off the UI thread, and the list follows it then.
             tui.app.defer(bind!(tui, |tui, _| {
-                match super::host::decide(&tui, &target, &artifact, decision) {
+                super::host::decide(&tui, &target, &artifact, decision, |tui, recorded| match recorded {
                     Ok(true) => {}
                     Ok(false) => tui.toasts.show(ToastOptions::new(
                         Variant::Warning,
                         "The plugin changed while you were asked, so nothing was saved. Review the new build.",
                     )),
                     Err(error) => tui.toasts.error(format!("The decision was not saved: {error}")),
-                }
+                });
             }));
         })
     };

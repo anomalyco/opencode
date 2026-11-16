@@ -640,7 +640,9 @@ own files and of its dependencies' packages) changed, or a file changed within t
 A project's TypeScript plugin waits for approval as a native build does (below): its artifact is the directory and a
 SHA-256 of every file in it, hidden ones and `node_modules` included, and nothing of it reaches the JS host before.
 The JS host imports the staged copy of the approved bytes, so a dependency changed after approval in a way the stamp
-does not see still runs only what was approved. A
+does not see still runs only what was approved: its copy fails, the plugin is held back, and its tree is hashed whole
+again for the question about the new build. The tree hashed again when the user approves, the copy and that hash all
+run off the UI thread too, so Approve returns at once and the plugin starts once they end. A
 file outside the directory that it imports is not part of what was approved. Safe mode holds a TypeScript plugin as it
 holds a library. The JS host's standard output is the protocol's: a plugin's `console` (every method) and
 `process.stdout`, its own modules' and its dependencies' included, write to the JS host's standard error, which the
