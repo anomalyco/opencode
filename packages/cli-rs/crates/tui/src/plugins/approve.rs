@@ -67,6 +67,16 @@ fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String 
         unsaved.map(|reason| format!("\nYour answer lasts until opencode exits: {reason}.")).unwrap_or_default();
     // The real path as a user would type it: Windows' canonical form starts `\\?\` (`\\?\C:\`, `\\?\UNC\`).
     let path = opencode_util::path::strip_verbatim(&artifact.path.to_string_lossy()).into_owned();
+    // A Luau plugin's directory is held by the same artifact as a TypeScript plugin's (spike `luau-spike`).
+    #[cfg(feature = "luau")]
+    if artifact.script && opencode_plugin::luau::enabled() && opencode_plugin::luau::is_plugin(&artifact.path) {
+        return format!(
+            "This project wants to run a Luau plugin inside opencode:\n\n{target}\nPlugin directory: {path}\
+             {elsewhere}\nSHA-256 of its files: {}…\n\nIt has no direct access to your files, but it acts through \
+             opencode with your permissions. Approve it only if you trust this project.{saved}",
+            artifact.short(),
+        );
+    }
     if artifact.script {
         return format!(
             "This project wants to run TypeScript code in opencode's JS host:\n\n{target}\nModule directory: {path}\
