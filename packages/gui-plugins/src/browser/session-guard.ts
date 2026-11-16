@@ -7,13 +7,18 @@ import { pagePermission } from "./policy"
 const ManifestPermissions = Schema.Struct({ permissions: Schema.optional(Schema.Array(Schema.Unknown)) })
 
 /**
- * Installs what Electron keeps once per session, which every tab of the partition shares, and in the profile its
- * extensions' pages too: a pane tab's web page asks its user, through its entry in `pages` by web contents ID, for the
- * features `site-permissions.ts` lists, and gets no other permission, device or screen; any other web page gets none;
- * an extension's page gets the clipboard and
- * notifications its manifest declares (`pagePermission`); a download goes to the tab whose page started it, by web
- * contents ID, or to the system's save flow when no tab takes it. Returns the download listener's removal. The
- * permission handlers stay, so nothing is allowed by Electron's default after the pane goes.
+ * The one owner of what Electron keeps once per session, which every tab of the partition shares, and in the profile
+ * its extensions' pages too:
+ * - permissions: a pane tab's web page asks its user, through its entry in `pages` by web contents ID
+ *   (`createPagePrompts`, which applies the agent-driven rule), for the features `site-permissions.ts` lists, and gets
+ *   no other permission, device or screen; any other web page gets none; an extension's page gets the clipboard and
+ *   notifications its manifest declares (`pagePermission`);
+ * - client certificates: never sent; every selection is answered with none;
+ * - `file:`: never loaded or navigated to by any page of the session;
+ * - downloads: each goes to the tab whose page started it, by web contents ID, or to the system's save flow when no
+ *   tab takes it.
+ * Returns the removal of its app and session listeners. The permission handlers and the `file:` refusal stay, so
+ * nothing is allowed by Electron's default after the pane goes.
  */
 export function guardSession(
   session: Electron.Session,
