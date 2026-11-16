@@ -21,6 +21,7 @@ import {
   documentGeneration,
   documentIcon,
   documentTab,
+  frameStillCurrent,
   isDocumentClosed,
   isNavigationPending,
   transitionDocument,
@@ -388,6 +389,7 @@ export function createBrowserPage(
 
   let documentState = createDocumentState(options.restore)
   const closed = () => isDocumentClosed(documentState)
+  let captures = 0
   let reported = ""
 
   const detail = () => {
@@ -1513,12 +1515,7 @@ export function createBrowserPage(
         })
 
         if (blocked) throw new Error(undrawableMessage(blocked))
-        // Capture the document a navigation in flight lands on, not the one it leaves. One that is still going after
-        // the wait leaves the current document in place, which is then what the tab shows.
-        await waitFor(() => !isNavigationPending(documentState), signal, 10_000).catch(() => abortError(signal))
-        // A frame rendered after the last navigation or action.
-        await painted()
-        const capture = await screenshot(action, signal)
+        const capture = await captureFrame(action, signal)
 
         const id = await files.save(`screenshot.${capture.format}`, `image/${capture.format}`, capture.data, [
           ...captureSources,
@@ -1868,9 +1865,45 @@ export function createBrowserPage(
     return id ? sessions.get(id) : undefined
   }
 
+  async function captureFrame(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {
+    abortError(signal)
+    const expired = AbortSignal.timeout(CAPTURE_DEADLINE_MS)
+    const stop = AbortSignal.any([expired, signal])
+    const interrupted = Promise.withResolvers<never>()
+    const cancel = () => interrupted.reject(new Error(expired.aborted ? undrawableMessage("stalled") : "Browser capture was cancelled."))
+
+    // A temporary compositor consumer keeps a hidden surface producing frames. Ignore subscription frames: the
+    // first can be cached. Page.captureScreenshot requests a renderer redraw and copies the resulting surface.
+    if (!captures) contents.beginFrameSubscription(true, () => {})
+    captures++
+    stop.addEventListener("abort", cancel, { once: true })
+
+    try {
+      const capture = async () => {
+        if (isNavigationPending(documentState)) await waitFor(() => !isNavigationPending(documentState), stop, CAPTURE_DEADLINE_MS)
+        abortError(stop)
+        const before = documentState
+        const frame = await screenshot(action, stop)
+        abortError(stop)
+
+        if (!frameStillCurrent(before, documentState)) throw new CodedError(Browser.FailureCode.documentChanged, "The document changed during capture. Check the tab and take a new screenshot.")
+
+        return frame
+      }
+
+      return await Promise.race([capture(), interrupted.promise])
+    } finally {
+      stop.removeEventListener("abort", cancel)
+      captures--
+
+      if (!captures && !contents.isDestroyed()) contents.endFrameSubscription()
+    }
+  }
+
   async function screenshot(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {
     const element = action.ref ? await rect(target(action.ref), true) : undefined
     const metrics = await cdp.send("Page.getLayoutMetrics")
+    abortError(signal)
     const viewport = metrics.cssVisualViewport
     // Chromium renders beyond the viewport only for a tab it presents on screen.
     const onscreen = view.getVisible() && win.isVisible() && !win.isMinimized()
@@ -1892,7 +1925,7 @@ export function createBrowserPage(
     )
       return beyondViewport(action, { ...element, x: element.x + viewport.pageX, y: element.y + viewport.pageY })
 
-    // Otherwise the viewport, or the element's part of it, copied from the tab's last frame; hidden tabs keep rendering.
+    // Crop the requested redraw to the element's visible part without changing the page's viewport.
     const clip = element && {
       x: Math.max(0, element.x),
       y: Math.max(0, element.y),
@@ -1904,17 +1937,21 @@ export function createBrowserPage(
       throw new Error(
         "Element has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
       )
-    const zoom = contents.getZoomFactor()
+    const ratio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
+    const shot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false, optimizeForSpeed: true })
+    abortError(signal)
+    const viewportImage = electron.nativeImage.createFromBuffer(Buffer.from(shot.data, "base64"))
 
-    const image = await surface(
-      clip && {
-        x: Math.round(clip.x * zoom),
-        y: Math.round(clip.y * zoom),
-        width: Math.max(1, Math.round(clip.width * zoom)),
-        height: Math.max(1, Math.round(clip.height * zoom)),
-      },
-      signal,
-    )
+    const image = clip
+      ? viewportImage.crop({
+          x: Math.round(clip.x * ratio),
+          y: Math.round(clip.y * ratio),
+          width: Math.max(1, Math.round(clip.width * ratio)),
+          height: Math.max(1, Math.round(clip.height * ratio)),
+        })
+      : viewportImage
+
+    if (image.isEmpty()) throw new Error(undrawableMessage("stalled"))
 
     const maxWidth = action.maxWidth ?? 2000
     const scaled = image.getSize().width > maxWidth ? image.resize({ width: maxWidth, quality: "good" }) : image
@@ -1949,32 +1986,6 @@ export function createBrowserPage(
     })
 
     return { format, data: Buffer.from(capture.data, "base64") }
-  }
-
-  // Right after a document commits, Chromium has no frame of it for a few frames and rejects the copy, so it retries.
-  // A window that draws nothing never answers the copy at all, so every attempt shares one deadline.
-  async function surface(
-    area: Electron.Rectangle | undefined,
-    signal: AbortSignal,
-    deadline = performance.now() + CAPTURE_DEADLINE_MS,
-  ): Promise<Electron.NativeImage> {
-    const expired = AbortSignal.timeout(Math.max(1, Math.round(deadline - performance.now())))
-
-    const image = await Promise.race([
-      contents.capturePage(area, { stayHidden: true }).catch((error: Error) => error),
-      new Promise<undefined>((resolve) => expired.addEventListener("abort", () => resolve(undefined), { once: true })),
-    ])
-
-    if (image && !(image instanceof Error) && !image.isEmpty()) return image
-    abortError(signal)
-
-    if (!image) throw new Error(undrawableMessage("stalled"))
-
-    if (performance.now() + 100 >= deadline)
-      throw new Error(`Capture failed: ${image instanceof Error ? image.message : "Chromium returned an empty frame"}`)
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    return surface(area, signal, deadline)
   }
 
   async function point(element: Element) {
@@ -2500,8 +2511,8 @@ export function createBrowserPage(
     return name ? { ...labeled, name } : labeled
   }
 
-  // Waits until the compositor drew a new frame: the picked highlight without its hover tooltip, a scroll before input
-  // is routed by position, or the page before a screenshot copies it. A stalled page must not hold any of them back.
+  // Give the picker or scrolled input target a chance to lay out. This is not a compositor acknowledgement;
+  // screenshots wait for their own redraw instead.
   async function painted(sessionID?: string) {
     await Promise.race([
       cdp

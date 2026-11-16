@@ -15,9 +15,13 @@ test.each([
   expect(undrawable({ platform, ...window })).toBe(expected)
 })
 
-test.each(["minimized", "hidden", "stalled"] as const)("the %s message asks for the window, not the connection", (reason) => {
+test.each(["minimized", "hidden"] as const)("the %s message asks for the window, not the connection", (reason) => {
   const message = undrawableMessage(reason)
 
   expect(message).toContain("restore the OpenCode window")
   expect(message).not.toMatch(/connection|reload|crash/i)
+})
+
+test("a redraw timeout never presents a cached image as a successful capture", () => {
+  expect(undrawableMessage("stalled")).toContain("No cached screenshot was returned")
 })

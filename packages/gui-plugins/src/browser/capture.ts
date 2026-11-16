@@ -26,9 +26,11 @@ export function undrawable(window: {
 const causes: Record<Undrawable, string> = {
   minimized: "The OpenCode window is minimized, so the system does not draw this tab.",
   hidden: "OpenCode is hidden, so the system does not draw this tab.",
-  stalled: `No frame of this tab arrived within ${CAPTURE_DEADLINE_MS / 1000} seconds; the OpenCode window is probably minimized or hidden.`,
+  stalled: `No fresh frame of this tab arrived within ${CAPTURE_DEADLINE_MS / 1000} seconds. No cached screenshot was returned.`,
 }
 
 export function undrawableMessage(reason: Undrawable) {
+  if (reason === "stalled") return `${causes.stalled} Check that the page has finished navigating and is responsive before retrying.`
+
   return `${causes[reason]} A screenshot needs the window restored. Ask the user to restore the OpenCode window, then take the screenshot again; do not repeat it before then. Clicks, typing and other browser actions still work.`
 }
