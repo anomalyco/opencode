@@ -163,6 +163,53 @@ describe("location dialog steps", () => {
     ).toMatchObject({ effects: [{ type: "project.add" }] })
   })
 
+  test("the base-branch row opens the branch list and keeps the chosen branch for New worktree", () => {
+    const start = createLocationDialogState(opencode)
+    const base: LocationEntry = { id: "base", type: "base", project: opencode, directory: opencode.worktree }
+
+    const branches = transitionLocationDialog(start, {
+      type: "chosen",
+      entry: base,
+      active: "base",
+      choosesServer: false,
+    })
+
+    expect(branches.state).toMatchObject({ type: "branches", project: opencode, direct: false })
+    expect(branches.effects).toEqual([{ type: "focus", active: undefined }])
+
+    const chosen = transitionLocationDialog(branches.state, { type: "branch.chosen", branch: "release/base" })
+    expect(chosen.state).toMatchObject({ type: "worktrees", project: opencode, direct: true, base: "release/base" })
+    expect(chosen.effects).toEqual([{ type: "focus", active: "base" }])
+
+    const created = transitionLocationDialog(chosen.state, {
+      type: "chosen",
+      entry: { id: "create", type: "workspace", project: opencode, value: "create", directory: opencode.worktree },
+      active: "create",
+      choosesServer: true,
+    })
+
+    expect(created.effects).toEqual([
+      { type: "workspace.select", project: opencode, value: "create", branch: "release/base" },
+    ])
+  })
+
+  test("a dialog opened on the branch step closes on Escape and returns to the worktree step after a choice", () => {
+    const direct = createLocationDialogState(opencode, { step: "branches" })
+    expect(locationDialogView(direct)).toMatchObject({
+      drilled: opencode,
+      placeholderKey: "session.new.workspace.branch.search.placeholder",
+    })
+
+    const escape = transitionLocationDialog(direct, key("Escape"))
+    expect(escape).toMatchObject({ state: direct, effects: [{ type: "close" }], handled: true, stop: true })
+
+    const chosen = transitionLocationDialog(direct, { type: "branch.chosen", branch: "release/base" })
+    expect(chosen.state).toMatchObject({ type: "worktrees", project: opencode, direct: true, base: "release/base" })
+
+    const projects = transitionLocationDialog(direct, back)
+    expect(projects.state).toEqual({ type: "projects", query: "", history: [] })
+  })
+
   test("an unchanged query and a back with nowhere to go keep the state", () => {
     const state = createLocationDialogState()
     expect(transitionLocationDialog(state, query("")).state).toBe(state)

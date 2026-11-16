@@ -20,6 +20,7 @@ import {
 } from "~/component/site/changelog-entry"
 import { useMarkdown } from "~/component/site/use-markdown"
 import { PageTitle } from "~/component/site/sticky-title"
+import { staticRender } from "~/lib/static-render"
 
 export default function Changelog() {
   const i18n = useI18n()
@@ -84,7 +85,14 @@ export default function Changelog() {
                   when={current().entries.length > 0}
                   fallback={<p data-slot="lead">{i18n.t("changelog.filter.empty")}</p>}
                 >
-                  <ChangelogTimeline entries={current().entries} level={2} limit={6} />
+                  {/* Collapsed lists load from each entry's page, which has the same notes unless a filter
+                      leaves some out. Hydrated (vite dev) there is no script to load them. */}
+                  <ChangelogTimeline
+                    entries={current().entries}
+                    level={2}
+                    limit={6}
+                    defer={staticRender() && current().filter.length === 0}
+                  />
                 </Show>
                 <ChangelogPages view={current()} />
               </section>

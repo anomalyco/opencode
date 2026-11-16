@@ -5,6 +5,7 @@ import * as Exit from "effect/Exit"
 import * as Scope from "effect/Scope"
 import type { SqlClient } from "effect/sql/SqlClient"
 import type { SqlError } from "effect/sql/SqlError"
+import { StorageFailure } from "../../storage-failure.js"
 import type { EffectCacheShape } from "drizzle-orm/cache/core/cache-effect"
 import type { WithCacheConfig } from "drizzle-orm/cache/core/types"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors"
@@ -186,13 +187,23 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
                             ),
                           )
                         : this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`)
-                      : id === 0
-                        ? this.executeTransactionStatement(connection, "rollback")
-                        : this.executeTransactionStatement(connection, `rollback to savepoint effect_sql_${id}`).pipe(
-                            Effect.andThen(
-                              this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`),
-                            ),
-                          )
+                      : (id === 0
+                          ? this.executeTransactionStatement(connection, "rollback")
+                          : this.executeTransactionStatement(connection, `rollback to savepoint effect_sql_${id}`).pipe(
+                              Effect.andThen(
+                                this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`),
+                              ),
+                            )
+                        ).pipe(
+                          // After errors such as SQLITE_FULL, SQLite rolls the whole transaction back itself, so this
+                          // rollback has nothing to undo and fails. Report the body's error, not that one. Any other
+                          // rollback failure still fails.
+                          Effect.catch((error) =>
+                            Exit.isFailure(exit) && StorageFailure.rolledBack(exit.cause)
+                              ? Effect.void
+                              : Effect.fail(error),
+                          ),
+                        )
 
                     return finalize.pipe(Effect.flatMap(() => exit))
                   }),

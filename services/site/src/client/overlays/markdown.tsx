@@ -36,10 +36,18 @@ export async function toggle(on = !dispose, fromFooter = false) {
   if (text === undefined || dispose) return
   const file = href()!.split("/").pop()!
   const home = $<HTMLAnchorElement>('[data-slot="logo"]')?.getAttribute("href") ?? "/"
-  dispose = await mount(
+  // Its own host after the page: disposing a render empties its host, which must not take the page.
+  const host = document.createElement("div")
+  host.style.display = "contents"
+  $('[data-component="content"]')!.append(host)
+  const unmount = await mount(
     () => <MarkdownView source={text} file={file} href={href()} home={home} onHome={() => void toggle(false)} />,
-    $('[data-component="content"]')!,
+    host,
   )
+  dispose = () => {
+    unmount()
+    host.remove()
+  }
   sessionStorage.setItem(markdownKey, "1")
   show(true, fromFooter)
 }

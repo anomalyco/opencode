@@ -77,7 +77,7 @@
 
 @media (hover: hover) {
   [data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):is(:hover, :has(:focus-visible))
-    [data-slot="tab-status"] {
+    [data-slot="tab-close"]:has(> button) [data-slot="tab-status"] {
     opacity: 0;
   }
 }
@@ -460,6 +460,15 @@
   [data-titlebar-tab][data-status="busy"]:not([data-orientation="vertical"]) [data-slot="project-avatar-slot"] {
     visibility: hidden;
   }
+}
+
+/* Under a project header the avatar is left out, but shortcut numbers still show in its slot. */
+[data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: hidden;
+}
+
+[data-shortcut-hints] [data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: visible;
 }
 
 /* Holding the mod key slides each tab's initial out as its shortcut number rises in. */

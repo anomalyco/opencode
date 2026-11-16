@@ -57,7 +57,7 @@ export type ServerConnectError =
   | { readonly type: "connection-failed"; readonly url: string }
 
 export type ServerSaveAction =
-  | { readonly type: "connect"; readonly http: ServerConnection.HttpBase }
+  | { readonly type: "connect"; readonly http: ServerConnection.HttpBase; readonly displayName: string | undefined }
   | { readonly type: "add"; readonly connection: ServerConnection.Http }
   | { readonly type: "replace"; readonly originalUrl: string; readonly connection: ServerConnection.Http }
 
@@ -383,13 +383,17 @@ function submit(state: Form, draft: ServerConnectDraft): ServerConnectTransition
 }
 
 function saved(state: Form, http: ServerConnection.HttpBase): ServerConnectTransition {
+  // A name the user typed wins over the one a pairing link carries.
+  const displayName =
+    state.draft.name.trim() || pairingLink(state.draft.method === "link" ? state.draft.link : state.draft.url)?.name
+
   if (state.target.kind === "connect")
     return {
       state: { ...form(state), status: "editing" },
-      effects: [stop, { type: "save", action: { type: "connect", http } }],
+      effects: [stop, { type: "save", action: { type: "connect", http, displayName } }],
     }
 
-  const connection: ServerConnection.Http = { type: "http", displayName: state.draft.name.trim() || undefined, http }
+  const connection: ServerConnection.Http = { type: "http", displayName, http }
   const original = state.target.kind === "edit" ? state.target.original : undefined
 
   const action: ServerSaveAction =

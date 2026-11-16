@@ -56,6 +56,74 @@ const rowIDs = (state: QueueState) => selectQueueRows(state).map((row) => row.id
 
 const [one, two, three] = ["inb_1", "inb_2", "inb_3"].map((id) => item(id))
 
+describe("queue first shares the serialized reorder", () => {
+  test("a waiting request follows rewritten inbox IDs instead of resurrecting an original", () => {
+    const result = replay(createQueueState([one, two, three]), [
+      { type: "reorder.requested", inboxIDs: [two.id, one.id, three.id], reverted: false },
+      { type: "first.requested", id: three.id, reverted: false },
+      { type: "mutation.moved", attempt: 1, moved: { [one.id]: "new_1", [two.id]: "new_2", [three.id]: "new_3" } },
+      { type: "inbox.synced", items: [item("new_2"), item("new_1"), item("new_3")] },
+      { type: "mutation.succeeded", attempt: 1 },
+    ])
+
+    expect(runs(result.effects)).toMatchObject([
+      { type: "reorder", inboxIDs: [two.id, one.id, three.id] },
+      { type: "reorder", inboxIDs: ["new_3", "new_2", "new_1"] },
+    ])
+    expect(rowIDs(result.state)).toEqual(["new_3", "new_2", "new_1"])
+
+    const stale = transitionQueue(result.state, { type: "mutation.failed", attempt: 1, hidden: [] })
+
+    expect(stale.state).toBe(result.state)
+    expect(stale.effects).toEqual([])
+  })
+
+  test.each([one.id, "delivered"])("%s needs no reorder", (id) => {
+    const state = createQueueState([one, two])
+
+    expect(transitionQueue(state, { type: "first.requested", id, reverted: false })).toEqual({ state, effects: [] })
+  })
+
+  test.each(["mutation.succeeded", "mutation.failed", "mutation.timed-out", "dispose"] as const)(
+    "%s settles a queue-first reorder through the existing lifecycle",
+    (type) => {
+      const started = transitionQueue(createQueueState([one, two]), {
+        type: "first.requested",
+        id: two.id,
+        reverted: false,
+      })
+
+      const result = transitionQueue(
+        started.state,
+        type === "dispose" ? { type } : { type, attempt: 1, hidden: [], stage: "running" },
+      )
+
+      expect(result.state.status).toBe(type === "dispose" ? "disposed" : "idle")
+      expect(
+        result.effects.some((effect) => effect.type === "mutation.timer.clear" || effect.type === "timer.clearAll"),
+      ).toBe(true)
+    },
+  )
+})
+
+test("steer-first ignores an open edit and a disposed or empty queue", () => {
+  const editing = transitionQueue(createQueueState([one, two]), {
+    type: "edit.start",
+    id: one.id,
+    reverted: false,
+    draft: draft("my draft"),
+  }).state
+
+  const disposed = transitionQueue(createQueueState([one, two]), { type: "dispose" }).state
+
+  for (const state of [editing, disposed, createQueueState([])]) {
+    const result = transitionQueue(state, { type: "steer-first.requested" })
+
+    expect(result.state).toBe(state)
+    expect(result.effects).toEqual([])
+  }
+})
+
 describe("an edit always returns the draft it replaced", () => {
   test("when the server delivers the prompt being edited", () => {
     const result = replay(createQueueState([one, two]), [

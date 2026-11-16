@@ -3,6 +3,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { isShellNotFoundError, type LocationRef, type ShellInfo } from "@opencode/client"
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import stripAnsi from "strip-ansi"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { useNewDesigns } from "../config"
 import { useClient } from "../context/client"
 import { useClipboard } from "../context/clipboard"
@@ -57,14 +58,15 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
       }
       const page = await client.api.shell.output({ id, location, cursor, limit: PAGE_BYTES })
       if (disposed) return false
+      const advanced = page.data.cursor > cursor
       cursor = page.data.cursor
       setOutput((previous) => {
         const next = (previous ?? "") + page.data.output
         if (next.length > PAGE_BYTES) setOmitted(true)
-        return next.slice(-PAGE_BYTES)
+        return TextBoundary.tail(next, PAGE_BYTES)
       })
       setError("")
-      return cursor < page.data.size
+      return advanced && cursor < page.data.size
     }
 
     const poll = () => {

@@ -78,6 +78,8 @@ function fakeConsole(options: { readonly upgrade?: boolean } = {}) {
     requests: new Array<{ method: string; path: string; body?: unknown }>(),
     /** What `GET /api/event-watches/types` lists. */
     types: new Array<Record<string, unknown>>(),
+    /** The status and message Console answers `POST /api/event-watches` with instead of a watch, when set. */
+    refuse: undefined as { status: number; message: string } | undefined,
   }
   const server = Bun.serve({
     port: 0,
@@ -112,6 +114,8 @@ function fakeConsole(options: { readonly upgrade?: boolean } = {}) {
       }
       if (url.pathname === "/api/event-watches/types") return Response.json({ types: state.types })
       if (url.pathname === "/api/event-watches" && request.method === "POST") {
+        if (state.refuse)
+          return Response.json({ _tag: "WatchRefused", message: state.refuse.message }, { status: state.refuse.status })
         const created = body as { sessionID: string; server?: string; event?: string; arguments?: unknown }
         // Another server's event type is keyed by a hash of it, as Console keys it.
         return Response.json({
@@ -931,6 +935,44 @@ describe("OpencodePlugin event watches", () => {
           { sessionID: session.id, target: "https://github.com/Acme/App/pull/42" },
           { sessionID: session.id, target: { _tag: "GitHubBranch", repo: "acme/app", branch: "feature" } },
         ])
+      }),
+    ),
+  )
+
+  it.effect("tells the session once why Console refused a shell command's watch, and skips other failures", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const hooks = yield* PluginHooks.Service
+        const { host, wakes, replays } = yield* start(console)
+        const session = yield* host.session.create({})
+        const created = () =>
+          console.state.requests.filter((request) => request.method === "POST" && request.path === "/api/event-watches")
+        const push = (refuse: { status: number; message: string }, posted: number) =>
+          Effect.gen(function* () {
+            console.state.refuse = refuse
+            yield* hooks.trigger("tool", "execute.after", {
+              tool: "shell",
+              sessionID: session.id,
+              agent: Agent.ID.make("build"),
+              messageID: SessionMessage.ID.create(),
+              id: Tool.CallID.make("call_shell"),
+              input: { command: "gh pr create --fill" },
+              status: "completed",
+              result: { output: { exit: 0, output: "https://github.com/Acme/App/pull/42\n", truncated: false } },
+            })
+            yield* waitUntil(Effect.sync(() => created().length === posted))
+          })
+        const refused = { status: 403, message: "Sign in to GitHub at https://console.test/github first." }
+
+        yield* push({ status: 500, message: "Something went wrong" }, 1)
+        yield* push(refused, 2)
+        yield* waitUntil(Effect.sync(() => wakes.length === 1))
+        yield* push(refused, 3)
+        yield* waitUntil(Effect.sync(() => replays.length === 1))
+
+        expect(wakes).toHaveLength(1)
+        expect(wakes[0]?.sessionID).toBe(session.id)
+        expect(wakes[0]?.text).toContain(refused.message)
       }),
     ),
   )

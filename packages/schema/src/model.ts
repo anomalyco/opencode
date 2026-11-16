@@ -5,6 +5,7 @@ import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Compatibility, MaxTokensField, MediaInput, ReasoningField } from "./model-compatibility.js"
 import { Money } from "./money.js"
+import { FreeformFormat } from "./tool.js"
 import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
@@ -77,6 +78,8 @@ export const Overlays = {
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
+  /** Freeform tool input formats advertised by the selected API. Absent or empty means JSON tools only. */
+  freeform: Schema.Array(FreeformFormat).pipe(optional),
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
   /** Whether the model accepts a sampling temperature. Unknown when unset. */

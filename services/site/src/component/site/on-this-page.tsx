@@ -97,7 +97,7 @@ export function OnThisPage(props: { items: ContentsItem[] }) {
  * "Contents" folded up for phones, where the aside's list is hidden: put it above the first section of
  * any page that passes OnThisPage to <Site aside>. Hidden from 60rem up and in print. On phones it
  * sticks under the top bar (and any sticky bar the page adds above it). The static pages drive the same
- * markup from src/client/contents.ts, and the docs from src/docs/client.ts.
+ * markup with startContents (contents-spy.ts), and so do the docs (src/docs/client.ts).
  */
 export function ContentsMenu(props: { items: ContentsItem[] }) {
   const i18n = useI18n()
@@ -188,8 +188,8 @@ export function SectionHeading(props: { level?: 2 | 3; id: string; title: string
 /**
  * The inside of a heading: a button with the title that copies the section's address and puts it in
  * the address bar, then says "Link copied" for a moment (also to screen readers). `children` replaces
- * the plain title for headings with markup of their own. Pages that never hydrate (the docs) do the
- * same from a delegated listener keyed on `data-heading-id` (src/docs/client.ts, src/client/copy.ts).
+ * the plain title for headings with markup of their own. Pages that never hydrate (the static pages
+ * and the docs) do the same from a delegated listener keyed on `data-heading-id` (copy-feedback.ts).
  */
 export function HeadingLink(props: { id: string; title: string; children?: JSX.Element }) {
   const i18n = useI18n()

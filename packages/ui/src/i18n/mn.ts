@@ -160,6 +160,7 @@ export const dict = {
   "ui.common.dismiss": "Хаах",
   "ui.common.close": "Хаах",
   "ui.common.next": "Дараа нь",
+  "ui.common.continue": "Үргэлжлүүлэх",
   "ui.common.submit": "Илгээх",
   "ui.common.showMore": "Илүү ихийг харуулах",
   "ui.permission.deny": "Үгүйсгэх",

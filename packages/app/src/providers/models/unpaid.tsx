@@ -82,14 +82,14 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
 
   return (
     <Dialog
+      size="large"
       fit
-      containerClass="!h-auto max-h-[calc(100vh_-_16px)] !w-[min(calc(100vw_-_16px),640px)]"
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
     >
       <DialogHeader closeLabel={language.t("common.close")}>
         <DialogTitle>{language.t("dialog.model.select.title")}</DialogTitle>
       </DialogHeader>
-      <DialogBody class="max-h-[calc(100vh_-_68px)] min-h-0 flex-none gap-0">
+      <DialogBody class="min-h-0 gap-0">
         <MenuScroll viewportClass="px-2 pb-2">
           <div ref={listEl} class="flex min-h-0 flex-col">
             <div data-section="free-models" class="flex w-full flex-col items-start pb-3">
