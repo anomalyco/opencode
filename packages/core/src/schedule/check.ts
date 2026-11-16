@@ -71,10 +71,11 @@ export function validate(condition: ScheduleSchema.Condition): Result.Result<voi
   switch (condition.type) {
     case "shell": {
       if (condition.run.trim() === "") return Result.fail("A shell check needs a command")
+      // `changes: false` opts out, so only a true value is a predicate of its own.
       const predicates = [
         condition.is !== undefined,
         condition.matches !== undefined,
-        condition.changes !== undefined,
+        condition.changes === true,
       ].filter(Boolean).length
       if (predicates > 1) return Result.fail("Choose at most one of is, matches or changes")
       if (condition.matches === undefined) return Result.succeed(undefined)
