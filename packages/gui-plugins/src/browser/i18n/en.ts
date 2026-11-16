@@ -107,6 +107,7 @@ export default {
   "extensions.failed.manifest": "This is not a supported extension.",
   "extensions.failed.download": "The store did not provide this extension. Check the link.",
   "extensions.failed.load": "The extension could not load: {{message}}",
+  "extensions.failed.filterNotReady": "Request filtering did not start. Turn the extension on to try again.",
   "signins.title": "Bring your sign-ins",
   "signins.description": "Import cookies from a browser on this computer, and sites such as GitHub open signed in.",
   "signins.bar": "Already signed in somewhere else? Bring your sign-ins here.",

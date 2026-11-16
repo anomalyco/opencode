@@ -4,7 +4,7 @@ import type { Session } from "electron"
  * runtime, not to Session.serviceWorkers. A short-lived, sandboxed view of the package's inert manifest requests
  * that native wake. It never opens a window, receives an event payload or supplies the background frame's identity. */
 export async function eventPage(session: Session, scope: string, fresh: boolean, signal: AbortSignal) {
-  const { webContents, WebContentsView } = await import("electron")
+  const { webContents } = await import("electron")
   signal.throwIfAborted()
 
   const find = () =>
@@ -17,6 +17,19 @@ export async function eventPage(session: Session, scope: string, fresh: boolean,
   const page = !fresh && find()
 
   if (page) return page
+
+  const ready = await manifestQuery(session, scope, "wake", signal)
+  const awake = ready && find()
+
+  if (!awake) throw new Error("Extension event page did not start.")
+
+  return awake
+}
+
+/** Run a fixed, read-only query in the extension's own origin. Nothing is exposed to the pane or the caller. */
+export async function manifestQuery(session: Session, scope: string, query: "wake" | "filtering", signal: AbortSignal) {
+  const { WebContentsView } = await import("electron")
+  signal.throwIfAborted()
 
   const relay = new WebContentsView({
     webPreferences: {
@@ -46,16 +59,15 @@ export async function eventPage(session: Session, scope: string, fresh: boolean,
 
     if (relay.getURL() !== url) throw new Error("Extension event page did not open.")
 
-    const ready = await relay.executeJavaScript(
-      "new Promise(resolve => chrome.runtime.getBackgroundPage(page => resolve(!!page)))",
-    )
+    const ready = await relay.executeJavaScript(query === "wake"
+      ? "new Promise(resolve => chrome.runtime.getBackgroundPage(page => resolve(!!page)))"
+      // Lite answers this settings query only after its background has finished enabling its configured rulesets.
+      // Either permission value is legitimate, including when the user has intentionally limited the extension.
+      : "chrome.runtime.sendMessage({what:'hasBroadHostPermissions'}).then(value => typeof value === 'boolean')")
 
     signal.throwIfAborted()
-    const awake = ready === true && find()
 
-    if (!awake) throw new Error("Extension event page did not start.")
-
-    return awake
+    return ready === true
   } finally {
     signal.removeEventListener("abort", close)
     close()

@@ -316,7 +316,9 @@ function ExtensionRow(props: {
           fallback="extensions"
           name={props.extension.name}
           detail={props.extension.version}
-          message={props.extension.changed ? { text: ctx.t("settings.extensions.changed"), error: true } : props.extension.error ? { text: props.extension.error, error: true } : undefined}
+          message={props.extension.changed ? { text: ctx.t("settings.extensions.changed"), error: true } : props.extension.error ? {
+            text: props.extension.error === "browser.extension.filterNotReady" ? ctx.t("extensions.failed.filterNotReady") : props.extension.error, error: true,
+          } : undefined}
         />
       }
     >

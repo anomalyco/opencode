@@ -13,6 +13,7 @@ import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
 import { cookiesPersist } from "./probe"
 import { extensionDigest } from "./integrity"
+import { filterStartup, waitForFilter } from "./filter-startup"
 import { createPreviews } from "./previews"
 import {
   displayName,
@@ -142,7 +143,7 @@ export async function createBrowserProfile(input: {
       id: record.id,
       name: await displayName(record.directory, manifest),
       version: manifest.version,
-      enabled: record.enabled,
+      enabled: record.enabled && !errors.has(record.id) && !!session.extensions.getExtension(record.id),
       source: record.source,
       icon: await extensionIcon(record.directory, manifest),
       popup: page(pages.popup),
@@ -211,6 +212,23 @@ export async function createBrowserProfile(input: {
     )
 
     if (loaded) {
+      const filtering = filterStartup(record.id, record.source, loaded.manifest.manifest_version)
+
+      if (filtering) {
+        const failed = await waitForFilter(session, loaded.url, filtering, input.signal).then(() => undefined, (cause: unknown) => String(cause))
+        input.signal.throwIfAborted()
+
+        if (failed !== undefined) {
+          apis.forget(record.id)
+
+          if (session.extensions.getExtension(record.id)) session.extensions.removeExtension(record.id)
+          errors.set(record.id, "browser.extension.filterNotReady")
+          input.log.write("warn", "extension filtering did not start", { id: record.id, version: loaded.version, cause: failed })
+
+          return
+        }
+      }
+
       errors.delete(record.id)
       apis.activate(loaded)
     }
