@@ -28,24 +28,30 @@ a `cli starting` line with the version and the source commit of the build.
 ## Build
 
 The client takes OpenTUI's Rust crates from `packages/rust` of
-[`anomalyco/opentui`](https://github.com/anomalyco/opentui), pinned by git `rev` in `Cargo.toml`. Cargo fetches that
-commit, but the checkout has no native library, and the bindings accept only the `opentui.h` they were generated
-from. `.cargo/config.toml` points `OPENTUI_LIB_DIR` at the pin's own directory,
-`~/.cache/opentui-native/<short rev>/x86_64-linux`, which native-hardening's `abi-artifacts.py` fills with artifacts
-built at the matching OpenTUI commit. Each pin has its own directory, so a re-pin leaves other branches' builds alone.
-Fill it once, then build:
+[`anomalyco/opentui`](https://github.com/anomalyco/opentui), pinned to a release by git `tag` in `Cargo.toml`. Cargo
+fetches it, but the checkout has no native library, and the bindings accept only the `opentui.h` they were generated
+from. `script/opentui-native.ts` installs the release's library from its zip (`opentui-native-<tag>-<platform>.zip`),
+checked against the sha256 table in the script and the release's header hash, with every licence and notice file of
+the zip under `licenses/`. `.cargo/config.toml` points `OPENTUI_LIB_DIR` at
+`.opentui/<tag>/host-fill-with-bun-run-opentui-native` in this package (git-ignored), and `bun run cargo` installs it
+there first when it is missing, so a build needs nothing else:
 
 ```sh
-python3 /home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py \
-  --client packages/cli-rs/Cargo.toml --dest ~/.cache/opentui-native/32e9e414e/x86_64-linux
 bun run --cwd packages/cli-rs cargo build --bin opencode-native
 ```
+
+For another target, `bun run --cwd packages/cli-rs opentui:native --target aarch64-apple-darwin` installs into
+`.opentui/<tag>/<target>` and prints the directory to set as `OPENTUI_LIB_DIR`. Zips are kept in
+`$XDG_CACHE_HOME/opencode/opentui-native`, so another worktree needs no download.
 
 On Linux and macOS the library is linked statically with its own private libc++, so neither the build nor the binary
 needs `libopentui` or a system libc++.
 
 Changes to OpenTUI's Rust crates are pull requests into `packages/rust` of `anomalyco/opentui`. To move the client
-to another commit, run `abi-artifacts.py` for it, then change the `rev` and commit it with `Cargo.lock`.
+to another release, add the release's rows to the table in `script/opentui-native.ts` (from
+`gh release view <tag> -R anomalyco/opentui --json assets`), change the `tag` and the directory in
+`.cargo/config.toml`, and commit them with `Cargo.lock`. A pin between releases (a `rev`) has no zip: build its
+library from OpenTUI's source and set `OPENTUI_LIB_DIR` to it.
 
 Cargo finds `.cargo/config.toml` only when it runs inside `packages/cli-rs`, which is why the
 commands go through `bun run --cwd packages/cli-rs cargo`.

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "cargo": "cargo",
+    "cargo": "bun run script/opentui-native.ts --quiet && cargo",
+    "opentui:native": "bun run script/opentui-native.ts",
     "generate": "bun run script/generate.ts",
     "fixtures": "bun run parity/fixtures.ts",
     "check:drift": "bun run script/drift.ts",
