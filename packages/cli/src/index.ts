@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-// Check before terminal initialization, which itself needs a valid cwd.
-import "./check-cwd"
+import { writeSync } from "node:fs"
+import { isatty } from "node:tty"
 import { ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Cause, Effect } from "effect"
@@ -20,6 +20,17 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ShutdownDeadline } from "./shutdown-deadline"
+
+// Bun needs a valid cwd to open terminal stdin; headless commands may not need one.
+if (isatty(0)) {
+  try {
+    process.cwd()
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error
+    writeSync(2, "Error: The current directory no longer exists. Change directories and run opencode again.\n")
+    process.exit(1)
+  }
+}
 
 // Keep requests to the local service off any proxy. Bun reads lowercase `no_proxy` alone whenever it is set, so both
 // spellings get the same merged list.
