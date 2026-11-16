@@ -173,6 +173,70 @@ it.live(
 )
 
 it.live(
+  "scopes a client MCP server to one session of its location",
+  () =>
+    Effect.gen(function* () {
+      const server = yield* serve()
+      const sessions = Context.get(server.context, Session.Service)
+      const location = Location.Ref.make({ directory: AbsolutePath.make(server.directory) })
+      const owner = yield* sessions.create({ location })
+      const other = yield* sessions.create({ location })
+      const elsewhere = yield* sessions.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(path.join(server.directory, "elsewhere")) }),
+      })
+
+      const status = (sessionID: string) => {
+        const url = server.url({ name: "android", sessionID })
+        url.protocol = "http:"
+        return Effect.promise(() => fetch(url, { headers: { authorization } }).then((response) => response.status))
+      }
+      expect(yield* status("ses_missing")).toBe(404)
+      expect(yield* status(elsewhere.id)).toBe(404)
+
+      const client = yield* connectClient(server.url({ name: "android", sessionID: owner.id }), { authorization })
+      yield* until(() =>
+        Effect.runPromise(server.inLocation(registryIDs)).then((ids) => ids.includes("android_open_terminal")),
+      )
+      const visible = (sessionID: Session.ID) =>
+        Effect.promise(() =>
+          Effect.runPromise(
+            server.inLocation(
+              Tool.Service.use((registry) => registry.snapshot(undefined, sessionID)).pipe(
+                Effect.map((snapshot) => (snapshot.codeModeCatalog?.tools ?? []).map((tool) => tool.name)),
+              ),
+            ),
+          ),
+        )
+      expect(yield* visible(owner.id)).toContain("android")
+      expect(yield* visible(other.id)).not.toContain("android")
+
+      const call = (sessionID: Session.ID) =>
+        Effect.promise(() =>
+          Effect.runPromise(
+            server.inLocation(
+              Mcp.Service.use((mcp) => mcp.callTool({ server: "android", name: "open_terminal", sessionID })).pipe(
+                Effect.result,
+              ),
+            ),
+          ),
+        )
+      const rejected = yield* call(other.id)
+      expect(rejected._tag === "Failure" && rejected.failure.message).toContain(
+        "only available to the session it was connected for",
+      )
+      expect(client.sessions).toEqual([])
+      expect((yield* call(owner.id))._tag).toBe("Success")
+      expect(client.sessions).toEqual([owner.id])
+
+      client.socket.close()
+      yield* until(() =>
+        Effect.runPromise(server.inLocation(registryIDs)).then((ids) => !ids.includes("android_open_terminal")),
+      )
+    }),
+  20_000,
+)
+
+it.live(
   "closes a client MCP socket with 1012 on reload and reattaches to the fresh location",
   () =>
     Effect.gen(function* () {

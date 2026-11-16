@@ -5,6 +5,8 @@ export type ClientMcpOptions = {
   readonly name: string
   /** Sent as `location[directory]`. */
   readonly directory?: string
+  /** Only this session, which must belong to the location, sees and can call the tools. Others are unaffected. */
+  readonly sessionID?: string
   /** Handshake headers, such as `authorization`. Browsers cannot send them; use a ticket in `url` instead. */
   readonly headers?: Record<string, string>
   readonly tools: ReadonlyArray<ClientMcpTool>
@@ -170,6 +172,7 @@ function endpoint(options: ClientMcpOptions) {
   url.search = base.search
   if (options.directory) url.searchParams.set("location[directory]", options.directory)
   url.searchParams.set("name", options.name)
+  if (options.sessionID) url.searchParams.set("sessionID", options.sessionID)
   url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:"
   return url
 }

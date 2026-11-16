@@ -1,9 +1,10 @@
 import { Mcp } from "@opencode/schema/mcp"
 import { Location } from "@opencode/schema/location"
 import { PtyTicket } from "@opencode/schema/pty-ticket"
+import { Session } from "@opencode/schema/session"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
-import { ForbiddenError, LocationNotFoundError, McpServerNotFoundError } from "../errors.js"
+import { ForbiddenError, LocationNotFoundError, McpServerNotFoundError, SessionNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER } from "./pty.js"
 
@@ -137,9 +138,16 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     .middleware(locationMiddleware)
     .add(
       HttpApiEndpoint.get("mcp.client", MCP_CLIENT_PATH, {
-        query: Schema.Struct({ ...McpClientQuery.fields, [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String) }),
+        query: Schema.Struct({
+          ...McpClientQuery.fields,
+          sessionID: Schema.optional(Session.ID).annotate({
+            description:
+              "Scope the client's tools to this session of the location: other sessions neither see nor can call them.",
+          }),
+          [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String),
+        }),
         success: Schema.Boolean,
-        error: [ForbiddenError, LocationNotFoundError],
+        error: [ForbiddenError, LocationNotFoundError, SessionNotFoundError],
       })
         .annotateMerge(locationQueryOpenApi)
         .annotateMerge(
@@ -147,7 +155,7 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
             identifier: "experimental.mcp.client",
             summary: "Attach client MCP server",
             description:
-              "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; its tools stay available while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
+              "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; its tools stay available while the socket is open, to every session of the location or only to `sessionID`. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
             transform: (operation) => ({ ...operation, "x-websocket": true }),
           }),
         ),
