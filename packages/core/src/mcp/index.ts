@@ -47,6 +47,8 @@ import { McpPool } from "./pool.js"
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
 export const PromptsChanged = ephemeral({ type: "mcp.prompts.changed", schema: { server: Schema.String } })
+/** Experimental: a server's MCP Skills list changed. */
+export const SkillsChanged = ephemeral({ type: "mcp.skills.changed", schema: { server: Schema.String } })
 
 export const Status = Mcp.Status
 export type Status = Mcp.Status
@@ -63,6 +65,11 @@ export type ToolResultContent = McpClient.CallToolContent
 export type ToolResult = McpClient.CallToolResult
 export type Prompt = McpClient.Prompt & { readonly server: ServerName }
 export type PromptResult = McpClient.GetPromptResult
+/** Experimental: a skill entry a server lists through MCP Skills, a beta extension. */
+export interface Skill {
+  readonly server: ServerName
+  readonly entry: McpClient.Skill
+}
 
 export const Resource = Mcp.Resource
 export type Resource = Mcp.Resource
@@ -134,7 +141,12 @@ const FALLBACK_LIST_TIMEOUT = "5 seconds"
 const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
 
-const changes = { tools: McpEvent.ToolsChanged, resources: McpEvent.ResourcesChanged, prompts: PromptsChanged }
+const changes = {
+  tools: McpEvent.ToolsChanged,
+  resources: McpEvent.ResourcesChanged,
+  prompts: PromptsChanged,
+  skills: SkillsChanged,
+}
 
 // A broken, silent or closed event stream reopens after a delay growing from a second to this cap.
 const EVENT_REOPEN = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")])
@@ -194,6 +206,20 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly uri: string
   }) => Effect.Effect<ResourceContent | undefined, Error>
+  /**
+   * Experimental: skills that connected servers list through MCP Skills, while the `mcp_skills` flag is on, sorted by
+   * server, then `SKILL.md` URI.
+   */
+  readonly skills: () => Effect.Effect<Skill[]>
+  /**
+   * Experimental: reads one verified file of a skill from the server that listed it, its `SKILL.md` when `ref` is
+   * omitted.
+   */
+  readonly readSkill: (input: {
+    readonly server: ServerName | string
+    readonly entry: McpClient.Skill
+    readonly ref?: string
+  }) => Effect.Effect<McpClient.SkillFile, NotFoundError | Error>
   /** Experimental: MCP Events of a connected server that offers them, while the `mcp_events` flag is on. */
   readonly events: (server: ServerName | string) => Effect.Effect<McpClient.Events | undefined, NotFoundError>
   /**
@@ -266,6 +292,7 @@ export const layer = (options?: Options) =>
       const fetch = yield* FetchHttpClient.Fetch
       const pool = yield* McpPool.Service
       const mcpEvents = yield* Flag.enabled("mcp_events")
+      const mcpSkills = yield* Flag.enabled("mcp_skills")
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
@@ -590,6 +617,7 @@ export const layer = (options?: Options) =>
             directory: location.directory,
             clientInfo: options?.clientInfo,
             mcpEvents,
+            mcpSkills,
             authProvider: Effect.suspend(() =>
               selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
             ),
@@ -619,6 +647,7 @@ export const layer = (options?: Options) =>
                 yield* bus.publish(McpEvent.ToolsChanged, { server: name })
                 yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
                 yield* bus.publish(PromptsChanged, { server: name })
+                yield* bus.publish(SkillsChanged, { server: name })
                 yield* bus.publish(McpEvent.StatusChanged, { server: name })
               }),
               failed: (failure) =>
@@ -1066,6 +1095,30 @@ export const layer = (options?: Options) =>
                 : { type: "blob", uri: part.uri, blob: part.blob, mimeType: part.mimeType },
             ),
           })
+        }),
+        skills: Effect.fn("MCP.skills")(function* () {
+          return (
+            Array.from(entries)
+              .flatMap(([server, entry]) =>
+                (entry.connection.skills ?? []).map((skill): Skill => ({ server, entry: skill })),
+              )
+              // URIs compare by code point, so the duplicate a server's skill keeps does not depend on the locale.
+              .toSorted(
+                (a, b) =>
+                  a.server.localeCompare(b.server) ||
+                  (a.entry.uri < b.entry.uri ? -1 : a.entry.uri > b.entry.uri ? 1 : 0),
+              )
+          )
+        }),
+        readSkill: Effect.fn("MCP.readSkill")(function* (input) {
+          const name = ServerName.make(input.server)
+          const target = yield* connected(name)
+          if (!target.client) return yield* Effect.fail(new Error(unavailable(name, target.entry.status)))
+          return yield* target.entry.connection.recovering(target.client, (connection) =>
+            connection.skills
+              ? connection.skills.read(input.entry, input.ref)
+              : Effect.fail(new Error(`MCP server "${name}" does not offer skills`)),
+          )
         }),
         events: Effect.fn("MCP.events")(function* (server) {
           return (yield* connected(ServerName.make(server))).client?.events

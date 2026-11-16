@@ -35,6 +35,11 @@ const booleanValue = (value: unknown) => {
   return undefined
 }
 
+/** Whether a skill's frontmatter lets the model load it on its own; undefined keeps the default. */
+export const autoinvoke = (frontmatter: Readonly<Record<string, unknown>>) =>
+  metadataBoolean(frontmatter.metadata, "opencode/autoinvoke") ??
+  (booleanValue(frontmatter["disable-model-invocation"]) ? false : undefined)
+
 export function parse(directory: string, filepath: string, content: string): ParseResult {
   const markdown = ConfigMarkdown.parseOption(content)
   if (!markdown) return { _tag: "Skipped", reason: "markdown" }
@@ -45,16 +50,14 @@ export function parse(directory: string, filepath: string, content: string): Par
     path.dirname(filepath) === directory && path.basename(filepath) !== "SKILL.md"
       ? path.basename(filepath, ".md")
       : path.basename(path.dirname(filepath))
-  const opencodeAutoinvoke = metadataBoolean(frontmatter.metadata, "opencode/autoinvoke")
-  const disableModelInvocation = booleanValue(frontmatter["disable-model-invocation"])
-  const autoinvoke = opencodeAutoinvoke ?? (disableModelInvocation ? false : undefined)
+  const invoke = autoinvoke(frontmatter)
   return {
     _tag: "Parsed",
     skill: {
       id: Skill.ID.make(id),
       name: Skill.Name.make(frontmatter.name ?? id),
       ...(frontmatter.description === undefined ? {} : { description: frontmatter.description }),
-      ...(autoinvoke === undefined ? {} : { autoinvoke }),
+      ...(invoke === undefined ? {} : { autoinvoke: invoke }),
       path: AbsolutePath.make(filepath),
       content: markdown.content,
     },
