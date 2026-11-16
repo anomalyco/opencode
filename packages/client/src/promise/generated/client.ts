@@ -113,6 +113,10 @@ import type {
   ExperimentalGenerateTextOutput,
   ExperimentalGenerateImageInput,
   ExperimentalGenerateImageOutput,
+  ExperimentalGenerateVideoCreateInput,
+  ExperimentalGenerateVideoCreateOutput,
+  ExperimentalGenerateVideoGetInput,
+  ExperimentalGenerateVideoGetOutput,
   ExperimentalGenerateDecisionsInput,
   ExperimentalGenerateDecisionsOutput,
   ExperimentalVoiceModelsOutput,
@@ -243,6 +247,8 @@ import type {
   ExperimentalPersistentPtyConnectTokenOutput,
   ExperimentalMediaGetInput,
   ExperimentalMediaGetOutput,
+  ExperimentalBlobGetInput,
+  ExperimentalBlobGetOutput,
   ExperimentalScheduleCreateInput,
   ExperimentalScheduleCreateOutput,
   ExperimentalScheduleListInput,
@@ -1205,6 +1211,41 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+        video: {
+          create: (input: ExperimentalGenerateVideoCreateInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalGenerateVideoCreateOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/generate/video`,
+                body: {
+                  model: input["model"],
+                  prompt: input["prompt"],
+                  start: input["start"],
+                  end: input["end"],
+                  references: input["references"],
+                  duration: input["duration"],
+                  aspect: input["aspect"],
+                  resolution: input["resolution"],
+                  sound: input["sound"],
+                },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404, 422, 502, 503],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          get: (input: ExperimentalGenerateVideoGetInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalGenerateVideoGetOutput }>(
+              {
+                method: "GET",
+                path: `/api/experimental/generate/video/${encodeURIComponent(input.id)}`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
         decisions: (input: ExperimentalGenerateDecisionsInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalGenerateDecisionsOutput }>(
             {
@@ -1497,6 +1538,20 @@ export function make(options: ClientOptions) {
             {
               method: "GET",
               path: `/api/experimental/media/${encodeURIComponent(input.hash)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+      },
+      blob: {
+        get: (input: ExperimentalBlobGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalBlobGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/blob/${encodeURIComponent(input.id)}`,
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
               empty: false,

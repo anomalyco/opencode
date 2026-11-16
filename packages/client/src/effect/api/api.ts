@@ -1520,6 +1520,28 @@ export type ExperimentalGenerateImageOperation<E = never> = (
   input: ExperimentalGenerateImageInput,
 ) => Effect.Effect<ExperimentalGenerateImageOutput, E>
 
+export type ExperimentalGenerateVideoCreateInput = {
+  readonly model: Model.Ref
+  readonly prompt: string
+  readonly start?: Generate.ImageFile | undefined
+  readonly end?: Generate.ImageFile | undefined
+  readonly references?: ReadonlyArray<Generate.File> | undefined
+  readonly duration?: number | undefined
+  readonly aspect?: Generate.VideoAspect | undefined
+  readonly resolution?: Generate.VideoResolution | undefined
+  readonly sound?: boolean | undefined
+}
+export type ExperimentalGenerateVideoCreateOutput = Generate.VideoRunning
+export type ExperimentalGenerateVideoCreateOperation<E = never> = (
+  input: ExperimentalGenerateVideoCreateInput,
+) => Effect.Effect<ExperimentalGenerateVideoCreateOutput, E>
+
+export type ExperimentalGenerateVideoGetInput = { readonly id: Generate.VideoID }
+export type ExperimentalGenerateVideoGetOutput = Generate.VideoJob
+export type ExperimentalGenerateVideoGetOperation<E = never> = (
+  input: ExperimentalGenerateVideoGetInput,
+) => Effect.Effect<ExperimentalGenerateVideoGetOutput, E>
+
 export type ExperimentalGenerateDecisionsInput = {
   readonly model: Model.Ref
   readonly input: ReadonlyArray<Generate.DecisionPart>
@@ -1533,6 +1555,10 @@ export type ExperimentalGenerateDecisionsOperation<E = never> = (
 export interface ExperimentalGenerateApi<E = never> {
   readonly text: ExperimentalGenerateTextOperation<E>
   readonly image: ExperimentalGenerateImageOperation<E>
+  readonly video: {
+    readonly create: ExperimentalGenerateVideoCreateOperation<E>
+    readonly get: ExperimentalGenerateVideoGetOperation<E>
+  }
   readonly decisions: ExperimentalGenerateDecisionsOperation<E>
 }
 

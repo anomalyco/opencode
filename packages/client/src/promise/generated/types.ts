@@ -178,7 +178,7 @@ export type SessionMessageToolStateRunning1 = {
   metadata: { [x: string]: JsonValue }
 }
 
-export type ModelType = "chat" | "decision" | "image" | (string & {})
+export type ModelType = "chat" | "decision" | "image" | "video" | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
@@ -197,6 +197,12 @@ export type GenerateTextResponse = { data: { text: string } }
 export type GenerateUsage = { input?: number; output?: number }
 
 export type GenerateNative = { [x: string]: JsonValue }
+
+export type GenerateVideoID = string
+
+export type BlobID = string
+
+export type GenerateVideoErrorReason = "failed" | "cancelled" | "expired" | "unknown"
 
 export type GeneratePredicateAnswer = { type: "predicate"; name: string; probability: number }
 
@@ -728,6 +734,17 @@ export type ModelCost = {
   input: MoneyUSDPerMillionTokens
   output: MoneyUSDPerMillionTokens
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
+}
+
+export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
+
+export type BlobInfo = { id: BlobID; mime: string; bytes: number; expiresAt: number }
+
+export type GenerateVideoError = {
+  id: GenerateVideoID
+  status: "error"
+  error: string
+  reason: GenerateVideoErrorReason
 }
 
 export type GenerateChoiceAnswer = {
@@ -2195,6 +2212,10 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type GenerateVideoCreateResponse = { data: GenerateVideoRunning }
+
+export type GenerateVideoCompleted = { id: GenerateVideoID; status: "completed"; blobs: Array<BlobInfo> }
+
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer
   | GenerateChoiceAnswer
@@ -2597,6 +2618,7 @@ export type ConfigEntry =
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
+          video_generate?: boolean
           console_watches?: boolean
           mcp_events?: boolean
           full_codemode?: boolean
@@ -2674,6 +2696,8 @@ export type SessionMessageAssistantTool1 = {
     | SessionMessageToolStateError1
   time: { created: number; ran?: number; completed?: number }
 }
+
+export type GenerateVideoJob = GenerateVideoRunning | GenerateVideoCompleted | GenerateVideoError
 
 export type GenerateDecisionResult = {
   answers: Array<GenerateDecisionAnswer>
@@ -2782,6 +2806,8 @@ export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantText1
   | SessionMessageAssistantReasoning1
   | SessionMessageAssistantTool1
+
+export type GenerateVideoGetResponse = { data: GenerateVideoJob }
 
 export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
@@ -3179,6 +3205,18 @@ export type ProviderRequestError = {
 export const isProviderRequestError = (value: unknown): value is ProviderRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderRequestError"
 
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
+
+export type VideoNotFoundError = {
+  readonly _tag: "VideoNotFoundError"
+  readonly videoID: string
+  readonly message: string
+}
+export const isVideoNotFoundError = (value: unknown): value is VideoNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "VideoNotFoundError"
+
 export type IntegrationNotFoundError = {
   readonly _tag: "IntegrationNotFoundError"
   readonly integrationID: string
@@ -3212,10 +3250,6 @@ export type McpServerNotFoundError = {
 }
 export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
-
-export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
-export const isForbiddenError = (value: unknown): value is ForbiddenError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type ProjectNotFoundError = {
   readonly _tag: "ProjectNotFoundError"
@@ -3274,6 +3308,14 @@ export type PtyFeatureUnsupportedError = {
 }
 export const isPtyFeatureUnsupportedError = (value: unknown): value is PtyFeatureUnsupportedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyFeatureUnsupportedError"
+
+export type BlobNotFoundError = {
+  readonly _tag: "BlobNotFoundError"
+  readonly blobID: string
+  readonly message: string
+}
+export const isBlobNotFoundError = (value: unknown): value is BlobNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "BlobNotFoundError"
 
 export type ScheduleNotFoundError = {
   readonly _tag: "ScheduleNotFoundError"
@@ -3969,7 +4011,7 @@ export type MessageListOutput = SessionMessagesResponse
 
 export type ModelListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | (string & {})> | undefined
+  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | "video" | (string & {})> | undefined
 }
 
 export type ModelListOutput = { location: LocationPublicRef; data: Array<ModelInfo> }
@@ -3995,6 +4037,26 @@ export type ExperimentalGenerateImageInput = {
 }
 
 export type ExperimentalGenerateImageOutput = GenerateImageResponse["data"]
+
+export type ExperimentalGenerateVideoCreateInput = {
+  readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+  readonly prompt: string
+  readonly start?: { readonly data: string; readonly mime: string; readonly name?: string } | undefined
+  readonly end?: { readonly data: string; readonly mime: string; readonly name?: string } | undefined
+  readonly references?:
+    | ReadonlyArray<{ readonly data: string; readonly mime: string; readonly name?: string }>
+    | undefined
+  readonly duration?: number | undefined
+  readonly aspect?: (`${number}${":"}${number}` | "auto") | undefined
+  readonly resolution?: ("480p" | "720p" | "1080p" | "4k" | (string & {})) | undefined
+  readonly sound?: boolean | undefined
+}
+
+export type ExperimentalGenerateVideoCreateOutput = GenerateVideoCreateResponse["data"]
+
+export type ExperimentalGenerateVideoGetInput = { readonly id: string }
+
+export type ExperimentalGenerateVideoGetOutput = GenerateVideoGetResponse["data"]
 
 export type ExperimentalGenerateDecisionsInput = {
   readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -4597,6 +4659,10 @@ export type ExperimentalPersistentPtyConnectTokenOutput = { data: PtyTicketConne
 export type ExperimentalMediaGetInput = { readonly hash: string }
 
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
+
+export type ExperimentalBlobGetInput = { readonly id: string }
+
+export type ExperimentalBlobGetOutput = globalThis.Uint8Array
 
 export type ExperimentalScheduleCreateInput = {
   readonly sessionID: string
