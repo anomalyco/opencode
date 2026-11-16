@@ -16,6 +16,7 @@ import { Plugin } from "../plugin/service.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { Skill } from "../skill.js"
 import { SessionBlob } from "./blob.js"
+import { SessionSkill } from "./skill.js"
 import { AttachmentError, SkillNotFoundError } from "./error.js"
 import { SessionStored } from "./stored.js"
 
@@ -64,7 +65,9 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
       Effect.gen(function* () {
         const name = prepared.get(attachment.id)
         if (name !== undefined) return { id: attachment.id, name, mention: attachment.mention }
-        const skill = yield* skillService.get(attachment.id)
+        const skill = yield* skillService
+          .get(attachment.id)
+          .pipe(Effect.catchTag("Skill.LoadError", SessionSkill.unloadable))
         if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
         prepared.set(skill.id, skill.name)
         const files = yield* skillService.files(skill.id)

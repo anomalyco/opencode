@@ -44,15 +44,18 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const skill = yield* skills.get(input.id)
-              if (!skill) return yield* unableToLoad(input.id)
+              const summary = yield* skills.get(input.id, { content: false })
+              if (!summary) return yield* unableToLoad(input.id)
               return yield* Effect.gen(function* () {
                 yield* permission.assert({
                   action: name,
-                  resources: [skill.id],
-                  save: [skill.id],
+                  resources: [summary.id],
+                  save: [summary.id],
                   ...Permission.invocation(context),
                 })
+                // Lazy content, such as an MCP server's SKILL.md, is fetched only once the load is allowed.
+                const skill = yield* skills.get(summary.id)
+                if (!skill) return yield* unableToLoad(input.id)
                 const files = yield* skills.files(skill.id)
                 const { directory, output: content } = yield* Skill.prepare(fs, skill, files)
                 return {
@@ -60,7 +63,13 @@ export const Plugin = {
                   content,
                   metadata: { name: skill.name, directory },
                 }
-              }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
+              }).pipe(
+                Effect.mapError((error) =>
+                  error instanceof Skill.LoadError
+                    ? new ToolFailure({ message: `Unable to load skill ${input.id}: ${error.message}` })
+                    : unableToLoad(input.id, error),
+                ),
+              )
             }),
         }),
       )

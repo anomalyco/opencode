@@ -7,6 +7,7 @@ import { Config } from "../../config.js"
 import { Credential } from "../../credential.js"
 import { ManagedPolicy } from "../../managed-policy.js"
 import { Permission } from "../../permission.js"
+import { Skill } from "../../skill.js"
 import { State } from "../../state.js"
 import { Wildcard } from "../../util/wildcard.js"
 import { WebSearch } from "../../websearch.js"
@@ -19,6 +20,7 @@ export const Plugin = define({
     const config = yield* Config.Service
     const credentials = yield* Credential.Service
     const websearch = yield* WebSearch.Service
+    const skills = yield* Skill.Service
     const bus = yield* Bus.Service
     const reload = State.batch(
       Effect.all([ctx.provider.reload(), ctx.mcp.reload(), ctx.skill.reload(), websearch.reload()], {
@@ -90,10 +92,11 @@ export const Plugin = define({
         if (ManagedPolicy.decision(statements, "mcp.use", name) === "deny") servers.remove(name)
       }
     })
-    yield* ctx.skill.transform((skills) => {
+    // Through the service, not the plugin API, so skills that load their content lazily are covered too.
+    yield* skills.transform((editor) => {
       const statements = policies()
-      for (const skill of skills.list()) {
-        if (ManagedPolicy.decision(statements, "skill.use", skill.id) === "deny") skills.remove(skill.id)
+      for (const skill of editor.list({ content: false })) {
+        if (ManagedPolicy.decision(statements, "skill.use", skill.id) === "deny") editor.remove(skill.id)
       }
     })
     yield* ctx.permission.hook("evaluate", (event) =>

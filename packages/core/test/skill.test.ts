@@ -242,10 +242,9 @@ describe("Skill", () => {
         })
 
         const files = yield* skill.files(Skill.ID.make("review"))
-        expect(Array.from(files ?? [])).toEqual([
-          ["references/a.md", "A"],
-          ["references/b.md", "B"],
-        ])
+        expect(files).toEqual(["references/a.md", "references/b.md"])
+        expect(new TextDecoder().decode(yield* skill.files(Skill.ID.make("review"), "references/a.md"))).toBe("A")
+        expect(new TextDecoder().decode(yield* skill.files(Skill.ID.make("review"), "SKILL.md"))).toBe("# review")
         const fs = yield* FSUtil.Service
         const prepared = yield* Skill.prepare(
           { ...fs, scan: () => Effect.die(new Error("unexpected disk scan")) },
@@ -270,5 +269,71 @@ describe("Skill", () => {
         yield* skill.transform((editor) => editor.remove("review"))
         expect(yield* skill.files(Skill.ID.make("review"))).toBeUndefined()
       }),
+  )
+
+  it.effect("keeps lazy skills out of content lists and loads them only when asked", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      const bus = yield* Bus.Service
+      const id = Skill.ID.make("team:deploy")
+      const loads: string[] = []
+      const lazy = <A>(name: string, value: A) => Effect.sync(() => loads.push(name)).pipe(Effect.as(value))
+      let revision = "1"
+      yield* skill.transform((editor) =>
+        editor.add(
+          {
+            id,
+            name: Skill.Name.make("team:deploy"),
+            description: "Deploy",
+            path: AbsolutePath.make(Skill.uri("team:deploy", "SKILL.md")),
+            content: lazy("SKILL.md", "# Deploy"),
+            revision,
+          },
+          {
+            "references/guide.md": lazy("references/guide.md", "Guide"),
+            "logo.png": lazy("logo.png", new Uint8Array([1, 2])),
+            "broken.md": Effect.fail(new Error("digest mismatch")),
+          },
+        ),
+      )
+      let updates = 0
+      yield* bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Skill.Event.Updated.type) updates++
+        }),
+      )
+
+      expect(yield* skill.list()).toEqual([])
+      expect(yield* skill.get(id, { content: false })).toEqual({
+        id,
+        name: Skill.Name.make("team:deploy"),
+        description: "Deploy",
+        path: AbsolutePath.make("skill://team:deploy/SKILL.md"),
+      })
+      expect((yield* skill.list({ content: false })).map((item) => item.id)).toEqual([id])
+      expect(yield* skill.files(id)).toEqual(["broken.md", "logo.png", "references/guide.md"])
+      yield* skill.transform((editor) => {
+        expect(editor.list()).toEqual([])
+        expect(editor.get(id)).toBeUndefined()
+        expect(editor.get(id, { content: false })?.description).toBe("Deploy")
+      })
+      expect(loads).toEqual([])
+
+      expect((yield* skill.get(id))?.content).toBe("# Deploy")
+      expect(yield* skill.files(id, "logo.png")).toEqual(new Uint8Array([1, 2]))
+      expect(new TextDecoder().decode(yield* skill.files(id, "SKILL.md"))).toBe("# Deploy")
+      expect(loads).toEqual(["SKILL.md", "logo.png", "SKILL.md"])
+      expect(yield* skill.files(id, "missing.md")).toBeUndefined()
+      expect(yield* skill.files(id, "broken.md").pipe(Effect.flip)).toEqual(
+        new Skill.LoadError({ skill: id, path: "broken.md", message: "digest mismatch" }),
+      )
+
+      yield* skill.reload()
+      expect(updates).toBe(0)
+      revision = "2"
+      yield* skill.reload()
+      expect(updates).toBe(1)
+      expect(loads).toEqual(["SKILL.md", "logo.png", "SKILL.md"])
+    }),
   )
 })

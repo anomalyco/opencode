@@ -30,6 +30,12 @@ import {
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
 import {
+  SKILLS_EXTENSION_ID,
+  SkillsClient,
+  type Skill as SdkSkill,
+  type SkillFile as SdkSkillFile,
+} from "@modelcontextprotocol/client/ext/skills"
+import {
   Cause,
   Clock,
   Duration,
@@ -167,6 +173,9 @@ export type EventMessage =
 const EVENT_STREAM_REJECTED = new Set([-32601, -32602, -32023, -32024, -32026])
 
 export type { GetPromptResult, Prompt, ReadResourceResult, Resource }
+/** Experimental: MCP Skills is a beta extension; may change without compatibility guarantees. */
+export type Skill = SdkSkill
+export type SkillFile = SdkSkillFile
 export type ResourceTemplate = ResourceTemplateType
 
 /** A listed tool, keeping the server's fields except `icons`, each only when it has the right type. */
@@ -279,6 +288,8 @@ export interface Connection {
   ) => Effect.Effect<CallToolResult, Error>
   /** MCP Events, when the connection declared them and negotiated 2026-07-28 with a server that offers them. Experimental; see `Events`. */
   readonly events: Events | undefined
+  /** MCP Skills, when the connection declared them and the server offers them with resources. Experimental; see `Skills`. */
+  readonly skills: Skills | undefined
   readonly onClose: (callback: (reason: string) => void) => void
   readonly onSessionExpired: (callback: () => void) => void
   readonly onToolsChanged: (callback: () => void) => void
@@ -313,6 +324,17 @@ export interface Events {
   }) => Stream.Stream<EventMessage, Error>
 }
 
+/** Experimental: MCP Skills is a beta extension; may change without compatibility guarantees. */
+export interface Skills {
+  /** Every valid skill the server lists (`skills/list`); invalid entries are logged and skipped. No file is read. */
+  readonly list: () => Effect.Effect<ReadonlyArray<Skill>, Error>
+  /**
+   * Reads one file of a listed skill, its `SKILL.md` when `ref` is omitted, and verifies its size, digest and, for
+   * `SKILL.md`, frontmatter against the entry.
+   */
+  readonly read: (skill: Skill, ref?: string) => Effect.Effect<SkillFile, Error>
+}
+
 /** An MCP server reached over a transport someone else already opened, such as a client socket. */
 export interface Attached {
   readonly type: "attached"
@@ -334,6 +356,8 @@ export interface ConnectOptions {
   readonly roots?: boolean
   /** Experimental: declares MCP Events, a beta extension, and exposes `Connection.events` for a 2026-07-28 server that offers them. */
   readonly events?: boolean
+  /** Experimental: declares MCP Skills, a beta extension, and exposes `Connection.skills` for a server that offers them. */
+  readonly skills?: boolean
 }
 
 /**
@@ -410,7 +434,14 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         // Legacy era only: roots are deprecated as of 2026-07-28 and modern servers cannot request them.
         // Some legacy servers refuse to run without one (https://github.com/anomalyco/opencode/issues/2308).
         ...(options.roots === false ? {} : { roots: {} }),
-        ...(options.events ? { extensions: { [EVENTS]: {} } } : {}),
+        ...(options.events || options.skills
+          ? {
+              extensions: {
+                ...(options.events ? { [EVENTS]: {} } : {}),
+                ...(options.skills ? { [SKILLS_EXTENSION_ID]: {} } : {}),
+              },
+            }
+          : {}),
       },
       versionNegotiation: negotiation(protocol, timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT),
       listChanged: {
@@ -693,6 +724,9 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       if (!known.arguments(input.arguments ?? {}))
         return yield* reject(-32602, `Arguments for ${input.name} do not match its inputSchema`)
     })
+    // MCP Skills (SEP-2640), a beta extension, serves skill files as resources.
+    const skills =
+      options.skills && advertised("resources") ? new SkillsClient(client, { skipInvalid: true }) : undefined
 
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {
@@ -786,6 +820,24 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                 ),
             }
           : undefined,
+      skills: skills?.supported
+        ? {
+            list: () =>
+              list("list MCP skills", (signal) => skills.list({}, { ...catalog, signal })).pipe(
+                Effect.tap((result) =>
+                  Effect.forEach(
+                    result.invalid,
+                    (entry) =>
+                      Effect.logWarning("skipping invalid MCP skill", { server, uri: entry.uri, reason: entry.reason }),
+                    { discard: true },
+                  ),
+                ),
+                Effect.map((result) => result.skills),
+              ),
+            read: (skill, ref) =>
+              request("read MCP skill file", (signal) => skills.read(skill, ref, { signal, timeout: execution })),
+          }
+        : undefined,
       // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
       // re-parses it and compiles an output validator for every listed tool. Each call passes its own
       // checked definition instead, so modern Mcp-Param-* header mirroring still sees the input schema.

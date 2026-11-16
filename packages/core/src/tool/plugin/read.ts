@@ -77,10 +77,10 @@ export const Plugin = {
                 const parsed = parseSkillUri(input.path)
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
                 const id = Skill.ID.make(parsed.id)
-                const skill = yield* skills.get(id)
+                const skill = yield* skills.get(id, { content: false })
                 if (!skill || !Skill.isUri(skill.path))
                   return yield* new ToolFailure({ message: `File not found: ${input.path}` })
-                const extra = yield* skills.files(id)
+                const extra = (yield* skills.files(id)) ?? []
                 yield* permission.assert({
                   action: "skill",
                   resources: [skill.id],
@@ -93,14 +93,26 @@ export const Plugin = {
                   save: ["*"],
                   ...Permission.invocation(context),
                 })
+                // A file read loads only that file; a directory read lists the skill's paths and loads nothing.
+                const file = parsed.target.slice(1)
                 const virtualFs = Environment.makeFiles(Environment.makeMemoryDriver())
-                const encoder = new TextEncoder()
-                yield* virtualFs.write(AbsolutePath.make("/SKILL.md"), encoder.encode(skill.content))
-                yield* Effect.forEach(
-                  extra ? Array.from(extra) : [],
-                  ([rel, text]) => virtualFs.write(AbsolutePath.make(`/${rel}`), encoder.encode(text)),
-                  { discard: true },
-                )
+                if (file === "SKILL.md" || extra.includes(file)) {
+                  const bytes = yield* skills
+                    .files(id, file)
+                    .pipe(
+                      Effect.mapError(
+                        (error) => new ToolFailure({ message: `Unable to read ${input.path}: ${error.message}` }),
+                      ),
+                    )
+                  if (!bytes) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
+                  yield* virtualFs.write(AbsolutePath.make(parsed.target), bytes)
+                }
+                if (file === "" || extra.some((path) => path.startsWith(`${file}/`)))
+                  yield* Effect.forEach(
+                    ["SKILL.md", ...extra],
+                    (path) => virtualFs.write(AbsolutePath.make(`/${path}`), new Uint8Array()),
+                    { discard: true },
+                  )
                 const output = yield* ReadToolFileSystem.read(virtualFs, AbsolutePath.make(parsed.target), input.path, {
                   offset: input.offset,
                   limit: input.limit,

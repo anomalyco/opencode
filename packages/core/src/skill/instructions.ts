@@ -59,7 +59,7 @@ const layer = Layer.effect(
 
     return Service.of({
       load: Effect.fn("SkillInstructions.load")(function* (policy) {
-        const available = Skill.available(yield* skills.list(), policy)
+        const available = Skill.available(yield* skills.list({ content: false }), policy)
           .flatMap((skill) =>
             skill.description === undefined || skill.autoinvoke === false
               ? []

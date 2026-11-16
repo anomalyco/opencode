@@ -70,6 +70,17 @@ export const registerIntegrationPolicy = Effect.fn(function* (input: {
     }),
   ).pipe(
     Effect.provideService(
+      Skill.Service,
+      input.skill ??
+        Skill.Service.of({
+          transform: () => Effect.succeed({ dispose: Effect.void }),
+          reload: () => Effect.void,
+          get: () => Effect.die("unused Skill.get"),
+          files: () => Effect.die("unused Skill.files"),
+          list: () => Effect.die("unused Skill.list"),
+        }),
+    ),
+    Effect.provideService(
       Credential.Service,
       Credential.Service.of({
         all: () => Effect.succeed([]),

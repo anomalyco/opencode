@@ -26,6 +26,8 @@ export const registry = {
     'Let Code Mode scripts call the OpenCode HTTP API with fetch("opencode:///api/..."), in-process and already signed in, with no permission checks. Only in local and dev builds, and off there until you opt in with OPENCODE_FLAGS=opencode_api or experimental.opencode_api: true.',
   sqlite_fts:
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
+  mcp_skills:
+    "Enable experimental MCP Skills, a beta MCP extension: discover skills that MCP servers offer and load their files on demand.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 

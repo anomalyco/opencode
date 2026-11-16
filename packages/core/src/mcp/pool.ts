@@ -51,9 +51,15 @@ export const key = (input: {
   /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
   readonly credential?: string
   readonly clientInfo?: { readonly name: string; readonly version: string }
+  readonly mcpSkills?: boolean
 }) => {
   const config = input.config
-  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null]
+  const common = [
+    config.protocol,
+    config.timeout ?? null,
+    input.clientInfo ?? null,
+    input.mcpSkills === true,
+  ]
   if (config.type === "remote")
     return JSON.stringify([
       "remote",
@@ -122,7 +128,10 @@ export const layer = Layer.effect(
     const unfixed = new Set<string>()
 
     // Takes only data from the Location that opens it: the connection outlives that Location's claim.
-    const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo">) => {
+    const open = (
+      key: string,
+      input: Pick<Input, "name" | "config" | "directory" | "clientInfo" | "mcpSkills">,
+    ) => {
       const slot: Slot = {
         holders: new Set(),
         lock: Semaphore.makeUnsafe(1),
@@ -134,6 +143,7 @@ export const layer = Layer.effect(
           directory: input.directory,
           shared: true,
           clientInfo: input.clientInfo,
+          mcpSkills: input.mcpSkills,
           // Every holder of a key presents the same credential, so any of them can build the provider.
           authProvider: Effect.suspend(() => slot.holders.values().next().value?.authProvider ?? Effect.undefined),
           elicitation: {
@@ -245,6 +255,7 @@ export const layer = Layer.effect(
           config: input.config,
           directory: input.directory,
           clientInfo: input.clientInfo,
+          mcpSkills: input.mcpSkills,
         })
       yield* Effect.acquireRelease(
         Effect.sync(() => slot.holders.add(holder)),
@@ -343,6 +354,9 @@ export const layer = Layer.effect(
         get prompts() {
           return live().prompts
         },
+        get skills() {
+          return live().skills
+        },
         start: Effect.gen(function* () {
           if (input.config.type === "local" && input.config.cwd === undefined && !unfixed.has(input.name)) {
             unfixed.add(input.name)
@@ -365,6 +379,7 @@ export const layer = Layer.effect(
           yield* input.events.changed("tools")
           yield* input.events.changed("resources")
           yield* input.events.changed("prompts")
+          yield* input.events.changed("skills")
         }),
         recovering: (client, request) =>
           state.shared
