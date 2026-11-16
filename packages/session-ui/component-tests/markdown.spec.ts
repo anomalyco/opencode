@@ -71,6 +71,26 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
   ])
 })
 
+story("limits authored presentation to text and keeps application link hit areas inline", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const fragment = document.createElement("template")
+    fragment.innerHTML = sanitizeMarkdown([
+      '<p style="position:relative;transform:scale(2);pointer-events:none;color:teal;text-align:center">sample</p>',
+      '<span popover="manual">sample</span><button commandfor="unused" command="close" popovertarget="unused">sample</button><dialog>sample</dialog>',
+      '<a href="obsidian:fixture" style="font-weight:bold"><strong>Label</strong></a>',
+      '<a href="mailto:fixture@example.invalid"><div>Block label</div></a>',
+    ].join(""))
+    const anchors = [...fragment.content.querySelectorAll("a")]
+    return {
+      style: fragment.content.querySelector("p")?.style.cssText,
+      active: fragment.content.querySelectorAll("[popover], [commandfor], [command], [popovertarget], dialog").length,
+      links: anchors.map(a => [a.dataset.appLink, a.hasAttribute("href"), a.hasAttribute("style"), a.textContent]),
+    }
+  }, fixture)
+  expect(result).toEqual({ style: "color: teal; text-align: center;", active: 0, links: [["obsidian:fixture", false, false, "Label"], [undefined, false, false, "Block label"]] })
+})
+
 story("keeps Markdown sanitization and link protections after Mermaid renders", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { renderMermaidSvg, sanitizeMarkdown } = await import(fixture)

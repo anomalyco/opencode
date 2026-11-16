@@ -43,26 +43,46 @@ const purifier = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 
 if (typeof window !== "undefined" && purifier.isSupported) {
   const appLinks = new WeakMap<HTMLAnchorElement, string>()
+  const style = document.createElement("span").style
+  const allowedStyle = document.createElement("span").style
   // A config passed to sanitize() rebuilds every allow-list on each call; set once, every call reuses them.
   purifier.setConfig({
     USE_PROFILES: { html: true, mathMl: true },
     SANITIZE_NAMED_PROPS: true,
-    FORBID_TAGS: ["style"],
+    FORBID_TAGS: ["style", "dialog"],
+    FORBID_ATTR: ["popover", "popovertarget", "popovertargetaction", "command", "commandfor", "data-floating-overlay"],
     FORBID_CONTENTS: ["style", "script"],
     ADD_TAGS: ["svg", "path"],
     ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
   })
+  purifier.addHook("uponSanitizeAttribute", (_, attr) => {
+    if (attr.attrName !== "style") return
+    style.cssText = attr.attrValue
+    allowedStyle.cssText = ""
+    for (const property of ["color", "background-color", "font-weight", "font-style", "text-decoration-line", "text-align"]) {
+      allowedStyle.setProperty(property, style.getPropertyValue(property))
+    }
+    attr.attrValue = allowedStyle.cssText
+    attr.keepAttr = !!attr.attrValue
+  })
   purifier.addHook("beforeSanitizeAttributes", (node) => {
+    if (node instanceof Element) node.removeAttribute("data-app-link")
     if (node instanceof HTMLAnchorElement) {
       // Local file links never navigate the document; the host decides how to open them.
       node.removeAttribute("data-local-link")
-      node.removeAttribute("data-app-link")
       const href = node.getAttribute("href") ?? ""
       const path = localLinkPath(href)
 
       const protocol = URL.parse(href)?.protocol
 
-      if (protocol && (!path || protocol === "file:") && !/^https?:$/.test(protocol)) appLinks.set(node, href)
+      if (protocol && (!path || protocol === "file:") && !/^https?:$/.test(protocol)) {
+        node.removeAttribute("style")
+        node.removeAttribute("class")
+        // A card or an entire paragraph is not a link label. Keep its contents, but don't arm that hit area.
+        if (node.querySelector(":not(b,i,em,strong,s,span,code)")) return node.removeAttribute("href")
+        if (node.childElementCount) node.textContent = node.textContent
+        appLinks.set(node, href)
+      }
 
       if (!path) return
       node.setAttribute("data-local-link", path)
