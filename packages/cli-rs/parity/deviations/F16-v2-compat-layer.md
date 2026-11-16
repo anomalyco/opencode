@@ -69,6 +69,11 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   theme follows a theme change without a call, where an installed package's node keeps the color it read in TS. The
   `theme` object has no `hue`, `categorical` or `surface()`, and neither it nor `themeMode` is a signal.
 - **Numbers** a render computes are rounded and clamped to the contract's ranges.
+- **Raw writes to standard output** (`fs.writeSync(1, …)`, as oc-bg-color-sync writes `OSC 11` and `OSC 111` to set
+  and reset the terminal's background) reach the terminal in TS, where the plugin runs in the TUI's process. Here they
+  are logged, escaped, by the plugin whose code ran as they were written (`js host: plugin <id> wrote N bytes to standard
+  output, …`), and change nothing on screen; the JS host and its plugins keep running. Forwarding them would need
+  OpenTUI to write them between its frames, so they cannot cut into one (js-stdio).
 
 **Reason.** O-123 and O-125 keep plugin UI code native and in-process; O-128 makes TypeScript a compatibility shim on
 the JS host, the second tier: what it cannot read in the frame, or that the contract does not carry, it reports rather

@@ -665,11 +665,12 @@ fn a_plugin_that_floods_fails_alone_and_the_js_host_starts_again() {
     }
 }
 
-// Expected (review F4): a plugin's prints go to the JS host's standard error and break nothing; raw bytes written past
-// them to standard output break the protocol, which ends the JS host: the plugin whose handler wrote them fails, and the
-// other is set up again on a new one.
+// Expected (review F4, js-stdio): a plugin's prints go to the JS host's standard error and break nothing, and so do the
+// raw bytes it writes to the descriptor of standard output itself, as oc-bg-color-sync writes an OSC sequence: the
+// protocol runs on standard input, so the JS host and every plugin keep running and answer, and the bytes are logged by
+// the plugin whose handler wrote them, escaped. TS sends them to the terminal (deviation F16).
 #[test]
-fn standard_output_is_the_protocols_alone() {
+fn a_raw_write_to_standard_output_is_logged_and_breaks_nothing() {
     let Some(config) = config() else { return };
     let (pipe, log) = probe_and_twin(config, false);
     let pid = pipe.scripts().pid().unwrap();
@@ -677,16 +678,24 @@ fn standard_output_is_the_protocols_alone() {
     pipe.settle();
     assert_eq!(calls(&log), vec![serde_json::json!({ "printed": true })]);
     assert_eq!(pipe.scripts().pid(), Some(pid), "a print ended the JS host");
-    pipe.harness.tui.keymap.dispatch("probe.raw", None);
-    pipe.harness.wait("the raw bytes ended the JS host", || {
+    for _ in 0..3 {
+        pipe.harness.tui.keymap.dispatch("probe.raw", None);
+        pipe.settle();
+    }
+    assert_eq!(calls(&log).iter().filter(|call| **call == serde_json::json!({ "raw": true })).count(), 3);
+    pipe.harness.wait("the raw bytes are logged", || {
         pipe.harness.app.advance(Duration::from_millis(1));
-        pipe.scripts().pid().is_some_and(|now| now != pid)
+        pipe.scripts().stray().iter().filter(|record| record.contains("not a frame")).count() == 3
     });
-    pipe.settle();
-    assert!(gone(pid));
-    let error = failed(&pipe, PROBE).unwrap_or_default();
-    assert!(error.contains("run-command ended the JS host: the JS host broke the protocol"), "{error}");
+    let stray = pipe.scripts().stray();
+    let record = stray.iter().find(|record| record.contains("not a frame")).unwrap();
+    assert!(record.starts_with(&format!("plugin {PROBE} wrote 30 bytes")), "{stray:?}");
+    assert!(record.contains(r"\u{1b}]11;rgb:10/20/30\u{7}not a frame\n"), "{record}");
+    assert_eq!(pipe.scripts().pid(), Some(pid), "a raw write ended the JS host");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+    twin_open(&pipe);
     assert_eq!(pipe.status(twin::ID), Some(Status::Active));
+    assert_eq!(pipe.scripts().pid(), Some(pid));
 }
 
 // Expected (the JS host's memory budget): a JS host over its budget is ended and started again with its plugins.

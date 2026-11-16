@@ -644,10 +644,18 @@ does not see still runs only what was approved: its copy fails, the plugin is he
 again for the question about the new build. The tree hashed again when the user approves, the copy and that hash all
 run off the UI thread too, so Approve returns at once and the plugin starts once they end. A
 file outside the directory that it imports is not part of what was approved. Safe mode holds a TypeScript plugin as it
-holds a library. The JS host's standard output is the protocol's: a plugin's `console` (every method) and
-`process.stdout`, its own modules' and its dependencies' included, write to the JS host's standard error, which the
-client logs; only a write to the descriptor itself (`fs.writeSync(1, …)`) breaks the protocol, which ends the JS host
-and fails the plugin that wrote it. A plugin that gives the host what is not JSON (a `BigInt`, a cycle) fails alone.
+holds a library. The protocol runs both ways on the JS host's standard input: a socket pair on Linux and macOS, and on
+Windows a duplex named pipe that belongs to the JS host by construction (a random name, its first and only instance,
+this user's alone, local, its client connected before the JS host starts), whose two ends are overlapped so a read
+pending at either end holds no write back. Nothing a plugin writes can break it. A plugin's `console` (every method)
+and `process.stdout`, its own modules' and its dependencies' included, write to the JS host's standard error, which the
+client logs a line at a time. A write to the descriptor of standard output itself (`fs.writeSync(1, …)`, as
+oc-bg-color-sync writes OSC sequences) is logged too, escaped, by the plugin whose code the JS host ran as it was
+written: the JS host marks on standard output whose code runs from then on. Bytes written outside any plugin's code (a
+timer, a child process) name no plugin, and the log says so. At most 10 records a second and 64 KiB in all are logged
+for one JS host; the rest is counted. TS sends those bytes to the terminal (deviation `F16-v2-compat-layer`); forwarding
+them would need OpenTUI to put them between its frames. A plugin that gives the host what is not JSON (a `BigInt`, a
+cycle) fails alone.
 
 It is the second timing tier. No frame waits for the JS host:
 

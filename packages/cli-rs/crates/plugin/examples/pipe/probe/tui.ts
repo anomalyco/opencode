@@ -66,8 +66,10 @@ export default {
       })
     })
     carrier.command({ name: "probe.raw", title: "probe.raw" }, () => {
-      // Past the JS host's own stream, as a native addon or a careless write would.
-      writeSync(1, "not a frame\n")
+      // To the descriptor itself, as oc-bg-color-sync sets the terminal's background, a native addon or a careless
+      // write would.
+      writeSync(1, "\x1b]11;rgb:10/20/30\x07not a frame\n")
+      log({ raw: true })
     })
     carrier.command({ name: "probe.print", title: "probe.print" }, () => {
       console.log("a stray print")

@@ -1,7 +1,7 @@
 // The JS host of opencode-native's pipe carrier (rich-plugins synthesis 3.7 and 4.3, phase P7). One Bun process runs
-// every TypeScript TUI plugin and speaks contract 2.0 with the client over its standard streams: frames of a length
-// (u32, little-endian), a kind byte (0 control, 1 tree) and JSON. The client embeds this file and runs it; it is not a
-// module plugins import.
+// every TypeScript TUI plugin and speaks contract 2.0 with the client over its standard input, which carries both
+// directions (a socket pair, or a duplex named pipe on Windows; js-stdio): frames of a length (u32, little-endian), a
+// kind byte (0 control, 1 tree) and JSON. The client embeds this file and runs it; it is not a module plugins import.
 //
 // What it gives a plugin is a `{ id, setup }` module's setup context: the V2 TUI context of the compatibility layer
 // (P8, `compat/`, bundled as `compat.js`), whose slots, routes and dialogs render the plugin's JSX into contract trees,
@@ -10,7 +10,9 @@
 // (`@opencode/plugin/tui`, Solid, `@opentui/solid`, `@opentui/core`) are the layer's.
 //
 // The rules it keeps:
-// - Standard output is the protocol. Before any plugin loads, `console` and `process.stdout` write to standard error.
+// - Standard input is the protocol, both ways. Standard output and standard error are the plugins': `console` and
+//   `process.stdout` write to standard error, and what a plugin writes to the descriptor itself (`writeSync(1, …)`)
+//   the client logs, by the plugin whose code ran then, which this host marks on standard output (`own`).
 // - Every host message with a sequence is acknowledged on receipt, apart from the work it asks for. A sequence seen
 //   again is dropped; one that skips or goes back breaks the stream, and the process exits.
 // - A handler's effects are its call's: a handler that throws has none, and its plugin is called no more.
@@ -30,9 +32,9 @@ const VERSION = 1
 const CONTROL = 0
 const TREE = 1
 
-// Standard output is the protocol's alone (review F4): every method of `console` (`dir` and `table` too, which Bun's
-// own console writes to standard output directly) and the whole `process.stdout` stream, also for a library that
-// holds on to it or waits for its callback, write to standard error.
+// Prints are logged a line at a time (review F4): every method of `console` (`dir` and `table` too, which Bun's own
+// console writes to standard output directly) and the whole `process.stdout` stream, also for a library that holds on
+// to it or waits for its callback, write to standard error.
 const stderr = (text: string) => process.stderr.write(text.endsWith("\n") ? text : text + "\n")
 globalThis.console = new Console(process.stderr, process.stderr)
 process.stdout.write = ((chunk: unknown, encoding?: unknown, callback?: unknown) =>
@@ -54,8 +56,7 @@ const OUTSIDE = "is outside the plugin's approved files"
 runtime({
   name: "opencode-compat",
   setup(build) {
-    for (const [name, exports] of Object.entries(modules))
-      build.module(name, () => ({ exports, loader: "object" }))
+    for (const [name, exports] of Object.entries(modules)) build.module(name, () => ({ exports, loader: "object" }))
     build.onResolve({ filter: /.*/ }, (args) => {
       const importer = args.importer?.split("?")[0]
       if (!importer || resolving || confined.size === 0 || args.path in modules || builtin(args.path)) return undefined
@@ -83,16 +84,39 @@ function builtin(specifier: string) {
   return isBuiltin(specifier) || specifier === "bun" || specifier.startsWith("bun:")
 }
 
-// Frames go out with blocking writes (review carbon-5): a client that reads nothing stops the JS host in its write,
-// which is the pipe's back-pressure, rather than letting it buffer without bound; and no frame is cut at exit.
-function write(bytes: Buffer) {
+// Frames go out on standard input, the protocol's both ways, with blocking writes (review carbon-5): a client that
+// reads nothing stops the JS host in its write, which is the channel's back-pressure, rather than letting it buffer
+// without bound; and no frame is cut at exit.
+function write(bytes: Buffer, fd = 0) {
   let at = 0
   while (at < bytes.length) {
     try {
-      at += writeSync(1, bytes, at)
+      at += writeSync(fd, bytes, at)
     } catch (error) {
       if ((error as { code?: string }).code !== "EAGAIN") throw error
     }
+  }
+}
+
+// Whose code runs, marked on standard output as it changes: what a plugin writes there with `writeSync(1, …)` while
+// its code runs comes after its mark, so the client's log names it; bytes written outside any plugin's code (a timer, a
+// child process) come after a `null` mark and name nobody. The mark is the client's `OWNER` in `child.rs`.
+const OWNER = "\0OPENCODE_JS_HOST_OWNER "
+let owner: string | undefined
+function own(id: string | undefined) {
+  if (id === owner) return
+  owner = id
+  try {
+    write(Buffer.from(`${OWNER}${JSON.stringify(id ?? null)}\0`), 1)
+  } catch {}
+}
+async function owning<T>(id: string | undefined, run: () => T | Promise<T>): Promise<T> {
+  const before = owner
+  own(id)
+  try {
+    return await run()
+  } finally {
+    own(before)
   }
 }
 
@@ -135,7 +159,7 @@ function killAll(me: number) {
     }
     const found: number[] = []
     for (const queue = [me]; queue.length; ) {
-      for (const pid of children.get(queue.shift()!) ?? []) found.push(pid), queue.push(pid)
+      for (const pid of children.get(queue.shift()!) ?? []) (found.push(pid), queue.push(pid))
     }
     return found
   }
@@ -383,7 +407,9 @@ function view(plugin: Plugin, mount: Mount) {
         nested.set(key, within.pop() ?? [])
       }
       // The subtree takes the key as its id, as the Rust SDK's memo gives it.
-      return node && typeof node === "object" && node.type !== "keep" && node.type !== "slot" ? { ...node, id: key } : node
+      return node && typeof node === "object" && node.type !== "keep" && node.type !== "slot"
+        ? { ...node, id: key }
+        : node
     },
     content(bytes) {
       const handle = mount.next++
@@ -437,9 +463,12 @@ function viewAll(plugin: Plugin) {
 // cleanup): the host is told whose it is, so an end within it names that plugin (review carbon-3).
 function within(plugin: Plugin, run: () => void) {
   send({ type: "entered", id: plugin.id })
+  const before = owner
+  own(plugin.id)
   try {
     run()
   } finally {
+    own(before)
     send({ type: "entered" })
   }
 }
@@ -798,6 +827,8 @@ async function load(seq: number, target: string, dir: string, options: Json, wit
   if (known && known.target !== target)
     return send({ type: "done", seq, error: `plugin ID ${definition.id} is already registered` })
   const plugin = candidate(definition, target, dir, options)
+  // Its setup's writes name its ID; its module's own code ran as its target.
+  own(definition.id)
   if (withSetup) return setup(seq, seeded(plugin, seed))
   described.set(seq, plugin)
   send({ type: "described", seq, id: definition.id })
@@ -861,7 +892,8 @@ function call(seq: number, plugin: Plugin, request: Json) {
     } else if (request.type === "event") {
       const events = plugin.events[request.handler]
       result = events?.handler(request.event)
-      for (const listener of events?.listens ? [...(plugin.listening[events.listens] ?? [])] : []) listener(request.event)
+      for (const listener of events?.listens ? [...(plugin.listening[events.listens] ?? [])] : [])
+        listener(request.event)
     } else if (request.type === "input") {
       const to = request.to
       const handler = to.type === "layer" ? plugin.layers[to.layer]?.handler : plugin.surfaces[to.surface]?.on
@@ -898,7 +930,12 @@ let running = false
 const STARTED = new Set(["load", "setup", "call", "mount", "input"])
 
 async function handle(message: Json) {
-  const plugin = typeof message.activation === "number" ? generations.get(message.activation) : message.id ? plugins.get(message.id) : undefined
+  const plugin =
+    typeof message.activation === "number"
+      ? generations.get(message.activation)
+      : message.id
+        ? plugins.get(message.id)
+        : undefined
   if (STARTED.has(message.type)) send({ type: "started", seq: message.seq })
   switch (message.type) {
     case "skipped":
@@ -1029,13 +1066,22 @@ async function handle(message: Json) {
   }
 }
 
+// The plugin whose code `message` runs, if one does: a load runs its module's own code, named by its target until it
+// says its ID.
+function runs(message: Json): string | undefined {
+  if (message.type === "load") return message.target
+  if (message.type === "setup") return described.get(message.load)?.id
+  if (typeof message.activation === "number") return generations.get(message.activation)?.id
+  return typeof message.id === "string" ? message.id : undefined
+}
+
 async function drain() {
   if (running) return
   running = true
   while (work.length) {
     const next = work.shift()
     try {
-      await handle(next)
+      await owning(runs(next), () => handle(next))
     } catch (error) {
       stderr(`js host: ${message(error)}`)
     }
@@ -1047,36 +1093,40 @@ async function drain() {
 send({ type: "hello", magic: MAGIC, version: VERSION, pid: process.pid })
 
 let pending = Buffer.alloc(0)
-for await (const chunk of Bun.stdin.stream()) {
-  pending = pending.length ? Buffer.concat([pending, chunk]) : Buffer.from(chunk)
-  let acked = 0
-  while (pending.length >= 5) {
-    const len = pending.readUInt32LE(0)
-    if (pending.length < 5 + len) break
-    const kind = pending[4]
-    const body = pending.subarray(5, 5 + len)
-    pending = pending.subarray(5 + len)
-    if (kind !== CONTROL) continue
-    const message = JSON.parse(body.toString())
-    trace(`down ${body.toString()}`)
-    if (message.type === "hello") {
-      last = message.after ?? 0
-      themeMode = message.theme_mode ?? themeMode
-      palette = message.palette ?? palette
-    }
-    if (typeof message.seq === "number") {
-      if (message.seq <= last) continue
-      if (message.seq !== last + 1) {
-        stderr(`js host: the stream skipped from ${last} to ${message.seq}`)
-        process.exit(3)
+try {
+  for await (const chunk of Bun.stdin.stream()) {
+    pending = pending.length ? Buffer.concat([pending, chunk]) : Buffer.from(chunk)
+    let acked = 0
+    while (pending.length >= 5) {
+      const len = pending.readUInt32LE(0)
+      if (pending.length < 5 + len) break
+      const kind = pending[4]
+      const body = pending.subarray(5, 5 + len)
+      pending = pending.subarray(5 + len)
+      if (kind !== CONTROL) continue
+      const message = JSON.parse(body.toString())
+      trace(`down ${body.toString()}`)
+      if (message.type === "hello") {
+        last = message.after ?? 0
+        themeMode = message.theme_mode ?? themeMode
+        palette = message.palette ?? palette
       }
-      last = message.seq
-      acked = last
+      if (typeof message.seq === "number") {
+        if (message.seq <= last) continue
+        if (message.seq !== last + 1) {
+          stderr(`js host: the stream skipped from ${last} to ${message.seq}`)
+          process.exit(3)
+        }
+        last = message.seq
+        acked = last
+      }
+      work.push(message)
     }
-    work.push(message)
+    if (acked) send({ type: "ack", seq: acked })
+    drain()
   }
-  if (acked) send({ type: "ack", seq: acked })
-  drain()
+} catch {
+  // A read that fails is the end of input too: on Windows the client's end of the named pipe ends it so (EPIPE).
 }
 // The input ended: the client is done with it, or gone.
 killAll(process.pid)
