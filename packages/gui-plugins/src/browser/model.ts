@@ -631,6 +631,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
     search: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.find,
     reviewLink(session: SessionRef, url: string) {
+      if (!available(session)) return
       if (url.length > 2048) {
         ctx.toast.show({ title: describe("browser.address.web") })
 

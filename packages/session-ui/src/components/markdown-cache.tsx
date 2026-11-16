@@ -113,8 +113,10 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     // URL parser might trim: the desktop policy checks exactly what the author wrote.
     if (href !== undefined) {
       node.dataset.appLink = href
-      node.setAttribute("role", "link")
-      node.tabIndex = 0
+      if (!node.hasAttribute("href")) {
+        node.removeAttribute("tabindex")
+        node.removeAttribute("role")
+      }
     }
 
     if (node.target !== "_blank") return
@@ -131,6 +133,14 @@ export function sanitizeMarkdown(html: string) {
   if (!purifier.isSupported) return ""
 
   return purifier.sanitize(html)
+}
+
+/** Only the desktop session installs a reviewer for inert application targets. */
+export function enableMarkdownAppLinks(source: ParentNode) {
+  source.querySelectorAll<HTMLAnchorElement>("a[data-app-link]").forEach((anchor) => {
+    anchor.setAttribute("role", "link")
+    anchor.tabIndex = 0
+  })
 }
 
 export function getCachedMarkdown(key: string) {

@@ -38,10 +38,11 @@ story("reviews the actual application target only after a trusted click", async 
   const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
   const url = "obsidian://open?vault=test&file=report"
   await page.evaluate(async ({ sanitizer, url }) => {
-    const { sanitizeMarkdown } = await import(sanitizer)
+    const { enableMarkdownAppLinks, sanitizeMarkdown } = await import(sanitizer)
     const row = document.createElement("div")
     row.dataset.paneRow = ""
     row.innerHTML = sanitizeMarkdown(`<a href="${url}">Misleading title</a>`)
+    enableMarkdownAppLinks(row)
     document.querySelector('[data-testid="browser-pane-fixture"]')?.prepend(row)
     row.querySelector("a")?.click()
   }, { sanitizer, url })

@@ -160,6 +160,7 @@ export function PluginThemes(props: { loaded: () => boolean }) {
 export function PluginLinks(props: ParentProps<{ session: MountedSession; active?: boolean }>) {
   const host = usePluginHost()
   const markdown = useMarkdown()
+  const desktop = usePlatform().platform === "desktop"
 
   // Checks untracked: markdown calls this inside its render effect, which must not follow the routed session.
   const localFileExists = createLinkCheck(
@@ -169,6 +170,7 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
 
   const Links = (inner: ParentProps<{ codeBlocks: MarkdownCodeBlocks | false }>) => (
     <MarkdownProvider
+      appLinks={desktop}
       readImage={markdown?.readImage}
       openLocalFile={(href) => void host.links.open({ href, session: props.session })}
       localFileExists={localFileExists}

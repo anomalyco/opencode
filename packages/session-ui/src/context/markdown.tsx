@@ -56,6 +56,7 @@ export type MarkdownCodeBlocks = {
 }
 
 const context = createContext<{
+  readonly appLinks?: boolean
   readonly readImage?: ReadMarkdownImage
   readonly openLocalFile?: OpenMarkdownLocalFile
   readonly localFileExists?: MarkdownLocalFileExists
@@ -67,6 +68,7 @@ const context = createContext<{
 
 export function MarkdownProvider(
   props: ParentProps<{
+    appLinks?: boolean
     readImage?: ReadMarkdownImage
     openLocalFile?: OpenMarkdownLocalFile
     localFileExists?: MarkdownLocalFileExists
@@ -82,6 +84,9 @@ export function MarkdownProvider(
   return (
     <context.Provider
       value={{
+        get appLinks() {
+          return props.appLinks ?? parent?.appLinks
+        },
         get readImage() {
           return props.readImage
         },
