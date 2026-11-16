@@ -1,13 +1,14 @@
 export * as DesktopFiles from "./index"
 
 import { execFile, spawn } from "node:child_process"
-import { clipboard, dialog, nativeImage, shell, webContents } from "electron"
+import { app, clipboard, dialog, nativeImage, shell, webContents } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions } from "../../shared/ipc-contract"
 import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
 import { resolveExternalURL } from "./external-url"
+import { pickerStarts } from "./picker-start"
 
 export type Interface = ReturnType<typeof make>
 
@@ -59,13 +60,23 @@ function make(
   path: Path.Path,
   pickedFiles: ReturnType<typeof createPickedFileAuthorizations>,
 ) {
+  // The first start that exists; none when even home is gone, which leaves the system to choose.
+  const start = Effect.fnUntraced(function* (requested: string | undefined, save = false) {
+    for (const candidate of pickerStarts(requested, app.getPath("home"), save)) {
+      if (yield* fs.exists(candidate.check).pipe(Effect.orElseSucceed(() => false))) return candidate.use
+    }
+
+    return undefined
+  })
+
   return {
     openDirectoryPicker: Effect.fn("DesktopFiles.openDirectoryPicker")(function* (options?: DirectoryPickerOptions) {
+      const defaultPath = yield* start(options?.defaultPath)
       const result = yield* Effect.promise(() =>
         dialog.showOpenDialog({
           properties: ["openDirectory", ...(options?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
           title: options?.title ?? nativeT("desktop.dialog.chooseFolder"),
-          defaultPath: options?.defaultPath,
+          defaultPath,
         }),
       )
 
@@ -79,11 +90,12 @@ function make(
       if (picker === undefined) return null
 
       return yield* Effect.gen(function* () {
+        const defaultPath = yield* start(options?.defaultPath)
         const result = yield* Effect.promise(() =>
           dialog.showOpenDialog({
             properties: ["openFile", ...(options?.multiple ? ["multiSelections" as const] : [])],
             title: options?.title ?? nativeT("desktop.dialog.chooseFile"),
-            defaultPath: options?.defaultPath,
+            defaultPath,
             filters: pickerFilters(options?.extensions),
           }),
         )
@@ -109,10 +121,11 @@ function make(
     readPickedFile: pickedFiles.read,
     releasePickedFiles: pickedFiles.release,
     saveFile: Effect.fn("DesktopFiles.saveFile")(function* (options: SaveFilePickerOptions, content: string) {
+      const defaultPath = yield* start(options?.defaultPath, true)
       const result = yield* Effect.promise(() =>
         dialog.showSaveDialog({
           title: options?.title ?? nativeT("desktop.dialog.saveFile"),
-          defaultPath: options?.defaultPath,
+          defaultPath,
         }),
       )
 
