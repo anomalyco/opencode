@@ -1246,6 +1246,17 @@ export const dict = {
   "settings.providers.account.switched.description": "Now using {{account}}.",
   "settings.providers.account.removed.title": "{{account}} removed",
   "settings.providers.account.removed.description": "{{provider}} will no longer use this account.",
+  "settings.providers.account.remove.title": "Remove {{account}}?",
+  "settings.providers.account.remove.description": "{{provider}} will no longer use this account.",
+  "settings.providers.account.remove.finalDescription":
+    "This is your only {{provider}} account, so {{provider}} will be disconnected.",
+  "settings.providers.disconnect.title": "Disconnect {{provider}}?",
+  "settings.providers.disconnect.description":
+    "Its saved credentials will be removed and its models will no longer be available.",
+  "settings.providers.disconnect.consoleDescription.one":
+    "Your sign-in will be removed and {{count}} provider from {{workspace}} will no longer be available.",
+  "settings.providers.disconnect.consoleDescription.other":
+    "Your sign-in will be removed and {{count}} providers from {{workspace}} will no longer be available.",
   "settings.providers.console.available.one": "{{count}} provider available",
   "settings.providers.console.available.other": "{{count}} providers available",
   "settings.providers.section.popular": "Popular providers",
