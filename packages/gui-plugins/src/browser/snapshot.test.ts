@@ -100,12 +100,54 @@ test("summarizes collections, preserves late selections, and expands a scoped co
   const tree = [node(1, "listbox", "Cities", ...items.map((_, i) => i + 2)), ...items]
   const result = await accessibilitySnapshot(tree, options())
   expect(result.content).toContain('"City 29" selected=true')
-  expect(result.content).not.toContain('"City 27"')
-  expect(result.content).toContain("+4 more in @e1 [listbox]")
-  expect(result.content).toContain("4 nodes omitted (4 interactive)")
+  expect(result.content).toContain('"City 27"')
+  expect(result.truncated).toBe(false)
+  const short = await accessibilitySnapshot(tree, { ...options(), maxLines: 10 })
+  expect(short.content).toContain('"City 29" selected=true')
+  expect(short.content).toContain("+21 more in @")
   const scoped = await accessibilitySnapshot(tree, { ...options(), root: 1 })
   expect(scoped.truncated).toBe(false)
   expect(scoped.content).toContain('"City 27"')
+})
+
+test("alerts and nested dialogs outrank navigation; invalid fields and safe values survive a tight budget", async () => {
+  const field = node(4, "textbox", "Email")
+  field.properties = ["invalid", "readonly", "required"].map((key) => ({
+    name: key as "invalid" | "readonly" | "required",
+    value: { type: "boolean", value: true },
+  }))
+  field.value = { type: "string", value: "bad@" }
+  const other = { ...node(6, "textbox", "Password"), value: { type: "string" as const, value: "secret" } }
+  const tree = [
+    node(1, "generic", "", 2, 5),
+    node(2, "navigation", "Routes", 3),
+    node(3, "dialog", "Submit", 4, 6),
+    field,
+    node(5, "alert", "Errors"),
+    other,
+  ]
+  const content = (await accessibilitySnapshot(tree, { ...options(), readableValue: async (id) => id === 4 })).content
+  expect(content.indexOf("[dialog]")).toBeLessThan(content.indexOf("[navigation]"))
+  expect(content.indexOf("[alert]")).toBeLessThan(content.indexOf("[navigation]"))
+  expect(content).toContain('invalid=true required=true readonly=true value="bad@"')
+  expect(content).not.toContain("secret")
+})
+
+test("headings inside collapsed card wrappers distinguish identical controls", async () => {
+  const tree = [
+    node(1, "list", "", 2, 6),
+    node(2, "listitem", "", 3, 5),
+    node(3, "generic", "", 4),
+    node(4, "heading", "Alpha"),
+    node(5, "button", "Edit"),
+    node(6, "listitem", "", 7, 9),
+    node(7, "generic", "", 8),
+    node(8, "heading", "Beta"),
+    node(9, "button", "Edit"),
+  ]
+  const result = await accessibilitySnapshot(tree, { ...options(), interactive: true })
+  expect(result.content).toContain('[button] "Edit" in heading "Alpha"')
+  expect(result.content).toContain('[button] "Edit" in heading "Beta"')
 })
 
 test("prefers a nonignored root and can find a known ref after its role changes", async () => {

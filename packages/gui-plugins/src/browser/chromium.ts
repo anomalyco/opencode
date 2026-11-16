@@ -2267,6 +2267,11 @@ export function createBrowserPage(
       previous: refs.previous(frameID, sessionID),
       picked: byNode(picked),
       ref: options.shared.ref,
+      // AX does not distinguish password textboxes. Fail closed if the backing input is gone or protected.
+      readableValue: async backendID => {
+        abortError(signal)
+        return (await call({ backendID, frameID, sessionID }, `function() { return this.isConnected && !(this instanceof HTMLInputElement && ['password','file'].includes(this.type)) && getComputedStyle(this).webkitTextSecurity === 'none' }`).catch(() => false)) === true
+      },
       box: action.type === "snapshot" && action.boxes ? async (backendID) => {
         abortError(signal)
         const box = await rect({ backendID, frameID, sessionID }, false, tree).catch(() => undefined)

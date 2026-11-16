@@ -12,12 +12,13 @@ type Options = {
   picked: ReadonlyMap<number, string>
   ref: () => string
   box?: (id: number) => Promise<string>
+  readableValue?: (id: number) => Promise<boolean>
   signal?: AbortSignal
 }
 
-type Area = { id: number; role: string; count: number; skipped: number }
+type Area = { id: number; role: string; skipped: number }
 
-type Overflow = { area: Area; keep: boolean; parent?: Overflow }
+type Item = { area: Area; keep: boolean; meaningful: boolean; shown: number; parent?: Item }
 
 type Branch = {
   node: Protocol.Accessibility.AXNode
@@ -30,24 +31,33 @@ type Branch = {
   priority?: number
   area?: Area
   collection?: Area
-  overflow?: Overflow
+  entry?: Item
 }
 
-type Line = { label: string; id?: number; interactive: boolean; area?: Area; overflow?: Overflow; deep: boolean }
+type Line = {
+  label: string
+  value?: string
+  id?: number
+  interactive: boolean
+  area?: Area
+  entry?: Item
+  important: boolean
+  deep: boolean
+}
 
 const controls =
   /^(button|link|textbox|searchbox|combobox|listbox|checkbox|radio|option|switch|tab|menuitem|menuitemcheckbox|menuitemradio|slider|spinbutton|treeitem|scrollbar)$/
 
 const collections = /^(table|grid|treegrid|list|listbox|combobox|menu|tree)$/
 
-const landmarks = /^(dialog|alertdialog|main|form|search|region|navigation|contentinfo|banner|complementary)$/
+const landmarks = /^(alert|dialog|alertdialog|main|form|search|region|navigation|contentinfo|banner|complementary)$/
 
 function excerpt(name: string, limit: number) {
   return name.length <= limit ? name : `${name.slice(0, limit)}… [+${name.length - limit} chars]`
 }
 
 function rank(role: string) {
-  if (role === "alertdialog" || role === "dialog") return 1
+  if (role === "alert" || role === "alertdialog" || role === "dialog") return 1
 
   if (role === "main") return 2
 
@@ -75,7 +85,7 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
   const buckets = Array.from({ length: 6 }, (): Line[] => [])
   const seen = new Set<string>()
   const headings = new Map<string, string>()
-  const overflowItems: Overflow[] = []
+  const items: Item[] = []
   const query = options.text?.toLowerCase()
 
   while (pending.length) {
@@ -115,12 +125,10 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
       !(role === "StaticText" && name === branch.parentName && !known)
 
     const area =
-      visible && id && (landmarks.test(role) || collections.test(role))
-        ? { id, role, count: 0, skipped: 0 }
-        : branch.area
+      visible && id && (landmarks.test(role) || collections.test(role)) ? { id, role, skipped: 0 } : branch.area
 
     const collection = area && collections.test(area.role) ? area : branch.collection
-    const priority = branch.priority ?? (visible ? rank(role) : undefined)
+    const priority = Math.min(branch.priority ?? 5, (visible && rank(role)) || 5)
     const inherited = headings.get(branch.parent) ?? branch.scope
 
     const scope =
@@ -133,7 +141,7 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
     const isItem = visible && /^(row|listitem|option)$/.test(role)
 
     const itemName =
-      options.interactive && role === "row" && !name
+      options.interactive && (role === "row" || role === "listitem") && !name
         ? String(index.get(children[0])?.name?.value ?? "").replace(/\s+/g, " ")
         : name
 
@@ -142,25 +150,39 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
         ? `${role} ${itemName ? JSON.stringify(excerpt(itemName, 60)) : branch.ordinal}`
         : branch.item
 
-    const overflow =
-      isItem && collection && options.text === undefined && collection.id !== options.root && ++collection.count > 25
-        ? { area: collection, keep: false, parent: branch.overflow }
-        : branch.overflow
-
-    if (overflow && overflow !== branch.overflow) overflowItems.push(overflow)
-
-    if (
-      overflow &&
-      ["focused", "selected", "checked"].some((key) =>
-        node.properties?.some((p) => p.name === key && [true, "true", "mixed"].includes(p.value.value)),
-      )
-    ) {
-      for (let group: Overflow | undefined = overflow; group; group = group.parent) group.keep = true
+    const entry =
+      isItem && collection
+        ? { area: collection, keep: false, meaningful: false, shown: 0, parent: branch.entry }
+        : branch.entry
+    if (entry && entry !== branch.entry) items.push(entry)
+    const important = !!node.properties?.some(
+      (p) =>
+        ["focused", "selected", "checked", "invalid"].includes(p.name) &&
+        ![false, "false", undefined].includes(p.value.value),
+    )
+    if (visible && entry && (interactive || name.trim() || important)) {
+      entry.meaningful = true
+      if (important) for (let group: Item | undefined = entry; group; group = group.parent) group.keep = true
     }
 
     if (visible && (!options.interactive || interactive)) {
-      const flags = (["checked", "disabled", "expanded", "selected", "pressed", "focused"] as const).flatMap((key) =>
-        props.has(key) ? [`${key}=${props.get(key)}`] : [],
+      const flags = (
+        [
+          "checked",
+          "disabled",
+          "expanded",
+          "selected",
+          "pressed",
+          "focused",
+          "invalid",
+          "required",
+          "readonly",
+        ] as const
+      ).flatMap((key) =>
+        props.has(key) &&
+        !(["invalid", "required", "readonly"].includes(key) && [false, "false"].includes(props.get(key)))
+          ? [`${key}=${props.get(key)}`]
+          : [],
       )
 
       const context = options.interactive ? [inherited, branch.item].filter(Boolean).join(" / ") : ""
@@ -175,10 +197,15 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
         const pad = options.interactive ? "" : "  ".repeat(Math.min(12, branch.level))
         buckets[role === "RootWebArea" ? 0 : (priority ?? 5)].push({
           label: pad + label,
+          value:
+            interactive && node.value?.value !== undefined
+              ? JSON.stringify(excerpt(String(node.value.value), 160))
+              : undefined,
           id: interactive || known || area?.id === id ? id : undefined,
           interactive,
           area,
-          overflow,
+          entry,
+          important,
           deep: branch.level > (options.depth ?? Infinity),
         })
       }
@@ -193,25 +220,23 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
         pending.push({
           node: child,
           level: branch.level + Number(visible),
-          parent: node.nodeId,
+          parent: visible ? node.nodeId : branch.parent,
           parentName: visible ? name : branch.parentName,
           scope,
           item,
           priority,
           area,
           collection,
-          overflow,
+          entry,
           ordinal: i + 1,
         })
     }
   }
 
-  for (const group of overflowItems) if (!group.keep) group.area.skipped++
-
-  return printSnapshot(buckets, options)
+  return printSnapshot(buckets, items, options)
 }
 
-async function printSnapshot(buckets: Line[][], options: Options) {
+async function printSnapshot(buckets: Line[][], items: Item[], options: Options) {
   const refs = new Map<string, number>()
   const issued = new Map<number, string>()
 
@@ -224,7 +249,7 @@ async function printSnapshot(buckets: Line[][], options: Options) {
 
   const maxChars = options.maxChars ?? 20_000
   const maxLines = options.maxLines ?? Infinity
-  const output: { line: Line; text: string }[] = []
+  const output: { line: Line; text: string; order: number }[] = []
   const areas = new Map<Area | undefined, number>()
   let omitted = 0
   let interactive = 0
@@ -238,29 +263,39 @@ async function printSnapshot(buckets: Line[][], options: Options) {
     areas.set(line.area, (areas.get(line.area) ?? 0) + 1)
   }
 
-  for (const bucket of buckets) {
+  for (const original of buckets) {
+    const order = new Map(original.map((line, i) => [line, i + visited]))
+    // Select within each landmark's budget by usefulness, then restore tree order for reading.
+    const groups = Array.from({ length: 4 }, (): Line[] => [])
+    for (const line of original)
+      groups[
+        line.important || line.entry?.keep ? 0 : line.interactive ? 1 : line.area?.id === line.id && line.id ? 2 : 3
+      ].push(line)
+    const bucket = groups.flat()
     for (let i = 0; i < bucket.length; i += 32) {
       const batch = bucket.slice(i, i + 32)
 
-      const boxes =
-        options.box && !full && output.length < maxLines
+      const details =
+        !full && output.length < maxLines
           ? await Promise.all(
-              batch.map((line) =>
-                !line.deep && (!line.overflow || line.overflow.keep) && line.id ? options.box?.(line.id) : undefined,
-              ),
+              batch.map(async (line) => {
+                if (!line.id || line.deep) return ""
+                const value = line.value && (await options.readableValue?.(line.id)) ? ` value=${line.value}` : ""
+                return value + ((await options.box?.(line.id)) ?? "")
+              }),
             )
           : []
 
       for (const [j, line] of batch.entries()) {
         if (++visited % 2048 === 0) await setImmediate(undefined, { signal: options.signal })
 
-        if ((line.overflow && !line.overflow.keep) || line.deep || full || output.length >= maxLines) {
+        if (line.deep || full || output.length >= maxLines) {
           omit(line)
           continue
         }
 
         const key = line.id ? ref(line.id) : undefined
-        const text = (key ? line.label.replace(/^\s*/, (pad) => `${pad}@${key} `) : line.label) + (boxes[j] ?? "")
+        const text = (key ? line.label.replace(/^\s*/, (pad) => `${pad}@${key} `) : line.label) + (details[j] ?? "")
         const length = size + Number(output.length > 0) + text.length
 
         if (length > maxChars) {
@@ -270,18 +305,25 @@ async function printSnapshot(buckets: Line[][], options: Options) {
         }
 
         size = length
-        output.push({ line, text })
+        output.push({ line, text, order: order.get(line) ?? 0 })
       }
     }
   }
 
-  const content = () => output.map(row => {
-    if (row.line.id) refs.set(ref(row.line.id), row.line.id)
+  const content = () =>
+    output
+      .sort((a, b) => a.order - b.order)
+      .map((row) => {
+        if (row.line.id) refs.set(ref(row.line.id), row.line.id)
 
-    return row.text
-  }).join("\n")
+        return row.text
+      })
+      .join("\n")
 
   if (!omitted) return { content: content(), truncated: false, refs }
+
+  for (const row of output) for (let group = row.line.entry; group; group = group.parent) group.shown++
+  for (const group of items) if (group.meaningful && !group.shown) group.area.skipped++
 
   const footer = () => {
     const places = Array.from(areas)
@@ -303,6 +345,8 @@ async function printSnapshot(buckets: Line[][], options: Options) {
     const last = output.pop()
 
     if (!last) break
+    for (let group = last.line.entry; group; group = group.parent)
+      if (--group.shown === 0 && group.meaningful) group.area.skipped++
     omit(last.line)
     size -= last.text.length + Number(output.length > 0)
     hint = footer()
