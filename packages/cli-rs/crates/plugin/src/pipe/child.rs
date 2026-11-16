@@ -1,8 +1,10 @@
-//! The JS host as a child process, supervised (synthesis 4.3): the UI thread never touches a pipe. A writer thread
-//! drains a bounded queue into the child's standard input; a reader thread reads and decodes frames from its standard
-//! output into a bounded inbox and wakes the UI thread; a watch thread names the JS host hung when the oldest event it
-//! has not acknowledged is over the limit, and over its memory budget when its resident set is. Standard error is the
-//! plugins' own output, logged a line at a time.
+//! The JS host as a child process, supervised (synthesis 4.3): the UI thread never touches a pipe. The protocol runs
+//! both ways on the child's standard input, one connection ([`channel`], js-stdio): a writer thread drains a bounded
+//! queue into it; a reader thread reads and decodes frames from it into a bounded inbox and wakes the UI thread; a watch
+//! thread names the JS host hung when the oldest event it has not acknowledged is over the limit, and over its memory
+//! budget when its resident set is. Standard output and standard error are the plugins' own: what a plugin writes to
+//! the descriptor itself (`fs.writeSync(1, …)`, which no JS-level redirect reaches) and its prints are logged, and
+//! neither can break the protocol.
 //!
 //! What bounds what (S2):
 //!
@@ -24,7 +26,7 @@
 
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
-use std::process::{ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
@@ -167,6 +169,8 @@ struct Shared {
     wake: Box<dyn Fn() + Send + Sync>,
     /// The last lines of standard error, for the report of a death.
     stderr: Mutex<VecDeque<String>>,
+    /// The last records of what plugins wrote to standard output ([`stray`]).
+    stray: Mutex<VecDeque<String>>,
     process: Mutex<Option<std::process::Child>>,
     pid: u32,
     /// The job that holds the child and what it starts; closing it ends them all. It goes when the child is killed, not
@@ -186,16 +190,19 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Child {
-    /// Starts `command` with piped standard streams. `wake` runs on another thread, once per batch, when the UI thread
-    /// has something to take.
+    /// Starts `command` with the protocol's channel as its standard input, and its standard output and error piped to
+    /// the log. `wake` runs on another thread, once per batch, when the UI thread has something to take.
     pub fn spawn(
         mut command: Command,
         limits: Limits,
         wake: impl Fn() + Send + Sync + 'static,
     ) -> std::io::Result<Self> {
-        command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        let (reader, writer, theirs) = channel::open()?;
+        command.stdin(theirs).stdout(Stdio::piped()).stderr(Stdio::piped());
         contain(&mut command);
         let mut process = command.spawn()?;
+        // The child's end goes with the command: the reader sees the end of the stream once the child's copies close.
+        drop(command);
         // Without its job the child would outlive a client that dies: it is not run then (review bigboi-9).
         #[cfg(windows)]
         let job = match opencode_util::win::KillOnCloseJob::new().and_then(|job| job.assign(&process).map(|()| job)) {
@@ -206,7 +213,7 @@ impl Child {
                 return Err(error);
             }
         };
-        let (stdin, stdout, stderr) = (process.stdin.take(), process.stdout.take(), process.stderr.take());
+        let (stdout, stderr) = (process.stdout.take(), process.stderr.take());
         let pid = process.id();
         let shared = Arc::new(Shared {
             limits,
@@ -225,6 +232,7 @@ impl Child {
             pending: AtomicBool::new(false),
             wake: Box::new(wake),
             stderr: Mutex::default(),
+            stray: Mutex::default(),
             process: Mutex::new(Some(process)),
             pid,
             #[cfg(windows)]
@@ -232,13 +240,17 @@ impl Child {
         });
         let child = Self { shared: shared.clone() };
         let named = |name: &str| std::thread::Builder::new().name(format!("js-host-{name}"));
-        if let Some(stdin) = stdin {
+        {
             let shared = shared.clone();
-            named("writer").spawn(move || write(&shared, stdin))?;
+            named("writer").spawn(move || write(&shared, writer))?;
+        }
+        {
+            let shared = shared.clone();
+            named("reader").spawn(move || read(&shared, reader))?;
         }
         if let Some(stdout) = stdout {
             let shared = shared.clone();
-            named("reader").spawn(move || read(&shared, stdout))?;
+            named("stdout").spawn(move || stray(&shared, stdout))?;
         }
         if let Some(stderr) = stderr {
             let shared = shared.clone();
@@ -329,6 +341,11 @@ impl Child {
     /// The last lines the child wrote to standard error.
     pub fn stderr(&self) -> Vec<String> {
         lock(&self.shared.stderr).iter().cloned().collect()
+    }
+
+    /// The last records of what the child's plugins wrote to standard output, as they were logged.
+    pub fn stray(&self) -> Vec<String> {
+        lock(&self.shared.stray).iter().cloned().collect()
     }
 
     /// Ends the child at once, with every process of its group, and reaps it.
@@ -443,7 +460,7 @@ fn contain(command: &mut Command) {
     }
 }
 
-fn write(shared: &Shared, mut stdin: ChildStdin) {
+fn write(shared: &Shared, mut writer: channel::Writer) {
     loop {
         let (frame, room) = {
             let mut out = lock(&shared.out);
@@ -463,11 +480,12 @@ fn write(shared: &Shared, mut stdin: ChildStdin) {
         if room {
             (shared.wake)();
         }
-        if stdin.write_all(&frame).and_then(|()| stdin.flush()).is_err() {
+        if writer.write_all(&frame).and_then(|()| writer.flush()).is_err() {
             break;
         }
     }
-    // Dropping the pipe is the end of input, which ends the child.
+    // The end of input, which ends the child.
+    writer.end();
 }
 
 /// The plugin a message of the JS host is its own, when it names one.
@@ -535,8 +553,8 @@ fn deliver(shared: &Shared, event: Event, bytes: usize) -> bool {
     !ended
 }
 
-fn read(shared: &Shared, stdout: ChildStdout) {
-    let mut input = std::io::BufReader::with_capacity(64 << 10, stdout);
+fn read(shared: &Shared, reader: channel::Reader) {
+    let mut input = std::io::BufReader::with_capacity(64 << 10, reader);
     let mut hello = false;
     loop {
         let frame = wire::read(&mut input);
@@ -681,6 +699,250 @@ fn errors(shared: &Shared, stderr: std::process::ChildStderr) {
     }
 }
 
+/// What marks, on standard output, whose code the JS host runs from then on: the plugin's ID as JSON, or `null`, up to
+/// a NUL (`host.ts` `own`). What a plugin writes with `fs.writeSync(1, …)` while its code runs comes after its mark, as
+/// writes to one descriptor from one thread keep their order.
+const OWNER: &[u8] = b"\0OPENCODE_JS_HOST_OWNER ";
+
+/// The most records of standard output logged in a second, the most bytes logged for one JS host, and the most of a
+/// record's bytes shown.
+const STRAY_LINES: u32 = 10;
+const STRAY_TOTAL: u64 = 64 << 10;
+const STRAY_SHOWN: usize = 200;
+
+/// Logs what the child's plugins write to standard output, which is not the protocol and reaches no terminal (TS sends
+/// it to the terminal; deviation F16): by the plugin whose code ran then, when the JS host marked one, at most
+/// [`STRAY_LINES`] records a second and [`STRAY_TOTAL`] bytes in all, the rest counted.
+fn stray(shared: &Shared, mut stdout: ChildStdout) {
+    let mut log = Stray::default();
+    let mut buffer = vec![0; 16 << 10];
+    let mut pending = Vec::new();
+    loop {
+        let read = match std::io::Read::read(&mut stdout, &mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => read,
+        };
+        pending.extend_from_slice(&buffer[..read]);
+        log.take(&mut pending);
+        log.record();
+        log.flush(shared);
+    }
+    log.bytes.append(&mut pending);
+    log.record();
+    log.flush(shared);
+}
+
+/// What [`stray`] reads: whose code runs, its bytes not recorded yet, the records not logged yet, and the bounds'
+/// counts.
+struct Stray {
+    owner: Option<String>,
+    bytes: Vec<u8>,
+    records: Vec<String>,
+    logged: u64,
+    window: Instant,
+    lines: u32,
+    dropped: u64,
+    capped: bool,
+}
+
+impl Default for Stray {
+    fn default() -> Self {
+        Self {
+            owner: None,
+            bytes: Vec::new(),
+            records: Vec::new(),
+            logged: 0,
+            window: Instant::now(),
+            lines: 0,
+            dropped: 0,
+            capped: false,
+        }
+    }
+}
+
+impl Stray {
+    /// Splits what `pending` holds by the marks in it; what may be the start of a mark stays in it.
+    fn take(&mut self, pending: &mut Vec<u8>) {
+        loop {
+            let Some(at) = pending.windows(OWNER.len()).position(|window| window == OWNER) else {
+                // The longest end that could begin a mark waits for the next read.
+                let keep = (1..OWNER.len().min(pending.len() + 1))
+                    .rev()
+                    .find(|keep| pending.ends_with(&OWNER[..*keep]))
+                    .unwrap_or(0);
+                self.bytes.extend(pending.drain(..pending.len() - keep));
+                return;
+            };
+            let Some(end) = pending[at + OWNER.len()..].iter().position(|byte| *byte == 0) else {
+                self.bytes.extend(pending.drain(..at));
+                // A mark is short: one that does not end is a plugin's bytes.
+                if pending.len() > 4096 {
+                    self.bytes.extend(pending.drain(..1));
+                    continue;
+                }
+                return;
+            };
+            let owner = serde_json::from_slice::<Option<String>>(&pending[at + OWNER.len()..at + OWNER.len() + end]);
+            self.bytes.extend(pending.drain(..at));
+            pending.drain(..OWNER.len() + end + 1);
+            let owner = owner.unwrap_or(None);
+            if owner != self.owner {
+                self.record();
+                self.owner = owner;
+            }
+        }
+    }
+
+    /// Logs the records made.
+    fn flush(&mut self, shared: &Shared) {
+        for record in self.records.drain(..) {
+            log::warn!("js host: {record}");
+            let mut last = lock(&shared.stray);
+            if last.len() == 16 {
+                last.pop_front();
+            }
+            last.push_back(record);
+        }
+    }
+
+    /// Records the bytes kept, which go, unless a bound holds them back; then they are counted.
+    fn record(&mut self) {
+        if let Some(record) = self.made() {
+            self.records.push(record);
+        }
+    }
+
+    fn made(&mut self) -> Option<String> {
+        if self.bytes.is_empty() {
+            return None;
+        }
+        let bytes = std::mem::take(&mut self.bytes);
+        let now = Instant::now();
+        if now.duration_since(self.window) >= Duration::from_secs(1) {
+            (self.window, self.lines) = (now, 0);
+        }
+        if self.logged >= STRAY_TOTAL {
+            self.dropped += bytes.len() as u64;
+            if !std::mem::replace(&mut self.capped, true) {
+                return Some(format!(
+                    "plugins wrote over {STRAY_TOTAL} bytes to standard output; what follows is not logged"
+                ));
+            }
+            return None;
+        }
+        if self.lines >= STRAY_LINES {
+            self.dropped += bytes.len() as u64;
+            return None;
+        }
+        self.lines += 1;
+        self.logged += bytes.len() as u64;
+        let who = match &self.owner {
+            Some(id) => format!("plugin {id}"),
+            None => "a plugin (the JS host ran none's code as it was written, so it is not named)".to_owned(),
+        };
+        let mut shown: String =
+            String::from_utf8_lossy(&bytes[..bytes.len().min(STRAY_SHOWN)]).escape_debug().collect();
+        if bytes.len() > STRAY_SHOWN {
+            shown.push('…');
+        }
+        let before = match std::mem::take(&mut self.dropped) {
+            0 => String::new(),
+            dropped => format!(" ({dropped} bytes before it were not logged)"),
+        };
+        Some(format!(
+            "{who} wrote {} bytes to standard output, which reaches no terminal here{before}: \"{shown}\"",
+            bytes.len()
+        ))
+    }
+}
+
+/// The protocol's connection with the child: one stream both ways, whose other end is the child's standard input, so
+/// its standard output is free for what plugins write there (js-stdio). The child owns its end by construction: it is
+/// made for it, and no name or path leads to it but its own descriptor.
+mod channel {
+    use std::process::Stdio;
+
+    #[cfg(unix)]
+    pub(super) struct Reader(std::os::unix::net::UnixStream);
+    #[cfg(unix)]
+    pub(super) struct Writer(std::os::unix::net::UnixStream);
+
+    /// A socket pair: this process's reader and writer of one end, and the other end for the child's standard input.
+    #[cfg(unix)]
+    pub(super) fn open() -> std::io::Result<(Reader, Writer, Stdio)> {
+        let (ours, theirs) = std::os::unix::net::UnixStream::pair()?;
+        // A pipe's room either way, whatever a socket's default (8 KiB on macOS).
+        for stream in [&ours, &theirs] {
+            for option in [libc::SO_SNDBUF, libc::SO_RCVBUF] {
+                let size: libc::c_int = 64 << 10;
+                // SAFETY: a plain option of an open socket, the value's size given.
+                unsafe {
+                    libc::setsockopt(
+                        std::os::fd::AsRawFd::as_raw_fd(stream),
+                        libc::SOL_SOCKET,
+                        option,
+                        std::ptr::from_ref(&size).cast(),
+                        size_of::<libc::c_int>() as libc::socklen_t,
+                    );
+                }
+            }
+        }
+        Ok((Reader(ours.try_clone()?), Writer(ours), Stdio::from(std::os::fd::OwnedFd::from(theirs))))
+    }
+
+    #[cfg(unix)]
+    impl Writer {
+        /// The end of the child's input; what it still writes is read.
+        pub(super) fn end(self) {
+            let _ = self.0.shutdown(std::net::Shutdown::Write);
+        }
+    }
+
+    #[cfg(windows)]
+    pub(super) struct Reader(std::sync::Arc<opencode_util::win::Duplex>);
+    #[cfg(windows)]
+    pub(super) struct Writer(std::sync::Arc<opencode_util::win::Duplex>);
+
+    /// A duplex named pipe ([`opencode_util::win::duplex`]): its end here, read and written apart, and the child's end.
+    #[cfg(windows)]
+    pub(super) fn open() -> std::io::Result<(Reader, Writer, Stdio)> {
+        let (duplex, theirs) = opencode_util::win::duplex()?;
+        let duplex = std::sync::Arc::new(duplex);
+        Ok((Reader(duplex.clone()), Writer(duplex), Stdio::from(theirs)))
+    }
+
+    #[cfg(windows)]
+    impl Writer {
+        /// The end of the child's input. A named pipe has no half-close: it ends both ways, once the host wants nothing
+        /// more of the child.
+        pub(super) fn end(self) {
+            self.0.disconnect();
+        }
+    }
+
+    impl std::io::Read for Reader {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            #[cfg(unix)]
+            return std::io::Read::read(&mut self.0, buffer);
+            #[cfg(windows)]
+            return self.0.read(buffer);
+        }
+    }
+
+    impl std::io::Write for Writer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            #[cfg(unix)]
+            return std::io::Write::write(&mut self.0, bytes);
+            #[cfg(windows)]
+            return self.0.write(bytes);
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+}
+
 fn watch(shared: &Shared) {
     // The progress a hang was named at, so one silence is named once.
     let mut named = None;
@@ -769,6 +1031,99 @@ fn resident(shared: &Shared) -> Option<u64> {
     }
 }
 
+#[cfg(test)]
+mod stray_tests {
+    use super::*;
+
+    fn mark(id: Option<&str>) -> Vec<u8> {
+        [OWNER, serde_json::to_string(&id).unwrap().as_bytes(), b"\0"].concat()
+    }
+
+    /// The records of `chunks` read one at a time, as [`stray`] reads them.
+    fn records(chunks: &[Vec<u8>]) -> Vec<String> {
+        let (mut log, mut pending, mut records) = (Stray::default(), Vec::new(), Vec::new());
+        for chunk in chunks {
+            pending.extend_from_slice(chunk);
+            log.take(&mut pending);
+            log.record();
+            records.append(&mut log.records);
+        }
+        log.bytes.append(&mut pending);
+        log.record();
+        records.append(&mut log.records);
+        records
+    }
+
+    // Expected (js-stdio): bytes are recorded by the plugin whose mark comes before them, a `null` mark names nobody, and
+    // the records of several owners in one read are each kept; a mark cut across reads is still one mark, and bytes that
+    // only look like the start of one are a plugin's.
+    #[test]
+    fn standard_output_is_recorded_by_the_plugin_marked() {
+        let osc = b"\x1b]11;rgb:10/20/30\x07".to_vec();
+        let one =
+            [mark(Some("bg-sync")), osc.clone(), mark(None), b"timer\n".to_vec(), mark(Some("other")), b"x".to_vec()]
+                .concat();
+        let found = records(std::slice::from_ref(&one));
+        assert_eq!(found.len(), 3, "{found:?}");
+        assert!(found[0].starts_with("plugin bg-sync wrote 18 bytes"), "{found:?}");
+        assert!(found[0].ends_with(r#": "\u{1b}]11;rgb:10/20/30\u{7}""#), "{found:?}");
+        assert!(found[1].starts_with("a plugin (the JS host ran none's code"), "{found:?}");
+        assert!(found[2].starts_with("plugin other wrote 1 bytes"), "{found:?}");
+        // The same bytes in two reads, cut anywhere: in a mark too.
+        let total = |found: &[String], who: &str| -> usize {
+            found
+                .iter()
+                .filter(|record| record.starts_with(who))
+                .map(|record| {
+                    record.split(" wrote ").nth(1).unwrap().split(' ').next().unwrap().parse::<usize>().unwrap()
+                })
+                .sum()
+        };
+        for cut in 0..=one.len() {
+            let found = records(&[one[..cut].to_vec(), one[cut..].to_vec()]);
+            assert_eq!(total(&found, "plugin bg-sync"), 18, "{cut}: {found:?}");
+            assert_eq!(total(&found, "a plugin"), 6, "{cut}: {found:?}");
+            assert_eq!(total(&found, "plugin other"), 1, "{cut}: {found:?}");
+            assert!(found.iter().all(|record| !record.contains("OPENCODE_JS_HOST_OWNER")), "{cut}: {found:?}");
+        }
+        // The start of a mark that never comes is the plugin's own.
+        let found = records(&[b"a\0OPENCODE_JS".to_vec()]);
+        assert_eq!(total(&found, "a plugin"), 13, "{found:?}");
+    }
+
+    // Expected (js-stdio): at most `STRAY_LINES` records a second are logged and `STRAY_TOTAL` bytes in all; what a bound
+    // holds back is counted, said with the next record, and once the total is past, said once.
+    #[test]
+    fn standard_output_is_logged_within_its_bounds() {
+        let mut log = Stray::default();
+        let mut made = Vec::new();
+        for _ in 0..STRAY_LINES + 5 {
+            log.bytes.extend(b"line\n");
+            log.record();
+            made.append(&mut log.records);
+        }
+        assert_eq!(made.len(), STRAY_LINES as usize);
+        log.window -= Duration::from_secs(1);
+        log.bytes.extend(b"again\n");
+        log.record();
+        assert!(log.records[0].contains("(25 bytes before it were not logged)"), "{:?}", log.records);
+        log.records.clear();
+        log.window -= Duration::from_secs(1);
+        log.lines = 0;
+        log.bytes = vec![b'x'; STRAY_TOTAL as usize];
+        log.record();
+        log.window -= Duration::from_secs(1);
+        log.lines = 0;
+        for _ in 0..3 {
+            log.bytes.extend(b"more");
+            log.record();
+        }
+        assert_eq!(log.records.len(), 2, "{:?}", log.records);
+        assert!(log.records[0].contains('…'));
+        assert!(log.records[1].contains("what follows is not logged"), "{:?}", log.records);
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -781,7 +1136,7 @@ mod tests {
         let file = dir.path().join("frames");
         std::fs::write(&file, frames).unwrap();
         let mut command = Command::new("sh");
-        command.arg("-c").arg(format!("cat '{}'; cat > /dev/null", file.display()));
+        command.arg("-c").arg(format!("cat '{}' >&0; cat > /dev/null", file.display()));
         (Child::spawn(command, limits, || {}).unwrap(), dir)
     }
 
@@ -829,7 +1184,7 @@ mod tests {
         std::fs::write(&file, hello()).unwrap();
         // It says hello, reads nothing for a while, then reads all and says nothing.
         let mut command = Command::new("sh");
-        command.arg("-c").arg(format!("cat '{}'; sleep 0.3; cat > /dev/null", file.display()));
+        command.arg("-c").arg(format!("cat '{}' >&0; sleep 0.3; cat > /dev/null", file.display()));
         let wakes = Arc::new(AtomicU64::new(0));
         let woken = wakes.clone();
         let limits = Limits { queued: 4 << 10, ..Limits::default() };
@@ -963,7 +1318,7 @@ mod tests {
             std::fs::write(&hello_file, hello()).unwrap();
             std::fs::write(&ack_file, control(&Up::Ack { seq: 1 })).unwrap();
             let script = format!(
-                "cat '{}'; head -c 7 > /dev/null; cat '{}'; cat > /dev/null",
+                "cat '{}' >&0; head -c 7 > /dev/null; cat '{}' >&0; cat > /dev/null",
                 hello_file.display(),
                 ack_file.display()
             );
@@ -990,7 +1345,7 @@ mod tests {
         std::fs::write(&answer_file, answer).unwrap();
         // It answers once it read the event, never before it was sent.
         let script = format!(
-            "cat '{}'; head -c 7 > /dev/null; cat '{}'; cat > /dev/null",
+            "cat '{}' >&0; head -c 7 > /dev/null; cat '{}' >&0; cat > /dev/null",
             hello_file.display(),
             answer_file.display()
         );
@@ -1018,7 +1373,7 @@ mod tests {
             std::fs::write(&hello_file, hello()).unwrap();
             std::fs::write(&ack_file, control(&Up::Ack { seq: 1 })).unwrap();
             let script = format!(
-                "sleep 0.6; cat '{}'; head -c 7 > /dev/null; cat '{}'; cat > /dev/null",
+                "sleep 0.6; cat '{}' >&0; head -c 7 > /dev/null; cat '{}' >&0; cat > /dev/null",
                 hello_file.display(),
                 ack_file.display()
             );

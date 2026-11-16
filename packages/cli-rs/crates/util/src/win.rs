@@ -371,6 +371,177 @@ impl KillOnCloseJob {
     }
 }
 
+/// The server end of a duplex named pipe whose one client is a child's standard input ([`duplex`]): both directions of
+/// a protocol on one handle. Reads and writes are overlapped, each waited for, so a read pending on one thread never
+/// holds back a write on another, as a synchronous handle's would.
+pub struct Duplex(OwnedHandle);
+
+/// A duplex named pipe: this process's end, and the child's end to hand over as its standard input
+/// (`Stdio::from(OwnedHandle)`). It belongs to the child by construction: the name is random, its first instance is
+/// this one (`FILE_FLAG_FIRST_PIPE_INSTANCE`), it has one instance, only this user may open it, no remote client may,
+/// and its one client is connected here before anything else can be. Both ends are overlapped: Bun reads its stdin
+/// through libuv's overlapped path, and a synchronous end would serialize its pending read with its writes, which then
+/// wait for input (js-stdio's spike on Windows 11).
+pub fn duplex() -> io::Result<(Duplex, OwnedHandle)> {
+    use std::hash::{BuildHasher, Hasher};
+    use windows_sys::Win32::Foundation::{
+        ERROR_PIPE_CONNECTED, GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE, LocalFree,
+    };
+    use windows_sys::Win32::Security::Authorization::{
+        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    };
+    use windows_sys::Win32::Security::{PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES};
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
+    };
+    use windows_sys::Win32::System::Pipes::{
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
+    };
+    let random = || std::collections::hash_map::RandomState::new().build_hasher().finish();
+    let name = format!(r"\\.\pipe\opencode-js-host-{}-{:016x}{:016x}", std::process::id(), random(), random());
+    let name: Vec<u16> = OsStr::new(&name).encode_wide().chain([0]).collect();
+    // Full access for the object's owner (this user) alone, and no inherited entries.
+    let sddl: Vec<u16> = OsStr::new("D:P(A;;GA;;;OW)").encode_wide().chain([0]).collect();
+    let mut descriptor: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
+    // SAFETY: a NUL-terminated string and an out-parameter that outlives the call.
+    let made = unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.as_ptr(),
+            SDDL_REVISION_1,
+            &mut descriptor,
+            std::ptr::null_mut(),
+        )
+    };
+    if made == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let attributes = SECURITY_ATTRIBUTES {
+        nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor,
+        bInheritHandle: 0,
+    };
+    // SAFETY: the name is NUL-terminated and the attributes outlive the call.
+    let server = unsafe {
+        CreateNamedPipeW(
+            name.as_ptr(),
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
+            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+            1,
+            64 << 10,
+            64 << 10,
+            0,
+            &attributes,
+        )
+    };
+    let error = io::Error::last_os_error();
+    // SAFETY: the descriptor came from the conversion above, and the pipe keeps its own copy.
+    unsafe { LocalFree(descriptor.cast()) };
+    if server == INVALID_HANDLE_VALUE {
+        return Err(error);
+    }
+    // SAFETY: an open handle owned by nothing else.
+    let server = unsafe { OwnedHandle::from_raw_handle(server) };
+    // SAFETY: the name is NUL-terminated; without attributes the handle is not inheritable until std hands it over.
+    let client = unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED,
+            std::ptr::null_mut(),
+        )
+    };
+    if client == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: an open handle owned by nothing else.
+    let client = unsafe { OwnedHandle::from_raw_handle(client) };
+    // The client opened it already: the connection is made, and the one instance takes nobody else.
+    let duplex = Duplex(server);
+    let mut overlapped = Overlapped::new()?;
+    // SAFETY: the handle is open and the OVERLAPPED outlives the call, which completes at once here.
+    let connected = unsafe { ConnectNamedPipe(duplex.0.as_raw_handle(), &mut overlapped.0) };
+    if connected == 0 && io::Error::last_os_error().raw_os_error() != Some(ERROR_PIPE_CONNECTED as i32) {
+        return Err(io::Error::last_os_error());
+    }
+    Ok((duplex, client))
+}
+
+/// An `OVERLAPPED` with its own manual-reset event, which it keeps open.
+struct Overlapped(windows_sys::Win32::System::IO::OVERLAPPED, #[allow(dead_code)] OwnedHandle);
+
+impl Overlapped {
+    fn new() -> io::Result<Self> {
+        use windows_sys::Win32::System::Threading::CreateEventW;
+        // SAFETY: an anonymous manual-reset event, owned below.
+        let event = unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) };
+        if event.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: all-zero is a valid OVERLAPPED; the event is open and owned by nothing else.
+        let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED = unsafe { std::mem::zeroed() };
+        overlapped.hEvent = event;
+        Ok(Self(overlapped, unsafe { OwnedHandle::from_raw_handle(event) }))
+    }
+}
+
+impl Duplex {
+    /// Reads what the child wrote, waiting for some; 0 once it closed its end or [`Duplex::disconnect`] ran.
+    pub fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.io(buffer.as_mut_ptr(), buffer.len(), false)
+    }
+
+    /// Writes some of `bytes`, waiting until the pipe takes them.
+    pub fn write(&self, bytes: &[u8]) -> io::Result<usize> {
+        self.io(bytes.as_ptr().cast_mut(), bytes.len(), true)
+    }
+
+    /// Ends the connection both ways: the child reads the end of its input, and a read pending here ends.
+    pub fn disconnect(&self) {
+        use windows_sys::Win32::System::IO::CancelIoEx;
+        use windows_sys::Win32::System::Pipes::DisconnectNamedPipe;
+        // SAFETY: plain calls on an open handle.
+        unsafe {
+            CancelIoEx(self.0.as_raw_handle(), std::ptr::null());
+            DisconnectNamedPipe(self.0.as_raw_handle());
+        }
+    }
+
+    fn io(&self, buffer: *mut u8, len: usize, write: bool) -> io::Result<usize> {
+        use windows_sys::Win32::Foundation::{
+            ERROR_BROKEN_PIPE, ERROR_IO_PENDING, ERROR_OPERATION_ABORTED, ERROR_PIPE_NOT_CONNECTED,
+        };
+        use windows_sys::Win32::Storage::FileSystem::{ReadFile, WriteFile};
+        use windows_sys::Win32::System::IO::GetOverlappedResult;
+        let handle = self.0.as_raw_handle();
+        let len = len.min(u32::MAX as usize) as u32;
+        let mut overlapped = Overlapped::new()?;
+        let mut done = 0u32;
+        // SAFETY: the buffer is valid for `len` bytes, and it and the OVERLAPPED outlive the operation, whose result is
+        // waited for below before either goes.
+        let started = unsafe {
+            match write {
+                true => WriteFile(handle, buffer, len, &mut done, &mut overlapped.0),
+                false => ReadFile(handle, buffer, len, &mut done, &mut overlapped.0),
+            }
+        };
+        let mut error = (started == 0).then(io::Error::last_os_error);
+        if error.as_ref().and_then(io::Error::raw_os_error) == Some(ERROR_IO_PENDING as i32) {
+            // SAFETY: as above; the call waits for the operation's end.
+            let waited = unsafe { GetOverlappedResult(handle, &overlapped.0, &mut done, 1) };
+            error = (waited == 0).then(io::Error::last_os_error);
+        }
+        match error.as_ref().and_then(io::Error::raw_os_error).map(|code| code as u32) {
+            None => Ok(done as usize),
+            // The other end closed, or this one disconnected: the end of the stream.
+            Some(ERROR_BROKEN_PIPE | ERROR_PIPE_NOT_CONNECTED | ERROR_OPERATION_ABORTED) if !write => Ok(0),
+            Some(_) => Err(error.unwrap_or_else(io::Error::last_os_error)),
+        }
+    }
+}
+
 /// A console control event that ends the session: the console closes, the user logs off, the system shuts down.
 pub fn ends_session(event: u32) -> bool {
     use windows_sys::Win32::System::Console::{CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT};
@@ -671,6 +842,58 @@ mod tests {
         let old = SystemTime::now() - Duration::from_secs(3600);
         set_modified(&dir, old).unwrap();
         assert_eq!(std::fs::metadata(&dir).unwrap().modified().unwrap(), old);
+    }
+
+    // Expected (js-stdio): the duplex pipe carries both ways at once, a read pending at either end holding back no write
+    // at the other or its own (the client's end is overlapped, as the server's), and 4 MiB each way go without a
+    // deadlock; a disconnect ends the client's input.
+    #[test]
+    fn a_duplex_pipe_carries_both_ways_at_once() {
+        let (server, client) = duplex().unwrap();
+        let client = std::sync::Arc::new(Duplex(client));
+        let server = std::sync::Arc::new(server);
+        // A read pending on the client's end, then a write on its end too: it goes through at once.
+        let pending = {
+            let client = client.clone();
+            std::thread::spawn(move || {
+                let mut buffer = [0; 3];
+                client.read(&mut buffer).unwrap()
+            })
+        };
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(client.write(b"up").unwrap(), 2);
+        let mut buffer = [0; 2];
+        assert_eq!(server.read(&mut buffer).unwrap(), 2);
+        assert_eq!(&buffer, b"up");
+        server.write(b"one").unwrap();
+        assert_eq!(pending.join().unwrap(), 3);
+        // 4 MiB each way at once.
+        let big = vec![b'x'; 4 << 20];
+        let pump = |from: std::sync::Arc<Duplex>, bytes: Vec<u8>| {
+            std::thread::spawn(move || {
+                let mut at = 0;
+                while at < bytes.len() {
+                    at += from.write(&bytes[at..]).unwrap();
+                }
+            })
+        };
+        let drain = |into: std::sync::Arc<Duplex>| {
+            std::thread::spawn(move || {
+                let (mut total, mut buffer) = (0, vec![0; 64 << 10]);
+                while total < 4 << 20 {
+                    total += into.read(&mut buffer).unwrap();
+                }
+                total
+            })
+        };
+        let threads = [pump(server.clone(), big.clone()), pump(client.clone(), big)];
+        let read = [drain(server.clone()), drain(client.clone())];
+        threads.into_iter().for_each(|thread| thread.join().unwrap());
+        assert!(read.into_iter().all(|thread| thread.join().unwrap() == 4 << 20));
+        // The disconnect ends the client's input.
+        server.disconnect();
+        let mut buffer = [0; 1];
+        assert!(client.read(&mut buffer).map_or(true, |read| read == 0));
     }
 
     #[test]

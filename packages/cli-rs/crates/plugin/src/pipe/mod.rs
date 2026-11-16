@@ -641,6 +641,12 @@ impl Scripts {
         self.child.borrow().as_ref().and_then(Child::resident)
     }
 
+    /// The last records of what the running JS host's plugins wrote to its standard output, as they were logged.
+    #[doc(hidden)]
+    pub fn stray(&self) -> Vec<String> {
+        self.child.borrow().as_ref().map(Child::stray).unwrap_or_default()
+    }
+
     /// Asks the JS host to answer once it handled everything sent so far; [`Scripts::ponged`] tells when it did.
     pub fn ping(&self) -> u64 {
         let seq = self.next();
@@ -1774,7 +1780,7 @@ mod tests {
         let hello = Up::Hello { magic: proto::MAGIC.to_owned(), version: proto::VERSION, pid: 0 };
         std::fs::write(&file, wire::encode(wire::CONTROL, &serde_json::to_vec(&hello).unwrap())).unwrap();
         let mut command = std::process::Command::new("sh");
-        command.arg("-c").arg(format!("cat '{}'; cat > /dev/null", file.display()));
+        command.arg("-c").arg(format!("cat '{}' >&0; cat > /dev/null", file.display()));
         let proxy = host.app.app().proxy();
         let id = scripts.id;
         scripts.adopt(Child::spawn(command, scripts.config.limits, move || post(&proxy, id)).unwrap());
@@ -1856,7 +1862,7 @@ mod tests {
         std::fs::write(&file, wire::encode(wire::CONTROL, &serde_json::to_vec(&hello).unwrap())).unwrap();
         let mut command = std::process::Command::new("sh");
         let recv = dir.join("recv");
-        command.arg("-c").arg(format!("cat '{}'; sleep 0.3; cat > '{}'", file.display(), recv.display()));
+        command.arg("-c").arg(format!("cat '{}' >&0; sleep 0.3; cat > '{}'", file.display(), recv.display()));
         let proxy = host.app.app().proxy();
         let id = scripts.id;
         scripts.adopt(Child::spawn(command, scripts.config.limits, move || post(&proxy, id)).unwrap());
