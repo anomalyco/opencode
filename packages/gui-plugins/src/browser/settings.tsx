@@ -5,7 +5,7 @@ import { choiceLabel, choiceValue, Glyph, profileChoices } from "./choices"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
 import type { ExtensionAccess, ExtensionCompatibility, ProfileExtension, ProfileSource } from "./profile/ipc"
-import { promptHost } from "./prompt-machine"
+import { displayHost } from "./host-display"
 import { BrowserSites } from "./site-permissions"
 import { showToast } from "@opencode/ui/toast"
 
@@ -234,7 +234,7 @@ function SitePermissionsSection() {
 
   const decisions = () => client()?.state()?.decisions ?? []
   // The end of a long host is the site's own domain: shown whole, wrapping, never cut off at the end.
-  const site = (origin: string) => promptHost(origin) || origin
+  const site = (origin: string) => displayHost(origin) || origin
   const failed = () => showToast({ title: ctx.t("common.requestFailed") })
 
   return (

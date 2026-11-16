@@ -5,6 +5,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { showToast } from "@opencode/ui/toast"
 import { createMemo, on, Show } from "solid-js"
 import { actionGuard } from "./activation-delay"
+import { displayHost, hostDisplay } from "./host-display"
 import type definition from "./index"
 
 export function RefusalBar(props: {
@@ -12,7 +13,12 @@ export function RefusalBar(props: {
   answer: (dismiss: boolean) => Promise<void>
 }) {
   const ctx = usePlugin<typeof definition>()
-  const guard = createMemo(on(() => props.notice.token, () => actionGuard(performance.now())))
+  const guard = createMemo(
+    on(
+      () => props.notice.token,
+      () => actionGuard(performance.now()),
+    ),
+  )
   const press = (event: PointerEvent) => guard().press(event)
 
   const key = (event: KeyboardEvent) => {
@@ -27,12 +33,31 @@ export function RefusalBar(props: {
       <div role="status" class="min-w-0 flex-1 text-13-regular text-v2-text-text-base">
         {props.notice.text}
         <Show when={props.notice.target}>
-          {(target) => (
-            <bdi dir="ltr" class="flex min-w-0 text-12-regular text-v2-text-text-muted" title={target()}>
-              <span class="min-w-0 truncate">{target().slice(0, -12)}</span>
-              <span class="shrink-0">{target().slice(-12)}</span>
-            </bdi>
-          )}
+          {(target) => {
+            // A web address names its host as every prompt does (`displayHost`), whole, before the rest is cut short.
+            const web = () => hostDisplay(target())
+
+            return (
+              <bdi dir="ltr" class="flex min-w-0 text-12-regular text-v2-text-text-muted" title={target()}>
+                <Show
+                  when={web()}
+                  fallback={
+                    <>
+                      <span class="min-w-0 truncate">{target().slice(0, -12)}</span>
+                      <span class="shrink-0">{target().slice(-12)}</span>
+                    </>
+                  }
+                >
+                  {(parts) => (
+                    <>
+                      <span class="shrink-0">{displayHost(target())}</span>
+                      <span class="min-w-0 truncate">{parts().rest}</span>
+                    </>
+                  )}
+                </Show>
+              </bdi>
+            )
+          }}
         </Show>
       </div>
       <Show when={props.notice.label}>
@@ -61,7 +86,9 @@ export function RefusalBar(props: {
         onPointerCancel={() => guard().cancel()}
         onBlur={() => guard().cancel()}
         onKeyDown={key}
-        onClick={(event) => { if (guard().accept(event)) answer(true) }}
+        onClick={(event) => {
+          if (guard().accept(event)) answer(true)
+        }}
       />
     </section>
   )

@@ -4,6 +4,7 @@
 // it instead of queueing again. Every item ends with an answer: the user's, its deadline, or a navigation or close
 // that clears it, each settled exactly once.
 import type { Browser } from "@opencode/plugin-browser/rpc"
+import { displayHost } from "./host-display"
 import { previewScheme } from "./scheme"
 import { originOf, type PermissionKind } from "./site-permissions"
 
@@ -204,24 +205,9 @@ export function transitionVisit(state: Visit, event: VisitEvent): VisitTransitio
   }
 }
 
-/** The longest host the pane names; a longer one keeps its end, where the site's own domain is. */
-const HOST_MAX = 64
-
-/**
- * The host of a URL or origin as every prompt and list of the pane names it: ASCII, so an international name shows as
- * punycode, and at most HOST_MAX characters, keeping the end, where the registrable domain is. Show it whole and let
- * it wrap; never truncate it with CSS, which would hide that end.
- */
-export function promptHost(url: string) {
-  if (!URL.canParse(url)) return ""
-  const host = new URL(url).host
-
-  return host.length > HOST_MAX ? `…${host.slice(1 - HOST_MAX)}` : host
-}
-
 /**
  * Who asks: the asking document's origin, from the live frame when it is known (`frame`), else from its
- * address, whose origin a `blob:` URL carries. A web origin is named by its host (`promptHost`); a local file as a
+ * address, whose origin a `blob:` URL carries. A web origin is named by its host (`displayHost`); a local file as a
  * file; an opaque origin, as `data:` and sandboxed documents have, by no name. `embedded` is any document but the tab's
  * page: a subframe when the live frame is known, else another origin, or for an opaque origin another address, so it\n * never speaks as the page.
  */
@@ -236,7 +222,7 @@ export function promptSite(url: string, top: string, frame?: { readonly origin: 
 
   if (origin === "null" || !/^https?:$/.test(new URL(origin).protocol)) return { kind: "page" as const, host: "", embedded }
 
-  return { kind: "web" as const, host: promptHost(origin), embedded }
+  return { kind: "web" as const, host: displayHost(origin), embedded }
 }
 
 /** Page-supplied text the pane shows as text: bounded, without controls that reorder or hide what follows. */

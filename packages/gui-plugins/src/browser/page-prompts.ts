@@ -2,11 +2,11 @@ import electron, { type WebContents } from "electron"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { CodedError } from "./errors"
 import type { DialogInfo } from "./dialog-machine"
+import { displayHost } from "./host-display"
 import { PROMPT_TEXT_MAX, type PromptAnswer, type PromptView } from "./ipc"
 import {
   createVisit,
   initialPrompts,
-  promptHost,
   promptSite,
   promptText,
   selectPrompt,
@@ -276,7 +276,7 @@ export function createPagePrompts(input: {
       kind: "auth",
       key: answer.key,
       origin,
-      host: promptHost(details.url),
+      host: displayHost(details.url),
       realm: promptText(auth.realm, 256),
       failed: !details.firstAuthAttempt,
       navigation: details.isRequestForNavigation && visit.pending !== undefined && originOf(visit.pending) === origin,
