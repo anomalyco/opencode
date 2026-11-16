@@ -15,23 +15,18 @@ import { nativeT } from "./native-translations"
 const { autoUpdater } = pkg
 const key = "ready"
 
-// OpenCode 2 desktop keeps each channel's app ID, so its installer replaces OpenCode 1 in place.
-// OpenCode 1 reads GitHub releases; these are the feeds OpenCode 2 publishes to.
-const MAJOR_FEEDS = {
-  beta: "https://opencode.ai/update/api/beta/desktop/opencode/",
-  prod: "https://opencode.ai/update/api/latest/desktop/opencode/",
-}
+// OpenCode 2 desktop keeps the app ID, so its installer replaces OpenCode 1 in place.
+// OpenCode 1 reads GitHub releases; this is the feed OpenCode 2 publishes to.
+const MAJOR_FEED = "https://opencode.ai/update/api/latest/desktop/opencode/"
 
 // A second updater, so switching feeds can never make the OpenCode 1 updater download OpenCode 2.
-function majorUpdater(url: string) {
+function majorUpdater() {
   // autoUpdater is already the right updater for this platform and package type, so build another of the same class.
   const Updater = autoUpdater.constructor as new (options: { provider: "generic"; url: string }) => AppUpdater
-  const updater = new Updater({ provider: "generic", url })
+  const updater = new Updater({ provider: "generic", url: MAJOR_FEED })
   updater.logger = getLogger()
   updater.channel = "latest"
   updater.allowPrerelease = false
-  // OpenCode 2 beta versions (0.0.0-beta-N) sort below every OpenCode 1 version.
-  updater.allowDowngrade = true
   updater.autoDownload = false
   updater.autoInstallOnAppQuit = false
   return updater
@@ -85,7 +80,8 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
     enabled: UPDATER_ENABLED,
     currentVersion: app.getVersion(),
     backend: backend(autoUpdater),
-    major: UPDATER_ENABLED && CHANNEL !== "dev" ? majorBackend(majorUpdater(MAJOR_FEEDS[CHANNEL])) : undefined,
+    // Only the release channel ships OpenCode 1 desktop builds.
+    major: UPDATER_ENABLED && CHANNEL === "prod" ? majorBackend(majorUpdater()) : undefined,
     persistence: {
       get() {
         const value = store.get(key)
