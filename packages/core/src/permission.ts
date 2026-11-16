@@ -16,7 +16,7 @@ import { PluginHooks } from "./plugin/hooks.js"
 
 const PermissionEffect = Permission.Effect
 export { PermissionEffect as Effect }
-export { Rule, Ruleset } from "@opencode/schema/permission"
+export { Rule, Ruleset, deniesAll } from "@opencode/schema/permission"
 const missingAgentPermissions: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
 
 export const ID = Permission.ID
@@ -107,6 +107,24 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
   return rulesets.flat()
 }
 
+/**
+ * The rules for `agent` in `session`: the agent's, then the Session's, then any that `experimental.rules` hooks append.
+ * Requests are evaluated against them and steps list tools, skills and MCP servers by them, so what an agent is
+ * offered and what it may call come from one ruleset.
+ */
+export const rules = Effect.fn("Permission.rules")(function* (
+  hooks: PluginHooks.Interface,
+  input: { readonly session: SessionSchema.Info; readonly agent: Agent.Selection },
+) {
+  const event = yield* hooks.trigger("permission", "experimental.rules", {
+    sessionID: input.session.id,
+    agent: input.agent.id,
+    session: input.session.permissions ?? [],
+    rules: [...(input.agent.info?.permissions ?? missingAgentPermissions), ...(input.session.permissions ?? [])],
+  })
+  return event.rules
+})
+
 export interface Interface {
   readonly close: Effect.Effect<void>
   readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
@@ -169,8 +187,7 @@ const layer = Layer.effect(
     const configured = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
       const session = yield* sessions.get(sessionID)
       if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
-      const agent = yield* agents.resolve(agentID ?? session.agent)
-      return merge(agent?.permissions ?? missingAgentPermissions, session.permissions ?? [])
+      return yield* rules(hooks, { session, agent: yield* agents.select(agentID ?? session.agent) })
     })
 
     function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {

@@ -27,8 +27,23 @@ export interface PermissionEvaluation {
   }
 }
 
+/**
+ * The rules for one agent in one Session. They decide its permission requests and what its steps list: a tool whose
+ * permission they deny outright is not listed, and neither is a skill or MCP server they deny. Rules a hook appends
+ * are evaluated after the Session's. Experimental: may change without compatibility guarantees.
+ */
+export interface PermissionRules {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  /** The Session's own rules, which follow the agent's in `rules`. */
+  readonly session: ReadonlyArray<Permission.Rule>
+  /** The agent's rules, then the Session's. */
+  rules: Array<Permission.Rule>
+}
+
 export interface PermissionHooks {
   readonly evaluate: PermissionEvaluation
+  readonly "experimental.rules": PermissionRules
 }
 
 export type PermissionDomain = Pick<PermissionApi, "list" | "get" | "reply"> & {

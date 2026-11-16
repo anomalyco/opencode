@@ -17,7 +17,6 @@ import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
 import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
-import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
@@ -382,10 +381,8 @@ function commit(editor: Data, id: string, input: Tool.Info & { readonly id: stri
   editor.definitions.set(id, registered.success)
 }
 
-const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
-  const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
-  return rule?.resource === "*" && rule.effect === "deny"
-}
+const whollyDisabled = (action: string, rules: Permission.Ruleset) =>
+  Permission.deniesAll(action, rules, process.platform === "win32")
 
 const formatSchemaIssue = SchemaIssue.makeFormatterDefault()
 
