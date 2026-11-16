@@ -74,7 +74,7 @@ story("reviews the actual application target only after a trusted click", async 
   const open = pane.getByRole("button", { name: "Open", exact: true })
   await open.click()
   await expect(pane.getByText(url)).toBeVisible()
-  const longest = `obsidian:${"W".repeat(191)}`
+  const longest = "obsidian://open?file=".padEnd(200, "W")
   await pane.evaluate(node => { node.style.width = "320px" })
   await link.evaluate((node, value) => { node.dataset.appLink = value }, longest)
   await link.press("Enter")

@@ -68,8 +68,13 @@ test("conversation links use only the conversation subset of the page policy", (
     expect(externalTarget(`${scheme}:fixture`, "page")).toBe("open")
   }
 
-  for (const scheme of ["obsidian", "mailto", "zoommtg", "zoomus"]) {
-    expect(navigationNotice(`${scheme}:fixture`, {}, "conversation")).toMatchObject({ source: "conversation", action: "open" })
+  for (const url of ["obsidian://open?vault=fixture", "obsidian://search?query=fixture", "mailto:fixture", "zoommtg:fixture", "zoomus:fixture"]) {
+    expect(navigationNotice(url, {}, "conversation")).toMatchObject({ source: "conversation", action: "open" })
+  }
+
+  for (const url of ["obsidian://new?overwrite=true", "obsidian://plugin-command", "obsidian:fixture", "obsidian://open/other", "mailto:user@example.org?attach=fixture", "mailto:user@example.org?subject=ok&%61TTACHMENT=fixture"]) {
+    expect(externalTarget(url, "conversation")).toBe("copy")
+    expect(externalTarget(url, "page")).toBe("open")
   }
 })
 

@@ -22,6 +22,11 @@ export function externalTarget(value: string, source: "conversation" | "page" = 
 
   if (parsed.username || parsed.password) return
 
+  if (source === "conversation") {
+    if (scheme === "obsidian" && !/^\/\/(?:open|search)(?:\?|$)/.test(value.slice(scheme.length + 1))) return "copy"
+    if (scheme === "mailto" && Array.from(parsed.searchParams.keys()).some(key => /^(?:attach|attachment)$/i.test(key))) return "copy"
+  }
+
   // A 320px pane gives the URL its own 296px row: at least 40 default mono glyphs per line, for five lines.
   // The bar also checks the actual font and available width before presenting Open.
   const permitted = apps.includes(scheme) || (source === "page" && pageOnly.includes(scheme))
