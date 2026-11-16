@@ -4,7 +4,7 @@ import { expect } from "bun:test"
 import { Effect, Schedule } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
-import { startServer } from "./fixture/server"
+import { startServer, waitForAgentPolicy } from "./fixture/server"
 
 it.live(
   "browsing parents and siblings reuses the current Location and its MCP process",
@@ -150,6 +150,7 @@ it.live(
       expect(slice.status).toBe(206)
       expect(slice.headers.get("x-opencode-preview")).toBe("3")
       expect(yield* Effect.promise(() => slice.text())).toBe("2345")
+      yield* waitForAgentPolicy(server, created.data.location.directory)
       for (const [file, expected] of [["clip.mp4", 200], ["notes.txt", 404], ["empty.bin", 404]] as const) {
         preview.searchParams.set("path", file)
         for (const method of ["GET", "HEAD"]) {
