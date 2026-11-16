@@ -2307,7 +2307,7 @@ pub const SKIPPED_NO_TS: &str =
 pub const SKIPPED_OFF: &str = if cfg!(feature = "ts") { SKIPPED_JS_OFF } else { SKIPPED_NO_TS };
 /// Why a TypeScript plugin is not loaded when no Bun runs the JS host: neither the local server's opencode binary nor
 /// `bun` on the path (O-166).
-pub const SKIPPED_NO_BUN: &str = "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun on the path runs it; install Bun or set OPENCODE_BUN";
+pub const SKIPPED_NO_BUN: &str = "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun on the path runs it; install Bun 1.4 or newer, or set OPENCODE_BUN to its absolute path";
 
 struct Plugin {
     definition: Definition,
