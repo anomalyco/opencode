@@ -86,8 +86,6 @@ export const registerIpcHandlers = Effect.gen(function* () {
   }
 
   const onWindowCreated = (_event: Electron.Event, win: BrowserWindow) => wire(win)
-  const stopDisconnects = handoff.onDisconnect(lifecycle.deepLinks.disconnect)
-  yield* Effect.addFinalizer(() => Effect.sync(stopDisconnects))
   const stopSnapshots = setStorageSnapshotObserver(handoff.prepare)
   yield* Effect.addFinalizer(() => Effect.sync(stopSnapshots))
   // A language the renderer pushes rebuilds the menu once it is installed.

@@ -3,10 +3,8 @@ import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
 import { PluginInstalled, PluginMenubarItem, PluginPayload, PluginGuis } from "./plugins"
 
-export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
-  attempt: Schema.Number,
-  urls: Schema.Array(Schema.String),
-}) {}
+// A deep link is waiting; the window takes it with AppTakeDeepLink.
+export class DeepLinkReceived extends Schema.TaggedClass<DeepLinkReceived>()("DeepLinkReceived", {}) {}
 
 export class MenuCommandTriggered extends Schema.TaggedClass<MenuCommandTriggered>()("MenuCommandTriggered", {
   id: Schema.String,
@@ -77,7 +75,7 @@ export class SidecarChanged extends Schema.TaggedClass<SidecarChanged>()("Sideca
 }) {}
 
 export const DesktopEvent = Schema.Union([
-  DeepLinksOpened,
+  DeepLinkReceived,
   SidecarChanged,
   MenuCommandTriggered,
   WindowFullscreenChanged,

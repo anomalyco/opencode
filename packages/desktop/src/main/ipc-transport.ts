@@ -52,7 +52,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
 
     const dispatch = (event: TransportEvent) => {
       const next = transitionIpcTransport(state, event)
-      // Commit first: disconnect listeners (deep links) emit events that read the new state.
+      // Commit first: disconnect listeners may emit events that read the new state.
       state = next.state
       next.commands.forEach(perform)
     }

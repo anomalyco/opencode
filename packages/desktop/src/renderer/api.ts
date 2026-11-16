@@ -21,8 +21,7 @@ export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
   reconnectService: (signal) => cancellable("AppReconnectService", undefined, signal),
   onSidecarChanged: (cb) => listen("SidecarChanged", (event) => cb({ url: event.url })),
-  readyDeepLinks: () => send("AppReadyDeepLinks"),
-  acknowledgeDeepLinks: (attempt) => send("AppAcknowledgeDeepLinks", { attempt }),
+  takeDeepLink: () => invoke("AppTakeDeepLink"),
   isFirstLaunchOnboardingPending: () => invoke("AppIsFirstLaunchOnboardingPending"),
   finishFirstLaunchOnboarding: (createDefaultProject) =>
     invoke("AppFinishFirstLaunchOnboarding", { createDefaultProject }),
@@ -44,7 +43,7 @@ export const api: ElectronAPI = {
   getWindowBootstrap: () => window.electron.bootstrap,
   themeReady: () => invoke("WindowThemeReady"),
   onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
-  onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb({ attempt: event.attempt, urls: mutable(event.urls) })),
+  onDeepLink: (cb) => listen("DeepLinkReceived", () => cb()),
 
   openDirectoryPicker: (opts) => invoke("FilesOpenDirectoryPicker", { options: opts }).then(mutable),
   openFilePicker: (opts) => invoke("FilesOpenFilePicker", { options: opts }).then(mutable),
