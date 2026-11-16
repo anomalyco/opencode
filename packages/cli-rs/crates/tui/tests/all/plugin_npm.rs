@@ -371,3 +371,53 @@ fn a_remote_servers_local_parts_are_left_out() {
     assert_eq!(status(&pipe, &target), None, "a remote server's local path was listed");
     assert_eq!(pipe.status("sidebar.prompt"), None);
 }
+
+// Expected (carbon recheck-2, TS `context.tsx` reconcile): `cli.json` naming a package at one version and a server's
+// part naming it at another, vouched for by the global config, load `cli.json`'s alone, as TS's later `cli.json` entry
+// replaces the server's for the plugin's ID; nothing fails as "already registered", and the server's part is not
+// listed. Both versions are the pinned tarball, one plugin ID.
+#[test]
+fn a_cli_json_version_wins_over_the_servers_on_the_js_host() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    install(home.path(), "opencode-sidebar-tokens@0.1.2", "opencode-sidebar-tokens", "1794700000000");
+    install(home.path(), "opencode-sidebar-tokens@0.1.3", "opencode-sidebar-tokens", "1794700000000");
+    let source = serde_json::json!({ "type": "package", "target": "opencode-sidebar-tokens@0.1.3" });
+    let part = serde_json::json!({
+        "id": "sidebar.tokens", "source": source, "features": { "server": true, "tui": true },
+        "state": { "status": "active" },
+    });
+    let (cli, server) = ("opencode-sidebar-tokens@0.1.2", "opencode-sidebar-tokens@0.1.3");
+    let Some(pipe) = open_in(&home, &[cli], serde_json::json!([part]), None, &[server], true) else { return };
+    pipe.active("sidebar.tokens");
+    pipe.settle();
+    let entries = pipe.harness.tui.plugins.entries();
+    let target = |entry: &opencode_plugin::Entry| entry.target.clone().unwrap_or_default();
+    let failed: Vec<_> = entries.iter().filter(|entry| matches!(entry.status, Status::Failed(_))).map(target).collect();
+    assert!(failed.is_empty(), "{failed:?}");
+    let active = entries.iter().find(|entry| entry.id == "sidebar.tokens").map(target);
+    assert_eq!(active.as_deref(), Some(cli));
+    assert_eq!(status(&pipe, server), None, "the server's part was listed");
+}
+
+// Expected (carbon recheck-1): a removal added to `cli.json` while the TUI runs withdraws the vouch the global config
+// gave a server's part, as TS folds `cli.json`'s entries after it: the part then waits for approval. `-<spec>` selects
+// no plugin by ID, so only the vouch reads it.
+#[test]
+fn a_removal_added_to_cli_json_withdraws_the_vouch_of_a_running_part() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    install(home.path(), "opencode-sidebar-tokens@0.1.3", "opencode-sidebar-tokens", "1794700000000");
+    let spec = "opencode-sidebar-tokens@0.1.3";
+    let source = serde_json::json!({ "type": "package", "target": spec });
+    let part = serde_json::json!({ "source": source, "features": { "server": true, "tui": true }, "state": { "status": "active" } });
+    let Some(pipe) = open_in(&home, &[], serde_json::json!([part]), None, &[spec], true) else { return };
+    pipe.active("sidebar.tokens");
+    let removal = serde_json::json!([format!("-{spec}")]);
+    opencode_tui::dialogs::settings::update(&pipe.harness.tui, move |draft| {
+        opencode_tui::dialogs::settings::set_path(draft, &["plugins"], removal);
+    });
+    pipe.harness.wait("the part waits for approval", || {
+        pipe.settle();
+        status(&pipe, spec) == Some(Status::Pending)
+    });
+    assert_eq!(pipe.status("sidebar.tokens"), None, "the part still runs");
+}
