@@ -2960,6 +2960,53 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err\n");
 }
 
+// Expected (CT-1): a fetch whose reply comes after the plugin's registrations changed, which reloads it, settles: the
+// reply reaches the activation that took the JS host's over. It was lost with the one that asked, and the plugin's
+// await never ended (tokscope's history pass, started in setup, once its page's first mount reloaded it).
+#[test]
+fn a_fetch_across_a_reload_of_the_registrations_settles() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("fetched");
+    let plugin = root.path().join("config/plugins/gated");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.gated\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"gated.fetch\", title: \"gated.fetch\" }}, async () => {{\n    const pending = carrier.fetch({{ method: \"GET\", path: \"/api/gated\" }})\n    carrier.command({{ name: \"gated.late\", title: \"gated.late\" }}, () => {{}})\n    const result = await pending\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let open = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let gate = open.clone();
+    let server = support::Fake::new(move |seen| match seen.path.as_str() {
+        "/api/gated" => {
+            let begun = Instant::now();
+            while !gate.load(std::sync::atomic::Ordering::SeqCst) && begun.elapsed() < Duration::from_secs(20) {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            (200, serde_json::json!({ "gated": true }))
+        }
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.gated");
+    let h = &pipe.harness;
+    h.tui.keymap.dispatch("gated.fetch", None);
+    h.wait("the reload took the late command", || {
+        h.app.advance(Duration::from_millis(1));
+        matches!(h.tui.keymap.dispatch("gated.late", None), opentui::keymap::RunResult::Ok)
+    });
+    open.store(true, std::sync::atomic::Ordering::SeqCst);
+    h.wait("the fetch ended", || {
+        h.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "Ok\n");
+    assert_eq!(pipe.status("example.gated"), Some(opencode_plugin::Status::Active));
+}
+
 // Expected (bigboi's final pass): a TypeScript plugin's fetch that the host does not take, while another plugin's
 // fan-out fills the queue of effects, ends with an error, where its await never ended; once the queue drains, a fetch
 // gets its reply.
