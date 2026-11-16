@@ -1,0 +1,7 @@
+# The toolchain the client builds and is checked with: OpenTUI's (packages/rust/rust-toolchain.toml) and the preview
+# CI's. rustup installs it on first use; a toolchain without rustup ignores this file, so keep it at this version, as a
+# newer clippy can fail on one side only. rust-src is what script/check-target.sh builds the other targets' std from.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["rustfmt", "clippy", "rust-src"]
