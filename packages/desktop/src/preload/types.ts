@@ -30,8 +30,8 @@ export type UpdaterAPI = {
   major: {
     subscribe: (cb: (state: MajorUpdateState) => void) => Promise<() => void>
     prompt: () => Promise<boolean>
-    install: () => Promise<void>
     restart: () => Promise<void>
+    schedule: () => Promise<void>
   }
 }
 

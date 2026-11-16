@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { createUpdaterController, type UpdaterBackend, type UpdaterReadyRecord } from "./updater-controller"
+import {
+  createUpdaterController,
+  type MajorUpdaterBackend,
+  type UpdaterBackend,
+  type UpdaterReadyRecord,
+} from "./updater-controller"
 
 function setup(input?: { currentVersion?: string; ready?: UpdaterReadyRecord }) {
   const calls: string[] = []
@@ -110,7 +115,7 @@ describe("updater controller", () => {
   })
 })
 
-function setupMajor(input?: { update?: boolean; major?: Partial<UpdaterBackend> }) {
+function setupMajor(input?: { update?: () => boolean; major?: Partial<MajorUpdaterBackend> }) {
   const calls: string[] = []
   const controller = createUpdaterController({
     enabled: true,
@@ -118,7 +123,7 @@ function setupMajor(input?: { update?: boolean; major?: Partial<UpdaterBackend> 
     backend: {
       async checkForUpdates() {
         calls.push("check")
-        return { isUpdateAvailable: input?.update ?? false, updateInfo: { version: "1.19.6" } }
+        return { isUpdateAvailable: input?.update?.() ?? false, updateInfo: { version: "1.19.6" } }
       },
       async downloadUpdate() {
         calls.push("download")
@@ -135,6 +140,9 @@ function setupMajor(input?: { update?: boolean; major?: Partial<UpdaterBackend> 
       async downloadUpdate() {
         calls.push("major download")
       },
+      async installOnQuit() {
+        calls.push("major install on quit")
+      },
       quitAndInstall() {
         calls.push("major install")
       },
@@ -145,29 +153,47 @@ function setupMajor(input?: { update?: boolean; major?: Partial<UpdaterBackend> 
       calls.push("stop")
     },
   })
-  return { controller, calls }
+  const states: string[] = []
+  controller.major.subscribe((state) => states.push(state.status))
+  // The background download is not awaited by a check, so tests wait for the offer to settle.
+  const settled = async () => {
+    for (const _ of Array.from({ length: 10 })) await Promise.resolve()
+  }
+  return { controller, calls, states, settled }
 }
 
 describe("major updater", () => {
-  test("offers OpenCode 2 once OpenCode 1 is up to date, without downloading it", async () => {
+  test("downloads OpenCode 2 once OpenCode 1 is up to date, then offers it", async () => {
     const app = setupMajor()
 
     await app.controller.start()
+    await app.settled()
 
     expect(app.controller.getState()).toEqual({ status: "up-to-date" })
-    expect(app.controller.major.getState()).toEqual({ status: "available" })
-    expect(app.calls).toEqual(["check"])
+    expect(app.states).toEqual(["unavailable", "downloading", "ready"])
+    expect(app.calls).toEqual(["check", "major check", "major download"])
   })
 
-  test("a newer OpenCode 1 release wins over the OpenCode 2 offer", async () => {
-    const app = setupMajor({ update: true })
+  test("installs nothing until the user chooses", async () => {
+    const app = setupMajor()
+    await app.controller.start()
+    await app.settled()
+
+    expect(app.calls).not.toContain("major install")
+    expect(app.calls).not.toContain("major install on quit")
+    expect(app.calls).not.toContain("stop")
+  })
+
+  test("a newer OpenCode 1 release comes first", async () => {
+    const app = setupMajor({ update: () => true })
 
     await app.controller.start()
+    await app.settled()
 
     expect(app.controller.getState()).toEqual({ status: "ready", version: "1.19.6" })
     expect(app.controller.major.getState()).toEqual({ status: "unavailable" })
-    await app.controller.major.install()
     expect(app.calls).toEqual(["check", "download"])
+    await expect(app.controller.major.restart()).rejects.toThrow("OpenCode 2 is not ready to install")
   })
 
   test("never offers OpenCode 2 without a feed for it", async () => {
@@ -188,30 +214,50 @@ describe("major updater", () => {
     expect(controller.major.getState()).toEqual({ status: "unavailable" })
   })
 
-  test("upgrades when asked, then installs on restart", async () => {
+  test("restart stops the app and installs OpenCode 2", async () => {
     const app = setupMajor()
     await app.controller.start()
-    const states: string[] = []
-    app.controller.major.subscribe((state) => states.push(state.status))
+    await app.settled()
 
-    await app.controller.major.install()
     await app.controller.major.restart()
 
-    expect(states).toEqual(["available", "installing", "installed"])
     expect(app.calls).toEqual(["check", "major check", "major download", "stop", "major install"])
   })
 
-  test("stops checking for OpenCode 1 releases once OpenCode 2 is downloaded", async () => {
+  test("upgrade on quit arms the install and keeps the app running", async () => {
     const app = setupMajor()
     await app.controller.start()
-    await app.controller.major.install()
+    await app.settled()
+
+    await app.controller.major.schedule()
+
+    expect(app.states).toEqual(["unavailable", "downloading", "ready", "scheduled"])
+    expect(app.calls).toEqual(["check", "major check", "major download", "major install on quit"])
+  })
+
+  test("restart still works after upgrade on quit was chosen", async () => {
+    const app = setupMajor()
+    await app.controller.start()
+    await app.settled()
+    await app.controller.major.schedule()
+
+    await app.controller.major.restart()
+
+    expect(app.calls.slice(-2)).toEqual(["stop", "major install"])
+  })
+
+  test("stops checking for OpenCode 1 releases once the user chose OpenCode 2", async () => {
+    const app = setupMajor()
+    await app.controller.start()
+    await app.settled()
+    await app.controller.major.schedule()
 
     await app.controller.check()
 
-    expect(app.calls).toEqual(["check", "major check", "major download"])
+    expect(app.calls.filter((call) => call === "check")).toHaveLength(1)
   })
 
-  test("reports a failed download and lets the user try again", async () => {
+  test("a failed download stays quiet and the next check tries again", async () => {
     const failure = { fail: true }
     const app = setupMajor({
       major: {
@@ -221,23 +267,52 @@ describe("major updater", () => {
       },
     })
     await app.controller.start()
-
-    await app.controller.major.install()
-    expect(app.controller.major.getState()).toEqual({ status: "failed", message: "net::ERR_INTERNET_DISCONNECTED" })
-    await expect(app.controller.major.restart()).rejects.toThrow("OpenCode 2 is not ready to install")
+    await app.settled()
+    expect(app.states).toEqual(["unavailable", "downloading", "unavailable"])
 
     failure.fail = false
-    await app.controller.major.install()
-    expect(app.controller.major.getState()).toEqual({ status: "installed" })
+    await app.controller.check()
+    await app.settled()
+
+    expect(app.controller.major.getState()).toEqual({ status: "ready" })
   })
 
-  test("fails without a message when the feed has no OpenCode 2 release", async () => {
+  test("stays unavailable when the feed has no OpenCode 2 release", async () => {
     const app = setupMajor({ major: { checkForUpdates: async () => ({ isUpdateAvailable: false }) } })
+
     await app.controller.start()
+    await app.settled()
 
-    await app.controller.major.install()
+    expect(app.controller.major.getState()).toEqual({ status: "unavailable" })
+  })
 
-    expect(app.controller.major.getState()).toEqual({ status: "failed" })
+  test("a newer OpenCode 1 release withdraws an offer that was already made", async () => {
+    const release = { out: false }
+    const app = setupMajor({ update: () => release.out })
+    await app.controller.start()
+    await app.settled()
+    expect(app.controller.major.getState()).toEqual({ status: "ready" })
+
+    release.out = true
+    await app.controller.check()
+
+    expect(app.controller.getState()).toEqual({ status: "ready", version: "1.19.6" })
+    expect(app.controller.major.getState()).toEqual({ status: "unavailable" })
+  })
+
+  test("upgrade on quit that cannot be armed leaves the offer as it was", async () => {
+    const app = setupMajor({
+      major: {
+        async installOnQuit() {
+          throw new Error("cache missing")
+        },
+      },
+    })
+    await app.controller.start()
+    await app.settled()
+
+    await expect(app.controller.major.schedule()).rejects.toThrow("cache missing")
+    expect(app.controller.major.getState()).toEqual({ status: "ready" })
   })
 
   test("prompts in one window per launch", () => {

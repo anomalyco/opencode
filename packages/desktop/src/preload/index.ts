@@ -80,8 +80,8 @@ const api: ElectronAPI = {
         }
       },
       prompt: () => ipcRenderer.invoke("updater-major-prompt"),
-      install: () => ipcRenderer.invoke("updater-major-install"),
       restart: () => ipcRenderer.invoke("updater-major-restart"),
+      schedule: () => ipcRenderer.invoke("updater-major-schedule"),
     },
   },
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),

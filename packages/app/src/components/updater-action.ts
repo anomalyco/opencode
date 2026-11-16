@@ -38,7 +38,7 @@ export function useUpdaterAction() {
 
       const state = await platform.updater?.check()
       // With no OpenCode 1 release left to install, checking for updates opens the OpenCode 2.0 offer instead.
-      if (state?.status !== "ready" && major.status() !== "unavailable") return major.open()
+      if (state?.status !== "ready" && major.offered()) return major.open()
       if (state?.status === "up-to-date") {
         showToast({
           variant: "success",

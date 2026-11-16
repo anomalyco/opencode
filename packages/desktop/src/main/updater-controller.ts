@@ -10,6 +10,9 @@ export type UpdaterBackend = {
   quitAndInstall(): void
 }
 
+// The OpenCode 2 updater can also install when the app quits, without a restart.
+export type MajorUpdaterBackend = UpdaterBackend & { installOnQuit(): Promise<unknown> }
+
 type UpdaterPersistence = {
   get(): UpdaterReadyRecord | undefined | Promise<UpdaterReadyRecord | undefined>
   set(value: UpdaterReadyRecord): void | Promise<void>
@@ -21,7 +24,7 @@ export function createUpdaterController(input: {
   currentVersion: string
   backend: UpdaterBackend
   // Reads the OpenCode 2 feed. Without it, OpenCode 2 is never offered.
-  major?: UpdaterBackend
+  major?: MajorUpdaterBackend
   persistence: UpdaterPersistence
   stop: () => Promise<void>
   log?: (message: string, data?: object) => void
@@ -29,6 +32,7 @@ export function createUpdaterController(input: {
   let state: UpdaterState = input.enabled ? { status: "idle" } : { status: "disabled" }
   let major: MajorUpdateState = { status: "unavailable" }
   let pending: Promise<UpdaterState> | undefined
+  let preparing: Promise<void> | undefined
   let prompted = false
   const listeners = new Set<(state: UpdaterState) => void>()
   const majorListeners = new Set<(state: MajorUpdateState) => void>()
@@ -47,11 +51,36 @@ export function createUpdaterController(input: {
     return major
   }
 
+  // Downloads OpenCode 2 ahead of the offer, the way an OpenCode 1 update downloads. A failure stays quiet and the next
+  // check tries again, because the user has not asked for anything yet.
+  const prepare = () => {
+    const backend = input.major
+    if (!backend || preparing || major.status !== "unavailable") return
+    transitionMajor({ status: "downloading" })
+    preparing = backend
+      .checkForUpdates()
+      .then(async (result) => {
+        if (!result?.isUpdateAvailable) return false
+        await backend.downloadUpdate()
+        return true
+      })
+      .catch((error) => {
+        input.log?.("major update download failed", { message: error instanceof Error ? error.message : String(error) })
+        return false
+      })
+      .then((downloaded) => {
+        preparing = undefined
+        // A newer OpenCode 1 release can withdraw the offer while OpenCode 2 downloads.
+        if (major.status !== "downloading") return
+        transitionMajor(downloaded ? { status: "ready" } : { status: "unavailable" })
+      })
+  }
+
   const check = () => {
     if (!input.enabled) return Promise.resolve(state)
     if (state.status === "ready") return Promise.resolve(state)
     // Once the user picks OpenCode 2, an OpenCode 1 release must not download over it.
-    if (major.status === "installing" || major.status === "installed") return Promise.resolve(state)
+    if (major.status === "scheduled") return Promise.resolve(state)
     if (pending) return pending
 
     pending = (async () => {
@@ -60,7 +89,7 @@ export function createUpdaterController(input: {
       const version = result?.updateInfo?.version
       if (!result?.isUpdateAvailable || !version || version === input.currentVersion) {
         await input.persistence.clear()
-        if (input.major && major.status === "unavailable") transitionMajor({ status: "available" })
+        prepare()
         return transition({ status: "up-to-date" })
       }
 
@@ -119,26 +148,19 @@ export function createUpdaterController(input: {
         prompted = true
         return true
       },
-      // Nothing downloads until the user picks Upgrade.
-      async install() {
-        const backend = input.major
-        if (!backend || (major.status !== "available" && major.status !== "failed")) return
-        transitionMajor({ status: "installing" })
-        await backend
-          .checkForUpdates()
-          .then(async (result) => {
-            if (!result?.isUpdateAvailable) return transitionMajor({ status: "failed" })
-            await backend.downloadUpdate()
-            return transitionMajor({ status: "installed" })
-          })
-          .catch((error) =>
-            transitionMajor({ status: "failed", message: error instanceof Error ? error.message : String(error) }),
-          )
-      },
+      // Nothing installs until the user picks one of these two.
       async restart() {
-        if (!input.major || major.status !== "installed") throw new Error("OpenCode 2 is not ready to install")
+        const backend = input.major
+        if (!backend || (major.status !== "ready" && major.status !== "scheduled"))
+          throw new Error("OpenCode 2 is not ready to install")
         await input.stop()
-        input.major.quitAndInstall()
+        backend.quitAndInstall()
+      },
+      async schedule() {
+        const backend = input.major
+        if (!backend || major.status !== "ready") return
+        await backend.installOnQuit()
+        transitionMajor({ status: "scheduled" })
       },
     },
   }

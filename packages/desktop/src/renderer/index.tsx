@@ -243,8 +243,8 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       major: {
         state: majorUpdateState,
         prompt: () => window.api.updater.major.prompt(),
-        install: () => window.api.updater.major.install(),
         restart: () => window.api.updater.major.restart(),
+        schedule: () => window.api.updater.major.schedule(),
       },
     },
 

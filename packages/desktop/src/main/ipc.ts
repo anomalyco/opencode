@@ -97,8 +97,8 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("updater-check", () => deps.updater.check())
   ipcMain.handle("updater-install", () => deps.updater.install())
   ipcMain.handle("updater-major-prompt", () => deps.updater.major.prompt())
-  ipcMain.handle("updater-major-install", () => deps.updater.major.install())
   ipcMain.handle("updater-major-restart", () => deps.updater.major.restart())
+  ipcMain.handle("updater-major-schedule", () => deps.updater.major.schedule())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>

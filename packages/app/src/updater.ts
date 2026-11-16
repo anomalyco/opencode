@@ -13,17 +13,21 @@ export type UpdaterState =
 // A newer OpenCode 1 release wins; OpenCode 2.0 is only offered once OpenCode 1 is up to date.
 export type MajorUpdateState =
   | { status: "unavailable" }
-  | { status: "available" }
-  | { status: "installing" }
-  | { status: "installed" }
-  | { status: "failed"; message?: string }
+  // OpenCode 2 downloads in the background, like an OpenCode 1 update. Nothing is offered yet.
+  | { status: "downloading" }
+  // Downloaded. The user is asked, and nothing installs until they choose.
+  | { status: "ready" }
+  // The user chose to upgrade when the app quits.
+  | { status: "scheduled" }
 
 export type MajorUpdaterPlatform = {
   state: Accessor<MajorUpdateState>
   /** Resolves true for one window per launch, so restored windows don't each open the offer. */
   prompt(): Promise<boolean>
-  install(): Promise<void>
+  /** Quits, installs OpenCode 2 and opens it. */
   restart(): Promise<void>
+  /** Installs OpenCode 2 when the app next quits. */
+  schedule(): Promise<void>
 }
 
 export type UpdaterPlatform = {

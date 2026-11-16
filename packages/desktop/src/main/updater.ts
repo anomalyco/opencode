@@ -1,7 +1,12 @@
 import { app, dialog } from "electron"
 import pkg, { type AppUpdater } from "electron-updater"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
-import { createUpdaterController, type UpdaterBackend, type UpdaterReadyRecord } from "./updater-controller"
+import {
+  createUpdaterController,
+  type MajorUpdaterBackend,
+  type UpdaterBackend,
+  type UpdaterReadyRecord,
+} from "./updater-controller"
 import { getLogger } from "./logging"
 import { getStore } from "./store"
 import { setAppQuitting } from "./windows"
@@ -65,12 +70,22 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
     },
   })
 
+  const majorBackend = (updater: AppUpdater): MajorUpdaterBackend => ({
+    ...backend(updater),
+    // electron-updater only arms its install on quit while a download finishes. The installer is already in the cache,
+    // so downloading again returns at once and arms it.
+    installOnQuit: () => {
+      updater.autoInstallOnAppQuit = true
+      return updater.downloadUpdate()
+    },
+  })
+
   const store = getStore("opencode.updater")
   return createUpdaterController({
     enabled: UPDATER_ENABLED,
     currentVersion: app.getVersion(),
     backend: backend(autoUpdater),
-    major: UPDATER_ENABLED && CHANNEL !== "dev" ? backend(majorUpdater(MAJOR_FEEDS[CHANNEL])) : undefined,
+    major: UPDATER_ENABLED && CHANNEL !== "dev" ? majorBackend(majorUpdater(MAJOR_FEEDS[CHANNEL])) : undefined,
     persistence: {
       get() {
         const value = store.get(key)
@@ -92,8 +107,8 @@ export async function showUpdaterDialog(
 ) {
   const state = await controller.check()
   // With no OpenCode 1 release left to install, checking for updates opens the OpenCode 2 offer instead.
-  if (alertOnFail && state.status !== "ready" && controller.major.getState().status !== "unavailable")
-    return offerMajor()
+  const major = controller.major.getState().status
+  if (alertOnFail && state.status !== "ready" && (major === "ready" || major === "scheduled")) return offerMajor()
   if (state.status === "error") {
     if (!alertOnFail) return
     await dialog.showMessageBox({
