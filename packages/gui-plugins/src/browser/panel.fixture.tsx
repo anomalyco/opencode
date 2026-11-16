@@ -51,7 +51,7 @@ import browserEn from "./i18n/en"
 import type definition from "./index"
 import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
-import { BrowserPane, type PaneEvent } from "./ipc"
+import { BrowserPane, type PaneEvent, type PromptAnswer } from "./ipc"
 import { pageShortcut } from "./keys"
 import { normalizeURL, refusal } from "./policy"
 import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
@@ -73,6 +73,8 @@ type PaneHost = {
 
 type PaneFixtureState = {
   session: string
+  /** The user's answers to the tab's prompts, as main receives them. */
+  answers: PromptAnswer[]
   mounted: boolean
   visible: boolean
   url: string | undefined
@@ -179,6 +181,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
     const [store, setStore] = createStore<PaneFixtureState>({
       session: "Alpha",
+      answers: [],
       mounted: true,
       visible: true,
       url: scenario === "Empty" || scenario === "Recent" ? "about:blank" : undefined,
@@ -478,6 +481,11 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         } })
       },
       notice: async () => undefined,
+      // Main answers the page, which then waits on nothing.
+      answer: async (value) => {
+        setStore("answers", (answers) => [...answers, value.answer])
+        emit(store.session, { type: "prompt", tabID: value.tabID, prompt: null })
+      },
       reveal: async () => undefined,
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
@@ -678,6 +686,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
               Page icon
             </button>
           </nav>
+
           <p>Captures: {store.captures}</p>
           <p>Zoom: {Math.round(store.zoom * 100)}</p>
           <p>Visits: {store.history.visits.map((visit) => visit.url).join(" ")}</p>
@@ -718,6 +727,116 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             </For>
           </ul>
           <div data-testid="fixture-comment-metadata">{JSON.stringify(store.comments)}</div>
+          {/* Below the pane, so the pane keeps the place the geometry specs measure. */}
+          <nav>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 1,
+                    waiting: 1,
+                    focus: true,
+                    ask: {
+                      kind: "dialog",
+                      dialog: "confirm",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      message: "Discard the draft?\nIt cannot be restored.",
+                      value: "",
+                      stop: true,
+                    },
+                  },
+                })
+              }
+            >
+              Page confirm
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 2,
+                    waiting: 0,
+                    focus: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      permissions: ["camera", "microphone"],
+                      remember: "kept",
+                      agent: false,
+                    },
+                  },
+                })
+              }
+            >
+              Permission request
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 3,
+                    waiting: 0,
+                    focus: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      permissions: ["microphone"],
+                      remember: "none",
+                      agent: true,
+                    },
+                  },
+                })
+              }
+            >
+              Agent permission request
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 4,
+                    waiting: 0,
+                    focus: true,
+                    ask: {
+                      kind: "dialog",
+                      dialog: "prompt",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      message: "Name the copy",
+                      value: "Draft",
+                      stop: false,
+                    },
+                  },
+                })
+              }
+            >
+              Page prompt
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 5,
+                    waiting: 0,
+                    focus: true,
+                    ask: { kind: "auth", host: "intranet.alpha.example", realm: "Staff area", failed: true },
+                  },
+                })
+              }
+            >
+              Sign-in request
+            </button>
+          </nav>
+          <p>Answers: {JSON.stringify(store.answers)}</p>
           <Show when={store.covered}>
             {/* Floating content portals into <body> like a menu or hover card over the page. */}
             <Portal mount={document.body}>
@@ -1106,6 +1225,7 @@ export function mountBrowserRegion(input: RegionHost) {
       clearSite: async () => undefined,
       find: async () => undefined,
       notice: async () => undefined,
+      answer: async () => undefined,
       reveal: async () => undefined,
       close: async () => undefined,
       state: () => undefined,

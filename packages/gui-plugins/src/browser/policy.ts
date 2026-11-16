@@ -100,7 +100,10 @@ export function pagePermission(permission: string, origin: string, declared: (id
   )
 }
 
-/** How long after an agent command a download that no user input started still counts as the command's. */
+/**
+ * How long after an agent command what happens in its tab with no user input since still counts as the command's: a
+ * download its click started, or a script it ran that acts later, as a timer does.
+ */
 export const DOWNLOAD_GRACE_MS = 30_000
 
 export type TabActivity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number }
@@ -122,17 +125,33 @@ export function childActivity(activity: Readonly<TabActivity>): TabActivity {
   return activity.agentRuns ? { agentRuns: 0, agentEndedAt: Date.now() } : { ...activity }
 }
 
-/**
- * Whose a download in a tab is. Only one the agent's command caused is the agent's: it began while an agent command ran
- * in the tab, or within `DOWNLOAD_GRACE_MS` after one ended with no click or key press from the user since, and
- * neither the page nor any address it came through is an extension's. Every other download is the user's and takes
- * the system's save flow, which the agent cannot read.
- */
-export function downloadOwner(download: {
+/** Who may have caused what happens in a tab now: an agent command running, when the last ended, the user's last input. */
+export type AgentActivity = {
   readonly now: number
   readonly agentRunning: boolean
   readonly agentEndedAt?: number
   readonly userInputAt?: number
+}
+
+/**
+ * Whether the agent caused what happens in a tab now: one rule for downloads, clipboard writes, permission requests
+ * and where focus goes. True while an agent command runs, and within `DOWNLOAD_GRACE_MS` after one ended unless the
+ * user clicked or typed in the tab since.
+ */
+export function agentCaused(activity: AgentActivity) {
+  if (activity.agentRunning) return true
+
+  if (activity.agentEndedAt === undefined || activity.now - activity.agentEndedAt > DOWNLOAD_GRACE_MS) return false
+
+  return activity.userInputAt === undefined || activity.userInputAt < activity.agentEndedAt
+}
+
+/**
+ * Whose a download in a tab is. Only one the agent caused (`agentCaused`) is the agent's, and never one where the page
+ * or any address it came through is an extension's. Every other download is the user's and takes the system's save
+ * flow, which the agent cannot read.
+ */
+export function downloadOwner(download: AgentActivity & {
   readonly page: ReadonlyArray<string>
   readonly chain: ReadonlyArray<string>
 }): "agent" | "user" {

@@ -345,6 +345,11 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           keywords: "import cookies chrome edge firefox safari helium arc brave sign in",
         },
         { id: "settings-browser-extensions", title: ctx.t("settings.extensions.title"), keywords: "extensions" },
+        {
+          id: "settings-browser-sites",
+          title: ctx.t("settings.sites.title"),
+          keywords: "site permissions camera microphone location notifications clipboard",
+        },
       ]
     },
     render: () => (
@@ -375,6 +380,10 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
         <div class="flex items-center gap-1.5">
           <PageIcon icon={icon()} />
           <span class="max-w-40 truncate">{text()}</span>
+          {/* A tab behind another waits on the user: a dialog, a sign-in or a site's request. */}
+          <Show when={model()?.asking({ key: session }, id)}>
+            <span role="img" aria-label={ctx.t("prompt.tab")} class="size-1.5 shrink-0 rounded-full bg-v2-icon-icon-accent" />
+          </Show>
         </div>
       ),
       // Listed only to hold the restored selection until the desktop's first inventory names the tab, or the model

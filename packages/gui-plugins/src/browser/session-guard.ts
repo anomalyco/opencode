@@ -1,12 +1,16 @@
 import { app, type WebContents } from "electron"
 import { Option, Schema } from "effect"
+import { Browser } from "@opencode/plugin-browser/rpc"
+import type { PagePermissions } from "./page-prompts"
 import { pagePermission } from "./policy"
 
 const ManifestPermissions = Schema.Struct({ permissions: Schema.optional(Schema.Array(Schema.Unknown)) })
 
 /**
  * Installs what Electron keeps once per session, which every tab of the partition shares, and in the profile its
- * extensions' pages too: web pages get no permission, device or screen; an extension's page gets the clipboard and
+ * extensions' pages too: a pane tab's web page asks its user, through its entry in `pages` by web contents ID, for the
+ * features `site-permissions.ts` lists, and gets no other permission, device or screen; any other web page gets none;
+ * an extension's page gets the clipboard and
  * notifications its manifest declares (`pagePermission`); a download goes to the tab whose page started it, by web
  * contents ID, or to the system's save flow when no tab takes it. Returns the download listener's removal. The
  * permission handlers stay, so nothing is allowed by Electron's default after the pane goes.
@@ -14,6 +18,7 @@ const ManifestPermissions = Schema.Struct({ permissions: Schema.optional(Schema.
 export function guardSession(
   session: Electron.Session,
   downloads: ReadonlyMap<number, (item: Electron.DownloadItem) => void>,
+  pages: ReadonlyMap<number, PagePermissions> = new Map(),
 ) {
   // The native file loader is never a preview loader. Leave this refusal on the partition across plugin reloads.
   if (!session.protocol.isProtocolHandled("file")) session.protocol.handle("file", () => Response.error())
@@ -37,10 +42,23 @@ export function guardSession(
       Option.getOrElse(() => []),
     )
 
-  session.setPermissionRequestHandler((contents, permission, callback, details) =>
-    callback(pagePermission(permission, details.requestingUrl ?? contents.getURL(), declared)),
-  )
-  session.setPermissionCheckHandler((_contents, permission, origin) => pagePermission(permission, origin, declared))
+  // A pane tab's web page asks its user (`createPagePrompts`); any other page, and every extension page, gets what
+  // `pagePermission` gives.
+  session.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const url = details.requestingUrl ?? contents.getURL()
+    const page = pages.get(contents.id)
+
+    if (!page || Browser.extensionOrigin(url)) return callback(pagePermission(permission, url, declared))
+    page.request(permission, details, callback)
+  })
+  session.setPermissionCheckHandler((contents, permission, origin, details) => {
+    const page = contents ? pages.get(contents.id) : undefined
+
+    if (!page || Browser.extensionOrigin(origin) || Browser.extensionOrigin(details.requestingUrl ?? ""))
+      return pagePermission(permission, origin, declared)
+
+    return page.check(permission, origin, details)
+  })
   session.setDevicePermissionHandler(() => false)
   session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
 

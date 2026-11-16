@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import {
+  agentCaused,
   agentFrame,
   agentDriven,
   childActivity,
@@ -356,6 +357,19 @@ test("sticky agent provenance is inherited without inheriting a running command"
   const later = { agentRuns: 0, agentEndedAt: 20, userInputAt: 40 }
   expect(childActivity(later)).toEqual(later)
   expect(agentDriven(later)).toBe(true)
+})
+
+test("what happens in a tab is the agent's while its command runs and for a grace period after, until the user acts", () => {
+  const at = (input: Partial<Parameters<typeof agentCaused>[0]>) => agentCaused({ now: 100_000, agentRunning: false, ...input })
+
+  expect(at({ agentRunning: true })).toBe(true)
+  // A script the command started, such as a timer that writes the clipboard a moment after it returned.
+  expect(at({ agentEndedAt: 99_950 })).toBe(true)
+  expect(at({ agentEndedAt: 100_000 - DOWNLOAD_GRACE_MS })).toBe(true)
+  expect(at({ agentEndedAt: 100_000 - DOWNLOAD_GRACE_MS - 1 })).toBe(false)
+  expect(at({ agentEndedAt: 99_000, userInputAt: 99_000 })).toBe(false)
+  expect(at({ agentEndedAt: 99_000, userInputAt: 98_000 })).toBe(true)
+  expect(at({})).toBe(false)
 })
 
 test("the user still opens extension pages the agent may not", () => {

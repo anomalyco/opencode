@@ -37,6 +37,8 @@ import {
   selectDialog,
   selectDialogTarget,
   selectOpenDialog,
+  selectSuppressed,
+  selectUserDialog,
   transitionDialogGate,
   type DialogGateEvent,
   type RunStopReason,
@@ -61,13 +63,15 @@ import {
   type Policy,
   type TabActivity,
 } from "./policy"
-import type { PaneElement, RefusalNotice } from "./ipc"
+import type { PaneElement, PromptView, RefusalNotice } from "./ipc"
 import { navigationNotice, popupActivated } from "./refusal-notice"
 import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { reloadAddress } from "./preview"
 import type { workspacePages } from "./workspace-pages"
 import { artifactLinks } from "./artifact-links"
+import { createPagePrompts, RESTORE_PROMPT, takeDialogs } from "./page-prompts"
+import type { SitePermissions } from "./site-permissions"
 import { previewScheme } from "./scheme"
 import type { WorkspaceSource } from "./workspace-file"
 import type { artifactPages } from "./artifact-preview"
@@ -93,6 +97,9 @@ const retainedOperations: readonly Browser.Method[] = [
   "heap.object",
   "heap.compare",
 ]
+
+// The user's commands that leave the document, which a page's beforeunload may hold back for "Leave site?".
+const leavable: readonly Browser.Method[] = ["navigate", "back", "forward", "reload"]
 
 // Input the page receives while the element picker is on would pick an element instead.
 const pointerOperations: readonly Browser.Method[] = [
@@ -240,6 +247,18 @@ export function createBrowserPage(
     shared: Shared
     menu: PageMenuHost
     embeds: Embeds
+    /** The permission decisions the user kept for sites. */
+    sites: SitePermissions
+    /** The page browses in a remote server's partition, not the profile. */
+    serverPartition?: boolean
+    /** Reports what the tab waits on the user for, to the window only. */
+    prompt?: (view: PromptView | null) => void
+    /** Closes the tab, after the user chose to leave a page that asked to stay. */
+    closeTab?: () => void
+    /** Gives the page keyboard focus back after a prompt, when its tab is in front. */
+    focusPage?: () => void
+    /** Logs that an Electron internal is not what the page expects; the pane logs each message once. */
+    warn?: (message: string) => void
   },
 ) {
   const policy: Policy = {
@@ -401,6 +420,9 @@ export function createBrowserPage(
   const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
+  // SEAM(agentDriven): whether the agent drives this tab, from its first command in the tab (or in the tab that opened
+  // it, or the command that opened it) until the tab closes. Site permissions, clipboard writes and prompt focus read it.
+  const agentDrivenTab = () => activity.agentRuns > 0 || activity.agentEndedAt !== undefined
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
   const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
@@ -425,8 +447,12 @@ export function createBrowserPage(
     })
 
   // Every state report goes through here, so a page that was disposed publishes nothing.
+  // While a user's close asks the page's beforeunload on a blank load, the tab reports nothing: the blank page is not
+  // where it is, and a close or a window that goes meanwhile keeps its real address for restore.
+  let quiet = false
+
   const publish = (error?: string) => {
-    if (!closed()) options.publish(error)
+    if (!closed() && !quiet) options.publish(error)
   }
 
   const dispatch = (event: DocumentEvent) => {
@@ -468,7 +494,14 @@ export function createBrowserPage(
     const next = transitionDialogGate(dialogGate, event)
     dialogGate = next.state
     next.effects.forEach((effect) => {
-      if (effect.type === "publish") return publish()
+      if (effect.type === "publish") {
+        prompts.publish()
+
+        return publish()
+      }
+
+      if (effect.type === "dismiss")
+        return void cdp.send("Page.handleJavaScriptDialog", { accept: false }).catch(() => undefined)
       const run = runs.get(effect.runID)
 
       if (!run) return
@@ -478,8 +511,50 @@ export function createBrowserPage(
       run.interrupted.reject(runStopError(effect.reason))
     })
 
-    return next.reply
+    return next
   }
+
+  // The user's answer to a page dialog, unless the agent answers it first.
+  const answerDialog = async (revision: number, accept: boolean, text: string, stop: boolean) => {
+    if (dispatchDialog({ type: "dialog.answering", revision, by: "user" }).answer !== "accepted") return
+
+    if (stop) dispatchDialog({ type: "dialog.suppressed" })
+    await cdp.send("Page.handleJavaScriptDialog", { accept, promptText: text }).then(
+      () => void dispatchDialog({ type: "dialog.handled", revision, at: Date.now() }),
+      () => void dispatchDialog({ type: "dialog.answer-failed", revision }),
+    )
+  }
+
+  // Page dialogs, permission requests, sign-ins and "Leave site?" wait for the user in the pane; see page-prompts.ts.
+  const dialogs = takeDialogs(contents, {
+    suppressed: () => selectSuppressed(dialogGate),
+    opened: () => !!selectOpenDialog(dialogGate),
+    // The dialog shows at once; its frame's origin names it once Electron reports it.
+    framed: () => prompts.publish(),
+    warn: (message) => options.warn?.(message),
+  })
+
+  const prompts = createPagePrompts({
+    contents,
+    scope: options.serverPartition ? { kind: "server", partition: options.partition } : { kind: "profile" },
+    sites: options.sites,
+    agentDriven: agentDrivenTab,
+    top: () => state().url,
+    dialog: () => selectUserDialog(dialogGate),
+    dialogFrame: () => dialogs.frame(),
+    answerDialog: (revision, answer) => answerDialog(revision, answer.accept, answer.text, answer.stop),
+    redo: (action) => execute(action, [], new AbortController().signal, "user").then(() => undefined, () => undefined),
+    close: () => options.closeTab?.(),
+    focusPage: () => options.focusPage?.(),
+    quiet: (value) => {
+      quiet = value
+
+      if (!value) publish()
+    },
+    report: (view) => {
+      if (!closed()) options.prompt?.(view)
+    },
+  })
 
   // Chromium uses the document URL as the title of untitled files; don't persist its internal origin as a title.
   const pageTitle = (address = state().url) => {
@@ -742,9 +817,14 @@ export function createBrowserPage(
       dialogType: event.type,
       message: event.message.slice(0, Browser.MAX_TEXT),
       defaultPrompt: event.defaultPrompt ?? "",
+      at: Date.now(),
     }),
   )
-  cdp.on("Page.javascriptDialogClosed", () => dispatchDialog({ type: "dialog.closed" }))
+  cdp.on("Page.javascriptDialogClosed", () => {
+    dialogs.closed()
+    dispatchDialog({ type: "dialog.closed", at: Date.now() })
+  })
+  contents.on("did-navigate", () => dispatchDialog({ type: "document.committed" }))
   // Hidden tabs keep a desktop-sized viewport until the renderer lays the embed out.
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   const embed = options.embeds.create(view, win)
@@ -845,6 +925,7 @@ export function createBrowserPage(
         ]),
     diagnostics.enable(),
     cdp.send("Page.enable"),
+    cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
     attachFrames(),
   ]).then(() => undefined)
@@ -892,6 +973,8 @@ export function createBrowserPage(
         origin,
         storages: ["localstorage", "indexdb", "serviceworkers", "cachestorage", "filesystem", "shadercache"],
       })
+      // The site's HTTP sign-in too. Chromium clears its auth cache only whole, so other sites ask again as well.
+      await contents.session.clearAuthCache()
 
       if (closed()) return
       contents.reload()
@@ -904,16 +987,26 @@ export function createBrowserPage(
     detail,
     /** Takes a download this page started; see `guardSession`. */
     download,
+    /** Answers this page's permission requests and checks; see `guardSession`. */
+    permissions: prompts.permissions,
+    /** The user's answer to what the tab waits for; only the window calls it. */
+    answer: prompts.answer,
+    /** Whether the user's close may go ahead, or the page asked "Leave site?". */
+    leave: prompts.leave,
     /**
      * Runs one command, the agent's or the user's. The agent's never opens, reads or acts on an extension page, which
      * would run with that extension's privileges; every agent operation reaches the page through here.
      */
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
       await ready
+      const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
+
+      // The user leaving the page dismisses its dialog, as a browser's address bar does.
+      if (open) await answerDialog(open.revision, false, "", false)
 
       // Registers the run before any further await, and listens for its abort in the same turn, so a dialog or a
       // cancellation that arrives while it still inspects its target interrupts it.
-      const reply = dispatchDialog({ type: "run.started", actionType: command.action.type, aborted: signal.aborted })
+      const reply = dispatchDialog({ type: "run.started", actionType: command.action.type, aborted: signal.aborted }).reply
 
       if (reply?.status !== "accepted") throw runStopError(reply?.reason ?? "closed")
       const runID = reply.runID
@@ -931,9 +1024,20 @@ export function createBrowserPage(
         activity.agentRuns++
       }
 
+      // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
+      if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
+
+      if (origin === "agent") prompts.agentStarted()
+      const signIn = origin === "agent" ? prompts.agentWait(leavable.includes(command.action.type)) : undefined
+
       try {
-        return await Promise.race([perform(command, run.controller.signal, origin), run.interrupted.promise])
+        return await Promise.race([
+          perform(command, run.controller.signal, origin),
+          run.interrupted.promise,
+          ...(signIn ? [signIn.promise] : []),
+        ])
       } finally {
+        signIn?.stop()
         signal.removeEventListener("abort", cancel)
         runs.delete(runID)
         dispatchDialog({ type: "run.finished", runID })
@@ -951,6 +1055,8 @@ export function createBrowserPage(
       options.artifacts?.dispose()
       options.workspace?.dispose()
       dispatchDialog({ type: "disposed" })
+      prompts.dispose()
+      dialogs.dispose()
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)
       detachNetwork?.()
@@ -1325,15 +1431,18 @@ export function createBrowserPage(
         if (action.action !== "get") {
           const open = selectOpenDialog(dialogGate)
 
-          if (!open)
+          // The user may answer it in the pane first; then it is closed for the agent too.
+          if (!open || dispatchDialog({ type: "dialog.answering", revision: open.revision, by: "agent" }).answer !== "accepted")
             throw new Error(
               'This tab has no JavaScript dialog to handle. browser.dialog({tabID,action:"get"}) returns null when none is open; continue without accepting or dismissing one.',
             )
-          await cdp.send("Page.handleJavaScriptDialog", {
-            accept: action.action === "accept",
-            promptText: action.promptText,
-          })
-          dispatchDialog({ type: "dialog.handled", revision: open.revision })
+          await cdp
+            .send("Page.handleJavaScriptDialog", { accept: action.action === "accept", promptText: action.promptText })
+            .catch((error: Error) => {
+              dispatchDialog({ type: "dialog.answer-failed", revision: open.revision })
+              throw error
+            })
+          dispatchDialog({ type: "dialog.handled", revision: open.revision, at: Date.now() })
         }
 
         return result({ tab: state(), dialog: selectDialog(dialogGate) })

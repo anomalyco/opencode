@@ -41,7 +41,9 @@ export function createWebNavigation(input: { tabs: ExtensionTabs; emit: Emit }):
       ...frameIds(frame, main),
     })
 
-    const frameOf = (process: number, routing: number) => electron.webFrameMain.fromId(process, routing)
+    // Electron emits `did-fail-load` without a frame when a page's beforeunload keeps it; that is the main frame.
+    const frameOf = (process: number | undefined, routing: number | undefined) =>
+      process === undefined || routing === undefined ? undefined : electron.webFrameMain.fromId(process, routing)
 
     const started = (event: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>) => {
       if (event.isSameDocument || privateFile(event.url)) return

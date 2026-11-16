@@ -5,6 +5,9 @@ import { choiceLabel, choiceValue, Glyph, profileChoices } from "./choices"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
 import type { ExtensionAccess, ExtensionCompatibility, ProfileExtension, ProfileSource } from "./profile/ipc"
+import { promptHost } from "./prompt-machine"
+import { BrowserSites } from "./site-permissions"
+import { showToast } from "@opencode/ui/toast"
 
 /**
  * Settings › Browser: whether links open in the pane, importing sign-ins, the extensions the profile runs, and its
@@ -181,6 +184,7 @@ export default function BrowserSettings() {
           </ui.Button>
         </ui.SettingsRow>
       </ui.SettingsSection>
+      <SitePermissionsSection />
       <ui.SettingsSection title={ctx.t("settings.data.title")}>
         <ui.SettingsRow
           id="settings-browser-cookies"
@@ -200,7 +204,8 @@ export default function BrowserSettings() {
           <ui.Button
             size="small"
             variant="danger"
-            disabled={blocked() || !jobs.summary()?.cookies}
+            // HTTP sign-ins have no count to show, so signing out stays possible with no cookies.
+            disabled={blocked()}
             busy={jobs.running()?.type === "clear"}
             onClick={() => jobs.start({ type: "clear" })}
           >
@@ -211,6 +216,87 @@ export default function BrowserSettings() {
     </ui.SettingsLayout>
   )
 }
+
+/**
+ * The decisions the user kept for sites, one row per site and feature: the site, the feature under it, and its setting
+ * beside a remove button, in columns that line up whatever the names' length.
+ */
+function SitePermissionsSection() {
+  const ctx = usePlugin<typeof definition>()
+  const ui = ctx.ui
+  const live = ctx.use(BrowserSites)
+
+  const client = () => {
+    const current = live()
+
+    return current.status === "active" ? current.value : undefined
+  }
+
+  const decisions = () => client()?.state()?.decisions ?? []
+  // The end of a long host is the site's own domain: shown whole, wrapping, never cut off at the end.
+  const site = (origin: string) => promptHost(origin) || origin
+  const failed = () => showToast({ title: ctx.t("common.requestFailed") })
+
+  return (
+    <ui.SettingsSection
+      title={ctx.t("settings.sites.title")}
+      footer={<Note>{ctx.t("settings.sites.note")}</Note>}
+    >
+      <For each={decisions()} fallback={<ui.SettingsRow id="settings-browser-sites" title={<Muted>{ctx.t("settings.sites.none")}</Muted>} />}>
+        {(decision, index) => {
+          const names = () => ({
+            permission: ctx.t(`settings.sites.permission.${decision.permission}`),
+            site: site(decision.origin),
+          })
+
+          return (
+            <ui.SettingsRow
+              id={index() === 0 ? "settings-browser-sites" : undefined}
+              title={
+                <span class="flex min-w-0 items-center gap-3">
+                  <Glyph fallback="outline-globe" />
+                  <span class="flex min-w-0 flex-col gap-1">
+                    <span dir="ltr" class="[overflow-wrap:anywhere]">{site(decision.origin)}</span>
+                    <Muted>{names().permission}</Muted>
+                  </span>
+                </span>
+              }
+            >
+              <div class="flex items-center gap-2">
+                <ui.Select
+                  class={SETTING_COLUMN}
+                  label={ctx.t("settings.sites.setting", names())}
+                  options={[
+                    { value: "allow", label: ctx.t("settings.sites.allow") },
+                    { value: "block", label: ctx.t("settings.sites.block") },
+                  ]}
+                  value={decision.setting}
+                  disabled={!client()}
+                  onChange={(setting) =>
+                    void client()?.set({ origin: decision.origin, permission: decision.permission, setting }).catch(failed)
+                  }
+                />
+                <ui.Tooltip value={ctx.t("settings.sites.remove", names())}>
+                  <ui.IconButton
+                    icon="outline-trash"
+                    label={ctx.t("settings.sites.remove", names())}
+                    disabled={!client()}
+                    onClick={() =>
+                      void client()?.remove({ origin: decision.origin, permission: decision.permission }).catch(failed)
+                    }
+                  />
+                </ui.Tooltip>
+              </div>
+            </ui.SettingsRow>
+          )
+        }}
+      </For>
+    </ui.SettingsSection>
+  )
+}
+
+/** A site permission's setting keeps one width whatever it says, so the remove buttons line up. */
+const SETTING_COLUMN = "w-28"
 
 function ExtensionRow(props: {
   extension: ProfileExtension

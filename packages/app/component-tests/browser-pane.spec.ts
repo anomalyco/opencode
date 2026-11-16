@@ -944,3 +944,93 @@ story("zooms the page from the browser options in view and keeps its zoom in the
   await expect(root.getByText("Zoom: 100", { exact: true })).toBeVisible()
   await expect(zoom).toBeHidden()
 })
+
+story("shows a page dialog in the pane instead of the page, and answers it with Escape", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const native = root.getByTestId("native-Alpha")
+  // The fixture's controls sit below the pane, outside the viewport.
+  await root.getByRole("button", { name: "Page confirm", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const dialog = page.getByRole("alertdialog", { name: "alpha.example says" })
+  await expect(dialog).toContainText("Discard the draft?")
+  await expect(dialog).toContainText("1 more waiting")
+  await expect(dialog.getByRole("checkbox", { name: "Stop this page from showing more dialogs" })).toBeVisible()
+  // A page blocked in a dialog draws nothing: the native view hides, and the dialog sits over the page's box.
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(dialog.getByRole("button", { name: "OK", exact: true })).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+  await expect(root.getByText('Answers: [{"kind":"dialog","accept":false,"text":"","stop":false}]', { exact: true })).toBeVisible()
+  await expect(native).toHaveAttribute("data-visible", "true")
+})
+
+story("asks for a site's permission in a bar while the page stays usable", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const bar = root.getByRole("alertdialog", { name: "Site permission request" })
+  await expect(bar).toContainText("alpha.example wants to use your camera and microphone.")
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  const always = bar.getByRole("button", { name: "Always allow", exact: true })
+  const answered = root.getByText('Answers: [{"kind":"permission","allow":true,"remember":true}]', { exact: true })
+  // A page can make the bar appear under a click the user is making: a press right after it appears does nothing.
+  await always.click()
+  await expect(bar).toBeVisible()
+  await expect(root.getByText("Answers: []", { exact: true })).toBeVisible()
+  // Once the bar has been there long enough to read, a new press answers it.
+  await expect(async () => {
+    await always.click({ timeout: 1_000 })
+    await expect(answered).toBeVisible({ timeout: 200 })
+  }).toPass()
+  await expect(bar).toBeHidden()
+})
+
+story("asks again for an agent's request without offering to keep the answer, and says why", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Agent permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const bar = root.getByRole("alertdialog", { name: "Site permission request" })
+  await expect(bar).toContainText("alpha.example wants to use your microphone.")
+  await expect(bar).toContainText("The agent is working in this tab; your answer is for this request only.")
+  await expect(bar.getByRole("button", { name: "Always allow", exact: true })).toHaveCount(0)
+  await expect(bar.getByRole("button", { name: "Allow this time", exact: true })).toBeVisible()
+  // Enter on the bar never grants: focus starts on the refusing button.
+  await bar.getByRole("button", { name: "Block", exact: true }).focus()
+  await expect(async () => {
+    await page.keyboard.press("Enter")
+    await expect(root.getByText('Answers: [{"kind":"permission","allow":false,"remember":false}]', { exact: true })).toBeVisible({
+      timeout: 200,
+    })
+  }).toPass()
+})
+
+story("asks for a page's prompt text and sends what the user typed", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Page prompt", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const dialog = page.getByRole("alertdialog", { name: "alpha.example says" })
+  await expect(dialog).toContainText("Name the copy")
+  const field = dialog.getByRole("textbox", { name: "Your answer" })
+  await expect(field).toHaveValue("Draft")
+  await expect(field).toHaveAttribute("maxlength", "2000")
+  await field.fill("Final copy")
+  const answered = root.getByText('Answers: [{"kind":"dialog","accept":true,"text":"Final copy","stop":false}]', { exact: true })
+  await expect(async () => {
+    await field.press("Enter")
+    await expect(answered).toBeVisible({ timeout: 200 })
+  }).toPass()
+  await expect(dialog).toBeHidden()
+})
+
+story("asks for a site's sign-in with its realm, says the last one failed, and keeps nothing on cancel", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Sign-in request", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const dialog = page.getByRole("alertdialog", { name: "Sign in to intranet.alpha.example" })
+  // The realm sits in its sentence inside directional isolates.
+  await expect(dialog).toContainText(/The site says: “\u2068Staff area\u2069”/)
+  await expect(dialog.getByRole("alert")).toBeVisible()
+  const user = dialog.getByRole("textbox", { name: "User name" })
+  await expect(user).toBeFocused()
+  await expect(user).toHaveAttribute("maxlength", "1024")
+  await user.fill("demo")
+  await dialog.getByLabel("Password").fill("secret")
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+  await expect(root.getByText('Answers: [{"kind":"dismiss"}]', { exact: true })).toBeVisible()
+})

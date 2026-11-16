@@ -17,7 +17,15 @@ import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
 import { workspacePrefix } from "./remote-address"
-import { BrowserPane, type FindAction, type FindView, type PaneEvent, type RefusalNotice } from "./ipc"
+import {
+  BrowserPane,
+  type FindAction,
+  type FindView,
+  type PaneEvent,
+  type PromptAnswer,
+  type PromptView,
+  type RefusalNotice,
+} from "./ipc"
 import {
   addressFocusTab,
   createInitialState,
@@ -52,7 +60,10 @@ type ModelState = {
   machine: State
   /** Each session's page icons and zoom by tab, as this desktop reports them. */
   pages: Record<string, Record<string, PageDetail | undefined> | undefined>
-  chrome: Record<string, Record<string, { find?: FindView; notice?: RefusalNotice & { token: string } } | undefined> | undefined>
+  chrome: Record<
+    string,
+    Record<string, { find?: FindView; notice?: RefusalNotice & { token: string }; prompt?: PromptView } | undefined> | undefined
+  >
 }
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
@@ -269,6 +280,18 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const receive = (drive: Drive, attempt: number, event: PaneEvent) => {
     const sessionKey = drive.ref.key
+
+    // What the tab waits on the user for, kept per tab, so it shows again when the tab comes to front.
+    if (event.type === "prompt") {
+      // The strip closes a tab before main asks its page; one that asks to stay shows again, with "Leave site?".
+      if (event.prompt?.ask.kind === "leave" && layout.state(key(event.tabID), drive.ref) === "closed")
+        layout.open(key(event.tabID), drive.ref, { tab: "select" })
+
+      return setState("chrome", sessionKey, (old) => ({
+        ...old,
+        [event.tabID]: { ...old?.[event.tabID], prompt: event.prompt ?? undefined },
+      }))
+    }
 
     if (event.type === "find" || event.type === "refusal") {
       setState("chrome", sessionKey, (old) => ({ ...old, [event.tabID]: {
@@ -647,6 +670,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (!target) throw new Error("browser.pane.unavailable")
       await target.notice(tabID, token, dismiss)
+    },
+    /** What the tab waits on the user for. */
+    prompt: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.prompt,
+    /** A tab behind another one waits on the user, which its strip tab shows. */
+    asking: (session: Session, tabID: string) =>
+      !!state.chrome[session.key]?.[tabID]?.prompt && sessionBrowser(machine(), session.key)?.focusedTabID !== tabID,
+    answer(session: Session, tabID: Browser.TabID, id: number, answer: PromptAnswer) {
+      return registration(session)?.answer(tabID, id, answer) ?? Promise.reject(new Error("browser.pane.unavailable"))
     },
     find(session: Session, tabID: Browser.TabID, action: FindAction) {
       return registration(session)?.find(tabID, action) ?? Promise.reject(new Error("browser.pane.unavailable"))

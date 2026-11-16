@@ -178,6 +178,8 @@ const getBase = (appId: string): Configuration => {
       icon: `resources/icons/icon.icns`,
       extendInfo: {
         NSMicrophoneUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.microphoneUsage"],
+        // Sites in the browser pane may ask for the camera; without this key macOS ends the app when it asks.
+        NSCameraUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.cameraUsage"],
         // The CLI server and its terminals run as children of the app, so macOS asks for their access to
         // these protected locations in the app's name. The prompt shows the description (#56479).
         NSDocumentsFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.documentsFolderUsage"],

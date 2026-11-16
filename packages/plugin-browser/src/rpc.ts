@@ -18,6 +18,8 @@ export const FailureCode = {
   staleRef: "stale_ref",
   /** A workspace file could not be validated by the owner of its disk. */
   previewUnavailable: "preview_unavailable",
+  /** The site asks for a user name and password, which only the user can give, in the desktop's browser pane. */
+  signInRequired: "sign_in_required",
 } as const
 
 /**

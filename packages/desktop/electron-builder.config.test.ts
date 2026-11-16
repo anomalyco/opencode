@@ -111,6 +111,7 @@ test.each(channels)("macOS bundle for $channel", ({ channel }) => {
 
   for (const key of [
     "NSMicrophoneUsageDescription",
+    "NSCameraUsageDescription",
     "NSDocumentsFolderUsageDescription",
     "NSDesktopFolderUsageDescription",
     "NSDownloadsFolderUsageDescription",
