@@ -658,6 +658,12 @@ impl Scripts {
         self.waiting.borrow().values().all(|waiting| matches!(waiting, Waiting::Ping))
     }
 
+    /// Whether a load of `target` was sent and the JS host has not answered it.
+    #[doc(hidden)]
+    pub fn loading(&self, target: &str) -> bool {
+        self.waiting.borrow().values().any(|waiting| matches!(waiting, Waiting::Load(known) if known == target))
+    }
+
     /// How many answers the host waits for, pings included.
     #[doc(hidden)]
     pub fn waiting(&self) -> usize {

@@ -208,7 +208,7 @@ pub fn decide(
 
 /// One turn of the UI thread, and its frame when it wants one, as the run loop paints: a revision past a frame's rows
 /// waits for the next paint (Pl).
-fn turn(harness: &Harness) {
+pub(crate) fn turn(harness: &Harness) {
     harness.app.advance(Duration::from_millis(1));
     if harness.app.needs_frame() {
         harness.app.render();
