@@ -2,6 +2,8 @@
 //! `abi::Host` (`steps/luau-spike.md` 1.2). Tables cross as the contract's own types, through serde, with no JSON
 //! text. A Luau error in any call fails the plugin as a panic of a built-in does: none of the call's effects apply.
 
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
@@ -12,11 +14,12 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use super::current::{Current, Enter, Slot};
-use super::vm::{Compiled, Vm};
+use super::vm::{self, Compiled, Vm};
 
 /// A plugin activation: its VM, what its calls reach, and the objects every call is handed.
 pub(crate) struct Plugin {
-    pub(crate) vm: Vm,
+    /// Its VM, until a call fails: a failed plugin is called no more, so its heap goes at once, not at its unload.
+    pub(crate) vm: RefCell<Option<Vm>>,
     current: Rc<Slot>,
     read: Table,
     host: Table,
@@ -41,28 +44,42 @@ pub(crate) fn setup(
     let (read, host, memo) = objects(&vm.lua, &current).map_err(error)?;
     let module: Table = vm.lua.load(MODULE).set_name("=@opencode/plugin").call(()).map_err(error)?;
     vm.lua.register_module("@opencode/plugin", &module).map_err(error)?;
-    let plugin = Rc::new(Plugin { vm, current, read, host, memo });
+    let lua = vm.lua.clone();
+    let plugin = Rc::new(Plugin { vm: RefCell::new(Some(vm)), current, read, host, memo });
+    let started = |f: &mut dyn FnMut(&Vm) -> Result<Value, String>| match &*plugin.vm.borrow() {
+        Some(vm) => f(vm),
+        None => Err("the plugin has ended".to_owned()),
+    };
     let defined = {
         let _enter = Enter::new(&plugin.current, Current::setting_up(setup));
-        plugin.vm.start(compiled)?
+        started(&mut |vm| vm.start(compiled))?
     };
     let run = match &defined {
         Value::Table(defined) => defined.raw_get::<Option<Function>>("__opencode_setup").map_err(error)?,
         _ => None,
     };
     let run = run.ok_or("init.luau must return plugin.define(function(setup) ... end)")?;
-    let object = setup_object(&plugin, setup.id(), options).map_err(error)?;
+    let object = setup_object(&plugin, &lua, setup.id(), options).map_err(error)?;
     let _enter = Enter::new(&plugin.current, Current::setting_up(setup));
-    plugin.vm.call(|| run.call::<()>(object))?;
+    started(&mut |vm| vm.call(|| run.call::<()>(object.clone())).map(|()| Value::Nil))?;
     Ok(plugin.clone())
 }
 
 impl Plugin {
     /// Calls `f`, one call of the plugin, with `current` reachable from its `read` and `host`; a failure unwinds to the
-    /// host's catch, which fails the plugin.
+    /// host's catch, which fails the plugin, once the VM is let go.
     fn run<R>(&self, current: Current, f: impl FnOnce(&Lua) -> mlua::Result<R>) -> R {
-        let _enter = Enter::new(&self.current, current);
-        self.vm.call(|| f(&self.vm.lua)).unwrap_or_else(|error| fail(error))
+        let called = {
+            let _enter = Enter::new(&self.current, current);
+            match &*self.vm.borrow() {
+                Some(vm) => vm.call(|| f(&vm.lua)),
+                None => Err("the plugin has ended".to_owned()),
+            }
+        };
+        called.unwrap_or_else(|error| {
+            self.vm.borrow_mut().take();
+            fail(error)
+        })
     }
 }
 
@@ -81,9 +98,88 @@ pub(crate) fn out<T: Serialize + ?Sized>(lua: &Lua, value: &T) -> mlua::Result<V
     lua.to_value_with(value, options)
 }
 
-/// A Luau value as a value of the contract.
+/// A Luau value as a value of the contract. It is walked first, against bounds ([`Walk`]): a value past them is refused
+/// before the decoder allocates anything for it, and the refusal fails the call ([`vm::refuse`]).
 fn input<T: DeserializeOwned>(lua: &Lua, value: Value) -> mlua::Result<T> {
+    let limits = crate::limits::get();
+    let mut walk = Walk {
+        values: 0,
+        bytes: 0,
+        most_values: VALUES_A_NODE * limits.nodes,
+        most_bytes: limits.plugin_content,
+        seen: HashSet::new(),
+        refused: None,
+    };
+    if let Err(reason) = walk.value(&value, 0) {
+        let reason = format!("the plugin's value is refused: {reason}");
+        vm::refuse(lua, &reason);
+        return Err(mlua::Error::runtime(reason));
+    }
     lua.from_value(value)
+}
+
+/// The parts (keys, values) a value may hold for each node a tree may hold ([`crate::limits::Limits::nodes`]).
+const VALUES_A_NODE: u64 = 16;
+
+/// How deep a value's tables may nest: past the layout depth ([`crate::reconcile::MAX_DEPTH`]) twice over, as a node's
+/// children are a table in a table.
+const DEPTH: usize = 2 * crate::reconcile::MAX_DEPTH as usize;
+
+/// The walk of a Luau value before it is decoded: the decoder allocates on the Rust heap, outside the VM's cap, with no
+/// safepoint of the budget's, so what it would build is bounded here. Each table is taken once: a table reused in
+/// one value (a DAG of shared tables) would be decoded once for each place it appears, exponentially more than the
+/// VM holds.
+struct Walk {
+    values: u64,
+    bytes: u64,
+    most_values: u64,
+    most_bytes: u64,
+    seen: HashSet<*const std::ffi::c_void>,
+    /// Why the walk stopped inside a table's iteration.
+    refused: Option<String>,
+}
+
+impl Walk {
+    fn value(&mut self, value: &Value, depth: usize) -> Result<(), String> {
+        self.values += 1;
+        if self.values > self.most_values {
+            return Err(format!("it holds more than {} parts", self.most_values));
+        }
+        match value {
+            Value::String(text) => {
+                self.bytes += text.as_bytes().len() as u64;
+                if self.bytes > self.most_bytes {
+                    return Err(format!("its text is more than {} bytes", self.most_bytes));
+                }
+                Ok(())
+            }
+            Value::Table(table) => {
+                if depth >= DEPTH {
+                    return Err(format!("its tables nest more than {DEPTH} deep"));
+                }
+                if !self.seen.insert(table.to_pointer()) {
+                    return Err(
+                        "a table appears twice in it; give each place a table of its own (`table.clone`)".to_owned()
+                    );
+                }
+                let walked = table.for_each::<Value, Value>(|key, value| {
+                    match self.value(&key, depth + 1).and_then(|()| self.value(&value, depth + 1)) {
+                        Ok(()) => Ok(()),
+                        Err(reason) => {
+                            self.refused = Some(reason);
+                            Err(mlua::Error::runtime("refused"))
+                        }
+                    }
+                });
+                match (walked, self.refused.take()) {
+                    (_, Some(reason)) => Err(reason),
+                    (Err(error), None) => Err(error.to_string()),
+                    (Ok(()), None) => Ok(()),
+                }
+            }
+            _ => Ok(()),
+        }
+    }
 }
 
 /// A Luau value as a value of the contract whose fields the table leaves out are its defaults' (a command needs only
@@ -108,8 +204,7 @@ fn optional<T: DeserializeOwned>(lua: &Lua, value: Value) -> mlua::Result<Option
 type Register = fn(&Rc<Plugin>, &mut abi::Setup<'_>, &Lua, MultiValue) -> mlua::Result<()>;
 
 /// The `setup` object: its registrations, which take effect only while setup runs.
-fn setup_object(plugin: &Rc<Plugin>, id: &str, options: Option<&str>) -> mlua::Result<Table> {
-    let lua = &plugin.vm.lua;
+fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>) -> mlua::Result<Table> {
     let object = lua.create_table()?;
     object.raw_set("id", id)?;
     // The `options` of the plugin's `plugins` entry, decoded: Luau has no JSON reader of its own.

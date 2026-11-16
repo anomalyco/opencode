@@ -98,6 +98,17 @@ impl Budget {
 pub(crate) struct Vm {
     pub(crate) lua: Lua,
     budget: Rc<Budget>,
+    modules: Rc<Modules>,
+}
+
+/// The plugin's modules as `require` loads them: each once, by the module it resolves to, so `./x`, `@self/x` and
+/// `./x/init` are one module, and the entry is `init` to the others.
+struct Modules {
+    compiled: Rc<Compiled>,
+    /// What each module returned, by its key in [`Compiled`].
+    loaded: Table,
+    /// The modules being loaded, outermost first: one asked for again is a cycle.
+    loading: RefCell<Vec<String>>,
 }
 
 impl Vm {
@@ -110,19 +121,22 @@ impl Vm {
             Rc::new(Budget { limit, armed: Cell::new(None), ticks: Cell::new(0), stopped: RefCell::new(None) });
         let interrupt = budget.clone();
         lua.set_interrupt(move |_| interrupt.interrupt());
+        // What a binding reaches to fail the call ([`refuse`]).
+        lua.set_app_data(budget.clone());
+        let modules =
+            Rc::new(Modules { compiled: compiled.clone(), loaded: lua.create_table()?, loading: RefCell::default() });
         let globals = lua.globals();
         // Luau has no `io`; `os` reads clocks. What mlua adds that reaches beyond the plugin goes: the file system's
         // `require`, and `loadstring`, which would compile code the sandbox never saw.
         globals.raw_set("loadstring", Value::Nil)?;
-        globals.raw_set("require", require(&lua, compiled)?)?;
-        Ok(Self { lua, budget })
+        globals.raw_set("require", require(&lua, &modules)?)?;
+        Ok(Self { lua, budget, modules })
     }
 
     /// Runs the entry module and returns what it returned. Freezes the globals first (`Lua::sandbox`).
     pub(crate) fn start(&self, compiled: &Compiled) -> Result<Value, String> {
         self.lua.sandbox(true).map_err(|error| error.to_string())?;
-        let entry = load(&self.lua, compiled, &compiled.entry).map_err(|error| error.to_string())?;
-        self.call(|| entry.call::<Value>(()))
+        self.call(|| module(&self.lua, &self.modules, &compiled.entry))
     }
 
     /// Calls into the VM within the budget: the outermost call arms it. A Luau error, the budget's interrupt (also
@@ -150,15 +164,19 @@ impl Vm {
     }
 }
 
+/// Fails the running call of the VM `lua` with `reason`, also when the plugin catches the error a binding raises: the
+/// call ends with it, and every safepoint until then raises it again, as the budget's interrupt does.
+pub(crate) fn refuse(lua: &Lua, reason: &str) {
+    if let Some(budget) = lua.app_data_ref::<Rc<Budget>>() {
+        budget.stopped.borrow_mut().get_or_insert_with(|| reason.to_owned());
+    }
+}
+
 /// The plugin's `require`: `@opencode/plugin`, which the host registers, or a module of the plugin by `./name` or
 /// `@self/name` from its root. Anything else is an error; nothing is read from the disk after load.
-fn require(lua: &Lua, compiled: &Rc<Compiled>) -> mlua::Result<Function> {
-    let compiled = compiled.clone();
-    let loaded = lua.create_table()?;
+fn require(lua: &Lua, modules: &Rc<Modules>) -> mlua::Result<Function> {
+    let modules = modules.clone();
     lua.create_function(move |lua, name: String| {
-        if let Some(module) = loaded.raw_get::<Option<Value>>(name.as_str())? {
-            return Ok(module);
-        }
         // What the host registered (`Lua::register_module` keeps the names in lower case).
         let registered: Option<Table> = lua.named_registry_value("_REGISTEREDMODULES")?;
         let module = registered.map(|known| known.raw_get::<Option<Value>>(name.to_ascii_lowercase())).transpose()?;
@@ -173,25 +191,32 @@ fn require(lua: &Lua, compiled: &Rc<Compiled>) -> mlua::Result<Function> {
         if path.split('/').any(|part| part.is_empty() || part == "." || part == "..") {
             return Err(mlua::Error::runtime(format!("require({name:?}): no module outside the plugin")));
         }
-        // Marked while it loads, so a cycle is an error and not a stack overflow.
-        loaded.raw_set(name.as_str(), false)?;
-        let module = load(lua, &compiled, path)?.call::<Value>(());
-        let module = match module {
-            Ok(Value::Nil) => Value::Boolean(true),
-            Ok(module) => module,
-            Err(error) => {
-                loaded.raw_set(name.as_str(), Value::Nil)?;
-                return Err(error);
-            }
-        };
-        loaded.raw_set(name.as_str(), &module)?;
-        Ok(module)
+        self::module(lua, &modules, path)
     })
 }
 
-/// The function of module `name`'s bytecode.
-fn load(lua: &Lua, compiled: &Compiled, name: &str) -> mlua::Result<Function> {
-    let (key, code) =
-        compiled.module(name).ok_or_else(|| mlua::Error::runtime(format!("the plugin has no module {name}.luau")))?;
-    lua.load(code).set_name(format!("@{key}.luau")).set_mode(ChunkMode::Binary).into_function()
+/// What module `name` returned, loaded at its first `require`: `true` for a module that returned nothing. One asked for
+/// while it loads is a cycle, an error naming it.
+fn module(lua: &Lua, modules: &Modules, name: &str) -> mlua::Result<Value> {
+    let (key, code) = modules
+        .compiled
+        .module(name)
+        .ok_or_else(|| mlua::Error::runtime(format!("the plugin has no module {name}.luau")))?;
+    if let Some(module) = modules.loaded.raw_get::<Option<Value>>(key)? {
+        return Ok(module);
+    }
+    if modules.loading.borrow().iter().any(|loading| loading == key) {
+        let chain = modules.loading.borrow().join(" -> ");
+        return Err(mlua::Error::runtime(format!("require cycle: {chain} -> {key}")));
+    }
+    let function = lua.load(code).set_name(format!("@{key}.luau")).set_mode(ChunkMode::Binary).into_function()?;
+    modules.loading.borrow_mut().push(key.to_owned());
+    let module = function.call::<Value>(());
+    modules.loading.borrow_mut().pop();
+    let module = match module? {
+        Value::Nil => Value::Boolean(true),
+        module => module,
+    };
+    modules.loaded.raw_set(key, &module)?;
+    Ok(module)
 }

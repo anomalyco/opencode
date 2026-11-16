@@ -24,7 +24,7 @@
 pub mod child;
 mod guest;
 pub mod proto;
-mod tree;
+pub(crate) mod tree;
 pub mod wire;
 
 use std::cell::{Cell, RefCell};
