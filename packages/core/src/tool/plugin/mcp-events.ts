@@ -12,14 +12,7 @@ import { SessionMessage } from "../../session/message.js"
 
 const DATA_LIMIT = 16_384
 
-const EventType = Schema.Struct({
-  server: Schema.String,
-  name: Schema.String,
-  description: Schema.optional(Schema.String),
-  inputSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  payloadSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  delivery: Schema.optional(Schema.Array(Schema.String)),
-})
+const EventType = Schema.Struct({ server: Schema.String, ...McpClient.EventType.fields })
 
 // A stream that broke, fell silent or closed reopens from the last cursor 1, 2 and 4 seconds later. Any message
 // starts the count again; one the server terminated stays closed.

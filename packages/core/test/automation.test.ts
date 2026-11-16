@@ -12,6 +12,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Flag } from "@opencode/core/flag"
 import { Image } from "@opencode/core/image"
 import { Instance } from "@opencode/core/instance/service"
+import { KVTable } from "@opencode/core/kv/sql"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
@@ -1018,6 +1019,31 @@ describe("Automation", () => {
       yield* automations.tick
       expect(iso((yield* automations.get(fixed.id)).nextDueAt)).toBe("2026-11-02T06:30:00.000Z")
       expect(yield* Effect.flip(cron(automations, "0 0 31 2 *"))).toMatchObject({ _tag: "Automation.InvalidError" })
+    }),
+  )
+
+  it.effect("does not call a tool while another server holds the lease, then takes over when it expires", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup()
+      const { db } = yield* Database.Service
+      const now = yield* Clock.currentTimeMillis
+      yield* db
+        .insert(KVTable)
+        .values({ key: "automation:leader", value: { owner: "other-server", until: now + 60_000 } })
+        .run()
+      yield* automations.create({
+        sessionID,
+        name: "one post",
+        trigger: { type: "at", at: "in 30 seconds" },
+        action: code('await tools.slack.post({ text: "ready" })'),
+      })
+
+      yield* TestClock.adjust("30 seconds")
+      yield* automations.tick
+      expect(slack.posts).toEqual([])
+      yield* TestClock.adjust("30 seconds")
+      yield* automations.tick
+      expect(slack.posts).toEqual(["ready"])
     }),
   )
 

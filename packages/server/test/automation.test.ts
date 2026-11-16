@@ -251,7 +251,7 @@ it.live("runs due automations in standalone ServerProcess.start without lifecycl
   }).pipe(Effect.scoped),
 )
 
-it.live("elects one leader when two server processes boot against a due automation", () =>
+it.live("starts one child for a due automation when two servers share a database", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-automation-leader-")).path
     const dbPath = path.join(dir, "shared.db")
@@ -302,7 +302,6 @@ it.live("elects one leader when two server processes boot against a due automati
         fs: { filewatcher: false },
         models: { fetch: false },
       })
-    // Both servers start against the same already-due row; without leader election both start a Session.
     const [first] = yield* Effect.all([boot(), boot()], { concurrency: 2 })
     const base = `http://127.0.0.1:${"port" in first.address ? first.address.port : 0}`
     const api = OpenCode.make({
@@ -317,7 +316,6 @@ it.live("elects one leader when two server processes boot against a due automati
         await new Promise((resolve) => setTimeout(resolve, 50))
         current = await api.experimental.automation.get({ automationID: createdID })
       }
-      await new Promise((resolve) => setTimeout(resolve, 150))
       const started = (await api.session.list({})).data.filter((session) => session.title === "single leader")
       expect(current).toMatchObject({ status: "done", runCount: 1 })
       expect(started).toHaveLength(1)
