@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { captureCoordinator, cropPixels, pngFits, undrawable, undrawableMessage } from "./capture"
+import { captureCoordinator, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 
 const shown = { minimized: false, visible: true, appHidden: false }
 
@@ -93,6 +93,28 @@ test("reuse the redraw's PNG only when its actual dimensions and transfer size f
   expect(pngFits(png.subarray(0, 23), 800, 32)).toBe(false)
   png.writeUInt32BE(0, 20)
   expect(pngFits(png, 800, 32)).toBe(false)
+})
+
+test("reuse the redraw's JPEG only when its frame header dimensions and transfer size fit", () => {
+  const segment = (marker: number, body: number[]) => [0xff, marker, (body.length + 2) >> 8, (body.length + 2) & 0xff, ...body]
+
+  const frame = (marker: number, width: number, height: number) =>
+    segment(marker, [8, height >> 8, height & 0xff, width >> 8, width & 0xff, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1])
+
+  const jpeg = (...segments: number[][]) => Buffer.from([0xff, 0xd8, ...segments.flat(), 0xff, 0xd9])
+  // JFIF and a Huffman table (0xc4, in the frame-marker range) precede the frame header; the scan follows it.
+  const app = segment(0xe0, [0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0])
+  const table = segment(0xc4, Array(20).fill(0))
+  const scan = segment(0xda, [1, 1, 0, 0, 0x3f, 0])
+  const image = jpeg(app, table, frame(0xc0, 800, 600), scan)
+  expect(jpegFits(image, 800, image.length)).toBe(true)
+  expect(jpegFits(image, 799, image.length)).toBe(false)
+  expect(jpegFits(image, 800, image.length - 1)).toBe(false)
+  expect(jpegFits(jpeg(app, frame(0xc2, 800, 600), scan), 800, 1_000)).toBe(true)
+  expect(jpegFits(jpeg(app, frame(0xc0, 800, 0), scan), 800, 1_000)).toBe(false)
+  expect(jpegFits(jpeg(app, scan, frame(0xc0, 800, 600)), 800, 1_000)).toBe(false)
+  expect(jpegFits(image.subarray(0, 30), 800, 1_000)).toBe(false)
+  expect(jpegFits(Buffer.from([0x89, 0x50, 0x4e, 0x47]), 800, 1_000)).toBe(false)
 })
 
 test.each([

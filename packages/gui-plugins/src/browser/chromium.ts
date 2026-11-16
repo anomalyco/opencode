@@ -5,7 +5,7 @@ import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
-import { captureCoordinator, cropPixels, pngFits, undrawable, undrawableMessage } from "./capture"
+import { captureCoordinator, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
@@ -1947,7 +1947,8 @@ export function createBrowserPage(
     abortError(signal)
     const bytes = Buffer.from(shot.data, "base64")
 
-    if (!clip && format === "png" && pngFits(bytes, maxWidth, Browser.MAX_FILE_BYTES)) return { format, data: bytes }
+    if (!clip && encoding === format && (format === "png" ? pngFits : jpegFits)(bytes, maxWidth, Browser.MAX_FILE_BYTES))
+      return { format, data: bytes }
 
     const viewportImage = electron.nativeImage.createFromBuffer(bytes)
 

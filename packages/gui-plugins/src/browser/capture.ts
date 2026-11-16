@@ -87,6 +87,26 @@ export function pngFits(png: Buffer, maxWidth: number, maxBytes: number) {
   return width > 0 && width <= maxWidth && png.readUInt32BE(20) > 0
 }
 
+/** CDP produced a JPEG. Read its frame header dimensions, as for a PNG, so the final encoding needs no decode. */
+export function jpegFits(jpeg: Buffer, maxWidth: number, maxBytes: number) {
+  if (jpeg.length < 4 || jpeg.length > maxBytes || jpeg.readUInt16BE(0) !== 0xffd8) return false
+
+  for (let at = 2; at + 9 <= jpeg.length; at += 2 + jpeg.readUInt16BE(at + 2)) {
+    const marker = jpeg[at + 1]
+
+    if (jpeg[at] !== 0xff || marker === 0xd9 || marker === 0xda) return false
+
+    // Start-of-frame markers; 0xc4, 0xc8 and 0xcc share the range but are not frames.
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      const width = jpeg.readUInt16BE(at + 7)
+
+      return width > 0 && width <= maxWidth && jpeg.readUInt16BE(at + 5) > 0
+    }
+  }
+
+  return false
+}
+
 /**
  * macOS stops drawing a minimized window and every window of a hidden app, and a copy of the tab's frame then never
  * answers. Windows keeps drawing a minimized window, and Linux is left to the capture deadline.
