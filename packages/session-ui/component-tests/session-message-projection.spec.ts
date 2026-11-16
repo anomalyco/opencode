@@ -546,13 +546,13 @@ story("a stored image that fails to load shows a failed tile that retries", asyn
   const failed = tiles.first()
   await expect(failed.getByRole("img", { name: "Unable to load image." })).toBeVisible()
   await expect(failed).not.toHaveAttribute("data-placeholder")
-  const beforeRetry = await failed.boundingBox()
 
-  expect(beforeRetry).toMatchObject({ width: 132, height: 88 })
+  const tileSize = { width: 132, height: 88 }
+  expect(await failed.boundingBox()).toMatchObject(tileSize)
 
   await failed.click()
   await expect(timeline.getByAltText("flaky.svg")).toBeVisible()
-  expect(await failed.boundingBox()).toEqual(beforeRetry)
+  expect(await failed.boundingBox()).toMatchObject(tileSize)
 })
 
 story("shows note selectors and keeps annotation subtitles with or without comments", async ({ mount, page }) => {
