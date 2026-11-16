@@ -265,6 +265,59 @@ test("client.rpc calls a plugin's own server RPC and hears its events", async ()
   expect(() => echo.events.on("unknown", () => {})).toThrow("Unknown RPC event: echo.unknown")
 })
 
+// CT-2: an element is an event emitter, as an OpenTUI renderable is, so file-browser's `element.on("focus", …)` does
+// not crash its route; `focus()` of a field asks the host to focus it by its id and emits `focused`, another node's
+// focus blurs it (`blurred`), and `blur()` asks the host to blur. A box's focus is the layer's alone. The renderer's key
+// handler is an emitter too, which says once that it hears nothing.
+test("an element's focus is the host's and it emits as OpenTUI's renderables", async () => {
+  const fake = host()
+  const ctx = plugin("t.focus", fake)
+  const refs: Json = {}
+  const heard: string[] = []
+  ctx.ui.slot({
+    append: "sidebar.content",
+    render: () =>
+      h("box", {
+        ref: (el: Json) => (refs.box = el),
+        get children() {
+          return [
+            h("input", { id: "search", ref: (el: Json) => (refs.search = el) }),
+            h("input", { ref: (el: Json) => (refs.other = el) }),
+            h("scrollbox", { id: "list", ref: (el: Json) => (refs.list = el) }),
+          ]
+        },
+      }),
+  })
+  view(fake, 0, "a").draw()
+  expect(refs.search.on("focus", () => heard.push("focus"))).toBe(refs.search)
+  refs.search.on("focused", () => heard.push("search focused")).on("blurred", () => heard.push("search blurred"))
+  refs.search.focus()
+  refs.other.focus()
+  refs.other.blur()
+  refs.box.focus()
+  await turn()
+  expect(heard).toEqual(["search focused", "search blurred"])
+  const focus = fake.effects.filter((effect: Json) => effect.type === "focus" || effect.type === "blur")
+  expect(focus.map((effect: Json) => effect.node ?? effect.type)).toEqual(["search", expect.stringMatching(/^opentui-input-/), "blur"])
+  expect(refs.box.focused).toBe(true)
+  // A scroll box's position is the host's read of it; before it came, its viewport scrolls nothing; a move is the
+  // contract's verb on the surface's scroll.
+  expect([refs.list.scrollTop, refs.list.viewport.height]).toEqual([0, Infinity])
+  const surface = fake.surfaces[0].name
+  fake.push(`scroll:${surface}:list`, { offset: 4, viewport: 10, extent: 30 })
+  expect([refs.list.scrollTop, refs.list.viewport.height, refs.list.scrollHeight]).toEqual([4, 10, 30])
+  refs.list.scrollBy(2)
+  await turn()
+  const target = { type: "node", surface, id: "list" }
+  expect(fake.effects.filter((effect: Json) => effect.type === "scroll")).toEqual([
+    { type: "scroll", target, verb: { type: "offset", offset: 6 } },
+  ])
+  expect(fake.watches.has(`scroll:${surface}:list`)).toBe(true)
+  const keys = ctx.renderer.keyInput
+  expect(keys.prependListener("keypress", () => {})).toBe(keys)
+  expect(fake.toasts()).toContain("t.focus: renderer.keyInput is not supported by opencode-native yet")
+})
+
 // Bigboi P8-7: a dialog the host closes without an answer settles at once with nothing, also with no dialog after it;
 // `clear()` closes an asked dialog on the host too; a new `show` starts from the default size and place.
 test("each dialog settles once, and clear closes it", async () => {

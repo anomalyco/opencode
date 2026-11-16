@@ -23,11 +23,23 @@ import {
   untrack,
 } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
+import { EventEmitter } from "node:events"
 import { homedir } from "node:os"
 import { OpenCode } from "../../../../../../client/src/promise/generated/index"
 import { RGBA, hexToRgb } from "./core"
 import { rendererMethods, rendererPromises } from "./opentui.gen"
-import { legacy, missing, mount, serialize, type Mounted, type Screen, type VNode } from "./render"
+import {
+  idOf,
+  legacy,
+  missing,
+  mount,
+  serialize,
+  type Focus,
+  type Mounted,
+  type Screen,
+  type Scrolls,
+  type VNode,
+} from "./render"
 
 type Json = any
 
@@ -441,6 +453,33 @@ export function context(base: Base, carrier: Carrier) {
       carrier.invalidate()
     })
   }
+  // CT-2: the plugin's node that has the focus, as it asked: a field or a scroll is the host's to focus (the contract's
+  // `focus` of the node's id); any node emits `focused` and `blurred`, as OpenTUI's renderables do.
+  let focusedNode: VNode | undefined
+  const FOCUSABLE = new Set(["input", "textarea", "scrollbox"])
+  const focus: Focus = {
+    focus(node) {
+      if (focusedNode !== node) focusedNode?.focusChanged(false)
+      focusedNode = node
+      node.focusChanged(true)
+      if (FOCUSABLE.has(node.tag)) void carrier.effect({ type: "focus", node: idOf(node) })
+    },
+    blur(node) {
+      if (focusedNode !== node) return
+      focusedNode = undefined
+      node.focusChanged(false)
+      if (FOCUSABLE.has(node.tag)) void carrier.effect({ type: "blur" })
+    },
+  }
+  // A surface's scrolls (CT-2): a scroll box's state is the host's read of it, which follows it as it moves, and a move
+  // is the contract's verb on the scroll of the surface's live mount, by its id.
+  const scrollsOf = (surface: string): Scrolls => {
+    const target = (node: VNode) => ({ type: "node", surface, id: idOf(node) })
+    return {
+      state: (node) => read(`scroll:${surface}:${idOf(node)}`, { type: "scroll-state", target: target(node) }) ?? undefined,
+      to: (node, offset) => void carrier.effect({ type: "scroll", target: target(node), verb: { type: "offset", offset } }),
+    }
+  }
   const surface = (name: string, place: Json, input: (cx: Json) => Json, render: (input: Json) => unknown, where: string) => {
     let removed = false
     const key = (cx: Json) => `${cx.mount.surface}\u0000${cx.mount.key}\u0000${cx.mount.generation}`
@@ -494,7 +533,7 @@ export function context(base: Base, carrier: Carrier) {
               },
             })
           const at = key(cx)
-          mounted = mount(provided, screen, () => invalidate(at), crashed)
+          mounted = mount(provided, screen, () => invalidate(at), crashed, focus, scrollsOf(name))
         } finally {
           rendering = before
         }
@@ -717,9 +756,16 @@ export function context(base: Base, carrier: Carrier) {
     ...(options.sessionID ? { session: options.sessionID } : {}),
   })
 
+  const keyInput = new EventEmitter()
   const renderer = new Proxy(
     {
       requestRender: () => invalidate(),
+      // OpenTUI's key handler, an event emitter: its listeners hear no key here, as the layer maps no `useKeyboard`.
+      // It says so once, where it was undefined and a listener crashed the render (snippets' prompt footer).
+      get keyInput() {
+        unsupported("renderer.keyInput")
+        return keyInput
+      },
       // The terminal's, as `useTerminalDimensions` (carbon-4): a surface's own box is not the renderer's.
       get width() {
         return info()?.size?.[0] || size[0]().width || 0
@@ -931,7 +977,7 @@ export function context(base: Base, carrier: Carrier) {
           rendering = reading
           try {
             const key = `compat.dialog.${++shows}`
-            shown = { mounted: mount(provided, screen, panelChanged, crashed), key, onClose, opened: false }
+            shown = { mounted: mount(provided, screen, panelChanged, crashed, focus), key, onClose, opened: false }
           } finally {
             rendering = before
           }

@@ -14,19 +14,128 @@ const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input
 // The intrinsics of OpenTUI's catalogue the contract has no node for.
 const UNSUPPORTED = new Set(["select", "tab_select", "ascii_font", "diff", "line_number", "image", "video"])
 
+type Listener = (...args: any[]) => unknown
+
+// What a mount does with the focus of its nodes ([`VNode.focus`]).
+export interface Focus {
+  focus(node: VNode): void
+  blur(node: VNode): void
+}
+
+// A mount's scrolls, as the host keeps them: where one is, once the host said, and a move of one.
+export interface Scrolls {
+  state(node: VNode): { offset: number; viewport: number; extent: number } | undefined
+  to(node: VNode, offset: number): void
+}
+
 export class VNode {
   parent?: VNode
   children: VNode[] = []
   props: Record<string, any> = {}
   // A chunk of text, for a text node.
   text?: string
-  // The mount a root node belongs to, which a change of its tree asks to view again.
-  owner?: { invalidate(): void }
+  // The mount a root node belongs to, which a change of its tree asks to view again, and which focuses its nodes.
+  owner?: { invalidate(): void; focus?: Focus; scrolls?: Scrolls }
+  // It has the focus, as the layer last said ([`VNode.focusChanged`]).
+  focused = false
+  // CT-2: an OpenTUI renderable is an event emitter, which a plugin listens to by a ref (file-browser's search field):
+  // the layer emits `focused` and `blurred` as OpenTUI's renderables do; other names are heard and never come.
+  private listeners = new Map<string, Listener[]>()
   // A pointer handler's name in its mount, given as the tree is read.
   constructor(public tag: string) {}
 
   requestRender() {
     touch(this)
+  }
+
+  on(name: string, listener: Listener) {
+    this.listeners.set(name, [...(this.listeners.get(name) ?? []), listener])
+    return this
+  }
+
+  addListener(name: string, listener: Listener) {
+    return this.on(name, listener)
+  }
+
+  prependListener(name: string, listener: Listener) {
+    this.listeners.set(name, [listener, ...(this.listeners.get(name) ?? [])])
+    return this
+  }
+
+  once(name: string, listener: Listener) {
+    const once = (...args: unknown[]) => {
+      this.off(name, once)
+      return listener(...args)
+    }
+    return this.on(name, once)
+  }
+
+  off(name: string, listener: Listener) {
+    const list = this.listeners.get(name) ?? []
+    const index = list.indexOf(listener)
+    if (index !== -1) this.listeners.set(name, list.toSpliced(index, 1))
+    return this
+  }
+
+  removeListener(name: string, listener: Listener) {
+    return this.off(name, listener)
+  }
+
+  removeAllListeners(name?: string) {
+    if (name === undefined) this.listeners.clear()
+    else this.listeners.delete(name)
+    return this
+  }
+
+  listenerCount(name: string) {
+    return this.listeners.get(name)?.length ?? 0
+  }
+
+  emit(name: string, ...args: unknown[]) {
+    const list = this.listeners.get(name) ?? []
+    for (const listener of list) listener(...args)
+    return list.length > 0
+  }
+
+  // The contract's focus of the node, through its mount: a field or a scroll the host focuses (CT-2).
+  focus() {
+    rootOf(this).owner?.focus?.focus(this)
+  }
+
+  blur() {
+    rootOf(this).owner?.focus?.blur(this)
+  }
+
+  // A scroll box's position, as OpenTUI's `ScrollBoxRenderable` gives it (file-browser keeps its selected row in
+  // view by it): the host's state of the scroll once it came. Before, the viewport has no height a plugin would scroll
+  // by, so it scrolls nothing.
+  get scrollTop() {
+    return rootOf(this).owner?.scrolls?.state(this)?.offset ?? 0
+  }
+
+  get scrollHeight() {
+    return rootOf(this).owner?.scrolls?.state(this)?.extent ?? 0
+  }
+
+  get viewport() {
+    const state = rootOf(this).owner?.scrolls?.state(this)
+    return { width: Number(this.props.width) || 0, height: state?.viewport ?? Infinity }
+  }
+
+  scrollTo(to: number | { y?: number }) {
+    const offset = typeof to === "number" ? to : (to?.y ?? 0)
+    rootOf(this).owner?.scrolls?.to(this, Math.round(offset))
+  }
+
+  scrollBy(by: number | { y?: number }) {
+    this.scrollTo(this.scrollTop + (typeof by === "number" ? by : (by?.y ?? 0)))
+  }
+
+  // The node gained or lost the focus: it emits as an OpenTUI renderable does.
+  focusChanged(focused: boolean) {
+    if (this.focused === focused) return
+    this.focused = focused
+    this.emit(focused ? "focused" : "blurred")
   }
 
   getChildren() {
@@ -66,10 +175,14 @@ for (const name of [
   })
 }
 
+function rootOf(node: VNode) {
+  let at = node
+  while (at.parent) at = at.parent
+  return at
+}
+
 function touch(node: VNode) {
-  let at: VNode | undefined = node
-  while (at?.parent) at = at.parent
-  at?.owner?.invalidate()
+  rootOf(node).owner?.invalidate()
 }
 
 function textual(node: VNode) {
@@ -215,9 +328,11 @@ export function mount(
   screen: Screen,
   invalidate: () => void,
   crash: (error: unknown) => void,
+  focus?: Focus,
+  scrolls?: Scrolls,
 ): Mounted {
   const root = new VNode("box")
-  root.owner = { invalidate }
+  root.owner = { invalidate, focus, scrolls }
   let dispose = () => {}
   const mounted: Mounted = { root, dispose: () => dispose(), keys: new Set() }
   const fail = (error: unknown) => {
@@ -358,7 +473,7 @@ function node(at: VNode, reading: Reading): Json {
 // plugin's own, or one of the layer's.
 const ids = new WeakMap<VNode, string>()
 let lastId = 0
-function idOf(at: VNode) {
+export function idOf(at: VNode) {
   if (typeof at.props.id === "string" && at.props.id) return at.props.id
   if (!ids.has(at)) ids.set(at, `opentui-${at.tag}-${++lastId}`)
   return ids.get(at)!
