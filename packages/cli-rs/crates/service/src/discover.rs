@@ -126,7 +126,8 @@ impl Owner {
         ready.iter().position(|found| found.service.version.as_deref() == Some(version.as_str()))
     }
 
-    // `<binary> --version`, trimmed; `None` when it does not run or print within the probe timeout.
+    // The version `<binary> --version` prints: `opencode v1.2.3` gives `1.2.3`, as Desktop's `parseCliVersion` reads
+    // it, and a bare version stays. `None` when it does not run or print within the probe timeout.
     async fn version(&self) -> Option<String> {
         let mut command = tokio::process::Command::new(&self.command.program);
         command
@@ -136,8 +137,10 @@ impl Owner {
             .stderr(std::process::Stdio::null())
             .kill_on_drop(true);
         let output = tokio::time::timeout(REQUEST_TIMEOUT, command.output()).await.ok()?.ok()?;
-        let version = String::from_utf8(output.stdout).ok()?.trim().to_owned();
-        (output.status.success() && !version.is_empty()).then_some(version)
+        let text = String::from_utf8(output.stdout).ok()?;
+        let text = text.trim();
+        let version = text.rsplit_once(" v").map_or(text, |(_, version)| version);
+        (output.status.success() && !version.is_empty()).then(|| version.to_owned())
     }
 }
 
@@ -388,6 +391,9 @@ mod tests {
         let owner = Owner::with_lookup(printing("9.9.9"), fake_proc);
         assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "v2");
         let owner = Owner::with_lookup(printing("1.2.3"), fake_proc);
+        assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "oc-next");
+        // As the TS binary prints it (bundle-server: the bundled binary on macOS, whose executable is unknown).
+        let owner = Owner::with_lookup(printing("opencode v1.2.3"), fake_proc);
         assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "oc-next");
         // One answering registration is taken without asking the binary.
         let owner = Owner::with_lookup(TsCommand::new("sh"), |_| panic!("looked up"));
