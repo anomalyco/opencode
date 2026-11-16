@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   AIError,
+  LLMClient,
   CompactionPart,
   CompactionCheckpointResponse,
   HttpContext,
@@ -65,7 +66,14 @@ import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
-import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import {
+  InstructionStateTable,
+  SessionInboxTable,
+  SessionMessageTable,
+  SessionPendingStepTable,
+  SessionQuestionTable,
+  SessionTable,
+} from "@opencode/core/session/sql"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionStore } from "@opencode/core/session/store"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -100,6 +108,7 @@ import { promptLocationNode } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
+import { registerToolPlugin } from "./lib/tool"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
@@ -244,6 +253,8 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
     activationHook: Effect.void,
     skillBaselines: new Map<Agent.ID, string>(),
     authorizations: new Array<Tool.Context>(),
+    questionAuthorizations: new Array<Permission.AssertInput>(),
+    questionAuthorization: Effect.void as ReturnType<Permission.Interface["assert"]>,
     executions: new Array<string>(),
     closedTransports: new Array<Session.ID>(),
     spans: new Array<Tracer.NativeSpan>(),
@@ -294,13 +305,26 @@ const permissionFail = {
       }),
     }),
 }
-const permission = permissionLayer()
 const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, ToolInfo>>, options?: Tool.Options) =>
   registry.transform((editor) =>
     Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
   )
+class RunnerRebuild extends Context.Service<
+  RunnerRebuild,
+  {
+    readonly build: (scope: Scope.Scope) => Effect.Effect<SessionRunner.Interface>
+  }
+>()("test/RunnerRebuild") {}
+
 const layer = Layer.unwrap(
   Effect.map(RunnerState, (state) => {
+    const permission = permissionLayer({
+      assert: (input) =>
+        Effect.gen(function* () {
+          state.questionAuthorizations.push(input)
+          yield* state.questionAuthorization
+        }),
+    })
     const modelTransport = Layer.succeed(
       SessionModelTransport.Service,
       SessionModelTransport.Service.of({
@@ -470,7 +494,9 @@ const layer = Layer.unwrap(
             .drain({ sessionID, force, continuation })
             .pipe(
               Effect.flatMap((result) =>
-                result._tag === "Complete" ? Effect.void : drain(sessionID, false, result.continuation),
+                result._tag === "Complete" || result._tag === "Parked"
+                  ? Effect.void
+                  : drain(sessionID, false, result.continuation),
               ),
             )
         }
@@ -502,11 +528,12 @@ const layer = Layer.unwrap(
       ),
       Layer.orDie,
     )
-    return AppNodeBuilder.build(
+    const app = AppNodeBuilder.build(
       LayerNode.group([
         Database.node,
         Bus.node,
         Form.node,
+        Permission.node,
         SessionProjector.node,
         SessionStore.node,
         SessionInbox.node,
@@ -537,6 +564,32 @@ const layer = Layer.unwrap(
         Model.node.replace(promptModels),
         SessionExecution.node.replace(execution),
       ],
+    )
+    return Layer.merge(
+      app,
+      Layer.effect(
+        RunnerRebuild,
+        Effect.gen(function* () {
+          const database = yield* Database.Service
+          const llm = yield* LLMClient.Service
+          return {
+            build: (scope: Scope.Scope) =>
+              Layer.buildWithScope(
+                AppNodeBuilder.build(LayerNode.group([SessionRunnerLLM.node, SessionProjector.node, echoNode]), [
+                  ...replacements,
+                  Database.node.replace(Layer.succeed(Database.Service, database)),
+                  Bus.node.replace(Bus.configured({ persist: true })),
+                  LayerNodePlatform.llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
+                  McpInstructions.node.replace(mcpInstructions),
+                ]),
+                scope,
+              ).pipe(
+                Effect.orDie,
+                Effect.map((context) => Context.get(context, SessionRunner.Service)),
+              ),
+          }
+        }),
+      ).pipe(Layer.provide(app)),
     )
   }),
 ).pipe(Layer.provideMerge(Layer.sync(RunnerState, makeRunnerState)), Layer.provideMerge(testLLM))
@@ -632,6 +685,26 @@ const setup = Effect.gen(function* () {
 })
 
 type Scenario = Effect.Success<typeof setup>
+
+const questionInput = {
+  questions: [{ question: "Continue?", header: "Continue", options: [{ label: "Yes", description: "Continue" }] }],
+}
+
+const durableQuestions = Effect.gen(function* () {
+  yield* registerToolPlugin(QuestionTool.Plugin)
+  const store = yield* SessionStore.Service
+  yield* store.claim(sessionID)
+  const hooks = yield* PluginHooks.Service
+  const calls: string[] = []
+  yield* hooks.register("tool", "execute.before", (event) =>
+    Effect.sync(() => {
+      calls.push(event.id)
+      if (event.tool === "question") event.input = questionInput
+    }),
+  )
+  return calls
+})
+
 const scenario = (
   name: string,
   body: (s: Scenario) => Effect.gen.Return<void, unknown, Layer.Success<typeof layer> | Scope.Scope>,
@@ -2082,9 +2155,7 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(last)).toEqual(["First", "Fourth"])
     expect(last.system.map((part) => part.text).join("\n")).not.toContain("Entered mode")
     // Clients still see every message; only the model context hides the stale update.
-    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([
-      { text: "Entered mode" },
-    ])
+    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([{ text: "Entered mode" }])
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
@@ -7628,5 +7699,494 @@ describe("SessionRunnerLLM", () => {
     expect(defect).toBeInstanceOf(Error)
     if (!(defect instanceof Error)) return
     expect(defect.message).toBe("Tool input delta before start: call-1")
+  })
+})
+
+describe("durable Question parking", () => {
+  scenario("parks prepared Questions after concurrent ordinary tools finish", function* (s) {
+    const calls = yield* durableQuestions
+    const tools = yield* s.blockTools(2)
+    const authorized = yield* Deferred.make<void>()
+    s.questionAuthorization = Effect.suspend(() =>
+      s.questionAuthorizations.length === 2 ? Deferred.succeed(authorized, undefined).pipe(Effect.asVoid) : Effect.void,
+    )
+    yield* s.llm.push(
+      TestLLM.complete(
+        {
+          reason: { normalized: "tool-calls", raw: "tool_use" },
+          usage: { nonCachedInputTokens: 11, outputTokens: 7, cost: 1.25 },
+        },
+        LLMEvent.toolCall({ id: "question-a", name: "question", input: {} }),
+        LLMEvent.toolCall({ id: "echo-a", name: "echo", input: { text: "first" } }),
+        LLMEvent.toolCall({ id: "question-b", name: "question", input: {} }),
+        LLMEvent.toolCall({ id: "echo-b", name: "echo", input: { text: "second" } }),
+      ),
+    )
+    yield* s.admit("Ask and run tools")
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* tools.started
+    yield* Deferred.await(authorized)
+    expect(yield* s.db.select().from(SessionPendingStepTable)).toEqual([])
+    expect(yield* tools.maxActive).toBe(2)
+    yield* tools.release
+    yield* Fiber.join(run)
+    expect(calls.toSorted()).toEqual(["echo-a", "echo-b", "question-a", "question-b"])
+    expect(s.questionAuthorizations).toHaveLength(2)
+    expect(s.executions.toSorted()).toEqual(["first", "second"])
+    const forms = yield* Form.Service
+    expect(yield* forms.list()).toHaveLength(2)
+    const pending = yield* s.db.select().from(SessionPendingStepTable).get()
+    if (!pending) throw new Error("Step did not park")
+    expect(pending.data).toMatchObject({
+      assistantMessageID: pending.assistant_message_id,
+      generation: pending.generation,
+      step: 1,
+      finish: "tool-calls",
+      rawFinish: "tool_use",
+      cost: 1.25,
+      tokens: { input: 11, output: 7 },
+      questions: expect.arrayContaining([
+        {
+          callID: "question-a",
+          questionID: expect.any(String),
+          prepared: { adapter: "question@1", input: questionInput },
+        },
+        {
+          callID: "question-b",
+          questionID: expect.any(String),
+          prepared: { adapter: "question@1", input: questionInput },
+        },
+      ]),
+    })
+    const owner = yield* s.db
+      .select()
+      .from(SessionMessageTable)
+      .where(eq(SessionMessageTable.id, pending.assistant_message_id))
+      .get()
+    expect(owner?.step_started_seq).toBe(pending.generation)
+    expect(owner?.data).toMatchObject({
+      content: [
+        { id: "question-a", state: { status: "waiting" } },
+        { id: "echo-a", state: { status: "completed" } },
+        { id: "question-b", state: { status: "waiting" } },
+        { id: "echo-b", state: { status: "completed" } },
+      ],
+    })
+    expect(owner?.data).not.toHaveProperty("finish")
+    const events = yield* recordedEventTypes(sessionID)
+    expect(events.filter((type) => type === "session.step.parked.1")).toHaveLength(1)
+    expect(events).not.toContain("session.step.ended.1")
+    expect(s.requests).toHaveLength(1)
+  })
+
+  scenario("keeps unanswered Questions in fresh runners and settles all answers once", function* (s) {
+    const calls = yield* durableQuestions
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) =>
+      editor.update(Agent.ID.make("build"), (agent) => {
+        agent.steps = 2
+      }),
+    )
+    yield* s.llm.push(
+      TestLLM.toolCalls(
+        LLMEvent.toolCall({ id: "question-a", name: "question", input: {} }),
+        LLMEvent.toolCall({ id: "question-b", name: "question", input: {} }),
+        LLMEvent.toolCall({ id: "ordinary", name: "echo", input: { text: "once" } }),
+      ),
+      TestLLM.stop(),
+    )
+    yield* s.runPrompt("Ask two Questions")
+    const pending = yield* s.db.select().from(SessionPendingStepTable).get()
+    if (!pending) throw new Error("Step did not park")
+    const rebuild = yield* RunnerRebuild
+    const before = yield* Scope.make()
+    const first = yield* rebuild.build(before)
+    expect(yield* first.drain({ sessionID, force: true })).toEqual(SessionRunner.DrainResult.Parked())
+    yield* Scope.close(before, Exit.void)
+    const questions = yield* s.db.select().from(SessionQuestionTable).orderBy(asc(SessionQuestionTable.call_id))
+    const forms = yield* Form.Service
+    expect(yield* forms.list({ sessionID })).toHaveLength(2)
+    expect(yield* forms.list({ sessionID: otherSessionID })).toEqual([])
+    expect(yield* forms.reply({ id: questions[0]!.id, answer: { unknown: "Yes" } }).pipe(Effect.flip)).toBeInstanceOf(
+      Form.InvalidAnswerError,
+    )
+    const resolve = (index: number) => forms.reply({ id: questions[index]!.id, answer: { q0: "Yes" } })
+    yield* resolve(0)
+    const after = yield* Scope.make()
+    yield* Effect.addFinalizer(() => Scope.close(after, Exit.void))
+    const restarted = yield* rebuild.build(after)
+    expect(yield* restarted.drain({ sessionID, force: true })).toEqual(SessionRunner.DrainResult.Parked())
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.db.select().from(SessionPendingStepTable).get()).toEqual(pending)
+    yield* resolve(1)
+    expect(yield* resolve(1).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+    expect(yield* restarted.drain({ sessionID, force: true })).toEqual(SessionRunner.DrainResult.Complete())
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[1]?.toolChoice).toEqual({ type: "none" })
+    expect(JSON.stringify(s.requests[1]?.messages)).toContain("User has answered your questions")
+    expect(s.executions).toEqual(["once"])
+    expect(s.questionAuthorizations).toHaveLength(2)
+    expect(calls).toHaveLength(3)
+    expect(yield* s.db.select().from(SessionPendingStepTable)).toEqual([])
+    expect(
+      yield* s.db
+        .select({ step: SessionTable.resume_step })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get(),
+    ).toEqual({ step: null })
+    expect(yield* restarted.drain({ sessionID, force: false })).toEqual(SessionRunner.DrainResult.Complete())
+    expect(s.requests).toHaveLength(2)
+    expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.step.settled.1")).toHaveLength(1)
+  })
+
+  scenario("resumes the durable cursor after settlement commits before restart", function* (s) {
+    yield* durableQuestions
+    yield* s.llm.push(TestLLM.toolCall("question-a", "question", {}), TestLLM.stop())
+    yield* s.runPrompt("Ask")
+    const pending = yield* s.db.select().from(SessionPendingStepTable).get()
+    const question = yield* s.db.select().from(SessionQuestionTable).get()
+    if (!pending || !question) throw new Error("Step did not park")
+    yield* s.bus.publish(SessionEvent.QuestionResolution.Resolved, {
+      sessionID,
+      assistantMessageID: pending.assistant_message_id,
+      generation: pending.generation,
+      questionID: question.id,
+      callID: question.call_id,
+      terminal: { status: "answered", answer: { q0: "Yes" } },
+    })
+    yield* s.bus.publish(SessionEvent.Step.Settled, {
+      sessionID,
+      assistantMessageID: pending.assistant_message_id,
+      generation: pending.generation,
+    })
+    expect(
+      yield* s.db
+        .select({ step: SessionTable.resume_step })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get(),
+    ).toEqual({ step: 2 })
+    const scope = yield* Effect.scope
+    const rebuild = yield* RunnerRebuild
+    const restarted = yield* rebuild.build(scope)
+    expect(yield* restarted.drain({ sessionID, force: false })).toEqual(SessionRunner.DrainResult.Complete())
+    expect(s.requests).toHaveLength(2)
+    expect(s.questionAuthorizations).toHaveLength(1)
+    expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.step.settled.1")).toHaveLength(1)
+  })
+
+  for (const feedback of [undefined, "Use the default"] as const) {
+    scenario(
+      `cancels the whole parked Step ${feedback === undefined ? "by dismissal" : "with feedback"}`,
+      function* (s) {
+        const calls = yield* durableQuestions
+        yield* s.llm.push(
+          TestLLM.complete(
+            { reason: { normalized: "tool-calls" }, usage: { nonCachedInputTokens: 11, outputTokens: 7, cost: 1.25 } },
+            LLMEvent.toolCall({ id: "question-a", name: "question", input: {} }),
+            LLMEvent.toolCall({ id: "question-b", name: "question", input: {} }),
+            LLMEvent.toolCall({ id: "ordinary", name: "echo", input: { text: "once" } }),
+          ),
+        )
+        yield* s.runPrompt("Ask two Questions")
+        const pending = yield* s.db.select().from(SessionPendingStepTable).get()
+        if (!pending) throw new Error("Step did not park")
+        const forms = yield* Form.Service
+        const questions = yield* forms.list({ sessionID })
+        const ordinary = yield* forms.create({
+          sessionID,
+          title: "Ordinary",
+          fields: [{ key: "text", type: "string" }],
+        })
+        yield* forms.cancel(questions[0]!.id, feedback === undefined ? undefined : { message: feedback })
+        expect(yield* forms.list({ sessionID })).toEqual([ordinary])
+        expect(yield* forms.state(questions[1]!.id)).toEqual({
+          status: "cancelled",
+          ...(feedback === undefined ? {} : { message: feedback }),
+        })
+        expect(yield* forms.reply({ id: questions[1]!.id, answer: { q0: "Yes" } }).pipe(Effect.flip)).toBeInstanceOf(
+          Form.AlreadySettledError,
+        )
+        expect(yield* forms.cancel(questions[0]!.id).pipe(Effect.flip)).toBeInstanceOf(Form.AlreadySettledError)
+        expect(yield* s.db.select().from(SessionPendingStepTable)).toEqual([])
+        const settled = yield* s.db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()
+        expect(settled).toMatchObject({
+          cost: 1.25,
+          tokens_input: 11,
+          tokens_output: 7,
+          resume_step: feedback === undefined ? null : 2,
+        })
+        if (feedback === undefined)
+          expect(settled).toMatchObject({ time_suspended: null, resume_attempts: 0, idle_outcome: "interrupted" })
+        const assistant = (yield* s.context).find((message) => message.id === pending.assistant_message_id)
+        expect(assistant).toMatchObject({
+          type: "assistant",
+          cost: 1.25,
+          content: [
+            {
+              id: "question-a",
+              state: { status: "error", error: { message: feedback ?? "The user dismissed this question" } },
+            },
+            { id: "question-b", state: { status: "error" } },
+            { id: "ordinary", state: { status: "completed" } },
+          ],
+        })
+        if (feedback === undefined) expect(assistant).toMatchObject({ error: { type: "aborted" } })
+        yield* forms.reply({ id: ordinary.id, answer: { text: "unchanged" } })
+        if (feedback !== undefined) yield* s.llm.push(TestLLM.stop())
+        const scope = yield* Effect.scope
+        const rebuild = yield* RunnerRebuild
+        const runner = yield* rebuild.build(scope)
+        expect(yield* runner.drain({ sessionID, force: false })).toEqual(SessionRunner.DrainResult.Complete())
+        expect(s.requests).toHaveLength(feedback === undefined ? 1 : 2)
+        expect(s.executions).toEqual(["once"])
+        expect(calls).toHaveLength(3)
+        expect(s.questionAuthorizations).toHaveLength(2)
+        if (feedback !== undefined) expect(JSON.stringify(s.requests[1]?.messages)).toContain(feedback)
+        expect((yield* s.db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())?.cost).toBe(1.25)
+      },
+    )
+  }
+
+  scenario("persists the fresh allowance when promotion commits before the next Step starts", function* (s) {
+    yield* durableQuestions
+    yield* s.llm.push(TestLLM.toolCall("question-a", "question", {}), TestLLM.stop())
+    yield* s.runPrompt("Ask")
+    const forms = yield* Form.Service
+    const [question] = yield* forms.list({ sessionID })
+    if (!question) throw new Error("Question missing")
+    yield* forms.reply({ id: question.id, answer: { q0: "Yes" } })
+    const pending = yield* s.db.select().from(SessionPendingStepTable).get()
+    if (!pending) throw new Error("Step missing")
+    yield* s.bus.publish(SessionEvent.Step.Settled, {
+      sessionID,
+      assistantMessageID: pending.assistant_message_id,
+      generation: pending.generation,
+    })
+    yield* s.admit("Fresh allowance")
+    yield* SessionInbox.promote(s.db, s.bus, sessionID, "steer")
+    expect(
+      yield* s.db
+        .select({ step: SessionTable.resume_step })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get(),
+    ).toEqual({ step: 1 })
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) =>
+      editor.update(Agent.ID.make("build"), (agent) => {
+        agent.steps = 2
+      }),
+    )
+    const scope = yield* Effect.scope
+    const rebuild = yield* RunnerRebuild
+    const runner = yield* rebuild.build(scope)
+    expect(yield* runner.drain({ sessionID, force: false })).toEqual(SessionRunner.DrainResult.Complete())
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[1]?.toolChoice).not.toEqual({ type: "none" })
+    expect(JSON.stringify(s.requests[1]?.messages)).toContain("Fresh allowance")
+    expect(
+      yield* s.db
+        .select({ step: SessionTable.resume_step })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get(),
+    ).toEqual({ step: null })
+  })
+
+  for (const reason of ["decline", "cancel", "interrupt"] as const) {
+    scenario(`does not park when Question authorization ends with ${reason}`, function* (s) {
+      const calls = yield* durableQuestions
+      const started = yield* Deferred.make<void>()
+      s.questionAuthorization =
+        reason === "interrupt"
+          ? Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never))
+          : Effect.die(reason === "decline" ? new Permission.DeclinedError() : new QuestionTool.CancelledError())
+      yield* s.llm.push(TestLLM.toolCall("question-a", "question", {}))
+      yield* s.admit("Ask")
+      const run = yield* s.resume.pipe(Effect.exit, Effect.forkChild)
+      if (reason === "interrupt") {
+        yield* Deferred.await(started)
+        const execution = yield* SessionExecution.Service
+        yield* execution.interrupt(sessionID)
+      }
+      const result = yield* Fiber.join(run)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result)) expect(Cause.hasInterruptsOnly(result.cause)).toBe(true)
+      expect(calls).toEqual(["question-a"])
+      expect(s.questionAuthorizations).toHaveLength(1)
+      expect(yield* s.db.select().from(SessionPendingStepTable)).toEqual([])
+      expect(s.requests).toHaveLength(1)
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.parked.1")
+      expect(yield* s.context).toMatchObject([
+        { type: "user" },
+        { type: "assistant", content: [{ id: "question-a", state: { status: "error", error: { type: "aborted" } } }] },
+      ])
+    })
+  }
+
+  scenario("settles prepared Questions when the provider fails", function* (s) {
+    yield* durableQuestions
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        invalidRequest(),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "question-a", name: "question", input: {} }),
+      ),
+    )
+    expect(yield* s.runPrompt("Ask").pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+    expect(yield* s.db.select().from(SessionPendingStepTable)).toEqual([])
+    expect(s.questionAuthorizations).toHaveLength(1)
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.context).toMatchObject([
+      { type: "user" },
+      { type: "assistant", content: [{ id: "question-a", state: { status: "error" } }] },
+    ])
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.parked.1")
+  })
+
+  scenario("keeps ordinary Tool errors beside a parked Question", function* (s) {
+    yield* durableQuestions
+    yield* s.llm.push(
+      TestLLM.toolCalls(
+        LLMEvent.toolCall({ id: "question-a", name: "question", input: {} }),
+        LLMEvent.toolCall({ id: "bad-echo", name: "echo", input: {} }),
+      ),
+    )
+    yield* s.runPrompt("Ask and fail a tool")
+    expect(yield* s.db.select().from(SessionPendingStepTable)).toHaveLength(1)
+    expect(yield* s.context).toMatchObject([
+      { type: "user" },
+      {
+        type: "assistant",
+        content: [
+          { id: "question-a", state: { status: "waiting" } },
+          { id: "bad-echo", state: { status: "error" } },
+        ],
+      },
+    ])
+  })
+})
+
+describe("durable Question parking failures", () => {
+  scenario("settles a prepared Question after a duplicate provider call without executing it twice", function* (s) {
+    const calls = yield* durableQuestions
+    yield* s.llm.push(
+      TestLLM.toolCalls(
+        LLMEvent.toolCall({ id: "question-a", name: "question", input: {} }),
+        LLMEvent.toolCall({ id: "question-a", name: "question", input: {} }),
+      ),
+    )
+    expect(yield* s.runPrompt("Ask once").pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+    expect(calls).toEqual(["question-a"])
+    expect(s.questionAuthorizations).toHaveLength(1)
+    expect(yield* s.db.select().from(SessionPendingStepTable)).toEqual([])
+    expect(yield* s.context).toMatchObject([
+      { type: "user" },
+      {
+        type: "assistant",
+        content: [
+          { id: "question-a", state: { status: "error", error: { message: "Duplicate tool call: question-a" } } },
+        ],
+      },
+    ])
+  })
+
+  for (const reason of ["interrupt", "cancel", "defect"] as const) {
+    scenario(`settles prepared Questions when an ordinary sibling ends with ${reason}`, function* (s) {
+      yield* durableQuestions
+      const authorized = yield* Deferred.make<void>()
+      s.questionAuthorization = Deferred.succeed(authorized, undefined).pipe(Effect.asVoid)
+      const tools = yield* s.blockTools()
+      const registry = yield* Tool.Service
+      yield* transformTools(
+        registry,
+        {
+          abort: {
+            name: "abort",
+            description: "Stop while a Question is prepared",
+            input: Schema.Struct({}),
+            output: Schema.Struct({}),
+            execute: () =>
+              s.awaitToolBarrier.pipe(
+                Effect.andThen(
+                  Effect.die(reason === "cancel" ? new QuestionTool.CancelledError() : new Error("ordinary defect")),
+                ),
+              ),
+          },
+        },
+        { codemode: false },
+      )
+      yield* s.llm.push(
+        TestLLM.toolCalls(
+          LLMEvent.toolCall({ id: "question-a", name: "question", input: {} }),
+          LLMEvent.toolCall({ id: "abort", name: "abort", input: {} }),
+        ),
+        TestLLM.stop(),
+      )
+      yield* s.admit("Ask and stop")
+      const run = yield* s.resume.pipe(Effect.exit, Effect.forkChild)
+      yield* tools.started
+      yield* Deferred.await(authorized)
+      if (reason === "interrupt") {
+        const execution = yield* SessionExecution.Service
+        yield* execution.interrupt(sessionID)
+      }
+      if (reason !== "interrupt") yield* tools.release
+      const result = yield* Fiber.join(run)
+      expect(Exit.isSuccess(result)).toBe(reason === "defect")
+      expect(yield* s.db.select().from(SessionPendingStepTable)).toEqual([])
+      expect(s.questionAuthorizations).toHaveLength(1)
+      const messages = yield* s.context
+      expect(messages[1]).toMatchObject({
+        type: "assistant",
+        content: [
+          { id: "question-a", state: { status: "error" } },
+          { id: "abort", state: { status: "error" } },
+        ],
+      })
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.parked.1")
+    })
+  }
+
+  scenario("returns invalid Question input as a tool error without authorizing or parking", function* (s) {
+    yield* registerToolPlugin(QuestionTool.Plugin)
+    yield* s.llm.push(TestLLM.toolCall("invalid-question", "question", {}), TestLLM.stop())
+    yield* s.runPrompt("Ask an invalid Question")
+    expect(s.questionAuthorizations).toEqual([])
+    expect(yield* s.db.select().from(SessionPendingStepTable)).toEqual([])
+    expect(s.requests).toHaveLength(2)
+    expect(yield* s.context).toMatchObject([
+      { type: "user" },
+      {
+        type: "assistant",
+        content: [
+          {
+            id: "invalid-question",
+            state: { status: "error", error: { message: expect.stringContaining("Invalid arguments") } },
+          },
+        ],
+      },
+      { type: "assistant", finish: "stop" },
+    ])
+  })
+
+  scenario("does not leave prepared Questions running when the stream has no finish", function* (s) {
+    yield* durableQuestions
+    yield* s.llm.push([
+      LLMEvent.stepStart({ index: 0 }),
+      LLMEvent.toolCall({ id: "question-a", name: "question", input: {} }),
+    ])
+    expect(yield* s.runPrompt("Ask").pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+    expect(yield* s.db.select().from(SessionPendingStepTable)).toEqual([])
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.context).toMatchObject([
+      { type: "user" },
+      {
+        type: "assistant",
+        content: [{ id: "question-a", state: { status: "error", error: { type: "tool.result-missing" } } }],
+      },
+    ])
   })
 })

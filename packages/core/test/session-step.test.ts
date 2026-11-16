@@ -39,6 +39,7 @@ for (const fixture of [
   { finish: "stop", toolChoice: undefined },
   { finish: "content-filter", toolChoice: undefined },
   { finish: "stop", toolChoice: "none" },
+  { finish: "tool-calls", toolChoice: undefined },
 ] as const) {
   it.effect(`settles ${fixture.finish} with tool choice ${fixture.toolChoice ?? "default"}`, () =>
     Effect.gen(function* () {
@@ -103,6 +104,7 @@ for (const fixture of [
       const result = yield* steps
         .attempt({
           isLocationClosed: () => false,
+          step: 1,
           sessionID,
           assistantMessageID,
           agent: Agent.defaultID,
@@ -111,6 +113,24 @@ for (const fixture of [
             retry: () => Effect.void,
             request: ai.request({ model: model.model, prompt: "Run one tool", toolChoice: fixture.toolChoice }),
             options: {},
+            prepareAuthorizedQuestion:
+              fixture.finish === "tool-calls"
+                ? () =>
+                    Effect.succeed({
+                      prepared: {
+                        adapter: "question@1" as const,
+                        input: {
+                          questions: [
+                            {
+                              question: "Continue?",
+                              header: "Continue",
+                              options: [{ label: "Yes", description: "Continue" }],
+                            },
+                          ],
+                        },
+                      },
+                    })
+                : undefined,
             executeTool: () =>
               Effect.sync(() => {
                 executions++
@@ -123,6 +143,24 @@ for (const fixture of [
           recoverOverflow: Effect.succeed(false),
         })
         .pipe(Effect.exit)
+      if (fixture.finish === "tool-calls") {
+        expect(result).toEqual(Exit.succeed(SessionStep.Outcome.Parked()))
+        expect(executions).toBe(0)
+        expect(captures).toBe(2)
+        const events = yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, sessionID))
+        expect(events.find((event) => event.type === "session.step.parked.1")?.data).toMatchObject({
+          assistantMessageID,
+          generation: events.find((event) => event.type === "session.step.started.1")?.seq,
+          step: 1,
+          finish: "tool-calls",
+          snapshot: end,
+          files,
+          tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } },
+          questions: [{ callID: "call-test", prepared: { adapter: "question@1" } }],
+        })
+        expect(events.some((event) => event.type === "session.step.ended.1")).toBe(false)
+        return
+      }
       expect(Exit.isSuccess(result)).toBe(fixture.finish === "stop")
       expect(executions).toBe(fixture.toolChoice === "none" ? 0 : 1)
       if (Exit.isSuccess(result))
@@ -205,6 +243,7 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
     )
     yield* steps.attempt({
       isLocationClosed: () => false,
+      step: 1,
       sessionID,
       assistantMessageID,
       agent: Agent.defaultID,
@@ -284,6 +323,7 @@ const stopTwoTools = (how: {
     const attempt = yield* steps
       .attempt({
         isLocationClosed: () => how.locationClosed,
+        step: 1,
         interruption: () => how.reason,
         handoffPrepared: () => how.handoffPrepared === true,
         sessionID,

@@ -263,7 +263,12 @@ const layer = Layer.effect(
       release: Effect.fn("SessionStore.release")(function* (sessionID) {
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .set({
+            time_suspended: null,
+            resume_attempts: 0,
+            resume_step: null,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
           .where(eq(SessionTable.id, sessionID))
           .run()
           .pipe(Effect.orDie)
@@ -271,7 +276,12 @@ const layer = Layer.effect(
       releaseOrphanedChildClaims: Effect.fn("SessionStore.releaseOrphanedChildClaims")(() =>
         db
           .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .set({
+            time_suspended: null,
+            resume_attempts: 0,
+            resume_step: null,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
           .where(
             and(
               isNotNull(SessionTable.time_suspended),

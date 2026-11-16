@@ -70,7 +70,13 @@ export interface Snapshot {
   readonly definitions: ReadonlyArray<ToolDefinition>
   readonly codeModeCatalog?: CodeModeCatalog.Inventory
   /** Inert Gate 1 harness: no execution, parking, persistence, or automatic recovery. */
-  readonly prepareQuestion?: (input: Parameters<Snapshot["execute"]>[0]) => Effect.Effect<QuestionTool.Prepared, Tool.Error>
+  readonly prepareQuestion?: (
+    input: Parameters<Snapshot["execute"]>[0],
+  ) => Effect.Effect<QuestionTool.Prepared, Tool.Error>
+  /** Resolve once, then prepare an eligible Question or execute the ordinary tool. */
+  readonly prepareAuthorizedQuestion?: (
+    input: Parameters<Snapshot["execute"]>[0],
+  ) => Effect.Effect<{ readonly prepared: QuestionTool.Prepared } | { readonly outcome: NormalizedResult }, Tool.Error>
   readonly execute: (input: {
     readonly sessionID: SessionSchema.ID
     readonly agent: Agent.ID
@@ -331,6 +337,20 @@ const layer = Layer.effect(
               if (yield* hooks.has("tool", "execute.after"))
                 return yield* new Tool.Error({ message: "Question preparation does not support execute.after hooks" })
               return yield* QuestionTool.prepare(resolved.tool, resolved.input)
+            }),
+            prepareAuthorizedQuestion: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
+              const resolved = yield* resolve(input)
+              if (!QuestionTool.eligible(resolved.tool) || (yield* hooks.has("tool", "execute.after")))
+                return { outcome: yield* executeTool(resolved.tool, resolved.name, resolved.input, resolved.context) }
+              const prepared = yield* QuestionTool.prepare(resolved.tool, resolved.input)
+              yield* permission
+                .assert({
+                  action: "question",
+                  resources: ["*"],
+                  ...Permission.invocation(resolved.context),
+                })
+                .pipe(Effect.mapError((error) => new Tool.Error({ message: "Permission denied: question", error })))
+              return { prepared }
             }),
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const resolved = yield* resolve(input)

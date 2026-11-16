@@ -19,7 +19,7 @@ import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
-import { SessionMessageTable } from "../sql.js"
+import { SessionMessageTable, SessionPendingStepTable, SessionQuestionTable, SessionTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { toSessionError } from "../to-session-error.js"
 import { DrainResult, Service, type Interface } from "./index.js"
@@ -59,6 +59,48 @@ const layer = Layer.effect(
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
+    /**
+     * Resume a parked Step only when every original Question has been answered.
+     * The projector owns the transactional consumption, terminal assistant
+     * update and usage accounting; this helper only decides whether to request it.
+     */
+    const settleParkedStep = Effect.fn("SessionRunner.settleParkedStep")(function* (sessionID: SessionSchema.ID) {
+      const pending = yield* db
+        .select()
+        .from(SessionPendingStepTable)
+        .where(eq(SessionPendingStepTable.session_id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!pending) return false
+
+      const questions = yield* db
+        .select()
+        .from(SessionQuestionTable)
+        .where(
+          and(
+            eq(SessionQuestionTable.session_id, pending.session_id),
+            eq(SessionQuestionTable.assistant_message_id, pending.assistant_message_id),
+            eq(SessionQuestionTable.generation, pending.generation),
+          ),
+        )
+        .all()
+        .pipe(Effect.orDie)
+
+      if (
+        questions.length !== pending.data.questions.length ||
+        questions.length === 0 ||
+        questions.some((question) => question.status !== "answered")
+      )
+        return false
+
+      yield* bus.publish(SessionEvent.Step.Settled, {
+        sessionID: pending.session_id,
+        assistantMessageID: pending.assistant_message_id,
+        generation: pending.generation,
+      })
+      return true
+    })
+
     // Each drain is one turn and starts its own trace, whatever fiber woke it.
     const drain = Effect.fn("SessionRunner.drain", { root: true })(function* (input: DrainInput) {
       const sessionID = input.sessionID
@@ -68,6 +110,40 @@ const layer = Layer.effect(
       let entering = true
       let stepped = input.stepped ?? false
       const promotable = input.promotable ?? "input"
+
+      // A parked Question must never fall through into a fresh model request.
+      // Settlement is the only operation permitted to consume its original Step.
+      const pendingStep = yield* db
+        .select({
+          sessionID: SessionPendingStepTable.session_id,
+        })
+        .from(SessionPendingStepTable)
+        .where(eq(SessionPendingStepTable.session_id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
+
+      if (pendingStep) {
+        if (!(yield* settleParkedStep(sessionID))) return DrainResult.Parked()
+      }
+
+      // The settlement transaction persists this cursor before removing the
+      // pending Step, so a crash after settlement cannot reset the step limit.
+      const resume = yield* db
+        .select({
+          step: SessionTable.resume_step,
+        })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
+
+      if (resume?.step !== null && resume?.step !== undefined) {
+        if (!Number.isSafeInteger(resume.step) || resume.step < 1)
+          return yield* Effect.die(new Error("Invalid durable Step continuation cursor"))
+        step = resume.step
+        continuing = true
+        stepped = true
+      }
       if (!force && !continuing && !stepped) {
         const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
         if (!pending) return DrainResult.Complete()
@@ -216,7 +292,9 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step, input.interruption)
+        const result = yield* runStep(next.context, step, input.interruption)
+        if (result === "parked") return DrainResult.Parked()
+        continuing = result
         stepped = true
         step++
         force = false
@@ -290,6 +368,7 @@ const layer = Layer.effect(
               options: prepared.options,
               retry: prepared.retry,
               executeTool: prepared.executeTool,
+              prepareAuthorizedQuestion: prepared.prepareAuthorizedQuestion,
             })),
           )
         const outcome = yield* steps.attempt({
@@ -298,12 +377,16 @@ const layer = Layer.effect(
           handoffPrepared: pty.handoffPrepared,
           sessionID,
           assistantMessageID,
+          step,
           agent: loaded.agent.id,
           model: loaded.model,
           prepared: {
             ...prepared,
             // A tool call can arrive during a reload; its permission check reads the session's agent.
             executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
+            prepareAuthorizedQuestion: prepared.prepareAuthorizedQuestion
+              ? (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.prepareAuthorizedQuestion!(call)))
+              : undefined,
           },
           retryAttempt,
           retry: (cause, error, proposed) =>
@@ -326,6 +409,7 @@ const layer = Layer.effect(
         })
         retryAttempt = undefined
         const completed = yield* SessionStep.Outcome.$match(outcome, {
+          Parked: () => Effect.succeed("parked" as const),
           Completed: Effect.fnUntraced(function* (outcome) {
             // The Session is about to go idle, which leaves the background summary time to finish.
             if (!outcome.needsContinuation)

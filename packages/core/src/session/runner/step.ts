@@ -10,6 +10,7 @@ import {
 import type { Agent } from "@opencode/schema/agent"
 import { Cause, Clock, Data, Deferred, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { SessionError } from "@opencode/schema/session-error"
+import { Form } from "../../form.js"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
 import { Snapshot } from "../../snapshot.js"
@@ -29,6 +30,7 @@ import { SessionRunnerRetry } from "./retry.js"
 
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
+  Parked: {}
   Retry: {
     readonly error: SessionError.Error
     readonly decision: SessionRunnerRetry.Decision
@@ -47,6 +49,7 @@ interface Input {
   /** Whether this server is handing its process daemon over to the next one (see `PersistentPty.handoffPrepared`). */
   readonly handoffPrepared?: () => boolean
   readonly sessionID: SessionSchema.ID
+  readonly step: number
   readonly assistantMessageID: SessionMessage.ID
   readonly agent: Agent.ID
   readonly model: SessionRunnerModel.Resolved
@@ -98,6 +101,7 @@ export const make = Effect.gen(function* () {
       pendingSnapshot: Fiber.join(pendingStartSnapshot),
       started,
     })
+    const questions: SessionEvent.Step.ParkedPayload["questions"][number][] = []
     const toolRuns: Array<{
       readonly call: ToolCall
       readonly fiber: Fiber.Fiber<void, Permission.DeclinedError | QuestionTool.CancelledError>
@@ -115,18 +119,21 @@ export const make = Effect.gen(function* () {
         Effect.flatMap((settled) => (Option.isSome(settled) ? Effect.void : interruptTools)),
       )
     })
-    const executeTool = (call: ToolCall, cancel: Cancel) => {
+    const executeTool = Effect.fnUntraced(function* (call: ToolCall, cancel: Cancel) {
       if (input.prepared.request.toolChoice?.type === "none")
-        return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
-      return input.prepared.executeTool({
+        return yield* new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
+      const invocation = {
         sessionID: input.sessionID,
         agent: input.agent,
         messageID: input.assistantMessageID,
         call,
-        progress: (update) => publisher.progress(call.id, update),
+        progress: (update: Tool.Metadata) => publisher.progress(call.id, update),
         cancel: cancel.effect,
-      })
-    }
+      }
+      return input.prepared.prepareAuthorizedQuestion
+        ? yield* input.prepared.prepareAuthorizedQuestion(invocation)
+        : { outcome: yield* input.prepared.executeTool(invocation) }
+    })
 
     // Provider and tool fibers retain per-source order without a shared writer queue.
     // A local execution starts only after its Tool.Called publication completes.
@@ -149,8 +156,15 @@ export const make = Effect.gen(function* () {
             cancel,
             fiber: yield* Effect.uninterruptibleMask((restore) =>
               restore(executeTool(event, cancel)).pipe(
-                Effect.flatMap(toolOutput.truncate),
-                Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
+                Effect.flatMap((result) => {
+                  if ("prepared" in result) {
+                    questions.push({ callID: event.id, questionID: Form.ID.create(), prepared: result.prepared })
+                    return Effect.void
+                  }
+                  return toolOutput
+                    .truncate(result.outcome)
+                    .pipe(Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)))
+                }),
                 Effect.catchTag("Tool.Error", (error) =>
                   publisher.failTool(event.id, toSessionError(error), error.metadata).pipe(Effect.asVoid),
                 ),
@@ -277,6 +291,15 @@ export const make = Effect.gen(function* () {
               ? TOOLS_INTERRUPTED
               : undefined
         if (toolFailure) yield* publisher.failUnsettledTools(toolFailure)
+        // Preparation left these calls running. A failed provider attempt must settle them,
+        // never turn its incomplete response into durable waiting work.
+        const questionFailure = llmError ?? (Exit.isFailure(stream) ? toSessionError(Cause.squash(stream.cause)) : undefined)
+        if (questionFailure)
+          yield* Effect.forEach(questions, (question) => publisher.failTool(question.callID, questionFailure), { discard: true })
+        if (questions.length > 0 && !recorded.finish && !recorded.failure && !questionFailure && !toolFailure) {
+          yield* publisher.failUnsettledTools(RESULT_MISSING)
+          yield* publisher.failAssistant(RESULT_MISSING)
+        }
         if (interrupted) yield* publisher.failAssistant(STEP_INTERRUPTED)
 
         // Parsers may leave unfinished calls without an execution event.
@@ -301,6 +324,31 @@ export const make = Effect.gen(function* () {
           const usage = record.finish ? SessionUsage.record(record.finish.usage, input.model.cost) : undefined
           if (usage) yield* Effect.annotateCurrentSpan("opencode.usage.cost_usd", usage.cost)
           if (record.failure) yield* publisher.publishStepFailure({ ...usage, snapshot, files })
+          if (
+            record.finish &&
+            usage &&
+            !record.failure &&
+            !toolFailure &&
+            Exit.isSuccess(stream) &&
+            questions.length > 0
+          ) {
+            const generation = publisher.generation()
+            if (generation === undefined) return yield* Effect.die(new Error("Question prepared before Step.Started"))
+            yield* bus.publish(SessionEvent.Step.Parked, {
+              sessionID: input.sessionID,
+              assistantMessageID: input.assistantMessageID,
+              generation,
+              step: input.step,
+              finish: record.finish.finish,
+              ...(record.finish.rawFinish === undefined ? {} : { rawFinish: record.finish.rawFinish }),
+              ...(record.finish.native === undefined ? {} : { native: record.finish.native }),
+              ...usage,
+              ...(snapshot === undefined ? {} : { snapshot }),
+              ...(files === undefined ? {} : { files }),
+              questions: [questions[0]!, ...questions.slice(1)],
+            })
+            return Outcome.Parked()
+          }
           if (record.finish && usage && !record.failure)
             yield* bus.publish(SessionEvent.Step.Ended, {
               sessionID: input.sessionID,

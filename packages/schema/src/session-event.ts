@@ -394,6 +394,8 @@ export namespace Step {
     assistantMessageID: SessionMessage.ID,
     /** Zero-based sequence of the owning session.step.started event. */
     generation: NonNegativeInt,
+    /** One-based logical Step number within the current turn; required for new parking producers. */
+    step: NonNegativeInt.pipe(optional),
     finish: FinishReason,
     rawFinish: Schema.String.pipe(optional),
     native: SessionMessage.Native.pipe(optional),
@@ -791,6 +793,7 @@ export const DurableDefinitions = Event.inventory(
   UsageRecorded,
   MessageContentUpdated,
   Step.Parked,
+  Step.Settled,
   QuestionResolution.Resolved,
 )
 export const EphemeralDefinitions = Event.inventory(

@@ -299,6 +299,7 @@ export async function session(snapshots: "on" | "off", ttft: number) {
         )
         yield* steps.attempt({
           isLocationClosed: () => false,
+          step: 1,
           sessionID,
           assistantMessageID: SessionMessage.ID.create(),
           agent: Agent.defaultID,

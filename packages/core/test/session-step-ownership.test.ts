@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
 import { and, asc, eq, sql } from "drizzle-orm"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
+import { EventTable } from "@opencode/core/event/sql"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -22,12 +23,15 @@ import { Money } from "@opencode/schema/money"
 import { Project } from "@opencode/schema/project"
 import { Provider } from "@opencode/schema/provider"
 import { AbsolutePath } from "@opencode/schema/schema"
-import { Form } from "@opencode/schema/form"
+import { Form } from "@opencode/core/form"
+import { Flag } from "@opencode/core/flag"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, Form.node]), [
     Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
@@ -44,10 +48,15 @@ const prepared = {
   },
 }
 
-const parkedData = (session: Session.ID, assistant: SessionMessage.ID, generation: number): SessionEvent.Step.ParkedPayload => ({
+const parkedData = (
+  session: Session.ID,
+  assistant: SessionMessage.ID,
+  generation: number,
+): SessionEvent.Step.ParkedPayload => ({
   sessionID: session,
   assistantMessageID: assistant,
   generation,
+  step: 1,
   finish: "tool-calls" as const,
   cost: Money.USD.make(0),
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -59,16 +68,17 @@ const seed = Effect.gen(function* () {
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-  yield* db.insert(SessionTable).values(
-    [sessionID, otherSessionID].map((id) => ({
-      id,
-      project_id: Project.ID.global,
-      slug: "ownership",
-      directory: "/project",
-      version: "test",
-    })),
-  )
   const bus = yield* Bus.Service
+  yield* Effect.forEach([sessionID, otherSessionID], (id) =>
+    bus.publish(SessionEvent.Created, {
+      sessionID: id,
+      projectID: Project.ID.global,
+      location: { directory: AbsolutePath.make("/project") },
+      slug: "ownership",
+      version: "test",
+    }),
+  )
+  yield* db.update(SessionTable).set({ time_suspended: 1 })
   const event = yield* bus.publish(SessionEvent.Step.Started, {
     sessionID,
     assistantMessageID,
@@ -91,42 +101,48 @@ const start = (sessionID: Session.ID, assistantMessageID: SessionMessage.ID) =>
     })
   })
 
-
 describe("Question resolution admission", () => {
   const questionID = Form.ID.make("frm_owner")
 
-  const setup = Effect.gen(function* () {
-    const fixture = yield* seed
-    const bus = yield* Bus.Service
-    yield* bus.publish(SessionEvent.Tool.Input.Started, {
-      sessionID,
-      assistantMessageID,
-      id: "call_owner",
-      name: "question",
+  const setup = (usage?: Pick<SessionEvent.Step.ParkedPayload, "cost" | "tokens">, sibling = false) =>
+    Effect.gen(function* () {
+      const fixture = yield* seed
+      const bus = yield* Bus.Service
+      yield* Effect.forEach(sibling ? ["call_owner", "sibling"] : ["call_owner"], (id) =>
+        Effect.gen(function* () {
+          yield* bus.publish(SessionEvent.Tool.Input.Started, {
+            sessionID,
+            assistantMessageID,
+            id,
+            name: "question",
+          })
+          yield* bus.publish(SessionEvent.Tool.Called, {
+            sessionID,
+            assistantMessageID,
+            id,
+            input: prepared.input,
+            executed: false,
+          })
+        }),
+      )
+      yield* bus.publish(SessionEvent.Step.Streamed, {
+        sessionID,
+        assistantMessageID,
+      })
+      yield* bus.publish(SessionEvent.Step.Parked, {
+        ...parkedData(sessionID, assistantMessageID, fixture.generation),
+        ...usage,
+        questions: [
+          { callID: "call_owner", questionID, prepared },
+          ...(sibling ? [{ callID: "sibling", questionID: Form.ID.make("frm_sibling"), prepared }] : []),
+        ],
+      })
+      return { ...fixture, bus }
     })
-    yield* bus.publish(SessionEvent.Tool.Called, {
-      sessionID,
-      assistantMessageID,
-      id: "call_owner",
-      input: prepared.input,
-      executed: false,
-    })
-    yield* bus.publish(SessionEvent.Step.Streamed, {
-      sessionID,
-      assistantMessageID,
-    })
-    yield* bus.publish(SessionEvent.Step.Parked, parkedData(
-      sessionID,
-      assistantMessageID,
-      fixture.generation,
-    ))
-    return { ...fixture, bus }
-  })
 
   const originalTool = Effect.gen(function* () {
     const db = (yield* Database.Service).db
-    const row = yield* db.select().from(SessionMessageTable)
-      .where(eq(SessionMessageTable.id, assistantMessageID)).get()
+    const row = yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, assistantMessageID)).get()
     if (!row) return undefined
     const [full = row] = yield* SessionHistory.withParts(db, [row])
     const message = SessionHistory.decodeMessageRowSync(full)
@@ -137,10 +153,7 @@ describe("Question resolution admission", () => {
     )
   })
 
-  const resolve = (
-    generation: number,
-    terminal: SessionEvent.QuestionResolution.Resolved["data"]["terminal"],
-  ) => ({
+  const resolve = (generation: number, terminal: SessionEvent.QuestionResolution.Resolved["data"]["terminal"]) => ({
     sessionID,
     assistantMessageID,
     generation,
@@ -149,9 +162,282 @@ describe("Question resolution admission", () => {
     terminal,
   })
 
+  for (const mode of ["inline", "part_rows"] as const) {
+    for (const message of [undefined, "Continue with defaults"] as const) {
+      it.effect(
+        `cancels sibling Questions through fresh Forms (${mode}, ${message === undefined ? "dismiss" : "feedback"})`,
+        () =>
+          Effect.gen(function* () {
+            const fixture = yield* setup(
+              {
+                cost: Money.USD.make(1.25),
+                tokens: { input: 11, output: 7, reasoning: 2, cache: { read: 3, write: 1 } },
+              },
+              true,
+            )
+            const events: string[] = []
+            const unsubscribe = yield* fixture.bus.listen((event) =>
+              Effect.sync(() => {
+                events.push(event.type)
+              }),
+            )
+            yield* Effect.addFinalizer(() => unsubscribe)
+            yield* Effect.gen(function* () {
+              const forms = yield* Form.Service
+              expect(yield* forms.list({ sessionID })).toHaveLength(2)
+              expect(yield* forms.get(questionID)).toMatchObject({
+                id: questionID,
+                metadata: {
+                  kind: "question",
+                  tool: { messageID: assistantMessageID, id: "call_owner" },
+                },
+              })
+              yield* forms.cancel(questionID, { message })
+              expect(yield* forms.state(Form.ID.make("frm_sibling"))).toEqual({
+                status: "cancelled",
+                ...(message === undefined ? {} : { message }),
+              })
+              expect(yield* forms.list({ sessionID })).toEqual([])
+              expect(yield* forms.cancel(questionID).pipe(Effect.flip)).toBeInstanceOf(Form.AlreadySettledError)
+            }).pipe(Effect.provide(Form.layer))
+            expect(yield* fixture.db.select().from(SessionPendingStepTable)).toEqual([])
+            const row = yield* fixture.db
+              .select()
+              .from(SessionMessageTable)
+              .where(eq(SessionMessageTable.id, assistantMessageID))
+              .get()
+            if (!row) throw new Error("Assistant missing")
+            const [full = row] = yield* SessionHistory.withParts(fixture.db, [row])
+            const assistant = SessionHistory.decodeMessageRowSync(full)
+            expect(assistant).toMatchObject({
+              cost: 1.25,
+              finish: "tool-calls",
+              content: [
+                {
+                  id: "call_owner",
+                  state: { status: "error", error: { message: message ?? "The user dismissed this question" } },
+                },
+                { id: "sibling", state: { status: "error" } },
+              ],
+            })
+            expect(assistant.time).toHaveProperty("completed")
+            expect(
+              yield* fixture.db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get(),
+            ).toMatchObject({
+              cost: 1.25,
+              tokens_input: 11,
+              tokens_output: 7,
+              resume_step: message === undefined ? null : 2,
+            })
+            expect(events.filter((type) => type === Form.Event.Cancelled.type)).toHaveLength(2)
+          }).pipe(
+            Effect.provide(
+              Flag.testLayer([
+                new Document({
+                  type: "document",
+                  info: new Info({
+                    experimental: new ConfigExperimental.Info({ part_rows: mode === "part_rows" }),
+                  }),
+                }),
+              ]),
+            ),
+          ),
+      )
+    }
+  }
+
+  for (const outcome of ["answered", "legacy", "feedback", "dismissed"] as const) {
+    it.effect(`replays ${outcome} parked settlement into a second database without execution hooks`, () =>
+      Effect.gen(function* () {
+        const fixture = yield* setup({
+          cost: Money.USD.make(1.25),
+          tokens: { input: 11, output: 7, reasoning: 2, cache: { read: 3, write: 1 } },
+        })
+        // This hook runs only on the source. The target replays the durable log alone.
+        yield* fixture.bus.publish(
+          SessionEvent.Execution.Started,
+          { sessionID },
+          {
+            commit: () =>
+              fixture.db
+                .update(SessionTable)
+                .set({ time_suspended: 100 })
+                .where(eq(SessionTable.id, sessionID))
+                .run()
+                .pipe(Effect.orDie),
+          },
+        )
+        yield* fixture.bus.publish(
+          SessionEvent.QuestionResolution.Resolved,
+          resolve(
+            fixture.generation,
+            outcome === "answered" || outcome === "legacy"
+              ? { status: "answered", answer: { q0: "Yes" } }
+              : { status: "cancelled", ...(outcome === "feedback" ? { message: "Continue with defaults" } : {}) },
+          ),
+        )
+        if (outcome === "answered" || outcome === "legacy")
+          yield* fixture.bus.publish(SessionEvent.Step.Settled, {
+            sessionID,
+            assistantMessageID,
+            generation: fixture.generation,
+          })
+        const history = yield* fixture.db
+          .select({
+            id: SessionMessageTable.id,
+            data: SessionMessageTable.data,
+            generation: SessionMessageTable.step_started_seq,
+            seq: SessionMessageTable.seq,
+          })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, sessionID))
+        const questions = yield* fixture.db.select().from(SessionQuestionTable)
+        const usage = yield* fixture.db
+          .select({
+            cost: SessionTable.cost,
+            step: SessionTable.resume_step,
+            input: SessionTable.tokens_input,
+            output: SessionTable.tokens_output,
+            reasoning: SessionTable.tokens_reasoning,
+            read: SessionTable.tokens_cache_read,
+            write: SessionTable.tokens_cache_write,
+          })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+        expect(usage).toMatchObject({ cost: 1.25, input: 11, output: 7, reasoning: 2, read: 3, write: 1 })
+        const recorded = (yield* fixture.db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, sessionID))
+          .orderBy(asc(EventTable.seq))).map((event) => ({
+          id: event.id,
+          created: event.created,
+          aggregateID: event.aggregate_id,
+          seq: event.seq,
+          type: event.type,
+          data:
+            outcome === "legacy" && event.type === "session.step.parked.1"
+              ? Object.fromEntries(Object.entries(event.data).filter(([key]) => key !== "step"))
+              : event.data,
+        }))
+        const target = AppNodeBuilder.build(
+          LayerNode.group([Database.node, Bus.node, SessionProjector.node, Form.node]),
+          [Database.node.replace(Database.configured()), Bus.node.replace(Bus.configured({ persist: true }))],
+        )
+        yield* Effect.gen(function* () {
+          const db = (yield* Database.Service).db
+          const bus = yield* Bus.Service
+          expect(db).not.toBe(fixture.db)
+          yield* db
+            .insert(ProjectTable)
+            .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+          yield* Effect.forEach(recorded, (event) => bus.replay(event), { discard: true })
+          expect(
+            yield* db
+              .select({
+                id: SessionMessageTable.id,
+                data: SessionMessageTable.data,
+                generation: SessionMessageTable.step_started_seq,
+                seq: SessionMessageTable.seq,
+              })
+              .from(SessionMessageTable)
+              .where(eq(SessionMessageTable.session_id, sessionID)),
+          ).toEqual(history)
+          expect(yield* db.select().from(SessionQuestionTable)).toEqual(questions)
+          expect(yield* db.select().from(SessionPendingStepTable)).toEqual([])
+          expect(
+            yield* db
+              .select({
+                cost: SessionTable.cost,
+                step: SessionTable.resume_step,
+                input: SessionTable.tokens_input,
+                output: SessionTable.tokens_output,
+                reasoning: SessionTable.tokens_reasoning,
+                read: SessionTable.tokens_cache_read,
+                write: SessionTable.tokens_cache_write,
+              })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, sessionID))
+              .get(),
+          ).toEqual(usage)
+          expect(
+            yield* db
+              .select({ claim: SessionTable.time_suspended })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, sessionID))
+              .get(),
+          ).toEqual({ claim: null })
+          // Replaying the same log must neither account nor finalize the tools again.
+          yield* Effect.forEach(recorded, (event) => bus.replay(event), { discard: true })
+          expect(
+            yield* db
+              .select({
+                id: SessionMessageTable.id,
+                data: SessionMessageTable.data,
+                generation: SessionMessageTable.step_started_seq,
+                seq: SessionMessageTable.seq,
+              })
+              .from(SessionMessageTable)
+              .where(eq(SessionMessageTable.session_id, sessionID)),
+          ).toEqual(history)
+          expect(
+            yield* db
+              .select({
+                cost: SessionTable.cost,
+                step: SessionTable.resume_step,
+                input: SessionTable.tokens_input,
+                output: SessionTable.tokens_output,
+                reasoning: SessionTable.tokens_reasoning,
+                read: SessionTable.tokens_cache_read,
+                write: SessionTable.tokens_cache_write,
+              })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, sessionID))
+              .get(),
+          ).toEqual(usage)
+        }).pipe(Effect.provide(Layer.fresh(target)))
+      }),
+    )
+  }
+
+  for (const step of [undefined, 0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER]) {
+    it.effect(`rejects new parking with logical step ${String(step)}`, () =>
+      Effect.gen(function* () {
+        const fixture = yield* seed
+        const bus = yield* Bus.Service
+        yield* bus.publish(SessionEvent.Tool.Input.Started, {
+          sessionID,
+          assistantMessageID,
+          id: "call_owner",
+          name: "question",
+        })
+        yield* bus.publish(SessionEvent.Tool.Called, {
+          sessionID,
+          assistantMessageID,
+          id: "call_owner",
+          input: {},
+          executed: false,
+        })
+        yield* bus.publish(SessionEvent.Step.Streamed, { sessionID, assistantMessageID })
+        const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+        const payload = { ...parkedData(sessionID, assistantMessageID, fixture.generation), step }
+        expect(yield* bus.publish(SessionEvent.Step.Parked, payload).pipe(Effect.exit)).toMatchObject({
+          _tag: "Failure",
+        })
+        expect(yield* bus.publishAll([[SessionEvent.Step.Parked, payload]]).pipe(Effect.exit)).toMatchObject({
+          _tag: "Failure",
+        })
+        expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+        expect(yield* fixture.db.select().from(SessionPendingStepTable)).toEqual([])
+        expect(yield* fixture.db.select().from(SessionQuestionTable)).toEqual([])
+      }),
+    )
+  }
+
   it.effect("rejects a stale settlement generation without consuming the parked Step", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setup()
       const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
 
       const result = yield* fixture.bus.publish(SessionEvent.Step.Settled, {
@@ -225,7 +511,7 @@ describe("Question resolution admission", () => {
 
   it.effect("rejects settlement while the original Question is pending", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setup()
       const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
 
       const result = yield* fixture.bus.publish(SessionEvent.Step.Settled, {
@@ -253,7 +539,7 @@ describe("Question resolution admission", () => {
 
   it.effect("rolls back parked consumption when assistant finalization fails", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setup()
       yield* fixture.bus.publish(
         SessionEvent.QuestionResolution.Resolved,
         resolve(fixture.generation, { status: "answered", answer: { q0: "Yes" } }),
@@ -298,7 +584,7 @@ describe("Question resolution admission", () => {
 
   it.effect("settles the original parked Step after its Question is answered", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setup()
       yield* fixture.bus.publish(
         SessionEvent.QuestionResolution.Resolved,
         resolve(fixture.generation, { status: "answered", answer: { q0: "Yes" } }),
@@ -345,7 +631,7 @@ describe("Question resolution admission", () => {
 
   it.effect("accepts a valid answer exactly once without advancing the sequence on duplicate", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setup()
       const input = resolve(fixture.generation, {
         status: "answered",
         answer: { q0: "Yes" },
@@ -385,7 +671,7 @@ describe("Question resolution admission", () => {
   ] as const) {
     it.effect(`rolls back ${terminal.status} when tool finalization fails`, () =>
       Effect.gen(function* () {
-        const fixture = yield* setup
+        const fixture = yield* setup()
         const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
         const waiting = yield* originalTool
         expect(waiting).toMatchObject({
@@ -422,7 +708,7 @@ describe("Question resolution admission", () => {
 
   it.effect("rejects invalid answers without changing the row or durable sequence", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setup()
       const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
       const invalid: Form.Answer[] = [
         { q0: ["Yes"] },
@@ -445,7 +731,7 @@ describe("Question resolution admission", () => {
 
   it.effect("rejects stale generations and mismatched call ownership", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setup()
       const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
       const terminal = { status: "cancelled" as const }
       for (const input of [
@@ -466,7 +752,7 @@ describe("Question resolution admission", () => {
 
   it.effect("preserves an explicitly empty cancellation message", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setup()
       yield* fixture.bus.publish(
         SessionEvent.QuestionResolution.Resolved,
         resolve(fixture.generation, { status: "cancelled", message: "" }),

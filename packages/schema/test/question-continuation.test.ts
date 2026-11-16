@@ -93,7 +93,9 @@ test("waiting is a nonterminal tool state retaining original input and metadata"
   expect(Schema.encodeSync(SessionMessage.ToolState)(decoded)).toEqual(waiting)
   expect(decoded).not.toHaveProperty("content")
   expect(decoded).not.toHaveProperty("error")
-  for (const generation of [0, -1, 1.5]) {
+  expect(Schema.decodeUnknownSync(SessionMessage.ToolState)({ ...waiting, generation: 0 })).toMatchObject({ generation: 0 })
+  expect(Schema.decodeUnknownSync(SessionEvent.Step.ParkedPayload)({ ...parked, generation: 0 })).toMatchObject({ generation: 0 })
+  for (const generation of [-1, 1.5]) {
     expect(() => Schema.decodeUnknownSync(SessionMessage.ToolState)({ ...waiting, generation })).toThrow()
     expect(() => Schema.decodeUnknownSync(SessionEvent.Step.ParkedPayload)({ ...parked, generation })).toThrow()
   }

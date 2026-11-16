@@ -52,7 +52,11 @@ type MessageEvent = Exclude<
   | SessionEvent.QuestionResolution.Resolved
 >
 
-type StorageEvent = MessageEvent | SessionEvent.Step.Parked | SessionEvent.Step.Settled | SessionEvent.QuestionResolution.Resolved
+type StorageEvent =
+  | MessageEvent
+  | SessionEvent.Step.Parked
+  | SessionEvent.Step.Settled
+  | SessionEvent.QuestionResolution.Resolved
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const encodeStoredUser = Schema.encodeSync(SessionStored.User)
@@ -423,84 +427,136 @@ const projectParked = Effect.fnUntraced(function* (db: DatabaseService, event: S
  * and its original tool has been durably finalized.
  * The event bus owns the surrounding transaction.
  */
-const projectStepSettled = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  event: SessionEvent.Step.Settled,
-) {
+const projectStepSettled = Effect.fnUntraced(function* (db: DatabaseService, event: SessionEvent.Step.Settled) {
   const data = event.data
-  const conflict = (message: string) =>
-    Effect.die(new SessionParking.ConflictError({ message }))
+  const conflict = (message: string) => Effect.die(new SessionParking.ConflictError({ message }))
 
-  const pending = yield* db.select().from(SessionPendingStepTable).where(and(
-    eq(SessionPendingStepTable.session_id, data.sessionID),
-    eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
-    eq(SessionPendingStepTable.generation, data.generation),
-  )).get().pipe(Effect.orDie)
+  const pending = yield* db
+    .select()
+    .from(SessionPendingStepTable)
+    .where(
+      and(
+        eq(SessionPendingStepTable.session_id, data.sessionID),
+        eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
+        eq(SessionPendingStepTable.generation, data.generation),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
   if (!pending) return yield* conflict("Original parked Step is missing or already settled")
 
   const parked = Schema.decodeUnknownSync(SessionEvent.Step.ParkedPayload)(pending.data)
-  if (parked.questions.length === 0)
-    return yield* conflict("Parked Step has no Questions")
+  if (parked.questions.length === 0) return yield* conflict("Parked Step has no Questions")
+  // Legacy v1 parking omitted the cursor before logical Step recovery existed.
+  const step = parked.step ?? 1
+  if (!Number.isSafeInteger(step) || step < 1 || step >= Number.MAX_SAFE_INTEGER)
+    return yield* conflict("Parked Step has no valid continuation cursor")
 
-  const owner = yield* db.select().from(SessionMessageTable).where(and(
-    eq(SessionMessageTable.session_id, data.sessionID),
-    eq(SessionMessageTable.id, data.assistantMessageID),
-    eq(SessionMessageTable.type, "assistant"),
-    eq(SessionMessageTable.step_started_seq, data.generation),
-  )).get().pipe(Effect.orDie)
+  const owner = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, data.sessionID),
+        eq(SessionMessageTable.id, data.assistantMessageID),
+        eq(SessionMessageTable.type, "assistant"),
+        eq(SessionMessageTable.step_started_seq, data.generation),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
   if (!owner) return yield* conflict("Parked Step owner generation does not match")
 
   const [full = owner] = yield* SessionHistory.withParts(db, [owner])
   const assistant = SessionHistory.decodeMessageRowSync(full)
-  if (assistant.type !== "assistant" || assistant.time.streamed === undefined ||
-    assistant.time.completed !== undefined || assistant.finish !== undefined ||
-    assistant.error !== undefined)
+  if (
+    assistant.type !== "assistant" ||
+    assistant.time.streamed === undefined ||
+    assistant.time.completed !== undefined ||
+    assistant.finish !== undefined ||
+    assistant.error !== undefined
+  )
     return yield* conflict("Parked Step owner is not a streamed, nonterminal assistant")
 
   for (const item of parked.questions) {
-    const question = yield* db.select().from(SessionQuestionTable).where(and(
-      eq(SessionQuestionTable.id, item.questionID),
-      eq(SessionQuestionTable.session_id, data.sessionID),
-      eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
-      eq(SessionQuestionTable.generation, data.generation),
-      eq(SessionQuestionTable.call_id, item.callID),
-      eq(SessionQuestionTable.status, "answered"),
-    )).get().pipe(Effect.orDie)
+    const question = yield* db
+      .select()
+      .from(SessionQuestionTable)
+      .where(
+        and(
+          eq(SessionQuestionTable.id, item.questionID),
+          eq(SessionQuestionTable.session_id, data.sessionID),
+          eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+          eq(SessionQuestionTable.generation, data.generation),
+          eq(SessionQuestionTable.call_id, item.callID),
+          eq(SessionQuestionTable.status, "answered"),
+        ),
+      )
+      .get()
+      .pipe(Effect.orDie)
     if (!question) return yield* conflict("Parked Step has an unresolved or mismatched Question")
 
     const tool = assistant.content.find((part) => part.type === "tool" && part.id === item.callID)
-    if (!tool || tool.type !== "tool" || tool.state.status !== "completed" ||
-      tool.executed !== false || tool.time.completed === undefined)
+    if (
+      !tool ||
+      tool.type !== "tool" ||
+      tool.state.status !== "completed" ||
+      tool.executed !== false ||
+      tool.time.completed === undefined
+    )
       return yield* conflict("Original Question tool has not been completed")
   }
 
-  const consumed = yield* db.delete(SessionPendingStepTable).where(and(
-    eq(SessionPendingStepTable.session_id, data.sessionID),
-    eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
-    eq(SessionPendingStepTable.generation, data.generation),
-  )).returning({ sessionID: SessionPendingStepTable.session_id }).get().pipe(Effect.orDie)
+  const consumed = yield* db
+    .delete(SessionPendingStepTable)
+    .where(
+      and(
+        eq(SessionPendingStepTable.session_id, data.sessionID),
+        eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
+        eq(SessionPendingStepTable.generation, data.generation),
+      ),
+    )
+    .returning({ sessionID: SessionPendingStepTable.session_id })
+    .get()
+    .pipe(Effect.orDie)
   if (!consumed) return yield* conflict("Parked Step was concurrently consumed")
 
   const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
-  yield* writes.updateAssistant(produce(assistant, (draft) => {
-    draft.time.completed = DateTime.makeUnsafe(event.created)
-    draft.finish = parked.finish
-    draft.rawFinish = parked.rawFinish
-    draft.native = castDraft(parked.native)
-    draft.cost = parked.cost
-    draft.tokens = castDraft(parked.tokens)
-    if (parked.snapshot || parked.files)
-      draft.snapshot = {
-        ...draft.snapshot,
-        end: parked.snapshot,
-        files: parked.files ? Array.from(parked.files) : undefined,
-      }
-  }))
+  yield* writes.updateAssistant(
+    produce(assistant, (draft) => {
+      draft.time.completed = DateTime.makeUnsafe(event.created)
+      draft.finish = parked.finish
+      draft.rawFinish = parked.rawFinish
+      draft.native = castDraft(parked.native)
+      draft.cost = parked.cost
+      draft.tokens = castDraft(parked.tokens)
+      if (parked.snapshot || parked.files)
+        draft.snapshot = {
+          ...draft.snapshot,
+          end: parked.snapshot,
+          files: parked.files ? Array.from(parked.files) : undefined,
+        }
+    }),
+  )
 
-  yield* applyUsage(db, data.sessionID, {
-    cost: parked.cost,
-    tokens: parked.tokens,
-  }, event.created)
+  yield* applyUsage(
+    db,
+    data.sessionID,
+    {
+      cost: parked.cost,
+      tokens: parked.tokens,
+    },
+    event.created,
+  )
+
+  const cursor = yield* db
+    .update(SessionTable)
+    .set({ resume_step: step + 1 })
+    .where(and(eq(SessionTable.id, data.sessionID), isNull(SessionTable.resume_step)))
+    .returning({ id: SessionTable.id })
+    .get()
+    .pipe(Effect.orDie)
+  if (!cursor) return yield* conflict("Parked Step continuation cursor is already assigned")
 })
 
 /** Atomically admit the resolution and finalize the original tool when it has a materialized outcome. */
@@ -509,46 +565,72 @@ const projectQuestionResolved = Effect.fnUntraced(function* (
   event: SessionEvent.QuestionResolution.Resolved,
 ) {
   const data = event.data
-  const conflict = (message: string) =>
-    Effect.die(new SessionParking.ConflictError({ message }))
+  const conflict = (message: string) => Effect.die(new SessionParking.ConflictError({ message }))
 
-  const pending = yield* db.select().from(SessionPendingStepTable).where(and(
-    eq(SessionPendingStepTable.session_id, data.sessionID),
-    eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
-    eq(SessionPendingStepTable.generation, data.generation),
-  )).get().pipe(Effect.orDie)
+  const pending = yield* db
+    .select()
+    .from(SessionPendingStepTable)
+    .where(
+      and(
+        eq(SessionPendingStepTable.session_id, data.sessionID),
+        eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
+        eq(SessionPendingStepTable.generation, data.generation),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
   if (!pending) return yield* conflict("Question resolution requires its original pending Step")
 
-  const question = yield* db.select().from(SessionQuestionTable).where(and(
-    eq(SessionQuestionTable.id, data.questionID),
-    eq(SessionQuestionTable.session_id, data.sessionID),
-    eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
-    eq(SessionQuestionTable.generation, data.generation),
-    eq(SessionQuestionTable.call_id, data.callID),
-    eq(SessionQuestionTable.status, "pending"),
-  )).get().pipe(Effect.orDie)
+  const question = yield* db
+    .select()
+    .from(SessionQuestionTable)
+    .where(
+      and(
+        eq(SessionQuestionTable.id, data.questionID),
+        eq(SessionQuestionTable.session_id, data.sessionID),
+        eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+        eq(SessionQuestionTable.generation, data.generation),
+        eq(SessionQuestionTable.call_id, data.callID),
+        eq(SessionQuestionTable.status, "pending"),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
   if (!question) return yield* conflict("Question is missing, stale, or already resolved")
 
-  const owner = yield* db.select().from(SessionMessageTable).where(and(
-    eq(SessionMessageTable.session_id, data.sessionID),
-    eq(SessionMessageTable.id, data.assistantMessageID),
-    eq(SessionMessageTable.type, "assistant"),
-    eq(SessionMessageTable.step_started_seq, data.generation),
-  )).get().pipe(Effect.orDie)
+  const owner = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, data.sessionID),
+        eq(SessionMessageTable.id, data.assistantMessageID),
+        eq(SessionMessageTable.type, "assistant"),
+        eq(SessionMessageTable.step_started_seq, data.generation),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
   if (!owner) return yield* conflict("Question owner generation does not match")
 
-  if (question.prepared.adapter !== "question@1")
-    return yield* conflict("Unsupported Question continuation adapter")
+  if (question.prepared.adapter !== "question@1") return yield* conflict("Unsupported Question continuation adapter")
 
   const [full = owner] = yield* SessionHistory.withParts(db, [owner])
   const assistant = SessionHistory.decodeMessageRowSync(full)
-  const call = assistant.type === "assistant"
-    ? assistant.content.find((part) => part.type === "tool" && part.id === data.callID)
-    : undefined
+  const call =
+    assistant.type === "assistant"
+      ? assistant.content.find((part) => part.type === "tool" && part.id === data.callID)
+      : undefined
 
-  if (!call || call.type !== "tool" || call.state.status !== "waiting" ||
-    call.state.questionID !== data.questionID || call.state.generation !== data.generation ||
-    call.executed !== false || call.time.completed !== undefined)
+  if (
+    !call ||
+    call.type !== "tool" ||
+    call.state.status !== "waiting" ||
+    call.state.questionID !== data.questionID ||
+    call.state.generation !== data.generation ||
+    call.executed !== false ||
+    call.time.completed !== undefined
+  )
     return yield* conflict("Original Question tool is missing or no longer waiting")
 
   if (data.terminal.status === "answered") {
@@ -557,78 +639,107 @@ const projectQuestionResolved = Effect.fnUntraced(function* (
     if (invalid) return yield* conflict(`Invalid Question answer: ${invalid}`)
   }
 
-  const updated = yield* db.update(SessionQuestionTable).set(
-    data.terminal.status === "answered"
-      ? { status: "answered", answer: data.terminal.answer, cancel_message: null }
-      : { status: "cancelled", answer: null, cancel_message: data.terminal.message ?? null },
-  ).where(and(
-    eq(SessionQuestionTable.id, data.questionID),
-    eq(SessionQuestionTable.session_id, data.sessionID),
-    eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
-    eq(SessionQuestionTable.generation, data.generation),
-    eq(SessionQuestionTable.call_id, data.callID),
-    eq(SessionQuestionTable.status, "pending"),
-  )).returning({ id: SessionQuestionTable.id }).get().pipe(Effect.orDie)
-
-  if (!updated) return yield* conflict("Question was concurrently resolved")
-
-  if (data.terminal.status === "answered" ||
-    (data.terminal.status === "cancelled" && data.terminal.message !== undefined)) {
-    const terminal = data.terminal
-    const restored = terminal.status === "answered"
-      ? yield* QuestionTool.restore(question.prepared, terminal).pipe(Effect.orDie)
-      : undefined
-    if (restored && restored.content.length === 0)
-      return yield* conflict("Question restoration produced empty content")
-
+  if (data.terminal.status === "cancelled") {
+    const parked = Schema.decodeUnknownSync(SessionEvent.Step.ParkedPayload)(pending.data)
+    const message = data.terminal.message ?? "The user dismissed this question"
+    const feedback = data.terminal.message !== undefined
     const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
-    yield* writes.updateAssistantPart(data.assistantMessageID, { type: "tool", callID: data.callID }, (part) => {
-      if (part.state.status !== "waiting" ||
-        part.state.questionID !== data.questionID || part.state.generation !== data.generation)
-        return
-
-      part.time.completed = DateTime.makeUnsafe(event.created)
-      if (terminal.status === "cancelled") {
+    yield* db
+      .update(SessionQuestionTable)
+      .set({ status: "cancelled", cancel_message: data.terminal.message ?? null })
+      .where(
+        and(
+          eq(SessionQuestionTable.session_id, data.sessionID),
+          eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+          eq(SessionQuestionTable.generation, data.generation),
+          eq(SessionQuestionTable.status, "pending"),
+        ),
+      )
+      .run()
+      .pipe(Effect.orDie)
+    if (assistant.type !== "assistant") return yield* conflict("Question owner is not an assistant")
+    const finalized = produce(assistant, (draft) => {
+      for (const part of draft.content) {
+        if (part.type !== "tool" || part.state.status !== "waiting") continue
+        part.time.completed = DateTime.makeUnsafe(event.created)
         part.state = {
           status: "error",
           input: part.state.input,
-          error: { type: "QuestionTool.Cancelled", message: terminal.message! },
-        }
-      } else if (restored) {
-        const content = restored.content
-        part.state = {
-          status: "completed",
-          input: part.state.input,
-          content: [castDraft(content[0]!), ...content.slice(1).map(castDraft)],
-          metadata: restored.metadata,
+          error: { type: feedback ? "QuestionTool.Cancelled" : "aborted", message },
         }
       }
+      draft.time.completed = DateTime.makeUnsafe(event.created)
+      draft.finish = parked.finish
+      draft.rawFinish = parked.rawFinish
+      draft.native = castDraft(parked.native)
+      draft.cost = parked.cost
+      draft.tokens = castDraft(parked.tokens)
+      if (!feedback) draft.error = { type: "aborted", message }
+      if (parked.snapshot || parked.files)
+        draft.snapshot = {
+          ...draft.snapshot,
+          end: parked.snapshot,
+          files: parked.files ? Array.from(parked.files) : undefined,
+        }
     })
-
-    const persisted = yield* db.select().from(SessionMessageTable).where(and(
-      eq(SessionMessageTable.session_id, data.sessionID),
-      eq(SessionMessageTable.id, data.assistantMessageID),
-      eq(SessionMessageTable.type, "assistant"),
-    )).get().pipe(Effect.orDie)
-    if (!persisted) return yield* conflict("Question tool owner disappeared during finalization")
-    const [persistedFull = persisted] = yield* SessionHistory.withParts(db, [persisted])
-    const persistedAssistant = SessionHistory.decodeMessageRowSync(persistedFull)
-    const persistedCall = persistedAssistant.type === "assistant"
-      ? persistedAssistant.content.find((part) => part.type === "tool" && part.id === data.callID)
-      : undefined
-
-    if (!persistedCall || persistedCall.type !== "tool" ||
-      persistedCall.state.status !== (terminal.status === "answered" ? "completed" : "error") ||
-      persistedCall.time.completed === undefined ||
-      DateTime.toEpochMillis(persistedCall.time.completed) !== event.created)
-      return yield* conflict("Original Question tool finalization was not persisted")
-
-    if (terminal.status === "cancelled" &&
-      (persistedCall.state.status !== "error" ||
-        persistedCall.state.error.type !== "QuestionTool.Cancelled" ||
-        persistedCall.state.error.message !== terminal.message))
-      return yield* conflict("Question cancellation feedback was not persisted")
+    // Envelope-only writes deliberately preserve part rows. Persist cancelled
+    // tool parts through the content writer before finalizing the envelope.
+    yield* writes.replaceAssistantParts(data.assistantMessageID, finalized.content)
+    yield* writes.updateAssistant(finalized)
+    yield* applyUsage(db, data.sessionID, parked, event.created)
+    yield* db
+      .delete(SessionPendingStepTable)
+      .where(eq(SessionPendingStepTable.session_id, data.sessionID))
+      .run()
+      .pipe(Effect.orDie)
+    yield* setSession(
+      db,
+      data.sessionID,
+      feedback
+        ? { resume_step: (parked.step ?? 1) + 1 }
+        : {
+            resume_step: null,
+            time_suspended: null,
+            resume_attempts: 0,
+            time_idle: sql`max(${event.created}, coalesce(${SessionTable.time_idle} + 1, ${event.created}))`,
+            idle_outcome: "interrupted",
+          },
+    )
+    return
   }
+
+  const updated = yield* db
+    .update(SessionQuestionTable)
+    .set({ status: "answered", answer: data.terminal.answer, cancel_message: null })
+    .where(
+      and(
+        eq(SessionQuestionTable.id, data.questionID),
+        eq(SessionQuestionTable.session_id, data.sessionID),
+        eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+        eq(SessionQuestionTable.generation, data.generation),
+        eq(SessionQuestionTable.call_id, data.callID),
+        eq(SessionQuestionTable.status, "pending"),
+      ),
+    )
+    .returning({ id: SessionQuestionTable.id })
+    .get()
+    .pipe(Effect.orDie)
+
+  if (!updated) return yield* conflict("Question was concurrently resolved")
+
+  const restored = yield* QuestionTool.restore(question.prepared, data.terminal).pipe(Effect.orDie)
+  if (restored.content.length === 0) return yield* conflict("Question restoration produced empty content")
+  const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
+  yield* writes.updateAssistantPart(data.assistantMessageID, { type: "tool", callID: data.callID }, (part) => {
+    if (part.state.status !== "waiting") return
+    part.time.completed = DateTime.makeUnsafe(event.created)
+    part.state = {
+      status: "completed",
+      input: part.state.input,
+      content: [castDraft(restored.content[0]!), ...restored.content.slice(1).map(castDraft)],
+      metadata: restored.metadata,
+    }
+  })
 })
 
 function run(db: DatabaseService, event: MessageEvent) {
@@ -638,16 +749,29 @@ function run(db: DatabaseService, event: MessageEvent) {
       event.type === SessionEvent.Tool.Success.type ||
       event.type === SessionEvent.Tool.Failed.type
     ) {
-      const row = yield* db.select().from(SessionMessageTable).where(and(
-        eq(SessionMessageTable.session_id, event.data.sessionID),
-        eq(SessionMessageTable.id, event.data.assistantMessageID),
-        eq(SessionMessageTable.type, "assistant"),
-      )).get().pipe(Effect.orDie)
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(
+          and(
+            eq(SessionMessageTable.session_id, event.data.sessionID),
+            eq(SessionMessageTable.id, event.data.assistantMessageID),
+            eq(SessionMessageTable.type, "assistant"),
+          ),
+        )
+        .get()
+        .pipe(Effect.orDie)
       const [full] = yield* SessionHistory.withParts(db, row ? [row] : [])
       const assistant = full ? SessionHistory.decodeMessageRowSync(full) : undefined
-      if (assistant?.type === "assistant" && assistant.content.some(
-        (part) => part.type === "tool" && part.id === event.data.id && part.state.status === "waiting",
-      )) return yield* Effect.die(new SessionParking.ConflictError({ message: "Waiting calls cannot be called or settled" }))
+      if (
+        assistant?.type === "assistant" &&
+        assistant.content.some(
+          (part) => part.type === "tool" && part.id === event.data.id && part.state.status === "waiting",
+        )
+      )
+        return yield* Effect.die(
+          new SessionParking.ConflictError({ message: "Waiting calls cannot be called or settled" }),
+        )
     }
     const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
     const adapter: SessionMessageUpdater.Adapter = {
@@ -1324,6 +1448,12 @@ const layer = Layer.effectDiscard(
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
         })
+        // Replace a saved allowance atomically with promotion. Without a saved
+        // continuation the default is already Step 1, including control-only drains.
+        if (input.type === "user" || input.type === "synthetic")
+          yield* setSession(db, event.data.sessionID, {
+            resume_step: sql`case when ${SessionTable.resume_step} is not null then 1 end`,
+          })
         const time = { created: DateTime.makeUnsafe(event.created) }
         if (input.type === "user")
           yield* insertMessage(db, event, {
@@ -1416,6 +1546,17 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         if (owners.length !== 1)
           return yield* Effect.die(new Error("Step.Started requires exactly one assistant owner and no pending Step"))
+
+        // Step.Started and consumption of the durable continuation cursor
+        // commit together. A crash before this event retains the cursor;
+        // a committed successor Step must never replay it.
+        yield* db
+          .update(SessionTable)
+          .set({ resume_step: null })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+
         yield* touch(db, event)
       }),
     )
@@ -1502,17 +1643,87 @@ const layer = Layer.effectDiscard(
         yield* SessionBlob.releaseFrom(db, event.data.sessionID, boundary.seq)
       }),
     )
-    yield* bus.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed, SessionEvent.UsageRecorded]).pipe(
-      Stream.runForEach((event) => {
-        if (
-          event.type === SessionEvent.Step.Failed.type &&
-          (event.data.cost === undefined || event.data.tokens === undefined)
-        )
-          return Effect.void
-        return publishSessionUsage(db, bus, event.data.sessionID)
-      }),
+    yield* bus.subscribe([SessionEvent.Step.Parked, SessionEvent.QuestionResolution.Resolved]).pipe(
+      Stream.runForEach((event) =>
+        Effect.gen(function* () {
+          if (event.type === SessionEvent.Step.Parked.type) {
+            const data = event.data
+            const questions = yield* db
+              .select()
+              .from(SessionQuestionTable)
+              .where(
+                and(
+                  eq(SessionQuestionTable.session_id, data.sessionID),
+                  eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+                  eq(SessionQuestionTable.generation, data.generation),
+                ),
+              )
+              .all()
+              .pipe(Effect.orDie)
+            yield* Effect.forEach(
+              questions,
+              (question) =>
+                bus.publish(Form.Event.Created, {
+                  form: Form.fromQuestion(question),
+                }),
+              { discard: true },
+            )
+          }
+          if (event.type !== SessionEvent.QuestionResolution.Resolved.type) return
+          const data = event.data
+          if (data.terminal.status === "answered") {
+            yield* bus.publish(Form.Event.Replied, {
+              id: data.questionID,
+              sessionID: data.sessionID,
+              answer: data.terminal.answer,
+            })
+            return
+          }
+          const questions = yield* db
+            .select()
+            .from(SessionQuestionTable)
+            .where(
+              and(
+                eq(SessionQuestionTable.session_id, data.sessionID),
+                eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+                eq(SessionQuestionTable.generation, data.generation),
+                eq(SessionQuestionTable.status, "cancelled"),
+              ),
+            )
+            .all()
+            .pipe(Effect.orDie)
+          yield* Effect.forEach(
+            questions,
+            (question) =>
+              bus.publish(Form.Event.Cancelled, {
+                id: question.id,
+                sessionID: question.session_id,
+              }),
+            { discard: true },
+          )
+          yield* publishSessionUsage(db, bus, data.sessionID)
+        }),
+      ),
       Effect.forkScoped({ startImmediately: true }),
     )
+    yield* bus
+      .subscribe([
+        SessionEvent.Step.Ended,
+        SessionEvent.Step.Failed,
+        SessionEvent.Step.Settled,
+        SessionEvent.UsageRecorded,
+      ])
+      .pipe(
+        Stream.runForEach((event) => {
+          if (
+            event.type === SessionEvent.Step.Failed.type &&
+            (event.data.cost === undefined || event.data.tokens === undefined)
+          )
+            return Effect.void
+          return publishSessionUsage(db, bus, event.data.sessionID)
+        }),
+        Effect.forkScoped({ startImmediately: true }),
+      )
   }),
 )
 

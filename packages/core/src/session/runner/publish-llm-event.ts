@@ -120,6 +120,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     return { metadata: { ...tool.progress, ...metadata } }
   }
   const assistantMessageID = input.assistantMessageID
+  let generation: number | undefined
   let stepStarted = false
   let providerFailed = false
   let outputStarted = false
@@ -132,7 +133,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     // Check again after the await, so the check and the mark below never straddle a yield.
     if (stepStarted) return assistantMessageID
     stepStarted = true
-    yield* bus.publish(SessionEvent.Step.Started, {
+    const event = yield* bus.publish(SessionEvent.Step.Started, {
       sessionID: input.sessionID,
       agent: input.agent,
       model: input.model,
@@ -140,6 +141,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       snapshot,
       started: input.started,
     })
+    generation = event.durable.seq
     return assistantMessageID
   })
   const currentAssistantMessageID = () =>
@@ -606,6 +608,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     failUnsettledTools,
     failIncompleteTools,
     hasStarted: () => stepStarted,
+    generation: () => generation,
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({
       outputStarted,

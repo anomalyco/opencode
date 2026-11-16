@@ -47,8 +47,11 @@ const projectTerminalSnapshot = (draft: DraftAssistant, event: SessionEvent.Step
     }
 }
 
-// Parked has a private transactional SQL projector, outside the ordinary message fold.
-type ProjectedEvent = Exclude<SessionEvent.DurableEvent, SessionEvent.Step.Parked>
+// Question parking and settlement have private transactional SQL projectors.
+type ProjectedEvent = Exclude<
+  SessionEvent.DurableEvent,
+  SessionEvent.Step.Parked | SessionEvent.Step.Settled
+>
 
 export function update(adapter: Adapter, event: ProjectedEvent) {
   const created = DateTime.makeUnsafe(event.created)

@@ -509,6 +509,14 @@ export function configured(options?: Options) {
 
         const makePayload = (definition: Event.Definition, data: unknown, options: PublishOptions | undefined) =>
           Effect.gen(function* () {
+            // New parking requires a resumable logical Step. Stored v1 events may omit it;
+            // replay decodes those separately and never passes through makePayload.
+            if (definition.type === SessionEvent.Step.Parked.type)
+              Schema.decodeUnknownSync(
+                Schema.Struct({
+                  step: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER - 1 })),
+                }),
+              )(data)
             const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
             const location = options?.global
               ? undefined

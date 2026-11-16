@@ -1448,6 +1448,7 @@ export type ExperimentalSessionLogOutput =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly generation: number
+            readonly step?: number | undefined
             readonly finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
             readonly rawFinish?: string | undefined
             readonly native?: SessionMessage.Native | undefined
@@ -1478,6 +1479,41 @@ export type ExperimentalSessionLogOutput =
                 }
               }>,
             ]
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.step.settled"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly assistantMessageID: SessionMessage.ID
+            readonly generation: number
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.question.resolved"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly assistantMessageID: SessionMessage.ID
+            readonly generation: number
+            readonly questionID: Form.ID
+            readonly callID: string
+            readonly terminal:
+              | { readonly status: "answered"; readonly answer: Form.Answer }
+              | { readonly status: "cancelled"; readonly message?: string | undefined }
           }
         }
     )

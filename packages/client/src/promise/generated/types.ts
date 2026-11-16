@@ -185,6 +185,8 @@ export type QuestionPrompt = {
   multiple?: boolean
 }
 
+export type FormValue1 = string | number | boolean | Array<string>
+
 export type ModelType = "chat" | "decision" | "image" | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
@@ -312,8 +314,6 @@ export type PtyID = string
 export type FormMetadata1 = { [x: string]: any }
 
 export type FormWhen1 = { key: string; op: "eq" | "neq"; value: string | number | boolean }
-
-export type FormValue1 = string | number | boolean | Array<string>
 
 export type SessionStatus =
   | { type: "idle" }
@@ -714,6 +714,8 @@ export type ToolContent1 = ToolTextContent | ToolFileContent1
 
 export type QuestionContinuationInput = { questions: Array<QuestionPrompt> }
 
+export type FormAnswer1 = { [x: string]: FormValue1 }
+
 export type ModelCompatibility = {
   reasoningField?: ModelReasoningField
   requireReasoning?: boolean
@@ -953,8 +955,6 @@ export type FormMultiselectField1 = {
   custom?: boolean
   default?: Array<string>
 }
-
-export type FormAnswer1 = { [x: string]: FormValue1 }
 
 export type ScheduleWhenIn = { type: "in"; in: ScheduleDuration; tz?: string }
 
@@ -1702,6 +1702,16 @@ export type SessionUsageRecorded = {
   data: { sessionID: SessionID; source: "title" | "compaction" | "generate"; cost: MoneyUSD; tokens: TokenUsageInfo }
 }
 
+export type SessionStepSettled = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.step.settled"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; assistantMessageID: SessionMessageID; generation: number }
+}
+
 export type LocationShutdown = {
   id: EventID
   created: number
@@ -2222,6 +2232,32 @@ export type SessionMessageToolStateError1 = {
 
 export type QuestionContinuationPrepared = { adapter: "question@1"; input: QuestionContinuationInput }
 
+export type SessionQuestionResolved = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.question.resolved"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: SessionID
+    assistantMessageID: SessionMessageID
+    generation: number
+    questionID: FormID
+    callID: string
+    terminal: { status: "answered"; answer: FormAnswer1 } | { status: "cancelled"; message?: string }
+  }
+}
+
+export type FormReplied = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "form.replied"
+  location?: LocationRef
+  data: { id: FormID; sessionID: string; answer: FormAnswer1 }
+}
+
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer
   | GenerateChoiceAnswer
@@ -2286,15 +2322,6 @@ export type FormField1 =
   | FormBooleanField1
   | FormMultiselectField1
   | FormExternalField
-
-export type FormReplied = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "form.replied"
-  location?: LocationRef
-  data: { id: FormID; sessionID: string; answer: FormAnswer1 }
-}
 
 export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
 
@@ -2710,6 +2737,7 @@ export type SessionStepParked = {
     sessionID: SessionID
     assistantMessageID: SessionMessageID
     generation: number
+    step?: number
     finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
     rawFinish?: string
     native?: SessionMessageNative1
@@ -2940,6 +2968,8 @@ export type SessionEventDurable =
   | SessionUsageRecorded
   | SessionMessageContentUpdated
   | SessionStepParked
+  | SessionStepSettled
+  | SessionQuestionResolved
 
 export type V2Event =
   | LocationShutdown

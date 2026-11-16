@@ -86,6 +86,75 @@ const invocation = (input: unknown = questionInput): Parameters<Tool.Snapshot["e
 })
 
 describe("QuestionTool", () => {
+  it.effect("authorizes and prepares post-hook input once without asking a Form", () =>
+    Effect.gen(function* () {
+      assertions.length = 0
+      asks.length = 0
+      deny = false
+      const registry = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      const calls: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          calls.push(event.id)
+          event.tool = "question"
+          event.input = questionInput
+        }),
+      )
+      const snapshot = yield* registry.snapshot()
+      if (!snapshot.prepareAuthorizedQuestion) throw new Error("Missing authorized preparation")
+      const input = { ...invocation({}), call: { ...invocation({}).call, name: "repair-me" } }
+      expect(yield* snapshot.prepareAuthorizedQuestion(input)).toEqual({
+        prepared: { adapter: "question@1", input: questionInput },
+      })
+      expect(calls).toEqual([input.call.id])
+      expect(assertions).toHaveLength(1)
+      expect(assertions[0]).toMatchObject({
+        action: "question",
+        resources: ["*"],
+        sessionID,
+        source: { type: "tool", messageID: input.messageID, id: input.call.id },
+      })
+      expect(asks).toEqual([])
+    }),
+  )
+
+  it.effect("executes the ordinary Question once when after-hooks prevent parking", () =>
+    Effect.gen(function* () {
+      assertions.length = 0
+      asks.length = 0
+      deny = false
+      reject = false
+      terminal = { status: "answered", answer: { q0: "Yes" } }
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          terminal = undefined
+        }),
+      )
+      const hooks = yield* PluginHooks.Service
+      const calls: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          calls.push(event.id)
+        }),
+      )
+      yield* hooks.register("tool", "execute.after", (event) =>
+        Effect.sync(() => {
+          calls.push(event.id)
+        }),
+      )
+      const registry = yield* Tool.Service
+      const snapshot = yield* registry.snapshot()
+      if (!snapshot.prepareAuthorizedQuestion) throw new Error("Missing authorized preparation")
+      expect(yield* snapshot.prepareAuthorizedQuestion(invocation())).toMatchObject({
+        outcome: { output: { answers: [["Yes"]] } },
+      })
+      expect(calls).toEqual(["call-continuation", "call-continuation"])
+      expect(assertions).toHaveLength(1)
+      expect(asks).toHaveLength(1)
+    }),
+  )
+
   test("re-exports the exact canonical continuation schemas", () => {
     expect(QuestionTool.Input).toBe(QuestionContinuation.Input)
     expect(QuestionTool.Prepared).toBe(QuestionContinuation.Prepared)

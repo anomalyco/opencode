@@ -2,6 +2,7 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect, test } from "bun:test"
 import { AIError, TransportError } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
+import { Form } from "@opencode/schema/form"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -22,7 +23,7 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
-import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionInboxTable, SessionPendingStepTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Shell } from "@opencode/core/shell"
 import { Agent } from "@opencode/core/agent"
@@ -41,6 +42,39 @@ const it = testEffect(
 )
 
 describe("SessionExecution lifecycle", () => {
+  it.effect("keeps a parked Question claimed across execution and restart without consuming attempts", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_parked_restart")
+      yield* seedSessions(database, [sessionID], { time_suspended: 1, resume_attempts: 10 })
+      yield* seedParkedQuestion(bus, sessionID)
+      const original = yield* database.db.select().from(SessionPendingStepTable).get()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const drained = yield* Deferred.make<void>()
+      const runs: string[] = []
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.sync(() => {
+          runs.push(input.sessionID)
+          if (runs.length === 2) Deferred.doneUnsafe(drained, Exit.void)
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(sessionID)
+      expect(yield* claims(database)).toEqual({ [sessionID]: true })
+      const sequence = yield* Bus.latestSequence(database.db, sessionID)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Deferred.await(drained)
+      yield* execution.awaitIdle(sessionID)
+      expect(yield* claims(database)).toEqual({ [sessionID]: true })
+      expect(yield* attempts(database, sessionID)).toBe(10)
+      expect(yield* database.db.select().from(SessionPendingStepTable).get()).toEqual(original)
+      // Only Execution.Started may be added: no terminal or restart notice.
+      expect(yield* Bus.latestSequence(database.db, sessionID)).toBe(sequence + 1)
+    }),
+  )
+
   test("classifies success and typed failure terminals", () => {
     expect(SessionExecution.terminal(Exit.succeed(undefined))).toEqual({ type: "succeeded" })
     expect(
@@ -96,6 +130,53 @@ describe("SessionExecution lifecycle", () => {
       expect(yield* claims(database)).toEqual({ [parent]: false, [child]: false, [idle]: false })
     }),
   )
+
+  for (const reason of ["user", "shutdown"] as const) {
+    it.effect(`preserves the claim when ${reason} interruption races with final parking publication`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        const sessionID = Session.ID.make(`ses_parking_stop_${reason}`)
+        yield* seedSessions(database, [sessionID])
+        const committed = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const unsubscribe = yield* bus.listen((event) =>
+          event.type === SessionEvent.Step.Parked.type
+            ? Deferred.succeed(committed, undefined).pipe(Effect.andThen(Deferred.await(release)))
+            : Effect.void,
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const context = yield* buildExecution(scope, () => seedParkedQuestion(bus, sessionID))
+        const execution = Context.get(context, SessionExecution.Service)
+        const run = yield* execution.resume(sessionID).pipe(Effect.forkChild)
+        yield* Deferred.await(committed)
+        const pending = yield* database.db.select().from(SessionPendingStepTable).get()
+        expect(pending).toBeDefined()
+        if (reason === "user") {
+          expect(yield* execution.interrupt(sessionID)).toBe(true)
+          yield* Deferred.succeed(release, undefined)
+          yield* execution.awaitIdle(sessionID)
+        }
+        if (reason === "shutdown") {
+          const stopping = yield* Scope.close(scope, Exit.void).pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(stopping)
+        }
+        const stopped = yield* Fiber.await(run)
+        expect(Exit.isFailure(stopped) && Cause.hasInterrupts(stopped.cause)).toBe(true)
+        expect(yield* database.db.select().from(SessionPendingStepTable).get()).toEqual(pending)
+        expect(yield* claims(database)).toEqual({ [sessionID]: true })
+        expect(yield* execution.isActive(sessionID)).toBe(false)
+        expect(yield* attempts(database, sessionID)).toBe(0)
+        // The parked Step is still awaiting input, so no terminal may release it.
+        expect(
+          (yield* database.db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())?.time_idle,
+        ).toBeNull()
+      }),
+    )
+  }
 
   it.effect("leaves a child parked when its parent is gone or its restart budget is exhausted", () =>
     Effect.gen(function* () {
@@ -2054,6 +2135,60 @@ function seedInbox(
     )
     .run()
     .pipe(Effect.orDie)
+}
+
+function seedParkedQuestion(bus: Bus.Interface, sessionID: Session.ID) {
+  return Effect.gen(function* () {
+    const assistantMessageID = SessionMessage.ID.create()
+    const started = yield* bus.publish(SessionEvent.Step.Started, {
+      sessionID,
+      assistantMessageID,
+      agent: Agent.defaultID,
+      model: { id: ID.make("fake-model"), providerID: Provider.ID.make("fake") },
+      started: 1,
+    })
+    yield* bus.publish(SessionEvent.Tool.Input.Started, {
+      sessionID,
+      assistantMessageID,
+      id: "question",
+      name: "question",
+    })
+    yield* bus.publish(SessionEvent.Tool.Called, {
+      sessionID,
+      assistantMessageID,
+      id: "question",
+      input: {},
+      executed: false,
+    })
+    yield* bus.publish(SessionEvent.Step.Streamed, { sessionID, assistantMessageID })
+    yield* bus.publish(SessionEvent.Step.Parked, {
+      sessionID,
+      assistantMessageID,
+      generation: started.durable.seq,
+      step: 1,
+      finish: "tool-calls",
+      cost: Money.USD.zero,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      questions: [
+        {
+          callID: "question",
+          questionID: Form.ID.create(),
+          prepared: {
+            adapter: "question@1",
+            input: {
+              questions: [
+                {
+                  question: "Continue?",
+                  header: "Continue",
+                  options: [{ label: "Yes", description: "Continue" }],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    })
+  })
 }
 
 function seedSessions(

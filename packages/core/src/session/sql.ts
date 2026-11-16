@@ -85,6 +85,8 @@ export const SessionTable = sqliteTable(
     /** The execution claim timestamp (historical column name; see SessionStore.claim). */
     time_suspended: integer(),
     resume_attempts: integer().notNull().default(0),
+    /** Next logical Step after parked settlement; promotion replaces an existing cursor with Step 1. */
+    resume_step: integer(),
   },
   (table) => [
     index("session_v2_project_idx").on(table.project_id),

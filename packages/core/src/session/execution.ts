@@ -1,6 +1,7 @@
 export * as SessionExecution from "./execution.js"
 
-import { Cause, Context, Effect, Exit, Layer } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Stream } from "effect"
+import { and, eq, exists, isNotNull, or } from "drizzle-orm"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Job } from "../job.js"
@@ -12,6 +13,7 @@ import { SubagentReport } from "./execution/subagent-report.js"
 import { SessionRunCoordinator } from "./run-coordinator.js"
 import { SessionRunner } from "./runner/index.js"
 import { SessionSchema } from "./schema.js"
+import { SessionPendingStepTable, SessionTable } from "./sql.js"
 import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
 
@@ -125,6 +127,7 @@ export const layer = Layer.effect(
       )
       return yield* SessionRunner.DrainResult.$match(result, {
         Complete: () => Effect.void,
+        Parked: () => Effect.void,
         Moved: (result) => drain(sessionID, false, result.continuation, promotable, result.stepped),
         Reloaded: (result) => drain(sessionID, result.force, result.continuation, promotable, result.stepped),
       })
@@ -152,6 +155,31 @@ export const layer = Layer.effect(
           sessionID,
           Effect.gen(function* () {
             const outcome = terminal(exit, reason)
+            const waiting = yield* db
+              .select({ id: SessionTable.id })
+              .from(SessionTable)
+              .where(
+                and(
+                  eq(SessionTable.id, sessionID),
+                  or(
+                    exists(
+                      db
+                        .select({ id: SessionPendingStepTable.session_id })
+                        .from(SessionPendingStepTable)
+                        .where(eq(SessionPendingStepTable.session_id, sessionID)),
+                    ),
+                    outcome.type === "succeeded" ? isNotNull(SessionTable.resume_step) : undefined,
+                  ),
+                ),
+              )
+              .get()
+              .pipe(Effect.orDie)
+            if (waiting) {
+              // Parking commits before notification completes. An interruption there
+              // still leaves a waiting Step; a late answer can also leave its cursor.
+              subagentReport.clear(sessionID)
+              return
+            }
             if (outcome.type === "interrupted" && outcome.reason === "shutdown") {
               subagentReport.clear(sessionID)
               // Shutdown keeps the claim and the running Job row for restart continuity.
@@ -171,6 +199,14 @@ export const layer = Layer.effect(
         ),
     })
     holder.coordinator = coordinator
+    yield* bus.subscribe(SessionEvent.QuestionResolution.Resolved).pipe(
+      Stream.runForEach((event) =>
+        event.data.terminal.status === "cancelled" && event.data.terminal.message === undefined
+          ? Effect.void
+          : coordinator.wake(event.data.sessionID),
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
 
     interruption = coordinator.interruption
     return Service.of({

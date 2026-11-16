@@ -1,6 +1,7 @@
 export * as SessionRestart from "./restart.js"
 
 import { Cause, Context, Effect, Layer, Option, Schema } from "effect"
+import { eq } from "drizzle-orm"
 import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Shell as ShellSchema } from "@opencode/schema/shell"
@@ -16,6 +17,7 @@ import { SessionExecution } from "../execution.js"
 import { SessionHistory } from "../history.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { SessionPendingStepTable, SessionTable } from "../sql.js"
 import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
@@ -93,6 +95,20 @@ export const layer = (options?: Options) =>
       })
 
       const prepareResume = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+        const pending = yield* db
+          .select()
+          .from(SessionPendingStepTable)
+          .where(eq(SessionPendingStepTable.session_id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        const cursor = yield* db
+          .select({ step: SessionTable.resume_step })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        // Waiting for a human consumes no recovery attempts and needs no restart notice.
+        if (pending) return true
         // Durable before the resume runs, so a crash inside the resumed turn is
         // counted by the next sweep and the budget cannot be dodged.
         const attempts = yield* store.countResume(sessionID)
@@ -107,6 +123,8 @@ export const layer = (options?: Options) =>
           )
           return false
         }
+        // Settlement already supplies the original continuation; no extra input is needed.
+        if (cursor?.step != null) return true
         yield* bus.publish(SessionEvent.Synthetic, {
           sessionID,
           text: CONTINUE_AFTER_SERVER_RESTART,

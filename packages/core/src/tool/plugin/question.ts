@@ -74,20 +74,24 @@ const continuation = Symbol("question continuation")
 const capability = Object.freeze({ adapter: "question@1" as const, finalize })
 export type Prepared = typeof Prepared.Encoded
 
-/** Gate 1 only: capture decoded, post-before-hook input without running the tool. */
+/** Only the unwrapped Core executor can opt into durable preparation. */
+export const eligible = (tool: Tool.Info) => {
+  const marked = Object.getOwnPropertyDescriptor(tool.execute, continuation)?.value
+  return (
+    marked?.capability === capability &&
+    marked?.executor === tool.execute &&
+    tool.name === name &&
+    tool.input === Input &&
+    tool.output === Output &&
+    tool.options?.namespace === undefined &&
+    tool.options?.codemode === false
+  )
+}
+
+/** Capture decoded, post-before-hook input without running the tool. */
 export const prepare = (tool: Tool.Info, input: unknown) =>
   Effect.gen(function* () {
-    const marked = Object.getOwnPropertyDescriptor(tool.execute, continuation)?.value
-    if (
-      marked?.capability !== capability ||
-      marked?.executor !== tool.execute ||
-      tool.name !== name ||
-      tool.input !== Input ||
-      tool.output !== Output ||
-      tool.options?.namespace !== undefined ||
-      tool.options?.codemode !== false
-    )
-      return yield* new Tool.Error({ message: "Tool is not eligible for question@1 continuation" })
+    if (!eligible(tool)) return yield* new Tool.Error({ message: "Tool is not eligible for question@1 continuation" })
     const decoded = yield* decodeInput(tool, input)
     const encoded = yield* Schema.encodeUnknownEffect(Input)(decoded).pipe(
       Effect.mapError((error) => new Tool.Error({ message: error.message })),

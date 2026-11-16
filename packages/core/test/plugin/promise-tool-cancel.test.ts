@@ -145,6 +145,7 @@ const stop = Effect.fn(function* (
   const attempt = yield* steps
     .attempt({
       isLocationClosed: () => false,
+      step: 1,
       interruption: () => reason,
       sessionID: session.id,
       assistantMessageID: SessionMessage.ID.create(),

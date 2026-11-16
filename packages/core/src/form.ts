@@ -4,6 +4,14 @@ import { Form } from "@opencode/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
+import { Database } from "./database/database.js"
+import { SessionQuestionTable, SessionTable } from "./session/sql.js"
+import type { SessionSchema } from "./session/schema.js"
+import { SessionEvent } from "./session/event.js"
+import { SessionParking } from "./session/parking.js"
+import { Location } from "./location.js"
+import { QuestionTool } from "./tool/plugin/question.js"
+import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 
 const RETENTION = Duration.minutes(10)
 
@@ -105,6 +113,27 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    // Standalone Form.layer callers still support ordinary in-memory Forms.
+    // Form.node supplies the database for durable Session Questions.
+    const db = Option.getOrUndefined(yield* Effect.serviceOption(Database.Service))?.db
+    const withinLocation = Effect.gen(function* () {
+      const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+      if (!db || !location) return
+      return inArray(
+        SessionQuestionTable.session_id,
+        db
+          .select({ id: SessionTable.id })
+          .from(SessionTable)
+          .where(
+            and(
+              eq(SessionTable.directory, location.directory),
+              location.workspaceID === undefined
+                ? isNull(SessionTable.workspace_id)
+                : eq(SessionTable.workspace_id, location.workspaceID),
+            ),
+          ),
+      )
+    })
     let closed = false
     const forms = yield* Cache.makeWith<ID, Entry>(
       () => Effect.die(new Error("Form cache must be used via set/getSuccess, never get")),
@@ -115,17 +144,66 @@ export const layer = Layer.effect(
       },
     )
 
-    const requireEntry = Effect.fn("Form.requireEntry")((id: ID) =>
+    const requireLocalEntry = (id: ID) =>
       Cache.getSuccess(forms, id).pipe(
         Effect.flatMap((entry) => Effect.fromOption(entry, () => new NotFoundError({ id }))),
-      ),
-    )
+      )
+    const requireEntry = Effect.fn("Form.requireEntry")(function* (
+      id: ID,
+    ): Effect.fn.Return<
+      | Entry
+      | { readonly form: Info; readonly state: State; readonly question: typeof SessionQuestionTable.$inferSelect },
+      NotFoundError
+    > {
+      const question = db
+        ? yield* db
+            .select()
+            .from(SessionQuestionTable)
+            .where(and(eq(SessionQuestionTable.id, id), yield* withinLocation))
+            .get()
+            .pipe(Effect.orDie)
+        : undefined
+      if (question)
+        return {
+          form: fromQuestion(question),
+          state:
+            question.status === "pending"
+              ? { status: "pending" }
+              : question.status === "answered"
+                ? { status: "answered", answer: question.answer! }
+                : {
+                    status: "cancelled",
+                    ...(question.cancel_message === null ? {} : { message: question.cancel_message }),
+                  },
+          question,
+        }
+      return yield* requireLocalEntry(id)
+    })
+
+    const resolve = (question: typeof SessionQuestionTable.$inferSelect, terminal: TerminalState) =>
+      bus
+        .publish(SessionEvent.QuestionResolution.Resolved, {
+          sessionID: question.session_id,
+          assistantMessageID: question.assistant_message_id,
+          generation: question.generation,
+          questionID: question.id,
+          callID: question.call_id,
+          terminal,
+        })
+        .pipe(
+          Effect.asVoid,
+          Effect.catchDefect((error) =>
+            error instanceof SessionParking.ConflictError
+              ? Effect.fail(new AlreadySettledError({ id: question.id }))
+              : Effect.die(error),
+          ),
+        )
 
     const create = Effect.fn("Form.create")((input: CreateInput) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const id = input.id ?? ID.create()
-          const existing = yield* Cache.getSuccess(forms, id)
+          const existing = yield* requireEntry(id).pipe(Effect.option)
           if (Option.isSome(existing)) return yield* new AlreadyExistsError({ id })
           const invalid = validateFields(input.fields)
           if (invalid) return yield* new InvalidFormError({ message: invalid })
@@ -153,7 +231,7 @@ export const layer = Layer.effect(
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const form = yield* create(input)
-          const entry = yield* requireEntry(form.id).pipe(Effect.orDie)
+          const entry = yield* requireLocalEntry(form.id).pipe(Effect.orDie)
           return yield* restore(Deferred.await(entry.deferred)).pipe(
             Effect.onInterrupt(() => Effect.ignore(cancel(form.id))),
           )
@@ -167,10 +245,29 @@ export const layer = Layer.effect(
 
     const list = Effect.fn("Form.list")(function* (input?: ListInput) {
       const entries = yield* Cache.values(forms)
-      return Array.from(entries)
-        .filter((entry) => entry.state.status === "pending")
-        .filter((entry) => input?.sessionID === undefined || entry.form.sessionID === input.sessionID)
-        .map((entry) => entry.form)
+      const questions = db
+        ? yield* db
+            .select()
+            .from(SessionQuestionTable)
+            .where(
+              and(
+                eq(SessionQuestionTable.status, "pending"),
+                yield* withinLocation,
+                input?.sessionID === undefined
+                  ? undefined
+                  : sql`${SessionQuestionTable.session_id} = ${input.sessionID}`,
+              ),
+            )
+            .all()
+            .pipe(Effect.orDie)
+        : []
+      return [
+        ...questions.map(fromQuestion),
+        ...Array.from(entries)
+          .filter((entry) => entry.state.status === "pending")
+          .filter((entry) => input?.sessionID === undefined || entry.form.sessionID === input.sessionID)
+          .map((entry) => entry.form),
+      ]
     })
 
     const state = Effect.fn("Form.state")(function* (id: ID) {
@@ -185,6 +282,7 @@ export const layer = Layer.effect(
           const invalid = validateAnswer(entry.form.fields, input.answer)
           if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
           const next: TerminalState = { status: "answered", answer: input.answer }
+          if ("question" in entry) return yield* resolve(entry.question, next)
           yield* bus.publish(Form.Event.Replied, {
             id: input.id,
             sessionID: entry.form.sessionID,
@@ -205,6 +303,7 @@ export const layer = Layer.effect(
             status: "cancelled",
             ...(options?.message === undefined ? {} : { message: options.message }),
           }
+          if ("question" in entry) return yield* resolve(entry.question, next)
           yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
           yield* Cache.set(forms, id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
@@ -230,7 +329,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node, Database.node] })
 
 export function validateAnswer(form: ReadonlyArray<Form.Field>, answer: Answer) {
   const fields = new Map(form.map((field) => [field.key, field] as const))
@@ -368,3 +467,30 @@ function isDate(value: string) {
 function isDateTime(value: string) {
   return !Number.isNaN(new Date(value).getTime())
 }
+
+/** The public Form representation of a durable Question uses the original tool identity. */
+export function fromQuestion(question: typeof SessionQuestionTable.$inferSelect): Info {
+  return {
+    id: question.id,
+    sessionID: question.session_id,
+    title: "Questions",
+    metadata: { kind: "question", tool: { messageID: question.assistant_message_id, id: question.call_id } },
+    fields: [
+      QuestionTool.toField(question.prepared.input.questions[0], 0),
+      ...question.prepared.input.questions.slice(1).map((item, index) => QuestionTool.toField(item, index + 1)),
+    ],
+  }
+}
+
+/** Lists durable Questions without booting a Session's Location or its ordinary Forms. */
+export const pendingQuestions = Effect.fn("Form.pendingQuestions")(function* (
+  db: Database.Interface["db"],
+  sessionID: SessionSchema.ID,
+) {
+  return (yield* db
+    .select()
+    .from(SessionQuestionTable)
+    .where(and(eq(SessionQuestionTable.session_id, sessionID), eq(SessionQuestionTable.status, "pending")))
+    .all()
+    .pipe(Effect.orDie)).map(fromQuestion)
+})

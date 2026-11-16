@@ -76,6 +76,13 @@ export interface Prepared<Event = SessionRequest> {
   readonly executeTool: (
     input: Parameters<Tool.Snapshot["execute"]>[0],
   ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
+  /** Prepares a durable Question against the request's advertised tool definitions. */
+  readonly prepareAuthorizedQuestion?: (
+    input: Parameters<Tool.Snapshot["execute"]>[0],
+  ) => Effect.Effect<
+    { readonly prepared: QuestionTool.Prepared } | { readonly outcome: Tool.NormalizedResult },
+    ExecuteError
+  >
 }
 
 export interface Input {
@@ -128,9 +135,7 @@ export const baseTranscript = (input: {
     messages: input.messages.flatMap((message) =>
       toLLMMessages([message], input.model.ref, providerMetadataKey).map(
         (item): SessionRequestMessage =>
-          message.metadata === undefined || item.id !== message.id
-            ? item
-            : { ...item, metadata: message.metadata },
+          message.metadata === undefined || item.id !== message.id ? item : { ...item, metadata: message.metadata },
       ),
     ),
   }
@@ -442,6 +447,30 @@ export const layer = Layer.effect(
         // catch them and turn a "no" into model-visible output. Recover them here as failures,
         // including declines a tool rethrew and its wrapper attached to a Tool.Error, as Promise
         // plugin tools do.
+        prepareAuthorizedQuestion:
+          "prepareAuthorizedQuestion" in tools && tools.prepareAuthorizedQuestion
+            ? (
+                (prepare) => (call: Parameters<Prepared["executeTool"]>[0]) =>
+                  prepare({ ...call, definitions: hooked }).pipe(
+                    Effect.catchCauseFilter(
+                      (cause) => {
+                        const decline = cause.reasons
+                          .map((reason) => {
+                            if (Cause.isDieReason(reason)) return reason.defect
+                            if (Cause.isFailReason(reason)) return reason.error.error
+                            return undefined
+                          })
+                          .find(
+                            (value): value is Permission.DeclinedError | QuestionTool.CancelledError =>
+                              value instanceof Permission.DeclinedError || value instanceof QuestionTool.CancelledError,
+                          )
+                        return decline ? Result.succeed(decline) : Result.fail(cause)
+                      },
+                      (decline) => Effect.fail(decline),
+                    ),
+                  )
+              )(tools.prepareAuthorizedQuestion)
+            : undefined,
         executeTool: (call: Parameters<Prepared["executeTool"]>[0]) =>
           tools.execute({ ...call, definitions: hooked }).pipe(
             Effect.catchCauseFilter(
