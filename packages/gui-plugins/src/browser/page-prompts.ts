@@ -498,13 +498,19 @@ export type PagePrompts = ReturnType<typeof createPagePrompts>
  * Both events are Electron internals (lib/browser/api/web-contents.ts in 44.x: `-run-dialog` with `(info, callback)`).
  * When they are not what this expects, it fails safe and says so once through `warn`: a listener that is not there
  * means another Electron handles dialogs, and a call without a callback is left to CDP, which still shows and answers
- * the dialog in the pane. `script/electron-dialogs.test.ts` in packages/desktop runs this against the pinned Electron.
+ * the dialog in the pane. `electron-dialogs.test.ts` runs this in the pinned Electron.
  */
 export function takeDialogs(
   contents: WebContents,
-  suppressed: () => boolean,
-  opened: () => boolean,
-  warn: (message: string) => void,
+  input: {
+    /** The user stopped this document's dialogs. */
+    readonly suppressed: () => boolean
+    /** CDP reported the dialog open. */
+    readonly opened: () => boolean
+    /** Electron reported the asking frame; CDP reports the dialog before it does. */
+    readonly framed: () => void
+    readonly warn: (message: string) => void
+  },
 ) {
   // SAFETY: `-run-dialog` and `-cancel-dialogs` are Electron's own events on every WebContents; its `-run-dialog`
   // listener is the native message box this replaces. Each argument is checked before use below.
@@ -512,7 +518,7 @@ export function takeDialogs(
   const held = new Map<DialogCallback, { readonly origin: string; readonly main: boolean } | undefined>()
 
   if (events.listenerCount("-run-dialog") === 0)
-    warn("Electron has no -run-dialog listener on a page; the pane's dialog takeover may not match this Electron.")
+    input.warn("Electron has no -run-dialog listener on a page; the pane's dialog takeover may not match this Electron.")
 
   const release = () => {
     held.forEach((_frame, callback) => callback(false, ""))
@@ -522,14 +528,15 @@ export function takeDialogs(
   const run = (info?: RunDialogInfo | DialogCallback, last?: RunDialogInfo | DialogCallback) => {
     const callback = [last, info].find(dialogCallback)
 
-    if (!callback) return warn("Electron's -run-dialog passed no callback; the dialog is left to CDP.")
+    if (!callback) return input.warn("Electron's -run-dialog passed no callback; the dialog is left to CDP.")
 
-    if (suppressed()) return callback(false, "")
+    if (input.suppressed()) return callback(false, "")
     const frame = info && typeof info === "object" && info.frame && !info.frame.isDestroyed() ? info.frame : undefined
     held.set(callback, frame ? { origin: frame.origin, main: frame.parent === null } : undefined)
+    input.framed()
     // The page must never wait on a dialog nobody can see: one CDP never reported is dismissed.
     setTimeout(() => {
-      if (held.has(callback) && !opened()) {
+      if (held.has(callback) && !input.opened()) {
         held.delete(callback)
         callback(false, "")
       }

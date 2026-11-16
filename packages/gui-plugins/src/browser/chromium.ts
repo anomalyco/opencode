@@ -494,12 +494,13 @@ export function createBrowserPage(
   }
 
   // Page dialogs, permission requests, sign-ins and "Leave site?" wait for the user in the pane; see page-prompts.ts.
-  const dialogs = takeDialogs(
-    contents,
-    () => selectSuppressed(dialogGate),
-    () => !!selectOpenDialog(dialogGate),
-    (message) => options.warn?.(message),
-  )
+  const dialogs = takeDialogs(contents, {
+    suppressed: () => selectSuppressed(dialogGate),
+    opened: () => !!selectOpenDialog(dialogGate),
+    // The dialog shows at once; its frame's origin names it once Electron reports it.
+    framed: () => prompts.publish(),
+    warn: (message) => options.warn?.(message),
+  })
 
   const prompts = createPagePrompts({
     contents,

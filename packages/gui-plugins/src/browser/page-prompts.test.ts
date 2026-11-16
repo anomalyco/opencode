@@ -4,7 +4,7 @@ import type { WebContents } from "electron"
 import type { Storage } from "@opencode/plugin/gui/main"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { PromptView } from "./ipc"
-import { AGENT_PROMPT_WAIT_MS, createPagePrompts } from "./page-prompts"
+import { AGENT_PROMPT_WAIT_MS, createPagePrompts, takeDialogs } from "./page-prompts"
 import { createSitePermissions } from "./site-permissions"
 
 beforeEach(() => jest.useFakeTimers())
@@ -82,6 +82,38 @@ describe("a tab's permission requests", () => {
     expect(answers).toEqual([true, false])
     expect(tab.prompts.permissions.check("notifications", "https://maps.example/", details)).toBe(false)
     expect(tab.shown()).toBeNull()
+  })
+})
+
+describe("the takeover of a page's dialogs", () => {
+  test("fails safe and says so once when Electron's internal dialog events are not what it expects", () => {
+    // An Electron without the internal listener, which then calls it with no callback.
+    const contents = Object.assign(new EventEmitter(), { isDestroyed: () => false })
+    const warnings: string[] = []
+    // SAFETY: the takeover reads only the events and `isDestroyed` of a page's contents.
+    const dialogs = takeDialogs(contents as unknown as WebContents, {
+      suppressed: () => false,
+      opened: () => false,
+      framed: () => {},
+      warn: (message) => warnings.push(message),
+    })
+
+    expect(() => contents.emit("-run-dialog", { dialogType: "alert" })).not.toThrow()
+    expect(warnings).toHaveLength(2)
+    expect(dialogs.frame()).toBeUndefined()
+  })
+
+  test("answers a dialog nobody can see, so the page never waits on it", () => {
+    const contents = Object.assign(new EventEmitter(), { isDestroyed: () => false })
+    contents.on("-run-dialog", () => {})
+    const answers: unknown[][] = []
+    // SAFETY: as above.
+    takeDialogs(contents as unknown as WebContents, { suppressed: () => false, opened: () => false, framed: () => {}, warn: () => {} })
+
+    contents.emit("-run-dialog", { dialogType: "confirm" }, (...args: unknown[]) => answers.push(args))
+    expect(answers).toEqual([])
+    jest.advanceTimersByTime(2_000)
+    expect(answers).toEqual([[false, ""]])
   })
 })
 
