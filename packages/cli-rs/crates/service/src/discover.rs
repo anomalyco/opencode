@@ -47,7 +47,7 @@ pub struct Missing {
 }
 
 /// Discovers a ready, compatible service. `env_channel` is `OPENCODE_CHANNEL`. Among the scanned
-/// registrations it prefers the service of `OPENCODE_TS_BIN`, else `opencode` on `PATH`.
+/// registrations it prefers the service of the TypeScript binary [`TsCommand::from_env`] resolves.
 pub async fn discover(transport: &dyn Transport, paths: &Paths, env_channel: Option<&str>) -> Result<Found, Missing> {
     discover_with(transport, paths, env_channel, &Owner::new(TsCommand::from_env())).await
 }

@@ -12,7 +12,7 @@ built-ins (`-<id>`, `<id>`, `*`, `<prefix>.*`) exactly as TS does. The loader (`
 runs on the JS host (O-166, which reverses O-151's opt-in), a Bun process the client starts (`docs/P.4.md`, "TypeScript
 plugins on the JS host"), through the V2 compatibility layer (P8), which gives a V2 `{ id, setup }` module the context
 and the modules TS gives it. Bun is looked for only when the first TypeScript plugin needs it (`OPENCODE_BUN`, the
-local server's opencode binary run as its own Bun, or `bun` on the path), so a client with none runs no process for
+local server's opencode binary run as its own Bun, the opencode bundled beside the client, or `bun` on the path), so a client with none runs no process for
 it. Otherwise the registry lists it with status `Skipped`, its slot claims, commands and routes absent:
 - `OPENCODE_PLUGIN_JS` set to `0`, `false` or `off` (any case) turns the JS host off: "TypeScript TUI plugins run on
   the JS host, which OPENCODE_PLUGIN_JS turns off: unset it to turn the JS host back on";

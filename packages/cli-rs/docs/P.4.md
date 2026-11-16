@@ -600,8 +600,10 @@ host (`Scripts::runtime`): looking runs a binary, so a client with no TypeScript
 and no server TUI part starts no process. Without Bun the plugin is skipped saying Bun is missing. Bun is `OPENCODE_BUN` (an absolute path); else the opencode binary of a local server (a
 background service or a standalone server, not `--server`) run as the Bun it embeds (`BUN_BE_BUN=1`), when that Bun
 reports a version of 1.4.0 or newer: the executable of the server's process where the client can tell it (Linux and
-Windows), else the first `opencode` in an absolute `PATH` entry outside the project that answers so (its real path,
-so a `mise` shim answers for `mise` and is passed over); else `bun` in an absolute `PATH` entry outside the project.
+Windows); else the `opencode` bundled beside the client (bundle-server), for a remote server too; else, where the
+client cannot tell the server's binary, the first `opencode` in an absolute `PATH` entry outside the project that
+answers so (its real path, so a `mise` shim answers for `mise` and is passed over); else `bun` in an absolute `PATH`
+entry outside the project.
 Without any, TypeScript plugins are skipped and the log says why. Bun starts in the JS host's private directory, with
 `--no-env-file`, an empty `bunfig.toml` of its own and an allowlisted environment (what locates the user, the
 language, the proxy, what names the terminal, such as `TERM`, `TERM_PROGRAM`, `COLORTERM` and `TMUX`, and the

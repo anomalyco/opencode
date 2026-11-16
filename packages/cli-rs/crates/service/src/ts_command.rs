@@ -1,8 +1,9 @@
-//! TypeScript binary resolution: `OPENCODE_TS_BIN`, else `opencode` (F.9).
+//! TypeScript binary resolution: `OPENCODE_TS_BIN`, else the bundled `opencode`, else `opencode` on `PATH` (F.9).
 //!
 //! The Rust client is not a server (user Q2). It starts the TypeScript `opencode` for the background
 //! service and the standalone server, as the TypeScript client runs `selfCommand()`
-//! (`packages/cli/src/services/service-config.ts:150`, `standalone.ts:18-20`).
+//! (`packages/cli/src/services/service-config.ts:150`, `standalone.ts:18-20`). An install that bundles
+//! the server puts it beside the client (`opencode_util::bundle`, bundle-server).
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -22,17 +23,22 @@ impl TsCommand {
         Self::from_vars(|name| std::env::var_os(name))
     }
 
-    /// `OPENCODE_TS_BIN` (one executable path; an empty value counts as unset), else `opencode`,
-    /// found on `PATH` when it runs. On Windows `opencode` is looked up here, through `PATHEXT`, because
+    /// `OPENCODE_TS_BIN` (one executable path; an empty value counts as unset), else the `opencode`
+    /// installed beside this executable ([`opencode_util::bundle::server`]), else `opencode`, found on
+    /// `PATH` when it runs. On Windows `opencode` is looked up here, through `PATHEXT`, because
     /// `Command` finds only `opencode.exe` and npm installs an `opencode.cmd` shim.
     pub fn from_vars(var: impl Fn(&str) -> Option<OsString>) -> Self {
-        Self::resolve(var, cfg!(windows))
+        Self::resolve(var, cfg!(windows), opencode_util::bundle::server())
     }
 
-    /// `from_vars` as it runs on Windows when `windows` is set, so tests on other systems reach the lookup.
-    pub fn resolve(var: impl Fn(&str) -> Option<OsString>, windows: bool) -> Self {
+    /// `from_vars` as it runs on Windows when `windows` is set, so tests on other systems reach the lookup,
+    /// with `bundled` as the binary beside this executable.
+    pub fn resolve(var: impl Fn(&str) -> Option<OsString>, windows: bool, bundled: Option<PathBuf>) -> Self {
         if let Some(program) = var(Self::VAR).filter(|program| !program.is_empty()) {
             return Self::new(program);
+        }
+        if let Some(bundled) = bundled {
+            return Self::new(bundled);
         }
         let found = if windows {
             var("PATH").and_then(|path| {
@@ -157,6 +163,19 @@ mod tests {
         assert_eq!(from(None).program, "opencode");
         assert_eq!(from(Some("")).program, "opencode");
         assert_eq!(from(Some("/x/opencode")).program, "/x/opencode");
+        // Expected (bundle-server): the bundled binary comes after the variable and before `PATH`.
+        let path = |name: &str| (name == "PATH").then(|| OsString::from("/usr/bin"));
+        for windows in [false, true] {
+            let with = |var: &dyn Fn(&str) -> Option<OsString>| {
+                TsCommand::resolve(var, windows, Some(PathBuf::from("/lib/oc/opencode"))).program
+            };
+            assert_eq!(with(&path), "/lib/oc/opencode");
+            assert_eq!(
+                with(&|name| if name == TsCommand::VAR { Some("".into()) } else { path(name) }),
+                "/lib/oc/opencode"
+            );
+            assert_eq!(with(&|name| (name == TsCommand::VAR).then(|| "/x/opencode".into())), "/x/opencode");
+        }
         let mut command = TsCommand::new("bun");
         command.args.push("cli.ts".into());
         assert_eq!(command.service(), ["bun", "cli.ts", "serve", "--service"]);
@@ -227,6 +246,7 @@ mod tests {
                 _ => None,
             },
             true,
+            None,
         );
         assert_eq!(ts.program, dir.path().join("opencode.cmd"));
         let command = ts.with(&["serve", "--stdio", "a b"]);

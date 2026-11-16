@@ -134,7 +134,8 @@ impl Config {
         }
         let server = server.clone();
         let find = Find(Rc::new(move || {
-            Self::find(|name| std::env::var_os(name), std::env::current_dir().unwrap_or_default(), &server)
+            let bundled = opencode_util::bundle::server();
+            Self::find(|name| std::env::var_os(name), std::env::current_dir().unwrap_or_default(), &server, bundled)
         }));
         Some(Self { find: Some(find), ..Self::new(PathBuf::new()) })
     }
@@ -148,27 +149,37 @@ impl Config {
         if turned_off(var("OPENCODE_PLUGIN_JS").as_deref()) {
             return None;
         }
-        Self::find(var, directory, server)
+        Self::find(var, directory, server, opencode_util::bundle::server())
     }
 
     /// Bun for the JS host, over the environment `var` reads, for a client in `directory`. The runtime is
     /// `OPENCODE_BUN` (an absolute path only), else the opencode binary of a local server run as its own Bun
-    /// ([`Config::opencode`]; opencode ships with Bun), else `bun` on the path ([`find_in`]). The server's binary is the
-    /// executable its process runs, or, where the client cannot tell, the first `opencode` on the path that answers.
-    pub fn find(var: impl Fn(&str) -> Option<std::ffi::OsString>, directory: PathBuf, server: &Server) -> Option<Self> {
+    /// ([`Config::opencode`]; opencode ships with Bun), else `bundled`, the opencode installed beside the client
+    /// (bundle-server), else `bun` on the path ([`find_in`]). The server's binary is the executable its process runs,
+    /// or, where the client cannot tell, the first `opencode` on the path that answers, after `bundled`.
+    pub fn find(
+        var: impl Fn(&str) -> Option<std::ffi::OsString>,
+        directory: PathBuf,
+        server: &Server,
+        bundled: Option<PathBuf>,
+    ) -> Option<Self> {
         let home = var("HOME").map(PathBuf::from);
         let path = var("PATH").unwrap_or_default();
+        let opencode =
+            |binary: &Path| outside(binary, &directory, home.as_deref()).then(|| Self::opencode(binary)).flatten();
         let config = match var("OPENCODE_BUN") {
             Some(bun) => Some(PathBuf::from(bun)).filter(|bun| bun.is_absolute()).map(Self::new),
             None => match server {
-                Server::Local(Some(executable)) => {
-                    outside(executable, &directory, home.as_deref()).then(|| Self::opencode(executable)).flatten()
-                }
+                Server::Local(Some(executable)) => opencode(executable),
+                Server::Local(None) | Server::Remote => None,
+            }
+            .or_else(|| bundled.as_deref().and_then(opencode))
+            .or_else(|| match server {
                 Server::Local(None) => found_in("opencode", &path, &directory, home.as_deref())
                     .iter()
                     .find_map(|found| Self::opencode(found)),
-                Server::Remote => None,
-            }
+                Server::Local(Some(_)) | Server::Remote => None,
+            })
             .or_else(|| {
                 let bun = find_in("bun", &path, &directory, home.as_deref())?;
                 Some(Self { bun_version: bun_version(&bun), ..Self::new(bun) })
@@ -2249,17 +2260,17 @@ mod tests {
         script(&root.join("mise/mise"), mise);
         std::fs::create_dir_all(&shims).unwrap();
         std::os::unix::fs::symlink(root.join("mise/mise"), shims.join("opencode")).unwrap();
-        let from = |server: Server, entries: &[&Path], bun: Option<&str>| {
+        let with = |server: Server, entries: &[&Path], bun: Option<&str>, bundled: Option<PathBuf>| {
             let path = std::env::join_paths(entries).unwrap();
             let var = |name: &str| match name {
-                "OPENCODE_PLUGIN_JS" => Some("1".into()),
                 "OPENCODE_BUN" => bun.map(Into::into),
                 "PATH" => Some(path.clone()),
                 _ => None,
             };
-            Config::from_vars(var, work.clone(), &server)
+            Config::find(var, work.clone(), &server, bundled)
                 .map(|config| (config.bun, config.opencode, config.bun_version))
         };
+        let from = |server: Server, entries: &[&Path], bun: Option<&str>| with(server, entries, bun, None);
         let relative = [Path::new("bin"), Path::new("")];
         let chosen =
             |bun: &Path, opencode, version: &str| Some((bun.to_path_buf(), opencode, Some(version.to_owned())));
@@ -2280,5 +2291,28 @@ mod tests {
         // `OPENCODE_BUN` wins, unasked.
         let named = from(Server::Local(Some(server.join("opencode"))), &all, Some("/opt/bun/bin/bun"));
         assert_eq!(named, Some((PathBuf::from("/opt/bun/bin/bun"), false, None)));
+        // Expected (bundle-server): the opencode installed beside the client comes after the server's binary and before
+        // the path, for a remote server too; an old one, or one inside the project, is passed over.
+        let bundle = root.join("bundle");
+        script(&bundle.join("opencode"), &opencode("1.4.5"));
+        let bundled = || Some(bundle.join("opencode"));
+        let ours = chosen(&bundle.join("opencode"), true, "1.4.5");
+        assert_eq!(
+            with(Server::Local(Some(server.join("opencode"))), &all, None, bundled()),
+            chosen(&server.join("opencode"), true, "1.4.4")
+        );
+        assert_eq!(with(Server::Local(Some(old.join("opencode"))), &all, None, bundled()), ours);
+        assert_eq!(with(Server::Local(None), &all, None, bundled()), ours);
+        assert_eq!(with(Server::Remote, &all, None, bundled()), ours);
+        assert_eq!(with(Server::Remote, &[], None, bundled()), ours, "a fresh box: nothing on the path");
+        assert_eq!(
+            with(Server::Remote, &all, None, Some(old.join("opencode"))),
+            chosen(&tools.join("bun"), false, "1.4.2")
+        );
+        assert_eq!(
+            with(Server::Local(None), &all, None, Some(work.join("bin/opencode"))),
+            chosen(&server.join("opencode"), true, "1.4.4")
+        );
+        assert_eq!(with(Server::Local(None), &all, Some("/opt/bun/bin/bun"), bundled()), named);
     }
 }

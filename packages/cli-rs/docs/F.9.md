@@ -17,7 +17,8 @@ orchestrator decisions O-21 and O-22 apply.
    stale registration; on Windows a killed service's closed port times out rather than refuses
    the probe). `stop` is only for the
    explicit `service stop`, `restart`, and `set` commands (C.8).
-3. **What it runs.** `ts_command`: `OPENCODE_TS_BIN` (one executable path), else `opencode` on
+3. **What it runs.** `ts_command`: `OPENCODE_TS_BIN` (one executable path), else the `opencode`
+   bundled beside the client's real path (`opencode_util::bundle`, bundle-server), else `opencode` on
    `PATH`. The service is `<ts> serve --service`, the standalone server `<ts> serve --stdio --port 0`.
    The environment adds the service config's `env` (without `XDG_STATE_HOME`) and
    `OPENCODE_PTY_HANDOFF` from the sidecar, as TS does.
