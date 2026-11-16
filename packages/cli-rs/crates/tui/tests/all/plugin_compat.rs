@@ -432,6 +432,36 @@ fn a_plugin_whose_registrations_never_settle_fails() {
     assert!(error.contains("changed its registrations more than 64 times"), "{error}");
 }
 
+// Expected (big-boi's catalog recheck): an activation a reload handed the JS host's activation to owns the dialogs of the
+// one before it (FT-4); a plugin disabled and enabled again runs a fresh setup, whose activation owns its own dialogs
+// alone, not those of the activations before it. It took on the reload's chain, and claimed them.
+#[test]
+fn a_fresh_activation_owns_only_its_own_dialogs() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let tui = &pipe.harness.tui;
+    let owned = || (1..512).filter(|generation| tui.plugins.owns(PROBE, *generation)).collect::<Vec<u64>>();
+    let live = || (1..512).find(|generation| tui.plugins.live(PROBE, *generation));
+    // The page's layer is a registration after setup: a reload, which hands the activation on.
+    tui.keymap.dispatch("v2probe.page", None);
+    pipe.settle();
+    std::thread::sleep(Duration::from_millis(400));
+    pipe.settle();
+    let chain = owned();
+    assert!(chain.len() >= 2, "the reload handed nothing on: {chain:?}");
+    let host = opencode_tui::plugins::host::host(tui);
+    tui.plugins.set_active(&host, PROBE, false);
+    pipe.settle();
+    tui.plugins.set_active(&host, PROBE, true);
+    pipe.active(PROBE);
+    pipe.settle();
+    // The fresh setup's own registrations may reload it again: its own chain, which starts after the old one.
+    let fresh = live().expect("the enabled plugin has an activation");
+    let now = owned();
+    assert!(now.contains(&fresh), "{fresh} not in {now:?}");
+    assert!(now.iter().all(|generation| !chain.contains(generation)), "the fresh activation owns {now:?} of {chain:?}");
+}
+
 // Expected (carbon-5): a handler of an activation a reload ended that rejects late fails nothing: the reloaded plugin
 // stays active.
 #[test]
