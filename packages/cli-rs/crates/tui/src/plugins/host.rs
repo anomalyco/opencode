@@ -1297,13 +1297,13 @@ fn sync_server_plugins(tui: &Tui) {
     );
 }
 
-/// Lists the TUI parts of the active server plugins, which TS loads from the server's list (`serverTuiPlugins`), as
-/// not loaded, unless their target is listed already; a part the server no longer lists leaves the list.
-fn set_server_parts(tui: &Tui, plugins: &[PluginInfo]) {
+/// The TUI parts of the active server plugins, which TS loads from the server's list (`serverTuiPlugins`,
+/// `context.tsx:96-103`, `301-305`): with the JS host the loader loads them, from the local path or the package
+/// cache the server reports; without it they are listed as not loaded, unless their target is listed already, and a
+/// part the server no longer lists leaves the list.
+fn set_server_parts(tui: &Rc<Tui>, plugins: &[PluginInfo]) {
     // Only the client that loads external plugins has TS's reconcile to stand in for.
-    if tui.plugins.loader.borrow().is_none() {
-        return;
-    }
+    let Some(loader) = tui.plugins.loader.borrow().clone() else { return };
     let parts: Vec<String> = plugins
         .iter()
         .filter(|plugin| matches!(plugin.state, PluginState::Active(_)) && plugin.features.tui == Some(true))
@@ -1313,7 +1313,16 @@ fn set_server_parts(tui: &Tui, plugins: &[PluginInfo]) {
             _ => None,
         })
         .collect();
-    let skipped = Status::Skipped(opencode_plugin::SKIPPED_SERVER_TUI.to_owned());
+    if tui.plugins.scripts.borrow().is_some() {
+        if *tui.plugins.server_parts.borrow() != parts {
+            tui.plugins.server_parts.replace(parts.clone());
+            loader.set_server(parts);
+            loader.reconcile(&host(tui), &tui.plugins);
+            tell_plugins(tui);
+        }
+        return;
+    }
+    let skipped = Status::Skipped(opencode_plugin::SKIPPED_JS_OFF.to_owned());
     let before = tui.plugins.server_parts.replace(parts.clone());
     let entries = tui.plugins.entries();
     let status = |target: &str| entries.iter().find(|entry| entry.target.as_deref() == Some(target)).map(|e| &e.status);
@@ -1325,7 +1334,7 @@ fn set_server_parts(tui: &Tui, plugins: &[PluginInfo]) {
         }
     }
     for part in parts.iter().filter(|target| status(target).is_none()) {
-        log::warn!("plugin {part} skipped: {}", opencode_plugin::SKIPPED_SERVER_TUI);
+        log::warn!("plugin {part} skipped: {}", opencode_plugin::SKIPPED_JS_OFF);
         tui.plugins.set_unloaded(part, Some(skipped.clone()));
         changed = true;
     }
@@ -1436,6 +1445,11 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
     let entries = configured(tui, tui.plugins.skipped());
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries);
+    // A plugin named by npm package loads from the cache TS installs into, as TS resolves it (js-npm).
+    let loader = match tui.cache_dir() {
+        Some(cache) => loader.with_npm(cache),
+        None => loader,
+    };
     // Without real roots the decisions last as long as the TUI.
     let loader = match tui.state_dir() {
         Some(state) => loader.with_approvals(Approvals::open(state.join(approval::FILE), &project)),

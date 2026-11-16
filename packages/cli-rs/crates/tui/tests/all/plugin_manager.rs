@@ -1051,14 +1051,13 @@ fn typescript_plugins_not_loaded_are_told_once_and_listed() {
     });
     let toast = harness.tui.toasts.current().expect("the notice");
     assert_eq!(toast.title.as_deref(), Some("3 TypeScript plugins not loaded"));
-    for line in [
-        format!("opencode-tokens@0.1.3: {}.", opencode_plugin::SKIPPED_NPM),
-        format!("opencode-pulse-ticker: {}.", opencode_plugin::SKIPPED_JS_OFF),
-        format!("opencode-energy@1.0.0: {}.", opencode_plugin::SKIPPED_SERVER_TUI),
-        "Run /plugins to view details.".to_owned(),
-    ] {
-        assert!(toast.message.lines().any(|known| known == line), "{line:?} in {:?}", toast.message);
+    // A package named by npm, a directory and a server plugin's TUI part all wait for the JS host (js-npm): one reason.
+    let reason = format!(": {}.", opencode_plugin::SKIPPED_JS_OFF);
+    let line = toast.message.lines().find(|line| line.ends_with(&reason)).unwrap_or_default();
+    for name in ["opencode-tokens@0.1.3", "opencode-pulse-ticker", "opencode-energy@1.0.0"] {
+        assert!(line.contains(name), "{name} in {:?}", toast.message);
     }
+    assert!(toast.message.lines().any(|known| known == "Run /plugins to view details."), "{:?}", toast.message);
     harness.tui.toasts.dismiss();
     opencode_tui::plugins::host::reconcile(&harness.tui);
     settle(&harness);

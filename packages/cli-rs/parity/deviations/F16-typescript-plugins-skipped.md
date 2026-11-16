@@ -13,11 +13,33 @@ found (`OPENCODE_BUN`, the local server's opencode binary run as its own Bun, or
 the client starts (`docs/P.4.md`, "TypeScript plugins on the JS host"), through the V2 compatibility layer (P8), which
 gives a V2 `{ id, setup }` module the context and the modules TS gives it. Without Bun, or without `OPENCODE_PLUGIN_JS=1`,
 the registry lists it with status `Skipped` and the reason "TypeScript TUI plugins run on the JS host, which is off: set
-OPENCODE_PLUGIN_JS=1 (with Bun installed) to turn it on"; its slot claims, commands and routes are absent. Plugins named
-by npm package are not installed or loaded ("opencode-native does not install or load TUI plugins named by npm
-package"), with the JS host on or off. The TUI parts of the server's plugins (`GET /api/plugin`, active with
-`features.tui`, which TS loads as `serverTuiPlugins`) are not loaded either ("opencode-native does not load the TUI part
-of a server plugin"); each is listed by its package target or path beside the server plugin's own row.
+OPENCODE_PLUGIN_JS=1 (with Bun installed) to turn it on"; its slot claims, commands and routes are absent.
+
+Plugins named by npm package run on the JS host too, from the package cache TS installs into, and only from there:
+opencode-native installs and fetches nothing. TS's client prepares a `cli.json` entry with `Npm.add`
+(`packages/cli/src/commands/handlers/default.ts:143`), which installs a package the cache lacks and returns an
+installed one as it is (`packages/util/src/npm.ts:263-268`), and a server plugin's TUI part with `Npm.resolve`
+(`npm.ts:358-366`), then loads `Host.resolve(target).tui` (`packages/tui/src/plugin/context.tsx:652-671`). The Rust
+loader (`crates/plugin/src/loader/npm.rs`) finds the package as `Npm.resolve` does: under
+`<cache>/npm/<key>` (`npm.ts:148`, `<cache>` the global cache, `$XDG_CACHE_HOME/opencode` else `~/.cache/opencode`),
+the key being the spec's text and not a version it resolves to (`npm.ts:60-97`: `<name>@<spec>` for a version, range or
+tag, `<name>@latest` for a bare name, `git-<slug>-<hash>` for a git spec, else the spec), in the generation with the
+largest number (`npm.ts:149-162`), as `node_modules/<name>` (`installedName`, `npm.ts:173-183`); so the same spec
+picks the same directory, and a range is never matched against another version installed under another key. The JS
+host loads its `./tui` export, as for a directory. Like any global or `cli.json` plugin it needs no approval, and its
+build identity is computed off the UI thread (FT-2). As TS resolves a loaded package once a session
+(`context.tsx:663-665`), the directory a spec resolved to stays while the spec is a target: a later install (a new
+generation) does not move it, and a package is not watched. A `cli.json` entry whose key the cache does not hold, where
+TS installs it, is listed `Skipped` with the reason "not in opencode's package cache, and opencode-native installs
+nothing: run `opencode-native plugin add <spec>`", and named so in the notice below. The TUI parts of the server's
+plugins (`GET /api/plugin`, active with `features.tui`, by the package target or the local path the server reports,
+TS `serverTuiPlugins`, `context.tsx:96-103`, `301-305`) load the same way, in TS's order: the discovered directories,
+then the server parts, then `cli.json`; one the cache does not hold is left out, as TS leaves out an optional target it
+cannot load (`context.tsx:362-363`). With the JS host off, an npm entry and a server part are listed as a directory is,
+with the JS-host reason, each server part by its package target or path beside the server plugin's own row.
+`scenarios/P.8/cache-cli.app.ts` and `cache-server.app.ts` drive both on each side from one cache holding a pinned
+tarball: equal screens and requests. `crates/tui/tests/all/plugin_npm.rs` checks the keys of 34 spec forms against
+TS's `Npm.cacheKey`, and the not-installed reason and notice.
 
 Where TS draws these plugins, the Rust client tells the user once a run, in the host's notice lane (a warning toast that
 stays, with "Open plugins", as its "Plugin failed" toast is told; no plugin's toast hides it): "N TypeScript plugins
@@ -26,7 +48,7 @@ plugin list, so the server plugins' TUI parts are in the same notice; one found 
 directory, a new server plugin) is told then, once. `/plugins` lists each as a TUI row `skipped`, named by the `name` of
 its directory's `package.json` where there is one, else by its target, with the reason as its error; the log has
 `plugin <target> skipped: <reason>` once for each. `scenarios/F16/ts-plugins-skipped.pty.ts` drives it: a server plugin
-whose TUI part TS loads and Rust lists as skipped, with the notice.
+whose TUI part TS loads and Rust, with the JS host off, lists as skipped, with the notice.
 
 What runs on the JS host differs from TS as `F16-v2-compat-layer` says, and one found in a project's
 `.opencode/plugins` waits for the user's approval first (`F16-project-plugin-approval`). It is a second timing tier: a

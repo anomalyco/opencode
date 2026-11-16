@@ -538,7 +538,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     // Skipped with why and how to load it, and named by its package rather than its path (FT-10, FT-15).
     assert_eq!(entry(&entries, &ts_target).status, Status::Skipped(SKIPPED_JS_OFF.to_owned()));
     assert_eq!(entry(&entries, &ts_target).id, "@acme/typescript-tui");
-    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_NPM.to_owned()));
+    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_JS_OFF.to_owned()));
     assert_eq!(fake.active.get(), 2);
     assert_eq!(host.remounts.get(), 1);
     assert!(loader.watch_dirs().contains(&lib_dir));
@@ -594,7 +594,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     let entries = registry.entries();
     let gone = |entry: &Entry| entry.target.as_ref().is_some_and(|target| [&lib_target, &ts_target].contains(&target));
     assert!(!entries.iter().any(gone), "{entries:?}");
-    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_NPM.to_owned()));
+    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_JS_OFF.to_owned()));
 }
 
 #[test]
@@ -1946,4 +1946,46 @@ fn a_project_typescript_plugin_named_through_a_link_is_listed_once() {
     let targets = project.loader(Rc::new(Fake::default()), configured).targets();
     let named: Vec<(&str, bool)> = targets.iter().map(|target| (target.target.as_str(), target.project)).collect();
     assert_eq!(named, [(link.to_str().unwrap(), false)]);
+}
+
+// Expected (TS `context.tsx:663-665`, `Npm.resolve`, js-npm): with the JS host, a `cli.json` entry and a server
+// plugin's TUI part that name an npm package resolve in the package cache, need no approval, and keep the generation
+// they resolved to while they are targets, as TS resolves a loaded package once a session; a package is not watched.
+// A server part the cache does not hold is left out, as TS leaves out an optional target. Without the JS host neither
+// resolves, and server parts are not targets.
+#[test]
+fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
+    let project = Project::new();
+    let cache = project.root.path().join("cache");
+    let install = |key: &str, generation: &str, name: &str| {
+        let dir = cache.join("npm").join(key).join(generation).join("node_modules").join(name);
+        write(
+            &dir.join("package.json"),
+            &format!(r#"{{ "name": "{name}", "exports": {{ "./tui": "./lib/tui.js" }} }}"#),
+        );
+        write(&dir.join("lib/tui.js"), "export default {}\n");
+        dir
+    };
+    let first = install("tui-pkg@1.0.0", "10", "tui-pkg");
+    let part = install("@s/part@latest", "3", "@s/part");
+    let configured = vec![Configured { target: "tui-pkg@1.0.0".into(), options: None }];
+    let off = project.loader(Rc::new(Fake::default()), configured.clone()).with_npm(cache.clone());
+    off.set_server(vec!["@s/part".into(), "not-cached@1".into()]);
+    assert_eq!(off.targets().into_iter().map(|target| target.local).collect::<Vec<_>>(), [None]);
+    let host = host();
+    let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
+    let loader = project.loader(Rc::new(Fake::default()), configured).with_npm(cache.clone()).with_scripts(scripts);
+    loader.set_server(vec!["@s/part".into(), "not-cached@1".into()]);
+    let resolved = |loader: &Loader| {
+        loader.targets().into_iter().map(|target| (target.target, target.local, target.project)).collect::<Vec<_>>()
+    };
+    let expected = vec![
+        ("@s/part".to_owned(), Some(part.clone()), false),
+        ("tui-pkg@1.0.0".to_owned(), Some(first.clone()), false),
+    ];
+    assert_eq!(resolved(&loader), expected);
+    install("tui-pkg@1.0.0", "11", "tui-pkg");
+    assert_eq!(resolved(&loader), expected, "a later install moved the package");
+    let watched = loader.watch_dirs();
+    assert!(!watched.iter().any(|dir| dir.starts_with(&cache)), "{watched:?}");
 }

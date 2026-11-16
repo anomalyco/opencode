@@ -2245,12 +2245,9 @@ impl Entry {
 
 /// Why a configured TypeScript TUI plugin is listed but not loaded (deviation of F16 until P.4).
 pub const SKIPPED: &str = "TypeScript TUI plugins do not run in opencode-native yet";
-/// Why a TypeScript plugin directory is not loaded while the JS host is off (FT-10).
+/// Why a TypeScript plugin (a directory, a package named by npm or a server plugin's TUI part) is not loaded while the
+/// JS host is off (FT-10, js-npm).
 pub const SKIPPED_JS_OFF: &str = "TypeScript TUI plugins run on the JS host, which is off: set OPENCODE_PLUGIN_JS=1 (with Bun installed) to turn it on";
-/// Why a `plugins` entry that names an npm package is not loaded (FT-10).
-pub const SKIPPED_NPM: &str = "opencode-native does not install or load TUI plugins named by npm package";
-/// Why the TUI part of a server plugin is not loaded (FT-10).
-pub const SKIPPED_SERVER_TUI: &str = "opencode-native does not load the TUI part of a server plugin";
 
 struct Plugin {
     definition: Definition,

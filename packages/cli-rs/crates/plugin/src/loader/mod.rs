@@ -12,6 +12,7 @@
 pub mod approval;
 pub mod deps;
 pub mod native;
+pub mod npm;
 pub mod quarantine;
 
 use std::cell::RefCell;
@@ -22,7 +23,7 @@ use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
 use crate::pipe::{Scripts, Step};
-use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, SKIPPED_JS_OFF, SKIPPED_NPM, Status};
+use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, SKIPPED_JS_OFF, Status};
 use approval::{Approvals, Artifact, Decision};
 
 /// The file name of a plugin directory's native build: `plugin.so`, `plugin.dylib`, or `plugin.dll`.
@@ -124,6 +125,14 @@ pub struct Loader {
     held: RefCell<HashMap<String, Result<Artifact, String>>>,
     /// The JS host, which runs the targets that have no native build.
     scripts: Option<Rc<Scripts>>,
+    /// The global cache directory TS installs packages into (`~/.cache/opencode`), where a target named by npm
+    /// package is found ([`npm::resolve`]), and nothing installed.
+    npm: Option<PathBuf>,
+    /// The TUI parts of the active server plugins, by the target the server reports (TS `serverTuiPlugins`).
+    server: RefCell<Vec<String>>,
+    /// The package each npm spec resolved to, kept while the spec is a target: TS resolves a loaded package's entry
+    /// once a session (`context.tsx:663-665`), so a later install does not move it.
+    packages: RefCell<HashMap<String, PathBuf>>,
 }
 
 /// The `name` of the `package.json` in `dir`, which names a plugin that is not loaded in place of its path.
@@ -150,7 +159,35 @@ impl Loader {
             approvals: Approvals::default(),
             held: RefCell::default(),
             scripts: None,
+            npm: None,
+            server: RefCell::default(),
+            packages: RefCell::default(),
         }
+    }
+
+    /// Finds a target named by npm package in the package cache under `cache`, as the TS client does.
+    pub fn with_npm(self, cache: PathBuf) -> Self {
+        Self { npm: Some(cache), ..self }
+    }
+
+    /// Replaces the TUI parts of the server's plugins, after the server listed its plugins; the next
+    /// [`Loader::reconcile`] applies them. They load on the JS host only.
+    pub fn set_server(&self, parts: Vec<String>) {
+        self.server.replace(parts);
+    }
+
+    /// The local path a configured or server target names, or the package an npm spec names in the cache (with the
+    /// JS host only, which is what runs it).
+    fn local(&self, target: &str) -> Option<PathBuf> {
+        local_source(target, &self.config_dir).or_else(|| {
+            if let Some(pinned) = self.packages.borrow().get(target) {
+                return Some(pinned.clone());
+            }
+            let cache = self.npm.as_deref().filter(|_| self.scripts.is_some())?;
+            let directory = npm::resolve(target, cache)?.directory;
+            self.packages.borrow_mut().insert(target.to_owned(), directory.clone());
+            Some(directory)
+        })
     }
 
     /// Runs the targets without a native build on `scripts`.
@@ -182,15 +219,25 @@ impl Loader {
                 project: index > 0,
             })
         });
+        // TS's order: the discovered directories, the server plugins' TUI parts, then `cli.json` (`context.tsx:290-309`).
+        let server: Vec<String> = match self.scripts {
+            Some(_) => self.server.borrow().clone(),
+            None => Vec::new(),
+        };
+        // A part that does not resolve is left out, as TS leaves out an optional target it cannot load
+        // (`context.tsx:362-363`).
+        let server = server.into_iter().filter_map(|target| {
+            Some(Target { local: Some(self.local(&target)?), target, options: None, project: false })
+        });
         let configured = self.configured.borrow();
         let configured = configured.iter().map(|entry| Target {
             target: entry.target.clone(),
-            local: local_source(&entry.target, &self.config_dir),
+            local: self.local(&entry.target),
             options: entry.options.clone(),
             project: false,
         });
         let mut targets: Vec<Target> = Vec::new();
-        for target in discovered.chain(configured) {
+        for target in discovered.chain(server).chain(configured) {
             let key = |target: &Target| {
                 target
                     .local
@@ -242,6 +289,10 @@ impl Loader {
             .filter_map(|dir| dir.ancestors().take(3).find(|dir| dir.is_dir()).map(Path::to_path_buf))
             .collect();
         for target in self.targets() {
+            // A package in the npm cache changes only by an install, which TS does not reload either (js-npm).
+            if local_source(&target.target, &self.config_dir).is_none() {
+                continue;
+            }
             // A TypeScript plugin's modules may sit in its subdirectories, whose saves reload it too (review carbon-2);
             // its dependencies change by an install, which touches the directory itself.
             if self.scripted(&target)
@@ -299,6 +350,7 @@ impl Loader {
             changed = true;
         }
         self.listed.replace(targets.iter().map(|target| target.target.clone()).collect());
+        self.packages.borrow_mut().retain(|spec, _| targets.iter().any(|known| known.target == *spec));
         for target in &targets {
             changed |= self.reconcile_target(host, registry, target);
         }
@@ -365,10 +417,11 @@ impl Loader {
                 return false;
             }
             // Why, with the way to load it where there is one (FT-10).
-            return skip(match (&target.local, &self.scripts) {
-                (None, _) => SKIPPED_NPM,
-                (Some(local), None) if local.is_dir() => SKIPPED_JS_OFF,
-                _ => SKIPPED,
+            return skip(&match (&target.local, &self.scripts) {
+                (None, Some(_)) => npm::missing(name),
+                (None, None) => SKIPPED_JS_OFF.to_owned(),
+                (Some(local), None) if local.is_dir() => SKIPPED_JS_OFF.to_owned(),
+                _ => SKIPPED.to_owned(),
             });
         };
         let (digest, bytes, quarantine) = match self.admit(host, registry, target, &file, &listed) {
