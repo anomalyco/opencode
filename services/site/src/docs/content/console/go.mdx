@@ -63,6 +63,7 @@ The current list of models includes:
 - **MiniMax M3**
 - **Muse Spark 1.3 Contributor** ([limited regions](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Muse Spark 1.2 Contributor** ([limited regions](https://ai.developer.meta.com/legal/geographic-use-policy))
+- **Qwen4 Max**
 - **Qwen3.8 Max**
 - **Qwen3.8 Flash**
 - **Qwen3.7 Plus**
@@ -183,6 +184,7 @@ Token prices are per 1M tokens.
     | MiniMax M3 (> 512K tokens)       | $0.60           | $2.40             | $0.12           | -            | **$60**                                        |
     | Muse Spark 1.3 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$60**                                        |
     | Muse Spark 1.2 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$60**                                        |
+    | Qwen4 Max                        | $1.50           | $4.50             | $0.075          | $1.875       | **$15**                                        |
     | Qwen3.8 Max                      | $2.00           | $6.00             | $0.25           | $2.50        | **$15**                                        |
     | Qwen3.8 Flash                    | $0.15           | $0.47             | $0.016          | $0.20        | **$30**                                        |
     | Qwen3.7 Plus (≤ 256K tokens)     | $0.40           | $1.60             | $0.04           | $0.50        | **$60**                                        |
@@ -229,6 +231,7 @@ Token prices are per 1M tokens.
     | MiniMax M3 (> 512K tokens)       | $0.60           | $2.40             | $0.12           | -            | **$180**                                       |
     | Muse Spark 1.3 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$120**                                       |
     | Muse Spark 1.2 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$120**                                       |
+    | Qwen4 Max                        | $1.50           | $4.50             | $0.075          | $1.875       | **$60**                                        |
     | Qwen3.8 Max                      | $2.00           | $6.00             | $0.25           | $2.50        | **$60**                                        |
     | Qwen3.8 Flash                    | $0.15           | $0.47             | $0.016          | $0.20        | **$90**                                        |
     | Qwen3.7 Plus (≤ 256K tokens)     | $0.40           | $1.60             | $0.04           | $0.50        | **$180**                                       |
@@ -275,6 +278,7 @@ Token prices are per 1M tokens.
     | MiniMax M3 (> 512K tokens)       | $0.60           | $2.40             | $0.12           | -            | **$65**                                        |
     | Muse Spark 1.3 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$65**                                        |
     | Muse Spark 1.2 Contributor       | $0.10           | $0.20             | $0.002          | -            | **$65**                                        |
+    | Qwen4 Max                        | $1.50           | $4.50             | $0.075          | $1.875       | **$20**                                        |
     | Qwen3.8 Max                      | $2.00           | $6.00             | $0.25           | $2.50        | **$20**                                        |
     | Qwen3.8 Flash                    | $0.15           | $0.47             | $0.016          | $0.20        | **$35**                                        |
     | Qwen3.7 Plus (≤ 256K tokens)     | $0.40           | $1.60             | $0.04           | $0.50        | **$65**                                        |
@@ -338,6 +342,7 @@ Plus and Go Teams estimates scale with each model's higher usage limit.
     | MiniMax M3                 | 3,200                | 8,000             | 16,000             |
     | Muse Spark 1.3 Contributor | 45,300               | 113,300           | 226,600            |
     | Muse Spark 1.2 Contributor | 45,300               | 113,300           | 226,600            |
+    | Qwen4 Max                  | 460                  | 1,160             | 2,310              |
     | Qwen3.8 Max                | 160                  | 400               | 810                |
     | Qwen3.8 Flash              | 5,400                | 13,500            | 27,000             |
     | Qwen3.7 Plus               | 4,300                | 10,800            | 21,600             |
@@ -376,6 +381,7 @@ Plus and Go Teams estimates scale with each model's higher usage limit.
     | MiniMax M3                 | 9,600                | 24,000            | 48,000             |
     | Muse Spark 1.3 Contributor | 90,600               | 226,600           | 453,200            |
     | Muse Spark 1.2 Contributor | 90,600               | 226,600           | 453,200            |
+    | Qwen4 Max                  | 1,840                | 4,640             | 9,240              |
     | Qwen3.8 Max                | 640                  | 1,600             | 3,240              |
     | Qwen3.8 Flash              | 16,200               | 40,500            | 81,000             |
     | Qwen3.7 Plus               | 12,900               | 32,400            | 64,800             |
@@ -414,6 +420,7 @@ Plus and Go Teams estimates scale with each model's higher usage limit.
     | MiniMax M3                 | 3,467                | 8,670             | 17,330             |
     | Muse Spark 1.3 Contributor | 49,075               | 122,740           | 245,480            |
     | Muse Spark 1.2 Contributor | 49,075               | 122,740           | 245,480            |
+    | Qwen4 Max                  | 613                  | 1,550             | 3,080              |
     | Qwen3.8 Max                | 213                  | 530               | 1,080              |
     | Qwen3.8 Flash              | 6,300                | 15,750            | 31,500             |
     | Qwen3.7 Plus               | 4,658                | 11,700            | 23,400             |
@@ -454,6 +461,7 @@ The estimates use the following token counts per request; actual usage varies.
 - MiMo-V2.6-Pro — 790 input, 86,000 cached, 305 output tokens per request
 - MiMo-V2.5 — 830 input, 71,500 cached, 295 output tokens per request
 - MiMo-V2.5-Pro — 790 input, 86,000 cached, 305 output tokens per request
+- Qwen4 Max — 420 input, 66,000 cached, 200 output tokens per request
 - Qwen3.8 Max — 420 input, 66,000 cached, 200 output tokens per request
 - Qwen3.8 Flash — 600 input, 58,000 cached, 200 output tokens per request
 - Qwen3.7 Plus — 500 input, 57,000 cached, 190 output tokens per request
@@ -519,6 +527,7 @@ text model also works through the other APIs, which Console translates. See
 | MiniMax M3                 | minimax-m3                 | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
 | Muse Spark 1.3 Contributor | muse-spark-1.3-contributor | `https://opencode.ai/inference/go/openai/v1/responses`                 | `@ai-sdk/openai`            |
 | Muse Spark 1.2 Contributor | muse-spark-1.2-contributor | `https://opencode.ai/inference/go/openai/v1/responses`                 | `@ai-sdk/openai`            |
+| Qwen4 Max                  | qwen4-max                  | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
 | Qwen3.8 Max                | qwen3.8-max                | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
 | Qwen3.8 Flash              | qwen3.8-flash              | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus               | qwen3.7-plus               | `https://opencode.ai/inference/go/anthropic/v1/messages`               | `@ai-sdk/anthropic`         |
@@ -570,6 +579,7 @@ curl https://opencode.ai/inference/go/v1/models
 | MiMo-V2.6-Flash            | Not used       | 0 days         |
 | MiMo-V2.5-Pro              | Not used       | 0 days         |
 | MiMo-V2.5                  | Not used       | 0 days         |
+| Qwen4 Max                  | Not used       | 0 days         |
 | Qwen3.8 Max                | Not used       | 0 days         |
 | Qwen3.8 Flash              | Not used       | 0 days         |
 | Qwen3.7 Plus               | Not used       | 0 days         |
