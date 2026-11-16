@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { getDomain } from "tldts"
+import { displayHost } from "../host-display"
 import { extensionAccess, reviewHosts } from "./compatibility"
 import { coversPattern } from "./extension-api/match-pattern"
 import type { Manifest } from "./extensions"
@@ -20,7 +21,11 @@ export function reviewAccess(manifest: Manifest, previous?: ReviewedGrants) {
     if (!host || host === "*") return []
 
     // Include private suffixes: github.io tenants are not one site. Keep wildcard public suffixes broad and visible.
-    return getDomain(host, { allowPrivateDomains: true }) ?? (authority?.[1] ? `*.${host}` : host)
+    // Named as every host in the pane is (`displayHost`): ASCII, and the end of a long one kept.
+    const domain = getDomain(host, { allowPrivateDomains: true })
+    const site = displayHost(`https://${domain ?? host}/`)
+
+    return domain || !authority?.[1] ? site : `*.${site}`
   }))].sort()
 
   const added = previous && {
