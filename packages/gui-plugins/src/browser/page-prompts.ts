@@ -392,6 +392,8 @@ export function createPagePrompts(input: {
     intend,
     /** An agent command started: a page that unloads now does not ask the user. */
     agentStarted: () => dispatchVisit({ type: "intent-ended" }),
+    /** A "Leave site?" or sign-in covers the page with its still: the user sees no live page to aim at. */
+    covered: () => state.items.some((item) => item.kind === "leave" || item.kind === "auth"),
     /**
      * Whether the user's close may go ahead now. A page that asks to confirm keeps the tab and asks "Leave site?",
      * whose Leave closes it. The page's unload handlers run on a blank document load, which the tab's state never

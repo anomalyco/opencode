@@ -205,7 +205,8 @@ export default function SessionBrowserPane(props: {
   const find = (action: FindAction) => {
     const tab = state()
 
-    if (!tab) return
+    // Nothing to search while a dialog blocks the page; the bar would also sit beside the dialog's focus trap.
+    if (!tab || (action.type === "open" && promptKey(true))) return
 
     if (action.type === "open" && findInput?.isConnected) {
       findInput.focus()
@@ -912,23 +913,34 @@ export default function SessionBrowserPane(props: {
           {error()}
         </div>
       </Show>
-      <Show when={state()?.id} keyed>
-        {(id) => <><Show when={props.model.notice(props.session, id)}>{(notice) => (
-          <RefusalBar notice={notice()} answer={(dismiss) => props.model.answerNotice(props.session, id, dismiss)} />
-        )}</Show><Show when={!suspended() && props.model.search(props.session, id)}>{(view) => (
-          <FindBar view={view()} input={(el) => { findInput = el }} run={find} />
-        )}</Show></>}
-      </Show>
+      {/*
+        The bars above the page, always in this order: the sign-in offer, the site's permission request, the tab's
+        notice, then find. A dialog that blocks the page sits over the page area alone, never over a bar; find, which
+        would search the page behind it, closes while it shows.
+      */}
       {/* Above a page, where a signed-out site is the reason to import; the new tab page shows the offer as a card. */}
       <Show when={offering() && !empty() && !suspended()}>
         <SignInOffer variant="bar" imported={imported} closed={() => setConfirming(false)} />
       </Show>
-      {/* Nearest the page it is about, so the bars above it never move when it comes and goes. */}
       <Show when={promptKey(false)} keyed>
         {(key) => (
           <Show when={key ? prompt() : undefined}>
             {(view) => <PromptBar view={view()} answer={answer} focus={untrack(promptFocus)} />}
           </Show>
+        )}
+      </Show>
+      <Show when={state()?.id} keyed>
+        {(id) => (
+          <>
+            <Show when={props.model.notice(props.session, id)}>
+              {(notice) => (
+                <RefusalBar notice={notice()} answer={(dismiss) => props.model.answerNotice(props.session, id, dismiss)} />
+              )}
+            </Show>
+            <Show when={!suspended() && !promptKey(true) && props.model.search(props.session, id)}>
+              {(view) => <FindBar view={view()} input={(el) => { findInput = el }} run={find} />}
+            </Show>
+          </>
         )}
       </Show>
       <embeds.View

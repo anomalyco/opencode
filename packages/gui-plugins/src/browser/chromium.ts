@@ -1895,6 +1895,10 @@ export function createBrowserPage(
         throw new Error("Middle-click can paste the system selection. Use fill/type to enter text and evaluate to read page text.")
       const changed = "Input target changed or could not be verified. Take a fresh snapshot and use the page outside extension UI."
 
+      // The user sees a still of the page under "Leave site?" or a sign-in, not the page the input would reach.
+      if (prompts.covered())
+        throw new Error("The user is answering a prompt over this page. Wait for them, or use another tab; no input was sent.")
+
       if ("x" in params) {
         const version = revision
         const trees = await frameTrees()
