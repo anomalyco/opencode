@@ -8,6 +8,8 @@ type Document = {
   /** Bumped when a navigation replaces the document; refs and operations from an older one are stale. */
   readonly generation: number
   readonly url: string
+  /** An unissued user navigation. Shown and saved, but never used as the committed document's identity. */
+  readonly retry?: string
   /**
    * Chromium names a document after its URL until its <title> parses. A navigation on the same site keeps the shown
    * title until the new document names itself or stops loading, so a page that reloads or redirects to itself does
@@ -43,6 +45,7 @@ export type DocumentState =
   | { readonly status: "closed" }
 
 export type DocumentEvent =
+  | { readonly type: "navigation.held-stopped"; readonly address?: string }
   | { readonly type: "loading.started" }
   | { readonly type: "loading.stopped"; readonly title: string }
   | {
@@ -126,6 +129,8 @@ export function transitionDocument(state: DocumentState, event: DocumentEvent): 
   if (state.status === "closed") return unchanged(state)
 
   switch (event.type) {
+    case "navigation.held-stopped":
+      return settle(state, { ...state, retry: state.status === "loaded" ? undefined : event.address, busy: false, pending: undefined }, [PUBLISH])
     case "disposed":
       return { state: CLOSED, effects: [] }
     case "loading.started":
@@ -135,7 +140,7 @@ export function transitionDocument(state: DocumentState, event: DocumentEvent): 
     case "navigation.started":
       if (!event.isMainFrame || event.isSameDocument) return unchanged(state)
 
-      return settle(state, { ...state, pending: event.url }, [CLEAR, PUBLISH])
+      return settle(state, { ...state, retry: undefined, pending: event.url }, [CLEAR, PUBLISH])
     case "navigation.committed":
       return committed(state, event)
     case "navigation.failed":
@@ -210,6 +215,7 @@ export function isDocumentLoading(state: DocumentState) {
 export function documentTab(
   state: DocumentState,
   history: { readonly id: Browser.TabID; readonly canGoBack: boolean; readonly canGoForward: boolean },
+  display = true,
 ): Browser.Tab {
   if (state.status === "closed") return { ...history, url: "", title: "", loading: false, generation: 0 }
 
@@ -217,7 +223,7 @@ export function documentTab(
 
   const tab = {
     id: history.id,
-    url: state.url.slice(0, 16_384),
+    url: ((display && state.retry) || state.url).slice(0, 16_384),
     title: state.title.slice(0, 2_048),
     loading,
     canGoBack: history.canGoBack,
@@ -226,7 +232,7 @@ export function documentTab(
   }
 
   // A reload of a failed page shows its progress, and the error again if it stops without a document.
-  return state.status === "failed" && !loading ? { ...tab, loadError: state.message } : tab
+  return state.status === "failed" && !loading && !state.retry ? { ...tab, loadError: state.message } : tab
 }
 
 function committed(state: Open, event: Extract<DocumentEvent, { type: "navigation.committed" }>): DocumentTransition {

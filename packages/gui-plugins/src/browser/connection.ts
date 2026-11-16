@@ -14,6 +14,7 @@ export type ShortcutEvent = Extract<PaneEvent, { type: "shortcut" }>
 export type Zoom = "in" | "out" | "reset"
 
 export type Registration = {
+  readonly binding: string
   /** Creates a restored tab's page, which then reports its embed. */
   load(tabID: Browser.TabID): void
   command(command: Browser.Action): Promise<void>
@@ -62,6 +63,7 @@ export function openBinding(input: {
   )
 
   return {
+    binding,
     load(tabID) {
       if (status.closed) return
       void ready.then(() => client.load({ binding, tabID })).catch(() => undefined)

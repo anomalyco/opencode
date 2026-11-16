@@ -186,8 +186,12 @@ const setup: Plugin.MainSetup = (ctx) => {
       // The window lays out in CSS pixels; its content is in device-independent ones.
       const zoom = win.webContents.getZoomFactor()
       const anchor = input.anchor
+      const current = await profile()
+      const tab = (await pane()).toolbarTab(caller.window, input.binding, input.tabID)
 
-      return (await profile()).clickExtension(win, input.id, {
+      if (tab === undefined) return false
+
+      return current.clickExtension(win, input.id, tab, {
         x: Math.round(anchor.x * zoom),
         y: Math.round(anchor.y * zoom),
         width: Math.round(anchor.width * zoom),

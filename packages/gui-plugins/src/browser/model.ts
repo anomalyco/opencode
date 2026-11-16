@@ -695,6 +695,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     /** The page's cookie count; undefined while the pane cannot answer. */
     site: (session: Session, tabID: Browser.TabID) => registration(session)?.site(tabID),
+    binding: (session: Session) => registration(session)?.binding,
     /** Deletes the page's cookies and stored data, and reloads it. */
     clearSite: (session: Session, tabID: Browser.TabID) => registration(session)?.clearSite(tabID),
     revealFile: (session: Session, tabID: Browser.TabID) => registration(session)?.reveal(tabID),

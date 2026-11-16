@@ -301,6 +301,8 @@ export function createBrowserPage(
     webPreferences: {
       partition: options.partition,
       nodeIntegration: false,
+      // Deliver the profile's CSS receiver to child frames. It runs in the isolated sandbox, not the web world.
+      nodeIntegrationInSubFrames: options.local === true,
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
@@ -492,12 +494,12 @@ export function createBrowserPage(
     if (reason === "remove") extensionContexts.delete(frameId)
   })
 
-  const state = () =>
+  const state = (display = false) =>
     documentTab(documentState, {
       id: options.id,
       canGoBack: contents.navigationHistory.canGoBack(),
       canGoForward: contents.navigationHistory.canGoForward(),
-    })
+    }, display)
 
   // Every state report goes through here, so a page that was disposed publishes nothing.
   // While a user's close asks the page's beforeunload on a blank load, the tab reports nothing: the blank page is not
@@ -508,7 +510,10 @@ export function createBrowserPage(
     if (!closed() && !quiet) options.publish(error)
   }
 
+  let startingBlank = false
+
   const dispatch = (event: DocumentEvent) => {
+    if (startingBlank && event.type !== "disposed") return
     const next = transitionDocument(documentState, event)
     documentState = next.state
     next.effects.forEach((effect) => {
@@ -630,6 +635,9 @@ export function createBrowserPage(
   // Chromium uses the document URL as the title of untitled files; don't persist its internal origin as a title.
   const pageTitle = (address = state().url) => {
     const title = contents.getTitle()
+
+    if (documentState.status !== "closed" && documentState.retry && (!title || title === "about:blank"))
+      return documentState.title || documentState.retry
 
     return /^oc-preview:/i.test(title) ? address : title
   }
@@ -763,6 +771,7 @@ export function createBrowserPage(
       overrideBrowserWindowOptions: {
         webPreferences: {
           nodeIntegration: false,
+          nodeIntegrationInSubFrames: options.local === true,
           contextIsolation: true,
           sandbox: true,
           webSecurity: true,
@@ -987,12 +996,14 @@ export function createBrowserPage(
   const navigation = navigationTurn(options.waitForFilters, url => {
     dispatch({ type: "navigation.started", url, isMainFrame: true, isSameDocument: false })
     dispatch({ type: "loading.started" })
-  }, () => { if (!closed()) dispatch({ type: "loading.stopped", title: pageTitle() }) })
+  }, () => { if (!closed()) dispatch({ type: "loading.stopped", title: pageTitle() }) }, address => {
+    dispatch({ type: "navigation.held-stopped", address })
+  })
 
-  const begin = (signal = options.signal) => navigation.begin(AbortSignal.any([pageLifetime.signal, signal, options.signal]))
+  const begin = (signal = options.signal, keepAddress = false) => navigation.begin(AbortSignal.any([pageLifetime.signal, signal, options.signal]), keepAddress)
 
-  const load = async (url: string, retry = false, commandSignal = options.signal) => {
-    const visit = begin(commandSignal)
+  const load = async (url: string, retry = false, commandSignal = options.signal, keepAddress = true) => {
+    const visit = begin(commandSignal, keepAddress)
     const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, (guarded) => notices.show({reason: guarded ? "browser.preview.agentRestricted" : "browser.preview.restricted"}), retry ? contents.getURL() : undefined) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
@@ -1038,6 +1049,8 @@ export function createBrowserPage(
 
     if (navigation.interrupt("reload", documentState.status === "restoring" ? documentState.url : undefined)) return
 
+    if (documentState.status !== "closed" && documentState.retry) return load(documentState.retry, true, signal)
+
     if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url, true, signal)
     const actual = contents.getURL()
 
@@ -1054,7 +1067,13 @@ export function createBrowserPage(
     ...(initial === undefined
       ? []
       : [
-          load(initial).catch((error: Error) => {
+          load(initial).then(async () => {
+            // Stop before the first load leaves no renderer to finish CDP setup. Start only the inert document;
+            // its native events are not a navigation of the saved tab.
+            if (documentState.status !== "restoring" || !documentState.retry || contents.getURL() || closed()) return
+            startingBlank = true
+            await contents.loadURL("about:blank").finally(() => { startingBlank = false })
+          }).catch((error: Error) => {
             if (!options.restore) throw error
             // A dev server may have stopped while this page was unloaded. Keep its tab available to retry.
             publish(error.message)
@@ -1075,7 +1094,7 @@ export function createBrowserPage(
     view,
     contents,
     nativeID: contents.id,
-    state,
+    state: () => state(true),
     childActivity: () => childActivity(activity),
     previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
     previewIdentity: () => options.workspace?.identity(),
@@ -1325,7 +1344,7 @@ export function createBrowserPage(
         signal.addEventListener("abort", cancel, { once: true })
 
         try {
-          await load(url, false, signal)
+          await load(url, false, signal, origin === "user")
         } finally {
           signal.removeEventListener("abort", cancel)
         }

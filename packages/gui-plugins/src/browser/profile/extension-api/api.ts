@@ -86,9 +86,11 @@ export type Emit = (event: string, args: readonly Wire[], extension?: string) =>
 
 /** The namespace a `path.member` name belongs to: the one whose path is everything before the member. */
 export function namespaceOf(namespaces: readonly ApiNamespace[], name: string) {
-  return namespaces.find(
-    (namespace) => name.startsWith(`${namespace.path}.`) && !name.slice(namespace.path.length + 1).includes("."),
-  )
+  return namespaces.find(namespace => {
+    const member = name.slice(namespace.path.length + 1)
+
+    return name.startsWith(`${namespace.path}.`) && (namespace.methods.includes(member) || namespace.events?.includes(member))
+  })
 }
 
 /**
