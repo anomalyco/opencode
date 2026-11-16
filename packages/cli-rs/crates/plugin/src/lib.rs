@@ -1879,9 +1879,9 @@ impl Setup<'_> {
         self.registration.generation
     }
 
-    /// The activations this one goes on from, whose dialog it owns ([`Registry::owns`]).
-    pub(crate) fn continues(&mut self, generations: Vec<u64>) {
-        self.registration.continues = generations;
+    /// The first activation of the chain this one goes on from, whose dialogs it owns ([`Registry::owns`]).
+    pub(crate) fn continues(&mut self, since: Option<u64>) {
+        self.registration.continues = since;
     }
 
     /// Tells the registry how to learn that a call of this activation panicked: then it contributes nothing more.
@@ -2154,9 +2154,11 @@ impl Setup<'_> {
 struct Registration {
     /// The activation, unique in the registry.
     generation: u64,
-    /// The activations it goes on from: a reload of a JS plugin's registrations hands it their activation of the JS
-    /// host, so the dialog they showed is its own ([`Registry::owns`], FT-4).
-    continues: Vec<u64>,
+    /// The first activation of the chain it goes on from: a reload of a JS plugin's registrations hands it their
+    /// activation of the JS host, so the dialogs they showed are its own ([`Registry::owns`], FT-4). The chain's
+    /// activations are the plugin's from that one to this, as one plugin has one activation at a time: one number,
+    /// where a list of each grew with the reloads (big-boi's catalog review).
+    continues: Option<u64>,
     /// A call of the activation that panicked, if one did.
     failure: Option<ErrorFn>,
     claims: Vec<(Placement, ClaimRender)>,
@@ -2977,7 +2979,10 @@ impl Registry {
     pub fn owns(&self, id: &str, generation: u64) -> bool {
         self.with_plugin(id, |plugin| {
             plugin.active.as_ref().is_some_and(|(_, registration)| {
-                (registration.generation == generation || registration.continues.contains(&generation))
+                (registration.generation == generation
+                    || registration
+                        .continues
+                        .is_some_and(|since| (since..registration.generation).contains(&generation)))
                     && !registration.panicked()
             })
         })

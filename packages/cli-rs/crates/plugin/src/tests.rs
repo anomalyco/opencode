@@ -1071,3 +1071,27 @@ fn the_wake_and_the_mailbox_lose_nothing_in_any_gap() {
     assert_eq!(failed, 1);
     assert!(matches!(&status, Status::Failed(error) if error.contains("update failed")), "{status:?}");
 }
+
+// Expected (big-boi's catalog review, CT-1): an activation a reload handed a JS host's activation on to owns the dialogs
+// of the whole chain it goes on from, named by the chain's first activation alone, where each handover copied the list
+// of every earlier one: from that first one to itself, not one before it, not a later one, not another plugin's.
+#[test]
+fn an_activation_owns_the_dialogs_of_the_chain_it_goes_on_from() {
+    let generation = Rc::new(Cell::new(0));
+    let seen = generation.clone();
+    let chained = Definition::new("p", move |setup| {
+        seen.set(setup.generation());
+        setup.continues(Some(setup.generation() - 2));
+    });
+    let registry = Registry::define(
+        vec![Definition::new("q", |_| {}), Definition::new("r", |_| {}), Definition::new("s", |_| {}), chained],
+        [],
+    );
+    let host = host();
+    registry.activate(&dynamic(&host));
+    let now = generation.get();
+    assert!(now >= 3, "{now}");
+    let owned: Vec<bool> = (now - 3..=now + 1).map(|at| registry.owns("p", at)).collect();
+    assert_eq!(owned, [false, true, true, true, false]);
+    assert!(!registry.owns("q", now), "another plugin's");
+}
