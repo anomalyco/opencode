@@ -321,13 +321,15 @@ describe("Permission", () => {
     }),
   )
 
-  it.effect("shows a nested call's request on its parent's row while the call runs", () =>
+  it.effect("shows a nested call's request on its parent's row until the scope closes", () =>
     Effect.gen(function* () {
       yield* setup()
       const service = yield* Permission.Service
       const source = { type: "tool" as const, messageID: "msg_test", id: "call_child" }
       const ask = (id: string) => service.ask(assertion({ id: Permission.ID.create(id), source }))
-      yield* service.nested(Tool.CallID.make("call_child"), Tool.CallID.make("call_parent"), ask("per_nested"))
+      yield* service
+        .nested(Tool.CallID.make("call_child"), Tool.CallID.make("call_parent"))
+        .pipe(Effect.andThen(ask("per_nested")), Effect.scoped)
       yield* ask("per_after")
       expect((yield* service.get(Permission.ID.create("per_nested")))?.source).toEqual({ ...source, id: "call_parent" })
       expect((yield* service.get(Permission.ID.create("per_after")))?.source).toEqual(source)

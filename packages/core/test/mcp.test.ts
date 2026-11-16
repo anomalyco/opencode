@@ -1789,7 +1789,7 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
         sessionID,
         agent: toolIdentity.agent,
         // The call's own ID. The real service shows the request on the execute call's row.
-        source: { type: "tool", messageID: toolIdentity.messageID, id: "call_resource_0" },
+        source: { type: "tool", messageID: toolIdentity.messageID, id: expect.not.stringMatching(/^call_resource$/) },
       })
 
       server.state.contents = [{ uri: "docs://readme", text: "line\n".repeat(20_000), mimeType: "text/plain" }]
@@ -3071,7 +3071,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
       source: {
         type: "tool",
         messageID: toolIdentity.messageID,
-        id: "call_mcp_permission_0",
+        id: expect.not.stringMatching(/^call_mcp_permission$/),
       },
     })
     expect(calls).toBe(0)

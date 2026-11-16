@@ -1,7 +1,7 @@
 export * as Permission from "./permission.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Schema, Scope } from "effect"
 import { Permission } from "@opencode/schema/permission"
 import type { Tool } from "@opencode/schema/tool"
 import { Bus } from "./bus.js"
@@ -120,14 +120,10 @@ export interface Interface {
   readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
   /**
-   * Runs `effect` as a call made by `parent`, such as one inside a Code Mode program. The call has an ID of its own
-   * but no row, so while it runs, requests naming it as their source show on `parent`'s row.
+   * Marks `call` as made by `parent`, such as a call inside a Code Mode program. It has an ID of its own but no row,
+   * so until the scope closes, requests naming it as their source show on `parent`'s row.
    */
-  readonly nested: <A, E, R>(
-    call: Tool.CallID,
-    parent: Tool.CallID,
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E, R>
+  readonly nested: (call: Tool.CallID, parent: Tool.CallID) => Effect.Effect<void, never, Scope.Scope>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -191,11 +187,10 @@ const layer = Layer.effect(
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
-    const nested: Interface["nested"] = (call, parent, effect) =>
-      Effect.acquireUseRelease(
-        Effect.sync(() => parents.set(call, parent)),
-        () => effect,
-        () => Effect.sync(() => parents.delete(call)),
+    const nested: Interface["nested"] = (call, parent) =>
+      Effect.acquireRelease(
+        Effect.sync(() => void parents.set(call, parent)),
+        () => Effect.sync(() => void parents.delete(call)),
       )
 
     function row(source: AssertInput["source"]) {

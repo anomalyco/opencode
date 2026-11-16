@@ -32,7 +32,7 @@ const permission = Layer.succeed(
     get: () => Effect.succeed(undefined),
     forSession: () => Effect.succeed([]),
     list: () => Effect.succeed([]),
-    nested: (_call, _parent, effect) => effect,
+    nested: () => Effect.void,
   }),
 )
 
