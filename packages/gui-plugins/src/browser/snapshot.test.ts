@@ -19,6 +19,20 @@ function options() {
   return { previous: new Map<number, string>(), picked: new Map<number, string>(), ref: () => `e${++id}` }
 }
 
+test("interactive find keeps controls and their context, not static text or picked decoration", async () => {
+  const tree = [node(1, "navigation", "Projects", 2, 3, 9), node(2, "StaticText", "intro".repeat(100)), node(3, "row", "", 4, 5), node(4, "cell", "Atlas"), node(5, "button", "Edit"), node(9, "link", "Next")]
+  const setup = options()
+  setup.picked.set(2, "e42")
+  const all = await accessibilitySnapshot(tree, { ...setup, interactive: true, maxLines: 1 })
+  expect(all.content).toBe('@e1 [button] "Edit" in navigation "Projects" / row "Atlas"')
+  expect(all.truncated).toBe(true)
+  expect([...all.refs.keys()]).toEqual(["e1"])
+  const found = await accessibilitySnapshot(tree, { ...setup, interactive: true, text: "NEXT", maxLines: 1 })
+  expect(found.content).toBe('@e2 [link] "Next" in navigation "Projects"')
+  expect(found.truncated).toBe(false)
+  expect((await accessibilitySnapshot(tree, { ...setup, maxLines: 2 })).content.split("\n")).toHaveLength(2)
+})
+
 test("empty wrappers cost neither depth nor indentation; named groups and picked elements survive", async () => {
   const wrappers = Array.from({ length: 80 }, (_, i) => node(i + 1, "generic", "", i + 2))
   const tree = [...wrappers, node(81, "group", "Toolbar", 82), node(82, "button", "Save")]

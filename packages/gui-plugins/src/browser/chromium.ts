@@ -2275,6 +2275,8 @@ export function createBrowserPage(
       root: selected?.backendID,
       depth: action.type === "snapshot" ? action.depth : undefined,
       text: action.type === "find" ? action.text : undefined,
+      interactive: action.interactive,
+      maxLines: action.maxLines,
       previous: byNode(refs),
       picked: byNode(picked),
       ref: options.shared.ref,
