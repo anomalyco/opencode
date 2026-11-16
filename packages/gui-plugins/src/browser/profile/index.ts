@@ -5,7 +5,7 @@ import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
 import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { guardSession } from "../session-guard"
-import { extensionAccess, extensionCompatibility, reviewHosts } from "./compatibility"
+import { extensionAccess, extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
 import { createExtensionApis } from "./extension-api"
 import { clearStaging, download, stageExtension, swapIn } from "./install"
@@ -28,7 +28,7 @@ import {
   type ExtensionFiles,
   type Manifest,
 } from "./extensions"
-import type { ImportResult, InstallResult, ProfileExtension } from "./ipc"
+import { ReviewedGrants, type ImportResult, type InstallResult, type ProfileExtension } from "./ipc"
 import { chromiumProfileDirectory, listSources, profileExtensions, readSource, windowsIcons } from "./sources"
 
 /** The partition every page of the desktop browser shares, on disk under the app's user data. */
@@ -43,6 +43,7 @@ const StoredExtension = Schema.Struct({
   localKey: Schema.optional(Schema.String),
   digest: Schema.optional(Schema.String),
   name: Schema.optional(Schema.String),
+  grants: Schema.optional(ReviewedGrants),
 })
 
 type StoredExtension = typeof StoredExtension.Type
@@ -261,6 +262,7 @@ export async function createBrowserProfile(input: {
   const review = async (
     record: StoredExtension,
     fill: (staging: string) => Promise<boolean>,
+    store?: "chrome" | "edge",
   ): Promise<InstallResult> => {
     const folder = record.directory
     const failed: InstallResult = { type: "failed", reason: record.source === "store" ? "download" : "manifest" }
@@ -283,13 +285,14 @@ export async function createBrowserProfile(input: {
     const name = await displayName(staging, manifest)
     const token = crypto.randomUUID()
     const compatibility = extensionCompatibility(manifest, await extensionFiles(staging, manifest))
-    const hosts = reviewHosts(manifest)
-    pending = { token, staging, record: { ...record, name, digest } }
+    // The public-suffix list is needed only while preparing a review, not to start the browser profile.
+    const { reviewAccess } = await import("./review")
+    const summary = reviewAccess(manifest, previous?.grants)
+    pending = { token, staging, record: { ...record, name, digest, grants: summary.grants } }
 
-    return { type: compatibility.level === "unsupported" ? "unsupported" : "review", token, name,
-      icon: await extensionIcon(staging, manifest), replaces: previous?.name ?? previous?.id, compatibility, access: extensionAccess(manifest),
-      hosts: hosts.slice(0, 8), hostCount: hosts.length, wildcard: hosts.some((host) => host.includes("://*.")),
-      permissions: (manifest.permissions ?? []).filter(Schema.is(Schema.String)).filter((item) => !hosts.includes(item)),
+    return { type: compatibility.level === "unsupported" ? "unsupported" : "review", token, name, id: record.id, store,
+      icon: await extensionIcon(staging, manifest), replaces: previous?.name ?? previous?.id, compatibility,
+      ...summary.grants, sites: summary.sites, added: summary.added,
     }
   }
 
@@ -518,7 +521,7 @@ export async function createBrowserProfile(input: {
         await rm(path.join(staging, "_metadata"), { recursive: true, force: true })
 
         return pinKey(staging, parsed.key)
-      })
+      }, target.store)
     },
     async remove(id: string) {
       if (pending?.record.id === id) await discard()

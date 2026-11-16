@@ -63,6 +63,14 @@ export const ExtensionAccess = Schema.Literals(["allSites", "someSites", "cookie
 
 export type ExtensionAccess = typeof ExtensionAccess.Type
 
+export const ReviewedGrants = Schema.Struct({
+  access: Schema.Array(ExtensionAccess),
+  hosts: Schema.Array(Schema.String),
+  permissions: Schema.Array(Schema.String),
+})
+
+export type ReviewedGrants = typeof ReviewedGrants.Type
+
 /** An extension the desktop browser installed, as the window lists it. */
 export const ProfileExtension = Schema.Struct({
   id: text(64),
@@ -150,15 +158,15 @@ export const InstallResult = Schema.Union([
   Schema.Struct({
     type: Schema.Literals(["unsupported", "review"]),
     token: text(64),
-    hosts: Schema.Array(Schema.String),
-    hostCount: Count,
-    wildcard: Schema.Boolean,
-    permissions: Schema.Array(Schema.String),
+    id: text(64),
+    store: Schema.optional(Schema.Literals(["chrome", "edge"])),
+    ...ReviewedGrants.fields,
+    sites: Schema.Array(Schema.String),
+    added: Schema.optional(ReviewedGrants),
     replaces: Schema.optional(Schema.String),
     name: Schema.String,
     icon: Schema.optional(DataImage),
     compatibility: ExtensionCompatibility,
-    access: Schema.Array(ExtensionAccess),
   }),
   Schema.Struct({
     type: Schema.Literal("failed"),

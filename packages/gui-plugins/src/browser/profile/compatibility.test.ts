@@ -1,8 +1,20 @@
 import { expect, test } from "bun:test"
 import { extensionAccess, extensionCompatibility, reviewHosts } from "./compatibility"
 import type { Manifest } from "./extensions"
+import { reviewAccess } from "./review"
 
 const manifest = (fields: Partial<Manifest>): Manifest => ({ manifest_version: 3, name: "x", version: "1", ...fields })
+
+test("review groups by registrable site without collapsing private suffix tenants or hiding broader updates", () => {
+  const sites = ["https://news.example.co.uk/*", "https://*.example.co.uk/*", "https://one.github.io/*", "https://two.github.io/*", "http://localhost/*", "https://*.com/*"]
+  const original = reviewAccess(manifest({ host_permissions: sites }))
+  expect(original.sites).toEqual(["*.com", "example.co.uk", "localhost", "one.github.io", "two.github.io"])
+  expect(original.grants.hosts).toHaveLength(sites.length)
+  expect(reviewAccess(manifest({ host_permissions: sites, permissions: ["webNavigation"] }), original.grants).added)
+    .toEqual({ access: ["activity"], hosts: [], permissions: ["webNavigation"] })
+  expect(reviewAccess(manifest({ host_permissions: [sites[0]] }), original.grants).added).toBeUndefined()
+  expect(reviewAccess(manifest({ host_permissions: ["<all_urls>"] }), original.grants).added?.access).toEqual(["allSites"])
+})
 
 test("review counts distinct hosts across grants and content scripts and puts broad patterns before the display cutoff", () => {
   const sites = Array.from({ length: 12 }, (_, i) => `https://example${i}.test/*`)

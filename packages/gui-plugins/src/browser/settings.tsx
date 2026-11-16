@@ -4,7 +4,8 @@ import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, Glyph, profileChoices } from "./choices"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
-import type { ExtensionAccess, ExtensionCompatibility, ProfileExtension, ProfileSource } from "./profile/ipc"
+import type { ExtensionCompatibility, InstallResult, ProfileExtension, ProfileSource } from "./profile/ipc"
+import type { Job } from "./jobs-machine"
 
 /**
  * Settings › Browser: whether links open in the pane, importing sign-ins, the extensions the profile runs, and its
@@ -399,7 +400,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                 }
               >
                 {(confirm) => (
-                  <ChoiceRow image={confirm().result.icon} name={confirm().result.name} access={confirm().result.access}>
+                  <ChoiceRow image={confirm().result.icon} name={confirm().result.name}>
                     <CompatibilityNote compatibility={confirm().result.compatibility} />
                     <ui.Button
                       size="small"
@@ -414,38 +415,8 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                   </ChoiceRow>
                 )}
               </Show>
-              <Show when={confirming()}>
-                {(confirm) => <p class="break-words text-v2-text-text-muted">{(() => {
-                  const job = confirm().job
-
-                  if (job.type === "install-folder") return ctx.t("settings.extensions.source.folder", { path: job.path })
-
-                  if (job.type === "install-browser") return ctx.t("settings.extensions.source.browser", { source: job.source, profile: job.profile })
-
-                  return ctx.t("settings.extensions.source.store")
-                })()}</p>}
-              </Show>
-              <Show when={confirming() ? message().compatibility : undefined}>
-                {(compatibility) => (
-                  <span class="text-v2-text-text-muted">
-                    <CompatibilityDetails compatibility={compatibility()} />
-                  </span>
-                )}
-              </Show>
-              <Show when={confirming()?.result}>{(review) => <div class="min-w-0 break-words text-v2-text-text-muted">
-                <Show when={review().replaces}>{(name) => <p>{ctx.t("settings.extensions.replaces", { name: name() })}</p>}</Show>
-                <Show when={review().wildcard}><p>{ctx.t("settings.extensions.wildcard")}</p></Show>
-                <Show when={review().hostCount}><p>{ctx.t("settings.extensions.hosts", { count: review().hostCount })}</p>
-                  <ul><For each={review().hosts}>{(host) => <li class="break-all"><bdi dir="ltr">{host}</bdi></li>}</For></ul>
-                </Show>
-                <Show when={review().permissions.length}><p>{ctx.t("settings.extensions.permissions", { list: review().permissions.join(", ") })}</p></Show>
-              </div>}</Show>
-              <Show when={confirming()?.result.access.length ? confirming()?.result.access : undefined}>
-                {(access) => (
-                  <span class="text-v2-text-text-muted">
-                    <AccessDetails access={access()} />
-                  </span>
-                )}
+              <Show when={confirming()} keyed>
+                {(confirm) => <InstallReview review={confirm.result} job={confirm.job} />}
               </Show>
             </div>
           )}
@@ -475,7 +446,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                 }
               >
                 {(item) => (
-                  <ChoiceRow image={item.icon} name={item.name} access={item.access}>
+                  <ChoiceRow image={item.icon} name={item.name}>
                     <CompatibilityNote compatibility={item.compatibility} />
                     <ui.Button
                       size="small"
@@ -514,49 +485,76 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
  */
 const ACTION_COLUMN = "min-w-24 justify-center"
 
-/**
- * An extension the user may add: its icon, its name in the room left with the most far-reaching access it asks for
- * under it (all of it on hover or focus), then its verdict and the action, which stay whole while the name truncates.
- */
-function ChoiceRow(props: { image?: string; name: string; access: readonly ExtensionAccess[]; children: JSX.Element }) {
-  const ctx = usePlugin<typeof definition>()
-  const ui = ctx.ui
-
+/** The verdict and action stay whole; only the name may truncate. */
+function ChoiceRow(props: { image?: string; name: string; children: JSX.Element }) {
   return (
     <div class="flex h-11 items-center gap-3">
       <Glyph image={props.image} fallback="extensions" />
-      <span class="flex min-w-0 flex-1 flex-col">
-        <span class="truncate text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">{props.name}</span>
-        <Show when={props.access[0]}>
-          {(first) => (
-            // The tooltip wraps its trigger in an element of its own, which must shrink too for the line to truncate.
-            <span class="flex min-w-0 [&>*]:min-w-0">
-              <ui.Tooltip value={<AccessDetails access={props.access} />}>
-                <span
-                  tabIndex={0}
-                  class="block truncate text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-muted"
-                >
-                  {ctx.t(`extensions.access.${first()}`)}
-                </span>
-              </ui.Tooltip>
-            </span>
-          )}
-        </Show>
-      </span>
+      <span class="min-w-0 flex-1 truncate text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base" title={props.name}>{props.name}</span>
       {props.children}
     </div>
   )
 }
 
-/** Everything an extension can do once added, one line each. */
-function AccessDetails(props: { access: readonly ExtensionAccess[] }) {
+function InstallReview(props: {
+  review: Extract<InstallResult, { token: string }>
+  job: Extract<Job, { type: "install-store" | "install-folder" | "install-browser" }>
+}) {
   const ctx = usePlugin<typeof definition>()
+  const [expanded, setExpanded] = createSignal(false)
+  const more = () => props.review.sites.length - 3
+  const grants = () => props.review.added ?? props.review
+
+  const origin = () => {
+    if (props.job.type === "install-folder") return props.job.path
+
+    if (props.job.type === "install-browser") return ctx.t("review.profile", { source: props.job.source, profile: props.job.profile })
+  }
+
+  const source = () => props.review.store ?? (props.job.type === "install-browser" ? "browser" : "folder")
+
+  const technical = () => [
+    [ctx.t("review.id"), props.review.id],
+    [ctx.t("review.origin"), origin()],
+    [ctx.t("review.patterns"), props.review.hosts.join("\n")],
+    [ctx.t("review.permissions"), props.review.permissions.join(", ")],
+  ].filter((row) => row[1])
 
   return (
-    <span class="flex flex-col gap-1">
-      <span>{ctx.t("extensions.access.title")}</span>
-      <For each={props.access}>{(item) => <span class="ps-2">{ctx.t(`extensions.access.${item}`)}</span>}</For>
-    </span>
+    <div class="flex min-w-0 flex-col gap-3 text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base">
+      <Show when={grants().access.length || props.review.added}>
+        <div>
+          <p class="font-[530]" classList={{ "text-v2-state-fg-warning": !!props.review.added }}>{ctx.t(props.review.added ? "review.new" : "extensions.access.title")}</p>
+          <ul class="list-disc ps-4">
+            <For each={grants().access}>{(item) => <li>{ctx.t(item === "someSites" || item === "allSites" ? "review.changeSites" : `extensions.access.${item}`)}</li>}</For>
+            <Show when={props.review.added?.hosts.length && !grants().access.some((item) => item === "someSites" || item === "allSites")}><li>{ctx.t("review.moreSites")}</li></Show>
+            <Show when={props.review.added && !grants().access.length && !grants().hosts.length}><li>{ctx.t("review.morePermissions")}</li></Show>
+          </ul>
+        </div>
+      </Show>
+      <div class="flex flex-col gap-1 text-v2-text-text-muted">
+        <p>{ctx.t(`review.source.${source()}`)}</p>
+        <Show when={props.review.replaces}>{(name) => <p>{ctx.t("settings.extensions.replaces", { name: name() })}</p>}</Show>
+        <Show when={props.review.access.includes("allSites")} fallback={
+          <Show when={props.review.sites.length} fallback={<p>{ctx.t(props.review.hosts.length ? "review.otherSites" : "review.noSites")}</p>}>
+            <p class="break-words">{ctx.t("review.sites")} <bdi dir="ltr">{(expanded() ? props.review.sites : props.review.sites.slice(0, 3)).join(", ")}</bdi>{" "}
+              <Show when={more() > 0}><button type="button" aria-expanded={expanded()} class="underline" onClick={() => setExpanded(!expanded())}>
+                {expanded() ? ctx.t("review.less") : ctx.plural("review.more", more())}
+              </button></Show>
+            </p>
+          </Show>
+        }><p>{ctx.t("review.allSites")}</p></Show>
+      </div>
+      <details class="text-v2-text-text-muted">
+        <summary class="w-fit cursor-pointer text-[13px]">{ctx.t("review.details")}</summary>
+        <div data-scrollable tabIndex={0} role="region" aria-label={ctx.t("review.details")} class="mt-2 flex max-h-36 flex-col gap-2 overflow-y-auto">
+          <Show when={props.review.added}><p>{props.review.access.map((item) => ctx.t(`extensions.access.${item}`)).join(" · ")}</p></Show>
+          <dl class="grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[12px]">
+            <For each={technical()}>{(row) => <><dt>{row[0]}</dt><dd dir="ltr" class="whitespace-pre-wrap break-all text-v2-text-text-base" style={{ "font-family": "var(--font-family-mono)" }}>{row[1]}</dd></>}</For>
+          </dl>
+        </div>
+      </details>
+    </div>
   )
 }
 
@@ -607,7 +605,7 @@ function CompatibilityNote(props: { compatibility: ExtensionCompatibility }) {
                 "text-v2-text-text-muted": shown() === "partial",
               }}
             >
-              {ctx.t(`extensions.compat.${shown()}`)}
+              {ctx.t(shown() === "partial" ? "review.partial" : `extensions.compat.${shown()}`)}
             </span>
           </ui.Tooltip>
         </span>
