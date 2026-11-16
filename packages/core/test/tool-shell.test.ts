@@ -3,7 +3,7 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream, Tracer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream, Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -57,6 +57,7 @@ import { codeModeListings, toolIdentity, executeTool, registerToolPlugin, toolDe
 const sessionID = Session.ID.make("ses_shell_tool_test")
 const sessionModel = Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") })
 const assertions: Permission.AssertInput[] = []
+const wakes: Session.ID[] = []
 let denyAction: string | undefined
 let afterPermission = (_input: Permission.AssertInput): Effect.Effect<void> => Effect.void
 
@@ -80,6 +81,7 @@ const permission = permissionLayer({
 
 const reset = () => {
   assertions.length = 0
+  wakes.length = 0
   denyAction = undefined
   afterPermission = () => Effect.void
 }
@@ -125,7 +127,10 @@ const executionNode = makeGlobalNode({
         active: Effect.succeed(new Set()),
         isActive: () => Effect.succeed(false),
         resume: complete,
-        wake: () => Effect.void,
+        wake: (id) =>
+          Effect.sync(() => {
+            wakes.push(id)
+          }),
         interrupt: () => Effect.succeed(false),
         awaitIdle: (id) => complete(id).pipe(Effect.exit, Effect.asVoid),
       })
@@ -881,7 +886,16 @@ describe("ShellTool", () => {
             Effect.gen(function* () {
               const snapshot = yield* registry.snapshot()
               expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-              expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).toEqual(["shell"])
+              expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).toEqual([
+                "shell",
+                "shell_status",
+              ])
+              const denied = yield* registry.snapshot([{ action: "shell", resource: "*", effect: "deny" }])
+              expect(codeModeListings(denied.codeModeCatalog!)).toEqual([])
+              const fallback = yield* registry.snapshot([{ action: "execute", resource: "*", effect: "deny" }])
+              expect(fallback.definitions.map((tool) => tool.name)).toEqual(["shell"])
+              const direct = yield* fallback.execute(call({ command: helloCommand }))
+              expect(direct.metadata).toEqual({ status: "completed", exit: 0, truncated: false })
               const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
               const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
               const result = yield* executeTool(registry, {
@@ -904,6 +918,115 @@ describe("ShellTool", () => {
         ),
       )
     }),
+  )
+
+  fakeDaemonIt.live("hands off only shells that outlive their launching execute", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        yield* Effect.promise(() =>
+          Bun.write(path.join(tmp.path, "opencode.json"), JSON.stringify({ experimental: { full_codemode: true } })),
+        )
+        yield* withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const jobs = yield* Job.Service
+            const shell = yield* Shell.Service
+            const bus = yield* Bus.Service
+            const notices = yield* Queue.unbounded<unknown>()
+            yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+              Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+              Stream.runForEach((event) => Queue.offer(notices, event.data.item.payload)),
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            const execute = (id: string, code: string, owner = sessionID) =>
+              executeTool(registry, {
+                ...toolIdentity,
+                sessionID: owner,
+                call: { type: "tool-call", name: "execute", id, input: { code } },
+              })
+            const held = yield* Deferred.make<void>()
+            const release = yield* Deferred.make<void>()
+            yield* registry.transform((editor) =>
+              editor.add({
+                name: "hold",
+                description: "Wait for the test",
+                input: Schema.Struct({}),
+                execute: () =>
+                  Deferred.succeed(held, undefined).pipe(
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.as({ content: "released" }),
+                  ),
+              }),
+            )
+            const origin = yield* execute(
+              "origin",
+              `
+                const explicit = await tools.shell({command: 'explicit', background: true})
+                await tools.shell({command: 'yielded', timeout: 1})
+                await tools.hold({})
+                return await tools.shell_status({shellID: explicit.shellID})
+              `,
+            ).pipe(Effect.forkChild)
+            yield* Deferred.await(held)
+            const daemon = fake!
+            const [explicit, yielded] = daemon.processes
+            daemon.output(explicit.id, "partial")
+            const explicitID = (yield* shell.list()).find((command) => command.command === "explicit")!.id
+            const status = (id: string, timeout: number) =>
+              `return await tools.shell_status({shellID:${JSON.stringify(id)},timeout:${timeout}})`
+            for (const timeout of [0, 1]) {
+              const result = yield* execute("snapshot", status(explicitID, timeout))
+              expect(JSON.parse(result.output.output)).toMatchObject({
+                shellID: explicitID,
+                exitCode: null,
+                output: "partial",
+              })
+            }
+            const foreign = yield* execute("foreign", status(explicitID, 0), Session.ID.make("ses_other"))
+            expect(foreign.output.output).toContain("Unknown Code Mode shell")
+            denyAction = "shell"
+            const denied = yield* execute("denied", status(explicitID, 0))
+            expect(denied.output.error).toBe(true)
+            denyAction = undefined
+            expect(yield* jobs.pendingBackground).toEqual([])
+            daemon.exit(yielded.id, 0)
+            // A second launch in the same session ends while the first program is still active.
+            const other = yield* execute("other", `return await tools.shell({command:'outlives', timeout:1})`)
+            const otherID = JSON.parse(other.output.output).shellID
+            expect(yield* jobs.pendingBackground).toMatchObject([{ id: otherID, status: "running" }])
+            expect(yield* Queue.size(notices)).toBe(0)
+            expect(wakes).toEqual([])
+            daemon.output(daemon.processes[2].id, "later")
+            daemon.exit(daemon.processes[2].id, 7)
+            expect(yield* Queue.take(notices)).toMatchObject({ metadata: { shellID: otherID, exit: 7 } })
+            for (const timeout of [0, 100]) {
+              const final = yield* execute("later", status(otherID, timeout))
+              expect(JSON.parse(final.output.output)).toEqual({
+                output: "later",
+                exitCode: 7,
+                wallTimeSeconds: expect.any(Number),
+              })
+            }
+            // Release the first program into its blocking status call, then finish that command by signal.
+            const reading = yield* Deferred.make<void>()
+            afterPermission = () => Deferred.succeed(reading, undefined).pipe(Effect.asVoid)
+            yield* Deferred.succeed(release, undefined)
+            yield* Deferred.await(reading)
+            daemon.exit(explicit.id, null, "SIGTERM")
+            const final = yield* Fiber.join(origin)
+            expect(JSON.parse(final.output.output)).toEqual({
+              output: "partial",
+              signal: "SIGTERM",
+              exitCode: null,
+              wallTimeSeconds: expect.any(Number),
+            })
+            expect(yield* jobs.pendingBackground).toEqual([])
+            expect(yield* Queue.size(notices)).toBe(0)
+            expect(wakes).toEqual([sessionID])
+          }),
+        )
+      }),
+    ),
   )
 
   productionIt.live(

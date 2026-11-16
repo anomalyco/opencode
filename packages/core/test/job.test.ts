@@ -385,6 +385,33 @@ describe("Job", () => {
     }),
   )
 
+  it.live("records the terminal result when a yielded shell exits during handoff", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const exit = yield* Deferred.make<void>()
+      const recovery = {
+        kind: "shell" as const,
+        sessionID: SessionSchema.ID.make("ses_handoff"),
+        shellID: "sh_handoff",
+        command: "echo done",
+      }
+      const job = yield* jobs.start({
+        id: recovery.shellID,
+        type: "shell",
+        run: Deferred.await(exit).pipe(Effect.as("done")),
+      })
+      yield* jobs.background(job.id)
+      expect(yield* jobs.pendingBackground).toEqual([])
+      yield* Deferred.succeed(exit, undefined)
+      yield* jobs.wait({ id: job.id })
+      const marker = yield* jobs.background(job.id, recovery)
+      expect(marker?.notificationID).toStartWith("msg_")
+      expect(yield* jobs.pendingBackground).toMatchObject([
+        { notificationID: marker?.notificationID, recovery, status: "completed", output: "done" },
+      ])
+    }),
+  )
+
   it.live("recovers a background marker after its process-local registry closes", () =>
     Effect.gen(function* () {
       const scope = yield* Scope.make()

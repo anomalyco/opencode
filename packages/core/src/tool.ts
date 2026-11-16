@@ -264,7 +264,7 @@ const layer = Layer.effect(
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
           const direct = codeModeEnabled
             ? new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
-            : active
+            : new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== "only"))
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
           const names = Array.from(codeModeTools.keys()).join("\0")
           // Discovery is immutable for a registry revision and visible tool set. Keep executors

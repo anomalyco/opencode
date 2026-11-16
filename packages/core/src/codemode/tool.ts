@@ -11,7 +11,7 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { Permission } from "../permission.js"
@@ -102,6 +102,7 @@ export const create = (
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
         const scope = yield* Effect.scope
+        const executeScope = yield* Scope.fork(scope, "parallel")
         const publishedAt = yield* Ref.make(Number.NEGATIVE_INFINITY)
         const trailing = yield* Ref.make(false)
         const publish = Effect.gen(function* () {
@@ -134,6 +135,7 @@ export const create = (
                     progress: () => Effect.void,
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.
                     cancel: undefined,
+                    executeScope,
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )

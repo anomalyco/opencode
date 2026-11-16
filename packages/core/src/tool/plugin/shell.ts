@@ -5,8 +5,9 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
+import { ID } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
-import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
+import { Clock, Deferred, Effect, Fiber, Option, Schema, Scope, Struct } from "effect"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
@@ -26,6 +27,9 @@ import { toolFailure } from "../runtime.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
+const CODEMODE_WAIT_MS = 10_000
+const STATUS_GUIDE =
+  "Check every result: while shellID is present, call tools.shell_status({shellID}) to wait again. A result without shellID is final, including signal exits."
 // How long a call the user interrupted waits for its stopped command to exit before settling with the output so far.
 const INTERRUPT_WAIT = "500 millis"
 
@@ -77,6 +81,16 @@ const StructuredOutput = Schema.Struct({
   pid: Schema.optionalKey(NonNegativeInt),
 })
 
+const CodeModeInput = Schema.Struct({
+  ...Input.fields,
+  timeout: Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Foreground wait in milliseconds (default ${CODEMODE_WAIT_MS} inside execute, ${DEFAULT_TIMEOUT_MS} for direct calls). With background: true, a positive timeout stops the command after that duration.`,
+  }),
+  background: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "Return immediately; the command runs in the background.",
+  }),
+})
+
 type Output = ReturnType<typeof ShellResult.output> & {
   status: "completed" | "running"
   wallTimeSeconds: number
@@ -90,16 +104,18 @@ const resultMessages = (output: Output, timeout?: number) => {
   return [...(output.output ? [output.output] : []), ...(notice ? [notice] : [])]
 }
 
-const toolResult = (output: Output, timeout?: number) => {
+const toolResult = (output: Output, timeout?: number, codemode?: boolean) => {
   return {
     output: {
       ...Struct.omit(output, ["exit", "status", "truncated", "timeout", "killed"]),
       exitCode: output.exit ?? null,
     },
-    content: resultMessages(output, timeout).map((text) => ({
-      type: "text" as const,
-      text,
-    })),
+    content: (codemode && output.status === "running" ? [output.output] : resultMessages(output, timeout)).map(
+      (text) => ({
+        type: "text" as const,
+        text,
+      }),
+    ),
     metadata: {
       status: output.status,
       ...ShellResult.metadata(output),
@@ -110,6 +126,18 @@ const toolResult = (output: Output, timeout?: number) => {
 }
 
 const wallTimeSeconds = (time: ShellSchema.Time, end: number) => Math.max(0, end - time.started) / 1_000
+
+const capturedOutput = Effect.fnUntraced(function* (result: ShellResult.Result) {
+  const info = result.info
+  const running = info.status === "running"
+  return {
+    ...ShellResult.output(result),
+    status: running ? ("running" as const) : ("completed" as const),
+    wallTimeSeconds: wallTimeSeconds(info.time, info.time.completed ?? (yield* Clock.currentTimeMillis)),
+    ...(running ? { shellID: info.id, ...(info.pid === undefined ? {} : { pid: info.pid }) } : {}),
+    ...(running || result.capture?.truncated ? { outputPath: info.file } : {}),
+  }
+})
 
 const backgroundText = (info: ShellSchema.Info, timeout?: number) =>
   [
@@ -174,14 +202,17 @@ const startJob = Effect.fnUntraced(function* (
   jobs: Job.Interface,
   shell: Shell.Interface,
   input: {
+    readonly sessions: Pick<Session.Interface, "synthetic">
     readonly sessionID: SessionSchema.ID
     readonly info: ShellSchema.Info
     readonly background?: boolean
     readonly notificationID?: SessionMessage.ID
     readonly timeout?: () => number
+    readonly executeScope?: Scope.Scope
   },
 ) {
   const info = input.info
+  const recovery = { kind: "shell" as const, sessionID: input.sessionID, shellID: info.id, command: info.command }
   const settled = yield* Deferred.make<Output>()
   const job = yield* jobs.start({
     // CodeMode children share a tool-call ID, but each shell must own its job.
@@ -189,24 +220,13 @@ const startJob = Effect.fnUntraced(function* (
     type: name,
     title: info.command,
     metadata: { sessionID: input.sessionID, shellID: info.id },
-    recovery: {
-      kind: "shell",
-      sessionID: input.sessionID,
-      shellID: info.id,
-      command: info.command,
-    },
+    recovery: input.executeScope ? undefined : recovery,
     ...(input.notificationID ? { notificationID: input.notificationID } : {}),
     background: input.background,
     run: Effect.gen(function* () {
       const result = yield* shell.result(info)
       if (!result.capture) return yield* new Shell.NotFoundError({ id: info.id })
-      const completed = result.info.time.completed ?? (yield* Clock.currentTimeMillis)
-      return {
-        ...ShellResult.output(result),
-        status: "completed" as const,
-        wallTimeSeconds: wallTimeSeconds(result.info.time, completed),
-        ...(result.capture.truncated ? { outputPath: result.info.file } : {}),
-      }
+      return yield* capturedOutput(result)
     }).pipe(
       Effect.tap((output) => Deferred.succeed(settled, output)),
       Effect.map((output) => resultMessages(output, input.timeout?.()).join("\n\n")),
@@ -219,7 +239,22 @@ const startJob = Effect.fnUntraced(function* (
     // Cancelling the job stops the command, keeping it and its output file.
     cancel: shell.stop(info.id, "killed").pipe(Effect.ignore, Effect.asVoid),
   })
-  return { job, settled }
+  const notifying = notify(input.sessions, jobs, { ...recovery, id: job.id, settled })
+  if (input.executeScope)
+    yield* Scope.addFinalizer(
+      input.executeScope,
+      Effect.gen(function* () {
+        const current = yield* shell.get(info.id).pipe(Effect.option)
+        if (Option.isNone(current) || current.value.status !== "running") {
+          yield* jobs.wait({ id: job.id })
+          return
+        }
+        // Commit to reporting at script exit, even if the process finishes during the durable handoff.
+        yield* jobs.background(job.id, recovery)
+        yield* shell.watch(notifying)
+      }),
+    )
+  return { job, settled, notifying }
 })
 
 /** The tool result of a call whose command moved to the background. */
@@ -254,14 +289,7 @@ export const reattach = Effect.fnUntraced(function* (input: {
   // The job's existing durable row, if the previous server had backgrounded it.
   readonly notificationID?: SessionMessage.ID
 }) {
-  const { job, settled } = yield* startJob(input.jobs, input.shell, { ...input, background: true })
-  const notifying = notify(input.sessions, input.jobs, {
-    sessionID: input.sessionID,
-    id: job.id,
-    shellID: input.info.id,
-    command: input.info.command,
-    settled,
-  })
+  const { notifying } = yield* startJob(input.jobs, input.shell, { ...input, background: true })
   const current = yield* input.shell.get(input.info.id).pipe(Effect.option)
   if (Option.isSome(current) && current.value.status !== "running")
     return yield* notifying.pipe(
@@ -289,10 +317,11 @@ export const Plugin = {
     const flags = yield* Flag.Service
     const fullCodeMode = () => flags.resolve(loaded.entries).full_codemode.enabled
 
-    const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
+    const authorize = Effect.fn("ShellTool.authorize")(function* (
+      invocation: Pick<ShellCreateBefore, "cwd" | "shell" | "command">,
+      context: Tool.Context,
+    ) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
-      invocation.cwd = target.absolute
-      const timeout = invocation.timeout
       const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
         access.resolve({
@@ -308,26 +337,36 @@ export const Plugin = {
           save: parsed.commands.map((command) => command.save),
           ...Permission.invocation(context),
         })
+      return target.absolute
+    })
+
+    const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
+      invocation.cwd = yield* authorize(invocation, context)
       // Approval can outlive the directory, so validate immediately before spawning.
-      const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
+      const workdir = yield* Environment.typeFollowing(environment.files, invocation.cwd).pipe(
         Effect.catchTag("Environment.NotFound", () =>
-          Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
+          Effect.fail(new Error(`Working directory does not exist: ${invocation.cwd}`)),
         ),
       )
       if (workdir !== "directory")
-        return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.absolute}`))
-      return timeout
+        return yield* Effect.fail(new Error(`Working directory is not a directory: ${invocation.cwd}`))
+      return invocation.timeout
     })
 
     // Not in this Location's scope: a daemon command outlives a Location that closes while the server runs, and
     // its session must still hear how it ended.
-    const notifyWhenDone = (
-      sessionID: SessionSchema.ID,
-      id: string,
-      shellID: string,
-      command: string,
-      settled: Deferred.Deferred<Output>,
-    ) => shell.watch(notify(sessions, jobs, { sessionID, id, shellID, command, settled }))
+    const handoff = Effect.fnUntraced(function* (
+      info: ShellSchema.Info,
+      notifying: Effect.Effect<void, unknown>,
+      context: Tool.Context,
+      elapsed?: number,
+    ) {
+      if (context.executeScope) {
+        return yield* capturedOutput(yield* shell.result(info, { wait: 0 }))
+      }
+      yield* shell.watch(notifying)
+      return backgroundResult(info, yield* Clock.currentTimeMillis, elapsed)
+    })
 
     // Stops the command of a call the user asked to stop, and fails the call with the output so far. The command
     // stays observable, output file included.
@@ -351,17 +390,22 @@ export const Plugin = {
     })
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        const nested = fullCodeMode()
         editor.add({
           name,
           // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool.
-          options: { codemode: fullCodeMode() },
-          description: description(),
-          input: Input,
+          options: { codemode: nested },
+          description: nested
+            ? `Inside execute, check every shell result: while shellID is present, call tools.shell_status({shellID}) to wait again. Only commands still running when their launching script ends send a completion message.`
+            : description(),
+          input: nested ? CodeModeInput : Input,
           output: StructuredOutput,
           execute: (input, context) => {
             // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
-            const foreground = input.timeout || DEFAULT_TIMEOUT_MS
+            const foreground = context.executeScope
+              ? (input.timeout ?? CODEMODE_WAIT_MS)
+              : input.timeout || DEFAULT_TIMEOUT_MS
             const timeout = input.background === true ? (input.timeout ?? 0) : foreground
             let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
@@ -384,13 +428,15 @@ export const Plugin = {
                       cwd: input.workdir,
                       timeout,
                       shell: yield* compatibleShell,
-                      metadata: { sessionID: context.sessionID },
+                      metadata: { sessionID: context.sessionID, ...(context.executeScope ? { codemode: true } : {}) },
                       waited: input.background !== true,
-                      toolCall: {
-                        sessionID: context.sessionID,
-                        assistantMessageID: context.messageID,
-                        callID: context.id,
-                      },
+                      toolCall: context.executeScope
+                        ? undefined
+                        : {
+                            sessionID: context.sessionID,
+                            assistantMessageID: context.messageID,
+                            callID: context.id,
+                          },
                     },
                     (invocation) =>
                       Effect.gen(function* () {
@@ -417,23 +463,24 @@ export const Plugin = {
                   )
                   yield* context.progress({ shellID: info.id })
 
-                  const { job, settled } = yield* startJob(jobs, shell, {
+                  const { job, settled, notifying } = yield* startJob(jobs, shell, {
+                    sessions,
                     sessionID: context.sessionID,
                     info,
                     timeout: () => finalTimeout,
+                    executeScope: context.executeScope,
                   })
                   // Stopped while the command was starting: stop it now.
                   if (yield* Deferred.isDone(stopped)) return yield* cancelled(info, job.id)
 
                   if (input.background === true) {
                     yield* jobs.background(job.id)
-                    yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                    return backgroundResult(info, yield* Clock.currentTimeMillis)
+                    return yield* handoff(info, notifying, context)
                   }
 
                   const waiting = jobs.block({ id: job.id, sessionID: context.sessionID })
                   const blocked =
-                    finalTimeout > 0
+                    finalTimeout > 0 || context.executeScope
                       ? waiting.pipe(
                           Effect.timeoutOption(finalTimeout),
                           Effect.flatMap((result) =>
@@ -459,7 +506,9 @@ export const Plugin = {
                     ),
                   ).pipe(
                     Effect.onInterrupt(() =>
-                      shell.handoffPrepared() ? Effect.void : jobs.cancel(job.id).pipe(Effect.ignore),
+                      context.executeScope || shell.handoffPrepared()
+                        ? Effect.void
+                        : jobs.cancel(job.id).pipe(Effect.ignore),
                     ),
                   )
                   if (outcome.type === "cancelled") return yield* cancelled(info, job.id)
@@ -468,8 +517,7 @@ export const Plugin = {
                     yield* shell.timeout(info.id, 0)
                     const elapsed = "timedOut" in result ? finalTimeout : undefined
                     finalTimeout = 0
-                    yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                    return backgroundResult(info, yield* Clock.currentTimeMillis, elapsed)
+                    return yield* handoff(info, notifying, context, elapsed)
                   }
                   if (result?.info.status === "error")
                     return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
@@ -484,12 +532,39 @@ export const Plugin = {
                 "gen_ai.tool.call.id": context.id,
                 ...(input.background === true ? { "opencode.shell.background": true } : {}),
               }),
-              Effect.map((output) => toolResult(output, finalTimeout)),
+              Effect.map((output) => toolResult(output, finalTimeout, !!context.executeScope)),
               Effect.mapError(toolFailure(`Unable to execute command: ${input.command}`)),
             )
           },
-        }),
-      )
+        })
+        if (!nested) return
+        editor.add({
+          name: "shell_status",
+          options: { codemode: "only", permission: name },
+          description: `Wait for this session's Code Mode shell and return the same result as tools.shell, including the bounded output so far. ${STATUS_GUIDE}`,
+          input: Schema.Struct({
+            shellID: ID,
+            timeout: Schema.optionalKey(NonNegativeInt).annotate({
+              description: `Maximum wait in milliseconds (default ${CODEMODE_WAIT_MS}); 0 takes an immediate snapshot. Expiry leaves the command running.`,
+            }),
+          }),
+          output: StructuredOutput,
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const info = yield* shell.get(input.shellID).pipe(Effect.option)
+              if (
+                !context.executeScope ||
+                Option.isNone(info) ||
+                info.value.metadata.sessionID !== context.sessionID ||
+                info.value.metadata.codemode !== true
+              )
+                return yield* new ToolFailure({ message: `Unknown Code Mode shell in this session: ${input.shellID}` })
+              yield* authorize(info.value, context)
+              const result = yield* shell.result(info.value, { wait: input.timeout ?? CODEMODE_WAIT_MS })
+              return toolResult(yield* capturedOutput(result), undefined, true)
+            }).pipe(Effect.mapError(toolFailure("Unable to read shell status"))),
+        })
+      })
       .pipe(Effect.orDie)
 
     const hook = (event: SessionHooks["context"]) =>

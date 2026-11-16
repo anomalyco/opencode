@@ -161,7 +161,7 @@ export interface Interface {
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
   readonly block: (input: BlockInput) => Effect.Effect<BlockResult | undefined>
-  readonly background: (id: string) => Effect.Effect<Info | undefined>
+  readonly background: (id: string, recovery?: Recovery) => Effect.Effect<Info | undefined>
   readonly backgroundAll: (input: BackgroundAllInput) => Effect.Effect<Info[]>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
   readonly cancelSession: (sessionID: SessionSchema.ID) => Effect.Effect<Info[]>
@@ -482,15 +482,16 @@ export const make = Effect.gen(function* () {
     return next
   })
 
-  const background: Interface["background"] = Effect.fn("Job.background")(function* (id) {
+  const background: Interface["background"] = Effect.fn("Job.background")(function* (id, recovery) {
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
         const job = jobs.get(id)
         // Recoverable work may finish before the caller backgrounds it.
-        if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
-        if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
-        const next = yield* markBackground(job)
+        if (!job || (job.info.status !== "running" && !job.recovery && !recovery)) return [{}, jobs]
+        if (job.isBackgrounded && (job.recovery || !recovery)) return [{ info: snapshot(job) }, jobs]
+        // A script can release its own caller before handing the job over to its session.
+        const next = yield* markBackground({ ...job, recovery: job.recovery ?? recovery })
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]
       }),
     )

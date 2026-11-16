@@ -1,6 +1,6 @@
 export * as Tool from "./tool.js"
 
-import { Effect, JsonSchema, Schema } from "effect"
+import { Effect, JsonSchema, Schema, type Scope } from "effect"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 import type { Agent } from "./agent.js"
 import type { Session } from "./session.js"
@@ -28,6 +28,8 @@ export interface Context {
   readonly agent: Agent.ID
   readonly messageID: SessionMessage.ID
   readonly id: CallID
+  /** Lifetime of the execute program that launched this child call. */
+  readonly executeScope?: Scope.Scope
   readonly progress: (update: Metadata) => Effect.Effect<void>
   /**
    * Completes when the user asks the call to stop. A tool that awaits it can stop its work and fail with what it
@@ -49,7 +51,8 @@ interface BaseOptions {
 export type Options = BaseOptions &
   (
     | {
-        readonly codemode?: true
+        /** `only` omits the direct fallback when execute is disabled. */
+        readonly codemode?: true | "only"
         readonly pinned?: boolean
       }
     | {
