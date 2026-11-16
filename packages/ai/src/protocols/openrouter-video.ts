@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -69,13 +68,13 @@ const Job = Schema.Struct({
 // ---------------------------------------------------------------------------
 
 const STATUS = {
-  pending: "queued",
+  pending: "running",
   in_progress: "running",
   completed: "completed",
   failed: "failed",
   cancelled: "cancelled",
   expired: "expired",
-} as const satisfies Record<string, Status>
+} as const satisfies Record<string, MediaProtocol.State>
 
 // ---------------------------------------------------------------------------
 // 4. Body construction
@@ -135,7 +134,7 @@ const resolution = (value: string) => (/^\dk$/.test(value) ? value.toUpperCase()
 
 const decodeStart = route.decodeStarted(StartResponse, (value) => ({
   token: value.id,
-  snapshot: { id: value.id, status: MediaProtocol.status(STATUS, value.status ?? "pending") },
+  snapshot: { id: value.id, ...MediaProtocol.status(STATUS, value.status ?? "pending") },
 }))
 
 const decodeJob = route.decodeJson(Job)
@@ -145,7 +144,7 @@ const decodeStatus = Effect.fn("OpenRouterVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeJob(response)
-  return { id: context.token, status: MediaProtocol.status(STATUS, output.value.status) }
+  return { id: context.token, ...MediaProtocol.status(STATUS, output.value.status) }
 })
 
 const decodeResult = Effect.fn("OpenRouterVideo.decodeResult")(function* (
@@ -154,8 +153,8 @@ const decodeResult = Effect.fn("OpenRouterVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeJob(response)
   const job = output.value
-  const status = MediaProtocol.status(STATUS, job.status)
-  if (status === "queued" || status === "running") return yield* output.pending(context.token)
+  const status = MediaProtocol.state(STATUS, job.status)
+  if (status === "running") return yield* output.pending(context.token)
   if (status === "failed") {
     const message = `${route.name} generation failed${job.error ? `: ${job.error}` : ""}`
     if (job.error && /content policy|moderat/i.test(job.error)) return yield* output.contentPolicy(message)

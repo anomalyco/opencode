@@ -383,7 +383,7 @@ function DialogPairing(props: {
   const frame = "mx-auto aspect-square w-full max-w-[calc(100dvh-360px)] shrink-0 rounded-[6px]"
 
   return (
-    <Dialog fit containerClass="max-w-[min(400px,calc(100vw-32px))]">
+    <Dialog fit>
       <DialogHeader>
         <DialogTitleGroup title={ctx.t("pair.title")} description={ctx.t("dialog.description")} />
       </DialogHeader>
