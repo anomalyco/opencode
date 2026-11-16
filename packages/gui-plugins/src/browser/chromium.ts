@@ -578,10 +578,12 @@ export function createBrowserPage(
     // A page that held the keyboard before a prompt gets it back once its view shows again: a dialog's still hides the
     // view until the page draws, and a hidden view cannot take focus.
     focusPage: () => {
-      if (view.getVisible()) return options.focusPage?.()
-      refocus = true
+      refocus = !view.getVisible()
+
+      if (!refocus) options.focusPage?.()
     },
     front: () => !!options.front?.(),
+    returning: () => refocus,
     system: options.system,
     quiet: (value) => {
       quiet = value
@@ -908,7 +910,8 @@ export function createBrowserPage(
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
     if (visible) {
-      if (refocus) {
+      // Not while a prompt still shows: the view shows between two dialogs, and the next one takes the keyboard.
+      if (refocus && !prompts.showing()) {
         refocus = false
         options.focusPage?.()
       }

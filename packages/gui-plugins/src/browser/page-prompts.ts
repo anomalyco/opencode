@@ -92,6 +92,8 @@ export function createPagePrompts(input: {
   readonly focusPage: () => void
   /** The tab is the one in front and the app window has the keyboard: a dialog may take it (never from another app). */
   readonly front: () => boolean
+  /** The page is owed the keyboard and gets it once its view shows again (see `focusPage`). */
+  readonly returning: () => boolean
   /** Keeps the tab's state as it was while a close loads a blank page to ask the page's beforeunload. */
   readonly quiet: (quiet: boolean) => void
   readonly report: (view: PromptView | null) => void
@@ -114,8 +116,11 @@ export function createPagePrompts(input: {
   // Agent commands running now, which a sign-in the user must answer stops with a clear error.
   const agentWaits = new Set<(error: Error) => void>()
   let reported = "null"
-  // The page held the keyboard when the prompts began to show, so it gets it back once they end.
+  // The page held the keyboard when the prompts began to show, so it gets it back once they end (owed while one still
+  // shows). A prompt that shows while an answer is in flight, as a page's next dialog does, continues the same chain.
   let pageHeld = false
+  let owed = false
+  let answering = 0
   let disposed = false
 
   // The decisions in the tab's scope (see siteAnswer): a kept "block" wins over this visit's answer, so blocking a site
@@ -167,7 +172,10 @@ export function createPagePrompts(input: {
 
   // The keyboard goes back to the page only if the page had it; the window gives it back wherever else it was.
   const refocus = () => {
-    if (pageHeld) input.focusPage()
+    if (!pageHeld) return
+
+    if (view()) return void (owed = true)
+    input.focusPage()
   }
 
   const settle = (id: number) => {
@@ -184,9 +192,13 @@ export function createPagePrompts(input: {
 
     if (key === reported) return
 
-    if (reported === "null" && next) pageHeld = next.page
+    if (reported === "null" && next) pageHeld = next.page || (pageHeld && (answering > 0 || input.returning()))
     reported = key
     input.report(next)
+
+    if (next || !(owed || input.returning())) return
+    owed = false
+    input.focusPage()
   }
 
   const view = (): PromptView | null => {
@@ -464,6 +476,60 @@ export function createPagePrompts(input: {
     },
   }
 
+  const respond = async (id: number, answer: PromptAnswer) => {
+    if (answer.kind === "dialog") {
+      if (input.dialog()?.revision !== id) return
+      await input.answerDialog(id, answer)
+
+      return refocus()
+    }
+
+    const item = selectPrompted(state, id)
+
+    if (!item) return
+    const permission = item.kind === "permission" ? permissionCallbacks.get(id) : undefined
+    const sign = item.kind === "auth" ? authCallbacks.get(id) : undefined
+    const leave = leaveActions.get(id)
+    permissionCallbacks.delete(id)
+    authCallbacks.delete(id)
+    leaveActions.delete(id)
+    settle(id)
+
+    if (item.kind === "permission" || item.kind === "system") {
+      const allow = answer.kind === "permission" && answer.allow
+
+      // A kept decision lives in the store alone, so changing it in Settings applies to open tabs at once. An allow
+      // given while the agent drives the tab is for that request alone.
+      if (item.kind === "permission" && answer.kind === "permission" && !(item.agent && allow))
+        item.permissions.forEach((kind) =>
+          answer.remember && item.remember !== "none"
+            ? input.sites.keep(input.scope, { origin: item.origin, permission: kind, setting: allow ? "allow" : "block" })
+            : decisions.set(`${item.origin}\n${kind}`, allow ? "allow" : "block"),
+        )
+      permission?.forEach((callback) => callback(allow))
+
+      return refocus()
+    }
+
+    if (item.kind === "auth") {
+      if (answer.kind !== "auth") dispatchVisit({ type: "dismissed", origin: item.origin })
+      // The credentials go to Chromium alone; nothing here keeps them.
+      sign?.forEach((callback) => (answer.kind === "auth" ? callback(answer.username, answer.password) : callback()))
+
+      return refocus()
+    }
+
+    if (answer.kind === "leave" && answer.leave && leave) {
+      if (leave.type === "close") return input.close()
+      dispatchVisit({ type: "bypassed" })
+      await input.redo(leave).finally(() => dispatchVisit({ type: "bypass-ended" }))
+
+      return
+    }
+
+    refocus()
+  }
+
   return {
     permissions,
     /**
@@ -477,6 +543,8 @@ export function createPagePrompts(input: {
 
       return answer.promise
     },
+    /** Something shows: the page's view stays hidden behind it, and gets the keyboard back only once it ends. */
+    showing: () => reported !== "null",
     /** Reports the prompt again, after the dialog gate opened or closed a dialog. */
     publish,
     /** Marks a navigation as the user's while it starts, so a page that holds it asks "Leave site?". */
@@ -520,58 +588,15 @@ export function createPagePrompts(input: {
 
       return { promise: stopped.promise, stop: () => agentWaits.delete(stopped.reject) }
     },
+    /** The user's answer to what the tab shows; prompts that show while it runs continue the same focus chain. */
     async answer(id: number, answer: PromptAnswer) {
-      if (answer.kind === "dialog") {
-        if (input.dialog()?.revision !== id) return
-        await input.answerDialog(id, answer)
+      answering++
 
-        return refocus()
+      try {
+        await respond(id, answer)
+      } finally {
+        answering--
       }
-
-      const item = selectPrompted(state, id)
-
-      if (!item) return
-      const permission = item.kind === "permission" ? permissionCallbacks.get(id) : undefined
-      const sign = item.kind === "auth" ? authCallbacks.get(id) : undefined
-      const leave = leaveActions.get(id)
-      permissionCallbacks.delete(id)
-      authCallbacks.delete(id)
-      leaveActions.delete(id)
-      settle(id)
-
-      if (item.kind === "permission" || item.kind === "system") {
-        const allow = answer.kind === "permission" && answer.allow
-
-        // A kept decision lives in the store alone, so changing it in Settings applies to open tabs at once. An allow
-        // given while the agent drives the tab is for that request alone.
-        if (item.kind === "permission" && answer.kind === "permission" && !(item.agent && allow))
-          item.permissions.forEach((kind) =>
-            answer.remember && item.remember !== "none"
-              ? input.sites.keep(input.scope, { origin: item.origin, permission: kind, setting: allow ? "allow" : "block" })
-              : decisions.set(`${item.origin}\n${kind}`, allow ? "allow" : "block"),
-          )
-        permission?.forEach((callback) => callback(allow))
-
-        return refocus()
-      }
-
-      if (item.kind === "auth") {
-        if (answer.kind !== "auth") dispatchVisit({ type: "dismissed", origin: item.origin })
-        // The credentials go to Chromium alone; nothing here keeps them.
-        sign?.forEach((callback) => (answer.kind === "auth" ? callback(answer.username, answer.password) : callback()))
-
-        return refocus()
-      }
-
-      if (answer.kind === "leave" && answer.leave && leave) {
-        if (leave.type === "close") return input.close()
-        dispatchVisit({ type: "bypassed" })
-        await input.redo(leave).finally(() => dispatchVisit({ type: "bypass-ended" }))
-
-        return
-      }
-
-      refocus()
     },
     dispose() {
       if (disposed) return

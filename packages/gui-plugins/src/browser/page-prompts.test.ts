@@ -315,6 +315,7 @@ function page(
     close: () => {},
     focusPage: () => refocused++,
     front: () => options.front ?? true,
+    returning: () => false,
     quiet: () => {},
     report: (view) => views.push(view),
     system: {
