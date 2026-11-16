@@ -118,6 +118,9 @@ fn open_in(
 enum Carrier<'a> {
     Port(&'a str),
     Npm(&'a str),
+    /// The port's Luau twin (`crates/plugin/examples/luau/<name>`, spike `luau-spike`), added to the TUI as it loads.
+    #[cfg(feature = "luau")]
+    Luau(&'a str),
 }
 
 /// Unpacks the published package `name` from its tarball into `into`.
@@ -167,6 +170,8 @@ fn open_as(
                 std::fs::write(plugin.join(entry_file()), build(name)).unwrap();
             }
             Carrier::Npm(name) => unpack(name, &config.join("plugins").join(name.replace('/', "__"))),
+            #[cfg(feature = "luau")]
+            Carrier::Luau(_) => {}
         }
     }
     let server = Server {
@@ -192,6 +197,14 @@ fn open_as(
     match scripts {
         Some(scripts) => external_with(&harness.tui, external, Some(scripts)),
         None => opencode_tui::plugins::host::external(&harness.tui, external),
+    }
+    #[cfg(feature = "luau")]
+    for carrier in carriers {
+        if let Carrier::Luau(name) = *carrier {
+            let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau").join(name);
+            let sources = opencode_plugin::luau::Sources::read(&dir).unwrap();
+            opencode_tui::plugins::host::add(&harness.tui, opencode_plugin::luau::define(&sources, None).unwrap().0);
+        }
     }
     Some(Port { harness, events: server.events, log: server.log, hold: server.hold, _root: root })
 }
@@ -526,7 +539,18 @@ fn running(seen: &Seen) -> Option<Reply> {
 // shell mode hides it.
 #[test]
 fn force_input_interrupts_then_submits_and_hints_the_keys() {
-    let h = open("force-input", 120, running);
+    force_input(Carrier::Port("force-input"));
+}
+
+// Expected (luau-spike, `carrier-equal`): the port in Luau sends and draws what the native port does.
+#[cfg(feature = "luau")]
+#[test]
+fn force_input_in_luau_interrupts_then_submits_and_hints_the_keys() {
+    force_input(Carrier::Luau("force-input"));
+}
+
+fn force_input(carrier: Carrier<'_>) {
+    let h = open_as(&[carrier], 120, running, false, None).unwrap();
     h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
     let theme = h.tui.page();
     assert_eq!(h.fg("ctrl+⏎", 0), theme.text.action.primary.base);
