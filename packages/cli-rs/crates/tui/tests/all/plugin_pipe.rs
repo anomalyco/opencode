@@ -3046,6 +3046,90 @@ fn a_fetch_across_a_reload_of_the_registrations_settles() {
     assert_eq!(pipe.status("example.gated"), Some(opencode_plugin::Status::Active));
 }
 
+// Expected (big-boi's catalog review, CT-1): the same across a reload whose call also changed a mounted view. The view
+// sends the reload's manifest before the call's `Done`, so the handover came before the call's effects made the reply's
+// way back: the fetch the host took was answered once and the plugin still waited for it. Every fetch the host took
+// settles once, here with its reply.
+#[test]
+fn a_fetch_across_a_reload_with_a_changed_view_settles() {
+    fetch_across_a_reload_with_a_changed_view(false);
+}
+
+// Expected (big-boi's catalog review, CT-1): the same when a second view of the call is slow, so the host has taken the
+// reload and replaced the guest before the call's `Done` comes: the guest that runs the JS host's activation now applies
+// the call's effects, where they went with the replaced guest and the fetch never left.
+#[test]
+fn a_fetch_whose_done_comes_after_the_reload_settles() {
+    fetch_across_a_reload_with_a_changed_view(true);
+}
+
+/// A command that starts a fetch, registers another command and changes its footer, `slow` with a second footer that
+/// then draws 30,000 rows, whose view the JS host sends after the first's manifest and before the call's `Done`; the
+/// server holds the reply until the reload is on screen.
+fn fetch_across_a_reload_with_a_changed_view(slow: bool) {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("fetched");
+    let plugin = root.path().join("config/plugins/viewed");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        "import {{ Plugin }} from \"@opencode/plugin/tui\"\n\
+         import {{ createSignal }} from \"solid-js\"\n\
+         import {{ jsx }} from \"@opentui/solid/jsx-runtime\"\n\
+         import {{ appendFileSync }} from \"node:fs\"\n\
+         export default Plugin.define({{ id: \"example.viewed\", setup(context) {{\n\
+         const carrier = context[Symbol.for(\"opencode.carrier\")]\n\
+         const [text, setText] = createSignal(\"before\")\n\
+         context.ui.slot({{ append: \"home.footer\", render: () => jsx(\"text\", {{ get children() {{ return `viewed ${{text()}}` }} }}) }})\n\
+         if ({slow}) context.ui.slot({{ append: \"home.footer\", render: () => jsx(\"box\", {{ get children() {{\n\
+           if (text() !== \"after\" || globalThis.slowed) return jsx(\"text\", {{ children: \"slow\" }})\n\
+           globalThis.slowed = true\n\
+           return Array.from({{ length: 30000 }}, (_, index) => jsx(\"text\", {{ children: `row ${{index}}` }})) }} }}) }})\n\
+         context.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"viewed.fetch\", run: async () => {{\n\
+           const pending = carrier.fetch({{ method: \"GET\", path: \"/api/gated\" }})\n\
+           context.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"viewed.late\", run() {{}} }}] }}))\n\
+           setText(\"after\")\n\
+           const result = await pending\n\
+           appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \" \" + carrier.pendingFetches() + \"\\n\")\n\
+         }} }}] }}))\n\
+         }} }})\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let open = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let gate = open.clone();
+    let server = support::Fake::new(move |seen| match seen.path.as_str() {
+        "/api/gated" => {
+            let begun = Instant::now();
+            while !gate.load(std::sync::atomic::Ordering::SeqCst) && begun.elapsed() < Duration::from_secs(20) {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            (200, serde_json::json!({ "gated": true }))
+        }
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.viewed");
+    let h = &pipe.harness;
+    h.wait_for("viewed before");
+    h.tui.keymap.dispatch("viewed.fetch", None);
+    h.wait("the reload took the late command and the view", || {
+        h.app.advance(Duration::from_millis(1));
+        matches!(h.tui.keymap.dispatch("viewed.late", None), opentui::keymap::RunResult::Ok)
+            && h.app.text().contains("viewed after")
+    });
+    pipe.settle();
+    open.store(true, std::sync::atomic::Ordering::SeqCst);
+    h.wait("the fetch ended", || {
+        h.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "Ok 0\n");
+}
+
 // Expected (bigboi's final pass): a TypeScript plugin's fetch that the host does not take, while another plugin's
 // fan-out fills the queue of effects, ends with an error, where its await never ended; once the queue drains, a fetch
 // gets its reply.

@@ -485,6 +485,9 @@ enum Waiting {
 /// A handler's call as the host sent it.
 struct Call {
     guest: Weak<Guest>,
+    /// The plugin and the JS host's activation it was sent for, whose guest a reload may have replaced by its `Done`.
+    plugin: String,
+    activation: u64,
     export: &'static str,
     /// It answers the user's input.
     user: bool,
@@ -1423,7 +1426,11 @@ impl Scripts {
                         }
                     }
                     Some(Waiting::Call(call)) => {
-                        if let Some(guest) = call.guest.upgrade() {
+                        // A reload that came before its `Done` handed the JS host's activation on: the guest that runs
+                        // it now applies the call's effects, so what they ask for (a fetch) is answered once.
+                        let replaced =
+                            || self.guest(&call.plugin).filter(|guest| guest.activation() == call.activation);
+                        if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()).or_else(replaced) {
                             guest.done(seq, &call, effects, error);
                         }
                         // The keys it held go on once its effects applied: they are deferred, and so is this, after
@@ -1684,8 +1691,8 @@ impl Scripts {
     ) {
         let seq = self.next();
         let (id, activation, route) = (guest.id().to_owned(), guest.activation(), guest.unwatched_route());
-        let message = Down::Call { seq, id, activation, call: request.clone(), route, parted: false };
-        let call = Call { guest: Rc::downgrade(guest), export, user, request, owner, mount };
+        let message = Down::Call { seq, id: id.clone(), activation, call: request.clone(), route, parted: false };
+        let call = Call { guest: Rc::downgrade(guest), plugin: id, activation, export, user, request, owner, mount };
         self.send(message, Some(Waiting::Call(Box::new(call))));
         if hold {
             self.start_hold(seq);
