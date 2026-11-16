@@ -283,6 +283,37 @@ impl Default for Monitor {
     }
 }
 
+#[cfg(feature = "luau")]
+thread_local! {
+    /// The thread's CPU time as the monitored call that runs began, when the monitor read the real clock.
+    static CALL_CPU: Cell<Option<Duration>> = const { Cell::new(None) };
+}
+
+/// The thread's CPU time as the monitored call that runs on this thread began: one reading for the monitor and for a
+/// Luau call's budget. `None` outside a monitored call, or when a test set the monitor's clock.
+#[cfg(feature = "luau")]
+pub(crate) fn call_cpu() -> Option<Duration> {
+    CALL_CPU.with(Cell::get)
+}
+
+/// Publishes a monitored call's starting CPU time until it drops, also by unwinding.
+#[cfg(feature = "luau")]
+struct Published(Option<Duration>);
+
+#[cfg(feature = "luau")]
+impl Published {
+    fn new(cpu: Option<Duration>) -> Self {
+        Self(CALL_CPU.with(|call| call.replace(cpu)))
+    }
+}
+
+#[cfg(feature = "luau")]
+impl Drop for Published {
+    fn drop(&mut self) {
+        CALL_CPU.with(|call| call.set(self.0));
+    }
+}
+
 /// Leaves the running call however the plugin's call ends, also by unwinding.
 struct Leave<'a> {
     monitor: &'a Monitor,
@@ -464,6 +495,9 @@ impl Monitor {
         let (clock, queued, cpu) =
             (self.clock.borrow().clone(), self.queued.borrow().clone(), self.cpu.borrow().clone());
         let (start, waited, used) = (clock(), queued(), cpu());
+        // A Luau call arms its budget from this reading rather than taking its own ([`call_cpu`]).
+        #[cfg(feature = "luau")]
+        let _published = Published::new(used.filter(|_| !self.injected.get()));
         let generation = self.record.get().map(|(record, epoch)| {
             let now = if self.injected.get() { Instant::now() } else { start };
             record.enter(slot.0, record::kind(kind), now.saturating_duration_since(*epoch).as_millis() as u64)

@@ -144,7 +144,9 @@ impl Vm {
     pub(crate) fn call<R>(&self, f: impl FnOnce() -> mlua::Result<R>) -> Result<R, String> {
         let outer = self.budget.armed.get().is_none();
         if outer {
-            self.budget.armed.set(Some((Instant::now(), crate::contain::thread_cpu())));
+            // The monitor's reading as the call began, when it took one: one CPU clock read a call.
+            let cpu = crate::contain::call_cpu().or_else(crate::contain::thread_cpu);
+            self.budget.armed.set(Some((Instant::now(), cpu)));
             self.budget.stopped.take();
         }
         let result = f();
