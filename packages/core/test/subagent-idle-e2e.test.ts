@@ -222,6 +222,8 @@ const prepareLocation = (
         for (const id of ["build", "reviewer", "fallback"]) {
           editor.update(Agent.ID.make(id), (agent) => {
             agent.permissions.push({ action: "*", resource: "*", effect: "allow" })
+            // Shell is a Code Mode tool; without Code Mode the scripted model calls it directly.
+            agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
           })
         }
         editor.update(toolIdentity.agent, (agent) => {

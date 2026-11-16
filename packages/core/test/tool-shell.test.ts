@@ -52,10 +52,22 @@ import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { Expected } from "./lib/session-message"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import {
+  codeModeListings,
+  toolIdentity,
+  executeTool as executeRegisteredTool,
+  registerToolPlugin,
+  toolDefinitions as registeredToolDefinitions,
+} from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_shell_tool_test")
 const sessionModel = Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") })
+// Shell is a Code Mode tool. Without Code Mode it becomes direct, so these tests call the executor by name.
+const withoutCodeMode: Permission.Ruleset = [{ action: "execute", resource: "*", effect: "deny" }]
+const executeTool = (registry: Tool.Interface, input: Parameters<Tool.Snapshot["execute"]>[0]) =>
+  executeRegisteredTool(registry, input, withoutCodeMode)
+const toolDefinitions = (registry: Tool.Interface, permissions: Permission.Ruleset = []) =>
+  registeredToolDefinitions(registry, [...withoutCodeMode, ...permissions])
 const assertions: Permission.AssertInput[] = []
 let denyAction: string | undefined
 let afterPermission = (_input: Permission.AssertInput): Effect.Effect<void> => Effect.void
@@ -870,19 +882,17 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
-  it.live("returns both parallel CodeMode shell results", () =>
+  it.live("registers shell only in Code Mode and returns both parallel shell results", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
-          yield* registry.transform((editor) =>
-            editor.update("shell", (tool) => {
-              tool.options = { ...tool.options, codemode: true }
-            }),
-          )
+          const snapshot = yield* registry.snapshot()
+          expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+          expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).toEqual(["shell"])
           const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
           const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
-          const result = yield* executeTool(registry, {
+          const result = yield* executeRegisteredTool(registry, {
             sessionID,
             ...toolIdentity,
             call: {

@@ -346,7 +346,6 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false },
           description: description(),
           input: Input,
           output: StructuredOutput,

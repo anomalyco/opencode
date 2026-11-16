@@ -138,6 +138,8 @@ describe("shell commands across a graceful restart", () => {
           const session = yield* sessions.create({
             location: { directory: AbsolutePath.make(project) },
             agent: Agent.ID.make("build"),
+            // Shell is a Code Mode tool; without Code Mode the model calls it directly.
+            permissions: [{ action: "execute", resource: "*", effect: "deny" }],
             model: Model.Ref.make({ id: Model.ID.make("restart"), providerID: Provider.ID.make("test") }),
           })
           yield* Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(
@@ -222,6 +224,8 @@ describe("shell commands across a graceful restart", () => {
           const session = yield* sessions.create({
             location: { directory: AbsolutePath.make(project) },
             agent: Agent.ID.make("build"),
+            // Shell is a Code Mode tool; without Code Mode the model calls it directly.
+            permissions: [{ action: "execute", resource: "*", effect: "deny" }],
             model: Model.Ref.make({ id: Model.ID.make("restart"), providerID: Provider.ID.make("test") }),
           })
           yield* Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(
