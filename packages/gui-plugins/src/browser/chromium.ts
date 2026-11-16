@@ -252,6 +252,13 @@ export function createBrowserPage(
     previewFailure?: (url: string) => typeof FileVerificationError.code | undefined
     artifacts?: ReturnType<typeof artifactPages>
     remote?: Extract<WorkspaceSource, { type: "remote" }>
+    /**
+     * The tab's pop-up group must refuse passkeys too: the agent drives this tab, and a page of the group can script
+     * another through `window.opener` or the window it opened. Windows only.
+     */
+    restrictPasskeys?: () => void
+    /** The tab's pop-up group refuses passkeys already, so this tab does from its first document. */
+    passkeysRestricted?: () => boolean
     /** The server runs on this machine, so its loopback addresses are this machine's and the system browser reaches them. */
     local: boolean
     signal: AbortSignal
@@ -623,22 +630,42 @@ export function createBrowserPage(
 
   // A page's getUserMedia waits for the pane before Blink opens a device, so macOS asks only after the user's Allow.
   const media = guardMediaRequests(cdp, (ask) => prompts.gate(ask))
-  // A site's passkey or security-key request fails at once where nothing could answer it, with one notice per page.
-  let passkeyNoticed = false
+  // A site's passkey or security-key request fails where nothing here could answer it: always on macOS and Linux, and on
+  // Windows, whose own dialog would answer, in tabs the agent drives or could script. Once per page, the notice says
+  // why and a running agent command stops with the reason.
   const native = process.platform === "win32"
+  const passkeyPage = { noticed: false, interrupted: false }
 
   const passkeys = guardWebAuthn(cdp, {
     native,
-    // An agent run could otherwise put the system's sign-in dialog in front of the user for a site they did not open.
-    allow: () => !agentDriven(activity),
-    refused: () => {
-      if (activity.agentRuns > 0) prompts.interruptAgent(new Error(agentPasskeyRefusal(contents.getURL())))
+    refused: (asker) => {
+      // Another site's frame does not speak for the page: its request is refused without a word.
+      if (!asker.mainFrame && (!asker.origin || asker.origin !== contents.mainFrame.origin)) return
+      const site = URL.parse(displayURL(contents.getURL()))?.host
 
-      if (passkeyNoticed) return
-      passkeyNoticed = true
+      if (activity.agentRuns > 0 && !passkeyPage.interrupted) {
+        passkeyPage.interrupted = true
+        prompts.interruptAgent(new CodedError(Browser.FailureCode.signInRequired, agentPasskeyRefusal(site)))
+      }
+
+      if (passkeyPage.noticed) return
+      passkeyPage.noticed = true
       notices.show({ reason: native && agentDriven(activity) ? "browser.passkey.agent" : "browser.passkey" })
     },
   })
+
+  // A page that can never reach the system's dialog, or one the agent drove or could script, refuses in the browser
+  // process before its first document loads. On Windows a failure to do so leaves it unguarded, so the tab fails.
+  const restrictPasskeys = () => {
+    if (native) options.restrictPasskeys?.()
+
+    return passkeys.enforce()
+  }
+
+  if (!native || agentDriven(options.activity) || options.passkeysRestricted?.())
+    void restrictPasskeys().catch(() => {
+      if (native) options.fail()
+    })
 
   constructing.defer(() => prompts.dispose())
   constructing.defer(() => dialogs.dispose())
@@ -671,7 +698,8 @@ export function createBrowserPage(
 
     if (options.artifacts?.display(url)) artifactHost = new URL(url).host
     notices.clear()
-    passkeyNoticed = false
+    passkeyPage.noticed = false
+    passkeyPage.interrupted = false
     popupReport = undefined
 
     if (agentDriven(activity)) contents.setBackgroundThrottling(false)
@@ -1075,6 +1103,8 @@ export function createBrowserPage(
     previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
     previewIdentity: () => options.workspace?.identity(),
     answerNotice: notices.answer,
+    /** Refuses passkeys in the browser process from now on, for a tab the agent drives or a tab that can script one. */
+    restrictPasskeys,
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
@@ -1172,7 +1202,8 @@ export function createBrowserPage(
 
       try {
         return await Promise.race([
-          choosers.update().then(() => {
+          // The agent drives the tab from here on: refuse passkeys in the browser process before its action runs.
+          Promise.all([choosers.update(), origin === "agent" ? restrictPasskeys() : undefined]).then(() => {
             abortError(run.controller.signal)
 
             return perform(command, run.controller.signal, origin, saved)

@@ -1,69 +1,93 @@
 import { expect, test } from "bun:test"
 import type { Cdp } from "./cdp"
-import { agentPasskeyRefusal, guardWebAuthn } from "./webauthn-gate"
+import { agentPasskeyRefusal, guardWebAuthn, type PasskeyAsker } from "./webauthn-gate"
 
-// The page's side runs in the pinned Electron (electron-webauthn.test.ts), which never lets a request through, so no
-// system dialog opens. This drives the pane's decision at the CDP boundary, where letting one through is only a reply.
-function gate(native: boolean, allow: boolean) {
-  const sent: { method: string; expression?: string }[] = []
-  const listeners: ((event: { name: string; payload: string; executionContextId: number }) => void)[] = []
-  const refusals = { count: 0 }
+/** The parts of CDP events the gate reads. */
+type CdpEvent = {
+  readonly frame?: { readonly id: string }
+  readonly context?: { readonly id: number; readonly origin: string; readonly auxData: { readonly frameId: string; readonly isDefault: boolean } }
+  readonly name?: string
+  readonly payload?: string
+  readonly executionContextId?: number
+}
+
+// The page's side and the browser process run in the pinned Electron (electron-webauthn.test.ts), which never lets a
+// request reach the system, so no system dialog opens. This drives the pane's decision at the CDP boundary, where
+// letting a request through is only a reply.
+async function gate(native: boolean) {
+  const sent: { method: string; params: { name?: string; expression?: string } }[] = []
+  const listeners = new Map<string, ((event: CdpEvent, sessionID?: string) => void)[]>()
+  const asked: PasskeyAsker[] = []
 
   const cdp = {
-    on: (_method: string, callback: (typeof listeners)[number]) => {
-      listeners.push(callback)
+    on: (method: string, callback: (event: CdpEvent, sessionID?: string) => void) => {
+      listeners.set(method, [...(listeners.get(method) ?? []), callback])
 
       return () => undefined
     },
-    send: async (method: string, params: { expression?: string } = {}) => {
-      sent.push({ method, expression: params.expression })
+    send: async (method: string, params: { name?: string; expression?: string } = {}) => {
+      sent.push({ method, params })
 
       return {}
     },
   }
 
-  // SAFETY: the gate uses only `on("Runtime.bindingCalled")` and `send`, which the object above implements.
+  // SAFETY: the gate uses only `on` and `send`, which the object above implements with CDP's shapes.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-  guardWebAuthn(cdp as unknown as Cdp, { native, allow: () => allow, refused: () => refusals.count++ })
+  const guard = guardWebAuthn(cdp as unknown as Cdp, { native, refused: (asker) => asked.push(asker) })
+  await guard.attach()
+  const report = sent.find((item) => item.method === "Runtime.addBinding")?.params.name ?? ""
+  const emit = (method: string, event: CdpEvent, sessionID?: string) => listeners.get(method)?.forEach((listener) => listener(event, sessionID))
 
-  const call = (payload: string, name = "openCodeWebAuthn") =>
-    listeners.forEach((listener) => listener({ name, payload, executionContextId: 7 }))
+  emit("Page.frameNavigated", { frame: { id: "top" } })
+  emit("Runtime.executionContextCreated", { context: { id: 1, origin: "https://site.test", auxData: { frameId: "top", isDefault: true } } })
+  emit("Runtime.executionContextCreated", { context: { id: 2, origin: "https://ads.test", auxData: { frameId: "ad", isDefault: true } } }, "frame")
 
-  const answers = () =>
-    sent.flatMap((item) => (item.method === "Runtime.evaluate" ? [item.expression?.match(/\((\d+), (true|false)\)$/)?.slice(1)] : []))
+  const call = (payload: string, context = 1, sessionID?: string, name = report) =>
+    emit("Runtime.bindingCalled", { name, payload, executionContextId: context }, sessionID)
 
-  return { call, answers, refusals }
+  const replies = () =>
+    sent.flatMap((item) => (item.method === "Runtime.evaluate" ? [item.params.expression?.match(/detail: \[(\d+), (true|false)\]/)?.slice(1)] : []))
+
+  return { guard, sent, call, replies, asked, report }
 }
 
-test("lets a request reach the system only where it answers and the pane allows it", () => {
-  const windows = gate(true, true)
+test("lets a request reach the system only until the tab must refuse, which the browser process then enforces", async () => {
+  const windows = await gate(true)
   windows.call(JSON.stringify({ id: 1, kind: "get" }))
-  expect(windows.answers()).toEqual([["1", "true"]])
-  expect(windows.refusals.count).toBe(0)
+  expect(windows.replies()).toEqual([["1", "true"]])
+  expect(windows.asked).toEqual([])
+  expect(windows.sent.some((item) => item.method === "WebAuthn.enable")).toBe(false)
 
-  // An agent-driven tab on Windows, and every tab where the system shows no dialog, refuse at once.
-  const agent = gate(true, false)
-  const mac = gate(false, true)
-  agent.call(JSON.stringify({ id: 2, kind: "create" }))
-  mac.call(JSON.stringify({ id: 3, kind: "get" }))
-  expect([agent.answers(), mac.answers()]).toEqual([[["2", "false"]], [["3", "false"]]])
-  expect([agent.refusals.count, mac.refusals.count]).toEqual([1, 1])
+  // The agent drives the tab: the environment turns on once, and every later request is refused.
+  await Promise.all([windows.guard.enforce(), windows.guard.enforce()])
+  windows.call(JSON.stringify({ id: 2, kind: "create" }))
+  expect(windows.replies()).toEqual([["1", "true"], ["2", "false"]])
+  expect(windows.sent.filter((item) => item.method === "WebAuthn.enable")).toHaveLength(1)
+  expect(windows.asked).toEqual([{ origin: "https://site.test", mainFrame: true }])
+
+  // macOS and Linux refuse from the start; the page refuses on its own, so the pane only hears who asked.
+  const mac = await gate(false)
+  mac.call(JSON.stringify({ id: 1, kind: "get" }), 2, "frame")
+  expect(mac.replies()).toEqual([])
+  expect(mac.asked).toEqual([{ origin: "https://ads.test", mainFrame: false }])
+  expect(mac.guard.enforced()).toBe(true)
 })
 
-test("ignores calls that are not the gate's own", () => {
-  const page = gate(false, false)
-  page.call(JSON.stringify({ id: 1, kind: "get" }), "somethingElse")
+test("ignores calls that are not the gate's own, and leaves no fixed name for a page to find", async () => {
+  const page = await gate(false)
+  const other = await gate(false)
+  expect(page.report).not.toBe(other.report)
+  expect(page.report).not.toMatch(/opencode|webauthn/i)
+  page.call(JSON.stringify({ id: 1, kind: "get" }), 1, undefined, "openCodeWebAuthn")
   page.call(JSON.stringify({ id: 0, kind: "get" }))
   page.call(JSON.stringify({ id: 1, kind: "sign" }))
   page.call(`{"id":1,"kind":"get","pad":"${"x".repeat(300)}"}`)
   page.call("not json")
-  expect(page.answers()).toEqual([])
-  expect(page.refusals.count).toBe(0)
+  expect(page.asked).toEqual([])
 })
 
 test("tells an agent which site asked, and what to do instead", () => {
-  expect(agentPasskeyRefusal("https://accounts.google.com/v3/signin/challenge/pk")).toStartWith(
-    "accounts.google.com asked for a passkey or security key (WebAuthn).",
-  )
-  expect(agentPasskeyRefusal("about:blank")).toStartWith("The page asked")
+  expect(agentPasskeyRefusal("accounts.google.com")).toStartWith("accounts.google.com asked for a passkey or security key (WebAuthn).")
+  expect(agentPasskeyRefusal(undefined)).toStartWith("The page asked")
 })

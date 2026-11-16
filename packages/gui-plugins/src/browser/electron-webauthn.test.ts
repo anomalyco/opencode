@@ -5,13 +5,15 @@ import path from "node:path"
 import electron from "electron"
 import { PASSKEY_REFUSAL } from "./webauthn-gate"
 
-// Electron draws no WebAuthn request UI, so where the system shows none either a page's passkey request hangs until its
-// timeout. This runs the WebAuthn gate (webauthn-gate.ts) in the pinned Electron: explicit requests fail at once with
-// NotAllowedError, autofill requests wait silently, pages hear that no passkey path is available, and a password
-// manager's own wrapper still answers first. The gate refuses every request in the page, so nothing reaches Chromium's
-// WebAuthn stack and no system dialog can open.
+// Electron draws no WebAuthn request UI, and on Windows Chromium hands requests to the system's dialog. This runs the
+// WebAuthn gate (webauthn-gate.ts) in the pinned Electron. Where the pane refuses, the browser process refuses too: the
+// tab answers from CDP's empty virtual authenticator environment, which a virtual authenticator proves by receiving
+// the one credential a step creates, so a request that gets around the page-side wrapper never reaches the system.
+// The wrapper refuses explicit requests at once, also against options built to slip past it, leaves no trace on the
+// page, keeps autofill waiting silently, and lets a password manager's own wrapper answer first. The fixture checks
+// that the environment covers each page before any request there, and stops otherwise.
 test(
-  "the pinned Electron refuses a page's passkey requests at once and reports no passkey support",
+  "the pinned Electron refuses a page's passkey requests in the browser process and at once on the page",
   async () => {
     const out = await mkdtemp(path.join(tmpdir(), "electron-webauthn-"))
 
@@ -43,6 +45,21 @@ test(
 
       const result = JSON.parse(line)
 
+      expect(result.stopped).toBeUndefined()
+      // The browser process: a request reaches only the virtual environment, and fails there without an authenticator.
+      expect(result).toMatchObject({ bareCovered: true, routedCreate: "credential", routedCredentials: 1, bareGet: "NotAllowedError" })
+      // A Windows tab the agent drives: every shape of request is refused, by the wrapper or by the environment.
+      expect(result.agentCovered).toBe(true)
+      expect(result.functionOptions).toBe("NotAllowedError")
+      expect(result.inheritedOptions).toBe("NotAllowedError")
+      // The getter's first answer is the one Chromium gets: a request without `publicKey`, so no passkey is asked for.
+      expect(result.twoFacedGetter).not.toBe("credential")
+      expect(result.frameRealm).toBe("NotAllowedError")
+      expect(result.addedGlobals).toEqual([])
+      expect(result.nativeLooking).toEqual([true, true, true])
+      // A pop-up enforced while Electron creates it is covered before its opener's script runs again.
+      expect(result.popupUVPAA).toBe(false)
+      // macOS and Linux: pages hear that no passkey path is available, and explicit requests fail at once.
       expect(result.capabilities.slice(0, 2)).toEqual([false, false])
       expect(result.capabilities[2]).toMatchObject({
         conditionalGet: false,
@@ -52,27 +69,22 @@ test(
         passkeyPlatformAuthenticator: false,
         userVerifyingPlatformAuthenticator: false,
       })
-      // Explicit requests fail with what a browser says when no authenticator is available, well within a second.
-      expect(result.get).toMatchObject({ name: "NotAllowedError", message: PASSKEY_REFUSAL })
-      expect(result.made).toMatchObject({ name: "NotAllowedError", message: PASSKEY_REFUSAL })
-      expect(result.get.ms).toBeLessThan(1_000)
-      expect(result.made.ms).toBeLessThan(1_000)
+      expect([result.macGet, result.macCreate]).toEqual(["NotAllowedError", "NotAllowedError"])
       expect(result.afterExplicit).toBe(2)
       // Autofill, immediate and aborted requests end without a refusal, so the pane shows no notice for them.
       expect(result.conditional).toEqual({ before: "pending", after: "AbortError" })
       expect(result.immediate).toBe("NotAllowedError")
       expect(result.preAborted).toBe("AbortError")
-      expect(result.afterConditional).toBe(2)
+      // The conditional case's own explicit request is the one refusal it adds.
+      expect(result.afterConditional).toBe(3)
       // The password manager answered its own passkey; the request it handed on was refused.
       expect(result.manager).toEqual(["from-manager", "NotAllowedError"])
-      expect(result.refusals).toBe(3)
-      // Where the system answers requests, autofill still reports unavailable; the rest is Chromium's own answer.
-      expect(result.nativeCapabilities[1]).toBe(false)
-      expect(result.nativeCapabilities[2]).toMatchObject({ conditionalGet: false, conditionalCreate: false })
+      expect(result.refusals).toBe(4)
+      expect(PASSKEY_REFUSAL).toContain("not supported in this browser")
     } finally {
       await rm(out, { recursive: true, force: true })
     }
   },
-  // Starting Electron takes seconds on a loaded runner.
+  // Starting Electron takes seconds on a loaded runner, and the environment's refusals wait for their 1 s timeouts.
   60_000,
 )
