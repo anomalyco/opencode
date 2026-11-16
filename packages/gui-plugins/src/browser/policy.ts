@@ -301,7 +301,7 @@ export function normalizeURL(input: string, policy?: Policy) {
 
   if (reason)
     throw new Error(
-      policy?.fileRoots?.length
+      policy?.fileRoots?.length || policy?.remote
         ? "Only HTTP, HTTPS, about:blank, and file URLs inside the workspace are supported."
         : "Only HTTP, HTTPS, and about:blank URLs are supported.",
     )
@@ -323,7 +323,7 @@ export function refusal(input: string, policy?: Policy) {
   // A web page is refused only for its credentials.
   if (URL.canParse(url) && /^https?:$/.test(new URL(url).protocol)) return "browser.address.credentials"
 
-  return policy?.fileRoots?.length ? "browser.address.workspace" : "browser.address.web"
+  return policy?.fileRoots?.length || policy?.remote ? "browser.address.workspace" : "browser.address.web"
 }
 
 // The URL an address opens: a blank page for none, else the address with a scheme, `http` for this machine's names.

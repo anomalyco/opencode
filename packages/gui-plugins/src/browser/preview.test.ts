@@ -1,11 +1,29 @@
 import { expect, test } from "bun:test"
 import { previewAddress, previewFile, previewResource, reloadAddress } from "./preview"
+import { refusal } from "./policy"
+import { navigationNotice } from "./refusal-notice"
 
 const roots = ["/work/repo #1"]
 
 const file = "file:///work/repo%20%231/index.html?q=1#anchor"
 
 const view = "oc-preview://first/work/repo%20%231/index.html?q=1#anchor"
+
+test("a remote policy opens only its own session's workspace and explains a refusal as a workspace restriction", () => {
+  const remote = "workspace://ses_x/"
+  const address = `${remote}dir/page.html?q=1#h`
+  const actual = "oc-preview://host/dir/page.html?q=1#h"
+  expect(previewAddress(address, "host", [], remote)).toBe(actual)
+  expect(previewFile(actual, "host", [], remote)).toBe(address)
+  expect(refusal(address, {remote})).toBeUndefined()
+  expect(refusal(address, {})).toBe("browser.address.web")
+
+  for (const other of [file, "workspace://ses_other/dir/page.html"]) {
+    expect(previewAddress(other, "host", roots, remote)).toBeUndefined()
+    expect(refusal(other, {remote})).toBe("browser.address.workspace")
+    expect(navigationNotice(other, {remote}).reason).toBe("browser.address.workspace")
+  }
+})
 
 test("reload chooses the shown preview file for a virtual route, otherwise lets Chromium reload", () => {
   expect(reloadAddress(view.replace("index.html", "virtual"), file, "first", roots)).toBe(file)

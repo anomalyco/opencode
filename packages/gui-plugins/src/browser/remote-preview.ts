@@ -14,7 +14,7 @@ export function remotePreview(
     type: "remote",
     prefix: workspacePrefix(session),
     stat: (path, signal) => stat(path, AbortSignal.any([lifetime, signal, AbortSignal.timeout(15_000)])).catch(() => null),
-    read(path, range, signal) {
+    async read(path, range, signal) {
       const encoded = path.split("/").map(encodeURIComponent).join("/")
       const url = new URL(`api/fs/read/${encoded}`, `${server.url.replace(/\/+$/, "")}/`)
       url.searchParams.set("location[directory]", location.directory)
@@ -25,9 +25,15 @@ export function remotePreview(
 
       if (range) headers.set("range", range)
 
-      // Never send the page's headers or follow a redirect supplied by the server. Node streams the response with
-      // backpressure and a body inactivity timeout; revoking the attachment also interrupts active readers.
-      return fetch(url, { headers, redirect: "error", signal: AbortSignal.any([signal, lifetime]) })
+      // Bound the wait for headers, not the duration of a large response. Detach still aborts its body.
+      const timeout = new AbortController()
+      const timer = setTimeout(() => timeout.abort(), 15_000)
+
+      try {
+        return await fetch(url, { headers, redirect: "error", signal: AbortSignal.any([signal, lifetime, timeout.signal]) })
+      } finally {
+        clearTimeout(timer)
+      }
     },
   }
 }

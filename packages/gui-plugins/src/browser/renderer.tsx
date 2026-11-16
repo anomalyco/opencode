@@ -29,6 +29,7 @@ import {
 } from "./model-machine"
 import { PageIcon } from "./page-icon"
 import { artifactLink, artifactWebURL } from "./artifact-link"
+import { remotePath, workspacePrefix } from "./remote-address"
 import barStyles from "./bar.css?inline"
 import commentStyles from "./comment.css?inline"
 import tabStyles from "./tabs.css?inline"
@@ -83,6 +84,18 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   // The native pane is a desktop feature.
   if (ctx.app.platform !== "desktop") return
+  ctx.add(LinkHandler, {
+    priority: 6,
+    match: (link) => link.origin === undefined && link.href.startsWith("workspace://"),
+    open(link) {
+      const session = link.session
+      const pane = model()
+
+      if (session?.id && !session.server.builtin && remotePath(link.href, workspacePrefix(session.id)) && pane?.available(session))
+        return pane.openURL(session, link.href)
+      ctx.toast.show({ variant: "error", title: ctx.t("refused.workspace") })
+    },
+  })
   // Tab trigger styles render with the strip, before the pane chunk loads.
   ctx.add(Style, tabStyles)
   ctx.add(Style, commentStyles)

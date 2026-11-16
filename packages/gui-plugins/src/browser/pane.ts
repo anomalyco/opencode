@@ -762,7 +762,7 @@ export function createBrowserPane(input: {
         if (!url || !(remote ? await remote.stat(action.path, signal) !== null : await workspaceFile(url, roots)))
           throw new CodedError(Browser.FailureCode.previewUnavailable, "The workspace file no longer exists or cannot be read by this session.")
         signal.throwIfAborted()
-        const existing = inventory(binding).tabs.find((tab) => tab.url === url)
+        const existing = inventory(binding).tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === url)
         const tab = existing ? load(binding, existing.id) : create(binding)
 
         if (!tab) throw new Error("Workspace preview tab is unavailable.")
@@ -792,7 +792,7 @@ export function createBrowserPane(input: {
         const existing = inventory(binding).tabs.find((tab) => {
           const live = page(binding, tab.id)
 
-          return tab.url === file || (!!live && openingFiles.get(live) === file)
+          return tab.url.split(/[?#]/, 1)[0] === file || (!!live && openingFiles.get(live) === file)
         })
 
         if (existing) {
@@ -801,12 +801,14 @@ export function createBrowserPane(input: {
           return { value: existing, files: [] }
         }
       }
+
       const opened = create(binding)
       const tabID = opened.state().id
 
       if (file) openingFiles.set(opened, file)
 
       if (action.focus !== false) dispatchBinding(binding, { type: "tab.focused", tabID })
+
       try {
         await opened.ready
 
