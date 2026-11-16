@@ -202,7 +202,8 @@ const make = Effect.gen(function* () {
         Effect.orElseSucceed(() => undefined),
       ),
     )
-    return values.findLast((value) => value !== undefined) ?? "notify"
+    // Background checks reach opencode.ai, so they run only when the user opts in with `autoupdate` or `update`.
+    return values.findLast((value) => value !== undefined) ?? "disable"
   })
 
   const exec = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "30 seconds") {
