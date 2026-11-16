@@ -5,8 +5,9 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createSignal, createUniqueId, Match, onMount, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createSignal, createUniqueId, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
+import { guardActivation } from "./activation-delay"
 import type definition from "./index"
 import { PROMPT_TEXT_MAX, SIGN_IN_TEXT_MAX, type PromptAnswer, type PromptSite, type PromptView } from "./ipc"
 
@@ -56,7 +57,13 @@ export function PromptDialog(props: {
   }
 
   onMount(() => {
-    if (!props.focus || !box) return
+    if (!box) return
+    // A page can open a dialog under a click or key press already in flight: its default answer waits for a new one.
+    const guard = guardActivation(box)
+    createEffect(on(() => props.view.id, () => guard.changed(), { defer: true }))
+    onCleanup(guard.dispose)
+
+    if (!props.focus) return
     const target = box.querySelector<HTMLElement>("[autofocus]") ?? box
     target.focus({ preventScroll: true })
   })
@@ -384,9 +391,17 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
   const ctx = usePlugin<typeof definition>()
   const text = createUniqueId()
   let first: HTMLButtonElement | undefined
+  let bar: HTMLElement | undefined
 
   onMount(() => {
     if (props.focus) first?.focus({ preventScroll: true })
+
+    if (!bar) return
+    // The bar appears where the page was: a click or key press already in flight, or a page's double-click target, must
+    // not land on its answers.
+    const guard = guardActivation(bar)
+    createEffect(on(() => props.view.id, () => guard.changed(), { defer: true }))
+    onCleanup(guard.dispose)
   })
 
   const permission = () => (props.view.ask.kind === "permission" ? props.view.ask : undefined)
@@ -394,6 +409,7 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
 
   return (
     <section
+      ref={bar}
       data-component="browser-prompt"
       role={permission() ? "alertdialog" : "status"}
       aria-label={permission() ? ctx.t("prompt.permission.label") : undefined}
@@ -431,6 +447,7 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
             <>
               <Button
                 ref={first}
+                data-activation-guard
                 size="small"
                 variant="ghost"
                 onClick={() => props.answer({ kind: "permission", allow: false, remember: ask().remember !== "none" })}
@@ -438,6 +455,7 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
                 {ctx.t(ask().remember === "kept" ? "prompt.permission.never" : "prompt.permission.block")}
               </Button>
               <Button
+                data-activation-guard
                 size="small"
                 variant={ask().remember !== "none" ? "neutral" : "contrast"}
                 onClick={() => props.answer({ kind: "permission", allow: true, remember: false })}
@@ -445,7 +463,12 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
                 {ctx.t("prompt.permission.once")}
               </Button>
               <Show when={ask().remember !== "none"}>
-                <Button size="small" variant="contrast" onClick={() => props.answer({ kind: "permission", allow: true, remember: true })}>
+                <Button
+                  data-activation-guard
+                  size="small"
+                  variant="contrast"
+                  onClick={() => props.answer({ kind: "permission", allow: true, remember: true })}
+                >
                   {ctx.t(ask().remember === "kept" ? "prompt.permission.always" : "prompt.permission.session")}
                 </Button>
               </Show>

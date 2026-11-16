@@ -773,6 +773,67 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             >
               Permission request
             </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 3,
+                    waiting: 0,
+                    focus: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      permissions: ["microphone"],
+                      remember: "none",
+                      agent: true,
+                    },
+                  },
+                })
+              }
+            >
+              Agent permission request
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 4,
+                    waiting: 0,
+                    focus: true,
+                    ask: {
+                      kind: "dialog",
+                      dialog: "prompt",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      message: "Name the copy",
+                      value: "Draft",
+                      stop: false,
+                    },
+                  },
+                })
+              }
+            >
+              Page prompt
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 5,
+                    waiting: 0,
+                    focus: true,
+                    ask: { kind: "auth", host: "intranet.alpha.example", realm: "Staff area", failed: true },
+                  },
+                })
+              }
+            >
+              Sign-in request
+            </button>
           </nav>
           <p>Answers: {JSON.stringify(store.answers)}</p>
           <Show when={store.covered}>
