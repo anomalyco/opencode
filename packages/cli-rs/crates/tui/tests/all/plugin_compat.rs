@@ -562,6 +562,103 @@ fn a_project_plugin_imports_nothing_outside_its_approved_files() {
     assert!(refused, "{status:?}");
 }
 
+// Expected (carbon jsnpm-3): an approved project plugin's `package.json` `name` cannot lead its TUI module out of the
+// approved files: a name that climbs out of its staged copy with `../`, or an absolute one, names a module the user
+// never approved, which runs nowhere, and the plugin fails saying why; a direct relative import out of it is still
+// refused.
+#[cfg(unix)]
+#[test]
+fn a_project_plugins_package_name_cannot_lead_out_of_its_approved_files() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let work = root.path().join("work");
+    std::fs::create_dir_all(work.join(".git")).unwrap();
+    let unapproved = work.join("unapproved");
+    std::fs::create_dir_all(&unapproved).unwrap();
+    let marker = root.path().join("unapproved.ran");
+    let module = format!(
+        "require(\"node:fs\").appendFileSync({marker:?}, \"ran\\n\")\nexport default {{ id: \"example.out\", setup() {{}} }}\n"
+    );
+    std::fs::write(unapproved.join("tui.ts"), &module).unwrap();
+    std::fs::write(unapproved.join("helper.ts"), "export const helper = 1\n").unwrap();
+    // Up to `/` from wherever the copy is staged, then down to the unapproved directory.
+    let climb = format!("{}{}", "../".repeat(40), unapproved.to_string_lossy().trim_start_matches('/'));
+    let plugins = work.join(".opencode").join("plugins");
+    let named = |name: &str, folder: &str| {
+        let dir = plugins.join(folder);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("package.json"), serde_json::json!({ "name": name, "exports": {} }).to_string())
+            .unwrap();
+        dir
+    };
+    let climbing = named(&climb, "climb");
+    let absolute = named(&unapproved.to_string_lossy(), "absolute");
+    let relative = plugins.join("relative");
+    std::fs::create_dir_all(&relative).unwrap();
+    let import = format!("import {{ helper }} from {:?}\n", format!("{climb}/helper.ts"));
+    std::fs::write(
+        relative.join("tui.ts"),
+        format!("{import}export default {{ id: \"example.relative\", setup() {{ void helper }} }}\n"),
+    )
+    .unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.settle();
+    for dir in [&climbing, &absolute, &relative] {
+        approve(&pipe, dir);
+    }
+    pipe.settle();
+    for (dir, why) in [
+        (&climbing, "outside the plugin's approved files"),
+        (&absolute, "outside the plugin's approved files"),
+        (&relative, "outside the plugin's approved files"),
+    ] {
+        pipe.harness.wait("the plugin failed", || {
+            pipe.settle();
+            matches!(listed(&pipe, dir, ""), Some(Status::Failed(_)))
+        });
+        let status = listed(&pipe, dir, "");
+        assert!(matches!(&status, Some(Status::Failed(error)) if error.contains(why)), "{dir:?}: {status:?}");
+    }
+    assert!(!marker.exists(), "a module outside the approved files ran");
+}
+
+// Expected (carbon jsnpm-3): a global plugin, which is not confined, also loads only a TUI module among its own files: a
+// `package.json` `name` that leads elsewhere fails the plugin, and the module it names runs nowhere.
+#[cfg(unix)]
+#[test]
+fn a_global_plugins_package_name_cannot_lead_out_of_its_directory() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let elsewhere = root.path().join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    let marker = root.path().join("elsewhere.ran");
+    let module = format!(
+        "require(\"node:fs\").appendFileSync({marker:?}, \"ran\\n\")\nexport default {{ id: \"example.away\", setup() {{}} }}\n"
+    );
+    std::fs::write(elsewhere.join("tui.ts"), module).unwrap();
+    let dir = root.path().join("config").join("plugins").join("away");
+    std::fs::create_dir_all(&dir).unwrap();
+    let name = format!("{}{}", "../".repeat(40), elsewhere.to_string_lossy().trim_start_matches('/'));
+    std::fs::write(dir.join("package.json"), serde_json::json!({ "name": name, "exports": {} }).to_string()).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let work = root.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.harness.wait("the plugin failed", || {
+        pipe.settle();
+        matches!(listed(&pipe, &dir, ""), Some(Status::Failed(_)))
+    });
+    let status = listed(&pipe, &dir, "");
+    let refused = matches!(&status, Some(Status::Failed(error)) if error.contains("outside the plugin's directory"));
+    assert!(refused, "{status:?}");
+    assert!(!marker.exists(), "a module outside the plugin's directory ran");
+}
+
 // Expected (FT-3): a project plugin's approved files import one another by relative paths, from its root and from a
 // directory below it, as TS loads them.
 #[test]

@@ -26,7 +26,13 @@ the key being the spec's text and not a version it resolves to (`npm.ts:60-97`: 
 tag, `<name>@latest` for a bare name, `git-<slug>-<hash>` for a git spec, else the spec), in the generation with the
 largest number (`npm.ts:149-162`), as `node_modules/<name>` (`installedName`, `npm.ts:173-183`); so the same spec
 picks the same directory, and a range is never matched against another version installed under another key. The JS
-host loads its `./tui` export, as for a directory. Like any global or `cli.json` plugin a `cli.json` package needs no
+host loads its `./tui` export, as for a directory. The TUI module must be one of the plugin's own files (carbon
+`jsnpm-3`). TS's client imports whatever `<name>/tui` resolves to (`packages/plugin/src/host.ts` `resolve`); TS's
+server checks only its own server entry (`FSUtil.contains`, `core/src/config/plugin/source.ts`). The JS host refuses a
+module whose real path is not inside the plugin directory's real path, for every plugin: a `package.json` `name` of
+`../../x` or an absolute path resolves anywhere. A confined (approved project) plugin's own resolution from its root is
+also refused there. Either way the plugin fails, saying why. A package's `<name>/tui` resolves inside the package, by
+self-reference or from the `node_modules` it sits in, so no legitimate plugin is refused. Like any global or `cli.json` plugin a `cli.json` package needs no
 approval, and its build identity is computed off the UI thread (FT-2). As TS resolves a loaded package once a session
 (`context.tsx:663-665`), the directory a spec resolved to stays while the spec is a target: a later install (a new
 generation) does not move it, and a package is not watched. A `cli.json` entry whose key the cache does not hold, where

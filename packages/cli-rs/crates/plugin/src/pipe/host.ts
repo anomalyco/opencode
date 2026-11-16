@@ -47,6 +47,7 @@ const confined = new Set<string>()
 // `Bun.resolveSync` calls this `onResolve` again, with the importer's directory and then each parent as the importer,
 // and resolving from those fails a relative import (FT-3): the call made inside answers Bun's own resolution.
 let resolving = false
+const OUTSIDE = "is outside the plugin's approved files"
 
 runtime({
   name: "opencode-compat",
@@ -54,19 +55,24 @@ runtime({
     for (const [name, exports] of Object.entries(modules))
       build.module(name, () => ({ exports, loader: "object" }))
     build.onResolve({ filter: /.*/ }, (args) => {
-      const importer = args.importer
-      const root = importer && !resolving ? [...confined].find((root) => importer.startsWith(root)) : undefined
+      const importer = args.importer?.split("?")[0]
+      // A root is kept with its separator; the root itself is an importer too, as `resolveEntry` resolves from it
+      // (carbon jsnpm-3), and resolves from itself rather than from its parent.
+      const root =
+        importer && !resolving
+          ? [...confined].find((root) => importer.startsWith(root) || importer === root.slice(0, -1))
+          : undefined
       if (!root || args.path in modules || builtin(args.path)) return undefined
       resolving = true
       const resolved = (() => {
         try {
-          return Bun.resolveSync(args.path, path.dirname(importer.split("?")[0]!))
+          return Bun.resolveSync(args.path, importer === root.slice(0, -1) ? importer : path.dirname(importer!))
         } finally {
           resolving = false
         }
       })()
       if (resolved.startsWith(root) || builtin(resolved)) return undefined
-      throw new Error(`${args.path} is outside the plugin's approved files`)
+      throw new Error(`${args.path} ${OUTSIDE}`)
     })
   },
 })
@@ -647,7 +653,11 @@ function manifestOf(plugin: Plugin) {
   }
 }
 
-function resolveEntry(dir: string): string | undefined {
+// The plugin's TUI module, as TS's `Host.resolve` finds it: `<name>/tui` by its `package.json`, else `tui` at its root.
+// It must be one of the plugin's own files (carbon jsnpm-3): a `name` such as `../../x` or an absolute path resolves
+// anywhere, and the module it names would run outside what was approved. A package's `<name>/tui` resolves to the
+// package itself, by self-reference or from the `node_modules` it sits in.
+function resolveEntry(dir: string): { entry: string } | { error: string } | undefined {
   let name: string | undefined
   const file = path.join(dir, "package.json")
   if (existsSync(file)) {
@@ -657,11 +667,24 @@ function resolveEntry(dir: string): string | undefined {
     } catch {}
   }
   const specifier = name ? `${name}/tui` : path.resolve(dir, "tui")
-  try {
-    return Bun.resolveSync(specifier, dir)
-  } catch {
-    return undefined
-  }
+  const entry = (() => {
+    try {
+      return Bun.resolveSync(specifier, dir)
+    } catch (error) {
+      // A confined plugin's resolution the hook refused is its failure; one that finds nothing has no TUI module.
+      if (message(error).includes(OUTSIDE)) return { error: message(error) }
+      return undefined
+    }
+  })()
+  if (typeof entry !== "string") return entry
+  const inside = (() => {
+    try {
+      return realpathSync(entry).startsWith(realpathSync(dir) + path.sep)
+    } catch {
+      return false
+    }
+  })()
+  return inside ? { entry } : { error: `its TUI module ${entry} is outside the plugin's directory` }
 }
 
 // Sets up `plugin`, a candidate activation. The running activation of its ID, if any, keeps answering what the host
@@ -757,8 +780,10 @@ const described = new Map<number, Plugin>()
 // Loads the plugin of `target`. With `setup`, runs its setup; without, says its ID and keeps it for a `setup` message:
 // a disabled plugin's setup never runs (review carbon-8).
 async function load(seq: number, target: string, dir: string, options: Json, withSetup: boolean, seed?: Json) {
-  const entry = resolveEntry(dir)
-  if (!entry) return send({ type: "unsupported", seq })
+  const resolved = resolveEntry(dir)
+  if (!resolved) return send({ type: "unsupported", seq })
+  if ("error" in resolved) return send({ type: "done", seq, error: `cannot load ${target}: ${resolved.error}` })
+  const entry = resolved.entry
   // Each load imports the plugin's modules afresh, as a generation of its own: its helpers as much as its entry, so a
   // changed module's new code runs. The running generation keeps the modules it has.
   const roots = [dir, realpathSync(dir)].map((root) => root + path.sep)
