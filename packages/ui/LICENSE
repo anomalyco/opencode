@@ -19,3 +19,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Third-party artwork
+-------------------
+
+The word-wrap icon in src/icons/catalog.ts is from Microsoft VS Code Codicons
+and is licensed under Creative Commons Attribution 4.0 International (CC BY 4.0),
+not the MIT license above.
+
+Source: https://github.com/microsoft/vscode-codicons/blob/9d6c6e5f0714e82d5b33b1775969ab49d32d45c8/src/icons/word-wrap.svg
+License, including disclaimer of warranties: https://creativecommons.org/licenses/by/4.0/legalcode
+
+The artwork is unchanged. Its SVG wrapper was replaced with the catalog's
+viewBox and a group retaining the original currentColor fill.

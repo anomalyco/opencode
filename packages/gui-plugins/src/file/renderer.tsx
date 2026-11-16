@@ -90,8 +90,6 @@ const TABPANEL = "session-side-panel-file-browser-tabpanel"
 
 const HANDOFF_SESSIONS = 40
 
-const DEFAULT_LINE_HEIGHT = 24
-
 type Handoff = { sessions: Record<string, Record<string, LineRange | null>> }
 
 type StyleLoad = { loaded?: Promise<void> }
@@ -126,6 +124,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const [machines, setMachines] = createStore({ linkOpen: createLinkOpenState(), picker: createPickerState() })
 
   const revealListeners = new Map<string, Set<() => void>>()
+  const revealRanges = new Map<string, LineRange>()
   const linkAttempts = new Map<number, LinkAttempt>()
   const focusTimer: FocusTimer = {}
 
@@ -255,9 +254,9 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     files.selection.set(path, selection)
     layout.scroll.set(session, tabKey, {
       x: existing?.x ?? 0,
-      y: Math.max(0, (selection.start - 4) * DEFAULT_LINE_HEIGHT),
+      y: existing?.y ?? 0,
     })
-    shared.reveal.run(session.key, path)
+    shared.reveal.run(session.key, path, selection)
   }
 
   // Reuses the selected launcher; otherwise wide screens add another one beside the open tabs, so several can stay
@@ -323,6 +322,8 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
         }),
     },
     reveal: {
+      get: (session, path) => revealRanges.get(`${session}\n${path}`),
+      clear: (session, path) => void revealRanges.delete(`${session}\n${path}`),
       register(session, path, run) {
         const targetKey = `${session}\n${path}`
         const set = revealListeners.get(targetKey) ?? new Set()
@@ -335,7 +336,8 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
           if (set.size === 0) revealListeners.delete(targetKey)
         }
       },
-      run(session, path) {
+      run(session, path, range) {
+        revealRanges.set(`${session}\n${path}`, range)
         revealListeners.get(`${session}\n${path}`)?.forEach((fn) => fn())
       },
     },

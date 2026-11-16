@@ -94,6 +94,8 @@ type SharedProps<T> = {
 
 export type FileSearchHandle = {
   focus: () => void
+  /** Scrolls the owning code viewport to a range, returning false until its layout is ready. */
+  reveal?: (range: SelectedLineRange) => boolean
 }
 
 export type FileSearchControl = {
@@ -435,6 +437,7 @@ type VirtualStrategy = {
 function useSearchHandle(opts: {
   search: () => FileSearchControl | undefined
   find: ReturnType<typeof createFileFind>
+  reveal?: (range: SelectedLineRange) => boolean
 }) {
   createEffect(() => {
     const search = opts.search()
@@ -443,6 +446,7 @@ function useSearchHandle(opts: {
 
     const handle = {
       focus: () => opts.find.focus(),
+      reveal: opts.reveal,
     } satisfies FileSearchHandle
 
     search.register(handle)
@@ -1000,6 +1004,26 @@ function TextViewer<T>(props: TextFileProps<T>) {
   useSearchHandle({
     search: () => local.search,
     find: viewer.find,
+    reveal: (range) => {
+      const instance = render.instance()
+      const virtualizer = virtuals.get()
+
+      if (!(instance instanceof VirtualizedFile) || !virtualizer) return false
+      const first = instance.getLinePosition(Math.min(range.start, range.end))
+      const last = instance.getLinePosition(Math.max(range.start, range.end))
+      const root = virtualizer.getRoot()
+
+      if (!first || !last || !root) return false
+      const height = root instanceof Document ? window.innerHeight : root.clientHeight
+      virtualizer.scrollTo({
+        top:
+          virtualizer.getOffsetInScrollContainer(viewer.container) +
+          first.top -
+          Math.max(0, (height - (last.top + last.height - first.top)) / 2),
+      })
+
+      return true
+    },
   })
 
   // Cleanups run in reverse, so the instance is cleaned up before the virtualizer it uses.

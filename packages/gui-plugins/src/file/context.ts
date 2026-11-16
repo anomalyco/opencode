@@ -43,8 +43,12 @@ export interface FileShared {
   }
   /** Reveals a selected line range on a mounted file view when a link action targets it. */
   readonly reveal: {
+    /** A link target retained while the viewer's rows finish measuring. */
+    get(session: string, path: string): LineRange | undefined
+    /** Releases navigation when the user takes over or leaves the view. */
+    clear(session: string, path: string): void
     register(session: string, path: string, run: () => void): () => void
-    run(session: string, path: string): void
+    run(session: string, path: string, range: LineRange): void
   }
   /** The tab is the session's selected side tab. */
   active(session: MountedSession, id: string): boolean

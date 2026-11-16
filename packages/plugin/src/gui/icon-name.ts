@@ -164,6 +164,7 @@ export type IconName =
   | "waveform"
   | "window-analytics"
   | "window-cursor"
+  | "word-wrap"
   | "workspace"
   | "workspace-isolated"
   | "workspace-new"
