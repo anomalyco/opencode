@@ -1630,6 +1630,10 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     tell_skipped(tui);
 }
 
+/// How long a failed `plugin dev` build is told: until the next build replaces the toast, or the user closes it. The
+/// author saves in an editor and looks back at the TUI later, past the 5 s of a toast's default (dx-fresh).
+const FAILED_BUILD: Duration = Duration::from_secs(24 * 60 * 60);
+
 /// `plugin dev`'s `build.log` beside its library, which its builds in the background publish in the watched directory:
 /// empty after a build that passed, the compiler's output after one that failed. A failed build keeps the running
 /// version and said so only in the log file (PL-7).
@@ -1664,6 +1668,7 @@ impl Build {
                     format!("The running version stays. The compiler's output is in {}.", self.log.display()),
                 )
                 .title("plugin dev: the build failed")
+                .duration(FAILED_BUILD)
                 .keep(),
             ),
             (false, true) => tui.toasts.show(ToastOptions::new(Variant::Success, "plugin dev: the build passes again")),

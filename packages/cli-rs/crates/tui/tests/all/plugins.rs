@@ -1412,6 +1412,9 @@ fn a_failed_dev_build_says_so() {
     write_atomic(&log, b"error[E0425]: cannot find value");
     let screen = harness.wait_for("plugin dev: the build failed");
     assert!(screen.contains("build.log"), "{screen}");
+    // It stays until the next build, as the author looks back from the editor later (dx-fresh).
+    harness.app.advance(opencode_ui::toast::DEFAULT_DURATION * 10);
+    harness.wait_for("plugin dev: the build failed");
     harness.tui.toasts.dismiss();
     write_atomic(&log, b"");
     harness.wait_for("plugin dev: the build passes again");

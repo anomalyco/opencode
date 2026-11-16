@@ -915,7 +915,8 @@ Rust and in C and into a script, and the writer records it.
 `opencode-native plugin dev <dir>` builds the plugin crate in `<dir>`, runs the TUI with its library beside the
 configured plugins (a settings change keeps it, and it is never saved), and builds it again after a change in any
 directory of the crate but `target` and hidden ones; the hot reload above takes the new library, and a failed build
-leaves the running one, with its output in `<dir>/target/opencode-dev/build.log`.
+leaves the running one, with its output in `<dir>/target/opencode-dev/build.log` and a toast that names the log until
+the next build.
 `opencode-native plugin test <library, crate or plugin dir> [--route NAME] [--size WxH] [--command NAME[=INPUT]]
 [--wait TEXT]...` loads the plugin into the TUI on the headless renderer, with no server, and prints text frames. It
 exits with an error when the plugin does not load or fails, the route is not the plugin's, or a command does not run.
