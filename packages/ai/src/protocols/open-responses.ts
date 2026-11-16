@@ -553,8 +553,6 @@ const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadata
 }
 
 // A call replays as the type its tool is declared with now; the item id only survives when that type is unchanged.
-// Function tools added through `additional_tools` are filed under a namespace named after the tool, and replaying
-// their calls without it is rejected.
 const lowerToolCall = (
   part: ToolCallPart,
   providerMetadataKey: string,
@@ -577,9 +575,18 @@ const lowerToolCall = (
     ...(id === undefined ? {} : { id }),
     call_id: part.id,
     name: part.name,
-    namespace: part.namespace ?? (inlineTools.has(part.name) ? part.name : undefined),
+    namespace: part.namespace ?? addedToolCallNamespace(part, providerMetadataKey, inlineTools),
     arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   }
+}
+
+// A call parsed from this route replays its namespace as received. gpt-5.x rejects a call to a tool added through
+// `additional_tools` without the tool-named namespace, so a call from another model gets one.
+const addedToolCallNamespace = (part: ToolCallPart, providerMetadataKey: string, inlineTools: ReadonlySet<string>) => {
+  if (!inlineTools.has(part.name)) return undefined
+  const metadata = part.providerMetadata?.[providerMetadataKey]
+  if (metadata?.itemId === undefined) return part.name
+  return typeof metadata.namespace === "string" ? metadata.namespace : undefined
 }
 
 const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
@@ -1056,11 +1063,23 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
   compaction: "cmp",
 }
 
-// Calls to tools added through `additional_tools` come back under a namespace named after the tool.
-const callNamespace = (state: Pick<ParserState, "inlineTools">, item: OutputItem) =>
+// Some models return calls to tools added through `additional_tools` under a namespace named after the tool. The call
+// keeps the tool's own name, and its metadata keeps the namespace so replay sends it back as received.
+const addedToolNamespace = (state: Pick<ParserState, "inlineTools">, item: OutputItem) =>
   item.namespace !== undefined && item.namespace === item.name && state.inlineTools.has(item.namespace)
-    ? undefined
-    : item.namespace
+    ? item.namespace
+    : undefined
+
+const callNamespace = (state: Pick<ParserState, "inlineTools">, item: OutputItem) =>
+  addedToolNamespace(state, item) === undefined ? item.namespace : undefined
+
+const callMetadata = (state: ParserState, item: OutputItem, custom: boolean) => {
+  const namespace = addedToolNamespace(state, item)
+  return providerMetadata(state, {
+    ...OpenAIFreeform.metadata(item.id, custom),
+    ...(namespace === undefined ? {} : { namespace }),
+  })
+}
 
 // An item adopts the id already open in its output slot, since GitHub Copilot
 // sends a different id on every event, including the item's own done event.
@@ -1223,7 +1242,7 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
   if ((item.type !== "function_call" && item.type !== "custom_tool_call") || !item.call_id) return [state, NO_EVENTS]
   if (state.tools[item.id] !== undefined) return [state, NO_EVENTS]
   const custom = item.type === "custom_tool_call"
-  const metadata = providerMetadata(state, OpenAIFreeform.metadata(item.id, custom))
+  const metadata = callMetadata(state, item, custom)
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   const tools = ToolStream.start(state.tools, item.id, {
@@ -1359,7 +1378,7 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
   if (item.type === "function_call" || item.type === "custom_tool_call") {
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
     const custom = item.type === "custom_tool_call"
-    const metadata = providerMetadata(state, OpenAIFreeform.metadata(item.id, custom))
+    const metadata = callMetadata(state, item, custom)
     const final = { custom: state.custom.get(item.name), raw: rawInput(item) }
     const input = custom ? OpenAIFreeform.fromRaw(final.custom, final.raw) : item.arguments
     const registered = state.tools[item.id] !== undefined

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { ai, LLMEvent, Message, tool, ToolCallPart, ToolDefinition } from "../src/effect.js"
+import { ai, LLMEvent, type LLMResponse, Message, tool, ToolCallPart, ToolDefinition } from "../src/effect.js"
 import { AI } from "../src/index.js"
 import { Gemini } from "../src/protocols/gemini.js"
 import { TestLLM } from "../src/testing.js"
@@ -450,7 +450,7 @@ describe("OpenAI Responses tool updates", () => {
     }),
   )
 
-  it.effect("replays calls to inline-only tools under a namespace named after the tool", () =>
+  it.effect("replays calls to inline-only tools from another model under a namespace named after the tool", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
@@ -508,36 +508,62 @@ describe("OpenAI Responses tool updates", () => {
     }),
   )
 
-  it.effect("drops the tool-named namespace from returned calls to inline-only tools", () =>
+  it.effect("replays the namespace of returned calls to inline-only tools exactly as received", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        ai.request({
-          model: astra,
-          tools: [read],
-          messages: [Message.user("File it."), Message.tools({ add: [jira] })],
-        }),
-      ).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              {
-                type: "response.output_item.done",
-                item: {
-                  type: "function_call",
-                  id: "fc_1",
-                  call_id: "call_1",
-                  name: "jira",
-                  namespace: "jira",
-                  arguments: "{}",
+      const messages = [Message.user("File it."), Message.tools({ add: [jira] })]
+      const returned = (namespace?: string) =>
+        LLMClient.generate(ai.request({ model: astra, tools: [read], messages })).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                {
+                  type: "response.output_item.done",
+                  item: {
+                    type: "function_call",
+                    id: "fc_1",
+                    call_id: "call_1",
+                    name: "jira",
+                    namespace,
+                    arguments: "{}",
+                  },
                 },
-              },
-              { type: "response.completed", response: { id: "resp_1" } },
+                { type: "response.completed", response: { id: "resp_1" } },
+              ),
             ),
           ),
-        ),
-      )
+        )
+      const replayed = (response: LLMResponse) =>
+        compileRequest(
+          ai.request({
+            model: astra,
+            tools: [read],
+            messages: [...messages, response.message, Message.tool({ id: "call_1", name: "jira", result: "ok" })],
+          }),
+        ).pipe(
+          Effect.map((prepared) => prepared.body.input.find((item) => "type" in item && item.type === "function_call")),
+        )
+      const namespaced = yield* returned("jira")
+      const plain = yield* returned(undefined)
 
-      expect(response.toolCalls.map((call) => [call.name, call.namespace])).toEqual([["jira", undefined]])
+      expect(namespaced.toolCalls.map((call) => [call.name, call.namespace])).toEqual([["jira", undefined]])
+      expect(namespaced.toolCalls[0]?.providerMetadata).toEqual({ openai: { itemId: "fc_1", namespace: "jira" } })
+      expect(yield* replayed(namespaced)).toEqual({
+        type: "function_call",
+        id: "fc_1",
+        call_id: "call_1",
+        name: "jira",
+        namespace: "jira",
+        arguments: "{}",
+      })
+      expect(plain.toolCalls[0]?.providerMetadata).toEqual({ openai: { itemId: "fc_1" } })
+      expect(yield* replayed(plain)).toEqual({
+        type: "function_call",
+        id: "fc_1",
+        call_id: "call_1",
+        name: "jira",
+        namespace: undefined,
+        arguments: "{}",
+      })
     }),
   )
 
