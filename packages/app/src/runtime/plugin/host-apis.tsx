@@ -1,3 +1,4 @@
+import { fitsSidePane } from "../../session/session-panel-width"
 import {
   batch,
   createComputed,
@@ -458,6 +459,7 @@ export function createHostApis() {
     // Before the interface mounts, reads return what an empty layout holds and writes wait for it.
     layout: (plugin) => ({
       narrow,
+      fitsSide: () => fitsSidePane(document.querySelector("[data-pane-row]")?.getBoundingClientRect().width ?? 0),
       ready: () => current()?.layout.ready() ?? false,
       open: (key, session, options) => write((value) => value.layout.open(key, session, options)),
       close: (key, session) => write((value) => value.layout.close(key, session)),

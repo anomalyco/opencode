@@ -12,6 +12,10 @@ export const SIDE_PANE_WIDTH_MIN = 320
 
 const SESSION_PANEL_WIDTH_FIT = 450
 
+export function fitsSidePane(rowWidth: number) {
+  return rowWidth >= SESSION_PANEL_WIDTH_FIT + SIDE_PANE_WIDTH_MIN + 8
+}
+
 const REVIEW_PANE_WIDTH_FIT = 480
 
 const REVIEW_PANE_WIDTH_FIT_SPLIT = 800
