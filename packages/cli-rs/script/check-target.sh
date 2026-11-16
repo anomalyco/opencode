@@ -9,7 +9,8 @@
 # and that the header matches the bindings.
 #
 # Usage: sh script/check-target.sh <target> [extra cargo clippy arguments...]
-# Targets: x86_64-pc-windows-msvc, aarch64-pc-windows-msvc, x86_64-apple-darwin, aarch64-apple-darwin.
+# Targets: x86_64-pc-windows-msvc, aarch64-pc-windows-msvc, aarch64-unknown-linux-gnu, x86_64-unknown-linux-musl,
+# aarch64-unknown-linux-musl, x86_64-apple-darwin, aarch64-apple-darwin.
 # Set ZIG to the Zig command. The default is `zig`, or `zig 0.17.1` (OpenTUI's version) when `zig` is anyzig, which
 # needs a version outside a Zig project.
 set -eu
@@ -19,6 +20,9 @@ shift
 case $target in
     x86_64-pc-windows-msvc) name=windows zig_target=x86_64-windows-gnu stubs=opentui-static.lib ;;
     aarch64-pc-windows-msvc) name=windows-arm64 zig_target=aarch64-windows-gnu stubs=opentui-static.lib ;;
+    aarch64-unknown-linux-gnu) name=linux-arm64 zig_target=aarch64-linux-gnu.2.17 stubs=libopentui.a ;;
+    x86_64-unknown-linux-musl) name=linux-x64-musl zig_target=x86_64-linux-musl stubs=libopentui.a ;;
+    aarch64-unknown-linux-musl) name=linux-arm64-musl zig_target=aarch64-linux-musl stubs=libopentui.a ;;
     x86_64-apple-darwin) name=macos-x64 zig_target=x86_64-macos.13.0 stubs=libopentui.a ;;
     aarch64-apple-darwin) name=macos-arm64 zig_target=aarch64-macos.13.0 stubs=libopentui.a ;;
     *)
