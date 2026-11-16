@@ -13,7 +13,7 @@ import {
 } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { Command, createKeyed, LinkHandler, MenuItem, SettingsPage, Style, type Plugin } from "@opencode/plugin/gui"
-import { BuiltinCommand, BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
+import { BuiltinAppLink, BuiltinCommand, BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser } from "@opencode/plugin/gui/browser"
 import type definition from "./index"
 import type { Model } from "./model"
@@ -84,6 +84,17 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   // The native pane is a desktop feature.
   if (ctx.app.platform !== "desktop") return
+  ctx.add(BuiltinAppLink, {
+    review(href) {
+      const session = sessions.current()
+      const result = session && model()?.reviewLink(session, href)
+
+      if (!result) return ctx.toast.show({ title: ctx.t("link.unavailable") })
+      void result.catch(() => {
+        if (!ctx.signal.aborted) ctx.toast.show({ title: ctx.t("common.requestFailed") })
+      })
+    },
+  })
   ctx.add(LinkHandler, {
     priority: 6,
     match: (link) => link.origin === undefined && link.href.startsWith("workspace://"),

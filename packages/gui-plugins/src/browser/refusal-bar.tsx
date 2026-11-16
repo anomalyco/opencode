@@ -44,10 +44,7 @@ export function RefusalBar(props: {
                 <Show
                   when={web()}
                   fallback={
-                    <>
-                      <span class="min-w-0 truncate">{target().slice(0, -12)}</span>
-                      <span class="shrink-0">{target().slice(-12)}</span>
-                    </>
+                    <span class="max-h-32 overflow-y-auto whitespace-pre-wrap break-all select-text">{target()}</span>
                   }
                 >
                   {(parts) => (

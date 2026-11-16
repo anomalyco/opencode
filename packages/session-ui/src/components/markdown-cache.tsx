@@ -42,6 +42,7 @@ const workerIds = new Map<number, number>()
 const purifier = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 
 if (typeof window !== "undefined" && purifier.isSupported) {
+  const appLinks = new WeakMap<HTMLAnchorElement, string>()
   // A config passed to sanitize() rebuilds every allow-list on each call; set once, every call reuses them.
   purifier.setConfig({
     USE_PROFILES: { html: true, mathMl: true },
@@ -55,7 +56,13 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     if (node instanceof HTMLAnchorElement) {
       // Local file links never navigate the document; the host decides how to open them.
       node.removeAttribute("data-local-link")
-      const path = localLinkPath(node.getAttribute("href") ?? "")
+      node.removeAttribute("data-app-link")
+      const href = node.getAttribute("href") ?? ""
+      const path = localLinkPath(href)
+
+      const protocol = URL.parse(href)?.protocol
+
+      if (protocol && (!path || protocol === "file:") && !/^https?:$/.test(protocol)) appLinks.set(node, href)
 
       if (!path) return
       node.setAttribute("data-local-link", path)
@@ -79,6 +86,15 @@ if (typeof window !== "undefined" && purifier.isSupported) {
   })
   purifier.addHook("afterSanitizeAttributes", (node: Element) => {
     if (!(node instanceof HTMLAnchorElement)) return
+    const href = appLinks.get(node)
+
+    // Never restore a stripped href. Preserve the original as inert text, including characters DOMPurify or the
+    // URL parser might trim: the desktop policy checks exactly what the author wrote.
+    if (href !== undefined) {
+      node.dataset.appLink = href
+      node.setAttribute("role", "link")
+      node.tabIndex = 0
+    }
 
     if (node.target !== "_blank") return
 

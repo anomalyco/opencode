@@ -630,6 +630,17 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     /** A page's icon and zoom, once this desktop reported them. */
     page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
     search: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.find,
+    reviewLink(session: SessionRef, url: string) {
+      if (url.length > 2048) {
+        ctx.toast.show({ title: describe("browser.address.web") })
+
+        return Promise.resolve()
+      }
+
+      return registration(session)?.reviewLink(url).then((id) => {
+        if (!ctx.signal.aborted && sessions.current()?.key === session.key) layout.open(key(id), session, { tab: "select" })
+      })
+    },
     notice(session: Session, tabID: string) {
       const notice = state.chrome[session.key]?.[tabID]?.notice
 
@@ -637,7 +648,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (notice.reason === "external" || notice.reason === "popup") return {
         token: notice.token,
-        text: ctx.t(notice.reason === "external" ? "refused.external" : "refused.popup"), target: notice.target,
+        text: notice.reason === "external" ? ctx.t("refused.scheme", { scheme: notice.target.split(":", 1)[0] }) : ctx.t("refused.popup"), target: notice.target,
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
 

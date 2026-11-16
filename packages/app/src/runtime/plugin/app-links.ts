@@ -1,0 +1,67 @@
+import { makeEventListener } from "@solid-primitives/event-listener"
+
+function target(event: Event) {
+  const anchor = event.target instanceof Element ? event.target.closest("a") : null
+
+  if (!(anchor instanceof HTMLAnchorElement) || !anchor.closest("[data-pane-row]")) return
+  const href = anchor.dataset.appLink ?? anchor.getAttribute("href")
+
+  if (!href || /^[a-z]:[\\/]/i.test(href)) return
+  const protocol = URL.parse(href)?.protocol
+
+  if (!protocol || /^https?:$/.test(protocol)) return
+
+  return { anchor, href }
+}
+
+export function createAppLinks(review: (href: string) => void) {
+  let pressed: ReturnType<typeof target>
+  makeEventListener(
+    document,
+    "pointerdown",
+    (event) => {
+      pressed = event.isTrusted && event.button === 0 ? target(event) : undefined
+    },
+    true,
+  )
+  makeEventListener(
+    document,
+    "pointercancel",
+    () => {
+      pressed = undefined
+    },
+    true,
+  )
+  makeEventListener(
+    document,
+    "keydown",
+    (event) => {
+      if (event.key !== "Enter") return
+      const link = target(event)
+
+      if (!link) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+
+      if (event.isTrusted && !event.repeat && link.anchor === document.activeElement) review(link.href)
+    },
+    true,
+  )
+
+  const click = (event: MouseEvent) => {
+    const start = pressed
+    pressed = undefined
+    const link = target(event)
+
+    if (!link) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+
+    // A stream can replace the anchor or change its target between press and release.
+    if (event.type === "click" && event.isTrusted && start?.anchor === link.anchor && start.href === link.href)
+      review(link.href)
+  }
+
+  makeEventListener(document, "click", click, true)
+  makeEventListener(document, "auxclick", click, true)
+}

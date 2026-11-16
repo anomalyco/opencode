@@ -26,7 +26,7 @@ test("refusals describe the actual destination without displaying private, misle
 })
 
 test("external app launches need a known scheme and a non-agent request; unsafe targets cannot be copied either", () => {
-  for (const scheme of ["tel", "vscode-insiders", "cursor", "slack", "zoomus", "whatsapp", "github-mac", "jetbrains"]) {
+  for (const scheme of ["obsidian", "tel", "vscode-insiders", "cursor", "slack", "zoomus", "whatsapp", "github-mac", "jetbrains"]) {
     const url = `${scheme}:fixture`
     expect(externalTarget(url)).toBe("open")
     expect(navigationNotice(url, {}, "agent")).toEqual({ reason: "external", target: url, action: "copy" })
@@ -36,6 +36,9 @@ test("external app launches need a known scheme and a non-agent request; unsafe 
 
   for (const scheme of [
     "data",
+    "about",
+    "blob",
+    "vbscript",
     "file",
     "oc-preview",
     "workspace",

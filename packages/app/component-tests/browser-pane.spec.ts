@@ -5,6 +5,7 @@ const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 const modules = {
   fixture: source("../../gui-plugins/src/browser/panel.fixture.tsx"),
   embeds: source("../src/runtime/plugin/embeds.tsx"),
+  links: source("../src/runtime/plugin/app-links.ts"),
   panelMotion: source("../src/shell/panel-motion.ts"),
   language: source("../src/runtime/i18n/language.tsx"),
 }
@@ -13,15 +14,17 @@ story.beforeEach(async ({ mount, page }) => {
   // Any story loads the app styles; the fixture mounts the pane beside it on the real host embeds.
   await mount("ui-line-comment--editor")
   await page.evaluate(async (modules) => {
-    const [{ mountBrowserPane }, { createEmbeds }, panelMotion, language] = await Promise.all([
+    const [{ mountBrowserPane }, { createEmbeds }, { createAppLinks }, panelMotion, language] = await Promise.all([
       import(modules.fixture),
       import(modules.embeds),
+      import(modules.links),
       import(modules.panelMotion),
       import(modules.language),
     ])
 
     mountBrowserPane({
       createEmbeds,
+      createAppLinks,
       panelMotion,
       LanguageProvider: language.LanguageProvider,
       UiI18nBridge: language.UiI18nBridge,
@@ -29,6 +32,30 @@ story.beforeEach(async ({ mount, page }) => {
     })
   }, modules)
   await expect(page.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
+story("reviews the actual application target only after a trusted click", async ({ page }) => {
+  const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
+  const url = "obsidian://open?vault=test&file=report"
+  await page.evaluate(async ({ sanitizer, url }) => {
+    const { sanitizeMarkdown } = await import(sanitizer)
+    const row = document.createElement("div")
+    row.dataset.paneRow = ""
+    row.innerHTML = sanitizeMarkdown(`<a href="${url}">Misleading title</a>`)
+    document.querySelector('[data-testid="browser-pane-fixture"]')?.prepend(row)
+    row.querySelector("a")?.click()
+  }, { sanitizer, url })
+  const pane = page.locator("#browser-panel")
+  await expect(pane.getByText(url)).toHaveCount(0)
+  const link = page.getByRole("link", { name: "Misleading title" })
+  await link.hover()
+  await page.mouse.down()
+  await link.evaluate((node) => node.replaceWith(node.cloneNode(true)))
+  await page.mouse.up()
+  await expect(pane.getByText(url)).toHaveCount(0)
+  await link.click()
+  await expect(pane.getByRole("status").filter({ hasText: "Application link (obsidian)" })).toContainText(url)
+  await expect(pane.getByRole("button", { name: "Open", exact: true })).toBeVisible()
 })
 
 story("moves the native page when a fixed-size pane changes position", async ({ page }) => {

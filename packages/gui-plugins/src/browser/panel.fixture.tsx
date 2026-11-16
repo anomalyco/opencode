@@ -54,10 +54,12 @@ import SessionBrowserPane from "./panel"
 import { BrowserPane, type PaneEvent, type PromptAnswer } from "./ipc"
 import { pageShortcut } from "./keys"
 import { normalizeURL, refusal } from "./policy"
+import { navigationNotice } from "./refusal-notice"
 import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
 type PaneHost = {
+  createAppLinks(review: (href: string) => void): void
   createEmbeds(input: {
     bridge: Bridge | undefined
     zoom: () => number
@@ -481,6 +483,12 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         } })
       },
       notice: async () => undefined,
+      reviewLink: async ({ url }) => {
+        const tabID = tabs[0].id
+        emit(store.session, { type: "refusal", tabID, token: "fixture", notice: navigationNotice(url, {}) })
+
+        return tabID
+      },
       // Main answers the page, which then waits on nothing.
       answer: async (value) => {
         setStore("answers", (answers) => [...answers, value.answer])
@@ -540,6 +548,12 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const plugin = fake as unknown as Context & SetupContext<typeof definition>
     const model = createModel(plugin)
+
+    if ("createAppLinks" in input) input.createAppLinks((href) => {
+      const view = session()
+
+      if (view) void model.reviewLink(view, href)
+    })
 
     const pick = (rect?: ElementRect) => {
       const selector = () => {
@@ -1266,6 +1280,7 @@ export function mountBrowserRegion(input: RegionHost) {
       clearSite: async () => undefined,
       find: async () => undefined,
       notice: async () => undefined,
+      reviewLink: async () => tabID,
       answer: async () => undefined,
       reveal: async () => undefined,
       close: async () => undefined,

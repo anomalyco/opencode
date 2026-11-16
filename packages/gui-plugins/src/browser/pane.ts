@@ -382,6 +382,19 @@ export function createBrowserPane(input: {
 
       return page(binding, tabID)?.answerNotice(token, dismiss)
     },
+    async reviewLink(window: number, binding: string, url: string) {
+      owned(window, binding)
+      const focused = selectBinding(machine.state, binding)?.focusedTabID
+      const tab = (focused && page(binding, focused)) || create(binding)
+      const id = tab.state().id
+      await tab.ready
+
+      if (page(binding, id) !== tab) throw new Error("browser.pane.unavailable")
+      dispatchBinding(binding, { type: "tab.focused", tabID: id })
+      tab.reviewLink(url)
+
+      return id
+    },
     find(window: number, binding: string, tabID: Browser.TabID, action: FindAction) {
       owned(window, binding)
       const target = page(binding, tabID)

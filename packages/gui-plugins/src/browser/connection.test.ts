@@ -30,6 +30,7 @@ function fixture(reject?: Error) {
     command: async () => undefined,
     find: async () => undefined,
     notice: async () => undefined,
+    reviewLink: async () => tabID,
     answer: async () => undefined,
     inspect: async () => undefined,
     highlight: async (input) => {
