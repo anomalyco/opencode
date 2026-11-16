@@ -898,6 +898,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             {(tab) => (
               <div
                 data-testid={`native-${tab.title}`}
+                data-x={store.layouts[`embed-${tab.title}`]?.bounds?.x}
                 data-visible={!!store.layouts[`embed-${tab.title}`]?.visible}
                 style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
               >

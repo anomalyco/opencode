@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from "solid-js"
 import { createEventListener } from "@solid-primitives/event-listener"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { embedBounds, overlaps } from "./embed-geometry"
 import { observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
 import type { EmbedProps, Embeds } from "@opencode/plugin/gui"
 import type { Bridge } from "@opencode/plugin/gui/host"
@@ -99,7 +99,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   let element: HTMLDivElement | undefined
   let frame: number | undefined
   let layout: string | undefined
-  let until = 0
+  const motions = new Set<Animation>()
   // The embed the last layout went to; it hides when another one takes the box.
   let placed: string | undefined
   let snapshotTimer: ReturnType<typeof setTimeout> | undefined
@@ -238,14 +238,15 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   // The native embed always paints above the DOM, so hide it while a floating
   // menu, select, or popover overlaps it. Tooltips are excluded.
   const covered = (rect: DOMRect) => {
-    const floating = document.querySelectorAll('[data-popper-positioner]:not(:has([role="tooltip"]))')
+    const floating = document.querySelectorAll(
+      '[data-popper-positioner]:not(:has([role="tooltip"])), .toast-v2:not([data-visible="false"])',
+    )
 
     // An index loop: this runs every frame of a transition or a drag.
     for (let index = 0; index < floating.length; index++) {
       const r = floating[index].getBoundingClientRect()
 
-      if (r.width > 0 && r.left < rect.right && r.right > rect.left && r.top < rect.bottom && r.bottom > rect.top)
-        return true
+      if (overlaps(rect, r)) return true
     }
 
     return false
@@ -277,11 +278,16 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     if (!id) return hide()
     const rect = element.getBoundingClientRect()
     const zoom = props.input.zoom()
-    const left = Math.round(rect.left * zoom)
-    const top = Math.round(rect.top * zoom)
-    const right = Math.round(rect.right * zoom)
-    const bottom = Math.round(rect.bottom * zoom)
-    const shown = props.visible && current().documentVisible && !props.input.moving()
+    const bounds = embedBounds(rect, zoom)
+
+    const shown =
+      props.visible &&
+      current().documentVisible &&
+      !props.input.moving() &&
+      bounds.width > 0 &&
+      bounds.height > 0 &&
+      overlaps(rect, { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight })
+
     // A dialog's scrim covers the box like floating content does, so it dims a still of the page
     // instead of a blank box, and the page does not blink out and back as the dialog opens and closes.
     const cover = !!props.frozen || props.input.dialog() || covered(rect)
@@ -299,7 +305,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const ring = props.radius ? cardRing(element) : undefined
     const viewport = { width: Math.round(window.innerWidth * zoom), height: Math.round(window.innerHeight * zoom) }
 
-    const next = `${id}:${visible}:${left}:${top}:${right}:${bottom}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
+    const next = `${id}:${visible}:${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
 
     if (next === layout) return
     layout = next
@@ -317,10 +323,10 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
         page: props.page,
         placement: {
           id,
-          x: left / zoom - rect.left,
-          y: top / zoom - rect.top,
-          width: Math.max(0, right - left) / zoom,
-          height: Math.max(0, bottom - top) / zoom,
+          x: bounds.x / zoom - rect.left,
+          y: bounds.y / zoom - rect.top,
+          width: bounds.width / zoom,
+          height: bounds.height / zoom,
         },
       })
 
@@ -328,7 +334,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
     const box = {
       visible,
-      bounds: { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) },
+      bounds,
       viewport,
       radius: Math.round((props.radius ?? 0) * zoom),
     }
@@ -345,12 +351,14 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     frame = undefined
     measure()
 
-    if (performance.now() < until) frame = requestAnimationFrame(tick)
+    motions.forEach((motion) => {
+      if (motion.playState !== "running") motions.delete(motion)
+    })
+
+    if (motions.size) schedule()
   }
 
-  const schedule = (duration = 0) => {
-    until = Math.max(until, performance.now() + duration)
-
+  const schedule = () => {
     if (frame === undefined) frame = requestAnimationFrame(tick)
   }
 
@@ -386,31 +394,78 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
         // The native views are not clipped by the retained panel's DOM. Hide before the next
         // animation frame so closing the panel cannot leave the embed above the app.
         if (!props.visible || !documentVisible() || moving || !props.id) return hide()
-        schedule(300)
+        schedule()
       },
     ),
   )
-  // ResizeObserver runs after layout in the same frame; measuring here instead of on the next
-  // animation frame keeps the native view in step with a region drag.
-  createResizeObserver(() => element, measure)
-  createEventListener(window, "resize", () => schedule(300))
-  // A layout transition elsewhere, such as the chat column's width while the side pane opens, can
-  // move the box without resizing it. Track it from when it actually runs, and settle on its end.
-  createEventListener(document, "transitionrun", (event) => {
-    if (geometry.test(event.propertyName)) schedule(300)
+  createEffect(() => {
+    if (!element || !props.visible || !props.id || !documentVisible() || props.input.moving()) return
+    const box = element
+    // Watch the layout spine, not the conversation subtree: a sibling changing width or a banner being inserted
+    // can move a fixed-size pane. Only the portals outside the app root need subtree observation (menus and toasts).
+    const sizes = new ResizeObserver(schedule)
+    const nodes = new Set<Element>()
+
+    const changes = new MutationObserver((records) => {
+      if (
+        records.some(
+          (record) => record.type === "childList" && record.target instanceof Element && nodes.has(record.target),
+        )
+      )
+        observe()
+      schedule()
+    })
+
+    const observe = () => {
+      nodes.clear()
+      sizes.disconnect()
+      changes.disconnect()
+
+      for (let node: Element | null = box; node; node = node.parentElement) {
+        nodes.add(node)
+        sizes.observe(node)
+        changes.observe(node, { attributes: true, childList: true })
+
+        for (const sibling of node.parentElement?.children ?? []) {
+          if (sibling === node) continue
+          sizes.observe(sibling)
+          const portal = sibling.parentElement === document.body
+          changes.observe(sibling, { attributes: true, childList: portal, subtree: portal })
+        }
+      }
+    }
+
+    observe()
+    createEventListener(document, ["transitionstart", "animationstart"], (event) => {
+      const target = event.target
+
+      if (
+        !(target instanceof Element) ||
+        (!nodes.has(target) &&
+          !nodes.has(target.parentElement!) &&
+          !target.closest("[data-popper-positioner], .toast-v2"))
+      )
+        return
+
+      for (const motion of target.getAnimations()) {
+        if (
+          motion.effect instanceof KeyframeEffect &&
+          motion.effect.getKeyframes().some((key) => Object.keys(key).some((property) => geometry.test(property)))
+        )
+          motions.add(motion)
+      }
+
+      schedule()
+    })
+    createEventListener(document, "scroll", schedule, { capture: true, passive: true })
+    createEventListener(window, "resize", schedule)
+    createEventListener(window.matchMedia("(prefers-color-scheme: dark)"), "change", schedule)
+    onCleanup(() => {
+      motions.clear()
+      changes.disconnect()
+      sizes.disconnect()
+    })
   })
-  createEventListener(document, ["transitionend", "transitioncancel"], (event) => {
-    if (geometry.test(event.propertyName)) schedule()
-  })
-  // Floating content portals directly into <body>; keep measuring briefly so
-  // the positioner has settled before the overlap check runs.
-  const portals = new MutationObserver(() => schedule(300))
-  portals.observe(document.body, { childList: true })
-  onCleanup(() => portals.disconnect())
-  const appearance = new MutationObserver(() => schedule(300))
-  appearance.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "data-theme"] })
-  onCleanup(() => appearance.disconnect())
-  createEventListener(window.matchMedia("(prefers-color-scheme: dark)"), "change", () => schedule(300))
   createEventListener(document, "visibilitychange", () =>
     setEmbedState({ ...current(), documentVisible: document.visibilityState === "visible" }),
   )

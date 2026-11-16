@@ -31,6 +31,15 @@ story.beforeEach(async ({ mount, page }) => {
   await expect(page.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
+story("moves the native page when a fixed-size pane changes position", async ({ page }) => {
+  const native = page.getByTestId("native-Alpha")
+  const x = Number(await native.getAttribute("data-x"))
+  await page.locator("#browser-panel").evaluate((pane) => {
+    pane.style.translate = "-39px"
+  })
+  await expect(native).toHaveAttribute("data-x", String(x - 39))
+})
+
 story("hides a native page when another takes the pane, the pane hides, or it unmounts", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const alpha = root.getByTestId("native-Alpha")
