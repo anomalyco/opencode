@@ -1,4 +1,4 @@
-<p align="center">
+<p align="center"> 
   <a href="https://opencode.ai">
     <picture>
       <source srcset=".github/assets/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
