@@ -4,19 +4,26 @@ const idleMs = 30_000
 export function agentRendering(signal: AbortSignal, throttle: (enabled: boolean) => void, after = scheduleIdle) {
   let holds = 0
   let awake = false
+  let paint: Promise<void> | undefined
   let cancel: (() => void) | undefined
   signal.addEventListener("abort", () => cancel?.(), { once: true })
 
   return {
-    hold() {
+    hold(onWake?: () => Promise<void>) {
       signal.throwIfAborted()
       cancel?.()
 
-      if (!awake) throttle(false)
+      if (!awake) {
+        throttle(false)
+        paint = onWake?.()
+        // Later commands may retry a failed wake; overlapping holders await the same frame.
+        void paint?.finally(() => { paint = undefined }).catch(() => undefined)
+      }
       awake = true
       holds++
 
       return {
+        painted: paint,
         [Symbol.dispose]() {
           if (--holds || signal.aborted) return
           cancel = after(idleMs, () => {

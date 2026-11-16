@@ -29,3 +29,15 @@ test("only the last command starts the idle clock; wake before the next command 
   lifetime.abort()
   expect(timers.size).toBe(0)
 })
+
+test("overlapping commands await the same first frame", async () => {
+  const render = agentRendering(new AbortController().signal, () => {}, () => () => {})
+  const frame = Promise.withResolvers<void>()
+  const first = render.hold(() => frame.promise)
+  const second = render.hold(() => { throw new Error("duplicate wake") })
+  expect(second.painted).toBe(first.painted)
+  frame.resolve()
+  await first.painted
+  first[Symbol.dispose]()
+  second[Symbol.dispose]()
+})

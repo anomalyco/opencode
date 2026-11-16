@@ -48,6 +48,24 @@ export function loopbackAddress(value: string) {
   return /^(?:(?:[a-z\d-]+\.)*localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
 }
 
+// A glob such as **/dashboard matches the whole address; plain text matches anywhere in it.
+export function matchesURL(url: string, pattern: string) {
+  if (!pattern.includes("*")) return url.includes(pattern)
+  const parts = pattern.split(/\*+/)
+  const first = parts.shift() ?? ""
+  const last = parts.pop() ?? ""
+  if (!url.startsWith(first) || !url.endsWith(last)) return false
+  let offset = first.length
+  for (const part of parts) {
+    const found = url.indexOf(part, offset)
+    if (found < 0) return false
+    offset = found + part.length
+  }
+  return offset + last.length <= url.length
+}
+
+/** What one element probe saw; no count while the page navigated or did not answer. */
+
 export const MAX_FILE_BYTES = 5 * 1024 * 1024
 export const TUNNEL_CHUNK_BYTES = 64 * 1024
 export const MAX_TEXT = 100_000
@@ -413,7 +431,7 @@ export const Operations = [
   operation(
     "wait",
     'Wait until a condition holds in this tab, or pause. Pass one of: text (visible text appears), textGone, selector or ref (a matching element is visible; with state: "hidden", until none is), url (a substring or * glob of the address), delayMs (a plain pause; Code Mode has no timers; time up to 60 counts as seconds, larger as milliseconds), or nothing (the page finishes loading). Only a timeout or timeoutMs, with no condition, pauses that long. For example wait({ tabID, text: "Saved", timeout: 5000 }). A timeout is a result, not an error: it returns met: false with what the page showed; waited says what the call waited for. timeoutMs defaults to 10000; values above 30000 count as 30000.',
-    { ...tab, ...frame, condition: Schema.Literals(["load", "text", "textGone"]), text: optional(short), timeoutMs },
+    { ...tab, ...frame, condition: Schema.Literals(["load", "text", "textGone", "delay", "url"]), text: optional(short), url: optional(short), timeoutMs },
     Waited,
     {
       ...tab,

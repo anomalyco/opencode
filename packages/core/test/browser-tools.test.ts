@@ -213,6 +213,8 @@ it.live("wait pauses, and polls for an element or an address", () =>
   Effect.gen(function* () {
     const seen = { checks: 0 }
     const browser = yield* setup((action) => {
+      if (action.type === "wait" && action.condition === "url" && action.url === "**/done")
+        return failure("Unmet URL wait", Browser.FailureCode.unmet)
       if (action.type !== "evaluate") return success(tab)
       seen.checks++
       return evaluated(seen.checks < 2 ? { count: 0, visible: 0 } : { count: 1, visible: 1 })
@@ -221,7 +223,8 @@ it.live("wait pauses, and polls for an element or an address", () =>
     expect(JSON.parse(yield* browser.run(waited(`time: 0.02`)))).toMatchObject({ met: true, waited: "delay" })
     // A lone timeout is a pause for that long, not a load wait that returns at once on a loaded page.
     expect(JSON.parse(yield* browser.run(waited(`timeout: 50`)))).toMatchObject({ met: true, waited: "delay" })
-    expect(browser.commands).toEqual([])
+    expect(browser.commands).toEqual([20,20,50].map(timeoutMs => ({type:"wait",tabID,condition:"delay",timeoutMs})))
+    browser.commands.length = 0
     expect(JSON.parse(yield* browser.run(`return await tools.browser.wait({ tabID: "${tabID}" })`))).toMatchObject({
       met: true,
       waited: "load",

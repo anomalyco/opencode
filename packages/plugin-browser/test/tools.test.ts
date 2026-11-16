@@ -286,13 +286,13 @@ describe("wait reads the condition from the keys models write", () => {
   })
 
   test("url matches a substring or a * glob of the whole address", () => {
-    expect(BrowserTools.matchesURL("https://app.test/dashboard?tab=1", "/dashboard")).toBe(true)
-    expect(BrowserTools.matchesURL("https://app.test/dashboard", "**/dashboard")).toBe(true)
-    expect(BrowserTools.matchesURL("https://app.test/dashboard/settings", "**/dashboard")).toBe(false)
-    expect(BrowserTools.matchesURL("https://app.test/a.b", "*/a.b")).toBe(true)
-    expect(BrowserTools.matchesURL("https://app.test/axb", "*/a.b")).toBe(false)
-    expect(BrowserTools.matchesURL("abc", "ab*bc")).toBe(false)
-    expect(BrowserTools.matchesURL("https://app.test/some/path", "https://*/*/path")).toBe(true)
+    expect(Browser.matchesURL("https://app.test/dashboard?tab=1", "/dashboard")).toBe(true)
+    expect(Browser.matchesURL("https://app.test/dashboard", "**/dashboard")).toBe(true)
+    expect(Browser.matchesURL("https://app.test/dashboard/settings", "**/dashboard")).toBe(false)
+    expect(Browser.matchesURL("https://app.test/a.b", "*/a.b")).toBe(true)
+    expect(Browser.matchesURL("https://app.test/axb", "*/a.b")).toBe(false)
+    expect(Browser.matchesURL("abc", "ab*bc")).toBe(false)
+    expect(Browser.matchesURL("https://app.test/some/path", "https://*/*/path")).toBe(true)
   })
 })
 

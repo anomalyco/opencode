@@ -15,7 +15,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   ctx: Pick<Context, "tool" | "skill" | "location" | "permission">,
   connection: BrowserConnection.Connection,
 ) {
-  // Load and text waits run on the desktop; the rest poll from here with actions every desktop already supports.
+  // Element waits probe the page on every poll; other waits hold one command on the tab until they settle.
   const wait = Effect.fn("BrowserTools.wait")(function* (tabID: Browser.TabID, plan: WaitPlan, tool: Tool.Context, approved: Extract<Effect.Success<ReturnType<typeof connection.authorize>>, { connectionID: string }>) {
     const started = yield* Clock.currentTimeMillis
     const current = connection
@@ -44,30 +44,16 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       )
     const deadline = started + plan.timeoutMs
 
-    if (plan.kind === "delay") {
-      yield* current
-      yield* Effect.sleep(Duration.millis(plan.timeoutMs))
-      return yield* finish(yield* current, true)
-    }
-
-    if (plan.kind === "desktop") {
-      const target = yield* connection.target(tool.sessionID, plan.action, approved)
+    if (plan.kind !== "element") {
+      const action: WaitAction = plan.kind === "desktop" ? plan.action : { type: "wait", tabID, condition: plan.kind, ...(plan.kind === "url" ? { url: plan.url } : {}), timeoutMs: Math.max(1, plan.timeoutMs) }
+      const target = yield* connection.target(tool.sessionID, action, approved)
       return yield* target.request([]).pipe(
         Effect.flatMap((response) => Effect.fromResult(decodeResult({ name: "wait", output: Browser.Tab }, response))),
         Effect.flatMap((tab) => finish(tab, true)),
         Effect.catchIf(
           (error) => failureCode(error) === Browser.FailureCode.unmet,
-          () => Effect.flatMap(current, (tab) => finish(tab, false, unmet(plan.action))),
+          () => Effect.flatMap(current, (tab) => finish(tab, false, plan.kind === "url" ? `The address was ${tab.url} after ${plan.timeoutMs} ms.` : unmet(action))),
         ),
-      )
-    }
-
-    if (plan.kind === "url") {
-      const result = yield* until(current, (tab) => matchesURL(tab.url, plan.url), deadline, current)
-      return yield* finish(
-        result.seen,
-        result.met,
-        result.met ? undefined : `The address was ${result.seen.url} after ${plan.timeoutMs} ms.`,
       )
     }
 
@@ -473,29 +459,11 @@ function unmet(action: WaitAction) {
   return `Text "${action.text}" was still on the page after ${after}.`
 }
 
-// A glob such as **/dashboard matches the whole address; plain text matches anywhere in it.
-export function matchesURL(url: string, pattern: string) {
-  if (!pattern.includes("*")) return url.includes(pattern)
-  const parts = pattern.split(/\*+/)
-  const first = parts.shift() ?? ""
-  const last = parts.pop() ?? ""
-  if (!url.startsWith(first) || !url.endsWith(last)) return false
-  let offset = first.length
-  for (const part of parts) {
-    const found = url.indexOf(part, offset)
-    if (found < 0) return false
-    offset = found + part.length
-  }
-  return offset + last.length <= url.length
-}
-
-/** What one element probe saw; no count while the page navigated or did not answer. */
-type Seen = { readonly tab: Browser.Tab; readonly count: number | undefined; readonly visible: number | undefined }
-
 const Visibility = Schema.Struct({
   tab: Browser.Tab,
   value: Schema.Struct({ count: Schema.Number, visible: Schema.Number }),
 })
+type Seen = { readonly tab: Browser.Tab; readonly count: number | undefined; readonly visible: number | undefined }
 const refVisibility =
   "(element) => ({ count: element.isConnected ? 1 : 0, visible: element.isConnected && element.checkVisibility() ? 1 : 0 })"
 const selectorVisibility = (selector: string) =>

@@ -1,4 +1,5 @@
 import { homedir } from "node:os"
+import { scheduler } from "node:timers/promises"
 import { navigationTurn, replacementNavigation } from "./navigation-turn"
 import { accessibilitySnapshot } from "./snapshot"
 import { documentRefs } from "./refs"
@@ -1143,9 +1144,19 @@ export function createBrowserPage(
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
       using active = new DisposableStack()
 
-      if (origin === "agent") active.use(rendering.hold())
+      const hidden = !view.getVisible() && !undrawable({ platform: process.platform, visible: win.isVisible(), minimized: win.isMinimized(), appHidden: process.platform === "darwin" && electron.app.isHidden() })
+      const hold = origin === "agent" ? active.use(rendering.hold(hidden ? async () => {
+        await ready
+        if (closed() || agentRefusal(command.action, mainDocument())) return
+        await withFrames(false, pageLifetime.signal, async stop => {
+          const frame = (await cdp.send("Page.getFrameTree")).frameTree.frame.id
+          const world = await cdp.send("Page.createIsolatedWorld", { frameId: frame, worldName: "opencode-browser-paint" })
+          abortError(stop)
+          await cdp.send("Runtime.evaluate", { contextId: world.executionContextId, expression: "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done())))", awaitPromise: true })
+        })
+      } : undefined)) : undefined
       const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined)
-      await ready
+      await Promise.all([ready, hold?.painted])
       const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
 
       // The user leaving the page dismisses its dialog, as a browser's address bar does.
@@ -1507,7 +1518,12 @@ export function createBrowserPage(
       }
 
       case "wait": {
-        if (action.condition !== "load" && !action.text)
+        if (action.condition === "delay") {
+          await scheduler.wait(action.timeoutMs ?? 0, { signal })
+          break
+        }
+        if (action.condition === "url" && action.url === undefined) throw new Error("A URL wait requires a URL pattern.")
+        if ((action.condition === "text" || action.condition === "textGone") && !action.text)
           throw new Error(
             'browser.wait requires non-empty text for condition "text" or "textGone". Use condition "load" without text to wait for loading.',
           )
@@ -1525,6 +1541,7 @@ export function createBrowserPage(
           const page = agentRefusal({ type: "wait" }, mainDocument())
 
           if (page) throw new Error(page)
+          if (action.condition === "url") return Browser.matchesURL(state().url, action.url ?? "")
           const context = frameID ? contexts.get(frameID) : undefined
 
           if (frameID && (!context || extensionFrames().has(frameID))) {
