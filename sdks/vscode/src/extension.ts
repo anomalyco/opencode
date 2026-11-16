@@ -2,16 +2,27 @@
 export function deactivate() {}
 
 import * as vscode from "vscode"
+import { createSidebarProvider, SIDEBAR_VIEW_ID } from "./sidebar"
 
-const TERMINAL_NAME = "opencode"
+const TERMINAL_NAME = "OpenCode"
 
 export function activate(context: vscode.ExtensionContext) {
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, createSidebarProvider(context), {
+      // Rebuilding the app on every reveal would drop its streams and scroll position.
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    vscode.commands.registerCommand("opencode.openSettings", () =>
+      vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`),
+    ),
+  )
+
   const openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
     await openTerminal()
   })
 
   const openTerminalDisposable = vscode.commands.registerCommand("opencode.openTerminal", async () => {
-    // An opencode terminal already exists => focus it
+    // An OpenCode terminal already exists => focus it
     const existingTerminal = vscode.window.terminals.find((t) => t.name === TERMINAL_NAME)
     if (existingTerminal) {
       existingTerminal.show()

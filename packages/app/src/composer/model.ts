@@ -206,6 +206,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     known: createKnownServerSessions(() => server.ctx),
     apply: server.ctx.data.session.apply,
     projects: server.ctx.projects.list,
+    fixed: server.ctx.projects.fixed,
     load: async (search, signal) => {
       const page = await serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal })
       page.data.forEach(data.session.remember)

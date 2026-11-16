@@ -7,7 +7,7 @@ import { setNewIcons } from "@opencode/ui/icon"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
-import { usePlatform } from "@/runtime/platform/platform"
+import { usePlatform, type Platform } from "@/runtime/platform/platform"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
 export type Settings = typeof settingsSchema.Type
@@ -83,12 +83,12 @@ export function sansInput(font: string | undefined) {
   return input(font)
 }
 
-export function monoFontFamily(font: string | undefined) {
-  return stack(font, monoBase)
+export function monoFontFamily(font: string | undefined, base = monoBase) {
+  return stack(font, base)
 }
 
-export function sansFontFamily(font: string | undefined) {
-  return stack(font, sansBase)
+export function sansFontFamily(font: string | undefined, base = sansBase) {
+  return stack(font, base)
 }
 
 export function terminalInput(font: string | undefined) {
@@ -339,7 +339,10 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
 }
 
 /** Only local/dev desktop builds offer the Recent side-tab organization. */
-export function recentSessionsAvailable(platform: "web" | "desktop", channel: ImportMetaEnv["VITE_OPENCODE_CHANNEL"]) {
+export function recentSessionsAvailable(
+  platform: Platform["platform"],
+  channel: ImportMetaEnv["VITE_OPENCODE_CHANNEL"],
+) {
   return platform === "desktop" && (channel === "local" || channel === "dev")
 }
 
@@ -348,9 +351,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
+    const platform = usePlatform()
 
     const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(
-      usePlatform().platform,
+      platform.platform,
       import.meta.env.VITE_OPENCODE_CHANNEL,
     )
       ? ["list", "projects", "customize", "recent"]
@@ -364,9 +368,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
-      const mono = monoFontFamily(store.appearance?.mono)
+      const mono = monoFontFamily(store.appearance?.mono, platform.fonts?.mono)
       root.style.setProperty("--font-family-mono", mono)
-      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
+      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans, platform.fonts?.sans))
+      // The host's fonts are its own, already loaded.
+      if (platform.fonts) return
       // Inline code can first appear during history backfill. Load its selected
       // face with the shell so that font discovery does not resize that mount.
       void document.fonts?.load(`440 13px ${mono}`).catch(() => undefined)

@@ -37,9 +37,12 @@ export function ProjectMenuItems(props: {
           {language.t("command.session.import")}
         </Menu.Item>
       </Show>
-      <Menu.Item onSelect={() => props.onEditProject(props.server, props.project)}>
-        {language.t("dialog.project.edit.title")}
-      </Menu.Item>
+      {/* Project settings live on the Settings screen, which a host with its own settings never opens. */}
+      <Show when={!platform.openSettings}>
+        <Menu.Item onSelect={() => props.onEditProject(props.server, props.project)}>
+          {language.t("dialog.project.edit.title")}
+        </Menu.Item>
+      </Show>
       <Show when={props.canRevealProject(props.server)}>
         <Menu.Item onSelect={() => props.onRevealProject(props.server, props.project)}>
           {language.t(

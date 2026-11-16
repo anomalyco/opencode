@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "noUnusedLocals": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "emitDeclarationOnly": false,
+    "rootDir": "../..",
+    "outDir": "node_modules/.ts-dist",
+    "types": ["vite/client", "node"]
+  },
+  "references": [{ "path": "../app" }],
+  "include": ["src", "../../sdks/vscode/src/webview-protocol.ts", "vite.config.ts", "package.json"]
+}

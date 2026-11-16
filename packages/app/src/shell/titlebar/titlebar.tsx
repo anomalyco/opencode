@@ -501,6 +501,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 ...projectSearchCommand,
                 title: language.t("session.new.project.search"),
                 category: language.t("command.category.project"),
+                // A host that fixes the project leaves nothing to search.
+                disabled: !!platform.project,
                 onSelect: () => {
                   const draftID = uuid()
 

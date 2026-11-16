@@ -111,7 +111,8 @@ export function SessionWorkspaceMenu(props: {
 
   if (props.sub)
     return (
-      <Menu.Sub gutter={4} overflowPadding={24} onOpenChange={onOpenChange}>
+      // Overlaps its parent menu where neither side has room, as in a narrow window.
+      <Menu.Sub gutter={4} overflowPadding={24} overlap onOpenChange={onOpenChange}>
         <Menu.SubTrigger
           class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted"
           disabled={view().disabled}
