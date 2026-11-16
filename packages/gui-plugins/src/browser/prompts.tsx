@@ -35,6 +35,8 @@ export function PromptDialog(props: {
   const title = createUniqueId()
   const description = createUniqueId()
   let box: HTMLDivElement | undefined
+  // Where the keyboard last was inside the dialog, which a click on the dimmed page returns it to.
+  let last: HTMLElement | undefined
   // A page can open a dialog under a click or key press already in flight: its default answer waits for a new one,
   // from each dialog it shows on and each time the page asks again.
   let guard: ReturnType<typeof guardActivation> | undefined
@@ -90,11 +92,15 @@ export function PromptDialog(props: {
     target.focus({ preventScroll: true })
   })
 
-  // The dialog's keys are its own (prompt-keys.ts): the command layer runs no shortcut from inside an aria-modal dialog,
-  // no other handler of the window sees them, and what the window would do behind it, as its own reload or zoom, is
-  // cancelled. Tab and Shift+Tab cycle inside the dialog; the page behind it is a still.
+  // The dialog's keys are its own (prompt-keys.ts): the command layer and the native menu run no shortcut while the
+  // keyboard is inside it (`data-owns-keyboard`), no other handler of the window sees them, and what the window would do
+  // behind it, as its own reload or zoom, is cancelled. Tab and Shift+Tab cycle inside the dialog; the page behind it is
+  // a still.
   const keyDown = (event: KeyboardEvent) => {
-    const owner = promptKeyOwner(event, { inside: true, mac })
+    const text =
+      event.target instanceof HTMLInputElement && (event.target.type === "text" || event.target.type === "password")
+
+    const owner = promptKeyOwner(event, { inside: true, mac, text })
 
     if (owner !== "window") event.stopPropagation()
 
@@ -108,9 +114,9 @@ export function PromptDialog(props: {
     }
 
     // A click on the dialog's text focuses the dialog, or the page's text, where Enter answers as the main button does.
-    const text = event.target instanceof HTMLElement && event.target.dataset.pageText !== undefined
+    const pageText = event.target instanceof HTMLElement && event.target.dataset.pageText !== undefined
 
-    if (event.key === "Enter" && !event.isComposing && box && (event.target === box || text)) {
+    if (event.key === "Enter" && !composing(event) && box && (event.target === box || pageText)) {
       event.preventDefault()
 
       return box.querySelector("form")?.requestSubmit()
@@ -153,12 +159,30 @@ export function PromptDialog(props: {
         "pointer-events": "auto",
         "background-color": "var(--v2-overlay-simple-overlay-scrim)",
       }}
+      // The dimmed page is the dialog's: a click there keeps the keyboard in the dialog, or brings it back, rather than
+      // giving it to the pane behind. The strip, the address field and the chat stay the user's to click.
+      onMouseDown={(event) => {
+        if (event.target !== event.currentTarget || !box) return
+        event.preventDefault()
+
+        if (box.contains(document.activeElement)) return
+
+        const target =
+          last?.isConnected && box.contains(last) ? last : (box.querySelector<HTMLElement>("[autofocus]") ?? box)
+
+        target.focus({ preventScroll: true })
+      }}
     >
       <div
         ref={box}
         data-slot="dialog-container"
         role="alertdialog"
         aria-modal="true"
+        // The command layer and the native menu run no shortcut while the keyboard is here.
+        data-owns-keyboard
+        onFocusIn={(event) => {
+          if (event.target instanceof HTMLElement) last = event.target
+        }}
         aria-labelledby={title}
         aria-describedby={described() ? description : undefined}
         tabIndex={-1}
@@ -531,7 +555,10 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
 
 type Plugin = ReturnType<typeof usePlugin<typeof definition>>
 
-const cancelKey = (event: KeyboardEvent) => !event.isComposing && event.key === "Escape"
+// Chromium reports the key that ends an IME composition with keyCode 229 once isComposing is already false.
+const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229
+
+const cancelKey = (event: KeyboardEvent) => !composing(event) && event.key === "Escape"
 
 const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
 

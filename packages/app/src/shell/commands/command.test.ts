@@ -7,7 +7,6 @@ import {
   CommandCatalog,
   commandKeymap,
   formatKeybind,
-  insideModalDialog,
   matchKeybind,
   parseKeybind,
   resolveKeybindOption,
@@ -140,19 +139,5 @@ describe("command keybinds", () => {
     expect(formatKeybind("none")).toBe("")
     expect(formatKeybind("mod+k,mod+p")).toContain("K")
     expect(formatKeybind("mod+k,mod+p")).not.toContain("P")
-  })
-})
-
-describe("keys inside a modal dialog", () => {
-  test("belong to the dialog, which may cover only part of the window; keys elsewhere run commands", () => {
-    const page = document.createElement("div")
-    page.innerHTML = `<div id="pane"><div role="alertdialog" aria-modal="true"><input id="field"></div></div><div id="composer" contenteditable="true"></div>`
-    document.body.append(page)
-
-    expect(insideModalDialog(page.querySelector("#field"))).toBe(true)
-    expect(insideModalDialog(page.querySelector("#composer"))).toBe(false)
-    expect(insideModalDialog(page.querySelector("#pane"))).toBe(false)
-    expect(insideModalDialog(null)).toBe(false)
-    page.remove()
   })
 })

@@ -369,12 +369,12 @@ export function formatKeybind(config: string, t?: (key: KeyLabel) => string): st
 }
 
 /**
- * Whether a key's target is inside a modal dialog, which owns the keyboard there: no command keybind runs, as none runs
- * while one of the app's own dialogs is open (`dialog.active`). A dialog modal for less than the window, such as a
- * page's prompt in the browser pane, owns only the keys pressed inside it.
+ * Whether `target` is inside a surface that owns the keyboard (`data-owns-keyboard`), such as a page's prompt in the
+ * browser pane, which is modal for its tab only: no command keybind or native menu key equivalent runs there, as none
+ * runs while one of the app's own dialogs is open (`dialog.active`). Keys pressed elsewhere in the window are the app's.
  */
-export function insideModalDialog(target: EventTarget | null) {
-  return target instanceof Element && !!target.closest('[aria-modal="true"]')
+export function keyboardOwned(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest("[data-owns-keyboard]")
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -523,7 +523,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (suspended() || dialog.active || insideModalDialog(event.target)) return
+      if (suspended() || dialog.active || keyboardOwned(event.target)) return
 
       const sig = signatureFromEvent(event)
       const isPalette = palette().has(sig)
