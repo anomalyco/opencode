@@ -282,12 +282,14 @@ for (const [locale, dict] of [
 ] as const) {
   test(`background activity alignment stays physical and persists (${locale})`, async ({ page }) => {
     const label = dict["settings.timeline.row.backgroundActivity.title"]
+
     const names = {
       Hidden: dict["settings.timeline.row.backgroundActivity.off"],
       Left: dict["settings.timeline.row.backgroundActivity.left"],
       Center: dict["settings.timeline.row.backgroundActivity.center"],
       Right: dict["settings.timeline.row.backgroundActivity.right"],
     }
+
     const id = "ses_activity_settings"
     const childID = "ses_activity_settings_child"
     const stopped: string[] = []
