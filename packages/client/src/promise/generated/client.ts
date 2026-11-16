@@ -271,6 +271,9 @@ import type {
   ExperimentalArtifactsViewOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalPluginWebListOutput,
+  ExperimentalPluginWebModuleInput,
+  ExperimentalPluginWebModuleOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1701,6 +1704,32 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+      },
+      plugin: {
+        webList: (requestOptions?: RequestOptions) =>
+          request<ExperimentalPluginWebListOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/plugin/web-list`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        webModule: (input: ExperimentalPluginWebModuleInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalPluginWebModuleOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/plugin/web-module`,
+              query: { id: input["id"], revision: input["revision"], ticket: input["ticket"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
       },
       migration: {
         v1: {

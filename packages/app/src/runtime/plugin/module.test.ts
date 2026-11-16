@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Command, type Registry } from "@opencode/plugin/gui"
-import { pluginDefinition } from "./module"
+import { ClientError } from "@opencode/client/promise"
+import { pluginDefinition, webPluginError } from "./module"
 
 // One `./gui-experimental` bundle for both processes, as a bundler emits it: requires hoisted to module scope,
 // including Electron and Node built-ins that only the main setup uses.
@@ -23,6 +24,18 @@ exports.default = sdk.Plugin.define({
 `
 
 describe("plugin GUIs in a window", () => {
+  test("web diagnostics preserve the failure reason without logging module or listing tickets", () => {
+    const ticket = "test-ticket"
+    const url = `https://example.test/api/experimental/plugin/web-module?id=acme&revision=r1&ticket=${ticket}`
+    expect(webPluginError(new TypeError(`Failed to fetch ${url}`), ticket)).toBe(
+      "TypeError: Failed to fetch https://example.test/api/experimental/plugin/web-module?id=acme&revision=r1&ticket=[redacted]",
+    )
+    expect(webPluginError(new SyntaxError("Unexpected token '}'"), ticket)).toBe("SyntaxError: Unexpected token '}'")
+    expect(webPluginError(new ClientError("MalformedResponse", { cause: new SyntaxError(ticket) }))).toBe(
+      "MalformedResponse",
+    )
+  })
+
   test("declare their definition before they start, with the app's module instances and Electron inert", async () => {
     const definition = await pluginDefinition("acme", bundle)
     const added: { readonly registry: Registry<Command>; readonly item: Command }[] = []

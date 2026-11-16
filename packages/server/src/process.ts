@@ -9,6 +9,7 @@ import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
 import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
+import { WEB_PLUGIN_MODULE_PATH } from "@opencode/protocol/groups/web-plugin"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -201,7 +202,10 @@ function dispatch(
     if (
       !isPairingConnectURL(url) &&
       (!ready ||
-        (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url) && !hasMcpClientTicketURL(url))) &&
+        (!hasPtyConnectTicketURL(url) &&
+          !hasPersistentPtyConnectTicketURL(url) &&
+          !hasMcpClientTicketURL(url) &&
+          !(url.pathname === WEB_PLUGIN_MODULE_PATH && url.searchParams.get("ticket")))) &&
       !(yield* authorizedRequest(request, auth))
     )
       return unauthorizedResponse(request)

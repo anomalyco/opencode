@@ -11,10 +11,15 @@ const CAPACITY = 10_000
 
 export const ConnectToken = PtyTicket.ConnectToken
 
-// A ticket authorizes one upgrade to one target: a PTY, or a client MCP connection by client name.
+// A browser ticket authorizes one request to one target, never a general API session.
 export type Target =
   | { readonly ptyID: Pty.ID; readonly mcpClient?: never }
   | { readonly mcpClient: string; readonly ptyID?: never }
+  | {
+      readonly pluginGui: { readonly id: string; readonly revision: string }
+      readonly ptyID?: never
+      readonly mcpClient?: never
+    }
 
 export type Scope = Target & {
   readonly directory?: string
@@ -36,7 +41,12 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pt
 
 function stored(scope: Scope): Stored {
   return {
-    target: scope.ptyID !== undefined ? `pty:${scope.ptyID}` : `mcp:${scope.mcpClient}`,
+    target:
+      "pluginGui" in scope
+        ? `gui:${JSON.stringify([scope.pluginGui.id, scope.pluginGui.revision])}`
+        : scope.ptyID !== undefined
+          ? `pty:${scope.ptyID}`
+          : `mcp:${scope.mcpClient}`,
     directory: scope.directory,
     workspaceID: scope.workspaceID,
   }

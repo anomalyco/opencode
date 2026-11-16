@@ -910,6 +910,7 @@ function mockHandlers(
           })),
         skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
         plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),
+        webPluginList: () => Effect.succeed([]),
         mcp: (ctx) =>
           Effect.sync(() => {
             const directory = requestDirectory(config, ctx.request)

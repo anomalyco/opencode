@@ -240,15 +240,16 @@ export interface PluginBundleHost {
  * checks it: the declarations the host reads and at least one setup. Both hosts call it, each with its own `require`.
  * The bundle's code is trusted as much as the server that runs the app, which already loads the plugin.
  *
- * @param code - The bundle's CommonJS code.
+ * @param code - The bundle's CommonJS code on desktop, or its natively imported factory on the web.
  * @param host - The process evaluating it.
  * @returns The checked plugin.
  * @throws When evaluation throws, the default export is not a `Plugin.define` this app supports, or it has no setup.
  */
-export function evaluatePluginBundle(code: string, host: PluginBundleHost): PluginBundle {
+export function evaluatePluginBundle(code: string | PluginFactory, host: PluginBundleHost): PluginBundle {
   const module: BundleModule = { exports: {} }
 
-  new Function("require", "module", "exports", code)(host.require, module, module.exports)
+  const factory = Predicate.isString(code) ? new Function("require", "module", "exports", code) : code
+  factory(host.require, module, module.exports)
   // `export default` compiles to `exports.default`, or to `module.exports` itself in a bundler's default mode.
   const plugin = Predicate.hasProperty(module.exports, "default") ? module.exports.default : module.exports
 
@@ -281,6 +282,13 @@ export function evaluatePluginBundle(code: string, host: PluginBundleHost): Plug
 
 /** The CommonJS module a bundle fills. */
 type BundleModule = { exports: object }
+
+/** A CommonJS bundle wrapped by the server as a native JavaScript module's default export. */
+export type PluginFactory = (
+  require: PluginBundleHost["require"],
+  module: BundleModule,
+  exports: BundleModule["exports"],
+) => void
 
 // What the host reads of a plugin's GUI, checked once here: a malformed store would otherwise throw inside the host's
 // shared memos and take every plugin down. `is` checks without copying.
