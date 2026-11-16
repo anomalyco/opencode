@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Cause, Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -883,6 +883,8 @@ describe("shell scanner permission impact", () => {
 })
 
 describe("Permission experimental.rules", () => {
+  // Writes `value` into `target` and says whether that failed, as a write to a frozen object does.
+  const assign = (target: object, value: object) => Effect.exit(Effect.try(() => Object.assign(target, value)))
   const rulesFor = Effect.gen(function* () {
     const store = yield* SessionStore.Service
     const agents = yield* Agent.Service
@@ -900,18 +902,18 @@ describe("Permission experimental.rules", () => {
       yield* setup(configured)
       const hooks = yield* PluginHooks.Service
       yield* hooks.register("permission", "experimental.rules", (event) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           // Every way a hook could try to allow: push to the rules, edit them in place, swap the arrays, allow in deny.
           ;(event.rules as Permission.Rule[]).push({ action: "*", resource: "*", effect: "allow" })
           ;(event.rules as Permission.Rule[]).forEach((rule) => Object.assign(rule, { effect: "allow" }))
           ;(event.session as Permission.Rule[]).push({ action: "*", resource: "*", effect: "allow" })
-          Object.assign(event, { rules: [], session: [] })
-          event.deny.push({ action: "edit", resource: "*" })
-          event.deny.push(Object.assign({ action: "webfetch", resource: "*" }, { effect: "allow" }))
+          expect(Exit.isFailure(yield* assign(event, { rules: [], session: [] }))).toBe(true)
+          event.deny({ action: "edit", resource: "*" })
+          event.deny(Object.assign({ action: "webfetch", resource: "*" }, { effect: "allow" }))
         }),
       )
       yield* hooks.register("permission", "experimental.rules", (event) =>
-        Effect.sync(() => event.deny.push({ action: "shell", resource: "git *" })),
+        Effect.sync(() => event.deny({ action: "shell", resource: "git *" })),
       )
       expect(yield* rulesFor).toEqual([
         ...configured,
@@ -931,6 +933,32 @@ describe("Permission experimental.rules", () => {
     }),
   )
 
+  it.effect("a later hook cannot remove or replace an earlier hook's deny", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "experimental.rules", (event) =>
+        Effect.sync(() => event.deny({ action: "edit", resource: "*" })),
+      )
+      const attempts: boolean[] = []
+      yield* hooks.register("permission", "experimental.rules", (event) =>
+        Effect.gen(function* () {
+          // The event is frozen, so the swap fails; the list behind `deny` is core's, so there is nothing to clear.
+          attempts.push(Exit.isFailure(yield* assign(event, { deny: () => {} })))
+          event.deny({ action: "shell", resource: "*" })
+        }),
+      )
+      expect(yield* rulesFor).toEqual([
+        { action: "*", resource: "*", effect: "allow" },
+        { action: "edit", resource: "*", effect: "deny" },
+        { action: "shell", resource: "*", effect: "deny" },
+      ])
+      expect(attempts).toEqual([true])
+      const service = yield* Permission.Service
+      expect(yield* service.ask(assertion({ action: "edit", resources: ["a.ts"] }))).toMatchObject({ effect: "deny" })
+    }),
+  )
+
   it.effect("a hook's deny refuses the request before any evaluate hook runs", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "*", resource: "*", effect: "allow" }])
@@ -943,7 +971,7 @@ describe("Permission experimental.rules", () => {
         }),
       )
       yield* hooks.register("permission", "experimental.rules", (event) =>
-        Effect.sync(() => event.deny.push({ action: "shell", resource: "*" })),
+        Effect.sync(() => event.deny({ action: "shell", resource: "*" })),
       )
       const service = yield* Permission.Service
       const error = yield* service.assert(assertion({ action: "shell", resources: ["ls"] })).pipe(Effect.flip)
@@ -958,7 +986,7 @@ describe("Permission experimental.rules", () => {
       yield* setup([{ action: "*", resource: "*", effect: "allow" }])
       const hooks = yield* PluginHooks.Service
       yield* hooks.register("permission", "experimental.rules", (event) =>
-        Effect.sync(() => event.deny.push({ action: 1, resource: "*" } as unknown as (typeof event.deny)[number])),
+        Effect.sync(() => event.deny({ action: 1, resource: "*" } as unknown as Parameters<typeof event.deny>[0])),
       )
       const service = yield* Permission.Service
       const exit = yield* service.ask(assertion()).pipe(Effect.exit)

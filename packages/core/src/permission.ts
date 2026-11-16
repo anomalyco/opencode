@@ -120,15 +120,23 @@ export const rules = Effect.fn("Permission.rules")(function* (
   input: { readonly session: SessionSchema.Info; readonly agent: Agent.Selection },
 ) {
   const base = [...(input.agent.info?.permissions ?? missingAgentPermissions), ...(input.session.permissions ?? [])]
-  const event = yield* hooks.trigger("permission", "experimental.rules", {
-    sessionID: input.session.id,
-    agent: input.agent.id,
-    rules: base.map((rule) => ({ ...rule })),
-    session: (input.session.permissions ?? []).map((rule) => ({ ...rule })),
-    deny: [],
-  })
+  // Core owns the list and the event is frozen, so a hook can add a deny but cannot remove or replace another's.
+  const added: unknown[] = []
+  yield* hooks.trigger(
+    "permission",
+    "experimental.rules",
+    Object.freeze({
+      sessionID: input.session.id,
+      agent: input.agent.id,
+      rules: base.map((rule) => ({ ...rule })),
+      session: (input.session.permissions ?? []).map((rule) => ({ ...rule })),
+      deny: (rule: unknown) => {
+        added.push(rule)
+      },
+    }),
+  )
   // A hook that cannot say what it denies must not leave the request decided without it.
-  const denies = yield* Schema.decodeUnknownEffect(Denies)(event.deny).pipe(
+  const denies = yield* Schema.decodeUnknownEffect(Denies)(added).pipe(
     Effect.mapError(
       (error) => new Error(`A permission "experimental.rules" hook added an invalid deny: ${error.message}`),
     ),
