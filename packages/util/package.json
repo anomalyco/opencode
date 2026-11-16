@@ -20,6 +20,10 @@
     "./*": "./src/*.ts"
   },
   "imports": {
+    "#handle-path": {
+      "workerd": "./src/handle-path.workerd.ts",
+      "default": "./src/handle-path.ts"
+    },
     "#global-roots": {
       "workerd": "./src/global-roots.workerd.ts",
       "default": "./src/global-roots.ts"
