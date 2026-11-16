@@ -457,14 +457,15 @@ export const listWithRefs = Effect.fn("SessionInbox.listWithRefs")(function* (
   })
 })
 
-export const moveIDs = Effect.fn("SessionInbox.moveIDs")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  return yield* db
-    .select({ id: SessionInboxTable.id })
+export const moves = Effect.fn("SessionInbox.moves")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  const rows = yield* db
+    .select({ id: SessionInboxTable.id, payload: SessionInboxTable.payload })
     .from(SessionInboxTable)
     .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.type, "move")))
     .orderBy(asc(SessionInboxTable.enqueued_seq))
     .all()
     .pipe(Effect.orDie)
+  return rows.map((row) => ({ id: row.id, payload: decodeMove(row.payload) }))
 })
 
 export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function* (

@@ -8,6 +8,7 @@ import { Event } from "@opencode/schema/event"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
+import { FileSystem } from "../filesystem.js"
 import { Instance } from "../instance/service.js"
 import { ShellResult } from "../shell/result.js"
 import type { Skill } from "../skill.js"
@@ -198,15 +199,17 @@ export const make = Effect.fn("Session.make")(function* () {
     const running = yield* Effect.gen(function* () {
       const started = yield* SessionShell.start({ session, command: input.command }).pipe(
         Effect.provideService(Instance.Service, instances),
-        Effect.tapError((error) =>
-          synthetic(sessionID, {
-            text: `User shell command failed to start:\n${input.command}\n\n${error.message}`,
-            description: input.command,
-            metadata: { source: "shell", state: "error" },
-            resume: false,
-          }),
+        // A missing directory is the caller's error to report; anything else is recorded in the session.
+        Effect.catch((error) =>
+          error instanceof FileSystem.DirectoryNotFoundError
+            ? Effect.fail(error)
+            : synthetic(sessionID, {
+                text: `User shell command failed to start:\n${input.command}\n\n${error.message}`,
+                description: input.command,
+                metadata: { source: "shell", state: "error" },
+                resume: false,
+              }).pipe(Effect.andThen(Effect.die(error)), Effect.orDie),
         ),
-        Effect.orDie,
       )
       yield* bus.publish(
         SessionEvent.Shell.Started,

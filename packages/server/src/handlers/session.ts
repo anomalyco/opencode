@@ -410,7 +410,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.fn(function* (ctx) {
           yield* session
             .shell({ sessionID: ctx.params.sessionID, id: ctx.payload.id, command: ctx.payload.command })
-            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession), locationErrors)
           return HttpApiSchema.NoContent.make()
         }),
       )
