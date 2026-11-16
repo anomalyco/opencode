@@ -53,11 +53,13 @@ export default definePty({
     await writeFile(path.join(config, "cli.json"), JSON.stringify(cli))
   },
   steps: [
-    { until: { screen: "█▀▀█" }, settle: 1_000, timeout: 30_000 },
+    // TS shows "⋯ Finishing startup…" in its footer while it loads the part, longer under load: an extra line the
+    // checkpoints are compared after (f16-flake), as in `ts-plugin-loads`.
+    { until: { screen: /^(?![\s\S]*Finishing startup)[\s\S]*█▀▀█/ }, settle: 1_000, timeout: 30_000 },
     // The notice, over the home's top rows.
     { checkpoint: "home", deviation: { file: "F16-typescript-plugins-skipped", lines: 8 } },
     { keys: "/plugins", until: { screen: "/plugins" }, settle: 300 },
-    { keys: "\r", until: { screen: "Server" }, settle: 1_000, timeout: 10_000 },
+    { keys: "\r", until: { screen: /^(?![\s\S]*Finishing startup)[\s\S]*Server/ }, settle: 1_000, timeout: 10_000 },
     // The notice, and the TUI row: `parity.energy` active in TS, `./energy` skipped with its error to view in Rust.
     { checkpoint: "plugins", deviation: { file: "F16-typescript-plugins-skipped", lines: 10 } },
   ],
