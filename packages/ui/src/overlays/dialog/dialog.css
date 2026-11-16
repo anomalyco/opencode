@@ -24,9 +24,9 @@
     --dialog-height: min(calc(100vh - 32px), 368px);
     height: var(--dialog-height);
     max-height: calc(100vh - 32px);
-    background: var(--v2-background-bg-layer-01);
+    background: var(--v2-background-bg-base);
     box-shadow: var(--v2-elevation-overlay);
-    border-radius: 6px;
+    border-radius: 12px;
     overflow: hidden;
     pointer-events: auto;
 
@@ -173,7 +173,6 @@
     --dialog-height: min(calc(100vh - 96px), 600px);
     width: min(calc(100vw - 32px), 720px);
     background: var(--v2-background-bg-base);
-    border-radius: 12px;
   }
 
   &[data-size="x-large"] [data-slot="dialog-container"] {

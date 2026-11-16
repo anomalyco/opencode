@@ -1150,8 +1150,8 @@ test("the location dialog separates added projects from server projects and tags
   // It opens on the first row, not on the draft's current project (the second row).
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
 
-  // The picker shares the palette's full-width search, compact rows, and single-line titles.
-  await expect(options.nth(0)).toHaveCSS("height", "28px")
+  // The picker shares the palette's full-width search, 32px rows, and single-line titles.
+  await expect(options.nth(0)).toHaveCSS("height", "32px")
   await expect(dialog.locator(".palette-menu-search [data-component='text-input-v2']")).toHaveCSS("height", "28px")
   await expect(dialog.locator(".new-session-location-hints")).toHaveCount(0)
   await expect(dialog.locator("..")).toHaveCSS("width", "720px")
@@ -1176,10 +1176,9 @@ test("the location dialog separates added projects from server projects and tags
 
   await others.click()
   await expect(names).toHaveText(["console", "sstapollo"])
-  await expect(back).toHaveText("Other projects")
+  await expect(back).toHaveCount(0)
   await search.fill("no-project-matches")
   await expect(options).toHaveCount(0)
-  await expect(back).toBeVisible()
   await search.fill("")
   await expect(names).toHaveText(["console", "sstapollo"])
   await search.press("ArrowLeft")
@@ -1190,9 +1189,6 @@ test("the location dialog separates added projects from server projects and tags
   await search.press("Enter")
   await expect(names).toHaveText(["console", "sstapollo"])
   await search.press("Escape")
-  await expect(names).toHaveText(["opencodeapollo", "opencode"])
-  await others.click()
-  await back.click()
   await expect(names).toHaveText(["opencodeapollo", "opencode"])
 
   await search.fill("apollo")
@@ -1225,7 +1221,8 @@ test("the location dialog separates added projects from server projects and tags
   const open = (await page.evaluate(() => navigator.platform.includes("Mac"))) ? "Meta+o" : "Control+o"
   await search.fill("open")
   await page.keyboard.press(open)
-  await expect(back).toHaveText("Servers")
+  await expect(back).toHaveCount(0)
+  await expect(search).toHaveAttribute("placeholder", "Search servers")
   await expect(search).toHaveValue("")
   await page.keyboard.press("Escape")
   await expect(back).toHaveText("Run session in")
@@ -1249,10 +1246,10 @@ test("the location dialog separates added projects from server projects and tags
   await page.keyboard.press("ArrowUp")
   await expect(options.nth(3)).toHaveAttribute("aria-selected", "true")
   await page.keyboard.press(open)
-  await expect(back).toHaveText("Servers")
+  await expect(back).toHaveCount(0)
   // The server the app runs beside shows its hostname and "This computer" instead of its address.
   await expect(options).toHaveText(["hailmaryThis computer", "apollo"])
-  await back.click()
+  await search.press("Escape")
   await options.filter({ hasText: "Add project" }).click()
   await expect(options).toHaveText(["hailmaryThis computer", "apollo"])
   await options.filter({ hasText: "apollo" }).click()

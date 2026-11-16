@@ -289,7 +289,8 @@ export function locationDialogView(state: LocationDialogState) {
     case "others":
       return {
         drilled: undefined,
-        titleKey: "session.new.location.otherProjects",
+        // One category, so no header naming it.
+        titleKey: undefined,
         placeholderKey: "session.new.project.search",
         ownsEscape: true,
         otherGroupHeader: false,
@@ -297,7 +298,8 @@ export function locationDialogView(state: LocationDialogState) {
     case "servers":
       return {
         drilled: undefined,
-        titleKey: "session.new.location.servers",
+        // One category, so no header naming it.
+        titleKey: undefined,
         placeholderKey: "session.new.location.servers.search",
         ownsEscape: true,
         otherGroupHeader: false,

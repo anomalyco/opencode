@@ -110,6 +110,7 @@ export const DialogConnectProvider: Component<{
       size="normal"
       fit
       anchored
+      containerClass="!bg-v2-background-bg-base"
       preventBackdropDismiss={view().preventBackdropDismiss}
       onCloseAutoFocus={(event) => {
         if (view().completed && props.selection && props.onDone) {

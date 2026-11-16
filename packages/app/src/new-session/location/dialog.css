@@ -21,19 +21,13 @@
   opacity: 0.5;
 }
 
+/* Like the integrations search: the hairline sits 6px under the field, 12px under the icon. */
 .new-session-location-divider {
-  position: relative;
-  height: 9px;
+  height: 1px;
   flex-shrink: 0;
-  margin-block: 4px;
-}
-
-.new-session-location-divider::after {
-  position: absolute;
-  inset-inline: 0;
-  top: 4px;
-  border-top: 0.5px solid var(--v2-border-border-base);
-  content: "";
+  margin-block: 6px 2px;
+  background: var(--v2-border-border-base);
+  transform: scaleY(0.5);
 }
 
 .new-session-location .command-palette-results {
@@ -42,7 +36,12 @@
 }
 
 .new-session-location .command-palette-group {
-  gap: 4px;
+  gap: 2px;
+}
+
+/* Without a header, rows start 6px under the divider, as far as the field sits above it. */
+.new-session-location .command-palette-group:not(:has(> .command-palette-group-title:first-child)) {
+  padding-top: 4px;
 }
 
 .new-session-location-action-divider {
@@ -50,19 +49,21 @@
   flex-shrink: 0;
   margin-block: 2px;
   margin-inline: -6px;
-  background: var(--v2-border-border-muted);
+  background: var(--v2-border-border-base);
   transform: scaleY(0.5);
 }
 
+/* Headers, rows and weights follow the integrations dialog. */
 .new-session-location .command-palette-group-title {
   display: flex;
-  height: 28px;
   flex-shrink: 0;
   align-items: center;
   margin: 0;
-  padding: 0 6px;
-  color: var(--v2-text-text-muted);
-  line-height: var(--line-height-compact);
+  padding: 10px 8px 2px;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.05px;
 }
 
 .new-session-location-back {
@@ -81,7 +82,12 @@
 }
 
 .new-session-location .palette-menu-row[data-size="compact"] {
-  padding-inline: 6px;
+  height: 32px;
+  padding-inline: 8px 6px;
+}
+
+.new-session-location .palette-menu-title {
+  font-weight: 440;
 }
 
 .new-session-location .palette-menu-row:is([data-active], :focus-visible) {
