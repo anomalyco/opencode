@@ -24,7 +24,7 @@
     --dialog-height: min(calc(100vh - 32px), 368px);
     height: var(--dialog-height);
     max-height: calc(100vh - 32px);
-    background: var(--v2-background-bg-base);
+    background: var(--v2-background-bg-layer-01);
     box-shadow: var(--v2-elevation-overlay);
     border-radius: 12px;
     overflow: hidden;

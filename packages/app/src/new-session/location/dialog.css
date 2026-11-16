@@ -16,6 +16,25 @@
   padding-inline-start: 6px;
 }
 
+/* Padding and a matching negative margin leave the button the icon's size in the layout, so swapping them shifts nothing. */
+.new-session-location-search-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: -4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+
+  &:is(:hover, :focus-visible) {
+    background: var(--v2-overlay-simple-overlay-hover);
+    outline: none;
+  }
+}
+
 .new-session-location .palette-menu-search [data-slot="text-input-v2-input"]::placeholder {
   color: var(--v2-text-text-base);
   opacity: 0.5;
