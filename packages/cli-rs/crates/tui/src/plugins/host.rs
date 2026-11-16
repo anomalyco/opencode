@@ -1565,7 +1565,9 @@ pub fn reconcile(tui: &Rc<Tui>) {
 /// Records the user's `decision` on `artifact`, the build of `target` they were shown, once the build on the disk is
 /// identified again, and applies it: an approved build loads at once. `done` gets `Ok(false)` when nothing was recorded
 /// as the build changed since (bigboi-1), and an error when the decision cannot be saved (bigboi-7). A TypeScript
-/// plugin's tree is hashed off the UI thread (FT-2), so `done` runs in a later turn; a library's, at once.
+/// plugin's tree is hashed off the UI thread (FT-2), so `done` runs in a later turn; a library's, at once. An answer
+/// the user gave again on `target` before the hash ended supersedes this one: it records nothing, and `done` does not
+/// run (review jsnpm-5).
 pub fn decide(
     tui: &Rc<Tui>,
     target: &str,
@@ -1575,8 +1577,12 @@ pub fn decide(
 ) {
     let Some(loader) = tui.plugins.loader.borrow().clone() else { return done(tui, Ok(false)) };
     let found = loader.found(target);
+    let answer = loader.deciding(target);
     let (target, artifact) = (target.to_owned(), artifact.clone());
     let record = move |tui: &Rc<Tui>, now: Option<Result<Artifact, String>>| {
+        if loader.superseded(&target, answer) {
+            return;
+        }
         let recorded = loader.decide(&target, &artifact, decision, now);
         if recorded == Ok(true) {
             loader.reconcile(&host(tui), &tui.plugins);
