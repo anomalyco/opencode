@@ -188,15 +188,16 @@ describe("AI promise client", () => {
     const model = xai.video("grok-imagine-video-1.5")
 
     const job = await ai.video.start({ model, prompt: "A kite" })
-    expect(job).toEqual({ id: "req_1", token: { requestID: "req_1" } })
+    expect(job).toEqual({ id: "req_1" })
 
-    const token: unknown = JSON.parse(JSON.stringify(job.token))
-    expect(await ai.video.status(model, token)).toEqual({ status: "running", progress: 0.5 })
-    expect(await ai.video.status(model, token)).toEqual({ status: "completed" })
-    const response = await ai.video.result(model, token)
+    // The ID is plain text: store it and read the job back from any process.
+    const id = job.id
+    expect(await ai.video.status(model, id)).toEqual({ status: "running", progress: 0.5 })
+    expect(await ai.video.status(model, id)).toEqual({ status: "completed" })
+    const response = await ai.video.result(model, id)
     expect(response.video).toBeInstanceOf(Media.Asset)
     expect(response.video.source).toMatchObject({ type: "url", url: "https://vidgen.x.ai/out.mp4" })
-    expect(await ai.video.cancel(model, token).catch((error: unknown) => error)).toMatchObject({
+    expect(await ai.video.cancel(model, id).catch((error: unknown) => error)).toMatchObject({
       reason: { _tag: "UnsupportedOperation" },
     })
 
@@ -206,6 +207,29 @@ describe("AI promise client", () => {
       "https://xai.test/v1/videos/req_1",
       "https://xai.test/v1/videos/req_1",
     ])
+    await ai.dispose()
+  })
+
+  test("rejects image job calls on an inline route without a request", async () => {
+    const seen: Array<string> = []
+    const ai = AI.make({ layer: executor(seen) })
+    const model = openai.image("gpt-image-2")
+    const reasons = await Promise.all(
+      [
+        ai.image.start({ model, prompt: "A lighthouse" }),
+        ai.image.status(model, "job_1"),
+        ai.image.result(model, "job_1"),
+        ai.image.cancel(model, "job_1"),
+      ].map((call) => call.then(() => undefined).catch((error: unknown) => error)),
+    )
+    expect(reasons).toEqual(
+      ["start", "status", "result", "cancel"].map((operation) =>
+        expect.objectContaining({
+          reason: expect.objectContaining({ _tag: "UnsupportedOperation", operation: `image.${operation}` }),
+        }),
+      ),
+    )
+    expect(seen).toEqual([])
     await ai.dispose()
   })
 
@@ -235,7 +259,7 @@ describe("AI promise client", () => {
   test("exposes a generation's snapshot and terminal state", async () => {
     const ai = AI.make({ layer: executor([]) })
     const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
-    expect(generation.snapshot).toEqual({ id: "tr_1", status: "queued" })
+    expect(generation.snapshot).toEqual({ id: "tr_1", status: "running" })
     expect(generation.terminal).toBe(false)
     const refreshed = await generation.refresh()
     expect(refreshed.terminal).toBe(false)
@@ -250,7 +274,7 @@ describe("AI promise client", () => {
     const events: Array<string> = []
     for await (const event of generation.events({ poll: { interval: 10 } })) events.push(event.type)
     expect(events).toEqual(["generation-progress", "generation-finished"])
-    expect(generation.status).toBe("queued")
+    expect(generation.status).toBe("running")
     expect((await generation.result()).text).toBe("Hello there.")
     await ai.dispose()
   })

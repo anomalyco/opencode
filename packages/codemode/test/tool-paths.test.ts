@@ -118,7 +118,21 @@ describe("callable namespaces", () => {
     const nested = CodeMode.make({ tools: { "issues.list": echo("List issues", "list") } })
     const diagnostic = await failure(nested, `return await tools.issues({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
-    expect(diagnostic.message).toContain("Tool 'issues' is not callable")
+    expect(diagnostic.message).toBe("Tool 'issues' is not callable, it is a namespace. Did you mean tools.issues.list?")
+    expect(diagnostic.suggestions).toEqual(["Use search to find available tools."])
+  })
+
+  test("calling a namespace names a few of its tools and counts the rest", async () => {
+    const nested = CodeMode.make({
+      tools: Object.fromEntries(
+        ["archive", "create", "get", "issues", "list"].map((name) => [`issues.${name}`, echo(`Issue ${name}`, name)]),
+      ),
+    })
+    const diagnostic = await failure(nested, `return await tools.issues({})`)
+    expect(diagnostic.message).toBe(
+      "Tool 'issues' is not callable, it is a namespace. Did you mean tools.issues.issues, tools.issues.archive, or tools.issues.create?",
+    )
+    expect(diagnostic.suggestions).toEqual([`2 more under 'issues'. Use search({ namespace: "issues" }) to list them.`])
   })
 })
 

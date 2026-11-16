@@ -2059,6 +2059,32 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Fourth")
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, "Latest context"])
+    // The surviving "Changed context" update predates the fresh baseline and would contradict it.
+    expect(messageRoles(s.requests.at(-1))).toEqual(["user", "user"])
+    expect((yield* s.context).some((message) => message.type === "system")).toBe(false)
+  })
+
+  scenario("hides an update a revert left behind once the source is removed", function* (s) {
+    s.systemRemoved = true
+    yield* s.runPrompt("First")
+    s.systemRemoved = false
+    s.systemBaseline = "Entered mode"
+    const second = yield* s.runPrompt("Second")
+    s.systemRemoved = true
+    yield* s.runPrompt("Third")
+
+    // The removal is delivered with "Third"; the "Entered mode" update survives before "Second".
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+    yield* s.runPrompt("Fourth")
+
+    const last = s.requests.at(-1)!
+    expect(systemTexts(last)).toEqual([])
+    expect(userTexts(last)).toEqual(["First", "Fourth"])
+    expect(last.system.map((part) => part.text).join("\n")).not.toContain("Entered mode")
+    // Clients still see every message; only the model context hides the stale update.
+    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([
+      { text: "Entered mode" },
+    ])
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {

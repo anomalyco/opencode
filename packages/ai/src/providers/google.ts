@@ -10,6 +10,7 @@ import {
 } from "../protocols/google-embed-content.js"
 import { GoogleDecisions } from "../protocols/google-decisions.js"
 import { GoogleInteractions } from "../protocols/google-interactions.js"
+import { GoogleInteractionsVideo } from "../protocols/google-interactions-video.js"
 import { GoogleImages } from "../protocols/google-images.js"
 import { GoogleSpeech } from "../protocols/google-speech.js"
 import { GoogleTranscription } from "../protocols/google-transcription.js"
@@ -17,6 +18,7 @@ import { toConfig } from "./settings.js"
 
 export type { OptionsInput as GoogleEmbeddingOptions } from "../protocols/google-embed-content.js"
 export type { GoogleImageOptions } from "../protocols/google-images.js"
+export type { GoogleVideoOptions } from "../protocols/google-interactions-video.js"
 export type { GoogleSpeechOptions } from "../protocols/google-speech.js"
 export type { GoogleTranscriptionOptions } from "../protocols/google-transcription.js"
 export type GeminiOptionsInput = Gemini.OptionsInput
@@ -72,6 +74,8 @@ export const configure = (input: Config = {}) => {
       interactionsRoute(input).model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       GoogleImages.model({ ...media, id: modelID, providerOptions }),
+    video: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      GoogleInteractionsVideo.model({ ...media, id: modelID, providerOptions }),
     speech: (modelID: string | ModelID) => GoogleSpeech.model({ ...media, id: modelID }),
     transcription: (modelID: string | ModelID) => GoogleTranscription.model({ ...media, id: modelID }),
     embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -91,6 +95,10 @@ export const imageModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
+export const videoModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).video(modelID, input.providerOptions)
+}
 export const embeddingModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).embedding(modelID, input.providerOptions)
@@ -101,6 +109,7 @@ export const decisionModel = (modelID: string, settings?: Settings) => {
 }
 
 export const image = provider.image
+export const video = provider.video
 export const embedding = provider.embedding
 export const gemini = provider.gemini
 export const interactions = provider.interactions

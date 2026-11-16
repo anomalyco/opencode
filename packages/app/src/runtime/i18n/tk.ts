@@ -149,7 +149,7 @@ export const dict = {
   "provider.connect.title": "{{provider}} birikdiriň",
   "provider.connect.method.apiKey": "API açary",
   "provider.connect.status.inProgress": "Ygtyýarnama dowam edýär …",
-  "provider.connect.status.waiting": "Ygtyýarnama garaşýarys …",
+  "provider.connect.status.waiting": "Ygtyýarnama garaşýarys",
   "provider.connect.status.failed": "Ygtyýarnama şowsuz: {{error}}",
   "provider.connect.apiKey.description":
     "Hasabyňyzy birikdirmek we OpenCode-da {{provider}} modellerini ulanmak üçin {{provider}} API açaryňyzy giriziň.",
@@ -815,7 +815,6 @@ export const dict = {
   "workspace.delete.location": "Ýerleşiş",
   "command.session.location.cycle": "Sessiýanyň ýerleşýän ýerini üýtget",
   "dialog.provider.anthropic.note": "API açary bilen Claude modellerine göni giriş",
-  "provider.connect.title.anthropicProMax": "Anthropic arkaly giriň",
   "prompt.toast.uploading.cancelFile": "{{filename}} faýlynyň ýüklenmegini ýatyr",
   "prompt.toast.uploadFailed.title": "Ýükleme şowsuz boldy",
   "prompt.toast.uploading.percent": "{{percent}}%",

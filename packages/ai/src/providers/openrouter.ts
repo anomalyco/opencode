@@ -14,6 +14,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
+import { OpenRouterVideo } from "../protocols/openrouter-video.js"
 import { MediaRoute } from "../route/media.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
@@ -22,6 +23,8 @@ import { cacheControl } from "../protocols/utils/cache.js"
 import { isRecord, JsonObject, lenient, ProviderShared } from "../protocols/shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
+
+export type { OpenRouterVideoOptions } from "../protocols/openrouter-video.js"
 
 export const id = ProviderID.make("openrouter")
 const baseURL = "https://openrouter.ai/api/v1"
@@ -278,6 +281,8 @@ export const configure = (input: Config = {}) => {
       sizing: imageSizing,
       imageInput: "references",
     })
+  const video = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenRouterVideo.model({ ...media, id: modelID, providerOptions })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<OpenRouterDecisionOptions>({
       id: modelID,
@@ -302,6 +307,7 @@ export const configure = (input: Config = {}) => {
     responses: (modelID: string | ModelID) =>
       configuredResponses.model<OpenRouterResponsesProviderOptionsInput>({ id: modelID }),
     image,
+    video,
     decision,
     embedding,
     configure,
@@ -312,6 +318,7 @@ export const provider = configure()
 export const decision = provider.decision
 export const embedding = provider.embedding
 export const image = provider.image
+export const video = provider.video
 export const chat = provider.chat
 export const responses = provider.responses
 export const model: ProviderPackage.Model<Settings, OpenRouterProviderOptionsInput> = (modelID, settings) =>
@@ -323,6 +330,10 @@ export const responsesModel: ProviderPackage.Model<
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
+}
+export const videoModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).video(modelID, input.providerOptions)
 }
 export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)

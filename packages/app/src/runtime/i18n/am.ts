@@ -148,7 +148,7 @@ export const dict = {
   "provider.connect.title": "{{provider}} አገናኝ",
   "provider.connect.method.apiKey": "API ቁልፍ",
   "provider.connect.status.inProgress": "ፍቃድ በሂደት ላይ…",
-  "provider.connect.status.waiting": "ፈቀዳን በመጠበቅ ላይ…",
+  "provider.connect.status.waiting": "ፈቀዳን በመጠበቅ ላይ",
   "provider.connect.status.failed": "ፍቃድ መስጠት አልተሳካም፡ {{error}}",
   "provider.connect.apiKey.description":
     "መለያዎን ለማገናኘት የ{{provider}} API ቁልፍዎን ያስገቡ እና {{provider}} ሞዴሎችን በOpenCode ይጠቀሙ።",
@@ -796,7 +796,6 @@ export const dict = {
   "workspace.delete.location": "አካባቢ",
   "command.session.location.cycle": "የክፍለ ጊዜውን መገኛ ቀይር",
   "dialog.provider.anthropic.note": "የAPI ቁልፍ በመጠቀም ወደ Claude ሞዴሎች ቀጥተኛ መዳረሻ",
-  "provider.connect.title.anthropicProMax": "በAnthropic ግባ",
   "prompt.toast.uploading.cancelFile": "የ{{filename}} ስቀላን ሰርዝ",
   "prompt.toast.uploadFailed.title": "ስቀላው አልተሳካም",
   "prompt.toast.uploading.percent": "{{percent}}%",

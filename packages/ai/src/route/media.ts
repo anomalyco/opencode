@@ -191,6 +191,11 @@ export const queued = <Request extends MediaRequest, Response, Token>(
   const generationRoute = (token: Token, exchange: Exchange, execute: Execute) => {
     // Only the GET exchange retries: a decoded terminal failure (`output.ended`) can be a `ProviderInternal` too, and
     // re-reading it would spin until the caller's deadline.
+    const get = (path: string) =>
+      transport.call("GET", path, exchange, execute).pipe(
+        Effect.retry({ schedule: READ_RETRY, while: isRetryable }),
+        Effect.map((sent) => sent.response),
+      )
     const poll = <A>(operation: {
       readonly path: (token: Token) => string
       readonly decode: (
@@ -198,9 +203,10 @@ export const queued = <Request extends MediaRequest, Response, Token>(
         context: MediaProtocol.PollContext<Token>,
       ) => Effect.Effect<A, AIError>
     }) =>
-      transport.call("GET", operation.path(token), exchange, execute).pipe(
-        Effect.retry({ schedule: READ_RETRY, while: isRetryable }),
-        Effect.flatMap((sent) => operation.decode(sent.response, { token })),
+      get(operation.path(token)).pipe(
+        Effect.flatMap((response) =>
+          operation.decode(response, { token, get, headers: (url) => transport.headers(url, exchange) }),
+        ),
       )
     const status = poll(protocol.status)
     const cancel = protocol.cancel
@@ -341,7 +347,7 @@ const makeTransport = <Request extends MediaRequest>(
       body: encoded.text,
       headers: encoded.headers,
     })
-    const response = yield* execute(
+    const response = yield* RequestExecutor.withTls(execute, call.request.http?.tls)(
       encoded.apply(HttpClientRequest.make(call.method)(url).pipe(HttpClientRequest.setHeaders(headers))),
       RequestExecutor.withFetch(fetch),
     )
@@ -369,9 +375,11 @@ const makeTransport = <Request extends MediaRequest>(
         protocol.prepare === undefined
           ? request
           : yield* protocol.prepare(request, (path, body) =>
-              send({ method: "POST", url: baseURL(path), headers, request, body }, request.fetch, execute).pipe(
-                Effect.map((sent) => sent.response),
-              ),
+              send(
+                { method: "POST", url: baseURL(path), headers, request: { ...request, http }, body },
+                request.fetch,
+                execute,
+              ).pipe(Effect.map((sent) => sent.response)),
             )
       // Sanitize after merging so model-level overlays are covered; the model value is restored, not sanitized.
       const resolved: Request = {
@@ -389,6 +397,20 @@ const makeTransport = <Request extends MediaRequest>(
       const sent = yield* send({ method: "POST", url, headers, request: resolved, body }, request.fetch, execute)
       return { response: sent.response, context: { request: resolved, body }, exchange }
     }),
+    /**
+     * The headers a follow-up GET of `url` sends, for result URLs that only download with the same credentials. A URL
+     * on another origin than the route's base URL gets none, so credentials never leave the provider's host.
+     */
+    headers: (url: string, exchange: Exchange) =>
+      URL.canParse(url) && new URL(url).origin === baseURL("").origin
+        ? authorize({
+            request: { http: exchange.http },
+            method: "GET",
+            url,
+            body: "",
+            headers: Headers.fromInput(exchange.headers),
+          }).pipe(Effect.map((headers): Record<string, string> => ({ ...headers })))
+        : Effect.succeed({}),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
     call: (method: AuthInput["method"], path: string, exchange: Exchange, execute: Execute) => {
       // Provider-issued absolute URLs are used as-is; everything else resolves against the base.

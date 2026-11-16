@@ -239,6 +239,20 @@ export const AssetSchema = AssetEncoded.pipe(
   }),
 )
 
+/**
+ * An image, or a URL or provider file reference whose type it doesn't state, which the provider checks itself. Build one with
+ * `Media.image`; an asset known to be a video, audio or document is rejected.
+ */
+export const ImageAssetSchema = AssetInstance.check(
+  Schema.makeFilter(
+    (asset) =>
+      asset.kind === "image" ||
+      ((asset.source.type === "url" || asset.source.type === "ref") && asset.source.mediaType === undefined) ||
+      `expected an image, got ${asset.mediaType}`,
+  ),
+).pipe(Schema.brand("Media.ImageAsset"))
+export type ImageAsset = typeof ImageAssetSchema.Type
+
 const download = Effect.fn("Media.download")(function* (
   source: Extract<Source, { readonly type: "url" }>,
   headers: Record<string, string> | undefined,
@@ -329,6 +343,13 @@ export type Data = Uint8Array | ArrayBuffer | URL | string
 
 /** What file inputs accept: an `Asset` or plain `Data`. */
 export type Input = Asset | Data
+
+/** Normalize input into an `ImageAsset`; throws when it's known not to be an image. */
+export const image = (input: Input, mediaType?: string): ImageAsset => {
+  const asset = make(input, mediaType)
+  if (!Schema.is(ImageAssetSchema)(asset)) throw invalid(`expected an image, got ${asset.mediaType}`)
+  return asset
+}
 
 /**
  * Normalize file input into an `Asset`. Data URLs carry their media type and bytes or base64 are sniffed from magic

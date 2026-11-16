@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.2.7",
+  "version": "2.3.0",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -63,6 +63,12 @@
       "bun": "./src/image/photon-wasm.bun.ts",
       "node": "./src/image/photon-wasm.node.ts",
       "default": "./src/image/photon-wasm.bun.ts"
+    },
+    "#client-tls": {
+      "workerd": "./src/effect/client-tls/client-tls.workerd.ts",
+      "bun": "./src/effect/client-tls/client-tls.bun.ts",
+      "node": "./src/effect/client-tls/client-tls.node.ts",
+      "default": "./src/effect/client-tls/client-tls.bun.ts"
     },
     "#v1-migration": {
       "types": "./src/database/v1-migration.bun.ts",
@@ -128,6 +134,7 @@
     "jose": "6.0.11",
     "jsonc-parser": "3.3.1",
     "mime-types": "3.0.2",
+    "undici": "8.12.3",
     "which": "6.0.1",
     "zod": "catalog:"
   },
