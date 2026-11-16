@@ -244,7 +244,7 @@ export const content = {
         "allowed-sites": { title: "Tillatte nettsteder", body: "Hold fanen til en agent på nettstedene du oppgir." },
       },
       install:
-        "Skriptet installerer browse, legger MCP-serveren til agentene dine og kobler til [Chrome-utvidelsen]. Pakkehåndteringslinjene gjør det samme.",
+        "Installer [Chrome-utvidelsen] først. Den guider deg gjennom resten av stegene. Vil du installere CLI-en direkte (det skal du ikke trenge), bruk en av disse.",
     },
   },
   apps: {

@@ -271,7 +271,7 @@ export const content = {
         "allowed-sites": { title: "Erlaubte Sites", body: "Halte den Tab eines Agents auf den Websites, die du nennst." },
       },
       install:
-        "Das Skript installiert browse, fügt deinen Agents den MCP-Server hinzu und verbindet die [Chrome-Extension]. Die Paketmanager-Befehle machen dasselbe.",
+        "Installiere zuerst die [Chrome-Extension]. Sie führt dich durch die restlichen Schritte. Um die CLI direkt zu installieren (das solltest du nicht brauchen), nimm einen dieser Befehle.",
     },
   },
   apps: {

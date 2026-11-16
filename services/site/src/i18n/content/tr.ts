@@ -344,7 +344,7 @@ export const content = {
         },
       },
       install:
-        "Betik browse'u kurar, ajanlarınıza MCP sunucusunu ekler ve [Chrome uzantısını] eşler. Paket yöneticisi satırları da aynısını yapar.",
+        "Önce [Chrome uzantısını] yükleyin. Kalan adımlarda size yol gösterir. CLI'yi doğrudan yüklemek için (buna ihtiyacınız olmamalı) bunlardan birini kullanın.",
     },
   },
   apps: {

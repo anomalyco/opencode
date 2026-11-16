@@ -319,7 +319,7 @@ export const content = {
         },
       },
       install:
-        "El script instala browse, añade el servidor MCP a tus agentes y empareja la [extensión de Chrome]. Las líneas de los gestores de paquetes hacen lo mismo.",
+        "Instala primero la [extensión de Chrome]. Te guía por el resto de los pasos. Para instalar la CLI directamente (no deberías necesitarlo), usa cualquiera de estos.",
     },
   },
   apps: {

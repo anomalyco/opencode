@@ -344,7 +344,7 @@ export const content = {
         },
       },
       install:
-        "Skrypt instaluje browse, dodaje serwer MCP do Twoich agentów i łączy [rozszerzenie Chrome]. Wiersze menedżerów pakietów robią to samo.",
+        "Najpierw zainstaluj [rozszerzenie Chrome]. Przeprowadzi cię przez pozostałe kroki. Aby zainstalować CLI bezpośrednio (nie powinno to być potrzebne), użyj jednego z tych poleceń.",
     },
   },
   apps: {

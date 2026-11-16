@@ -176,7 +176,7 @@ export const content = {
         "allowed-sites": { title: "允許的網站", body: "讓代理的分頁只停留在你指定的網站。" },
       },
       install:
-        "指令碼會安裝 browse，把 MCP 伺服器加入你的代理，並配對 [Chrome 擴充功能]。套件管理員指令也會做同樣的事。",
+        "請先安裝 [Chrome 擴充功能]，它會引導你完成其餘步驟。如需直接安裝 CLI（通常不需要），可使用以下任一指令。",
     },
   },
   apps: {

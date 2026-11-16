@@ -172,7 +172,7 @@ export const content = {
         "allowed-sites": { title: "允许的网站", body: "让代理的标签页只停留在您指定的网站。" },
       },
       install:
-        "脚本会安装 browse，把 MCP 服务器添加到您的代理，并配对 [Chrome 扩展]。包管理器命令也会做同样的事。",
+        "请先安装 [Chrome 扩展]，它会引导你完成其余步骤。如需直接安装 CLI（通常不需要），可使用以下任一命令。",
     },
   },
   apps: {

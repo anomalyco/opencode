@@ -51,7 +51,7 @@ export const extensionPages: readonly Extension[] = [
       { title: "Allowed sites", body: "Keep an agent's tab on the sites you name." },
     ],
     install: {
-      lead: "The script installs browse, adds the MCP server to your agents and pairs the [Chrome extension]. The package manager lines do the same.",
+      lead: "Install the [Chrome extension] first. It walks you through the rest of the steps. To install the CLI directly (you should not need to do this), use any of these.",
       commands: [
         { method: "curl", command: "curl -fsSL https://opencode.ai/browse/install | bash" },
         { method: "pwsh", command: "irm https://opencode.ai/browse/install.ps1 | iex" },
