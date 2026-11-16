@@ -6,11 +6,11 @@ import { attachChildren, releaseWorker } from "./child-targets"
 // The Electron main process of `electron-workers.test.ts`, bundled and run by the pinned Electron. It guards a page's
 // child targets as a pane tab does and prints, as one JSON line, which of the page's workers started.
 
-const scripts: Record<string, string> = {
-  "/worker.js": `postMessage("worker")`,
-  "/outer.js": `const inner = new Worker("/inner.js"); inner.onmessage = (event) => postMessage(event.data)`,
-  "/inner.js": `postMessage("nested")`,
-}
+const scripts = [
+  ["/worker.js", `postMessage("worker")`],
+  ["/outer.js", `const inner = new Worker("/inner.js"); inner.onmessage = (event) => postMessage(event.data)`],
+  ["/inner.js", `postMessage("nested")`],
+] as const
 
 const page = `<!doctype html><title>workers</title><script>
 const seen = []
@@ -20,7 +20,7 @@ new Worker("/outer.js").onmessage = (event) => report(event.data)
 </script>`
 
 const server = createServer((request, response) => {
-  const script = scripts[request.url ?? ""]
+  const script = scripts.find(([path]) => path === request.url)?.[1]
   response.writeHead(200, {
     "content-type": script ? "text/javascript" : "text/html",
     "x-content-type-options": "nosniff",

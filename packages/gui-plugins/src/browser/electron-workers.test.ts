@@ -41,6 +41,7 @@ test("a guarded tab's dedicated and nested workers start in the pinned Electron"
       new Response(child.stderr).text(),
       child.exited,
     ])
+
     const line = stdout.split("\n").find((text) => text.startsWith("{"))
 
     if (!line) throw new Error(`Electron printed no result (exit ${code}).\n${stderr}`)
