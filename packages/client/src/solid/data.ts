@@ -88,6 +88,8 @@ export type CreateDataInput = {
    * is read for each message and event, so a client can follow a setting that changes while it runs.
    */
   readonly omitToolFileData?: boolean | (() => boolean)
+  /** When omitting tool files, keep inline images from successful `read` calls for previews. */
+  readonly keepReadImages?: boolean
 }
 
 const messagePageLimit = 20
@@ -177,9 +179,12 @@ function optimisticFiles(files: SessionPromptInput["files"]) {
 
 // Keeps an empty `data:<mime>;base64,` URI so the item still says what it was. It is built from `mime` because any
 // slice of the original URI is a V8 sliced string that keeps the whole payload alive.
-function omitFileData(content: [ToolContent, ...ToolContent[]]): [ToolContent, ...ToolContent[]] {
-  const omit = (item: ToolContent): ToolContent =>
-    item.type === "file" && item.uri.startsWith("data:") ? { ...item, uri: `data:${item.mime};base64,` } : item
+function omitFileData(content: [ToolContent, ...ToolContent[]], keepImages = false): [ToolContent, ...ToolContent[]] {
+  const omit = (item: ToolContent): ToolContent => {
+    if (item.type !== "file" || !item.uri.startsWith("data:")) return item
+    if (keepImages && item.mime.startsWith("image/") && item.uri.startsWith("data:image/")) return item
+    return { ...item, uri: `data:${item.mime};base64,` }
+  }
   return [omit(content[0]), ...content.slice(1).map(omit)]
 }
 
@@ -198,13 +203,22 @@ const hasDroppedFileData = (message: SessionMessageInfo) =>
   )
 
 // Returns the same message when there is nothing to drop, so the store keeps its objects.
-function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
+function omitMessageFileData(message: SessionMessageInfo, keepReadImages = false): SessionMessageInfo {
   if (message.type !== "assistant" || !message.content.some(hasFileData)) return message
   return {
     ...message,
     content: message.content.map((part) =>
       part.type === "tool" && "content" in part.state && part.state.content
-        ? { ...part, state: { ...part.state, content: omitFileData(part.state.content) } }
+        ? {
+            ...part,
+            state: {
+              ...part.state,
+              content: omitFileData(
+                part.state.content,
+                keepReadImages && part.name === "read" && part.state.status === "completed",
+              ),
+            },
+          }
         : part,
     ),
   }
@@ -356,7 +370,8 @@ export function createData(config: CreateDataInput) {
   const messageIndex = new Map<string, Map<string, number>>()
   const omitFiles = () =>
     typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
-  const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
+  const stored = (message: SessionMessageInfo) =>
+    omitFiles() ? omitMessageFileData(message, config.keepReadImages) : message
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
@@ -1140,7 +1155,9 @@ export function createData(config: CreateDataInput) {
             status: "completed",
             input: tool.state.input,
             metadata: event.data.metadata,
-            content: omitFiles() ? omitFileData(event.data.content) : [...event.data.content],
+            content: omitFiles()
+              ? omitFileData(event.data.content, config.keepReadImages && tool.name === "read")
+              : [...event.data.content],
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }

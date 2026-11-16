@@ -239,13 +239,15 @@ test("reconciles a stale running tool when execution settles", async () => {
   }
 })
 
-test("omits inline tool-result file payloads from read and live tool results when asked", async () => {
+test.each([undefined, true])("omits inline tool files from history and live results (keepReadImages: %s)", async (keepReadImages) => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
-  const tool = (id: string, state: object) => ({
+  const image = { type: "file", uri: screenshot, mime: "image/png", name: "page.png" }
+  const stripped = "data:image/png;base64,"
+  const tool = (id: string, name: string, state: object) => ({
     type: "tool",
     id,
-    name: "execute",
+    name,
     time: { created: 1, ran: 1 },
     state,
   })
@@ -261,16 +263,19 @@ test("omits inline tool-result file payloads from read and live tool results whe
             model: { providerID: "provider", id: "model" },
             time: { created: 1 },
             content: [
-              tool("call_read", {
+              tool("call_read", "read", {
                 status: "completed",
                 input: {},
                 content: [
                   { type: "text", text: "Took a screenshot" },
-                  { type: "file", uri: screenshot, mime: "image/png", name: "page.png" },
+                  image,
+                  { type: "file", uri: "data:application/pdf;base64,YQ==", mime: "application/pdf" },
                   { type: "file", uri: "file:///project/notes.md", mime: "text/markdown" },
                 ],
               }),
-              tool("call_live", { status: "running", input: {}, metadata: {} }),
+              tool("call_other", "execute", { status: "completed", input: {}, content: [image] }),
+              tool("call_failed", "read", { status: "error", input: {}, error: "failed", content: [image] }),
+              tool("call_live", "read", { status: "running", input: {}, metadata: {} }),
             ],
           },
         ],
@@ -282,6 +287,7 @@ test("omits inline tool-result file payloads from read and live tool results whe
       api: () => api,
       directory: "/project",
       omitToolFileData: true,
+      keepReadImages,
       event: {
         on: () => () => {},
         listen(handler) {
@@ -315,14 +321,15 @@ test("omits inline tool-result file payloads from read and live tool results whe
           state: {
             content: [
               { type: "text", text: "Took a screenshot" },
-              { type: "file", uri: "data:image/png;base64,", mime: "image/png", name: "page.png" },
+              { ...image, uri: keepReadImages ? screenshot : stripped },
+              { type: "file", uri: "data:application/pdf;base64,", mime: "application/pdf" },
               { type: "file", uri: "file:///project/notes.md", mime: "text/markdown" },
             ],
           },
         },
-        {
-          state: { status: "completed", content: [{ type: "file", uri: "data:image/png;base64,", mime: "image/png" }] },
-        },
+        { state: { content: [{ uri: stripped }] } },
+        { state: { content: [{ uri: stripped }] } },
+        { state: { status: "completed", content: [{ uri: keepReadImages ? screenshot : stripped }] } },
       ],
     })
   } finally {
