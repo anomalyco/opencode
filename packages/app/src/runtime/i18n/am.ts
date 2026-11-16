@@ -220,8 +220,6 @@ export const dict = {
   "dialog.fork.empty": "አዲስ ቅርንጫፍ ለመፍጠር መልዕክት የለም",
   "dialog.directory.action.selectFile": "ፋይል ምረጥ",
   "dialog.directory.action.selectFolder": "አቃፊን ምረጥ",
-  "dialog.directory.root": "ሥር",
-  "dialog.directory.parent": "ወላጅ",
   "dialog.directory.readError": "ይህን አቃፊ ማንበብ አልተቻለም",
   "dialog.server.add.title": "አገልጋይ አክል",
   "dialog.server.add.url": "የአገልጋይ አድራሻ",

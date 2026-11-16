@@ -221,8 +221,6 @@ export const dict = {
   "dialog.fork.empty": "Չկան պատառաքաղված հաղորդագրություններ",
   "dialog.directory.action.selectFile": "Ընտրել ֆայլը",
   "dialog.directory.action.selectFolder": "Ընտրել թղթապանակ",
-  "dialog.directory.root": "Արմատ",
-  "dialog.directory.parent": "Ծնող",
   "dialog.directory.readError": "Անհնար է կարդալ այս թղթապանակը",
   "dialog.server.add.title": "Ավելացնել սերվեր",
   "dialog.server.add.url": "Սերվերի հասցեն",

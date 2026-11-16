@@ -660,7 +660,7 @@ test("project list menus rename, edit, add, and stay inside the scrollport", asy
   const picker = page.getByRole("dialog", { name: "Open project", exact: true })
   await picker.getByRole("combobox").fill("/projects/added")
   await picker.getByRole("combobox").press("Enter")
-  const select = picker.getByRole("button", { name: "Select folder", exact: true })
+  const select = picker.getByRole("button", { name: "Open added", exact: true })
   await expect(select).toBeEnabled()
   await select.click()
   await expect(picker).toBeHidden()

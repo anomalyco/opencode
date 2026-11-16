@@ -222,8 +222,6 @@ export const dict = {
   "dialog.fork.empty": "Δεν υπάρχουν μηνύματα για διακλάδωση",
   "dialog.directory.action.selectFile": "Επιλογή αρχείου",
   "dialog.directory.action.selectFolder": "Επιλογή φακέλου",
-  "dialog.directory.root": "Ρίζα",
-  "dialog.directory.parent": "Γονικός",
   "dialog.directory.readError": "Δεν είναι δυνατή η ανάγνωση αυτού του φακέλου",
   "dialog.server.add.title": "Προσθήκη διακομιστή",
   "dialog.server.add.url": "Διεύθυνση διακομιστή",

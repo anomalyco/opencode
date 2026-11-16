@@ -220,8 +220,6 @@ export const dict = {
   "dialog.fork.empty": "Eingi boð at greina frá",
   "dialog.directory.action.selectFile": "Vel fílu",
   "dialog.directory.action.selectFolder": "Vel mappu",
-  "dialog.directory.root": "Rót",
-  "dialog.directory.parent": "Foreldur",
   "dialog.directory.readError": "Tað ber ikki til at lesa hesa mappuna",
   "dialog.server.add.title": "Legg ambætara til",
   "dialog.server.add.url": "Ambætaraadressa",

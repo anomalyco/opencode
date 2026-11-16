@@ -438,8 +438,6 @@ export const dict = {
   "dialog.fork.empty": "Nenhuma mensagem para bifurcar",
   "dialog.directory.action.selectFile": "Selecionar arquivo",
   "dialog.directory.action.selectFolder": "Selecionar pasta",
-  "dialog.directory.root": "Raiz",
-  "dialog.directory.parent": "Pasta superior",
   "dialog.directory.readError": "Não foi possível ler esta pasta",
   "dialog.server.add.title": "Adicionar um servidor",
   "dialog.server.add.url": "Endereço do servidor",

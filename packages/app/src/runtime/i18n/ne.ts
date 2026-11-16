@@ -225,8 +225,6 @@ export const dict = {
   "dialog.fork.empty": "बाट फोर्क गर्न कुनै सन्देश छैन",
   "dialog.directory.action.selectFile": "फाइल चयन गर्नुहोस्",
   "dialog.directory.action.selectFolder": "फोल्डर चयन गर्नुहोस्",
-  "dialog.directory.root": "रूट",
-  "dialog.directory.parent": "अभिभावक",
   "dialog.directory.readError": "यो फोल्डर पढ्न असमर्थ",
   "dialog.server.add.title": "सर्भर थप्नुहोस्",
   "dialog.server.add.url": "सर्भर ठेगाना",

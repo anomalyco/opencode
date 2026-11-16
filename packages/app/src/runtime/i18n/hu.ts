@@ -233,8 +233,6 @@ export const dict = {
   "dialog.fork.empty": "Nincsenek üzenetek, ahonnan elágazhatna",
   "dialog.directory.action.selectFile": "Válassza ki a fájlt",
   "dialog.directory.action.selectFolder": "Válasszon mappát",
-  "dialog.directory.root": "Gyökér",
-  "dialog.directory.parent": "Szülő",
   "dialog.directory.readError": "Ez a mappa nem olvasható",
   "dialog.server.add.title": "Szerver hozzáadása",
   "dialog.server.add.url": "Szerver címe",

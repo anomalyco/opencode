@@ -252,8 +252,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Pilih berkas",
   "dialog.directory.action.selectFolder": "Pilih folder",
-  "dialog.directory.root": "Akar",
-  "dialog.directory.parent": "Induk",
   "dialog.directory.readError": "Tidak dapat membaca folder ini",
 
   "dialog.server.add.title": "Tambah server",

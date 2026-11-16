@@ -227,8 +227,6 @@ export const dict = {
   "dialog.fork.empty": "ບໍ່ມີຂໍ້ຄວາມທີ່ຈະແຍກອອກຈາກ",
   "dialog.directory.action.selectFile": "ເລືອກໄຟລ໌",
   "dialog.directory.action.selectFolder": "ເລືອກໂຟນເດີ",
-  "dialog.directory.root": "ຮາກ",
-  "dialog.directory.parent": "ພໍ່ແມ່",
   "dialog.directory.readError": "ບໍ່ສາມາດອ່ານໂຟນເດີນີ້ໄດ້",
   "dialog.server.add.title": "ເພີ່ມເຊີບເວີ",
   "dialog.server.add.url": "ທີ່ຢູ່ເຊີບເວີ",

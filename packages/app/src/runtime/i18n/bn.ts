@@ -225,8 +225,6 @@ export const dict = {
   "dialog.fork.empty": "থেকে কাঁটাচামচ কোন বার্তা",
   "dialog.directory.action.selectFile": "ফাইল নির্বাচন করুন",
   "dialog.directory.action.selectFolder": "ফোল্ডার নির্বাচন করুন",
-  "dialog.directory.root": "রুট",
-  "dialog.directory.parent": "অভিভাবক",
   "dialog.directory.readError": "এই ফোল্ডারটি পড়তে অক্ষম৷",
   "dialog.server.add.title": "সার্ভার যোগ করুন",
   "dialog.server.add.url": "সার্ভার ঠিকানা",

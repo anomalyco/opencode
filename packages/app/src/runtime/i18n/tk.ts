@@ -221,8 +221,6 @@ export const dict = {
   "dialog.fork.empty": "Şahalandyrmaly habar ýok",
   "dialog.directory.action.selectFile": "Faýly saýlaň",
   "dialog.directory.action.selectFolder": "Papkany saýlaň",
-  "dialog.directory.root": "Kök",
-  "dialog.directory.parent": "Ene-ata",
   "dialog.directory.readError": "Bu bukjany okap bolmaýar",
   "dialog.server.add.title": "Serwer goşuň",
   "dialog.server.add.url": "Serwer salgysy",

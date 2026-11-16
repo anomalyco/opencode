@@ -221,8 +221,6 @@ export const dict = {
   "dialog.fork.empty": "Нема пораки од кои може да се префрлите",
   "dialog.directory.action.selectFile": "Изберете датотека",
   "dialog.directory.action.selectFolder": "Изберете папка",
-  "dialog.directory.root": "Корен",
-  "dialog.directory.parent": "Родител",
   "dialog.directory.readError": "Не може да се прочита оваа папка",
   "dialog.server.add.title": "Додај сервер",
   "dialog.server.add.url": "Адреса на серверот",

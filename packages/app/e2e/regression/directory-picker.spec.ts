@@ -13,7 +13,7 @@ async function openPicker(page: Page, input: Pick<MockServerConfig, "fileList" |
   await page.getByTestId("settings-screen").getByRole("tab", { name: "Projects", exact: true }).click()
   await page.getByRole("button", { name: "Add project", exact: true }).click()
   const picker = page.getByRole("dialog", { name: "Open project", exact: true })
-  await expect(picker.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
+  await expect(picker.getByRole("button", { name: "Open Picker", exact: true })).toBeEnabled()
 
   return picker
 }
@@ -28,7 +28,8 @@ test("Tab and Enter while suggestions load act on the typed folder, not the prev
   const input = picker.getByRole("combobox")
 
   await input.fill("alp")
-  await expect(picker.getByRole("option")).toHaveText(["C:\\OpenCode\\Picker\\alpha/"])
+  await expect(picker.getByRole("option")).toHaveCount(1)
+  await expect(picker.getByRole("option")).toHaveAttribute("data-directory-path", "C:/OpenCode/Picker/alpha")
 
   const search = await holdRoute(page, /\/api\/fs\/find\?(.*&)?query=beta(&|$)/)
   await input.fill("beta")
@@ -40,7 +41,7 @@ test("Tab and Enter while suggestions load act on the typed folder, not the prev
 
   await input.press("Enter")
   await expect(input).toHaveValue("C:\\OpenCode\\Picker\\beta\\")
-  await expect(picker.locator(".directory-picker-selection-text")).toHaveText("C:\\…\\Picker\\beta")
+  await expect(picker.getByRole("button", { name: "Open beta", exact: true })).toBeEnabled()
   search.release()
 })
 
@@ -66,7 +67,7 @@ test("a folder that cannot be listed leaves the root readable and retries when e
 
   await expect(picker.getByText("Unable to read this folder")).toHaveCount(0)
   await expect(picker.getByRole("treeitem", { name: "open", exact: true })).toBeVisible()
-  await expect(picker.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
+  await expect(picker.getByRole("button", { name: "Open locked", exact: true })).toBeEnabled()
 })
 
 test("the folder picker's tree scrolls with the mouse wheel inside the modal", async ({ page }) => {
