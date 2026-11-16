@@ -3,6 +3,7 @@ import path from "node:path"
 import { pickerStarts } from "./picker-start"
 
 const home = path.resolve("home", "me")
+
 const project = path.resolve("work", "project")
 
 test.each([

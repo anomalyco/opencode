@@ -72,6 +72,7 @@ function make(
   return {
     openDirectoryPicker: Effect.fn("DesktopFiles.openDirectoryPicker")(function* (options?: DirectoryPickerOptions) {
       const defaultPath = yield* start(options?.defaultPath)
+
       const result = yield* Effect.promise(() =>
         dialog.showOpenDialog({
           properties: ["openDirectory", ...(options?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
@@ -91,6 +92,7 @@ function make(
 
       return yield* Effect.gen(function* () {
         const defaultPath = yield* start(options?.defaultPath)
+
         const result = yield* Effect.promise(() =>
           dialog.showOpenDialog({
             properties: ["openFile", ...(options?.multiple ? ["multiSelections" as const] : [])],
@@ -122,6 +124,7 @@ function make(
     releasePickedFiles: pickedFiles.release,
     saveFile: Effect.fn("DesktopFiles.saveFile")(function* (options: SaveFilePickerOptions, content: string) {
       const defaultPath = yield* start(options?.defaultPath, true)
+
       const result = yield* Effect.promise(() =>
         dialog.showSaveDialog({
           title: options?.title ?? nativeT("desktop.dialog.saveFile"),
