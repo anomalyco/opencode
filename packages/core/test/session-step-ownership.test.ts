@@ -8,6 +8,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionHistory } from "@opencode/core/session/history"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import {
@@ -96,22 +97,44 @@ describe("Question resolution admission", () => {
 
   const setup = Effect.gen(function* () {
     const fixture = yield* seed
-    const owner = {
-      session_id: sessionID,
-      assistant_message_id: assistantMessageID,
-      generation: fixture.generation,
-    }
-    yield* fixture.db.insert(SessionPendingStepTable).values({
-      ...owner,
-      data: parkedData(sessionID, assistantMessageID, fixture.generation),
+    const bus = yield* Bus.Service
+    yield* bus.publish(SessionEvent.Tool.Input.Started, {
+      sessionID,
+      assistantMessageID,
+      id: "call_owner",
+      name: "question",
     })
-    yield* fixture.db.insert(SessionQuestionTable).values({
-      id: questionID,
-      ...owner,
-      call_id: "call_owner",
-      prepared,
+    yield* bus.publish(SessionEvent.Tool.Called, {
+      sessionID,
+      assistantMessageID,
+      id: "call_owner",
+      input: prepared.input,
+      executed: false,
     })
-    return { ...fixture, bus: yield* Bus.Service }
+    yield* bus.publish(SessionEvent.Step.Streamed, {
+      sessionID,
+      assistantMessageID,
+    })
+    yield* bus.publish(SessionEvent.Step.Parked, parkedData(
+      sessionID,
+      assistantMessageID,
+      fixture.generation,
+    ))
+    return { ...fixture, bus }
+  })
+
+  const originalTool = Effect.gen(function* () {
+    const db = (yield* Database.Service).db
+    const row = yield* db.select().from(SessionMessageTable)
+      .where(eq(SessionMessageTable.id, assistantMessageID)).get()
+    if (!row) return undefined
+    const [full = row] = yield* SessionHistory.withParts(db, [row])
+    const message = SessionHistory.decodeMessageRowSync(full)
+    if (message.type !== "assistant") return undefined
+    return message.content.find(
+      (part): part is Extract<SessionMessage.AssistantContent, { readonly type: "tool" }> =>
+        part.type === "tool" && part.id === "call_owner",
+    )
   })
 
   const resolve = (
@@ -140,11 +163,68 @@ describe("Question resolution admission", () => {
         answer: { q0: "Yes" },
         cancel_message: null,
       })
+      const completed = yield* originalTool
+      expect(completed).toMatchObject({
+        type: "tool",
+        id: "call_owner",
+        state: {
+          status: "completed",
+          metadata: { answers: [["Yes"]] },
+        },
+      })
+      expect(completed?.time.completed).toBeDefined()
+      expect(completed?.state.status).toBe("completed")
+      if (completed?.state.status === "completed") {
+        expect(completed.state.content.length).toBeGreaterThan(0)
+      }
+
       expect(yield* fixture.bus.publish(SessionEvent.QuestionResolution.Resolved, input).pipe(Effect.exit))
         .toMatchObject({ _tag: "Failure" })
       expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+      expect(yield* originalTool).toEqual(completed)
     }),
   )
+
+  for (const terminal of [
+    { status: "answered", answer: { q0: "Yes" } },
+    { status: "cancelled", message: "" },
+  ] as const) {
+    it.effect(`rolls back ${terminal.status} when tool finalization fails`, () =>
+      Effect.gen(function* () {
+        const fixture = yield* setup
+        const sequence = yield* Bus.latestSequence(fixture.db, sessionID)
+        const waiting = yield* originalTool
+        expect(waiting).toMatchObject({
+          type: "tool",
+          id: "call_owner",
+          state: { status: "waiting" },
+        })
+
+        yield* fixture.db.run(sql`
+          CREATE TRIGGER reject_question_tool_finalization
+          BEFORE UPDATE ON session_message
+          WHEN NEW.id = 'msg_step_owner'
+          BEGIN
+            SELECT RAISE(ABORT, 'injected question tool finalization failure');
+          END
+        `)
+
+        const result = yield* fixture.bus.publish(
+          SessionEvent.QuestionResolution.Resolved,
+          resolve(fixture.generation, terminal),
+        ).pipe(Effect.exit)
+
+        expect(result._tag).toBe("Failure")
+        expect(yield* fixture.db.select().from(SessionQuestionTable).get()).toMatchObject({
+          status: "pending",
+          answer: null,
+          cancel_message: null,
+        })
+        expect(yield* originalTool).toEqual(waiting)
+        expect(yield* Bus.latestSequence(fixture.db, sessionID)).toBe(sequence)
+      }),
+    )
+  }
 
   it.effect("rejects invalid answers without changing the row or durable sequence", () =>
     Effect.gen(function* () {
@@ -202,6 +282,15 @@ describe("Question resolution admission", () => {
         answer: null,
         cancel_message: "",
       })
+      expect(yield* originalTool).toMatchObject({
+        type: "tool",
+        id: "call_owner",
+        state: {
+          status: "error",
+          error: { type: "QuestionTool.Cancelled", message: "" },
+        },
+      })
+      expect((yield* originalTool)?.time.completed).toBeDefined()
     }),
   )
 })

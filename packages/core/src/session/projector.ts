@@ -51,7 +51,7 @@ type MessageEvent = Exclude<
   | SessionEvent.QuestionResolution.Resolved
 >
 
-type StorageEvent = MessageEvent | SessionEvent.Step.Parked
+type StorageEvent = MessageEvent | SessionEvent.Step.Parked | SessionEvent.QuestionResolution.Resolved
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const encodeStoredUser = Schema.encodeSync(SessionStored.User)
@@ -417,7 +417,7 @@ const projectParked = Effect.fnUntraced(function* (db: DatabaseService, event: S
   yield* setSession(db, event.data.sessionID, { time_updated: event.created })
 })
 
-/** Atomic admission only. Finalization of the original waiting tool belongs to P2-B2. */
+/** Atomically admit the resolution and finalize the original tool when it has a materialized outcome. */
 const projectQuestionResolved = Effect.fnUntraced(function* (
   db: DatabaseService,
   event: SessionEvent.QuestionResolution.Resolved,
@@ -454,6 +454,17 @@ const projectQuestionResolved = Effect.fnUntraced(function* (
   if (question.prepared.adapter !== "question@1")
     return yield* conflict("Unsupported Question continuation adapter")
 
+  const [full = owner] = yield* SessionHistory.withParts(db, [owner])
+  const assistant = SessionHistory.decodeMessageRowSync(full)
+  const call = assistant.type === "assistant"
+    ? assistant.content.find((part) => part.type === "tool" && part.id === data.callID)
+    : undefined
+
+  if (!call || call.type !== "tool" || call.state.status !== "waiting" ||
+    call.state.questionID !== data.questionID || call.state.generation !== data.generation ||
+    call.executed !== false || call.time.completed !== undefined)
+    return yield* conflict("Original Question tool is missing or no longer waiting")
+
   if (data.terminal.status === "answered") {
     const fields = question.prepared.input.questions.map(QuestionTool.toField)
     const invalid = Form.validateAnswer(fields, data.terminal.answer)
@@ -474,6 +485,64 @@ const projectQuestionResolved = Effect.fnUntraced(function* (
   )).returning({ id: SessionQuestionTable.id }).get().pipe(Effect.orDie)
 
   if (!updated) return yield* conflict("Question was concurrently resolved")
+
+  if (data.terminal.status === "answered" ||
+    (data.terminal.status === "cancelled" && data.terminal.message !== undefined)) {
+    const terminal = data.terminal
+    const restored = terminal.status === "answered"
+      ? yield* QuestionTool.restore(question.prepared, terminal).pipe(Effect.orDie)
+      : undefined
+    if (restored && restored.content.length === 0)
+      return yield* conflict("Question restoration produced empty content")
+
+    const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
+    yield* writes.updateAssistantPart(data.assistantMessageID, { type: "tool", callID: data.callID }, (part) => {
+      if (part.state.status !== "waiting" ||
+        part.state.questionID !== data.questionID || part.state.generation !== data.generation)
+        return
+
+      part.time.completed = DateTime.makeUnsafe(event.created)
+      if (terminal.status === "cancelled") {
+        part.state = {
+          status: "error",
+          input: part.state.input,
+          error: { type: "QuestionTool.Cancelled", message: terminal.message! },
+        }
+      } else if (restored) {
+        const content = restored.content
+        part.state = {
+          status: "completed",
+          input: part.state.input,
+          content: [castDraft(content[0]!), ...content.slice(1).map(castDraft)],
+          metadata: restored.metadata,
+        }
+      }
+    })
+
+    const persisted = yield* db.select().from(SessionMessageTable).where(and(
+      eq(SessionMessageTable.session_id, data.sessionID),
+      eq(SessionMessageTable.id, data.assistantMessageID),
+      eq(SessionMessageTable.type, "assistant"),
+    )).get().pipe(Effect.orDie)
+    if (!persisted) return yield* conflict("Question tool owner disappeared during finalization")
+    const [persistedFull = persisted] = yield* SessionHistory.withParts(db, [persisted])
+    const persistedAssistant = SessionHistory.decodeMessageRowSync(persistedFull)
+    const persistedCall = persistedAssistant.type === "assistant"
+      ? persistedAssistant.content.find((part) => part.type === "tool" && part.id === data.callID)
+      : undefined
+
+    if (!persistedCall || persistedCall.type !== "tool" ||
+      persistedCall.state.status !== (terminal.status === "answered" ? "completed" : "error") ||
+      persistedCall.time.completed === undefined ||
+      DateTime.toEpochMillis(persistedCall.time.completed) !== event.created)
+      return yield* conflict("Original Question tool finalization was not persisted")
+
+    if (terminal.status === "cancelled" &&
+      (persistedCall.state.status !== "error" ||
+        persistedCall.state.error.type !== "QuestionTool.Cancelled" ||
+        persistedCall.state.error.message !== terminal.message))
+      return yield* conflict("Question cancellation feedback was not persisted")
+  }
 })
 
 function run(db: DatabaseService, event: MessageEvent) {

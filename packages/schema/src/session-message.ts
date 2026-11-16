@@ -7,7 +7,7 @@ import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
 import { Attachment, Prompt } from "./prompt.js"
-import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
+import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt, RelativePath, statics } from "./schema.js"
 import { ascending } from "./identifier.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { FinishReason } from "./llm.js"
@@ -153,7 +153,7 @@ export const ToolStateWaiting = Schema.Struct({
   metadata: Schema.Record(Schema.String, Schema.Json),
   questionID: Form.ID,
   /** Sequence of the owning session.step.started event. */
-  generation: PositiveInt,
+  generation: NonNegativeInt,
 }).annotate({ identifier: "Session.Message.ToolState.Waiting" })
 
 export interface ToolStateCompleted extends Schema.Schema.Type<typeof ToolStateCompleted> {}
