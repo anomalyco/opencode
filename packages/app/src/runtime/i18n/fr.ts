@@ -442,8 +442,6 @@ export const dict = {
   "dialog.fork.empty": "Aucun message à partir duquel bifurquer",
   "dialog.directory.action.selectFile": "Sélectionner le fichier",
   "dialog.directory.action.selectFolder": "Sélectionner le dossier",
-  "dialog.directory.root": "Racine",
-  "dialog.directory.parent": "Parent",
   "dialog.directory.readError": "Impossible de lire ce dossier",
   "dialog.server.add.title": "Ajouter un serveur",
   "dialog.server.add.url": "URL du serveur",

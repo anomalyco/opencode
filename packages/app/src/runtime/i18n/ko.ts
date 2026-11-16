@@ -155,8 +155,6 @@ export const dict = {
   "dialog.fork.empty": "분기할 메시지 없음",
   "dialog.directory.action.selectFile": "파일 선택",
   "dialog.directory.action.selectFolder": "폴더 선택",
-  "dialog.directory.root": "루트",
-  "dialog.directory.parent": "상위 폴더",
   "dialog.directory.readError": "이 폴더를 읽을 수 없습니다",
   "dialog.server.add.title": "서버 추가",
   "dialog.server.add.url": "서버 URL",

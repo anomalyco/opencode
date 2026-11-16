@@ -426,8 +426,6 @@ export const dict = {
   "dialog.fork.empty": "Geen berichten om van af te splitsen",
   "dialog.directory.action.selectFile": "Selecteer bestand",
   "dialog.directory.action.selectFolder": "Selecteer map",
-  "dialog.directory.root": "Hoofdmap",
-  "dialog.directory.parent": "Bovenliggende map",
   "dialog.directory.readError": "Kan deze map niet lezen",
   "dialog.server.add.title": "Server toevoegen",
   "dialog.server.add.url": "Serveradres",

@@ -233,8 +233,6 @@ export const dict = {
   "dialog.fork.empty": "Không có tin nhắn nào để phân nhánh",
   "dialog.directory.action.selectFile": "Chọn tệp",
   "dialog.directory.action.selectFolder": "Chọn thư mục",
-  "dialog.directory.root": "Gốc",
-  "dialog.directory.parent": "Thư mục mẹ",
   "dialog.directory.readError": "Không thể đọc thư mục này",
   "dialog.server.add.title": "Thêm máy chủ",
   "dialog.server.add.url": "Địa chỉ máy chủ",

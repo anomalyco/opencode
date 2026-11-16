@@ -243,8 +243,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Odaberi datoteku",
   "dialog.directory.action.selectFolder": "Odaberi fasciklu",
-  "dialog.directory.root": "Korijen",
-  "dialog.directory.parent": "Nadređena fascikla",
   "dialog.directory.readError": "Nije moguće pročitati ovu fasciklu",
 
   "dialog.server.add.title": "Dodaj server",

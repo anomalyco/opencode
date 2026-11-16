@@ -16794,6 +16794,9 @@
               "mcp_events": {
                 "type": "boolean"
               },
+              "full_codemode": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },

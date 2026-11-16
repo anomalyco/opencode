@@ -220,8 +220,6 @@ export const dict = {
   "dialog.fork.empty": "Ühtegi sõnumit pole",
   "dialog.directory.action.selectFile": "Valige fail",
   "dialog.directory.action.selectFolder": "Valige kaust",
-  "dialog.directory.root": "Juur",
-  "dialog.directory.parent": "Lapsevanem",
   "dialog.directory.readError": "Seda kausta ei saa lugeda",
   "dialog.server.add.title": "Lisa server",
   "dialog.server.add.url": "Serveri aadress",

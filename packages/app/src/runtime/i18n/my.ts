@@ -228,8 +228,6 @@ export const dict = {
   "dialog.fork.empty": "လမ်းခွဲရန် မက်ဆေ့ချ်များ မရှိပါ။",
   "dialog.directory.action.selectFile": "ဖိုင်ကို ရွေးပါ။",
   "dialog.directory.action.selectFolder": "ဖိုင်တွဲကို ရွေးပါ။",
-  "dialog.directory.root": "အမြစ်",
-  "dialog.directory.parent": "မိဘ",
   "dialog.directory.readError": "ဤဖိုင်တွဲကို ဖတ်၍မရပါ။",
   "dialog.server.add.title": "ဆာဗာထည့်ပါ။",
   "dialog.server.add.url": "ဆာဗာလိပ်စာ",

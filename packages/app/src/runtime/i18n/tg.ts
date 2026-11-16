@@ -221,8 +221,6 @@ export const dict = {
   "dialog.fork.empty": "Паёме барои сохтани шоха нест",
   "dialog.directory.action.selectFile": "Файлро интихоб кунед",
   "dialog.directory.action.selectFolder": "Папкаро интихоб кунед",
-  "dialog.directory.root": "Реша",
-  "dialog.directory.parent": "Падару модар",
   "dialog.directory.readError": "Ин ҷузвдонро хондан ғайриимкон аст",
   "dialog.server.add.title": "Илова кардани сервер",
   "dialog.server.add.url": "Суроғаи сервер",

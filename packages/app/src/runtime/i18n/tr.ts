@@ -255,8 +255,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Dosya seç",
   "dialog.directory.action.selectFolder": "Klasör seç",
-  "dialog.directory.root": "Kök",
-  "dialog.directory.parent": "Üst klasör",
   "dialog.directory.readError": "Bu klasör okunamıyor",
 
   "dialog.server.add.title": "Sunucu ekle",

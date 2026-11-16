@@ -371,8 +371,6 @@ export const dict = {
   "dialog.fork.empty": "Keine Nachrichten zum Abzweigen vorhanden",
   "dialog.directory.action.selectFile": "Datei auswählen",
   "dialog.directory.action.selectFolder": "Ordner auswählen",
-  "dialog.directory.root": "Stammverzeichnis",
-  "dialog.directory.parent": "Übergeordnet",
   "dialog.directory.readError": "Dieser Ordner kann nicht gelesen werden",
   "dialog.server.add.title": "Server hinzufügen",
   "dialog.server.add.url": "Serveradresse",

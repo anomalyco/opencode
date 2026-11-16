@@ -220,8 +220,6 @@ export const dict = {
   "dialog.fork.empty": "Niciun mesaj de bifurcat",
   "dialog.directory.action.selectFile": "Selectează fișier",
   "dialog.directory.action.selectFolder": "Selectează folder",
-  "dialog.directory.root": "Rădăcină",
-  "dialog.directory.parent": "Părinte",
   "dialog.directory.readError": "Nu se poate citi acest folder",
   "dialog.server.add.title": "Adaugă server",
   "dialog.server.add.url": "Adresă server",

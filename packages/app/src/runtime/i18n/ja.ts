@@ -231,8 +231,6 @@ export const dict = {
   "dialog.fork.empty": "フォーク元のメッセージがありません",
   "dialog.directory.action.selectFile": "ファイルを選択",
   "dialog.directory.action.selectFolder": "フォルダを選択",
-  "dialog.directory.root": "ルート",
-  "dialog.directory.parent": "親フォルダ",
   "dialog.directory.readError": "このフォルダを読み取れません",
   "dialog.server.add.title": "サーバーを追加",
   "dialog.server.add.url": "サーバーURL",

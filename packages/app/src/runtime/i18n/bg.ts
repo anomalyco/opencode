@@ -221,8 +221,6 @@ export const dict = {
   "dialog.fork.empty": "Няма съобщения за разклонение",
   "dialog.directory.action.selectFile": "Изберете файл",
   "dialog.directory.action.selectFolder": "Изберете папка",
-  "dialog.directory.root": "корен",
-  "dialog.directory.parent": "Родител",
   "dialog.directory.readError": "Тази папка не може да се прочете",
   "dialog.server.add.title": "Добавете сървър",
   "dialog.server.add.url": "Адрес на сървъра",

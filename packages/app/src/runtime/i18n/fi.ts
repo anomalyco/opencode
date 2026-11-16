@@ -354,8 +354,6 @@ export const dict = {
   "dialog.fork.empty": "Ei viestejä, joista voisi haarauttaa",
   "dialog.directory.action.selectFile": "Valitse tiedosto",
   "dialog.directory.action.selectFolder": "Valitse kansio",
-  "dialog.directory.root": "Juuri",
-  "dialog.directory.parent": "Ylätaso",
   "dialog.directory.readError": "Tätä kansiota ei voi lukea",
   "dialog.server.add.title": "Lisää palvelin",
   "dialog.server.add.url": "Palvelimen osoite",
