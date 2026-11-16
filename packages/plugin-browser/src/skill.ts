@@ -57,6 +57,7 @@ export const info = Skill.Info.make({
     "",
     "### Debug a request",
     "",
+    "Console and network diagnostics omit entries attributed to extensions.",
     "`network.list` with `urlContains`, then `network.get` with `includeBody: true` on the request ID it returns. An HTTP 4xx or 5xx is a completed request, not a transport failure.",
     "",
     "### Measure performance",

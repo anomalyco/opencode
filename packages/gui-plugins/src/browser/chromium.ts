@@ -357,7 +357,8 @@ export function createBrowserPage(
   const documents = new Map<string, string>()
   const sourceURLs = () => [...new Set([state().url, ...documents.values()])].sort()
   const files = createBrowserFiles(sourceURLs)
-  const diagnostics = createDiagnostics(cdp, displayURL)
+  const diagnostics = createDiagnostics(cdp, displayURL, (id, sessionID) =>
+    Array.from(contexts.values()).some((context) => context.id === id && context.sessionID === sessionID))
   const profiling = createProfiling(contents, cdp, files, sourceURLs, options.shared)
   const refs = new Map<string, Element>()
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
@@ -653,6 +654,9 @@ export function createBrowserPage(
     contexts.forEach((context, key) => {
       if (context.id === executionContextId && context.sessionID === sessionID) contexts.delete(key)
     })
+  })
+  cdp.on("Runtime.executionContextsCleared", (_event, sessionID) => {
+    contexts.forEach((context, key) => { if (context.sessionID === sessionID) contexts.delete(key) })
   })
   cdp.on("Target.attachedToTarget", ({ sessionId, targetInfo }, parentSessionID) => {
     if (targetInfo.type !== "iframe") return
