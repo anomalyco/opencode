@@ -198,7 +198,7 @@ export type GenerateUsage = { input?: number; output?: number }
 
 export type GenerateNative = { [x: string]: JsonValue }
 
-export type GenerateGenerationID = string
+export type GenerateVideoID = string
 
 export type PromptMediaRef = string
 
@@ -736,17 +736,17 @@ export type ModelCost = {
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
 }
 
-export type GenerateVideoRunning = { id: GenerateGenerationID; status: "running" }
+export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
 
 export type GenerateVideoCompleted = {
-  id: GenerateGenerationID
+  id: GenerateVideoID
   status: "completed"
   media: Array<PromptMediaRef>
   expiresAt: number
 }
 
 export type GenerateVideoError = {
-  id: GenerateGenerationID
+  id: GenerateVideoID
   status: "error"
   error: string
   reason: GenerateVideoErrorReason
@@ -3212,13 +3212,13 @@ export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message
 export const isForbiddenError = (value: unknown): value is ForbiddenError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
-export type GenerationNotFoundError = {
-  readonly _tag: "GenerationNotFoundError"
-  readonly generationID: string
+export type VideoNotFoundError = {
+  readonly _tag: "VideoNotFoundError"
+  readonly videoID: string
   readonly message: string
 }
-export const isGenerationNotFoundError = (value: unknown): value is GenerationNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "GenerationNotFoundError"
+export const isVideoNotFoundError = (value: unknown): value is VideoNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "VideoNotFoundError"
 
 export type IntegrationNotFoundError = {
   readonly _tag: "IntegrationNotFoundError"

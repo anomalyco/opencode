@@ -1537,7 +1537,7 @@ export type ExperimentalGenerateVideoStartOperation<E = never> = (
   input: ExperimentalGenerateVideoStartInput,
 ) => Effect.Effect<ExperimentalGenerateVideoStartOutput, E>
 
-export type ExperimentalGenerateVideoGetInput = { readonly id: Generate.GenerationID }
+export type ExperimentalGenerateVideoGetInput = { readonly id: Generate.VideoID }
 export type ExperimentalGenerateVideoGetOutput = Generate.VideoJob
 export type ExperimentalGenerateVideoGetOperation<E = never> = (
   input: ExperimentalGenerateVideoGetInput,

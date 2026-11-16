@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import {
   ForbiddenError,
-  GenerationNotFoundError,
+  VideoNotFoundError,
   InvalidRequestError,
   LocationNotFoundError,
   ModelNotFoundError,
@@ -87,9 +87,9 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
   )
   .add(
     HttpApiEndpoint.get("generate.video.get", "/api/experimental/generate/video/:id", {
-      params: { id: Generate.GenerationID },
+      params: { id: Generate.VideoID },
       success: Schema.Struct({ data: Generate.VideoJob }).annotate({ identifier: "GenerateVideoGetResponse" }),
-      error: [GenerationNotFoundError, ForbiddenError, LocationNotFoundError],
+      error: [VideoNotFoundError, ForbiddenError, LocationNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "experimental.generate.video.get",

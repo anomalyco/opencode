@@ -5590,7 +5590,7 @@
             "name": "id",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/Generate.GenerationID"
+              "$ref": "#/components/schemas/Generate.VideoID"
             },
             "required": true
           }
@@ -5638,13 +5638,13 @@
             }
           },
           "404": {
-            "description": "GenerationNotFoundError | LocationNotFoundError",
+            "description": "VideoNotFoundError | LocationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/GenerationNotFoundErrorEncoded"
+                      "$ref": "#/components/schemas/VideoNotFoundErrorEncoded"
                     },
                     {
                       "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
@@ -19127,10 +19127,6 @@
         "required": ["data", "mime"],
         "additionalProperties": false
       },
-      "Generate.GenerationID": {
-        "type": "string",
-        "pattern": "^gen_"
-      },
       "Generate.ImageAspect": {
         "type": "string",
         "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?:[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$",
@@ -19401,7 +19397,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Generate.GenerationID"
+            "$ref": "#/components/schemas/Generate.VideoID"
           },
           "status": {
             "type": "string",
@@ -19426,7 +19422,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Generate.GenerationID"
+            "$ref": "#/components/schemas/Generate.VideoID"
           },
           "status": {
             "type": "string",
@@ -19446,6 +19442,10 @@
         "type": "string",
         "enum": ["failed", "cancelled", "expired", "unknown"],
         "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider or the stored video expired. unknown: the outcome could not be determined, for example after a restart during submission"
+      },
+      "Generate.VideoID": {
+        "type": "string",
+        "pattern": "^video_"
       },
       "Generate.VideoJob": {
         "anyOf": [
@@ -19519,7 +19519,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Generate.GenerationID"
+            "$ref": "#/components/schemas/Generate.VideoID"
           },
           "status": {
             "type": "string",
@@ -19584,23 +19584,6 @@
           }
         },
         "required": ["data"],
-        "additionalProperties": false
-      },
-      "GenerationNotFoundErrorEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["GenerationNotFoundError"]
-          },
-          "generationID": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "generationID", "message"],
         "additionalProperties": false
       },
       "Instruction.Hash": {
@@ -26239,6 +26222,23 @@
           }
         },
         "required": ["_tag", "providerID", "message"],
+        "additionalProperties": false
+      },
+      "VideoNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["VideoNotFoundError"]
+          },
+          "videoID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "videoID", "message"],
         "additionalProperties": false
       },
       "VoiceModel": {

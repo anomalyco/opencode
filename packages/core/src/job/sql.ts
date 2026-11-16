@@ -4,6 +4,9 @@ import type { Job } from "../job.js"
 import type { SessionMessage } from "../session/message.js"
 import type { SessionSchema } from "../session/schema.js"
 
+// TODO: make the session link optional. A row is keyed by the session message that announces its result and is
+// deleted once that message is delivered, so work with no session (session-less video generation) can't be recorded
+// here and doesn't survive a restart.
 export const JobTable = sqliteTable(
   "job",
   {

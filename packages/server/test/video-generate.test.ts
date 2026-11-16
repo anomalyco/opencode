@@ -69,7 +69,7 @@ it.live("generates a video in the background and serves it by hash with Range an
     expect(started.status).toBe(200)
     const { data } = (yield* Effect.promise(() => started.json())) as { data: { id: string; status: string } }
     expect(data).toMatchObject({ status: "running" })
-    expect(data.id.startsWith("gen_")).toBe(true)
+    expect(data.id.startsWith("video_")).toBe(true)
 
     const completed = yield* eventually(
       call(`${base}/generate/video/${data.id}`).pipe(
@@ -113,7 +113,7 @@ it.live("generates a video in the background and serves it by hash with Range an
     expect((yield* call(route)).status).toBe(404)
     expect((yield* call(route, { headers: { "if-none-match": `"${hash}"` } })).status).toBe(404)
 
-    expect((yield* call(`${base}/generate/video/gen_unknown`)).status).toBe(404)
+    expect((yield* call(`${base}/generate/video/video_unknown`)).status).toBe(404)
   }).pipe(Effect.scoped),
 )
 
@@ -131,6 +131,6 @@ it.live("rejects video routes while experimental.video_generate is off", () =>
       ),
     )
     expect(start.status).toBe(403)
-    expect((yield* Effect.promise(() => handler(new Request(`${base}/generate/video/gen_1`)))).status).toBe(403)
+    expect((yield* Effect.promise(() => handler(new Request(`${base}/generate/video/video_1`)))).status).toBe(403)
   }).pipe(Effect.scoped),
 )

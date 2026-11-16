@@ -1,19 +1,19 @@
 import { Flag } from "@opencode/core/flag"
 import { Generate } from "@opencode/core/generate"
-import { Generation } from "@opencode/core/generation"
+import { VideoGeneration } from "@opencode/core/video-generation"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import {
   ForbiddenError,
-  GenerationNotFoundError,
+  VideoNotFoundError,
   InvalidRequestError,
   ModelNotFoundError,
   ProviderRequestError,
   ServiceUnavailableError,
   UnsupportedModelError,
 } from "@opencode/protocol/errors"
-import type { DecisionRequest, GenerationID, ImageRequest, VideoRequest } from "@opencode/schema/generate"
+import type { DecisionRequest, VideoID, ImageRequest, VideoRequest } from "@opencode/schema/generate"
 import { Global } from "@opencode/util/global"
 import { Model } from "@opencode/schema/model"
 import { Effect } from "effect"
@@ -25,7 +25,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
   Effect.gen(function* () {
     const global = yield* Global.Service
     const locations = yield* LocationServiceMap.Service
-    const generations = yield* Generation.Service
+    const videos = yield* VideoGeneration.Service
     const services = locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))
     const text = Effect.fn("server.generate.text")(
       function* (request: { readonly payload: { readonly prompt: string; readonly model?: Model.Ref } }) {
@@ -69,19 +69,17 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       function* (request: { readonly payload: VideoRequest }) {
         yield* videoEnabled
         yield* awaitPlugins
-        return { data: yield* generations.video(request.payload).pipe(Effect.mapError(generateError)) }
+        return { data: yield* videos.start(request.payload).pipe(Effect.mapError(generateError)) }
       },
       Effect.provide(services),
       locationErrors,
     )
     const videoGet = Effect.fn("server.generate.video.get")(
-      function* (request: { readonly params: { readonly id: GenerationID } }) {
+      function* (request: { readonly params: { readonly id: VideoID } }) {
         yield* videoEnabled
-        const job = yield* generations
+        const job = yield* videos
           .get(request.params.id)
-          .pipe(
-            Effect.mapError((error) => new GenerationNotFoundError({ generationID: error.id, message: error.message })),
-          )
+          .pipe(Effect.mapError((error) => new VideoNotFoundError({ videoID: error.id, message: error.message })))
         return { data: job }
       },
       Effect.provide(services),

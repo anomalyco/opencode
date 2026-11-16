@@ -88,14 +88,14 @@ export const ImageResult = Schema.Struct({
 // Video
 // ---------------------------------------------------------------------------
 
-export const GenerationID = Schema.String.check(Schema.isStartingWith("gen_")).pipe(
-  Schema.brand("Generate.GenerationID"),
-  Schema.annotate({ identifier: "Generate.GenerationID" }),
+export const VideoID = Schema.String.check(Schema.isStartingWith("video_")).pipe(
+  Schema.brand("Generate.VideoID"),
+  Schema.annotate({ identifier: "Generate.VideoID" }),
   statics((schema) => ({
-    create: () => schema.make("gen_" + descending()),
+    create: () => schema.make("video_" + descending()),
   })),
 )
-export type GenerationID = typeof GenerationID.Type
+export type VideoID = typeof VideoID.Type
 
 export type VideoAspect = `${number}:${number}` | "auto"
 export const VideoAspect: Schema.Codec<VideoAspect> = Schema.Union([ImageAspect, Schema.Literal("auto")]).annotate({
@@ -138,13 +138,13 @@ export type VideoErrorReason = typeof VideoErrorReason.Type
 
 export interface VideoRunning extends Schema.Schema.Type<typeof VideoRunning> {}
 export const VideoRunning = Schema.Struct({
-  id: GenerationID,
+  id: VideoID,
   status: Schema.Literal("running"),
 }).annotate({ identifier: "Generate.VideoRunning" })
 
 export interface VideoCompleted extends Schema.Schema.Type<typeof VideoCompleted> {}
 export const VideoCompleted = Schema.Struct({
-  id: GenerationID,
+  id: VideoID,
   status: Schema.Literal("completed"),
   media: Schema.Array(MediaRef).annotate(description("Read each with GET /api/experimental/media/:hash")),
   expiresAt: Schema.Finite.annotate(description("Epoch milliseconds after which the video may be deleted")),
@@ -152,7 +152,7 @@ export const VideoCompleted = Schema.Struct({
 
 export interface VideoError extends Schema.Schema.Type<typeof VideoError> {}
 export const VideoError = Schema.Struct({
-  id: GenerationID,
+  id: VideoID,
   status: Schema.Literal("error"),
   error: Schema.String,
   reason: VideoErrorReason,

@@ -343,10 +343,10 @@ export class ScheduleNotFoundError extends Schema.TaggedError<ScheduleNotFoundEr
   { httpApiStatus: 404 },
 ) {}
 
-export class GenerationNotFoundError extends Schema.TaggedError<GenerationNotFoundError>()(
-  "GenerationNotFoundError",
+export class VideoNotFoundError extends Schema.TaggedError<VideoNotFoundError>()(
+  "VideoNotFoundError",
   {
-    generationID: Schema.String,
+    videoID: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

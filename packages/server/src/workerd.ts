@@ -8,7 +8,7 @@ import type { DurableObjectStorage } from "@opencode/core/database/sqlite.worker
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { FileSystem } from "@opencode/core/filesystem"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
-import { Generation } from "@opencode/core/generation"
+import { VideoGeneration } from "@opencode/core/video-generation"
 import { Pty } from "@opencode/core/pty"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Vcs } from "@opencode/core/vcs"
@@ -91,7 +91,7 @@ export function replacements(options: Options): LayerNode.Replacements {
     Pty.node.replace(ptyLayer),
     Npm.node.replace(npmLayer),
     // Stored videos need a local `blobs/` folder, which a Durable Object doesn't have.
-    Generation.node.replace(Generation.unsupportedLayer),
+    VideoGeneration.node.replace(VideoGeneration.unsupportedLayer),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),

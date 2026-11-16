@@ -23,7 +23,7 @@ import sessionViewedStateMigration from "@opencode/core/database/migration/20260
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
 import blobMigration from "@opencode/core/database/migration/20261025123711_blob"
-import videoGenerationMigration from "@opencode/core/database/migration/20261116002054_video_generation"
+import blobExpiryMigration from "@opencode/core/database/migration/20261116055456_video_blob_expiry"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -250,7 +250,7 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO blob_ref (session_id, message_id, hash, seq) VALUES ('ses_media', 'msg_1', 'aa', 1)`,
         )
 
-        yield* DatabaseMigration.applyOnly(db, [videoGenerationMigration])
+        yield* DatabaseMigration.applyOnly(db, [blobExpiryMigration])
 
         expect(yield* db.all(sql`SELECT session_id, message_id, hash, seq FROM blob_ref`)).toEqual([
           { session_id: "ses_media", message_id: "msg_1", hash: "aa", seq: 1 },
@@ -261,7 +261,6 @@ describe("DatabaseMigration", () => {
           data: "010203",
           expires_at: null,
         })
-        expect(yield* db.get(sql`SELECT count(*) AS count FROM generation`)).toEqual({ count: 0 })
       }),
     )
   })
