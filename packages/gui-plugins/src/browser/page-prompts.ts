@@ -20,6 +20,7 @@ import {
   originOf,
   keptApplies,
   permissionKinds,
+  requesterOrigin,
   siteAnswer,
   type PermissionKind,
   type SitePermissions,
@@ -355,8 +356,12 @@ export function createPagePrompts(input: {
         )
     },
     check(permission, requesting, details) {
-      // Electron passes the origin as a URL with a trailing slash.
-      const origin = originOf(requesting)
+      // Electron passes Chromium's origin of the asking frame as a URL with a trailing slash; the frame at the asking
+      // address must agree with it, as for a request.
+      const origin =
+        details.requestingUrl === undefined || requestOrigin(details, contents) === originOf(requesting)
+          ? originOf(requesting)
+          : "null"
       const request = { origin, top: contents.mainFrame.origin, mainFrame: details.isMainFrame }
 
       if (permission === "clipboard-sanitized-write") return clipboardWrite(request, input.agentCaused())
@@ -545,10 +550,18 @@ function device(kind: "camera" | "microphone") {
   return status !== "denied" && status !== "restricted"
 }
 
+/** The asking frame's own origin (equesterOrigin); a media request's security origin must agree with it. */
 function requestOrigin(details: Details, contents: WebContents) {
-  const url = details.securityOrigin ?? details.requestingUrl ?? contents.getURL()
+  const main = contents.mainFrame
 
-  return originOf(url)
+  const origin = requesterOrigin({
+    mainFrame: details.isMainFrame,
+    requestingUrl: details.requestingUrl,
+    main: { url: main.url, origin: main.origin },
+    frames: main.framesInSubtree.map((frame) => ({ url: frame.url, origin: frame.origin })),
+  })
+
+  return details.securityOrigin === undefined || originOf(details.securityOrigin) === origin ? origin : "null"
 }
 
 function onceCallback<Args extends unknown[]>(callback: (...args: Args) => void) {

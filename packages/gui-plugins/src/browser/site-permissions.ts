@@ -173,8 +173,32 @@ export function createSitePermissions(storage: Storage, changed: () => void) {
 
 export type SitePermissions = ReturnType<typeof createSitePermissions>
 
+/**
+ * The asking frame's own origin. Electron 44 passes only `isMainFrame` and `requestingUrl` for a non-media request, and
+ * an address is not an origin: a sandboxed frame or a page served with `CSP: sandbox` has an opaque origin at an
+ * address that names a site, and `about:blank`, `srcdoc` and `blob:` documents take their creator's. So the origin is
+ * read from the live frame at that address, and is opaque (`"null"`, which is always denied) when no frame, or more
+ * than one origin, is there.
+ */
+export function requesterOrigin(input: {
+  readonly mainFrame: boolean
+  readonly requestingUrl?: string
+  readonly main: { readonly url: string; readonly origin: string }
+  readonly frames: readonly { readonly url: string; readonly origin: string }[]
+}) {
+  if (input.mainFrame) return frameOrigin(input.main.origin)
+  const origins = new Set(input.frames.filter((frame) => frame.url === input.requestingUrl).map((frame) => frame.origin))
+
+  return origins.size === 1 ? frameOrigin([...origins][0] ?? "null") : "null"
+}
+
+function frameOrigin(origin: string) {
+  return origin === "null" ? "null" : originOf(origin)
+}
+
+/** The asking document is the page's own origin, which is a real one: embedded pages of other origins are denied. */
 function sameSite(request: Omit<SiteRequest, "kinds">) {
-  return request.origin !== "null" && (request.mainFrame || request.origin === request.top)
+  return request.origin !== "null" && request.origin === request.top
 }
 
 function same(a: Pick<SiteDecision, "origin" | "permission">, b: Pick<SiteDecision, "origin" | "permission">) {

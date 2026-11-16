@@ -3,6 +3,7 @@ import {
   clipboardWrite,
   originOf,
   permissionKinds,
+  requesterOrigin,
   keptApplies,
   siteAnswer,
   trustworthy,
@@ -53,6 +54,38 @@ describe("what a page's permission request gets before anyone is asked", () => {
     expect(clipboardWrite(top, false)).toBe(true)
     expect(clipboardWrite(top, true)).toBe(false)
     expect(clipboardWrite({ ...top, origin: "http://a.example", top: "http://a.example" }, false)).toBe(false)
+  })
+
+  test("takes the asking frame's own origin, so a sandboxed or opaque document never borrows the page's", () => {
+    // What Electron 44 passes, measured live: isMainFrame and requestingUrl only, for every non-media permission.
+    const page = { url: "https://bank.example/probe", origin: "https://bank.example" }
+    const frames = [
+      page,
+      { url: "https://bank.example/upload.html", origin: "null" },
+      { url: "about:srcdoc", origin: "https://bank.example" },
+      { url: "about:blank", origin: "https://bank.example" },
+      { url: "blob:https://bank.example/0b6f", origin: "https://bank.example" },
+      { url: "data:text/html,x", origin: "null" },
+    ]
+    const asked = (requestingUrl: string, mainFrame = false) =>
+      requesterOrigin({ mainFrame, requestingUrl, main: page, frames })
+
+    expect(asked("https://bank.example/upload.html")).toBe("null")
+    expect(asked("about:srcdoc")).toBe("https://bank.example")
+    expect(asked("blob:https://bank.example/0b6f")).toBe("https://bank.example")
+    expect(asked("data:text/html,x")).toBe("null")
+    expect(asked("https://other.example/gone")).toBe("null")
+    expect(requesterOrigin({ mainFrame: true, requestingUrl: "https://bank.example/upload.html", main: { url: page.url, origin: "null" }, frames })).toBe("null")
+    // Two frames at one address with different origins cannot be told apart.
+    expect(requesterOrigin({ mainFrame: false, requestingUrl: "about:blank", main: page, frames: [...frames, { url: "about:blank", origin: "https://ads.example" }] })).toBe("null")
+  })
+
+  test("denies a page whose own origin is opaque, as a CSP sandbox makes it, even when its address names an allowed site", () => {
+    const allowed = () => "allow" as const
+
+    expect(siteAnswer({ origin: "null", top: "null", mainFrame: true, kinds: ["notifications"] }, allowed)).toBe("block")
+    expect(siteAnswer({ origin: "https://bank.example", top: "null", mainFrame: true, kinds: ["notifications"] }, allowed)).toBe("block")
+    expect(clipboardWrite({ origin: "https://bank.example", top: "null", mainFrame: true }, false)).toBe(false)
   })
 
   test("keys a site by the origin Chromium gives it, a local preview's included", () => {
