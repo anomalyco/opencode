@@ -5,13 +5,16 @@ export function navigationTurn(
   wait: ((url: string, signal: AbortSignal) => Promise<void> | undefined) | undefined,
   started: (url: string) => void,
   stopped: () => void,
+  heldStop?: (address?: string) => void,
 ) {
   let pending: AbortController | undefined
+  let held: string | undefined
   let spinning = false
 
   const cancel = () => {
     pending?.abort()
     pending = undefined
+    held = undefined
 
     if (spinning) stopped()
     spinning = false
@@ -28,9 +31,19 @@ export function navigationTurn(
       // This load hasn't been issued yet. Let it satisfy Reload: cancelling would both lose its URL and leave
       // initial CDP setup waiting for a renderer that the replacement command cannot start until setup finishes.
       if (method === "reload" && pending && restoring && /^https?:\/\//i.test(restoring)) return restoring
+
+      if (method === "stop" && held !== undefined && heldStop) {
+        const address = held
+        spinning = false
+        cancel()
+        heldStop(address || undefined)
+
+        return
+      }
+
       cancel()
     },
-    begin(signal: AbortSignal) {
+    begin(signal: AbortSignal, keepAddress = true) {
       cancel()
       const mine = new AbortController()
       pending = mine
@@ -42,6 +55,7 @@ export function navigationTurn(
         const waiting = wait?.(url, lifetime)
 
         if (waiting) {
+          held = keepAddress ? url : ""
           // Let the pane take ownership before publishing the initial restore's spinner.
           await Promise.resolve()
 
@@ -60,6 +74,7 @@ export function navigationTurn(
         if (mine.signal.aborted) return
         lifetime.throwIfAborted()
         pending = undefined
+        held = undefined
         spinning = false
         await issue()
 

@@ -62,13 +62,31 @@ test("a redraw against the filter gate's held navigation: rejected while it is h
   expect(frameStillCurrent(page, cancelled)).toBe(true)
   expect(frameStillCurrent(page, replay(visit("https://site.test/b"), waiting).state)).toBe(false)
 
-  // A restored tab whose held load is stopped shows its blank page; one whose load was never issued stays restoring,
-  // and no redraw of it is current.
+  // An actual native stop with no commit is distinct from stopping before Chromium starts the load.
   const restoring = createDocumentState({ generation: 1, title: "B", url: "https://site.test/b" })
   const blank = replay([...held, { type: "loading.stopped", title: "" }], restoring).state
   expect(blank.status).toBe("blank")
   expect(frameStillCurrent(blank, blank)).toBe(true)
   expect(frameStillCurrent(restoring, blank)).toBe(false)
+})
+
+test("Stop before issue publishes the restore address without inventing a committed document or an error", () => {
+  const address = "https://next.test/report"
+  const restore = createDocumentState({ url: address, title: "Report", generation: 4 })
+
+  for (const before of [restore, replay(visit("https://previous.test/")).state]) {
+    const cancelled = replay([
+      { type: "navigation.started", isMainFrame: true, isSameDocument: false, url: address },
+      { type: "loading.started" },
+      { type: "navigation.held-stopped", address },
+    ], before).state
+
+    const saved = documentTab(cancelled, history)
+    expect(saved).toMatchObject({ id: history.id, url: address, loading: false })
+    expect(saved).not.toHaveProperty("loadError")
+    expect(documentVisible(cancelled)).toBe(documentVisible(before))
+    expect(documentTab(cancelled, history, false)).toEqual(documentTab(before, history, false))
+  }
 })
 
 // Electron's events for a navigation that commits and finishes loading.
