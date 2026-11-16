@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test"
-import { captureCoordinator, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
+import { captureCoordinator, captureScale, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 
 const shown = { minimized: false, visible: true, appHidden: false }
+
+test("full capture limits include zoom and DPI, after scaling to maxWidth", () => {
+  expect(captureScale({ width: 1000, height: 4000 }, 2, 1000)).toBe(0.5)
+  expect(() => captureScale({ width: 1000, height: 4001 }, 2, 2000)).toThrow("16 megapixels")
+  expect(() => captureScale({ width: 100, height: 16385 }, 1, 1000)).toThrow("16384 pixels")
+})
 
 test("crop uses the returned pixels, including fractional edge overlaps at non-default zoom", () => {
   // A 200 DIP view rendered at 150% DPI, at page zoom 2: one CSS pixel covers three bitmap pixels.

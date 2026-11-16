@@ -8,6 +8,19 @@ type Size = { width: number; height: number }
 
 type Rect = Size & { x: number; y: number }
 
+/** Bound both the decoded bitmap (64 MB of RGBA) and the compositor's longest surface edge. */
+export function captureScale(bounds: Size, pixelRatio: number, maxWidth: number) {
+  if (bounds.width <= 0 || bounds.height <= 0) throw new Error("Element or page has no visible screenshot area.")
+  const scale = Math.min(1, maxWidth / (bounds.width * pixelRatio))
+  const width = Math.ceil(bounds.width * pixelRatio * scale)
+  const height = Math.ceil(bounds.height * pixelRatio * scale)
+
+  if (width * height > 16_000_000 || Math.max(width, height) > 16_384)
+    throw new Error("Screenshot exceeds 16 megapixels or 16384 pixels on one edge. Reduce maxWidth or capture the viewport or an element.")
+
+  return scale
+}
+
 /** Intersect in actual bitmap pixels. Round outward so a fractional overlap includes the pixel it touches. */
 export function cropPixels(clip: Rect, image: Size, viewWidth: number, zoom: number) {
   if (viewWidth <= 0 || clip.width <= 0 || clip.height <= 0) return

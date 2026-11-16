@@ -7,7 +7,7 @@ import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
-import { captureCoordinator, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
+import { captureCoordinator, captureScale, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
@@ -1945,13 +1945,7 @@ export function createBrowserPage(
     const metrics = await cdp.send("Page.getLayoutMetrics")
     abortError(signal)
     const viewport = metrics.cssVisualViewport
-    // Chromium renders beyond the viewport only for a tab it presents on screen.
     const onscreen = view.getVisible() && win.isVisible() && !win.isMinimized()
-
-    if (action.fullPage && !onscreen)
-      throw new Error(
-        "A full-page screenshot needs this tab on screen in the Review pane, and it is not shown now. Omit fullPage to capture the viewport, which works while the tab is hidden, and scroll to capture the rest.",
-      )
 
     if (action.fullPage) return beyondViewport(action, metrics.cssContentSize)
 
@@ -2026,20 +2020,13 @@ export function createBrowserPage(
     bounds: { x: number; y: number; width: number; height: number },
   ) {
     const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-    const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
-
-    if (bounds.width <= 0 || bounds.height <= 0)
-      throw new Error(
-        "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
-      )
-
-    if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
-      throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
+    const scale = captureScale(bounds, pixelRatio, action.maxWidth ?? 2000)
     const format = action.format ?? "jpeg"
 
     const capture = await cdp.send("Page.captureScreenshot", {
       format,
       quality: format === "png" ? undefined : (action.quality ?? 80),
+      fromSurface: true,
       captureBeyondViewport: true,
       clip: { ...bounds, scale },
     })

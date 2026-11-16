@@ -42,7 +42,7 @@ export const info = Skill.Info.make({
     "- Put HTML assets in the document's folder or below it; parent folders, hidden paths and secret filenames are not available to the page.",
     "- `tabs.open` and `navigate` take web addresses. For another workspace file, pass its server-local path to `preview`, or click a relative link. Neither the displayed file address nor the page's isolated origin is a navigation argument.",
     "- New tabs open in front by default so the user can watch. Pass `focus: false` only when the user asked you to work in the background.",
-    "- `screenshot` works on a hidden tab; only `fullPage: true` needs the tab on screen in the Review pane, and on macOS no screenshot works while the OpenCode window is minimized or hidden. It returns the image for you to look at and a server-local file path.",
+    "- `screenshot` works on a hidden tab, including `fullPage: true`. On macOS restore the OpenCode window if it is minimized or hidden. The result includes the image and a server-local file path.",
     "",
     "## Recipes",
     "",
