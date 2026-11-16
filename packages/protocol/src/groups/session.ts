@@ -39,6 +39,13 @@ import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Form } from "@opencode/schema/form"
 import { PublicSessionMessage } from "./message.js"
+import { UnarySse } from "../unary-sse.js"
+
+export const SessionWaitResult = Schema.Struct({
+  message: PublicSessionMessage.pipe(Schema.optional).annotate({
+    description: "The session's latest assistant message once it is idle.",
+  }),
+}).annotate({ identifier: "SessionWaitResult" })
 
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
@@ -461,13 +468,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.wait", "/api/experimental/session/:sessionID/wait", {
         params: { sessionID: Session.ID },
-        success: HttpApiSchema.NoContent,
+        success: UnarySse.make(SessionWaitResult),
         error: [SessionNotFoundError, ServiceUnavailableError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "experimental.session.wait",
           summary: "Wait for session",
-          description: "Wait for a session agent loop to become idle.",
+          description:
+            "Wait for a session agent loop to become idle. The response is an event stream that sends a heartbeat comment every 15 seconds while the session runs, so idle-connection timeouts never end the wait, then one data event with the result.",
         }),
       ),
     )

@@ -304,7 +304,7 @@ async function run(input: {
   )
   spyOn(sdk.session.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
   let promptID = "msg_prompt"
-  spyOn(sdk.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
+  spyOn(sdk.experimental.session, "wait").mockImplementation(() => (input.wait?.() ?? wait.promise).then(() => ({})))
   spyOn(sdk.experimental.job, "list").mockImplementation((async () => input.jobs?.() ?? []) as never)
   spyOn(sdk.session, "active").mockImplementation((async () => input.active?.() ?? {}) as never)
   spyOn(sdk.session.inbox, "list").mockImplementation(

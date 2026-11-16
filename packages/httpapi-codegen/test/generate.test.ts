@@ -15,6 +15,7 @@ import {
   generate,
   GenerationError,
   type Output,
+  unarySseAnnotation,
 } from "../src"
 import { it } from "./effect"
 import { Api as FixtureApi, Missing } from "./fixture"
@@ -1380,6 +1381,75 @@ describe("HttpApiCodegen.generate", () => {
     expect(received).toEqual([{ type: "ready", count: "1" }])
     expect(requests).toBe(1)
     expect(url).toBe("https://example.com/event?after=2")
+  })
+
+  test("resolves a unary SSE call with its one data event, skipping heartbeats", async () => {
+    const contract = compileContract(
+      api(
+        HttpApiEndpoint.post("wait", "/wait", {
+          success: HttpApiSchema.StreamSse({ data: Schema.Struct({ done: Schema.Boolean }) }).annotate({
+            [unarySseAnnotation]: true,
+          }),
+        }),
+      ),
+    )
+    expect(contract.groups[0]?.endpoints[0]?.operation.success).toBe("unary")
+    const output = emitPromise(contract)
+    await using emitted = await emittedModule(output)
+    const encoder = new TextEncoder()
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(": heartbeat\n\n"))
+              controller.enqueue(encoder.encode(": heartbeat\n\n"))
+              controller.enqueue(encoder.encode('data: {"done":true}\n\n'))
+              controller.close()
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+    })
+    expect(await client.session.wait()).toEqual({ done: true })
+  })
+
+  test("rejects a unary SSE call that ends without a result or outlives its timeout", async () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.post("wait", "/wait", {
+            success: HttpApiSchema.StreamSse({ data: Schema.Boolean }).annotate({ [unarySseAnnotation]: true }),
+          }),
+        ),
+      ),
+    )
+    await using emitted = await emittedModule(output)
+    const encoder = new TextEncoder()
+    const empty = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async () =>
+        new Response(encoder.encode(": heartbeat\n\n"), { headers: { "content-type": "text/event-stream" } }),
+    })
+    expect(await empty.session.wait().catch((error: unknown) => error)).toMatchObject({ reason: "MalformedResponse" })
+
+    const stalled = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(": heartbeat\n\n"))
+              init?.signal?.addEventListener("abort", () => controller.error(init.signal?.reason))
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+    })
+    expect(await stalled.session.wait({ timeout: 20 }).catch((error: unknown) => error)).toMatchObject({
+      reason: "Timeout",
+    })
   })
 
   test("preserves public group and endpoint identifiers exactly", () => {

@@ -582,7 +582,7 @@ export type ExperimentalSessionSkillOperation<E = never> = (
 ) => Effect.Effect<ExperimentalSessionSkillOutput, E>
 
 export type ExperimentalSessionWaitInput = { readonly sessionID: Session.ID }
-export type ExperimentalSessionWaitOutput = void
+export type ExperimentalSessionWaitOutput = { readonly message?: SessionMessage.Info | undefined }
 export type ExperimentalSessionWaitOperation<E = never> = (
   input: ExperimentalSessionWaitInput,
 ) => Effect.Effect<ExperimentalSessionWaitOutput, E>

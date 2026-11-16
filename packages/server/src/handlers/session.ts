@@ -5,11 +5,11 @@ import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
-import { DateTime, Effect, Stream } from "effect"
+import { DateTime, Effect, Schema, Stream } from "effect"
 import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { SessionMediaMessageResponse } from "@opencode/protocol/groups/message"
-import { SessionMediaInboxResponse } from "@opencode/protocol/groups/session"
+import { SessionMediaInboxResponse, SessionWaitResult } from "@opencode/protocol/groups/session"
 import { Api } from "../api"
 import { wantsMediaRefs } from "../media-uri"
 import {
@@ -33,6 +33,8 @@ import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } f
 function missingForm(id: Form.ID) {
   return new FormNotFoundError({ id, message: `Form not found: ${id}` })
 }
+
+const encodeWaitResult = Schema.encodeUnknownEffect(SessionWaitResult)
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
@@ -434,11 +436,31 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           }
         }),
       )
-      .handle(
+      .handleRaw(
         "session.wait",
         Effect.fn(function* (ctx) {
-          yield* session.wait(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
-          return HttpApiSchema.NoContent.make()
+          yield* requireSession(ctx.params.sessionID)
+          // Clients and proxies drop a response that stays silent for minutes, so heartbeat comments keep the wait
+          // alive until its one data event.
+          const result = Stream.fromEffect(
+            session.wait(ctx.params.sessionID).pipe(
+              Effect.flatMap(encodeWaitResult),
+              Effect.map((encoded) => `data: ${JSON.stringify(encoded)}\n\n`),
+              Effect.orDie,
+            ),
+          )
+          const heartbeat = Stream.tick("15 seconds").pipe(Stream.map(() => ": heartbeat\n\n"))
+          return HttpServerResponse.stream(
+            result.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }), Stream.encodeText),
+            {
+              contentType: "text/event-stream",
+              headers: {
+                "Cache-Control": "no-cache, no-transform",
+                "X-Accel-Buffering": "no",
+                "X-Content-Type-Options": "nosniff",
+              },
+            },
+          )
         }),
       )
       .handle(

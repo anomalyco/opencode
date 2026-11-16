@@ -13,6 +13,8 @@ The package is private while its API is explored. Its tests are the executable s
 - Generate a zero-Effect Promise client with structural wire-oriented values, direct `fetch`, and syntax parsing without runtime structural validation.
 - Keep the Promise surface domain-oriented rather than Hey API compatible: methods return unwrapped values and reject with tagged declared errors or `ClientError`.
 - Return Promise streams as lazy `AsyncIterable` values and Effect streams as `Stream` values. Neither runtime reconnects automatically.
+- Expose an SSE data stream annotated with `unarySseAnnotation` (`"httpapi.unarySse": true`) as a one-shot call that resolves to its first data event: `Promise<A>` and `Effect<A>`. The server can send heartbeat comments until the result is ready, so long waits survive idle-connection timeouts. A stream that ends without an event fails with `ClientError`.
+- Accept a `timeout` request option in milliseconds on the Promise client, which rejects with a `Timeout` `ClientError`.
 
 - Flatten path, query, header, and struct payload fields into one input object.
 - Represent every non-struct payload (including unions, arrays, primitives, and records with index signatures) as one required `payload` input field and send that value as the request body directly.

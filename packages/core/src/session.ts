@@ -238,7 +238,10 @@ export interface Interface {
   readonly compact: (
     input: CompactInput,
   ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError>
-  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  /** Waits until the session is idle, then returns its latest assistant message. */
+  readonly wait: (
+    id: SessionSchema.ID,
+  ) => Effect.Effect<{ readonly message?: SessionMessage.Info }, NotFoundError | MessageDecodeError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
