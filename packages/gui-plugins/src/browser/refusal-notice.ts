@@ -2,7 +2,7 @@ import { destinationOrigin, type Policy } from "./policy"
 
 const apps: readonly string[] = ["mailto", "tel", "sms", "facetime", "vscode", "vscode-insiders", "cursor", "zed", "slack", "msteams", "zoommtg", "zoomus", "discord", "spotify", "figma", "linear", "notion", "obsidian", "tg", "whatsapp", "x-github-client", "github-windows", "github-mac", "jetbrains"]
 
-const denied: readonly string[] = ["http", "https", "file", "javascript", "data", "vbscript", "chrome", "chrome-extension", "oc", "oc-preview", "about", "blob", "filesystem", "shell", "ms-msdt", "search-ms", "ms-officecmd"]
+const denied: readonly string[] = ["http", "https", "file", "javascript", "data", "vbscript", "chrome", "chrome-extension", "oc", "oc-preview", "workspace", "about", "blob", "filesystem", "shell", "ms-msdt", "search-ms", "ms-officecmd"]
 
 /** Validates the ORIGINAL target; never trim away a bad character or accept a parser-repaired scheme. */
 export function externalTarget(value: string) {

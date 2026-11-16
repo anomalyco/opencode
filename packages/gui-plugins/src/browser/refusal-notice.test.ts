@@ -12,6 +12,8 @@ test("refusals describe the actual destination without displaying private, misle
   for (const url of [
     "file:///etc/passwd",
     "oc-preview://private/secret",
+    // A remote server's preview address is the app's own display form, not an app to launch or a link to copy.
+    "workspace://ses_other/site/index.html",
     "javascript:noop()",
     "slack://user:password@host",
     "slack://abc\n",
@@ -36,6 +38,7 @@ test("external app launches need a known scheme and a non-agent request; unsafe 
     "data",
     "file",
     "oc-preview",
+    "workspace",
     "oc",
     "javascript",
     "chrome-extension",
