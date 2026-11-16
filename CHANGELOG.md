@@ -32,7 +32,7 @@ Maintenance release on upstream v2.3.0, syncing `dev` from `cbe71595e1` through 
 ### App
 
 - A server paired by QR code takes the name in the pairing payload.
-- Hex install detection matches Rune's checks, the tip hides once Hex is installed, and its copy is clearer.
+- The Hex item is a voice-input tip in the shared app/desktop source: it links to installing Hex and hides itself once Hex is installed. There is no Hex integration in the CLI/TUI, and no desktop binary ships in this release.
 - Dialogs share consistent size presets.
 
 ### Also included
