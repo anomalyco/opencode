@@ -12,6 +12,7 @@ import { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import { BrowserMachine } from "./machine.js"
+import { BrowserSkill } from "./skill.js"
 import { Browser } from "./rpc.js"
 import { BrowserTunnel } from "./tunnel.js"
 
@@ -74,16 +75,17 @@ export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleG
 })
 
 export const make = Effect.fn("BrowserConnection.make")(function* (
-  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event" | "permission" | "storage">,
+  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event" | "permission" | "storage" | "skill">,
 ) {
   // Each agent's rules from config and its definition, which an attachment's grant must not override.
   const configured = new Map<string, readonly Permission.Rule[]>()
-  // Appended after config, so every agent hides the browser until an attachment allows it.
+  // Appended after config, so every agent hides the browser tools until an attachment allows them. The skill is hidden
+  // by the `experimental.rules` hook below, which can tell the built-in skill from a person's own skill of that name.
   yield* ctx.agent.transform((editor) => {
     configured.clear()
     editor.list().forEach((agent) => {
       configured.set(agent.id, [...agent.permissions])
-      agent.permissions.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const })))
+      agent.permissions.push({ action: "browser", resource: "*", effect: "deny" })
     })
   })
   const rulesFor = (session: Pick<Session.Info, "agent" | "permissions">, agent: string | undefined) => [
@@ -91,50 +93,72 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     ...(configured.get(agent ?? session.agent ?? "") ?? [{ action: "*", resource: "*", effect: "deny" as const }]),
     ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
   ]
-  // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call to
-  // allow. The rules from config, the agent's definition and the session itself decide instead: a deny refuses the
-  // call, and an ask makes the permission check prompt as it would without the grant, unless the user already saved
-  // "always" for it. No matching rule leaves it allowed.
-  yield* ctx.permission.hook("evaluate", (event) =>
-    event.action !== "browser" || event.effect === "deny"
-      ? Effect.void
-      : ctx.session.get({ sessionID: event.sessionID }).pipe(
-          Effect.map((session) => {
-            const rules = rulesFor(session, event.agent)
-            const denied = denial(rules, event.resources)
-            if (denied) {
+  // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call and
+  // every load of the `browser` skill to allow. The rules from config, the agent's definition and the session itself
+  // decide instead: a deny refuses the call, and an ask makes the permission check prompt as it would without the
+  // grant, unless the user already saved "always" for it. No matching rule leaves it allowed. The skill's denies come
+  // from the `experimental.rules` hook below, so core refuses those before this hook runs.
+  yield* ctx.permission.hook("evaluate", (event) => {
+    const skill = event.action === "skill" && event.resources.includes(BrowserSkill.id)
+    if ((event.action !== "browser" && !skill) || event.effect === "deny") return Effect.void
+    return ctx.session.get({ sessionID: event.sessionID }).pipe(
+      Effect.map((session) => {
+        const rules = rulesFor(session, event.agent)
+        if (skill) {
+          if (
+            !event.experimental?.approvedSave &&
+            BrowserMachine.selectRule(rules, "skill", BrowserSkill.id)?.effect === "ask"
+          )
+            event.effect = "ask"
+          return
+        }
+        const denied = denial(rules, event.resources)
+        if (denied) {
+          event.effect = "deny"
+          event.message = denied
+          return
+        }
+        if (
+          !event.experimental?.approvedSave &&
+          event.resources.some((operation) => BrowserMachine.selectBrowserRule(rules, operation)?.effect === "ask")
+        )
+          event.effect = "ask"
+      }),
+      // Without the rules, the grant must not decide alone.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("Browser permission evaluation failed", cause).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
               event.effect = "deny"
-              event.message = denied
-              return
-            }
-            if (
-              !event.experimental?.approvedSave &&
-              event.resources.some((operation) => BrowserMachine.selectBrowserRule(rules, operation)?.effect === "ask")
-            )
-              event.effect = "ask"
-          }),
-          // Without the rules, the grant must not decide alone.
-          Effect.catchCause((cause) =>
-            Effect.logWarning("Browser permission evaluation failed", cause).pipe(
-              Effect.andThen(
-                Effect.sync(() => {
-                  event.effect = "deny"
-                  event.message = "Browser permissions could not be read; no action ran."
-                }),
-              ),
-            ),
+              event.message = "Browser permissions could not be read; no action ran."
+            }),
           ),
         ),
-  )
-  // The grant comes last, so core would list the browser tools and skill to an agent whose own rules deny the whole
-  // browser, and only the hook above would refuse their calls. Restating the deny after the grant hides them from that
-  // agent's steps and Code Mode catalog, and core refuses its calls before any hook runs. An ask or a narrower deny
-  // keeps them listed, for the hook above to decide each call.
+      ),
+    )
+  })
+  // The grant comes last, so without these denies core would list the browser tools and skill to an agent whose own
+  // rules deny them, and only the hook above would refuse their calls. A deny added here is evaluated after the grant:
+  // it hides them from that agent's steps and Code Mode catalog, and core refuses their calls before any hook runs. An
+  // ask or a narrower deny keeps them listed, for the hook above to decide each call. The skill is denied while no
+  // desktop is attached, or when the agent is denied the whole browser, only while the registered `browser` skill is
+  // the built-in one: a person's own skill of that name follows their rules alone.
   yield* ctx.permission.hook("experimental.rules", (event) =>
-    Effect.sync(() => {
-      if (!BrowserMachine.deniesBrowser(rulesFor({ permissions: event.session }, event.agent))) return
-      event.rules.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const })))
-    }),
+    ctx.skill.list().pipe(
+      Effect.map((skills) => skills.data.some((skill) => skill.id === BrowserSkill.id && skill.path === BrowserSkill.info.path)),
+      // When the skills cannot be read, treat the skill as the built-in one, which hides it rather than shows it.
+      Effect.orElseSucceed(() => true),
+      Effect.map((builtin) => {
+        const rules = rulesFor({ permissions: event.session }, event.agent)
+        const browser = BrowserMachine.deniesBrowser(rules)
+        if (browser) event.deny.push({ action: "browser", resource: "*" })
+        if (
+          BrowserMachine.selectRule(rules, "skill", BrowserSkill.id)?.effect === "deny" ||
+          (builtin && (browser || !event.session.some(BrowserMachine.isGrant)))
+        )
+          event.deny.push({ action: "skill", resource: BrowserSkill.id })
+      }),
+    ),
   )
   // Permission syncs run here. Registered first, so it closes last: after disposal has drained the revokes.
   const work = yield* Scope.make()
