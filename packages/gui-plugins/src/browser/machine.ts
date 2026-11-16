@@ -324,7 +324,9 @@ export function sessionEmbed(state: State, sessionKey: string, tabID: string) {
 export function sessionRegistration(state: State, sessionKey: string) {
   const phase = attachmentOf(state, sessionKey)?.phase
 
-  return phase?.status === "registering" || phase?.status === "ready" ? phase.attempt : undefined
+  // Registration effects install the IPC handle *after* publishing the registering state. Only acceptance
+  // can wake the visible tab's loader: reading the Map while registering can consume the attempt too early.
+  return phase?.status === "ready" ? phase.attempt : undefined
 }
 
 /** The blank tab the user just opened, whose pane focuses the address field once it shows it. */
