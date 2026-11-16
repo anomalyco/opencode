@@ -20,6 +20,7 @@ serde_json = "1.0"
 shell-words = "1.1"
 
 [target.'cfg(unix)'.dependencies]
+crossbeam-utils = "0.8"
 libc = "0.2"
 nix = { version = "0.28", features = ["poll", "process", "term", "user"] }
 sha2 = "0.10"

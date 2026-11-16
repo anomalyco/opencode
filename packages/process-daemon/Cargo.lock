@@ -189,6 +189,7 @@ dependencies = [
  "anyhow",
  "base64",
  "crossbeam-channel",
+ "crossbeam-utils",
  "fs2",
  "libc",
  "nix",
