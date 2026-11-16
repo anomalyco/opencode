@@ -33,7 +33,8 @@ pub(crate) struct Trees {
     wake: Arc<dyn Fn() + Send + Sync>,
 }
 
-type Stages = HashMap<(PathBuf, String), Option<Result<PathBuf, String>>>;
+/// Each copy by the tree and its hash: the tree's [`Entry::changes`] when it began, and its result until it is taken.
+type Stages = HashMap<(PathBuf, String), (u64, Option<Result<PathBuf, String>>)>;
 
 /// What the last walk found of a tree: its light build and its artifact, each `None` until a walk took it.
 type Answer = (Option<Result<u64, String>>, Option<Result<Artifact, String>>);
@@ -50,6 +51,9 @@ struct Entry {
     stamp: Option<u64>,
     light: Option<Result<u64, String>>,
     artifact: Option<Result<Artifact, String>>,
+    /// How many walks found another artifact than the last: a copy that failed before the last of them failed on
+    /// files that are no longer there.
+    changes: u64,
 }
 
 impl Trees {
@@ -71,6 +75,9 @@ impl Trees {
     /// Hashes the project plugin `dir` whole again, whatever its stamp says: its files changed under a stamp that did
     /// not, as a stage of the approved bytes found.
     pub(crate) fn rewalk(&self, dir: &Path) {
+        // A failed copy's error is not kept for a later question: the files may come back as they were approved.
+        let real = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+        lock(&self.stages).retain(|(path, _), (_, staged)| !(path == &real && matches!(staged, Some(Err(_)))));
         lock(&self.state).entry(dir.to_path_buf()).or_default().stale = true;
         self.ask(dir, true);
     }
@@ -82,23 +89,26 @@ impl Trees {
             return artifact.stage(root).into();
         }
         let key = (artifact.path.clone(), artifact.sha256.clone());
+        let changes = lock(&self.state).get(&artifact.target).map_or(0, |entry| entry.changes);
         let mut stages = lock(&self.stages);
         match stages.get(&key) {
-            Some(None) => return None,
-            Some(Some(_)) => return stages.remove(&key).flatten(),
+            Some((_, None)) => return None,
+            // It failed on files a walk since found changed: it is made again (review jsnpm-5).
+            Some((began, Some(Err(_)))) if *began != changes => {}
+            Some((_, Some(_))) => return stages.remove(&key).and_then(|(_, staged)| staged),
             None => {}
         }
-        stages.insert(key, None);
+        stages.insert(key, (changes, None));
         drop(stages);
         let (stages, hashed, wake) = (self.stages.clone(), self.hashed.clone(), self.wake.clone());
         let (owned, to) = (artifact.clone(), root.to_owned());
         let spawned = std::thread::Builder::new().name("plugin-stage".to_owned()).spawn(move || {
-            stage(&stages, &hashed, &owned, &to);
+            stage(&stages, &hashed, &owned, &to, changes);
             wake();
         });
         // Without a thread, the copy is made here.
         if spawned.is_err() {
-            stage(&self.stages, &self.hashed, artifact, root);
+            stage(&self.stages, &self.hashed, artifact, root, changes);
             return self.staged(artifact, root);
         }
         None
@@ -111,7 +121,8 @@ impl Trees {
 
     /// Whether a walk or a copy runs.
     pub(crate) fn walking(&self) -> bool {
-        lock(&self.state).values().any(|entry| entry.running) || lock(&self.stages).values().any(Option::is_none)
+        lock(&self.state).values().any(|entry| entry.running)
+            || lock(&self.stages).values().any(|(_, staged)| staged.is_none())
     }
 
     fn ask(&self, dir: &Path, full: bool) -> Answer {
@@ -167,7 +178,9 @@ fn walks(state: &Mutex<HashMap<PathBuf, Entry>>, hashed: &AtomicU64, wake: &dyn 
             let Some(entry) = state.get_mut(dir) else { return };
             let mut changed = false;
             if let Some((light, artifact)) = found {
-                changed = entry.light.as_ref() != Some(&light) || (artifact.is_some() && entry.artifact != artifact);
+                let other = artifact.is_some() && entry.artifact != artifact;
+                changed = entry.light.as_ref() != Some(&light) || other;
+                entry.changes += u64::from(other);
                 entry.stamp = stamp;
                 entry.light = Some(light);
                 if artifact.is_some() {
@@ -187,12 +200,13 @@ fn walks(state: &Mutex<HashMap<PathBuf, Entry>>, hashed: &AtomicU64, wake: &dyn 
     }
 }
 
-/// Copies the approved `artifact` under `root`, and keeps the copy or why it failed for the next question.
-fn stage(stages: &Mutex<Stages>, hashed: &AtomicU64, artifact: &Artifact, root: &Path) {
+/// Copies the approved `artifact` under `root`, begun at the tree's `changes`, and keeps the copy or why it failed for
+/// the next question.
+fn stage(stages: &Mutex<Stages>, hashed: &AtomicU64, artifact: &Artifact, root: &Path, changes: u64) {
     let before = approval::hashed();
     let staged = artifact.stage(root);
     hashed.fetch_add(approval::hashed() - before, Ordering::Relaxed);
-    lock(stages).insert((artifact.path.clone(), artifact.sha256.clone()), Some(staged));
+    lock(stages).insert((artifact.path.clone(), artifact.sha256.clone()), (changes, Some(staged)));
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -324,5 +338,39 @@ mod tests {
         write("b");
         assert_eq!(walk(false), first);
         assert_ne!(walk(true), first);
+    }
+
+    // Expected (review jsnpm-5): a copy's failure is the answer for the files it was made of. Taken while the tree is
+    // as it was, it is given, and nothing is copied again until asked; a hash again drops it; and one a walk since
+    // found other files for is made again, so a tree back as it was approved loads.
+    #[test]
+    fn a_failed_copy_counts_only_for_the_files_it_failed_on() {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let (dir, staging) = (root.path().join("p"), root.path().join("staged"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("tui.ts"), "a").unwrap();
+        let trees = Trees::new(|| {});
+        let settle = || {
+            while trees.walking() {
+                std::thread::yield_now();
+            }
+        };
+        trees.artifact(&dir);
+        settle();
+        let artifact = trees.artifact(&dir).unwrap().unwrap();
+        settle();
+        let key = (artifact.path.clone(), artifact.sha256.clone());
+        let failed = |began: u64| lock(&trees.stages).insert(key.clone(), (began, Some(Err("failed".to_owned()))));
+        let changes = lock(&trees.state)[&dir].changes;
+        failed(changes);
+        assert_eq!(trees.staged(&artifact, &staging), Some(Err("failed".to_owned())));
+        failed(changes);
+        trees.rewalk(&dir);
+        settle();
+        assert!(!lock(&trees.stages).contains_key(&key), "a hash again kept the failure");
+        failed(changes - 1);
+        assert_eq!(trees.staged(&artifact, &staging), None, "a failure on files since changed was given");
+        settle();
+        assert_eq!(trees.staged(&artifact, &staging), Some(Ok(staging.join(&artifact.sha256))));
     }
 }

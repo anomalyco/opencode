@@ -142,6 +142,8 @@ pub struct Loader {
     /// The project targets held back for approval, with the artifact the user is asked about, or why it cannot be
     /// read.
     held: RefCell<HashMap<String, Result<Artifact, String>>>,
+    /// The last answer the user gave on each target, counted ([`Loader::deciding`]).
+    answers: RefCell<HashMap<String, u64>>,
     /// The JS host, which runs the targets that have no native build.
     scripts: Option<Rc<Scripts>>,
     /// The global cache directory TS installs packages into (`~/.cache/opencode`), where a target named by npm
@@ -177,6 +179,7 @@ impl Loader {
             waiting: RefCell::default(),
             approvals: Approvals::default(),
             held: RefCell::default(),
+            answers: RefCell::default(),
             scripts: None,
             npm: None,
             server: RefCell::default(),
@@ -677,6 +680,21 @@ impl Loader {
             return Ok(false);
         }
         self.approvals.decide(artifact, decision).map(|()| true)
+    }
+
+    /// Counts the user's answer on `target`, whose check of the disk may end after a later answer's (review jsnpm-5).
+    /// The count goes to [`Loader::superseded`] once the check ended.
+    pub fn deciding(&self, target: &str) -> u64 {
+        let mut answers = self.answers.borrow_mut();
+        let answer = answers.entry(target.to_owned()).or_default();
+        *answer += 1;
+        *answer
+    }
+
+    /// Whether the user answered on `target` again since the answer [`Loader::deciding`] counted as `answer`: then that
+    /// answer is not recorded, and nothing is said about it.
+    pub fn superseded(&self, target: &str, answer: u64) -> bool {
+        self.answers.borrow().get(target).is_some_and(|last| *last != answer)
     }
 
     /// The build `target` holds on the disk now, as a reconcile reads it, for [`Loader::decide`]: its library, or its
