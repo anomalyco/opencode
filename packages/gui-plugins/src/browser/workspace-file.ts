@@ -22,10 +22,9 @@ export async function resolvePreviewRequest(url: string, method: string, initiat
   const host = new URL(url).host
   const grant = grants.get(host)
 
-  if (!grant || signal.aborted) return
+  if (!grant || signal.aborted || (initiator !== undefined && initiator !== `oc-preview://${host}`)) return
 
   if (grant.type === "artifact") {
-    if (initiator !== undefined && initiator !== `oc-preview://${host}`) return
     const item = artifactResource(url, host, grant.id)
 
     return item && { type: "artifact" as const, route: item.route, read: grant.read }
@@ -34,7 +33,6 @@ export async function resolvePreviewRequest(url: string, method: string, initiat
   if (grant.type === "remote") {
     const origin = `oc-preview://${host}`
 
-    if (initiator !== undefined && initiator !== origin) return
     const path = remotePath(url, `${origin}/`)
 
     if (!path) return

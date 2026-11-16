@@ -5,12 +5,12 @@ import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
 import { workspaceTarget } from "./workspace.js"
 import { previewPath } from "./preview-path.js"
+import { stat } from "node:fs/promises"
+import { resolve } from "node:path"
 
 /** Exact lookup only: each request, including an asset or a History API route, checks the server's current disk. */
 export async function previewSize(path: string, directory: string) {
   if (!previewPath(path, process.platform === "win32")) return
-  const { resolve } = await import("node:path")
-  const { stat } = await import("node:fs/promises")
   const target = await workspaceTarget(resolve(directory, path), [directory])
   const info = target && await stat(target)
 
@@ -65,8 +65,7 @@ export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, 
   const value = path.trim()
   if (address(value) && !/^file:/i.test(value)) return undefined
   return yield* Effect.tryPromise(async (): Promise<Located> => {
-    const { stat } = await import("node:fs/promises")
-    const { isAbsolute, relative, resolve } = await import("node:path")
+    const { isAbsolute, relative } = await import("node:path")
     const { fileURLToPath } = await import("node:url")
     const url = /^file:/i.test(value) ? new URL(value) : undefined
     if (url?.hostname) return { absolute: value, found: false, directory: false, outside: true }

@@ -26,7 +26,7 @@ export interface Browser {
    */
   open(session: SessionRef, url: string): void
   /**
-   * Opens a workspace file (relative path) as a file:// browser tab. Check `canOpen(session, path)` first.
+   * Opens a workspace file as a browser tab. Local tabs display file: addresses and remote tabs display workspace: addresses. Check `canOpen(session, path)` first.
    *
    * @param session - The session whose pane opens it.
    * @param path - The workspace-relative file path.
