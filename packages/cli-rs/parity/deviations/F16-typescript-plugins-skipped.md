@@ -26,8 +26,8 @@ the key being the spec's text and not a version it resolves to (`npm.ts:60-97`: 
 tag, `<name>@latest` for a bare name, `git-<slug>-<hash>` for a git spec, else the spec), in the generation with the
 largest number (`npm.ts:149-162`), as `node_modules/<name>` (`installedName`, `npm.ts:173-183`); so the same spec
 picks the same directory, and a range is never matched against another version installed under another key. The JS
-host loads its `./tui` export, as for a directory. Like any global or `cli.json` plugin it needs no approval, and its
-build identity is computed off the UI thread (FT-2). As TS resolves a loaded package once a session
+host loads its `./tui` export, as for a directory. Like any global or `cli.json` plugin a `cli.json` package needs no
+approval, and its build identity is computed off the UI thread (FT-2). As TS resolves a loaded package once a session
 (`context.tsx:663-665`), the directory a spec resolved to stays while the spec is a target: a later install (a new
 generation) does not move it, and a package is not watched. A `cli.json` entry whose key the cache does not hold, where
 TS installs it, is listed `Skipped` with the reason "not in opencode's package cache, and opencode-native installs
@@ -35,13 +35,37 @@ nothing: run `opencode-native plugin add <spec>`", and named so in the notice be
 plugins (`GET /api/plugin`, active with `features.tui`, by the package target or the local path the server reports,
 TS `serverTuiPlugins`, `context.tsx:96-103`, `301-305`) load the same way, in TS's order: the discovered directories,
 then the server parts, then `cli.json`; one the cache does not hold is left out, as TS leaves out an optional target it
-cannot load (`context.tsx:362-363`). Approval goes by where a part's code lives (O-146). A part whose files are
-inside the project (the nearest directory with `.git` or `.hg`), as a local path in the project's `opencode.json` is,
-is a project plugin: it waits for the user's approval as a project's plugin directory does, keyed by the same
-artifact (the directory and the hash of its files). A part that names a project's plugin directory another way (a
-link) is that plugin, one target with one decision. A package from the user's npm cache needs no approval, even when a
-project's configuration names it: its code is not in the project, and TS loads it so. TS asks for no approval at all;
-`F16-project-plugin-approval` covers this. With the JS host off, an npm entry and a server part are listed as a directory is,
+cannot load (`context.tsx:362-363`).
+
+Unlike TS, which asks for no approval at all, a server part loads without approval only when the user's own
+configuration names it (O-162, carbon `jsnpm-2`). `GET /api/plugin` carries no provenance, and a project's
+`opencode.json` can name a package (a `.tgz`, a git spec) with no server export, so the server runs none of its code.
+So the client reads the user's layers itself: the `plugins` entries of `cli.json` and of the global opencode config
+(`opencode.json`, `opencode.jsonc` in the global config directory, TS `ConfigDiscovery`), a string or the `package` of
+`{ package, options }`, `-` removals ignored.
+- **Package:** it is vouched for when one of those entries is its spec exactly as written, which is the text TS's
+  server reports as `source.target` (`core/src/config/plugin/source.ts` `parse`, `plugin/module.ts` `source`). The
+  same package at another version, or named only by the project's configuration (`opencode.json`,
+  `.opencode/opencode.json`), waits for approval. A managed, explicit (`OPENCODE_CONFIG`) or `OPENCODE_CONFIG_CONTENT`
+  layer vouches for nothing.
+- **Approval of a package:** it is keyed by the package's artifact: the SHA-256 of its own tree, folded with its
+  install's `package.json` and `package-lock.json`, which name its dependencies (`approval::install_root`). Once
+  approved it runs where it is, unstaged and unconfined: its dependencies sit beside it in the generation (about
+  300 MB for a field-test plugin), so a copy of it could not import them.
+- **Local path:** the path a server reports is canonicalized. It is vouched for under a global plugin directory
+  (`plugin`, `plugins` in the global config directory) or when an entry of the user's configuration names it (TS
+  resolves `./`, `../` and `file://` against the config file's directory). Any other path is held as a project's
+  plugin directory is, staged and confined, keyed by the same artifact. A part that names a target already found under
+  any spelling (a link, another case) is that target: one target with one decision. A server part never stands in for
+  a project's plugin the way a `cli.json` entry does (no alias).
+- **Native build:** a server target never opens one. A part whose directory holds `plugin.so` (`.dylib`, `.dll`), or
+  that names the library itself, is left out, as TS leaves out a part with no TUI entry.
+- **Remote server:** local-path parts are dropped, unless the server is on this machine: one the client started or
+  the service (no `--server`), or a `--server` URL whose host is a loopback address or `localhost`. A loopback port can
+  be a tunnel to another machine. A path it reports then is held for approval like any path the user's configuration
+  does not name.
+
+`F16-project-plugin-approval` covers the approval itself. With the JS host off, an npm entry and a server part are listed as a directory is,
 with the JS-host reason, each server part by its package target or path beside the server plugin's own row.
 `scenarios/P.8/cache-cli.app.ts` and `cache-server.app.ts` drive both on each side from one cache holding a pinned
 tarball: equal screens and requests. `crates/tui/tests/all/plugin_npm.rs` checks the keys of 34 spec forms against

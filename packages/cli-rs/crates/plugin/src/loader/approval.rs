@@ -103,6 +103,10 @@ impl Artifact {
                 sha256
             }
         };
+        let sha256 = match install_root(&path) {
+            Some(root) => install_sha256(&sha256, &root)?,
+            None => sha256,
+        };
         Ok(Self { target: target.to_path_buf(), path, sha256, script: true })
     }
 
@@ -213,6 +217,40 @@ fn fingerprint(path: &Path) -> Result<u64, String> {
 static STAGES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// The hash of the plugin directory `path`, copied under `copy` as it is read when there is one.
+/// The install a package of the npm cache belongs to (`<cache>/npm/<key>/<generation>/node_modules/<name>`, a scoped
+/// name one level deeper): the generation, whose `package.json` and lockfile name the package's dependencies, which sit
+/// beside it rather than in it. `None` for any other directory, a project's plugin and a staged copy included.
+pub(crate) fn install_root(dir: &Path) -> Option<PathBuf> {
+    let dir = std::fs::canonicalize(dir).ok()?;
+    let parent = dir.parent()?;
+    let modules = match parent.file_name()?.to_str()?.starts_with('@') {
+        true => parent.parent()?,
+        false => parent,
+    };
+    let root = (modules.file_name()? == "node_modules").then(|| modules.parent()).flatten()?;
+    let generation = root.file_name()?.to_str()?;
+    (!generation.is_empty() && generation.bytes().all(|byte| byte.is_ascii_digit())).then(|| root.to_path_buf())
+}
+
+/// The approval hash of a package of the npm cache (O-162): its own tree's, and its dependencies by the install's
+/// `package.json` and lockfile.
+fn install_sha256(tree: &str, root: &Path) -> Result<String, String> {
+    let mut context = ring::digest::Context::new(&ring::digest::SHA256);
+    context.update(b"opencode-ts-package\0");
+    context.update(tree.as_bytes());
+    for name in ["package.json", "package-lock.json"] {
+        context.update(b"\0");
+        context.update(name.as_bytes());
+        context.update(b"\0");
+        match std::fs::read(root.join(name)) {
+            Ok(bytes) => context.update(&bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => context.update(b"-"),
+            Err(error) => return Err(format!("{}: {error}", root.join(name).display())),
+        }
+    }
+    Ok(context.finish().as_ref().iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
 fn tree_sha256(path: &Path, copy: Option<&Path>) -> Result<String, String> {
     let mut context = ring::digest::Context::new(&ring::digest::SHA256);
     context.update(b"opencode-ts-plugin\0");
