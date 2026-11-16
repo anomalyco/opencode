@@ -104,6 +104,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   let frame: (() => void) | undefined
   let layout: string | undefined
   const motions = new Set<Animation>()
+  let settlePosition: ((rect: DOMRectReadOnly) => void) | undefined
   // The embed the last layout went to; it hides when another one takes the box.
   let placed: string | undefined
   let snapshotTimer: ReturnType<typeof setTimeout> | undefined
@@ -246,6 +247,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     frame?.()
     frame = undefined
     layout = undefined
+
     if (placed) props.bridge.embed(placed)
     placed = undefined
 
@@ -370,8 +372,10 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   }
 
   let measured: ReturnType<typeof measure>
+
   const tick = () => {
     frame = undefined
+
     if (measured) place(measured)
 
     motions.forEach((motion) => {
@@ -379,6 +383,9 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     })
 
     if (motions.size) schedule()
+
+    if (!motions.size && measured) settlePosition?.(measured.rect)
+
     return false
   }
 
@@ -418,6 +425,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
         // The native views are not clipped by the retained panel's DOM. Hide before the next
         // animation frame so closing the panel cannot leave the embed above the app.
         if (!props.visible || !documentVisible() || moving || !props.id) return hide()
+
         if (placed && placed !== props.id) hide()
         schedule()
       },
@@ -431,10 +439,12 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const sizes = new ResizeObserver(schedule)
     const nodes = new Set<Element>()
     const neighbors = new Set<Element>()
+    const removeScroll = () => nodes.forEach(node => node.removeEventListener("scroll", schedule))
 
     const changes = new MutationObserver((records) => {
       if (!box.isConnected) {
         if (!nodes.size) return
+        removeScroll()
         sizes.disconnect()
         changes.disconnect()
         changes.observe(document, { childList: true, subtree: true })
@@ -443,6 +453,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
         return
       }
+
       if (
         !nodes.size ||
         records.some(
@@ -454,13 +465,21 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     })
 
     const observe = () => {
+      removeScroll()
       nodes.clear()
       neighbors.clear()
       sizes.disconnect()
       changes.disconnect()
 
+      if (!box.isConnected) {
+        changes.observe(document, { childList: true, subtree: true })
+
+        return
+      }
+
       for (let node: Element | null = box; node; node = node.parentElement) {
         nodes.add(node)
+        node.addEventListener("scroll", schedule, { passive: true })
         sizes.observe(node)
         changes.observe(node, { attributes: true, childList: true })
 
@@ -475,6 +494,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     }
 
     observe()
+
     const track = (target: Element) => {
       for (const motion of target.getAnimations()) {
         if (
@@ -490,22 +510,49 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     // Web Animations do not send CSS animation events. A tight intersection root wakes on the first displaced
     // edge, then the animation itself drives the frames; no permanent frame job or patched Element.animate.
     let position: IntersectionObserver | undefined
-    const anchor = (rect: DOMRectReadOnly) => {
+
+    let previous: DOMRectReadOnly | undefined
+
+    const anchor = (rect: DOMRectReadOnly, visible = rect, threshold = 1, calibrated = false) => {
+      previous = rect
       position?.disconnect()
-      const inset = [rect.top, window.innerWidth - rect.right, window.innerHeight - rect.bottom, rect.left]
+      const inset = [visible.top, window.innerWidth - visible.right, window.innerHeight - visible.bottom, visible.left]
       position = new IntersectionObserver(([entry]) => {
         if (!entry || !box.isConnected) return
         const next = entry.boundingClientRect
 
-        if (next.x === rect.x && next.y === rect.y && next.width === rect.width && next.height === rect.height) return
+        if (next.x === rect.x && next.y === rect.y && next.width === rect.width && next.height === rect.height) {
+          // With an ancestor scrollport the full box may never intersect. Pin the *visible* rectangle instead.
+          if (!calibrated && entry.intersectionRatio > 0 && entry.intersectionRatio < 1)
+            anchor(rect, entry.intersectionRect, entry.intersectionRatio * 0.999999, true)
+
+          return
+        }
+
         nodes.forEach(track)
         schedule()
+
+        if (motions.size) {
+          position?.disconnect()
+          previous = undefined
+
+          return
+        }
+
         anchor(next)
-      }, { rootMargin: inset.map((n) => `${-Math.floor(n)}px`).join(" "), threshold: 1 })
+      }, { rootMargin: inset.map((n) => `${-Math.floor(n)}px`).join(" "), threshold })
       position.observe(box)
     }
+
     anchor(box.getBoundingClientRect())
-    onCleanup(() => position?.disconnect())
+    settlePosition = (rect) => {
+      if (!previous || rect.x !== previous.x || rect.y !== previous.y || rect.width !== previous.width || rect.height !== previous.height) anchor(rect)
+    }
+
+    onCleanup(() => {
+      position?.disconnect()
+      settlePosition = undefined
+    })
     createEventListener(document, ["transitionrun", "transitionstart", "animationstart"], (event) => {
       const target = event.target
 
@@ -514,17 +561,17 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
       schedule()
     })
-    createEventListener(document, "scroll", (event) => {
-      if (event.target === document || (event.target instanceof Element && nodes.has(event.target))) schedule()
-    }, { capture: true, passive: true })
+    createEventListener(document, "scroll", schedule, { passive: true })
     const scale = () => window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
     let density = scale()
+
     const changed = () => {
       density.removeEventListener("change", changed)
       density = scale()
       density.addEventListener("change", changed)
       schedule()
     }
+
     density.addEventListener("change", changed)
     onCleanup(() => density.removeEventListener("change", changed))
     createEventListener(window, "resize", schedule)
@@ -533,6 +580,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     }, true)
     createEventListener(window.matchMedia("(prefers-color-scheme: dark)"), "change", schedule)
     onCleanup(() => {
+      removeScroll()
       motions.clear()
       changes.disconnect()
       sizes.disconnect()

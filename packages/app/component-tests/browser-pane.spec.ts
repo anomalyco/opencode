@@ -66,6 +66,14 @@ story("reviews the actual application target only after a trusted click", async 
   await link.press("Enter")
   await expect(pane.getByRole("status").filter({ hasText: "From the conversation" })).toContainText(url)
   await expect(pane.getByRole("button", { name: "Open", exact: true })).toBeVisible()
+  // A synthetic press on the guarded button cannot answer the review, even after a real Enter on the link.
+  await pane.getByRole("button", { name: "Open", exact: true }).evaluate((button: HTMLElement) => button.click())
+  await expect(pane.getByText(url)).toBeVisible()
+  // A fresh notice reuses the bar but not the earlier notice's press or activation time.
+  await link.click()
+  const open = pane.getByRole("button", { name: "Open", exact: true })
+  await open.click()
+  await expect(pane.getByText(url)).toBeVisible()
 })
 
 story("moves the native page when a fixed-size pane changes position", async ({ page }) => {
@@ -84,13 +92,16 @@ story("moves the native page when a fixed-size pane changes position", async ({ 
 story("reconnects the observation spine after its panel reattaches", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   const x = Number(await native.getAttribute("data-x"))
+
   const detached = await page.locator("#browser-panel").evaluateHandle((box) => {
     const marker = document.createComment("panel slot")
     box.replaceWith(marker)
     const fragment = document.createDocumentFragment()
     fragment.append(box)
+
     return { marker, fragment }
   })
+
   await expect(native).toHaveAttribute("data-visible", "false")
   await detached.evaluate(({ marker, fragment }) => { marker.replaceWith(fragment) })
   await expect(native).toHaveAttribute("data-visible", "true")
@@ -100,11 +111,17 @@ story("reconnects the observation spine after its panel reattaches", async ({ pa
 
 story("a spinner inside a persistent floating surface does not measure the pane each frame", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
+
   const reads = await page.locator("#browser-panel").evaluate(async (panel) => {
     const box = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!
     const rect = box.getBoundingClientRect.bind(box)
     const count = { reads: 0 }
-    box.getBoundingClientRect = () => { count.reads++; return rect() }
+    box.getBoundingClientRect = () => {
+      count.reads++
+
+      return rect()
+    }
+
     const surface = document.createElement("div")
     surface.dataset.floatingOverlay = ""
     const spinner = document.createElement("span")
@@ -119,10 +136,42 @@ story("a spinner inside a persistent floating surface does not measure the pane 
     await cycle()
     const total = count.reads - initial
     surface.remove()
+
     return total
   })
+
   expect(reads).toBe(0)
   await expect(native).toHaveAttribute("data-visible", "true")
+})
+
+story("tracks a fixed-size pane through a sibling resize, ancestor scroll and animation", async ({ page }) => {
+  const pane = page.locator("#browser-panel")
+  const native = page.getByTestId("native-Alpha")
+  const x = Number(await native.getAttribute("data-x"))
+
+  const row = await pane.evaluateHandle((box) => {
+    const scroller = document.createElement("div")
+    const spacer = document.createElement("div")
+    const rect = box.getBoundingClientRect()
+    scroller.style.cssText = `display:flex; overflow:auto; width:${rect.width}px; height:${rect.height}px`
+    box.style.flex = `0 0 ${rect.width}px`
+    spacer.style.flex = "0 0 32px"
+    box.replaceWith(scroller)
+    scroller.append(spacer, box)
+
+    return { spacer, scroller }
+  })
+
+  await expect(native).toHaveAttribute("data-x", String(x + 32))
+  await row.evaluate(({ spacer }) => { spacer.style.flexBasis = "48px" })
+  await expect(native).toHaveAttribute("data-x", String(x + 48))
+  await row.evaluate(({ scroller }) => { scroller.scrollLeft = 19 })
+  await expect(native).toHaveAttribute("data-x", String(x + 29))
+  const motion = await row.evaluateHandle(({ scroller }) => scroller.animate([{ translate: "0" }, { translate: "-64px" }], { duration: 220, fill: "forwards" }))
+  await motion.evaluate(animation => animation.finished.then(() => undefined))
+  await expect(native).toHaveAttribute("data-x", String(x - 35))
+  await motion.evaluate(animation => animation.cancel())
+  await expect(native).toHaveAttribute("data-x", String(x + 29))
 })
 
 story("hides a native page when another takes the pane, the pane hides, or it unmounts", async ({ page }) => {
