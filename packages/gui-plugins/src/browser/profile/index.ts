@@ -30,8 +30,15 @@ import {
   type ExtensionFiles,
   type Manifest,
 } from "./extensions"
-import { ReviewedGrants, type ImportResult, type InstallResult, type ProfileExtension } from "./ipc"
-import { chromiumProfileDirectory, listSources, profileExtensions, readSource, windowsIcons } from "./sources"
+import { ReviewedGrants, type ImportResult, type InstallResult, type ProfileExtension, type SiteList } from "./ipc"
+import {
+  chromiumProfileDirectory,
+  listSources,
+  profileExtensions,
+  readSource,
+  readSourceHosts,
+  windowsIcons,
+} from "./sources"
 
 /** The partition every page of the desktop browser shares, on disk under the app's user data. */
 export const PARTITION = "persist:opencode-browser"
@@ -461,8 +468,20 @@ export async function createBrowserProfile(input: {
         icon: source.application ? icons.get(source.application) : undefined,
       }))
     },
-    async importBrowser(source: string, profile: string): Promise<ImportResult> {
-      const read = await readSource(source, profile)
+    /** The sites a browser profile has cookies for, from their hosts alone; see `SiteList`. */
+    async sites(source: string, profile: string): Promise<SiteList> {
+      const hosts = await readSourceHosts(source, profile)
+
+      if ("failure" in hosts) return { type: "failed", reason: hosts.failure === "key" ? "read" : hosts.failure }
+      // The public-suffix list loads only when a list or a chosen import needs it, not to start the browser profile.
+      const { groupSites } = await import("./sites")
+
+      return { type: "listed", sites: groupSites(hosts, Date.now() / 1000) }
+    },
+    /** Imports a browser profile's cookies, or with `sites` only those of the chosen sites. */
+    async importBrowser(source: string, profile: string, sites?: readonly string[]): Promise<ImportResult> {
+      const keep = sites ? (await import("./sites")).siteFilter(sites) : undefined
+      const read = await readSource(source, profile, keep)
 
       if ("failure" in read) return { type: "failed", reason: read.failure }
 

@@ -2,7 +2,8 @@ import type { ImportResult, InstallResult } from "./profile/ipc"
 
 /** One thing a surface asks main to do with the browser profile: the settings page, or the pane's import prompt. */
 export type Job =
-  | { readonly type: "import-browser"; readonly source: string; readonly profile: string }
+  /** Every cookie of a browser profile, or with `sites` only those of the sites the user chose. */
+  | { readonly type: "import-browser"; readonly source: string; readonly profile: string; readonly sites?: readonly string[] }
   | { readonly type: "import-file"; readonly path: string }
   | { readonly type: "install-store"; readonly url: string; readonly token?: string }
   | { readonly type: "install-folder"; readonly path: string; readonly token?: string }

@@ -255,6 +255,9 @@ export function createProfileJobs(
     remoteSignIns: () => client()?.state()?.remoteSignIns,
     /** The switch shows main's state, so a call that fails leaves it where it was. */
     shareSignIns: (enabled: boolean) => void client()?.shareSignIns({ enabled }, { signal: ctx.signal }).catch(() => undefined),
+    /** The sites one browser profile has cookies for, without any cookie's name or value. Rejects while main is away. */
+    sites: (source: string, profile: string, signal: AbortSignal) =>
+      client()?.sites({ source, profile }, { signal }) ?? Promise.reject(new Error("browser.profile.unavailable")),
     /** The extensions one Chromium profile has installed. */
     browserExtensions: (source: string, profile: string, signal: AbortSignal) =>
       client()?.browserExtensions({ source, profile }, { signal }) ?? Promise.resolve([]),
@@ -269,7 +272,7 @@ async function perform(client: Client, job: Job, signal: AbortSignal): Promise<O
     case "import-browser":
       return {
         type: "imported",
-        result: await client.importBrowser({ source: job.source, profile: job.profile }, { signal }),
+        result: await client.importBrowser({ source: job.source, profile: job.profile, sites: job.sites }, { signal }),
       }
     case "import-file":
       return { type: "imported", result: await client.importFile({ path: job.path }, { signal }) }

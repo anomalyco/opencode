@@ -70,6 +70,11 @@ test("reads Safari's binary cookie file, with its flags and 2001-based expiry", 
     protected: 0,
     failed: 0,
   })
+  // The list of the file's sites leaves every value unread.
+  expect(parseBinaryCookies(Buffer.concat([header, ...pages]), false)?.cookies.map((cookie) => [cookie.host, cookie.value])).toEqual([
+    [".github.com", ""],
+    ["example.com", ""],
+  ])
   expect(parseBinaryCookies(Buffer.from("not a cookie file"))).toBeUndefined()
 })
 

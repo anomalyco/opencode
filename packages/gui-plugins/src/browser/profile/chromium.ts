@@ -1,6 +1,7 @@
 import { createDecipheriv, createHash, pbkdf2Sync } from "node:crypto"
 import { chromiumTime, type CookieRead, type ImportedCookie } from "./cookie"
 import { snapshotDatabase } from "./database"
+import type { CookieHost } from "./sites"
 
 /**
  * The key a Chromium profile encrypts cookie values with.
@@ -89,10 +90,39 @@ type Row = {
 }
 
 /**
- * Reads a Chromium profile's cookie database from a copy, so the running browser keeps its lock. Partitioned cookies
- * (CHIPS) stay behind: Electron cannot write a cookie's partition.
+ * The hosts of a Chromium profile's cookies that an import would write, for the list of its sites. It reads the
+ * plain-text columns only: no value is read, so nothing is decrypted and no key is asked for. Partitioned cookies
+ * stay out, as an import leaves them behind.
  */
-export async function readChromiumCookies(database: string, key: ChromiumKey): Promise<CookieRead> {
+export async function readChromiumHosts(database: string): Promise<CookieHost[]> {
+  const rows = await snapshotDatabase(database, (db) => {
+    const query = db.prepare(
+      "SELECT host_key, expires_utc, has_expires, last_access_utc FROM cookies WHERE top_frame_site_key IS NULL OR top_frame_site_key = ''",
+    )
+
+    query.setReadBigInts(true)
+
+    // SAFETY: the query names Chromium's cookie table columns, whose SQLite types match the row.
+    return query.all() as { host_key: string; expires_utc: bigint; has_expires: bigint; last_access_utc: bigint }[]
+  })
+
+  return rows.map((row) => ({
+    host: row.host_key,
+    expires: Number(row.has_expires) ? chromiumTime(row.expires_utc) : undefined,
+    used: chromiumTime(row.last_access_utc) ?? 0,
+  }))
+}
+
+/**
+ * Reads a Chromium profile's cookie database from a copy, so the running browser keeps its lock. Partitioned cookies
+ * (CHIPS) stay behind: Electron cannot write a cookie's partition. With `keep`, only the rows of the hosts it keeps
+ * are decrypted and counted; the others are not read further.
+ */
+export async function readChromiumCookies(
+  database: string,
+  key: ChromiumKey,
+  keep?: (host: string) => boolean,
+): Promise<CookieRead> {
   const rows = await snapshotDatabase(database, (db) => {
     const query = db.prepare(
       "SELECT host_key, name, value, encrypted_value, path, expires_utc, has_expires, is_secure, is_httponly, samesite, top_frame_site_key FROM cookies",
@@ -107,6 +137,8 @@ export async function readChromiumCookies(database: string, key: ChromiumKey): P
 
   return rows.reduce<{ cookies: ImportedCookie[]; protected: number; failed: number; skipped: number }>(
     (result, row) => {
+      if (keep && !keep(row.host_key)) return result
+
       if (row.top_frame_site_key) {
         result.skipped++
 

@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
-import { decryptChromium, deriveCbcKey, readChromiumCookies, type ChromiumKey } from "./chromium"
+import { decryptChromium, deriveCbcKey, readChromiumCookies, readChromiumHosts, type ChromiumKey } from "./chromium"
 
 // Encrypts as Chromium does, with the SHA-256 of the host in front of the value since database version 24.
 function gcm(key: Uint8Array, host: string, value: string, digest = true) {
@@ -50,6 +50,49 @@ test("decrypts each platform's cookie values and says which ones only their brow
   expect(decryptChromium(cbc(deriveCbcKey("keyring", 1), "v11", "a.test", "x"), mac, "a.test")).toEqual({
     error: "failed",
   })
+})
+
+test("lists hosts without reading a value, and imports only the chosen sites' cookies", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "chromium-sites-"))
+  const file = path.join(directory, "Cookies")
+  const key: ChromiumKey = { type: "gcm", key: randomBytes(32) }
+  const db = new DatabaseSync(file)
+
+  try {
+    db.exec(
+      "CREATE TABLE cookies (host_key TEXT, name TEXT, value TEXT, encrypted_value BLOB, path TEXT, expires_utc INTEGER, has_expires INTEGER, is_secure INTEGER, is_httponly INTEGER, samesite INTEGER, top_frame_site_key TEXT, last_access_utc INTEGER)",
+    )
+    const insert = db.prepare("INSERT INTO cookies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    insert.run(".github.com", "user_session", "", gcm(key.key, ".github.com", "secret"), "/", 13_300_000_000_000_000, 1, 1, 1, 1, "", 13_300_000_000_000_000)
+    insert.run("github.com", "host_only", "", gcm(key.key, "github.com", "host"), "/", 0, 0, 1, 1, 1, "", 0)
+    // Values no key decrypts: listing must not try, and an import of other sites must not either.
+    insert.run("bank.test", "session", "", Buffer.from("v20aaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), "/", 0, 0, 1, 1, 1, "", 0)
+    insert.run("mail.test", "session", "", gcm(randomBytes(32), "mail.test", "x"), "/", 0, 0, 1, 1, 1, "", 0)
+    // A partitioned cookie of a chosen site stays behind and is counted.
+    insert.run("github.com", "chips", "", gcm(key.key, "github.com", "x"), "/", 0, 0, 1, 0, 0, "https://top.test", 0)
+
+    expect(await readChromiumHosts(file)).toEqual([
+      { host: ".github.com", expires: 1_655_526_400, used: 1_655_526_400 },
+      { host: "github.com", expires: undefined, used: 0 },
+      { host: "bank.test", expires: undefined, used: 0 },
+      { host: "mail.test", expires: undefined, used: 0 },
+    ])
+
+    const read = await readChromiumCookies(file, key, (host) => host.replace(/^\./, "") === "github.com")
+
+    expect(read.cookies.map((cookie) => [cookie.host, cookie.name, cookie.value])).toEqual([
+      [".github.com", "user_session", "secret"],
+      ["github.com", "host_only", "host"],
+    ])
+    expect({ protected: read.protected, failed: read.failed, skipped: read.skipped }).toEqual({
+      protected: 0,
+      failed: 0,
+      skipped: 1,
+    })
+  } finally {
+    db.close()
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+  }
 })
 
 test("reads a profile's cookie database from a copy and leaves partitioned cookies behind", async () => {

@@ -1,7 +1,8 @@
 import { createMemo, createSignal, For, Show, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
-import { choiceLabel, choiceValue, Glyph, profileChoices } from "./choices"
+import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
+import { SiteChooser } from "./site-chooser"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
 import type { ExtensionCompatibility, InstallResult, ProfileExtension, ProfileSource } from "./profile/ipc"
@@ -49,6 +50,9 @@ export default function BrowserSettings() {
 
     if (file) jobs.start({ type: "import-file", path: file })
   }
+
+  const chooseSites = (choice: Choice) =>
+    ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} close={() => dialog.close()} />)
 
   const addExtension = () =>
     ctx.dialogs.open((dialog) => <AddExtension sources={jobs.sources()} close={() => dialog.close()} />)
@@ -123,16 +127,26 @@ export default function BrowserSettings() {
                 />
               }
             >
-              <ui.Button
-                size="small"
-                disabled={blocked() || unsaved()}
-                busy={jobs.importing(choice)}
-                onClick={() =>
-                  jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
-                }
-              >
-                {ctx.t("settings.import.action")}
-              </ui.Button>
+              <div class="flex items-center gap-2">
+                <ui.Button
+                  size="small"
+                  variant="ghost"
+                  disabled={!jobs.available() || unsaved()}
+                  onClick={() => chooseSites(choice)}
+                >
+                  {ctx.t("settings.import.choose")}
+                </ui.Button>
+                <ui.Button
+                  size="small"
+                  disabled={blocked() || unsaved()}
+                  busy={jobs.importing(choice)}
+                  onClick={() =>
+                    jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
+                  }
+                >
+                  {ctx.t("settings.import.action")}
+                </ui.Button>
+              </div>
             </ui.SettingsRow>
           )}
         </For>

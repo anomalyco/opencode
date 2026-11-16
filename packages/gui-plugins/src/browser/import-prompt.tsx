@@ -8,6 +8,7 @@ import { choiceLabel, Glyph, profileChoices, type Choice } from "./choices"
 import type definition from "./index"
 import { createProfileJobs } from "./jobs"
 import { importedCookies, importLoss } from "./jobs-machine"
+import { SiteChooser } from "./site-chooser"
 
 /**
  * The pane's offer to bring sign-ins from the browser the user already uses, until they import or decline once. A
@@ -67,6 +68,14 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
 
   const run = (choice: Choice) =>
     jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
+
+  // The dialog runs its own import and outlives this offer, which goes once cookies came in.
+  const imported = props.imported
+
+  const chooseSites = (choice: Choice) =>
+    ctx.dialogs.open((dialog) => (
+      <SiteChooser choices={choices()} initial={choice} imported={imported} close={() => dialog.close()} />
+    ))
 
   return (
     <Show
@@ -155,6 +164,9 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
               )}
             </Show>
             <div class="flex items-center gap-1">
+              <ui.Button size="small" variant="ghost" disabled={blocked()} onClick={() => chooseSites(first())}>
+                {ctx.t("signins.choose")}
+              </ui.Button>
               <ui.Button size="small" variant="ghost" onClick={decline}>
                 {ctx.t("signins.dismiss")}
               </ui.Button>
@@ -222,6 +234,9 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
                   <Show when={choices().length > 1}>
                     <Menu.Separator />
                   </Show>
+                  <Menu.Item disabled={blocked()} onSelect={() => chooseSites(first())}>
+                    {ctx.t("signins.choose")}
+                  </Menu.Item>
                   <Menu.Item onSelect={settings}>{ctx.t("signins.more")}</Menu.Item>
                 </Menu.Content>
               </Menu.Portal>
