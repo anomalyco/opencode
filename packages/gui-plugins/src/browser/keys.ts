@@ -35,7 +35,7 @@ const shellKeys = ["t", "w", "l", "f", "g", "n", "1", "2", "3", "4", "5", "6", "
 // Shifted chords with the platform's modifier that belong to the app shell rather than the page: reopening a tab,
 // switching side-panel tabs, toggling the side panel, opening the command palette, or running session commands. New Window and Close Window
 // (⇧⌘N, ⇧⌘W) stay unclaimed: only their menu accelerators handle them, and claiming a chord also blocks the menu.
-const shellShiftKeys = ["t", "[", "]", "g", "p", "l", "e", "o", "s"]
+const shellShiftKeys = ["t", "[", "]", "r", "g", "p", "l", "e", "o", "s"]
 
 // The side panel's launchers: Review, Browser and Open file, with ⌃⌘ on macOS and Ctrl+Alt elsewhere. Only a typed
 // Latin letter counts, so AltGr (Ctrl+Alt) typing on other layouts stays with the page.
@@ -64,20 +64,11 @@ export function pageLetter(input: Pick<Electron.Input, "key" | "code">) {
  * reloads itself; left to the window, the Reload menu item would reload the whole app.
  */
 export function pageReload(input: PageKey, mac: boolean) {
-  if (input.alt) return
+  if (input.alt || input.shift) return false
 
-  if (input.key === "F5") {
-    if (input.meta || input.shift) return
+  if (input.key === "F5") return !input.meta && !input.control
 
-    if (!input.control) return "normal"
-
-    if (!mac) return "hard"
-
-    return
-  }
-
-  if ((mac ? input.meta && !input.control : input.control && !input.meta) && pageLetter(input) === "r")
-    return input.shift ? "hard" : "normal"
+  return (mac ? input.meta && !input.control : input.control && !input.meta) && pageLetter(input) === "r"
 }
 
 /**
@@ -91,6 +82,8 @@ export function pageShortcut(input: PageKey, mac: boolean): PageShortcut | undef
   const launcher = mac ? input.meta && input.control && !input.alt : input.control && input.alt && !input.meta
 
   const matched =
+    (!mac && mod && !input.alt && !input.shift && key === "f5") ||
+    (mac && mod && input.alt && !input.shift && key === "r") ||
     (!mac && key === "f3" && !input.control && !input.meta && !input.alt) ||
     (input.control && !input.meta && !input.alt && (key === "tab" || (key === "`" && !input.shift))) ||
     (launcher && !input.shift && launcherKeys.includes(input.key.toLowerCase())) ||

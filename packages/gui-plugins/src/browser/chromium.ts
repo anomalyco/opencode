@@ -347,11 +347,9 @@ export function createBrowserPage(
     activity.userInputAt = Date.now()
     void choosers.update().catch(() => undefined)
 
-    const refresh = pageReload(input, process.platform === "darwin")
-
-    if (refresh) {
+    if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
-      void reload(options.signal, refresh === "hard").catch((error: Error) => publish(error.message))
+      void options.menu.navigate("reload").catch((error: Error) => publish(error.message))
 
       return
     }
@@ -1029,8 +1027,6 @@ export function createBrowserPage(
   const reload = async (signal = options.signal, ignoreCache = false) => {
     const tab = state()
 
-    if (navigation.interrupt("reload", documentState.status === "restoring" ? documentState.url : undefined)) return
-
     if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url, true, signal)
     const actual = contents.getURL()
 
@@ -1114,23 +1110,11 @@ export function createBrowserPage(
       await contents.session.clearAuthCache()
 
       if (closed()) return
-      await reload()
+      await options.menu.navigate("reload")
       // A slow page still cleared; the count then reads what it set so far.
       await waitFor(() => closed() || !contents.isLoading(), new AbortController().signal, 30_000).catch(
         () => undefined,
       )
-    },
-    async clearCache(address: string) {
-      const origin = destinationOrigin(address)
-
-      if (closed() || !origin || destinationOrigin(contents.getURL()) !== origin) throw new Error("browser.site.changed")
-      // Session.clearCache() clears the entire partition; clearData can filter the HTTP cache by origin.
-      await contents.session.clearData({
-        origins: [origin], originMatchingMode: "origin-in-all-contexts", dataTypes: ["cache", "serviceWorkers"],
-      })
-      await contents.session.clearStorageData({ origin, storages: ["cachestorage"] })
-
-      if (!closed() && destinationOrigin(contents.getURL()) === origin) await reload(options.signal, true)
     },
     /** Reports the page's icon and zoom when either changed since the last report. */
     detail,

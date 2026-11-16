@@ -1,5 +1,5 @@
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
-import type { Plugin } from "@opencode/plugin/gui/main"
+import { MenubarItem, type Plugin } from "@opencode/plugin/gui/main"
 import type { Pane } from "./pane"
 import type { Profile } from "./profile"
 import { RefsStore } from "./refs"
@@ -130,6 +130,21 @@ const setup: Plugin.MainSetup = (ctx) => {
     dispatch({ type: "load.requested" })
 
     return pane()
+  }
+
+  if (process.platform === "darwin") {
+    const reload = (window?: number) => {
+      const current = selectPane(paneState)
+
+      return current.kind === "ready" ? current.pane.menuReload(window) : undefined
+    }
+
+    ctx.add(MenubarItem, {
+      menu: "view", id: "hardReload", after: "view.reload",
+      get label() { return ctx.t("menu.hardReload") },
+      enabled: () => !!reload(ctx.windows.focused()?.id),
+      run: window => { void reload(window?.id)?.().catch((error: Error) => ctx.log.write("warn", error.message)) },
+    })
   }
 
   const provider = ctx.provide(BrowserPane, {

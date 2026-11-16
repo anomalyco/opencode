@@ -123,6 +123,15 @@ export function createBrowserPane(input: {
   const warned = new Set<string>()
 
   return {
+    menuReload(window: number | undefined) {
+      for (const [binding, handle] of handles) {
+        if (handle.window !== window) continue
+        const tab = inventory(binding).focusedTabID
+
+        if (tab && page(binding, tab)?.view.getVisible())
+          return () => execute(binding, { action: { type: "reload", tabID: tab, ignoreCache: true }, files: [] }, handle.abort.signal, "user")
+      }
+    },
     async register(window: number, binding: string, target: Target) {
       const server = input.serverEndpoints.get(target.server)
 
@@ -412,7 +421,16 @@ export function createBrowserPane(input: {
     },
     async clearCache(window: number, binding: string, tabID: Browser.TabID, address: string) {
       owned(window, binding)
-      await page(binding, tabID)?.clearCache(address)
+      const handle = handles.get(binding)
+      const origin = destinationOrigin(address)
+      const current = () => page(binding, tabID)?.contents.getURL() ?? selectTabSlot(machine.state, binding, tabID)?.tab.url
+
+      if (!handle || !origin || destinationOrigin(current() ?? "") !== origin) throw new Error("browser.site.changed")
+      const session = electron.session.fromPartition(handle.partition)
+      await session.clearData({ origins: [origin], originMatchingMode: "origin-in-all-contexts", dataTypes: ["cache", "serviceWorkers"] })
+
+      if (handle.abort.signal.aborted || destinationOrigin(current() ?? "") !== origin) return
+      await execute(binding, { action: { type: "reload", tabID, ignoreCache: true }, files: [] }, handle.abort.signal, "user")
     },
     async clearSite(window: number, binding: string, tabID: Browser.TabID) {
       owned(window, binding)
