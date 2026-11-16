@@ -326,9 +326,12 @@ export function createBrowserPage(
 
   if (detachNetwork) constructing.defer(detachNetwork)
   let nativeMenu = true
+  // Tab focus and browser chrome commands also update activity.userInputAt. Neither is input to this document.
+  let documentInput = false
   contents.on("before-mouse-event", (_event, mouse) => {
     // Unlike keyboard events, Electron 44 does not expose the Blink modifiers on mouse events.
     if (mouse.type === "mouseDown" && activity.agentRuns === 0) {
+      documentInput = true
       nativeMenu = true
       activity.userInputAt = Date.now()
       void choosers.update().catch(() => undefined)
@@ -340,6 +343,7 @@ export function createBrowserPage(
 
     if (!hardware || input.type !== "keyDown") return
 
+    documentInput = true
     nativeMenu = true
     activity.userInputAt = Date.now()
     void choosers.update().catch(() => undefined)
@@ -458,7 +462,7 @@ export function createBrowserPage(
 
   constructing.defer(notices.clear)
   const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
-  const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
+  const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 }), documentInput))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
   let dialogGate = createDialogGateState()
@@ -656,6 +660,7 @@ export function createBrowserPage(
   // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
   // we woke on the first agent command, so wake its replacement too.
   contents.on("did-navigate", () => {
+    documentInput = false
     const url = contents.getURL()
 
     if (options.artifacts?.display(url)) artifactHost = new URL(url).host
@@ -669,6 +674,7 @@ export function createBrowserPage(
   )
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame) return
+    documentInput = false
     const report = (address: string) => dispatch({ type: "navigation.in-page", url: address, title: pageTitle(address), isMainFrame })
 
     if (!/^(?:oc-preview|file):/i.test(url)) return report(url)

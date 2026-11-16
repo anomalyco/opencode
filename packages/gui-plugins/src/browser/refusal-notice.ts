@@ -35,14 +35,18 @@ export function popupActivated(report: { url: string; userGesture: boolean } | u
 }
 
 /** A refused Chromium navigation is an absolute destination, never text to turn into a web search or host name. */
-export function navigationNotice(url: string, policy: Policy, owner: "agent" | "user" | "conversation" = "user") {
+export function navigationNotice(url: string, policy: Policy, owner: "agent" | "user" | "conversation" = "user", documentInput = false) {
   if (URL.canParse(url) && /^https?:$/i.test(new URL(url).protocol) && !destinationOrigin(url))
     return { reason: "browser.address.credentials" } as const
 
   const source = owner === "conversation" ? "conversation" : "page"
   const action = externalTarget(url, source)
 
-  if (action) return { reason: "external", target: url, source, action: owner === "agent" ? "copy" : action } as const
+  if (action) {
+    const unattendedEditor = !documentInput && pageOnly.includes(url.slice(0, url.indexOf(":")).toLowerCase())
+
+    return { reason: "external", target: url, source, action: owner === "agent" || unattendedEditor ? "copy" : action } as const
+  }
 
   const reason = policy.fileRoots?.length || policy.remote ? "browser.address.workspace" : "browser.address.web"
 

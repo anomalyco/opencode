@@ -81,3 +81,14 @@ test("only a short, wholly visible ASCII target can launch an app", () => {
   expect(externalTarget(`obsidian:${"W".repeat(191)}`)).toBe("open")
   expect(externalTarget(`obsidian:${"W".repeat(192)}`)).toBe("copy")
 })
+
+test("editor redirects without a person's input in the current page stay copy-only", () => {
+  for (const scheme of ["vscode", "vscode-insiders", "cursor", "zed", "jetbrains"]) {
+    const url = `${scheme}:fixture`
+    expect(navigationNotice(url, {}, "user")).toMatchObject({ source: "page", action: "copy" })
+    expect(navigationNotice(url, {}, "user", true)).toMatchObject({ action: "open" })
+    expect(navigationNotice(url, {}, "agent", true)).toMatchObject({ action: "copy" })
+    expect(navigationNotice(url, {}, "conversation", true)).toMatchObject({ action: "copy" })
+  }
+  expect(navigationNotice("zoommtg:fixture", {}, "user")).toMatchObject({ action: "open" })
+})
