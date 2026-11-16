@@ -27,8 +27,9 @@ pub fn run(_context: &Context, args: &PluginArgs) -> error::Result<()> {
     }
 }
 
-/// Runs `plugin add` on the TypeScript binary, then names each entry it added to `cli.json`: TS adds a package there
-/// only when it has a TUI part and no server part, and `opencode-native` loads no TUI plugin named by npm package.
+/// Runs `plugin add` on the TypeScript binary, then names each entry it added to `cli.json` while the JS host is off:
+/// TS adds a package there only when it has a TUI part and no server part, and `opencode-native` loads such a package
+/// from the cache the install filled only on its JS host (js-npm).
 fn add() -> error::Result<()> {
     let config = CliConfig::new(&Paths::from_env()?);
     let before = targets(&config);
@@ -37,13 +38,13 @@ fn add() -> error::Result<()> {
     if code != 0 {
         return Err(Exit(u8::try_from(code).unwrap_or(1)).into());
     }
-    let plugins = config.path().parent().map(|dir| dir.join("plugins")).unwrap_or_default();
+    if std::env::var("OPENCODE_PLUGIN_JS").as_deref() == Ok("1") {
+        return Ok(());
+    }
     for added in targets(&config).into_iter().filter(|target| !before.contains(target)) {
         println!(
-            "opencode-native will not load TUI plugin \"{added}\": it does not install or load TUI plugins named by npm \
-             package. The TypeScript client (opencode) loads it. To try it in opencode-native, install the package as a \
-             directory under {} and set OPENCODE_PLUGIN_JS=1.",
-            plugins.display()
+            "opencode-native loads TUI plugin \"{added}\" on its JS host, which is off: set OPENCODE_PLUGIN_JS=1 (with \
+             Bun installed) to load it. The TypeScript client (opencode) loads it as it is."
         );
     }
     Ok(())
