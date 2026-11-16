@@ -64,11 +64,25 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
   expect(result).toEqual([
     "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
     '<img data-local-image="safe.png"><a data-app-link="javascript:alert(3)">unsafe</a>',
-    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
-    '<form name="user-content-document" id="user-content-location" data-markdown-contain=""><input name="user-content-cookie" data-markdown-contain=""></form>',
+    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer" class="external-link">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
+    '<form id="user-content-location" data-markdown-contain=""><input disabled=""></form>',
     '<math data-markdown-contain=""><mrow data-markdown-contain=""><mi data-markdown-contain="">x</mi><mo data-markdown-contain="">+</mo><mn data-markdown-contain="">1</mn></mrow></math>',
     '<svg viewBox="0 0 10 10" data-markdown-contain=""><path d="M0 0L10 10" data-markdown-contain=""></path></svg>',
   ])
+})
+
+story("authored HTML cannot supply application behavior attributes", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const names = ["data-owns-keyboard", "data-owns-escape", "data-prevent-autofocus", "data-floating-overlay", "data-app-link", "data-local-link", "data-local-image", "data-slot", "data-component", "data-future-marker", "aria-owns", "aria-controls", "aria-modal", "aria-hidden", "role", "class", "tabindex", "contenteditable", "draggable", "inert", "hidden", "popover", "autofocus", "slot", "part", "exportparts", "for", "form", "formaction", "command", "commandfor", "accesskey"]
+    const box = document.createElement("div")
+    box.innerHTML = sanitizeMarkdown(`<a href="#sample" id="sample" name="legacy" ${names.map(n => `${n}="fixture"`).join(" ")}>sample</a><label for="sample">label</label>`)
+    const a = box.querySelector("a")!
+
+    return { retained: names.filter(n => a.hasAttribute(n)), id: a.id, name: a.name, labelFor: box.querySelector("label")?.htmlFor, custom: sanitizeMarkdown('<a is="fixture-link">custom label</a>') }
+  }, fixture)
+
+  expect(result).toEqual({ retained: [], id: "user-content-sample", name: "user-content-legacy", labelFor: "", custom: "custom label" })
 })
 
 story("limits authored presentation to text and keeps application link hit areas inline", async ({ page }) => {
@@ -169,7 +183,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
   }, fixture)
 
   expect(result.before).toBe(
-    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><img data-local-image="safe.png">',
+    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer" class="external-link">external</a><img data-local-image="safe.png">',
   )
   expect(result.renders).toEqual([
     { root: "svg", text: expect.stringContaining("Start"), unsafe: 0, links: [], markdown: result.before },

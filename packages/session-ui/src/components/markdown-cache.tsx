@@ -46,6 +46,8 @@ const rendered = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 
 if (typeof window !== "undefined" && purifier.isSupported) {
   const appLinks = new WeakMap<HTMLAnchorElement, string>()
+  const files = new WeakMap<HTMLAnchorElement, string>()
+  const images = new WeakMap<HTMLImageElement, string>()
 
   const prose = new Set(
     "a b blockquote br center code col colgroup dd del details div dl dt em h1 h2 h3 h4 h5 h6 hr i img input kbd li mark ol p pre s small span strong sub summary sup table tbody td th thead tr ul".split(
@@ -75,10 +77,39 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
   }
 
-  purifier.setConfig(config)
+  purifier.setConfig({ ...config, ALLOW_DATA_ATTR: false, ALLOW_ARIA_ATTR: false })
   // These fragments still pass DOMPurify's structural/URI checks, but their renderer owns their inline geometry.
   rendered.setConfig({ ...config, RETURN_DOM_FRAGMENT: true })
   purifier.addHook("uponSanitizeAttribute", (node, attr) => {
+    // Never import identifiers from the app's styling, focus, shortcut, form or plugin protocols. This allowlist
+    // is for document content only. DOMPurify still validates every value and namespaces id and name.
+    const tag = node.localName
+    const name = attr.attrName
+
+    const allowed =
+      /^(style|id|dir|lang|title|align)$/.test(name) ||
+      (tag === "a" &&
+        (name === "href" ||
+          name === "download" ||
+          name === "name" ||
+          name === "rel" ||
+          (name === "target" && attr.attrValue === "_blank"))) ||
+      (tag === "img" && /^(src|alt|height|width)$/.test(name)) ||
+      (/^(table|col|th|td)$/.test(tag) && /^(width|colspan|rowspan|scope)$/.test(name)) ||
+      (tag === "ol" && /^(start|reversed|type)$/.test(name)) ||
+      (tag === "li" && name === "value") ||
+      (tag === "details" && name === "open") ||
+      (tag === "input" &&
+        (name === "disabled" || name === "checked" || (name === "type" && attr.attrValue === "checkbox"))) ||
+      (tag === "svg" && /^(viewbox|preserveaspectratio|xmlns)$/.test(name)) ||
+      (tag === "path" && name === "d")
+
+    if (!allowed) {
+      attr.keepAttr = false
+
+      return
+    }
+
     const sized = /^(?:IMG|TABLE|TH|TD|COL)$/.test(node.nodeName)
 
     if (attr.attrName === "width" && sized) {
@@ -110,11 +141,12 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     attr.keepAttr = !!attr.attrValue
   })
   purifier.addHook("beforeSanitizeAttributes", (node) => {
-    if (node instanceof Element) node.removeAttribute("data-app-link")
+    // Removing `is` does not clear Chromium's internal customized-built-in name; serialization can put it back.
+    if (node instanceof Element && node.hasAttribute("is"))
+      return node.replaceWith(node.ownerDocument.createTextNode(node.textContent ?? ""))
 
     if (node instanceof HTMLAnchorElement) {
       // Local file links never navigate the document; the host decides how to open them.
-      node.removeAttribute("data-local-link")
       const href = node.getAttribute("href") ?? ""
       const path = localLinkPath(href)
 
@@ -133,9 +165,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       }
 
       if (!path) return
-      node.setAttribute("data-local-link", path)
-      node.setAttribute("role", "link")
-      node.setAttribute("tabindex", "0")
+      files.set(node, path)
       node.removeAttribute("href")
       node.removeAttribute("target")
 
@@ -144,40 +174,39 @@ if (typeof window !== "undefined" && purifier.isSupported) {
 
     if (!(node instanceof HTMLImageElement)) return
     // Local paths are not browser URLs. Keep them inert until the host reads them.
-    node.removeAttribute("data-local-image")
     const path = localImagePath(node.getAttribute("src") ?? "")
 
     if (!path) return
-    node.setAttribute("data-local-image", path)
+    images.set(node, path)
     node.removeAttribute("src")
     node.removeAttribute("srcset")
   })
   purifier.addHook("afterSanitizeAttributes", (node: Element) => {
-    // Plain prose stays in normal flow. Mark anything that could take on app CSS (classes, IDs, data
-    // attributes or an unfamiliar element) for a containing block that clips fixed descendants too. This marker
-    // only ever *adds* containment. Generated math and code do not pass through this authored-content hook.
-    if (node instanceof Element && (node.hasAttributes() || !prose.has(node.localName)) && node.localName !== "body") {
-      const plain =
-        prose.has(node.localName) &&
-        node
-          .getAttributeNames()
-          .every(
-            (name) =>
-              /^(align|alt|checked|disabled|dir|download|height|href|open|rel|src|start|style|target|title|width)$/.test(
-                name,
-              ) ||
-              (node.localName === "input" && name === "type" && node.getAttribute("type") === "checkbox") ||
-              (node.localName === "a" && name === "class" && node.getAttribute("class") === "external-link") ||
-              (node.localName === "a" &&
-                ["data-local-link", "role", "tabindex"].includes(name) &&
-                node.hasAttribute("data-local-link")) ||
-              (node.localName === "img" && name === "data-local-image"),
-          )
+    // This application-owned marker only adds containment. Renderer fragments never pass through this hook.
+    if (
+      node instanceof Element &&
+      node.localName !== "body" &&
+      (!prose.has(node.localName) || node.hasAttribute("id") || node.hasAttribute("name"))
+    )
+      node.setAttribute("data-markdown-contain", "")
 
-      if (!plain) node.setAttribute("data-markdown-contain", "")
+    if (node instanceof HTMLInputElement) node.disabled = true
+
+    if (node instanceof HTMLImageElement) {
+      const path = images.get(node)
+
+      if (path) node.dataset.localImage = path
     }
 
     if (!(node instanceof HTMLAnchorElement)) return
+    const file = files.get(node)
+
+    if (file) {
+      node.dataset.localLink = file
+      node.setAttribute("role", "link")
+      node.tabIndex = 0
+    }
+
     const href = appLinks.get(node)
 
     // Never restore a stripped href. Preserve the original as inert text, including characters DOMPurify or the
@@ -192,6 +221,8 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     }
 
     if (node.target !== "_blank") return
+
+    if (/^https?:$/.test(node.protocol)) node.classList.add("external-link")
 
     const rel = node.getAttribute("rel") ?? ""
     const set = new Set(rel.split(/\s+/).filter(Boolean))
