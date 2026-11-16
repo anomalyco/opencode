@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
+import type { SessionInfo } from "@opencode/client"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { locationKey, useData } from "./data"
@@ -120,8 +121,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const session = data.session.get(sessionID)
       return session?.title ?? persisted ?? fallback ?? (session ? withTimestampedFallback(session) : undefined)
     }
-    const isUnread = (sessionID: string) => {
-      const info = data.session.get(sessionID)
+    const isUnread = (info: SessionInfo | undefined) => {
       return info?.time.idle !== undefined && (info.time.viewed === undefined || info.time.idle > info.time.viewed)
     }
     const family = (sessionID: string) => {
@@ -150,17 +150,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const sessionID = current()
       return sessionID !== undefined && !state().tabs.some((tab) => tab.sessionID === sessionID)
     }, false)
-    const status = (sessionID: string) => {
+    const status = (sessionID: string, fallback?: SessionInfo) => {
       const session = root(sessionID)
       const members = family(session)
+      const info = data.session.get(session) ?? fallback
       return {
         // Unread reads the root session only: background subagent completions wake the parent,
         // whose own idle transition then carries the signal.
-        unread: !isUnread(session)
-          ? undefined
-          : data.session.get(session)?.outcome === "failed"
-            ? ("error" as const)
-            : ("activity" as const),
+        unread: !isUnread(info) ? undefined : info?.outcome === "failed" ? ("error" as const) : ("activity" as const),
         promptPulse: promptPulses()[session] ?? 0,
         attention: members.some((id) => (data.session.permission.list(id)?.length ?? 0) > 0)
           ? ("permission" as const)
@@ -239,7 +236,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       if (route.data.type !== "session" || route.data.sessionID === "dummy") return
       const sessionID = root(route.data.sessionID)
       const idle = data.session.get(sessionID)?.time.idle
-      if (idle === undefined || !isUnread(sessionID) || acknowledged.get(sessionID) === idle) return
+      if (idle === undefined || !isUnread(data.session.get(sessionID)) || acknowledged.get(sessionID) === idle) return
       // Record before the request so event-driven re-runs don't re-post the same watermark.
       acknowledged.set(sessionID, idle)
       void client.api.session.view({ sessionID, idle }).then(
