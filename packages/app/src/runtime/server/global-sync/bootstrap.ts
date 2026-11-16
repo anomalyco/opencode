@@ -34,18 +34,30 @@ export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi) =>
       ),
   })
 
-export function loadProjects(input: {
-  scope: ServerScope
-  project: ProjectApi
-  setGlobalStore: SetStoreFunction<GlobalStore>
-  queryClient: QueryClient
-}) {
-  return input.queryClient.fetchQuery(loadProjectsQuery(input.scope, input.project)).then((data) =>
-    input.setGlobalStore(
-      "project",
-      data.map((project) =>
-        withWorktreeInventory(project, input.queryClient.getQueryData(worktreeInventoryKey(input.scope, project.id))),
-      ),
+export async function loadProjects(
+  input: {
+    scope: ServerScope
+    project: ProjectApi
+    setGlobalStore: SetStoreFunction<GlobalStore>
+    queryClient: QueryClient
+  },
+  options?: { afterRegistration: true },
+) {
+  const query = loadProjectsQuery(input.scope, input.project)
+  const fetch = () => input.queryClient.fetchQuery(query)
+  const current = input.queryClient.getQueryState(query.queryKey)
+
+  // An existing request may have read the list before the selected folder was registered.
+  if (options?.afterRegistration && current && current.fetchStatus !== "idle") {
+    await fetch().catch(() => undefined)
+  }
+
+  const data = await fetch()
+
+  input.setGlobalStore(
+    "project",
+    data.map((project) =>
+      withWorktreeInventory(project, input.queryClient.getQueryData(worktreeInventoryKey(input.scope, project.id))),
     ),
   )
 }
