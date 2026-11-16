@@ -1,6 +1,7 @@
 import { homedir } from "node:os"
 import { navigationTurn, replacementNavigation } from "./navigation-turn"
 import { accessibilitySnapshot } from "./snapshot"
+import { documentRefs } from "./refs"
 import { agentRendering } from "./agent-rendering"
 import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
@@ -433,7 +434,7 @@ export function createBrowserPage(
     Array.from(contexts.values()).some((context) => context.id === id && context.sessionID === sessionID))
 
   const profiling = createProfiling(contents, cdp, files, sourceURLs, options.shared)
-  const refs = new Map<string, Element>()
+  const refs = documentRefs()
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
   // the element until the document changes.
   const picked = new Map<string, Element>()
@@ -1760,7 +1761,7 @@ export function createBrowserPage(
     if (!value)
       throw new CodedError(
         Browser.FailureCode.staleRef,
-        "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from that tab's newest snapshot. Do not reuse refs after navigation or a newer snapshot.",
+        "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from the current document.",
       )
 
     return value
@@ -1864,7 +1865,7 @@ export function createBrowserPage(
     return object.object.objectId
   }
 
-  async function rect(element: Element, scroll = false) {
+  async function rect(element: Element, scroll = false, knownTree?: Awaited<ReturnType<typeof frames>>) {
     if (scroll) {
       await cdp.send("DOM.scrollIntoViewIfNeeded", { backendNodeId: element.backendID }, element.sessionID)
       // Input is routed by the last rendered frame, so let one render at the new scroll position.
@@ -1882,7 +1883,7 @@ export function createBrowserPage(
       ),
     }
 
-    const tree = await frames()
+    const tree = knownTree ?? await frames()
     let frame = tree.find((frame) => frame.id === element.frameID)
 
     while (frame?.parentID) {
@@ -2261,12 +2262,14 @@ export function createBrowserPage(
       text: action.type === "find" ? action.text : undefined,
       interactive: action.interactive,
       maxLines: action.maxLines,
-      previous: byNode(refs),
+      maxChars: action.maxChars,
+      signal,
+      previous: refs.previous(frameID, sessionID),
       picked: byNode(picked),
       ref: options.shared.ref,
       box: action.type === "snapshot" && action.boxes ? async (backendID) => {
         abortError(signal)
-        const box = await rect({ backendID, frameID, sessionID }).catch(() => undefined)
+        const box = await rect({ backendID, frameID, sessionID }, false, tree).catch(() => undefined)
 
         return box ? ` box=${JSON.stringify(box)}` : ""
       } : undefined,
@@ -2275,8 +2278,7 @@ export function createBrowserPage(
     abortError(signal)
 
     if (documentGeneration(documentState) !== generation) throw new CodedError(Browser.FailureCode.documentChanged, "Document changed during snapshot; request a fresh snapshot.")
-    refs.clear()
-    snapshot.refs.forEach((backendID, ref) => refs.set(ref, { backendID, frameID, sessionID }))
+    refs.add(frameID, sessionID, snapshot.refs)
 
     return { content: snapshot.content, truncated: snapshot.truncated }
   }

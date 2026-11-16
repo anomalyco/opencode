@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import type { Protocol } from "devtools-protocol"
 import { accessibilitySnapshot } from "./snapshot"
+import { documentRefs } from "./refs"
 
 function node(id: number, role: string, name: string, ...children: number[]): Protocol.Accessibility.AXNode {
   return {
@@ -20,15 +21,25 @@ function options() {
 }
 
 test("interactive find keeps controls and their context, not static text or picked decoration", async () => {
-  const tree = [node(1, "navigation", "Projects", 2, 3, 9), node(2, "StaticText", "intro".repeat(100)), node(3, "row", "", 4, 5), node(4, "cell", "Atlas"), node(5, "button", "Edit"), node(9, "link", "Next")]
+  const tree = [
+    node(1, "navigation", "Projects", 2, 3, 9),
+    node(2, "StaticText", "intro".repeat(100)),
+    node(3, "row", "", 4, 5),
+    node(4, "cell", "Atlas"),
+    node(5, "button", "Edit"),
+    node(9, "link", "Next"),
+  ]
+
   const setup = options()
   setup.picked.set(2, "e42")
   const all = await accessibilitySnapshot(tree, { ...setup, interactive: true, maxLines: 1 })
-  expect(all.content).toBe('@e1 [button] "Edit" in navigation "Projects" / row "Atlas"')
+  expect(all.content).toStartWith('@e1 [button] "Edit" in navigation "Projects" / row "Atlas"')
+  expect(all.content).toContain("1 interactive")
+  expect(all.content).not.toContain("intro")
   expect(all.truncated).toBe(true)
-  expect([...all.refs.keys()]).toEqual(["e1"])
+  expect(all.refs.get("e2")).toBe(1)
   const found = await accessibilitySnapshot(tree, { ...setup, interactive: true, text: "NEXT", maxLines: 1 })
-  expect(found.content).toBe('@e2 [link] "Next" in navigation "Projects"')
+  expect(found.content).toBe('@e3 [link] "Next" in navigation "Projects"')
   expect(found.truncated).toBe(false)
   expect((await accessibilitySnapshot(tree, { ...setup, maxLines: 2 })).content.split("\n")).toHaveLength(2)
 })
@@ -53,10 +64,81 @@ test("budgets whole lines, not traversal: find reaches the last item of a trunca
   const setup = options()
   const page = await accessibilitySnapshot(tree, setup)
   expect(page.truncated).toBe(true)
-  expect(page.content.length).toBeLessThanOrEqual(100_000)
-  expect(page.content).toEndWith('"')
+  expect(page.content.length).toBeLessThanOrEqual(20_000)
+  expect(page.content).toEndWith("maxChars/maxLines.")
   expect(page.content).not.toContain(' 1999"')
   const match = await accessibilitySnapshot(tree, { ...setup, text: " 1999" })
   expect(match.truncated).toBe(false)
   expect([...match.refs.values()]).toEqual([2000])
+})
+
+test("orders landmarks across empty branching wrappers, follows aria-owns cycles once, and never enters an editor", async () => {
+  const tree = [
+    node(1, "generic", "", 2, 3, 4),
+    node(2, "navigation", "Menu", 5),
+    node(3, "main", "Body", 1, 6),
+    node(4, "dialog", "Confirm"),
+    node(5, "textbox", "Password", 7),
+    node(6, "StaticText", "Body"),
+    node(7, "StaticText", "secret"),
+  ]
+
+  const result = await accessibilitySnapshot(tree, options())
+  expect(result.content.split("\n").map((s) => s.trim().split(" ")[1])).toEqual([
+    "[dialog]",
+    "[main]",
+    "[navigation]",
+    "[textbox]",
+  ])
+  expect(result.content).not.toContain("secret")
+  expect((await accessibilitySnapshot(tree, { ...options(), text: "secret" })).content).toBe("")
+})
+
+test("summarizes collections, preserves late selections, and expands a scoped collection", async () => {
+  const items = Array.from({ length: 30 }, (_, i) => node(i + 2, "option", `City ${i}`))
+  items[29].properties = [{ name: "selected", value: { type: "boolean", value: true } }]
+  const tree = [node(1, "listbox", "Cities", ...items.map((_, i) => i + 2)), ...items]
+  const result = await accessibilitySnapshot(tree, options())
+  expect(result.content).toContain('"City 29" selected=true')
+  expect(result.content).not.toContain('"City 27"')
+  expect(result.content).toContain("+4 more in @e1 [listbox]")
+  expect(result.content).toContain("4 nodes omitted (4 interactive)")
+  const scoped = await accessibilitySnapshot(tree, { ...options(), root: 1 })
+  expect(scoped.truncated).toBe(false)
+  expect(scoped.content).toContain('"City 27"')
+})
+
+test("prefers a nonignored root and can find a known ref after its role changes", async () => {
+  const first = { ...node(1, "generic", ""), ignored: true, nodeId: "ignored" }
+
+  const result = await accessibilitySnapshot([first, node(1, "group", "Renamed")], {
+    ...options(),
+    root: 1,
+    text: "@e9",
+    previous: new Map([[1, "e9"]]),
+  })
+
+  expect(result.content).toBe('@e9 [group] "Renamed"')
+})
+
+test("snapshot, find, then scope by the first ref without invalidating the second", async () => {
+  const live = documentRefs()
+  const tree = [node(1, "generic", "", 2, 3), node(2, "button", "First"), node(3, "button", "Second")]
+  const setup = options()
+
+  const read = async (extra: { maxLines?: number; text?: string; root?: number }) => {
+    const result = await accessibilitySnapshot(tree, { ...setup, ...extra, previous: live.previous("main") })
+    live.add("main", undefined, result.refs)
+
+    return result.content
+  }
+
+  await read({ maxLines: 1 })
+  await read({ text: "Second" })
+  expect(await read({ root: live.get("e1")?.backendID })).toBe('@e1 [button] "First"')
+  expect(live.get("e2")?.backendID).toBe(3)
+  expect(await read({})).toContain('@e2 [button] "Second"')
+  live.clear()
+  expect(live.get("e1")).toBeUndefined()
+  expect(live.previous("main").size).toBe(0)
 })
