@@ -725,8 +725,22 @@ story(
     await expect(reloads).toHaveText("0")
     await expect(reviews).toHaveText("0")
 
-    // The prompt is modal for its tab only: on the address field the pane's shortcuts work and the prompt stays open.
+    // F6, Shift+F6 and the address shortcut leave the prompt open for the address field, as in Chrome; Tab comes back.
     const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+
+    for (const chord of ["F6", "Shift+F6", "ControlOrMeta+l"]) {
+      await field.focus()
+      await page.keyboard.press(chord)
+      await expect(address).toBeFocused()
+      await expect(dialog).toBeVisible()
+    }
+
+    await expect(async () => {
+      await page.keyboard.press("Tab")
+      await expect(field).toBeFocused({ timeout: 100 })
+    }).toPass()
+
+    // The prompt is modal for its tab only: on the address field the pane's shortcuts work and the prompt stays open.
     await address.click()
     await address.press("ControlOrMeta+r")
     await expect(reloads).toHaveText("1")

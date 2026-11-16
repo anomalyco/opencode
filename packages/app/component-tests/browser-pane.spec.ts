@@ -1088,10 +1088,10 @@ story("keeps the keys inside a page prompt, and leaves them to the window once t
   await page.keyboard.type(" two")
   await log()
 
-  // Reload, the agent switch, find, address field, close and new tab, zoom and history do nothing here.
-  for (const chord of ["Control+r", "Control+.", "Control+f", "Control+l", "Control+w", "Control+t", "Control+Equal", "Alt+ArrowLeft", "F5"])
+  // Reload, the agent switch, find, close and new tab, zoom and history do nothing here.
+  for (const chord of ["Control+r", "Control+.", "Control+f", "Control+w", "Control+t", "Control+Equal", "Alt+ArrowLeft", "F5"])
     await page.keyboard.press(chord)
-  expect(await log()).toEqual(["r", ".", "f", "l", "w", "t", "=", "ArrowLeft", "F5"].map((key) => `${key}:prevented`))
+  expect(await log()).toEqual(["r", ".", "f", "w", "t", "=", "ArrowLeft", "F5"].map((key) => `${key}:prevented`))
   // Editing keys edit the field as they do anywhere.
   await page.keyboard.press("Control+a")
   await page.keyboard.press("ArrowRight")

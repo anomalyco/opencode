@@ -42,8 +42,13 @@ describe("keys inside an open page prompt", () => {
     test(`never run the app's or the pane's shortcuts behind it on ${os}`, () => {
       // Reload, the agent switch, find, address field, close and new tab, zoom, palette, model picker, back, and the
       // editing letters with a Shift that edits nothing (select an element, a new incognito-style window).
-      for (const chord of ["mod+r", "mod+.", "mod+f", "mod+l", "mod+w", "mod+t", "mod+=", "mod++", "mod+-", "mod+0", "Shift+mod+p", "mod+k", "mod+'", "F5", "F3", "F6", "Shift+mod+r", "Shift+mod+a", "Shift+mod+c", "Shift+mod+x"])
+      for (const chord of ["mod+r", "mod+.", "mod+f", "mod+w", "mod+t", "mod+=", "mod++", "mod+-", "mod+0", "Shift+mod+p", "mod+k", "mod+'", "F5", "F3", "Shift+mod+r", "Shift+mod+a", "Shift+mod+c", "Shift+mod+x", "Shift+mod+l"])
         expect(owner(chord, mac), chord).toBe("swallowed")
+    })
+
+    test(`leave the prompt open for the address field on F6 and the address shortcut on ${os}`, () => {
+      for (const chord of ["F6", "Shift+F6", "mod+l"]) expect(owner(chord, mac), chord).toBe("exit")
+      expect(owner("mod+д", mac, { as: { code: "KeyL" } })).toBe("exit")
     })
 
     test(`leave the window's own keys to the window on ${os}`, () => {
@@ -88,6 +93,7 @@ describe("keys inside an open page prompt", () => {
       expect(owner(chord, false), chord).toBe("field")
     expect(owner("Alt+ArrowLeft", false)).toBe("swallowed")
     expect(owner("Alt+F", false)).toBe("swallowed")
+    expect(owner("Alt+F6", false)).toBe("swallowed")
   })
 
   test("macOS edits text with Option and Control and keeps its window chords", () => {

@@ -17,7 +17,12 @@ export type PromptKeyOwner =
   | "field"
   /** The window or the system, as Chrome leaves them with a tab-modal dialog: close or new window, quit, hide, full screen. */
   | "window"
-  /** Nothing: an app or pane shortcut (reload, find, zoom, history, tabs, the address field, the agent, the palette). */
+  /**
+   * The keyboard leaves the prompt for the pane's address field, which stays open: F6, Shift+F6 and the address
+   * shortcut, as they leave a tab-modal dialog in Chrome. Escape would cancel the prompt.
+   */
+  | "exit"
+  /** Nothing: an app or pane shortcut (reload, find, zoom, history, tabs, the agent, the palette). */
   | "swallowed"
   /** The keyboard is elsewhere, such as the chat composer: the app's shortcuts as usual, and the prompt stays open. */
   | "app"
@@ -54,6 +59,10 @@ export function promptKeyOwner(
   const plain = !key.ctrlKey && !key.metaKey && !key.altKey
 
   if (plain && (name === "Enter" || name === "Escape" || name === "Tab")) return "prompt"
+
+  if (plain && name === "F6") return "exit"
+
+  if (command && !key.shiftKey && !key.altKey && !(input.mac ? key.ctrlKey : key.metaKey) && name === "l") return "exit"
 
   // Shift+F10 opens the field's context menu on Windows and Linux.
   if (plain) return /^F\d{1,2}$/.test(name) && !(!input.mac && key.shiftKey && name === "F10") ? "swallowed" : "field"

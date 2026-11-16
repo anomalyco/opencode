@@ -30,6 +30,8 @@ export function PromptDialog(props: {
   answer: (answer: PromptAnswer) => void
   /** Whether to take keyboard focus as it opens; false while the user works elsewhere in the window. */
   focus: boolean
+  /** Moves the keyboard out to the pane's address field, with the dialog left open. */
+  leave: () => void
 }) {
   const ctx = usePlugin<typeof definition>()
   const title = createUniqueId()
@@ -105,6 +107,12 @@ export function PromptDialog(props: {
     if (owner !== "window") event.stopPropagation()
 
     if (owner === "swallowed") return event.preventDefault()
+
+    if (owner === "exit") {
+      event.preventDefault()
+
+      return props.leave()
+    }
 
     if (cancelKey(event)) {
       event.preventDefault()
