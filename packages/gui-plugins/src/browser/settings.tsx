@@ -405,7 +405,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                       size="small"
                       class={ACTION_COLUMN}
                       disabled={blocked()}
-                      onClick={() => jobs.start({ ...confirm().job, force: true })}
+                      onClick={() => jobs.start({ ...confirm().job, token: confirm().result.token })}
                     >
                       {confirm().result.type === "unsupported"
                         ? ctx.t("settings.extensions.anyway")
@@ -432,6 +432,14 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                   </span>
                 )}
               </Show>
+              <Show when={confirming()?.result}>{(review) => <div class="min-w-0 break-words text-v2-text-text-muted">
+                <Show when={review().replaces}>{(name) => <p>{ctx.t("settings.extensions.replaces", { name: name() })}</p>}</Show>
+                <Show when={review().wildcard}><p>{ctx.t("settings.extensions.wildcard")}</p></Show>
+                <Show when={review().hostCount}><p>{ctx.t("settings.extensions.hosts", { count: review().hostCount })}</p>
+                  <ul><For each={review().hosts}>{(host) => <li class="break-all"><bdi dir="ltr">{host}</bdi></li>}</For></ul>
+                </Show>
+                <Show when={review().permissions.length}><p>{ctx.t("settings.extensions.permissions", { list: review().permissions.join(", ") })}</p></Show>
+              </div>}</Show>
               <Show when={confirming()?.result.access.length ? confirming()?.result.access : undefined}>
                 {(access) => (
                   <span class="text-v2-text-text-muted">

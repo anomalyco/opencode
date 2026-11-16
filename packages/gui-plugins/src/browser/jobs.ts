@@ -263,6 +263,8 @@ export function createProfileJobs(
 
 /** Runs one job against main and says how it ended. */
 async function perform(client: Client, job: Job, signal: AbortSignal): Promise<Outcome> {
+  if ("token" in job && job.token) return { type: "installed", result: await client.install({ kind: "approve", token: job.token }, { signal }) }
+
   switch (job.type) {
     case "import-browser":
       return {
@@ -274,18 +276,18 @@ async function perform(client: Client, job: Job, signal: AbortSignal): Promise<O
     case "install-store":
       return {
         type: "installed",
-        result: await client.install({ kind: "store", url: job.url, force: job.force }, { signal }),
+        result: await client.install({ kind: "store", url: job.url }, { signal }),
       }
     case "install-folder":
       return {
         type: "installed",
-        result: await client.install({ kind: "folder", path: job.path, force: job.force }, { signal }),
+        result: await client.install({ kind: "folder", path: job.path }, { signal }),
       }
     case "install-browser":
       return {
         type: "installed",
         result: await client.install(
-          { kind: "browser", source: job.source, profile: job.profile, id: job.id, force: job.force },
+          { kind: "browser", source: job.source, profile: job.profile, id: job.id },
           { signal },
         ),
       }

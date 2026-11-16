@@ -1,8 +1,15 @@
 import { expect, test } from "bun:test"
-import { extensionAccess, extensionCompatibility } from "./compatibility"
+import { extensionAccess, extensionCompatibility, reviewHosts } from "./compatibility"
 import type { Manifest } from "./extensions"
 
 const manifest = (fields: Partial<Manifest>): Manifest => ({ manifest_version: 3, name: "x", version: "1", ...fields })
+
+test("review counts distinct hosts across grants and content scripts and puts broad patterns before the display cutoff", () => {
+  const sites = Array.from({ length: 12 }, (_, i) => `https://example${i}.test/*`)
+  const hosts = reviewHosts(manifest({ host_permissions: sites, permissions: [sites[0], "cookies"], content_scripts: [{ matches: ["*://*.com/*", "<all_urls>"] }] }))
+  expect(hosts).toHaveLength(14)
+  expect(hosts.slice(0, 2)).toEqual(["<all_urls>", "*://*.com/*"])
+})
 
 const worker = { service_worker: "background.js" }
 

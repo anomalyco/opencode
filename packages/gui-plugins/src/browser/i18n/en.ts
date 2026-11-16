@@ -220,4 +220,9 @@ export default {
   "settings.extensions.source.store": "From the store listing. The package signature matches the extension ID.",
   "extensions.failed.collision": "A different extension already uses this ID. Nothing was replaced.",
   "settings.extensions.changed": "Files changed on disk or were never verified. Add this extension again to review it before it runs.",
+  "settings.extensions.replaces": "Replaces the installed copy of {{name}} and keeps its data.",
+  "settings.extensions.hosts": "Website patterns: {{count}} (up to 8 shown)",
+  "settings.extensions.wildcard": "Wildcard hosts include every matching subdomain.",
+  "settings.extensions.permissions": "Requested browser permissions: {{list}}",
+  "extensions.failed.expired": "This review is no longer current. Add the extension again to review it.",
 }
