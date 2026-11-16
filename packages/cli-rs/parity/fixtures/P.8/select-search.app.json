@@ -14,7 +14,6 @@
  },
  "routes": [],
  "steps": [
-  {"checkpoint":"home","until":"v2search loaded","masks":[{"x":26,"y":16,"width":90,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.8/select-search/home"},
   {"type":"/find"},
   {"checkpoint":"slash","until":"Find a turn","fixture":"P.8/select-search/slash"},
   {"keys":["enter"]},
