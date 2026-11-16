@@ -2,10 +2,6 @@
 
 Release notes for OpenCode V2, newest first.
 
-## Unreleased
-
-- Experimental Code Mode tool calls can request a per-call timeout with `{ timeoutMs }`, behind `codemode_tool_timeouts`. Calls without it retain existing limits.
-
 ## v2.3.0 — 2026-11-13
 
 ### Highlights
