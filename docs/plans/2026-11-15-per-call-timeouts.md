@@ -64,6 +64,9 @@ Update the library README, current tool semantic overview, and an Unreleased cha
 - T1 RED: new library suite had 4 passes and 29 expected failures before implementation. GREEN: 33 passes; 10 repeats produced 330 passes. Coordinator independently ran the focused library/promise/suspend/call-timeout suites: 254 passes, 0 failures.
 - T2 RED: Core suite had 5 passes and 2 expected failures before wiring. GREEN: focused Core/flag/catalog/tool suites had 129 passes, 0 failures. Coordinator independently ran Code Mode and flag/catalog subset: 43 passes, 0 failures.
 - Baseline real SessionRunner and MCP suites: 366 passes, 0 failures. Full root check passed before changes, with existing lint warnings.
+- T3 sensitivity: disabling the feature only in the new test fixtures made both regressions fail immediately; restoring it produced 20 passes across 10 repeats. Coordinator independently ran the complete runner and MCP files: 368 passes, 0 failures, 1,801 assertions.
+- The MCP integration uses the real registration, client, in-memory protocol transport, and server. Only the blocked request receives protocol cancellation; completed siblings remain successful, and a later call succeeds on the same connection.
+- Full Code Mode suite: 1,674 passes, 0 failures across 44 files. Root bun run check: 35 successful tasks, exit 0, with pre-existing lint warnings. Official TypeScript checks through package typecheck:tsc pass for Code Mode and Core. Windows and the original authenticated Z.ai connection were not available for reproduction.
 
 ## Deferred
 

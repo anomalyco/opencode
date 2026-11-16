@@ -434,6 +434,7 @@ On a Location that is still loading plugins, `agent.list` returns the agents loa
 - **Faster Long Sessions in Desktop**: Streaming replies and long conversations now do much less rendering work. ([#60489](https://github.com/anomalyco/opencode/pull/60489), [#60521](https://github.com/anomalyco/opencode/pull/60521), [#60513](https://github.com/anomalyco/opencode/pull/60513), [#60481](https://github.com/anomalyco/opencode/pull/60481))
 - **Desktop Stability Fixes**: Fixes side-panel tabs, repeated "Session not found" toasts, and **Open file** over HTTP. ([#60430](https://github.com/anomalyco/opencode/pull/60430), [#60436](https://github.com/anomalyco/opencode/pull/60436), [#60459](https://github.com/anomalyco/opencode/pull/60459), [#60462](https://github.com/anomalyco/opencode/pull/60462))
 
+
 ### Breaking changes
 
 #### TUI plugins require OpenTUI 0.8
@@ -1171,15 +1172,15 @@ Version 2.1 makes intentional changes to public SDK, HTTP message/event, and plu
 
 Provider-owned replay data previously used different names on different surfaces. Read and write `native` instead; a tool's execution `state` and UI `metadata` are separate and are not renamed.
 
-| Surface                                                                     | Before                                  | After                            |
-| --------------------------------------------------------------------------- | --------------------------------------- | -------------------------------- |
-| Text and reasoning parts                                                    | `state`                                 | `native`                         |
-| Assistant and compaction messages                                           | `providerState`                         | `native`                         |
-| Text/reasoning lifecycle events and `session.tool.called`                   | `state`                                 | `native`                         |
-| `session.step.ended`, `session.step.failed`, and `session.compaction.ended` | `providerState`                         | `native`                         |
-| `session.tool.success` and `session.tool.failed`                            | `resultState`                           | `native`                         |
-| Exported replay-data schema                                                 | `SessionMessage.ProviderState`          | `SessionMessage.Native`          |
-| Plugin compaction hook result                                               | `SessionCompactionResult.providerState` | `SessionCompactionResult.native` |
+| Surface | Before | After |
+| --- | --- | --- |
+| Text and reasoning parts | `state` | `native` |
+| Assistant and compaction messages | `providerState` | `native` |
+| Text/reasoning lifecycle events and `session.tool.called` | `state` | `native` |
+| `session.step.ended`, `session.step.failed`, and `session.compaction.ended` | `providerState` | `native` |
+| `session.tool.success` and `session.tool.failed` | `resultState` | `native` |
+| Exported replay-data schema | `SessionMessage.ProviderState` | `SessionMessage.Native` |
+| Plugin compaction hook result | `SessionCompactionResult.providerState` | `SessionCompactionResult.native` |
 
 #### Tool call and result data share `tool.native`
 
