@@ -40,6 +40,7 @@ import {
   sessionSuspended,
   sessionTab,
   sessionTabs,
+  unseenActivity,
   transition,
   type Event,
   type Ipc,
@@ -328,6 +329,13 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (event.type === "focus") return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
 
+    if (event.type === "activity") return dispatch({
+      type: "pane.activity", sessionKey, attempt, tabID: event.tabID,
+      enabled: ctx.stores.preferences.value.agentPages !== false,
+      onScreen: sessions.current()?.key === sessionKey && !layout.narrow(),
+      opened: layout.side.opened(drive.ref), visible: layout.state(key(event.tabID), drive.ref) === "visible",
+    })
+
     if (event.type === "preview") return preview(drive, event.path)
 
     if (event.type === "inspect") return inspectors.get(sessionKey)?.forEach((listener) => listener(event))
@@ -501,6 +509,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       )
 
       // The shell list is a view, not a deletion log. It can disappear during re-authentication or a refresh.
+      createKeyed(() => layout.side.opened(ref) ? "open" : "closed", side => dispatch({
+        type: "side.changed", sessionKey, open: side === "open",
+        running: sessions.current()?.key === sessionKey && ref.server.data.session.status(ref.id) === "running",
+      }))
+      createKeyed(() => ref.server.data.session.status(ref.id) !== "running", () => dispatch({ type: "execution.ended", sessionKey }))
+
       createKeyed(() => sessions.list().some(item => item.key === sessionKey && item.server.compatible) ? "listed" : "absent",
         value => dispatch({ type:"session.presence", sessionKey, listed:value === "listed" }))
 
@@ -666,6 +680,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     /** A tab behind another one waits on the user, which its strip tab shows. */
     asking: (session: Session, tabID: string) =>
       !!state.chrome[session.key]?.[tabID]?.prompt && sessionBrowser(machine(), session.key)?.focusedTabID !== tabID,
+    unseen: (session: Session, tabID: string) => unseenActivity(machine(), session.key, tabID),
     answer(session: Session, tabID: Browser.TabID, id: number, answer: PromptAnswer) {
       return registration(session)?.answer(tabID, id, answer) ?? Promise.reject(new Error("browser.pane.unavailable"))
     },
@@ -732,6 +747,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     focusTab(session: Session, tabID: string) {
       const item = tab(session, tabID)
+
+      if (item) dispatch({ type: "activity.seen", sessionKey: session.key, tabID: item.id })
 
       if (item && item.id !== sessionBrowser(machine(), session.key)?.focusedTabID)
         command(session, { type: "tabs.focus", tabID: item.id })

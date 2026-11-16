@@ -515,6 +515,7 @@ export function createBrowserPane(input: {
       handles.get(binding)?.activity.delete(event.tabID)
       handles.get(binding)?.pluginTabs.forget(event.tabID)
     }
+
     dispatch({ type: "binding", binding, event })
 
     // Extensions hear which tab is active in a window.
@@ -884,6 +885,14 @@ export function createBrowserPane(input: {
     const action = command.action
     const driven = { agentRuns: 0, agentEndedAt: Date.now(), agent: command.agent }
 
+    const present = (tabID: Browser.TabID) => {
+      if (origin === "user") return dispatchBinding(binding, { type: "tab.focused", tabID })
+      const win = handles.get(binding)?.win
+
+      // The shell document can be hidden while its native child view has the keyboard.
+      if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && win.isFocused()) emit(binding, { type: "activity", tabID })
+    }
+
     // A user preview may already have consumed files that the agent may not read. Revoke its origins and
     // discard the complete WebContents before handing the agent a target; rechecking only future fetches is too late.
     const acquire = (id: Browser.TabID) => {
@@ -928,9 +937,9 @@ export function createBrowserPane(input: {
         const tabID = tab.state().id
 
         if (!existing) opening.defer(() => { if (page(binding, tabID) === tab) dispatchBinding(binding, { type: "tab.closed", tabID }) })
-        dispatchBinding(binding, { type: "tab.focused", tabID })
         await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
         refresh(binding, tabID, tab)
+        present(tabID)
         opening.move()
 
         return { value: { path: action.path, tabID, url: tab.state().url }, files: [] }
@@ -980,7 +989,7 @@ export function createBrowserPane(input: {
 
       if (file) openingFiles.set(opened, file)
 
-      if (action.focus !== false) dispatchBinding(binding, { type: "tab.focused", tabID })
+      if (origin === "user" && action.focus !== false) present(tabID)
 
       try {
         await opened.ready
@@ -989,6 +998,8 @@ export function createBrowserPane(input: {
         if (action.url !== undefined)
           await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
         refresh(binding, tabID, opened)
+
+        if (origin === "agent" && action.focus !== false) present(tabID)
         opening.move()
 
         return { value: opened.state(), files: [] }
@@ -1014,7 +1025,10 @@ export function createBrowserPane(input: {
 
       if (origin === "user") activity.userInputAt = Date.now()
       activities?.set(action.tabID, activity)
-      dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID })
+
+      if (origin === "user") dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID, fromStrip: true })
+
+      if (origin === "agent") present(action.tabID)
 
       return { value: restricted?.state() ?? slot.tab, files: [] }
     }
@@ -1033,6 +1047,8 @@ export function createBrowserPane(input: {
     if (!target) throw new Error("Browser tab is unavailable. Call browser.tabs.list({}) and use an existing tabID.")
     const result = await target.execute(command, signal, origin)
     refresh(binding, action.tabID, target)
+
+    if (origin === "agent" && action.type === "navigate") present(action.tabID)
 
     return result
   }

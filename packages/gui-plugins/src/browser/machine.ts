@@ -71,6 +71,8 @@ export type Attachment = {
   readonly error: string | undefined
   readonly strip: Strip
   readonly addressFocus: AddressFocus
+  readonly side: "unobserved" | "open" | "closed" | "dismissed"
+  readonly unseen: readonly Browser.TabID[]
 }
 
 /**
@@ -87,6 +89,19 @@ export type State =
   | { readonly status: "disposed" }
 
 export type Event =
+  | { readonly type: "side.changed"; readonly sessionKey: string; readonly open: boolean; readonly running: boolean }
+  | { readonly type: "execution.ended"; readonly sessionKey: string }
+  | { readonly type: "activity.seen"; readonly sessionKey: string; readonly tabID: Browser.TabID }
+  | {
+      readonly type: "pane.activity"
+      readonly sessionKey: string
+      readonly attempt: number
+      readonly tabID: Browser.TabID
+      readonly enabled: boolean
+      readonly onScreen: boolean
+      readonly opened: boolean
+      readonly visible: boolean
+    }
   | { readonly type: "disposed" }
   | { readonly type: "ipc.changed"; readonly ipc: Ipc }
   | { readonly type: "session.capability.changed"; readonly sessionKey: string }
@@ -307,6 +322,10 @@ export function sessionTab(state: State, sessionKey: string, tabID: string) {
   return sessionBrowser(state, sessionKey)?.tabs.find((tab) => tab.id === tabID)
 }
 
+export function unseenActivity(state: State, sessionKey: string, tabID: string) {
+  return attachmentOf(state, sessionKey)?.unseen.some(id => id === tabID) ?? false
+}
+
 export function sessionSuspended(state: State, sessionKey: string) {
   return attachmentOf(state, sessionKey)?.phase.status === "suspended"
 }
@@ -394,6 +413,8 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
     error: undefined,
     strip: { located: event.located, mirrored: [], prune: false, focus: undefined },
     addressFocus: noFocus(),
+    side: "unobserved",
+    unseen: [],
   })
 }
 
@@ -435,6 +456,33 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
   const phase = attachment.phase
 
   switch (event.type) {
+    case "side.changed": {
+      const dismissed = event.running && (attachment.side === "open" || attachment.side === "dismissed")
+      const side = event.open ? "open" : dismissed ? "dismissed" : "closed"
+
+      return side === attachment.side ? { state, effects: [] } : put(state, key, { ...attachment, side })
+    }
+
+    case "execution.ended":
+      return attachment.side === "dismissed" ? put(state, key, { ...attachment, side: "closed" }) : { state, effects: [] }
+    case "activity.seen":
+      return attachment.unseen.includes(event.tabID)
+        ? put(state, key, { ...attachment, unseen: attachment.unseen.filter(id => id !== event.tabID) })
+        : { state, effects: [] }
+    case "pane.activity": {
+      if (!current(phase, event.attempt) || !event.enabled || !event.onScreen || !attachment.strip.located)
+        return { state, effects: [] }
+
+      if (attachment.side === "dismissed" || !attachment.browser?.tabs.some(tab => tab.id === event.tabID))
+        return { state, effects: [] }
+
+      if (!event.opened) return { state, effects: [{ type: "focus-strip-tab", sessionKey: key, tabID: event.tabID }] }
+
+      if (event.visible || attachment.unseen.includes(event.tabID)) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, unseen: [...attachment.unseen, event.tabID] })
+    }
+
     case "session.capability.changed":
       if (phase.status !== "blocked" || phase.reason !== "unsupported") return {state,effects:[]}
 
@@ -751,6 +799,7 @@ function paneState(
       ...attachment,
       phase: { status: "ready", attempt: phase.attempt },
       browser: event.state,
+      unseen: attachment.unseen.filter(id => event.state?.tabs.some(tab => tab.id === id)),
       error: event.error,
       strip: mirrored.strip,
       addressFocus: follow(attachment.addressFocus, event.state),

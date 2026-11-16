@@ -317,7 +317,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       name: "Local",
       local: true,
       compatible: true,
-      data: { on: () => () => undefined },
+      data: { on: () => () => undefined, session: { status: () => "idle" } },
     }
 
     const [reads, setReads] = createStore({ directory: 0 })
@@ -1083,7 +1083,7 @@ export function mountBrowserRegion(input: RegionHost) {
       id: "browser-test",
       name: "Browser test",
       url: "http://127.0.0.1:4096",
-      data: { on: () => () => undefined },
+      data: { on: () => () => undefined, session: { status: () => "idle" } },
       local: true,
       builtin: true,
       compatible: true,

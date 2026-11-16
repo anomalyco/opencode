@@ -9,7 +9,7 @@ import en from "./i18n/en"
  * - `links`: web links in a session open in the browser pane.
  * - `welcomed`: the user imported sign-ins or declined the pane's offer, so the pane stops offering.
  */
-const Preferences = Schema.Struct({ links: Schema.Boolean, welcomed: Schema.Boolean })
+const Preferences = Schema.Struct({ links: Schema.Boolean, welcomed: Schema.Boolean, agentPages: Schema.optionalKey(Schema.Boolean) })
 
 export default Plugin.define({
   stores: {

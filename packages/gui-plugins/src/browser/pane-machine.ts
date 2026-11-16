@@ -108,7 +108,7 @@ export type BindingEvent =
       readonly attempt: number
       readonly tab?: Browser.Tab
     }
-  | { readonly type: "tab.focused"; readonly tabID: Browser.TabID }
+  | { readonly type: "tab.focused"; readonly tabID: Browser.TabID; readonly fromStrip?: boolean }
   | { readonly type: "tab.restricted"; readonly tabID: Browser.TabID; readonly url: string }
   | { readonly type: "tab.closed"; readonly tabID: Browser.TabID }
 
@@ -344,6 +344,9 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
   if (event.type === "tab.focused") {
     if (!state.tabs.has(event.tabID)) return { state, effects: [] }
     const next = publish({ ...state, focusedTabID: event.tabID })
+
+    // The strip already made this selection. Echoing it can reopen a pane the user has since closed.
+    if (event.fromStrip) return next
 
     return {
       state: next.state,

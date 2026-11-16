@@ -95,6 +95,36 @@ const ready = (state = replay(attach()).state) => replay([paneState(state, inven
 const types = (effects: readonly MachineEffect[]) => effects.map((effect) => effect.type)
 
 describe("browser pane machine", () => {
+  const activity = (state: State) => ({ type: "pane.activity" as const, sessionKey: key, attempt: attempt(state),
+    tabID: tabA, enabled: true, onScreen: true, opened: false, visible: false })
+
+  test.each([
+    ["closed pane", {}, "open"],
+    ["another browser tab, Review or Files selected", { opened: true }, "mark"],
+    ["target already visible", { opened: true, visible: true }, "none"],
+    ["session off screen or window hidden", { onScreen: false }, "none"],
+    ["disabled", { enabled: false }, "none"],
+    ["superseded binding", { attempt: -1 }, "none"],
+    ["since-closed tab", { tabID: tabB }, "none"],
+  ] as const)("agent navigation, preview or new tab: %s", (_label, input, expected) => {
+    const start = ready()
+    const next = transition(start, { ...activity(start), ...input })
+    expect(types(next.effects)).toEqual(expected === "open" ? ["focus-strip-tab"] : [])
+    expect(attachment(next.state)?.unseen).toEqual(expected === "mark" ? [tabA] : [])
+  })
+
+  test("closing the pane during a run wins until reopening it or finishing the run", () => {
+    const start = ready()
+    const side = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
+    const hidden = replay([side(true), side(false)], start).state
+    expect(transition(hidden, activity(hidden)).effects).toEqual([])
+    const nextRun = transition(hidden, { type: "execution.ended", sessionKey: key }).state
+    expect(types(transition(nextRun, activity(nextRun)).effects)).toEqual(["focus-strip-tab"])
+    const mark = replay([side(true), { ...activity(hidden), opened: true }], hidden).state
+    expect(attachment(mark)?.unseen).toEqual([tabA])
+    expect(attachment(transition(mark, { type: "activity.seen", sessionKey: key, tabID: tabA }).state)?.unseen).toEqual([])
+  })
+
   test("a visible restored tab requests its load on acceptance, not before the new registration exists", () => {
     const start = ready()
     const closed = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.registration.closed")).state

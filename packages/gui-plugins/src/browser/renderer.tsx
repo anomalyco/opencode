@@ -142,6 +142,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   builtinContext(ctx).provideFor(Browser, (_consumer, signal) => {
     const owner = uuid()
+
     const experimental: Browser["experimental"] = {
       async open(session, url) {
         signal.throwIfAborted()
@@ -416,6 +417,9 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
         <div class="flex items-center gap-1.5">
           <PageIcon icon={icon()} />
           <span class="max-w-40 truncate">{text()}</span>
+          <Show when={model()?.unseen({ key: session }, id)}>
+            <span role="img" aria-label={ctx.t("tab.activity")} class="size-1.5 shrink-0 rounded-full bg-v2-icon-icon-accent" />
+          </Show>
           {/* A tab behind another waits on the user: a dialog, a sign-in or a site's request. */}
           <Show when={model()?.asking({ key: session }, id)}>
             <span role="img" aria-label={ctx.t("prompt.tab")} class="size-1.5 shrink-0 rounded-full bg-v2-icon-icon-accent" />
