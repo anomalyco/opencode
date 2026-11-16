@@ -74,8 +74,9 @@ pub(crate) struct Loaded {
     pub effects: RefCell<Option<Vec<HostRequest>>>,
     /// The reads a handed-over activation watched, which it goes on watching (P8).
     pub watches: RefCell<Vec<(String, HostRequest)>>,
-    /// The registry's activations a reload handed their JS host's activation on from, whose dialog stays (FT-4).
-    pub continues: Vec<u64>,
+    /// The registry's first activation of the chain a reload handed this JS host's activation on from, whose
+    /// dialogs stay (FT-4).
+    pub continues: Option<u64>,
     /// Where the replies to the handed-over activation's requests go, which the new guest keeps ([`Relay`]).
     pub relay: RefCell<Option<Rc<Relay>>>,
 }
@@ -143,7 +144,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
             *current.borrow_mut() = failure.clone();
             let failed = failure.clone();
             setup.failure(Rc::new(move || failed.borrow().clone()));
-            setup.continues(loaded.continues.clone());
+            setup.continues(loaded.continues);
             let wake = Arc::new(Wake::new(Some(setup.host().app().proxy())));
             let mailbox = Mailbox::new(setup.id(), wake);
             mailbox.refuse_messages();
@@ -333,14 +334,17 @@ impl Guest {
             return;
         }
         let Some(scripts) = self.scripts.upgrade() else { return };
-        let churning = scripts
-            .loads
-            .borrow_mut()
-            .get_mut(&self.loaded.target)
-            .is_some_and(|load| load.reloaded(std::time::Instant::now()));
-        if churning {
+        if scripts.reloaded(self.id(), std::time::Instant::now()) {
             let (count, window) = (super::RELOADS, super::RELOAD_WINDOW.as_secs());
             self.fail(format!("it changed its registrations more than {count} times in {window} s, and never settled"));
+            return;
+        }
+        // Only the load this activation runs as is changed: a version that load replaced, still running, does not
+        // overwrite it (big-boi's catalog review).
+        let current =
+            scripts.loads.borrow().get(&self.loaded.target).is_some_and(|load| load.runs(&self.loaded, self.js.get()));
+        if !current {
+            log::warn!("plugin {}: a reload of registrations its load no longer runs; ignored", self.id());
             return;
         }
         // The replacement adopts this activation of the JS host: this guest's end must not deactivate it (review
@@ -366,7 +370,7 @@ impl Guest {
                 holds,
                 effects: RefCell::new(Some(Vec::new())),
                 watches: RefCell::new(watches),
-                continues: [self.loaded.continues.as_slice(), &[self.generation]].concat(),
+                continues: Some(self.loaded.continues.unwrap_or(self.generation)),
                 relay: RefCell::new(Some(self.relay.borrow().clone())),
             };
             (load.state, load.registered) = (super::Loading::Loaded(Rc::new(loaded)), false);

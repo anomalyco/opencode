@@ -441,8 +441,6 @@ struct Load {
     digest: u64,
     state: Loading,
     registered: bool,
-    /// When its registrations changed after setup, within the last [`RELOAD_WINDOW`] ([`Load::reloaded`]).
-    reloads: VecDeque<Instant>,
 }
 
 /// The reloads of a plugin's registrations within [`RELOAD_WINDOW`] past which it fails. Each reload sets up its surfaces
@@ -452,11 +450,12 @@ const RELOADS: usize = 64;
 const RELOAD_WINDOW: Duration = Duration::from_secs(5);
 
 impl Load {
-    /// Notes a reload of its registrations at `now`: whether it is past [`RELOADS`] within [`RELOAD_WINDOW`].
-    fn reloaded(&mut self, now: Instant) -> bool {
-        self.reloads.retain(|at| now.duration_since(*at) < RELOAD_WINDOW);
-        self.reloads.push_back(now);
-        self.reloads.len() > RELOADS
+    /// Whether the JS host's activation that `loaded` set up, now `js`, runs as this load, so a manifest of it may change
+    /// the load: the load holds `loaded` itself, or what a reload of that activation made of it, not yet registered. A
+    /// manifest of a version this load replaced (another build, a load not answered yet) may not (big-boi's catalog
+    /// review).
+    fn runs(&self, loaded: &Rc<guest::Loaded>, js: u64) -> bool {
+        matches!(&self.state, Loading::Loaded(held) if Rc::ptr_eq(held, loaded) || (held.seq == js && held.id == loaded.id))
     }
 }
 
@@ -614,6 +613,8 @@ pub struct Scripts {
     started: RefCell<std::collections::HashSet<u64>>,
     /// Messages the running JS host's queue had no room for yet, in order, and their bytes: they go once it reads.
     overflow: RefCell<(VecDeque<(Down, usize)>, usize)>,
+    /// When each plugin's registrations changed after setup, within the last [`RELOAD_WINDOW`] ([`Scripts::reloaded`]).
+    reloads: RefCell<HashMap<String, VecDeque<Instant>>>,
     /// The theme's mode and the theme the JS host was told last.
     theme: RefCell<Option<(String, opencode_ui::theme::Theme)>>,
     /// The plugin whose code the JS host said it runs outside any sequenced work.
@@ -675,6 +676,7 @@ impl Scripts {
             waiting: RefCell::default(),
             started: RefCell::default(),
             overflow: RefCell::default(),
+            reloads: RefCell::default(),
             theme: RefCell::default(),
             entered: RefCell::default(),
             reconcile: RefCell::default(),
@@ -876,7 +878,6 @@ impl Scripts {
                 digest,
                 state: Loading::Waiting(seq),
                 registered: false,
-                reloads: VecDeque::new(),
             },
         );
         drop(loads);
@@ -924,7 +925,7 @@ impl Scripts {
             holds: Vec::new(),
             effects: RefCell::new(None),
             watches: RefCell::default(),
-            continues: Vec::new(),
+            continues: None,
             relay: RefCell::default(),
         };
         (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
@@ -1441,7 +1442,7 @@ impl Scripts {
                             holds,
                             effects: RefCell::new(Some(effects)),
                             watches: RefCell::default(),
-                            continues: Vec::new(),
+                            continues: None,
                             relay: RefCell::default(),
                         };
                         (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
@@ -1573,6 +1574,24 @@ impl Scripts {
         (load.state, load.registered) = (state, false);
         drop(loads);
         self.reconcile();
+    }
+
+    /// Notes a reload of plugin `id`'s registrations at `now`: whether it is past [`RELOADS`] within [`RELOAD_WINDOW`].
+    /// Counted by the plugin, not by its load, so a new build of it or a restart of the JS host does not start the count
+    /// again within the window (big-boi's catalog review). It holds the reloads of the window alone, at most one past
+    /// the limit a plugin, and forgets a plugin with none.
+    pub(crate) fn reloaded(&self, id: &str, now: Instant) -> bool {
+        let mut reloads = self.reloads.borrow_mut();
+        reloads.retain(|_, at| {
+            at.retain(|at| now.duration_since(*at) < RELOAD_WINDOW);
+            !at.is_empty()
+        });
+        let at = reloads.entry(id.to_owned()).or_default();
+        at.push_back(now);
+        while at.len() > RELOADS + 1 {
+            at.pop_front();
+        }
+        at.len() > RELOADS
     }
 
     fn reconcile(&self) {
@@ -1961,6 +1980,76 @@ mod tests {
         assert_eq!(scripts.admit(&reply(300 << 10)), None, "past what the overflow has room for now");
         assert_eq!(scripts.admit(&reply(16)).map(|parts| parts.len()), Some(2), "a part and its call");
         assert_eq!(scripts.admit(&Down::Ping { seq: 2 }), None, "only a reply goes in parts");
+    }
+
+    // Expected (big-boi's catalog review, CT-1): the reload limit counts a plugin, not its load: a new build of it (a
+    // load of another digest at its target) within the window does not start the count again, another plugin has its
+    // own, and past the window it starts again. What it holds is the window's reloads alone, at most one past the limit.
+    #[test]
+    fn the_reload_limit_counts_a_plugin_across_its_builds() {
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(Config::new("bun".into()), &host);
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let _ = scripts.trees.light(dir.path());
+        while scripts.walking() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let build = |options: &str| scripts.step("t", dir.path(), Some(options), false);
+        assert!(matches!(build("{\"build\":1}"), Step::Starting));
+        let now = Instant::now();
+        let at = |millis: u64| now + Duration::from_millis(millis);
+        for index in 0..RELOADS as u64 {
+            assert!(!scripts.reloaded("p", at(index)), "reload {index} is within the limit");
+        }
+        let digest = |scripts: &Scripts| scripts.loads.borrow().get("t").map(|load| load.digest);
+        let first = digest(&scripts);
+        assert!(matches!(build("{\"build\":2}"), Step::Starting));
+        assert_ne!(digest(&scripts), first, "a new build is a new load");
+        assert!(scripts.reloaded("p", at(100)), "a new build started the count again");
+        assert!(!scripts.reloaded("q", at(100)), "another plugin's count");
+        for index in 0..8 {
+            scripts.reloaded("p", at(200 + index));
+        }
+        assert!(scripts.reloads.borrow().values().all(|at| at.len() <= RELOADS + 1), "it grew past the limit");
+        assert!(!scripts.reloaded("p", at(200) + RELOAD_WINDOW), "past the window it starts again");
+        assert_eq!(scripts.reloads.borrow().len(), 1, "a plugin with no reload in the window stays");
+    }
+
+    // Expected (big-boi's catalog review, CT-1): a manifest changes its target's load only while that load is the one
+    // the sending activation runs as: its own, what a reload of it made and the loader has not taken yet, or its own
+    // after a restart gave the activation another sequence; not another build's, loaded or still loading.
+    #[test]
+    fn a_manifest_changes_only_the_load_its_activation_runs_as() {
+        let loaded = |seq: u64| {
+            Rc::new(guest::Loaded {
+                id: "p".into(),
+                target: "t".into(),
+                dir: PathBuf::new(),
+                confined: false,
+                options: None,
+                seq,
+                manifest: opencode_plugin_abi::Manifest { id: "p".into(), ..Default::default() },
+                holds: Vec::new(),
+                effects: RefCell::new(None),
+                watches: RefCell::default(),
+                continues: None,
+                relay: RefCell::default(),
+            })
+        };
+        let load = |state: Loading| Load {
+            dir: PathBuf::new(),
+            confined: false,
+            options: None,
+            digest: 1,
+            state,
+            registered: true,
+        };
+        let own = loaded(3);
+        assert!(load(Loading::Loaded(own.clone())).runs(&own, 3), "its own");
+        assert!(load(Loading::Loaded(loaded(3))).runs(&own, 3), "what its reload made");
+        assert!(load(Loading::Loaded(own.clone())).runs(&own, 7), "its own after a restart");
+        assert!(!load(Loading::Loaded(loaded(5))).runs(&own, 3), "another build's");
+        assert!(!load(Loading::Waiting(5)).runs(&own, 3), "another build still loading");
     }
 
     // Expected (big-boi's catalog review, CT-5): admission measures exactly what goes, before it builds it. With the
