@@ -41,3 +41,33 @@ test("checked bytes belong to the open handle, not a replacement directory entry
     await rm(temp, { recursive: true, force: true })
   }
 })
+
+test("a runtime that cannot name an open handle refuses the read instead of trusting the path", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "contained-file-")))
+  try {
+    await writeFile(join(root, "page"), "first")
+    const control = await openContained(root, "page")
+    if (!control) throw new Error("missing control")
+    await control.file.close()
+
+    // workerd resolves `#handle-path` to its build, which has no kernel name for a descriptor.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--conditions=workerd",
+        "-e",
+        `const { openContained } = await import(${JSON.stringify(join(import.meta.dir, "../src/contained-file.ts"))})
+const opened = await openContained(${JSON.stringify(root)}, "page")
+await opened?.file.close()
+console.log(JSON.stringify({ opened: opened !== undefined }))`,
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    )
+    const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
+
+    expect(stderr).toBe("")
+    expect(JSON.parse(stdout)).toEqual({ opened: false })
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
