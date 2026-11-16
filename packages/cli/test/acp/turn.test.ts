@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 import { ACPElicitation } from "../../src/acp/elicitation"
 import {
+  backgroundShell,
   childCreated,
   delivered,
   durableEvent,
   ephemeralEvent,
   permissionAsked,
+  shellNotice,
   startSession,
   succeeded,
   textDelta,
@@ -199,10 +201,8 @@ describe("acp turn events over the wire", () => {
         turn(
           sessionID,
           id,
-          toolStarted(sessionID, `call_${text}`, "shell"),
-          toolCalled(sessionID, `call_${text}`, { command: "build", background: true }),
-          toolSucceeded(sessionID, `call_${text}`, { shellID: `sh_${text}`, status: "running" }, "backgrounded"),
-          // The second shell finishes as its turn ends: the notice is queued but wakes the session afterwards.
+          ...backgroundShell(sessionID, `sh_${text}`),
+          // The second shell finishes as its turn ends: the notice is queued in it but wakes the session afterwards.
           ...(text === "second" ? [shellNotice(sessionID, "msg_notice_second", "sh_second")] : []),
         ),
     })
@@ -212,7 +212,6 @@ describe("acp turn events over the wire", () => {
     acp.server.send(
       shellNotice(sessionID, "msg_notice_first", "sh_first"),
       ...turn(sessionID, "msg_notice_first", textDelta(sessionID, "msg_reaction_1", "first reaction")),
-      textDelta(sessionID, "msg_stale", "stale"),
     )
     await acp.waitForUpdate(({ update }) => JSON.stringify(update).includes("first reaction"))
 
@@ -270,18 +269,6 @@ describe("acp turn events over the wire", () => {
     expect(acp.server.prompts).toEqual([expect.objectContaining({ text: "redirect", delivery: "steer", resume: false })])
   })
 })
-
-function shellNotice(sessionID: string, inboxID: string, shellID: string) {
-  return durableEvent("session.inbox.enqueued", {
-    sessionID,
-    inboxID,
-    item: {
-      type: "synthetic",
-      payload: { text: `<shell id="${shellID}" state="completed">`, metadata: { source: "shell", shellID } },
-      delivery: "steer",
-    },
-  })
-}
 
 function turnUpdates(updates: readonly SessionNotification[]) {
   return updates.filter(

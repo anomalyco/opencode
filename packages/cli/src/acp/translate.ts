@@ -53,8 +53,8 @@ export type TurnState = {
   readonly compactions: ACPCompaction.Tracked
   readonly children: ReadonlyMap<string, Child>
   readonly openChildren: ReadonlySet<string>
-  /** Background shells that will wake their session: by shell ID while running, then by the inbox ID of their notice. */
-  readonly shells: ReadonlySet<string>
+  /** Background shells that will wake their session, with the inbox ID of their notice once it is queued. */
+  readonly shells: ReadonlyMap<string, string | undefined>
   readonly asks: ReadonlySet<string>
   readonly finish?: SessionMessage.Assistant["finish"]
   readonly usage?: { readonly turn: TokenUsage.Info; readonly last: TokenUsage.Info }
@@ -91,7 +91,7 @@ export const initial: TurnState = {
   compactions: new Map(),
   children: new Map(),
   openChildren: new Set(),
-  shells: new Set(),
+  shells: new Map(),
   asks: new Set(),
 }
 
@@ -400,7 +400,10 @@ function sessionEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, 
         state: {
           ...state,
           tools: without(state.tools, key),
-          ...(typeof shellID === "string" ? { shells: new Set(state.shells).add(shellID) } : {}),
+          // A command that exits at once can queue its notice first; keep the notice it already has.
+          ...(typeof shellID === "string" && !state.shells.has(shellID)
+            ? { shells: new Map(state.shells).set(shellID, undefined) }
+            : {}),
         },
         outputs: send({
           sessionUpdate: "tool_call_update",
@@ -464,20 +467,17 @@ function childEnded(state: TurnState, ctx: TurnContext, child: ACPChild.Session,
   return { state: { ...state, openChildren }, outputs: childStatus(ctx, child, status) }
 }
 
-// Follows a background shell from its run to its notice, which wakes the session once delivered.
+// A background shell's notice wakes the session once delivered, so the shell stays pending until then. Only a job's
+// notice wakes it: a user's shell command queues one without a job ID that waits for the next prompt.
 function shellNoticed(state: TurnState, event: Extract<OpenCodeEvent, { type: "session.inbox.enqueued" }>) {
-  const shellID = event.data.item.type === "synthetic" ? event.data.item.payload.metadata?.shellID : undefined
-  if (typeof shellID !== "string" || !state.shells.has(shellID)) return state
-  const shells = new Set(state.shells)
-  shells.delete(shellID)
-  return { ...state, shells: shells.add(event.data.inboxID) }
+  const metadata = event.data.item.type === "synthetic" ? event.data.item.payload.metadata : undefined
+  if (typeof metadata?.shellID !== "string" || typeof metadata.jobID !== "string") return state
+  return { ...state, shells: new Map(state.shells).set(metadata.shellID, event.data.inboxID) }
 }
 
 function noticeSettled(state: TurnState, inboxID: string) {
-  if (!state.shells.has(inboxID)) return state
-  const shells = new Set(state.shells)
-  shells.delete(inboxID)
-  return { ...state, shells }
+  const shells = new Map([...state.shells].filter(([, notice]) => notice !== inboxID))
+  return shells.size === state.shells.size ? state : { ...state, shells }
 }
 
 function recordStep(state: TurnState, tokens: TokenUsage.Info): TurnState {
