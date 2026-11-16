@@ -40,7 +40,11 @@ server checks only its own server entry (`FSUtil.contains`, `core/src/config/plu
 module whose real path is not inside the plugin directory's real path, for every plugin: a `package.json` `name` of
 `../../x` or an absolute path resolves anywhere. A confined (approved project) plugin's own resolution from its root is
 also refused there. Either way the plugin fails, saying why. A package's `<name>/tui` resolves inside the package, by
-self-reference or from the `node_modules` it sits in, so no legitimate plugin is refused. Like any global or `cli.json` plugin a `cli.json` package needs no
+self-reference or from the `node_modules` it sits in, so no legitimate plugin is refused. "Inside" is TS's own
+`FSUtil.contains` test, `path.relative` between real paths (`realpathSync.native`, with no verbatim prefix), for the
+module and for each confined root (carbon `recheck-3`, `pipe/compat/paths.ts`). So on Windows a drive letter's case, an
+8.3 short name or a `\\?\` prefix on either side does not read as outside. The loader also hands the JS host real
+paths without that prefix. Like any global or `cli.json` plugin a `cli.json` package needs no
 approval, and its build identity is computed off the UI thread (FT-2). As TS resolves a loaded package once a session
 (`context.tsx:663-665`), the directory a spec resolved to stays while the spec is a target: a later install (a new
 generation) does not move it, and a package is not watched. A `cli.json` entry whose key the cache does not hold, where
@@ -54,24 +58,45 @@ cannot load (`context.tsx:362-363`).
 Unlike TS, which asks for no approval at all, a server part loads without approval only when the user's own
 configuration names it (O-162, carbon `jsnpm-2`). `GET /api/plugin` carries no provenance, and a project's
 `opencode.json` can name a package (a `.tgz`, a git spec) with no server export, so the server runs none of its code.
-So the client reads the user's layers itself: the `plugins` entries of `cli.json` and of the global opencode config
-(`opencode.json`, `opencode.jsonc` in the global config directory, TS `ConfigDiscovery`), a string or the `package` of
-`{ package, options }`, `-` removals ignored.
-- **Package:** it is vouched for when one of those entries is its spec exactly as written, which is the text TS's
-  server reports as `source.target` (`core/src/config/plugin/source.ts` `parse`, `plugin/module.ts` `source`). The
-  same package at another version, or named only by the project's configuration (`opencode.json`,
-  `.opencode/opencode.json`), waits for approval. A managed, explicit (`OPENCODE_CONFIG`) or `OPENCODE_CONFIG_CONTENT`
-  layer vouches for nothing.
+So the client reads the user's layers itself. They are the `plugins` entries of the global opencode config (`opencode.json`,
+then `opencode.jsonc`, in the global config directory, in the order TS's `loadDirectory` reads them), then those of
+`cli.json`. Each is a string or the `package` of `{ package, options }`. The entries fold in order, as TS's server folds
+its operations (`core/src/plugin/supervisor.ts` `resolve`, carbon `recheck-1`):
+- a plugin directly under a global `plugin` or `plugins` directory starts named, as discovery adds it before any
+  entry;
+- an entry that is a part's spec, or names its path, names and enables it;
+- a selector (`*`, `<prefix>.*`, `opencode.…`, or the part's ID) enables it again, without naming it;
+- a removal `-<selector>` disables it, when the selector is the spec, the path or the plugin ID the server reports
+  (`selects` is TS's `matches`).
+
+A part is vouched for when it is named and, after the last entry, enabled. TS removes by plugin ID only. Matching a
+removal by spec or path too can only withdraw a vouch, so the client errs toward asking. A `cli.json` change
+refolds them at once.
+- **Package:** it is named by an entry that is its spec exactly as written, which is the text TS's server reports as
+  `source.target` (`core/src/config/plugin/source.ts` `parse`, `plugin/module.ts` `source`). The same package at
+  another version, or one named only by the project's configuration (`opencode.json`, `.opencode/opencode.json`),
+  waits for approval. A managed, explicit (`OPENCODE_CONFIG`) or `OPENCODE_CONFIG_CONTENT` layer vouches for
+  nothing.
+- **`cli.json`'s version of a package wins.** A server part for a package that a `cli.json` entry names, by its npm
+  name or, for a git spec, by its installed name, is left out at whatever version (carbon `recheck-2`). TS folds
+  `cli.json` after the server's parts, and `desired.set` keys by plugin ID, so `cli.json`'s version replaces the
+  server's (`tui/src/plugin/context.tsx:289-309`). The client decides by package name before anything loads. So
+  `cli.json`'s entry never fails as "plugin ID … is already registered" behind the server's, and the server's part is
+  not asked about. Two different packages with one ID still follow P.4's rule: the first one loaded keeps the ID.
 - **Approval of a package:** it is keyed by the package's artifact: the SHA-256 of its own tree, folded with its
   install's `package.json` and `package-lock.json`, which name its dependencies (`approval::install_root`). Once
   approved it runs where it is, unstaged and unconfined: its dependencies sit beside it in the generation (about
   300 MB for a field-test plugin), so a copy of it could not import them.
-- **Local path:** the path a server reports is canonicalized. It is vouched for under a global plugin directory
-  (`plugin`, `plugins` in the global config directory) or when an entry of the user's configuration names it (TS
-  resolves `./`, `../` and `file://` against the config file's directory). Any other path is held as a project's
-  plugin directory is, staged and confined, keyed by the same artifact. A part that names a target already found under
-  any spelling (a link, another case) is that target: one target with one decision. A server part never stands in for
-  a project's plugin the way a `cli.json` entry does (no alias).
+- **Local path:** the path a server reports is made a real path: canonicalized, without the `\\?\` verbatim prefix
+  Windows gives (carbon `recheck-3`).
+  - **Vouched:** a direct child of a global plugin directory (the reported path's parent is one; a link there
+    counts, nothing deeper such as its `node_modules` does), or a path an entry of the user's configuration names
+    (TS resolves `./`, `../` and `file://` against the config file's directory).
+  - **Otherwise:** it is held as a project's plugin directory is, staged and confined, keyed by the same artifact.
+  - **Merging:** a part that names a target already found under any spelling (a link, another case) is that target:
+    one target with one decision. A `cli.json` entry for the same directory replaces the server's part in its place,
+    with its options, compared by real path, as TS's `mergePluginTargets` merges them. A server part never stands in
+    for a project's plugin the way a `cli.json` entry does (no alias).
 - **Native build:** a server target never opens one. A part whose directory holds `plugin.so` (`.dylib`, `.dll`), or
   that names the library itself, is left out, as TS leaves out a part with no TUI entry.
 - **Remote server:** local-path parts are dropped, unless the server is on this machine: one the client started or

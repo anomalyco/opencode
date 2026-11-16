@@ -52,9 +52,16 @@ pub fn resolve(spec: &str, cache: &Path) -> Option<Package> {
     if !valid_name(&name) {
         return None;
     }
-    let directory = std::fs::canonicalize(base.join("node_modules").join(&name)).ok()?;
-    let inside = std::fs::canonicalize(&root).is_ok_and(|root| directory.starts_with(root));
+    // Real paths, without Windows' verbatim prefix: the JS host is handed this one (carbon recheck-3).
+    let directory = super::real(&base.join("node_modules").join(&name))?;
+    let inside = super::real(&root).is_some_and(|root| directory.starts_with(root));
     (inside && directory.is_dir()).then_some(Package { directory, name })
+}
+
+/// The package `spec` names, where the spec itself says: a version, range or tag of a named package, or a git spec
+/// with a name (`name@github:u/r`).
+pub fn name(spec: &str) -> Option<String> {
+    parse(spec)?.name
 }
 
 /// What `npm-package-arg` makes of a spec, as far as the key and the name go.

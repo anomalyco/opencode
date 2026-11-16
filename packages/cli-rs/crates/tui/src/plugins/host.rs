@@ -1309,21 +1309,24 @@ fn set_server_parts(tui: &Rc<Tui>, plugins: &[PluginInfo]) {
     let typed: Vec<ServerPart> = plugins
         .iter()
         .filter(|plugin| matches!(plugin.state, PluginState::Active(_)) && plugin.features.tui == Some(true))
-        .filter_map(|plugin| match &plugin.source {
-            PluginSource::Package(package) => Some(ServerPart::Package(package.target.clone())),
-            PluginSource::Local(local) if here => Some(ServerPart::Local(local.path.clone())),
-            _ => None,
+        .filter_map(|plugin| {
+            let id = plugin.id.as_ref().map(|id| id.0.clone());
+            match &plugin.source {
+                PluginSource::Package(package) => Some(ServerPart::Package { spec: package.target.clone(), id }),
+                PluginSource::Local(local) if here => Some(ServerPart::Local { path: local.path.clone(), id }),
+                _ => None,
+            }
         })
         .collect();
     let parts: Vec<String> = typed
         .iter()
         .map(|part| match part {
-            ServerPart::Package(target) | ServerPart::Local(target) => target.clone(),
+            ServerPart::Package { spec: target, .. } | ServerPart::Local { path: target, .. } => target.clone(),
         })
         .collect();
     if tui.plugins.scripts.borrow().is_some() {
         tui.plugins.server_parts.replace(parts);
-        if loader.set_server(typed, user_plugins(loader.config_dir())) {
+        if loader.set_server(typed, user_plugins(tui, loader.config_dir())) {
             loader.reconcile(&host(tui), &tui.plugins);
             tell_plugins(tui);
         }
@@ -1403,11 +1406,12 @@ fn same_machine(local: bool, url: &url::Url) -> bool {
         }
 }
 
-/// The `plugins` entries of the user's global opencode config as written (TS `ConfigDiscovery`: `opencode.json`,
-/// then `opencode.jsonc`, in the global config directory), a package's spec or a path; a file that does not parse
-/// names none.
-fn user_plugins(config_dir: &Path) -> Vec<String> {
-    ["opencode.json", "opencode.jsonc"]
+/// The `plugins` entries of the user's own configuration as written, in the order TS applies them, removals (`-…`)
+/// included (carbon recheck-1): the global opencode config's (TS `ConfigDiscovery`: `opencode.json`, then
+/// `opencode.jsonc`, in the global config directory), then `cli.json`'s. Each is a package's spec, a path or a
+/// selector; a file that does not parse names none.
+fn user_plugins(tui: &Tui, config_dir: &Path) -> Vec<String> {
+    let global = ["opencode.json", "opencode.jsonc"]
         .iter()
         .filter_map(|name| std::fs::read_to_string(config_dir.join(name)).ok())
         .filter_map(|text| opencode_local::jsonc::parse(&text))
@@ -1419,8 +1423,12 @@ fn user_plugins(config_dir: &Path) -> Vec<String> {
             Value::String(spec) => Some(spec),
             Value::Object(entry) => entry.get("package").and_then(Value::as_str).map(str::to_owned),
             _ => None,
-        })
-        .collect()
+        });
+    let cli = tui.config().info.plugins.clone().unwrap_or_default().into_iter().map(|plugin| match plugin {
+        opencode_local::cli_config::Plugin::Name(name) => name,
+        opencode_local::cli_config::Plugin::Package { package, .. } => package,
+    });
+    global.chain(cli).collect()
 }
 
 fn server_failed(plugins: &[PluginInfo]) -> usize {
@@ -1533,6 +1541,8 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
             tui.plugins.set_targets(&host, targets(current.as_deref().unwrap_or_default()).iter().map(String::as_str));
         plugins.replace(current);
         loader.set_configured(configured(&tui, targets));
+        // `cli.json`'s entries vouch for the server's parts they name, and its removals withdraw that (recheck-1).
+        loader.set_user(user_plugins(&tui, loader.config_dir()));
         loader.reconcile(&host, &tui.plugins);
         watch(&tui, &loader, &watches);
         // A new entry the loader does not load is listed skipped, with no remount (review carbon-4).
