@@ -226,4 +226,5 @@ export default {
   "settings.extensions.permissions": "Requested browser permissions: {{list}}",
   "extensions.failed.expired": "This review is no longer current. Add the extension again to review it.",
   "failed.tls": "A secure connection could not be established. Check the site address and certificate. This browser won’t bypass certificate errors.",
+  "extensions.notification.title": "Extension: {{name}}",
 }

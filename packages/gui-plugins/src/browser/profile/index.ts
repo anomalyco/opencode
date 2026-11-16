@@ -56,6 +56,7 @@ export type Profile = Awaited<ReturnType<typeof createBrowserProfile>>
  * partition's cookies in step with the profile's only while the user shares sign-ins with remote servers.
  */
 export async function createBrowserProfile(input: {
+  notificationTitle: (name: string) => string
   signal: AbortSignal
   storage: Storage
   log: Log
@@ -167,6 +168,7 @@ export async function createBrowserProfile(input: {
   }
 
   const apis = await createExtensionApis({
+    notificationTitle: input.notificationTitle,
     session,
     partition: PARTITION,
     directory,

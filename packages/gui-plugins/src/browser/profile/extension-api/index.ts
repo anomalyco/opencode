@@ -25,6 +25,7 @@ type Bus = { emit?: Emit }
  * extensions only. Call it before any extension loads, so their workers start with the APIs in place.
  */
 export async function createExtensionApis(input: {
+  notificationTitle: (name: string) => string
   session: Session
   partition: string
   directory: string
@@ -63,7 +64,7 @@ export async function createExtensionApis(input: {
       menus.module,
       createCookies({ session: input.session, tabs, emit, extensions, manifest }),
       createPermissions({ manifest }),
-      createNotifications({ emit, manifest }),
+      createNotifications({ emit, manifest, title: input.notificationTitle }),
       storageSync.module,
       createStubs({ manifest }),
     ],
