@@ -46,15 +46,6 @@ pub(in crate::service) use windows::Process;
 /// How long output is still read after the child exits.
 const DRAIN_AFTER_EXIT: Duration = Duration::from_secs(1);
 
-/// Whether `CreateProcessW` refused `PROC_THREAD_ATTRIBUTE_JOB_LIST`.
-///
-/// Win32 reports that as `ERROR_ACCESS_DENIED` (5). A packaged executable can
-/// report the same refusal as `NTSTATUS_FROM_WIN32(5)` (`0xC0070005`).
-#[cfg(any(windows, test))]
-fn create_process_refused_job(code: Option<i32>) -> bool {
-    code == Some(5) || code == Some(0xC007_0005_u32 as i32)
-}
-
 /// The output file and the actor queue, in the order every byte goes through
 /// them: the file first, so it always holds at least what subscribers have
 /// seen, even when the actor is backpressured.
@@ -351,18 +342,5 @@ mod tests {
         let mut newlines = 1;
         write_counting(&mut writer, b"x\ny\n", &mut newlines).unwrap();
         assert_eq!(newlines, 3);
-    }
-
-    #[test]
-    fn create_process_refused_job_covers_packaged_ntstatus() {
-        assert!(create_process_refused_job(Some(5)));
-        let packaged = 0xC007_0005_u32 as i32;
-        assert_eq!(packaged, -1073283067);
-        assert!(create_process_refused_job(Some(packaged)));
-        assert!(create_process_refused_job(
-            io::Error::from_raw_os_error(packaged).raw_os_error()
-        ));
-        assert!(!create_process_refused_job(Some(2)));
-        assert!(!create_process_refused_job(None));
     }
 }

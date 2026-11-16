@@ -54,7 +54,7 @@ use windows_sys::Win32::System::Threading::{
     UpdateProcThreadAttribute, WaitForMultipleObjects, WaitForSingleObject,
 };
 
-use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, Waiter, create_process_refused_job, start_pipe};
+use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, Waiter, start_pipe};
 use crate::service::{CreatePipe, ProcessSignal, TerminalHandle, TerminalId};
 use crate::transport::retained::Retained;
 use crate::transport::windows::{event, owned_handle, security::PrivateSecurity, wide};
@@ -226,7 +226,12 @@ fn spawn(
 ) -> Result<Process> {
     let (created, job) = match create_process(request, job.as_ref(), &client, false) {
         Ok(created) => (created, job),
-        Err(error) if job.is_some() && create_process_refused_job(error.raw_os_error()) => {
+        // A packaged executable reports the refusal as NTSTATUS_FROM_WIN32(5).
+        Err(error)
+            if job.is_some()
+                && (error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32)
+                    || error.raw_os_error() == Some(0xC007_0005_u32 as i32)) =>
+        {
             // A packaged executable refuses the job attribute but can still
             // join the job once created; an outer job with UI restrictions
             // refuses both. The child starts suspended, so it cannot start
