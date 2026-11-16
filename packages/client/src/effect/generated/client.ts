@@ -119,8 +119,8 @@ import type {
   ExperimentalGenerateTextOutput,
   ExperimentalGenerateImageInput,
   ExperimentalGenerateImageOutput,
-  ExperimentalGenerateVideoStartInput,
-  ExperimentalGenerateVideoStartOutput,
+  ExperimentalGenerateVideoCreateInput,
+  ExperimentalGenerateVideoCreateOutput,
   ExperimentalGenerateVideoGetInput,
   ExperimentalGenerateVideoGetOutput,
   ExperimentalGenerateDecisionsInput,
@@ -954,10 +954,10 @@ const EndpointExperimentalGenerateImage =
       ),
     )
 
-const EndpointExperimentalGenerateVideoStart =
-  (raw: RawClient["server.generate"]) => (input: ExperimentalGenerateVideoStartInput) =>
-    preserveEffect<ExperimentalGenerateVideoStartOutput>()(
-      raw["generate.video.start"]({
+const EndpointExperimentalGenerateVideoCreate =
+  (raw: RawClient["server.generate"]) => (input: ExperimentalGenerateVideoCreateInput) =>
+    preserveEffect<ExperimentalGenerateVideoCreateOutput>()(
+      raw["generate.video.create"]({
         payload: {
           model: input["model"],
           prompt: input["prompt"],
@@ -999,7 +999,7 @@ const EndpointExperimentalGenerateDecisions =
 const adaptGroupExperimentalGenerate = (raw: RawClient["server.generate"]) => ({
   text: EndpointExperimentalGenerateText(raw),
   image: EndpointExperimentalGenerateImage(raw),
-  video: { start: EndpointExperimentalGenerateVideoStart(raw), get: EndpointExperimentalGenerateVideoGet(raw) },
+  video: { create: EndpointExperimentalGenerateVideoCreate(raw), get: EndpointExperimentalGenerateVideoGet(raw) },
   decisions: EndpointExperimentalGenerateDecisions(raw),
 })
 

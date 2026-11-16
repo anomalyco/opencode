@@ -72,14 +72,14 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
     ),
   )
   .add(
-    HttpApiEndpoint.post("generate.video.start", "/api/experimental/generate/video", {
+    HttpApiEndpoint.post("generate.video.create", "/api/experimental/generate/video", {
       payload: Generate.VideoRequest,
-      success: Schema.Struct({ data: Generate.VideoRunning }).annotate({ identifier: "GenerateVideoStartResponse" }),
+      success: Schema.Struct({ data: Generate.VideoRunning }).annotate({ identifier: "GenerateVideoCreateResponse" }),
       error: [...errors, ForbiddenError],
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "experimental.generate.video.start",
-        summary: "Start a video generation",
+        identifier: "experimental.generate.video.create",
+        summary: "Create a video generation",
         description:
           "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the video; read it with GET /api/experimental/generate/video/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
       }),

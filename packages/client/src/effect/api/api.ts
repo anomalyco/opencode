@@ -1520,7 +1520,7 @@ export type ExperimentalGenerateImageOperation<E = never> = (
   input: ExperimentalGenerateImageInput,
 ) => Effect.Effect<ExperimentalGenerateImageOutput, E>
 
-export type ExperimentalGenerateVideoStartInput = {
+export type ExperimentalGenerateVideoCreateInput = {
   readonly model: Model.Ref
   readonly prompt: string
   readonly start?: Generate.ImageFile | undefined
@@ -1532,10 +1532,10 @@ export type ExperimentalGenerateVideoStartInput = {
   readonly sound?: boolean | undefined
   readonly expiresAfter?: number | undefined
 }
-export type ExperimentalGenerateVideoStartOutput = Generate.VideoRunning
-export type ExperimentalGenerateVideoStartOperation<E = never> = (
-  input: ExperimentalGenerateVideoStartInput,
-) => Effect.Effect<ExperimentalGenerateVideoStartOutput, E>
+export type ExperimentalGenerateVideoCreateOutput = Generate.VideoRunning
+export type ExperimentalGenerateVideoCreateOperation<E = never> = (
+  input: ExperimentalGenerateVideoCreateInput,
+) => Effect.Effect<ExperimentalGenerateVideoCreateOutput, E>
 
 export type ExperimentalGenerateVideoGetInput = { readonly id: Generate.VideoID }
 export type ExperimentalGenerateVideoGetOutput = Generate.VideoJob
@@ -1557,7 +1557,7 @@ export interface ExperimentalGenerateApi<E = never> {
   readonly text: ExperimentalGenerateTextOperation<E>
   readonly image: ExperimentalGenerateImageOperation<E>
   readonly video: {
-    readonly start: ExperimentalGenerateVideoStartOperation<E>
+    readonly create: ExperimentalGenerateVideoCreateOperation<E>
     readonly get: ExperimentalGenerateVideoGetOperation<E>
   }
   readonly decisions: ExperimentalGenerateDecisionsOperation<E>

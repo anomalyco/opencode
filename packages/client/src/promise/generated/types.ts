@@ -2217,7 +2217,7 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
-export type GenerateVideoStartResponse = { data: GenerateVideoRunning }
+export type GenerateVideoCreateResponse = { data: GenerateVideoRunning }
 
 export type GenerateVideoJob = GenerateVideoRunning | GenerateVideoCompleted | GenerateVideoError
 
@@ -4033,7 +4033,7 @@ export type ExperimentalGenerateImageInput = {
 
 export type ExperimentalGenerateImageOutput = GenerateImageResponse["data"]
 
-export type ExperimentalGenerateVideoStartInput = {
+export type ExperimentalGenerateVideoCreateInput = {
   readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
   readonly prompt: string
   readonly start?: { readonly data: string; readonly mime: string; readonly name?: string } | undefined
@@ -4048,7 +4048,7 @@ export type ExperimentalGenerateVideoStartInput = {
   readonly expiresAfter?: number | undefined
 }
 
-export type ExperimentalGenerateVideoStartOutput = GenerateVideoStartResponse["data"]
+export type ExperimentalGenerateVideoCreateOutput = GenerateVideoCreateResponse["data"]
 
 export type ExperimentalGenerateVideoGetInput = { readonly id: string }
 

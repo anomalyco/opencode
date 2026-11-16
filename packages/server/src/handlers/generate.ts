@@ -65,7 +65,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       if (yield* Flag.enabled("video_generate")) return
       return yield* new ForbiddenError({ message: "Video generation is disabled; enable experimental.video_generate" })
     })
-    const videoStart = Effect.fn("server.generate.video.start")(
+    const videoCreate = Effect.fn("server.generate.video.create")(
       function* (request: { readonly payload: VideoRequest }) {
         yield* videoEnabled
         yield* awaitPlugins
@@ -90,7 +90,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       .handle("generate.textLegacy", text)
       .handle("generate.image", image)
       .handle("generate.decisions", decisions)
-      .handle("generate.video.start", videoStart)
+      .handle("generate.video.create", videoCreate)
       .handle("generate.video.get", videoGet)
   }),
 )

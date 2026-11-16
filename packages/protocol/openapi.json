@@ -5472,16 +5472,16 @@
     "/api/experimental/generate/video": {
       "post": {
         "tags": ["generate"],
-        "operationId": "experimental.generate.video.start",
+        "operationId": "experimental.generate.video.create",
         "parameters": [],
         "security": [],
         "responses": {
           "200": {
-            "description": "GenerateVideoStartResponse",
+            "description": "GenerateVideoCreateResponse",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GenerateVideoStartResponse"
+                  "$ref": "#/components/schemas/GenerateVideoCreateResponse"
                 }
               }
             }
@@ -5568,7 +5568,7 @@
           }
         },
         "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the video; read it with GET /api/experimental/generate/video/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
-        "summary": "Start a video generation",
+        "summary": "Create a video generation",
         "requestBody": {
           "content": {
             "application/json": {
@@ -19566,21 +19566,21 @@
         "required": ["data"],
         "additionalProperties": false
       },
-      "GenerateVideoGetResponse": {
+      "GenerateVideoCreateResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Generate.VideoJob"
+            "$ref": "#/components/schemas/Generate.VideoRunning"
           }
         },
         "required": ["data"],
         "additionalProperties": false
       },
-      "GenerateVideoStartResponse": {
+      "GenerateVideoGetResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Generate.VideoRunning"
+            "$ref": "#/components/schemas/Generate.VideoJob"
           }
         },
         "required": ["data"],

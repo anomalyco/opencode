@@ -113,8 +113,8 @@ import type {
   ExperimentalGenerateTextOutput,
   ExperimentalGenerateImageInput,
   ExperimentalGenerateImageOutput,
-  ExperimentalGenerateVideoStartInput,
-  ExperimentalGenerateVideoStartOutput,
+  ExperimentalGenerateVideoCreateInput,
+  ExperimentalGenerateVideoCreateOutput,
   ExperimentalGenerateVideoGetInput,
   ExperimentalGenerateVideoGetOutput,
   ExperimentalGenerateDecisionsInput,
@@ -1210,8 +1210,8 @@ export function make(options: ClientOptions) {
             requestOptions,
           ).then((value) => value.data),
         video: {
-          start: (input: ExperimentalGenerateVideoStartInput, requestOptions?: RequestOptions) =>
-            request<{ readonly data: ExperimentalGenerateVideoStartOutput }>(
+          create: (input: ExperimentalGenerateVideoCreateInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalGenerateVideoCreateOutput }>(
               {
                 method: "POST",
                 path: `/api/experimental/generate/video`,
