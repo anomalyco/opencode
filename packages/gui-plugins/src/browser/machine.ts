@@ -90,12 +90,15 @@ export type State =
   | { readonly status: "disposed" }
 
 export type Event =
+  | { readonly type: "pane.file"; readonly sessionKey: string; readonly attempt: number; readonly path: string; readonly enabled: boolean; readonly onScreen: boolean; readonly room: boolean; readonly opened: boolean }
   | { readonly type: "side.changed"; readonly sessionKey: string; readonly open: boolean; readonly running: boolean }
   | { readonly type: "execution.ended"; readonly sessionKey: string }
   | { readonly type: "activity.seen"; readonly sessionKey: string; readonly tabID: Browser.TabID }
   | { readonly type: "reveal.elapsed"; readonly sessionKey: string; readonly token: number }
   | {
       readonly type: "pane.activity"
+      readonly reveal: boolean
+      readonly room: boolean
       readonly sessionKey: string
       readonly attempt: number
       readonly tabID: Browser.TabID
@@ -175,6 +178,7 @@ export type Event =
     }
 
 export type MachineEffect =
+  | { readonly type: "present-file"; readonly sessionKey: string; readonly path: string; readonly select: boolean }
   | {
       readonly type: "open-registration"
       readonly sessionKey: string
@@ -479,14 +483,17 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return attachment.unseen.includes(event.tabID)
         ? put(state, key, { ...attachment, unseen: attachment.unseen.filter(id => id !== event.tabID) })
         : { state, effects: [] }
+    case "pane.file":
     case "pane.activity": {
-      if (!current(phase, event.attempt) || !event.enabled || !event.onScreen || !attachment.strip.located)
+      if (!current(phase, event.attempt) || !event.onScreen || !attachment.strip.located)
         return { state, effects: [] }
+      const select = !event.opened && event.room && event.enabled && attachment.side !== "dismissed" && (event.type === "pane.file" || event.reveal)
 
-      if (attachment.side === "dismissed" || !attachment.browser?.tabs.some(tab => tab.id === event.tabID))
-        return { state, effects: [] }
+      if (event.type === "pane.file") return { state, effects: [{ type: "present-file", sessionKey: key, path: event.path, select }] }
 
-      if (!event.opened) {
+      if (!attachment.browser?.tabs.some(tab => tab.id === event.tabID)) return { state, effects: [] }
+
+      if (select) {
         const token = state.issued + 1
 
         return put(state, key, { ...attachment, reveal: { token, tabID: event.tabID } }, [

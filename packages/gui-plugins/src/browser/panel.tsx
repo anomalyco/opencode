@@ -257,6 +257,7 @@ export default function SessionBrowserPane(props: {
   }
 
   const drawn = () => shown() && prompt()?.ask.kind !== "dialog"
+  createKeyed(() => visible() && state()?.id, id => props.model.seen(props.session, id))
   const revealGuard = () => props.model.revealGuard(props.session, props.tab().id)
 
   // Start the guard when this panel would actually show the native view, not while its chunk is still loading.
@@ -358,7 +359,7 @@ export default function SessionBrowserPane(props: {
 
     return {
       source: source(),
-      open: !tab?.loadError && externalPage(url, session.server.local),
+      open: externalPage(url, session.server.local) && (!tab?.loadError || externalAction(url, session.server.local) === "browser"),
       reveal: externalAction(url, session.server.local) === "reveal",
       openPage() {
         if (!id || !current()) return failed()
@@ -372,7 +373,6 @@ export default function SessionBrowserPane(props: {
   }
 
   const [menuPage, setMenuPage] = createSignal<ReturnType<typeof pageTarget>>()
-  const toolbarTarget = createMemo(pageTarget)
 
   const closeOverlay = () => dispatchOverlay({ type: "overlay.cancelled" })
   const toggleInspect = () => dispatchOverlay({ type: "picker.toggled", context: context() })
@@ -409,7 +409,7 @@ export default function SessionBrowserPane(props: {
   const copyLink = () => {
     const url = address()
 
-    if (!url) return
+    if (!url || serverFile()) return
     void system.copy(url).then(
       () => showToast({ title: plugin.t("common.copied") }),
       () => showToast({ title: plugin.t("common.requestFailed") }),
@@ -785,7 +785,7 @@ export default function SessionBrowserPane(props: {
                     icon={<Icon name="outline-globe-plus" />}
                   />
                 </Tooltip>
-                <Show keyed when={!serverFile() && toolbarTarget()}>
+                <Show keyed when={!serverFile() && pageTarget()}>
                   {(target) => (
                     <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
                       <IconButton
@@ -931,16 +931,14 @@ export default function SessionBrowserPane(props: {
                   </Menu.Item>
                 </Menu.Group>
                 <Menu.Separator />
-                <Menu.Item disabled={!address()} onSelect={copyLink}>
+                <Menu.Item disabled={!address() || serverFile()} title={serverFile() ? plugin.t("menu.privateAddress") : undefined} onSelect={copyLink}>
                   {plugin.t("link.copy")}
                 </Menu.Item>
                 <Menu.Item disabled={!inspectable()} onSelect={() => find({ type: "open" })}>{plugin.t("find.open")}</Menu.Item>
                 <Show when={menuPage()?.source}>
                   {(open) => <Menu.Item onSelect={() => open()()}>{plugin.t("preview.source")}</Menu.Item>}
                 </Show>
-                <Show when={menuPage()?.open}>
-                  <Menu.Item onSelect={() => menuPage()?.openPage()}>{plugin.t("menu.openPage")}</Menu.Item>
-                </Show>
+                <Menu.Item disabled={!menuPage()?.open} title={!menuPage()?.open ? plugin.t("menu.pageUnavailable") : undefined} onSelect={() => menuPage()?.openPage()}>{plugin.t("menu.openPage")}</Menu.Item>
                 <Show when={menuPage()?.reveal}>
                 <Menu.Item onSelect={() => menuPage()?.revealFile()}>
                   {plugin.t("external.reveal")}

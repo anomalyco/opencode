@@ -150,6 +150,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const focused = new WeakMap<SessionScreen, string>()
 
   const key = (files: Files, path: string) => `file:${fileTabId(files, path)}`
+  const [unseen, setUnseen] = createStore<Record<string, boolean | undefined>>({})
 
   const active = (session: MountedSession, id: string) => {
     const state = layout.state(`file:${id}`, session)
@@ -243,18 +244,20 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     // Not batched: the mobile tab strip must register the new tab before it leaves the browser, or Kobalte falls back
     // to the first tab and reselects it.
     layout.open(key(screen.file, path), session, options)
-    dispatchPicker({ type: "file.opened", sessionKey: session.key })
+
+    if (options?.tab !== "append") dispatchPicker({ type: "file.opened", sessionKey: session.key })
     void screen.file.sync(path)
   }
 
-  ctx.provide(FileSource, { open(session, address) {
+  ctx.provide(FileSource, { open(session, address, tab) {
     const files = ctx.screen.current()?.file
     const path = files?.resolve(address)
 
     if (!files || !path || files.absolute(path) || path.split(/[\\/]/).includes("..") || sessions.current()?.key !== session.key)
       return ctx.toast.show({ variant: "error", title: ctx.t("load.failed") })
 
-    openSource(session, address)
+    if (tab === "append" && layout.state(key(files, address), session) !== "visible") setUnseen(`${session.key}\n${fileTabId(files, address)}`, true)
+    openSource(session, address, tab ? { tab, background: true } : undefined)
   } })
 
   const open = (session: MountedSession, path: string, options?: OpenOptions) => {
@@ -434,7 +437,12 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
         return missing() ? ctx.t("tab.notFound", { name }) : name
       },
-      label: (state) => <FileVisual path={path()} temporary={state.preview} notFound={missing()} />,
+      label: (state) => <>
+        <FileVisual path={path()} temporary={state.preview} notFound={missing()} />
+        <Show when={unseen[`${state.session.key}\n${id}`]}>
+          <span role="img" aria-label={ctx.t("tab.activity")} class="ms-1 size-1.5 shrink-0 rounded-full bg-v2-state-bg-info" />
+        </Show>
+      </>,
       get missing() {
         return missing()
       },
@@ -483,6 +491,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       })
     },
     close(input) {
+      setUnseen(`${input.session.key}\n${input.tab.id}`, undefined)
       tabs.get(input.screen)?.delete(input.tab.id)
 
       if (isLauncher(input.tab.id))
@@ -492,6 +501,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     },
     render: (props) => {
       const panel = usePanel()
+      createKeyed(() => panel.visible() && `${props.session.key}\n${props.tab.id}`, id => setUnseen(id, undefined))
 
       return (
         <FileProvider>

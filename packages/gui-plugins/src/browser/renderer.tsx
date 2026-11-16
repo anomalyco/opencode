@@ -382,6 +382,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     get entries() {
       return [
         { id: "settings-browser-links", title: ctx.t("settings.links.title"), keywords: "links open system browser" },
+        { id: "settings-browser-agent-pages", title: ctx.t("settings.agentPages.title"), keywords: "agent preview automatic browser pane" },
         {
           id: "settings-browser-remote",
           title: ctx.t("settings.remote.title"),
@@ -429,12 +430,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
         <div class="flex items-center gap-1.5">
           <PageIcon icon={icon()} />
           <span class="max-w-40 truncate">{text()}</span>
-          <Show when={model()?.unseen({ key: session }, id)}>
-            <span role="img" aria-label={ctx.t("tab.activity")} class="size-1.5 shrink-0 rounded-full bg-v2-icon-icon-accent" />
-          </Show>
-          {/* A tab behind another waits on the user: a dialog, a sign-in or a site's request. */}
-          <Show when={model()?.asking({ key: session }, id)}>
-            <span role="img" aria-label={ctx.t("prompt.tab")} class="size-1.5 shrink-0 rounded-full bg-v2-icon-icon-accent" />
+          <Show when={model()?.asking({ key: session }, id) ? "prompt.tab" : model()?.unseen({ key: session }, id) && "tab.activity"}>
+            {(status) => <span role="img" aria-label={ctx.t(status())} class="size-1.5 shrink-0 rounded-full" classList={{ "bg-v2-state-bg-warning": status() === "prompt.tab", "bg-v2-state-bg-info": status() === "tab.activity" }} />}
           </Show>
         </div>
       ),

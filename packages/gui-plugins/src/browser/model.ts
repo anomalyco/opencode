@@ -1,4 +1,6 @@
 import { FileVerificationError } from "@opencode/util/file-verification"
+import { builtinContext } from "@opencode/plugin/gui/builtin"
+import { FileSource } from "../file/contract"
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -56,7 +58,6 @@ type Session = Pick<SessionRef, "key">
 type Drive = {
   ref: SessionRef
   /** The agent's previews waiting for the session's screen, which resolves their paths. */
-  previews: string[]
   dispose: () => void
 }
 
@@ -100,7 +101,7 @@ export type Model = ReturnType<typeof createModel>
 export function createModel(ctx: SetupContext<typeof definition>) {
   const sessions = ctx.sessions
   const layout = ctx.layout
-  const links = ctx.links
+  const filesPanel = ctx.use(FileSource)
   // The plugin's own main entry provides the pane. `uses` declares it by reference; its full token, which this chunk
   // loads with the protocol schemas, resolves it.
   const pane = ctx.use(BrowserPane)
@@ -137,6 +138,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // Main names why it moved control elsewhere or refused an address; any other failure is a failed request.
   const describe = (error: string) => {
+    if (error === "browser.menu.failed") return ctx.t("menu.failed")
+
     if (error === "browser.pane.replaced") return ctx.t("replaced")
 
     if (error === "browser.address.credentials") return ctx.t("refused.credentials")
@@ -170,6 +173,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   const run = (effect: MachineEffect) => {
+    if (effect.type === "present-file") {
+      const view = sessions.current()
+      const files = filesPanel()
+
+      if (view?.key === effect.sessionKey && files.status === "active") files.value.open(view, effect.path, effect.select ? "select" : "append")
+
+      return
+    }
+
     if (effect.type === "open-registration") return open(effect)
 
     if (effect.type === "close-registration") {
@@ -331,14 +343,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (event.type === "focus") return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
 
-    if (event.type === "activity") return dispatch({
-      type: "pane.activity", sessionKey, attempt, tabID: event.tabID,
-      enabled: ctx.stores.preferences.value.agentPages !== false,
-      onScreen: sessions.current()?.key === sessionKey && !layout.narrow(),
-      opened: layout.side.opened(drive.ref), visible: layout.state(key(event.tabID), drive.ref) === "visible",
-    })
+    if (event.type === "activity" || event.type === "preview") {
+      const presentation = { sessionKey, attempt, enabled: ctx.stores.preferences.value.agentPages !== false,
+        onScreen: sessions.current()?.key === sessionKey, room: !layout.narrow() && builtinContext(ctx).layout.fitsSide(), opened: layout.side.opened(drive.ref) }
 
-    if (event.type === "preview") return preview(drive, event.path)
+      if (event.type === "preview") return dispatch({ ...presentation, type: "pane.file", path: event.path })
+
+      return dispatch({ ...presentation, type: "pane.activity", tabID: event.tabID, reveal: event.reveal, visible: layout.state(key(event.tabID), drive.ref) === "visible" })
+    }
 
     if (event.type === "inspect") return inspectors.get(sessionKey)?.forEach((listener) => listener(event))
 
@@ -474,7 +486,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     const sessionKey = ref.key
 
     if (drives.has(sessionKey)) return
-    const drive: Drive = { ref, previews: [], dispose: () => undefined }
+    const drive: Drive = { ref, dispose: () => undefined }
     drives.set(sessionKey, drive)
     dispatch({ type: "session.attached", sessionKey, serverID: ref.server.id, located: !!ref.location })
 
@@ -491,6 +503,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           const changed = () => dispatch({type:"session.capability.changed", sessionKey})
           onCleanup(data.on("plugin.updated", changed))
           onCleanup(data.on("server.connected", changed))
+          onCleanup(data.on("session.inbox.delivered", event => {
+            if (event.data.sessionID === ref.id) dispatch({ type: "execution.ended", sessionKey })
+          }))
           onCleanup(data.on("session.deleted", event => {
             if (event.data.sessionID === ref.id) dispatch({type:"session.removed", sessionKeys:[sessionKey]})
           }))
@@ -531,12 +546,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         () => !!ref.location,
         () => dispatch({ type: "session.located", sessionKey, located: true }),
         { otherwise: () => dispatch({ type: "session.located", sessionKey, located: false }) },
-      )
-
-      // Previews made while another session was on screen open once the user returns to this one.
-      createKeyed(
-        () => sessions.current()?.key === sessionKey && ctx.screen.current(),
-        () => drive.previews.splice(0).forEach((path) => preview(drive, path)),
       )
 
       return dispose
@@ -610,19 +619,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (current) openURL(session, workspaceFileURL(current.root, path, session.server.builtin ? undefined : session.id))
   }
 
-  // Main handles browser documents itself. File panel requests wait for the session's file model.
-  const preview = (drive: Drive, path: string) => {
-    const view = sessions.current()
-
-    if (view?.key === drive.ref.key && ctx.screen.current()) {
-      links.open({ href: path, session: view, background: true })
-
-      return
-    }
-
-    if (!drive.previews.includes(path)) drive.previews.push(path)
-  }
-
   return {
     available,
     attached,
@@ -631,6 +627,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     openURL,
     async createTab(sessionKey: string, owner: string, url: string) {
       if (sessions.current()?.key !== sessionKey) throw new Error("browser.pane.notOnScreen")
+      const ref = sessions.list().find(item => item.key === sessionKey)
+
+      if (ref?.server.compatible) attach(ref)
       dispatch({ type: "session.wake", sessionKey })
       const target = registrations.get(sessionKey)
 
@@ -692,6 +691,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     asking: (session: Session, tabID: string) =>
       !!state.chrome[session.key]?.[tabID]?.prompt && sessionBrowser(machine(), session.key)?.focusedTabID !== tabID,
     unseen: (session: Session, tabID: string) => unseenActivity(machine(), session.key, tabID),
+    seen: (session: Session, tabID: Browser.TabID) => dispatch({ type: "activity.seen", sessionKey: session.key, tabID }),
     revealGuard: (session: Session, tabID: string) => revealGuard(machine(), session.key, tabID),
     revealElapsed: (sessionKey: string, token: number) => dispatch({ type: "reveal.elapsed", sessionKey, token }),
     answer(session: Session, tabID: Browser.TabID, id: number, answer: PromptAnswer) {

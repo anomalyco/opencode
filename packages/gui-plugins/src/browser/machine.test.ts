@@ -97,14 +97,17 @@ const types = (effects: readonly MachineEffect[]) => effects.map((effect) => eff
 
 describe("browser pane machine", () => {
   const activity = (state: State) => ({ type: "pane.activity" as const, sessionKey: key, attempt: attempt(state),
-    tabID: tabA, enabled: true, onScreen: true, opened: false, visible: false })
+    tabID: tabA, reveal: true, room: true, enabled: true, onScreen: true, opened: false, visible: false })
 
   test.each([
     ["closed pane", {}, "open"],
     ["another browser tab, Review or Files selected", { opened: true }, "mark"],
     ["target already visible", { opened: true, visible: true }, "none"],
     ["session off screen or window hidden", { onScreen: false }, "none"],
-    ["disabled", { enabled: false }, "none"],
+    ["disabled", { enabled: false }, "mark"],
+    ["open pane with setting disabled", { enabled: false, opened: true }, "mark"],
+    ["no room beside the chat", { room: false }, "mark"],
+    ["navigate, popup, focus, implicit open or quiet tab", { reveal: false }, "mark"],
     ["superseded binding", { attempt: -1 }, "none"],
     ["since-closed tab", { tabID: tabB }, "none"],
   ] as const)("agent navigation, preview or new tab: %s", (_label, input, expected) => {
@@ -138,6 +141,15 @@ describe("browser pane machine", () => {
     expect(stale).toBe(again)
     const elapsed = transition(reveal, { type: "reveal.elapsed", sessionKey: key, token }).state
     expect(revealGuard(elapsed, key, tabA)).toBeUndefined()
+  })
+
+  test("starting with a closed pane does not dismiss the run; file previews use the same rule without replay", () => {
+    const start = ready()
+    const observed = transition(start, { type: "side.changed", sessionKey: key, open: false, running: true }).state
+    const file = { ...activity(observed), type: "pane.file" as const, path: "report.pdf" }
+    expect(transition(observed, file).effects).toEqual([{ type: "present-file", sessionKey: key, path: file.path, select: true }])
+    expect(transition(observed, { ...file, opened: true }).effects).toEqual([{ type: "present-file", sessionKey: key, path: file.path, select: false }])
+    expect(transition(observed, { ...file, onScreen: false })).toEqual({ state: observed, effects: [] })
   })
 
   test("a visible restored tab requests its load on acceptance, not before the new registration exists", () => {
@@ -631,7 +643,8 @@ describe("browser pane machine", () => {
               value.phase,
               value.embeds,
               value.strip,
-              value.strip.mirrored,
+                value.strip.mirrored,
+                value.unseen,
               value.addressFocus,
               ...(value.addressFocus.status === "opening" ? [value.addressFocus.known] : []),
               ...(value.browser ? [value.browser, value.browser.tabs, ...value.browser.tabs] : []),
