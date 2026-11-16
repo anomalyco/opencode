@@ -1,6 +1,7 @@
 import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
@@ -298,13 +299,30 @@ export const SettingsProviders: Component<{
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
   const disconnect = (item: ProviderItem, name: string) => {
-    const group = consoleGroup()
-    dispatch({
-      type: "disconnect.requested",
-      providerIDs: group?.root.id === item.id ? group.providers.map((provider) => provider.id) : [item.id],
-      integrationID: item.integrationID ?? item.id,
-      providerName: name,
-    })
+    const group = consoleGroup()?.root.id === item.id ? consoleGroup() : undefined
+
+    void dialog.push(() => (
+      <DialogConfirmProviderRemoval
+        title={language.t("settings.providers.disconnect.title", { provider: name })}
+        description={
+          group && group.providers.length > 1
+            ? language.plural("settings.providers.disconnect.consoleDescription", group.providers.length, {
+                count: group.providers.length,
+                workspace: group.workspace,
+              })
+            : language.t("settings.providers.disconnect.description")
+        }
+        action={language.t("common.disconnect")}
+        onConfirm={() =>
+          dispatch({
+            type: "disconnect.requested",
+            providerIDs: group ? group.providers.map((provider) => provider.id) : [item.id],
+            integrationID: item.integrationID ?? item.id,
+            providerName: name,
+          })
+        }
+      />
+    ))
   }
 
   const activate = (provider: ProviderItem, providerName: string, account: ProviderAccount) =>
@@ -318,14 +336,29 @@ export const SettingsProviders: Component<{
     })
 
   const remove = (provider: ProviderItem, providerName: string, account: ProviderAccount) =>
-    dispatch({
-      type: "account.remove.requested",
-      integrationID: provider.integrationID ?? provider.id,
-      providerName,
-      account,
-      final: providerAccounts(integration(provider)).length === 1,
-      catalog: untrack(available),
-    })
+    void dialog.push(() => (
+      <DialogConfirmProviderRemoval
+        title={language.t("settings.providers.account.remove.title", { account: account.label })}
+        description={language.t(
+          providerAccounts(integration(provider)).length === 1
+            ? "settings.providers.account.remove.finalDescription"
+            : "settings.providers.account.remove.description",
+          { provider: providerName },
+        )}
+        action={language.t("dialog.provider.accounts.remove")}
+        // The account list can change while the dialog is open, so whether this is the last one is read on confirm.
+        onConfirm={() =>
+          dispatch({
+            type: "account.remove.requested",
+            integrationID: provider.integrationID ?? provider.id,
+            providerName,
+            account,
+            final: providerAccounts(integration(provider)).length === 1,
+            catalog: untrack(available),
+          })
+        }
+      />
+    ))
 
   function AccountMenu(menuProps: { provider: ProviderItem; name?: string }) {
     const accounts = () => providerAccounts(integration(menuProps.provider))
@@ -632,5 +665,38 @@ export const SettingsProviders: Component<{
         </div>
       </div>
     </>
+  )
+}
+
+// The row leaves the list as soon as the removal starts, so the dialog closes before the request settles.
+function DialogConfirmProviderRemoval(props: {
+  title: string
+  description: string
+  action: string
+  onConfirm: () => void
+}) {
+  const dialog = useDialog()
+  const language = useLanguage()
+
+  const confirm = () => {
+    if (dialog.closing) return
+    dialog.close()
+    props.onConfirm()
+  }
+
+  return (
+    <Dialog fit>
+      <DialogHeader hideClose>
+        <DialogTitleGroup title={props.title} description={props.description} />
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="ghost" autofocus disabled={dialog.closing} onClick={() => dialog.close()}>
+          {language.t("common.cancel")}
+        </Button>
+        <Button variant="danger" disabled={dialog.closing} onClick={confirm}>
+          {props.action}
+        </Button>
+      </DialogFooter>
+    </Dialog>
   )
 }
