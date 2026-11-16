@@ -539,24 +539,13 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
     const listed = new Map<string, Tool>()
     const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
-    const request = <A>(
-      what: string,
-      run: (signal: AbortSignal, headers: Record<string, string> | undefined) => Promise<A>,
-    ) =>
-      Effect.flatMap(TraceContext.current, (headers) =>
-        Effect.tryPromise({ try: (signal) => run(signal, headers), catch: failure }),
-      ).pipe(Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })))
+    const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
+      Effect.tryPromise({ try: run, catch: failure }).pipe(
+        Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
+      )
     // Listing is read-only, so a transient failure is safe to retry.
-    const list = <A>(
-      what: string,
-      run: (signal: AbortSignal, headers: Record<string, string> | undefined) => Promise<A>,
-    ) =>
-      retrying(
-        what,
-        Effect.flatMap(TraceContext.current, (headers) =>
-          Effect.tryPromise({ try: (signal) => run(signal, headers), catch: (error) => error }),
-        ),
-      ).pipe(
+    const list = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
+      retrying(what, Effect.tryPromise({ try: run, catch: (error) => error })).pipe(
         Effect.mapError(failure),
         Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
       )
@@ -637,13 +626,8 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       // relisted an expired list before a call either.
       tools: () =>
         advertised("tools")
-          ? list("list MCP tools", (signal, headers) =>
-              client.listTools(headers ? { _meta: headers } : undefined, {
-                ...catalog,
-                cacheMode: "bypass",
-                signal,
-                headers,
-              }),
+          ? list("list MCP tools", (signal) =>
+              client.listTools(undefined, { ...catalog, cacheMode: "bypass", signal }),
             ).pipe(
               // Our SDK patch leaves the listed tools unchecked, so one malformed tool doesn't fail the
               // whole list; each is checked here and copied, dropping fields of the wrong type.
@@ -694,36 +678,33 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           : Effect.succeed([]),
       prompts: () =>
         advertised("prompts")
-          ? list("list MCP prompts", (signal, headers) =>
-              client.listPrompts(headers ? { _meta: headers } : undefined, { ...catalog, signal, headers }),
-            ).pipe(Effect.map((r) => r.prompts))
+          ? list("list MCP prompts", (signal) => client.listPrompts(undefined, { ...catalog, signal })).pipe(
+              Effect.map((r) => r.prompts),
+            )
           : Effect.succeed([]),
       resources: () =>
         advertised("resources")
-          ? list("list MCP resources", (signal, headers) =>
-              client.listResources(headers ? { _meta: headers } : undefined, { ...catalog, signal, headers }),
-            ).pipe(Effect.map((r) => r.resources))
+          ? list("list MCP resources", (signal) => client.listResources(undefined, { ...catalog, signal })).pipe(
+              Effect.map((r) => r.resources),
+            )
           : Effect.succeed([]),
       resourceTemplates: () =>
         advertised("resources")
-          ? list("list MCP resource templates", (signal, headers) =>
-              client.listResourceTemplates(headers ? { _meta: headers } : undefined, { ...catalog, signal, headers }),
+          ? list("list MCP resource templates", (signal) =>
+              client.listResourceTemplates(undefined, { ...catalog, signal }),
             ).pipe(Effect.map((r) => r.resourceTemplates))
           : Effect.succeed([]),
       readResource: (input) => {
         if (!advertised("resources")) return Effect.succeed(undefined)
-        return request("read MCP resource", (signal, headers) =>
-          client.readResource(
-            { uri: input.uri, _meta: headers },
-            { signal: claim(signal, input), timeout: execution, headers },
-          ),
+        return request("read MCP resource", (signal) =>
+          client.readResource({ uri: input.uri }, { signal: claim(signal, input), timeout: execution }),
         )
       },
       prompt: (input) =>
-        request("get MCP prompt", (signal, headers) =>
+        request("get MCP prompt", (signal) =>
           client.getPrompt(
-            { name: input.name, arguments: input.args ?? {}, _meta: headers },
-            { signal: claim(signal, input), timeout: execution, headers },
+            { name: input.name, arguments: input.args ?? {} },
+            { signal: claim(signal, input), timeout: execution },
           ),
         ),
       callTool: (input) => {

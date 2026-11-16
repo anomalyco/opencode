@@ -1,58 +1,62 @@
 import { expect, test } from "bun:test"
 import { makeExternalSpan } from "@effect/opentelemetry/OtelTracer"
-import { baggageEntryMetadataFromString, context, propagation } from "@opentelemetry/api"
-import { Effect, References, Tracer } from "effect"
+import { Context, Effect, References, Tracer } from "effect"
 import { Otlp } from "../src/observability/otlp.js"
 import { TraceContext } from "../src/observability/trace-context.js"
 
-const parent = makeExternalSpan({
-  traceId: "11111111111111111111111111111111",
-  spanId: "2222222222222222",
-  traceFlags: 0,
-  traceState: "vendor=value",
+test("preserves external trace state and sampled/unsampled flags without a global propagator", async () => {
+  for (const traceFlags of [0, 1]) {
+    const parent = makeExternalSpan({
+      traceId: "1".repeat(32),
+      spanId: "2".repeat(16),
+      traceFlags,
+      traceState: "vendor=value",
+    })
+    expect(await Effect.runPromise(TraceContext.current.pipe(Effect.withParentSpan(parent)))).toEqual({
+      traceparent: `00-${parent.traceId}-${parent.spanId}-0${traceFlags}`,
+      tracestate: "vendor=value",
+    })
+  }
 })
 
-test("preserves external trace state and unsampled flags without a global propagator", async () => {
-  expect(await Effect.runPromise(TraceContext.current.pipe(Effect.withParentSpan(parent)))).toEqual({
-    traceparent: "00-11111111111111111111111111111111-2222222222222222-00",
-    tracestate: "vendor=value",
-  })
-})
-
-test("omits context when absent, built-in only, disabled, or explicitly non-propagating", async () => {
+test("omits absent, built-in, invalid, disabled and non-propagating context", async () => {
+  const parent = Tracer.externalSpan({ traceId: "1".repeat(32), spanId: "2".repeat(16) })
   expect(await Effect.runPromise(TraceContext.current)).toBeUndefined()
   expect(await Effect.runPromise(TraceContext.current.pipe(Effect.withSpan("MCP.callTool")))).toBeUndefined()
-  expect(
-    await Effect.runPromise(TraceContext.current.pipe(Effect.withTracerEnabled(false), Effect.withParentSpan(parent))),
-  ).toBeUndefined()
-  expect(
-    await Effect.runPromise(
-      TraceContext.current.pipe(
-        Effect.provideService(References.DisablePropagation, true),
-        Effect.withParentSpan(parent),
-      ),
-    ),
-  ).toBeUndefined()
+  for (const invalid of ["0".repeat(32), "invalid"]) {
+    expect(await Effect.runPromise(TraceContext.current.pipe(
+      Effect.withParentSpan(Tracer.externalSpan({ ...parent, traceId: invalid })),
+    ))).toBeUndefined()
+  }
+  expect(await Effect.runPromise(TraceContext.current.pipe(
+    Effect.withTracerEnabled(false),
+    Effect.withParentSpan(parent),
+  ))).toBeUndefined()
+  expect(await Effect.runPromise(TraceContext.current.pipe(
+    Effect.provideService(References.DisablePropagation, true),
+    Effect.withParentSpan(parent),
+  ))).toBeUndefined()
+  expect(await Effect.runPromise(TraceContext.current.pipe(
+    Effect.withParentSpan(Tracer.externalSpan({ ...parent, annotations: Context.make(Tracer.DisablePropagation, true) })),
+  ))).toBeUndefined()
 })
 
 test("preserves explicitly installed tracing backends that use native spans", async () => {
   const spans: Tracer.Span[] = []
-  const carrier = await Effect.runPromise(
-    TraceContext.current.pipe(
-      Effect.withSpan("custom-tracing"),
-      Effect.provideService(Tracer.Tracer, Tracer.make({
-        span(options) {
-          const span = new Tracer.NativeSpan(options)
-          spans.push(span)
-          return span
-        },
-      })),
-    ),
-  )
+  const carrier = await Effect.runPromise(TraceContext.current.pipe(
+    Effect.withSpan("custom-tracing"),
+    Effect.provideService(Tracer.Tracer, Tracer.make({
+      span(options) {
+        const span = new Tracer.NativeSpan(options)
+        spans.push(span)
+        return span
+      },
+    })),
+  ))
   expect(carrier?.traceparent).toBe(`00-${spans[0]?.traceId}-${spans[0]?.spanId}-01`)
 })
 
-test("encodes active W3C baggage and bounds it while using the production OTel tracer", async () => {
+test("propagates a real production OTel span and exports its parent continuity", async () => {
   const exported: unknown[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -62,46 +66,35 @@ test("encodes active W3C baggage and bounds it while using the production OTel t
       return Response.json({})
     },
   })
-  await Effect.gen(function* () {
+  const parent = makeExternalSpan({
+    traceId: "1".repeat(32),
+    spanId: "2".repeat(16),
+    traceFlags: 1,
+    traceState: "vendor=value",
+  })
+  const child = await Effect.gen(function* () {
     yield* Effect.addFinalizer(() => Effect.promise(() => server.stop(true)))
     const tracing = yield* Otlp.tracingLayer(
       { endpoint: server.url.origin },
       { client: "test", version: "1.0.0", channel: "local" },
     )
-    yield* Effect.gen(function* () {
-      const run = Effect.runPromiseWith(yield* Effect.context())
-      const baggage = propagation.setBaggage(
-        context.active(),
-        propagation.createBaggage({
-          "tenant.id": { value: "a b,é", metadata: baggageEntryMetadataFromString("property=value") },
-        }),
-      )
-      const carrier = yield* Effect.promise(() =>
-        context.with(baggage, () =>
-          run(TraceContext.current.pipe(Effect.withSpan("baggage.fixture"), Effect.withParentSpan(parent))),
-        ),
-      )
-      expect(carrier?.tracestate).toBe("vendor=value")
-      expect(carrier?.baggage).toBe("tenant.id=a%20b%2C%C3%A9;property=value")
-
-      const oversized = propagation.setBaggage(
-        context.active(),
-        propagation.createBaggage({
-          large: { value: "x".repeat(4096) },
-          ...Object.fromEntries(Array.from({ length: 200 }, (_, index) => [`key${index}`, { value: "x" }])),
-        }),
-      )
-      const bounded = yield* Effect.promise(() =>
-        context.with(oversized, () => run(TraceContext.current.pipe(Effect.withParentSpan(parent)))),
-      )
-      expect(bounded?.baggage?.split(",")).toHaveLength(180)
-      expect(bounded?.baggage).not.toContain("large=")
-      expect(bounded?.baggage?.length).toBeLessThanOrEqual(8192)
-
-      const withoutSpan = yield* Effect.promise(() => context.with(baggage, () => run(TraceContext.current)))
-      expect(withoutSpan).toBeUndefined()
-    }).pipe(Effect.provide(tracing))
+    return yield* Effect.gen(function* () {
+      const span = yield* Effect.currentSpan
+      const carrier = yield* TraceContext.current
+      expect(carrier).toEqual({ traceparent: `00-${span.traceId}-${span.spanId}-01`, tracestate: "vendor=value" })
+      // A genuine carried OTel parent remains valid even under the receiving fiber's default tracer.
+      expect(yield* Effect.promise(() => Effect.runPromise(
+        TraceContext.current.pipe(Effect.withParentSpan(span)),
+      ))).toEqual(carrier)
+      return span.spanId
+    }).pipe(Effect.withSpan("trace.fixture"), Effect.withParentSpan(parent), Effect.provide(tracing))
   }).pipe(Effect.scoped, Effect.runPromise)
-  // The parent is unsampled, so a valid propagated trace need not be exported locally.
-  expect(exported).toHaveLength(0)
+  expect(exported).toHaveLength(1)
+  expect(exported[0]).toMatchObject({
+    resourceSpans: [{
+      scopeSpans: [{
+        spans: [{ name: "trace.fixture", traceId: parent.traceId, spanId: child, parentSpanId: parent.spanId }],
+      }],
+    }],
+  })
 })

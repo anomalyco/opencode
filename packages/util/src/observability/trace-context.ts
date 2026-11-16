@@ -2,7 +2,7 @@ export * as TraceContext from "./trace-context.js"
 
 import { Context, Effect, Option, References, Tracer } from "effect"
 
-/** W3C context for the executing caller, without installing global instrumentation or propagators. */
+/** W3C traceparent/tracestate for the executing caller, without installing global instrumentation or propagators. */
 export const current: Effect.Effect<Record<string, string> | undefined> = Effect.gen(function* () {
   if (!(yield* References.TracerEnabled) || (yield* References.DisablePropagation)) return undefined
   const parent = yield* Effect.currentParentSpan.pipe(Effect.option)
@@ -11,7 +11,7 @@ export const current: Effect.Effect<Record<string, string> | undefined> = Effect
   // Built-in spans still exist with telemetry off, but the default tracer does not export them.
   if (parent.value instanceof Tracer.NativeSpan && (yield* Effect.tracer) === Tracer.nativeTracer) return undefined
 
-  const [{ context, propagation, trace }, { currentOtelSpan, OtelTraceFlags, OtelTraceState }] = yield* Effect.all([
+  const [{ trace }, { currentOtelSpan, OtelTraceFlags, OtelTraceState }] = yield* Effect.all([
     Effect.promise(() => import("@opentelemetry/api")),
     Effect.promise(() => import("@effect/opentelemetry/OtelTracer")),
   ])
@@ -33,20 +33,5 @@ export const current: Effect.Effect<Record<string, string> | undefined> = Effect
   }
   const state = span.traceState?.serialize()
   if (state) carrier.tracestate = state
-  const baggage = propagation
-    .getBaggage(context.active())
-    ?.getAllEntries()
-    .map(
-      ([key, entry]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(entry.value)}${entry.metadata ? `;${entry.metadata.toString()}` : ""}`,
-    )
-    // Match the OpenTelemetry W3C baggage limits: 180 entries, 4096 bytes each, 8192 total.
-    .filter((entry) => entry.length <= 4096)
-    .slice(0, 180)
-    .reduce((header, entry) => {
-      const next = header ? `${header},${entry}` : entry
-      return next.length <= 8192 ? next : header
-    }, "")
-  if (baggage) carrier.baggage = baggage
   return carrier
 })
