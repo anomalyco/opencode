@@ -5,6 +5,13 @@
 
 #![allow(unsafe_code)]
 
+// A static musl executable has no dynamic loader, so `dlopen` would fail for every plugin library.
+#[cfg(all(target_env = "musl", target_feature = "crt-static"))]
+compile_error!(
+    "build musl with `-C target-feature=-crt-static` (packages/cli-rs/.cargo/config.toml sets it unless RUSTFLAGS \
+     replaces it): a static musl executable cannot load native plugins"
+);
+
 use std::ffi::{CString, OsStr, c_void};
 use std::ptr::NonNull;
 

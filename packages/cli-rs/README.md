@@ -47,6 +47,14 @@ For another target, `bun run --cwd packages/cli-rs opentui:native --target aarch
 On Linux and macOS the library is linked statically with its own private libc++, so neither the build nor the binary
 needs `libopentui` or a system libc++.
 
+The Linux builds match OpenTUI's floor (O-164). The glibc builds link with Zig against glibc 2.17:
+`cargo zigbuild --profile dist --target x86_64-unknown-linux-gnu.2.17` (or `aarch64-…`). Their binaries need
+`libc.so.6`, `libm.so.6`, `libpthread.so.0` and `libdl.so.2` at `GLIBC_2.17` or older, and no libstdc++ or libgcc_s.
+The musl builds (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, with OpenTUI's musl library from
+`opentui:native --target`) link musl dynamically, because a static musl binary cannot `dlopen` native plugins.
+`.cargo/config.toml` sets `-C target-feature=-crt-static` and Zig's `-dynamic` for them, and a crt-static musl build
+fails to compile. Their binaries need only musl (`ld-musl-<arch>.so.1`), which every Alpine install has.
+
 Changes to OpenTUI's Rust crates are pull requests into `packages/rust` of `anomalyco/opentui`. To move the client
 to another release, add the release's rows to the table in `script/opentui-native.ts` (from
 `gh release view <tag> -R anomalyco/opentui --json assets`), change the `tag` and the directory in

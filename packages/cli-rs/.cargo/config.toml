@@ -7,3 +7,13 @@
 # wins (CI, cross-target builds).
 [env]
 OPENTUI_LIB_DIR = { value = ".opentui/v0.9.1/host-fill-with-bun-run-opentui-native", relative = true, force = false }
+
+# musl links its C library dynamically (O-164): a static musl executable cannot dlopen, and the client loads native
+# plugin libraries. Rust's musl targets default to crt-static. The Linux builds link with Zig (cargo zigbuild), which
+# links musl statically unless its driver gets `-dynamic`; a gcc link reads that flag as debug letters and warns. A
+# RUSTFLAGS set in the shell replaces these, so crates/util/src/dl.rs also refuses to compile a crt-static musl build.
+[target.x86_64-unknown-linux-musl]
+rustflags = ["-C", "target-feature=-crt-static", "-C", "link-arg=-dynamic"]
+
+[target.aarch64-unknown-linux-musl]
+rustflags = ["-C", "target-feature=-crt-static", "-C", "link-arg=-dynamic"]
