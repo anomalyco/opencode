@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { extensionLabel } from "./label"
 import type { ContextMenuParams, Extension, MenuItemConstructorOptions } from "electron"
 import { method, none, optional, type ApiModule, type Emit } from "./api"
 import { matchesHost } from "./match-pattern"
@@ -230,12 +231,13 @@ export function createContextMenus(input: {
           const children = shownItems(items, target, item.id)
 
           if (item.type === "separator") return { type: "separator" }
+          const label = extensionLabel(extensionLabel(item.title).replaceAll("%s", () => extensionLabel(target.selectionText ?? ""))).replaceAll("&", "&&")
 
           if (children.length > 0)
-            return { label: item.title.replaceAll("%s", target.selectionText ?? ""), submenu: children.map(build) }
+            return { label, submenu: children.map(build) }
 
           return {
-            label: item.title.replaceAll("%s", target.selectionText ?? ""),
+            label,
             type: item.type,
             checked: item.checked,
             enabled: item.enabled,
@@ -245,7 +247,7 @@ export function createContextMenus(input: {
 
         const top = shownItems(items, target).map(build)
 
-        return top.length <= 1 ? top : [{ label: extension.name, submenu: top }]
+        return top.length ? [{ label: extensionLabel(extension.name).replaceAll("&", "&&") || extension.id, submenu: top }] : []
       })
 
   }

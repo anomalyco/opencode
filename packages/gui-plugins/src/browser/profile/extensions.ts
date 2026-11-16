@@ -4,6 +4,7 @@ import path from "node:path"
 import { promisify } from "node:util"
 import { inflateRaw } from "node:zlib"
 import { Option, Schema } from "effect"
+import { extensionLabel } from "./extension-api/label"
 
 const Manifest = Schema.Struct({
   manifest_version: Schema.Number,
@@ -106,14 +107,14 @@ export async function displayName(directory: string, manifest: Manifest) {
   const locale = manifest.default_locale
   const file = locale && /^[A-Za-z0-9_-]{1,16}$/.test(locale) ? within(directory, `_locales/${locale}/messages.json`) : undefined
 
-  if (!match?.[1] || !file) return manifest.name
+  if (!match?.[1] || !file) return extensionLabel(manifest.name)
   const text = await readFile(file, "utf8").catch(() => undefined)
 
   const messages = text === undefined ? undefined : Option.getOrUndefined(decodeMessages(text.replace(/^\uFEFF/, "")))
   const key = match[1].toLowerCase()
   const entry = Object.entries(messages ?? {}).find(([name]) => name.toLowerCase() === key)
 
-  return entry?.[1].message ?? manifest.name
+  return extensionLabel(entry?.[1].message ?? manifest.name)
 }
 
 /**
