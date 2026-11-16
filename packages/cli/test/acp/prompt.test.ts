@@ -55,6 +55,154 @@ const held = {
   onInterrupt: ({ sessionID }) => [interrupted(sessionID)],
 } satisfies WireOptions
 
+test("streams every execution submitted by a still-running command", async () => {
+  const gate = Promise.withResolvers<Response>()
+  await using acp = await startSession({
+    fetch: (request) => (request.method === "POST" && request.path.endsWith("/command") ? gate.promise : undefined),
+  })
+  let responded = false
+  const prompt = acp.prompt(acp.sessionId, "/review now").then((result) => {
+    responded = true
+    return result
+  })
+  try {
+    await acp.until(() => acp.server.requests.some((request) => request.path.endsWith("/command")))
+    acp.server.send(
+      delivered(acp.sessionId, "msg_command_owned"),
+      durableEvent("session.execution.started", { sessionID: acp.sessionId }),
+      textDelta(acp.sessionId, "msg_phase1", "phase one"),
+    )
+    await acp.waitForUpdate(
+      (item) =>
+        item.update.sessionUpdate === "agent_message_chunk" &&
+        item.update.content.type === "text" &&
+        item.update.content.text === "phase one",
+    )
+    acp.server.send(
+      succeeded(acp.sessionId),
+      delivered(acp.sessionId, "msg_command_next"),
+      durableEvent("session.execution.started", { sessionID: acp.sessionId }),
+      textDelta(acp.sessionId, "msg_phase2", "phase two"),
+      succeeded(acp.sessionId),
+    )
+    await acp.waitForUpdate(
+      (item) =>
+        item.update.sessionUpdate === "agent_message_chunk" &&
+        item.update.content.type === "text" &&
+        item.update.content.text === "phase two",
+    )
+    expect(responded).toBe(false)
+    gate.resolve(new Response(null, { status: 204 }))
+    expect((await prompt).stopReason).toBe("end_turn")
+  } finally {
+    gate.resolve(new Response(null, { status: 204 }))
+  }
+})
+
+test("a returned command waits for the current execution's final text and terminal event", async () => {
+  const gate = Promise.withResolvers<Response>()
+  await using acp = await startSession({
+    fetch: (request) => (request.method === "POST" && request.path.endsWith("/command") ? gate.promise : undefined),
+  })
+  let responded = false
+  const prompt = acp.prompt(acp.sessionId, "/review now").then((result) => {
+    responded = true
+    return result
+  })
+  await acp.until(() => acp.server.requests.some((request) => request.path.endsWith("/command")))
+  acp.server.send(
+    delivered(acp.sessionId, "msg_owned"),
+    durableEvent("session.execution.started", { sessionID: acp.sessionId }),
+    textDelta(acp.sessionId, "msg_text", "before return"),
+  )
+  await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
+  gate.resolve(new Response(null, { status: 204 }))
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(responded).toBe(false)
+  acp.server.send(textDelta(acp.sessionId, "msg_text", "final text"), succeeded(acp.sessionId))
+  expect((await prompt).stopReason).toBe("end_turn")
+  expect(
+    acp.updates.some(
+      (item) =>
+        item.update.sessionUpdate === "agent_message_chunk" &&
+        item.update.content.type === "text" &&
+        item.update.content.text === "final text",
+    ),
+  ).toBe(true)
+})
+
+test("a command that returns before its expanded prompt starts still streams", async () => {
+  const gate = Promise.withResolvers<Response>()
+  await using acp = await startSession({
+    fetch: (request) => (request.method === "POST" && request.path.endsWith("/command") ? gate.promise : undefined),
+  })
+  const prompt = acp.prompt(acp.sessionId, "/review now")
+  await acp.until(() => acp.server.requests.some((request) => request.path.endsWith("/command")))
+  gate.resolve(new Response(null, { status: 204 }))
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  acp.server.send(
+    delivered(acp.sessionId, "msg_command_owned"),
+    durableEvent("session.execution.started", { sessionID: acp.sessionId }),
+    textDelta(acp.sessionId, "msg_expanded", "expanded output"),
+    succeeded(acp.sessionId),
+  )
+  await acp.waitForUpdate(
+    (item) =>
+      item.update.sessionUpdate === "agent_message_chunk" &&
+      item.update.content.type === "text" &&
+      item.update.content.text === "expanded output",
+  )
+  expect((await prompt).stopReason).toBe("end_turn")
+})
+
+test("a returned command waits for an execution started after the previous terminal", async () => {
+  const gate = Promise.withResolvers<Response>()
+  await using acp = await startSession({
+    fetch: (request) => (request.method === "POST" && request.path.endsWith("/command") ? gate.promise : undefined),
+  })
+  let responded = false
+  const prompt = acp.prompt(acp.sessionId, "/review now").then((result) => {
+    responded = true
+    return result
+  })
+  await acp.until(() => acp.server.requests.some((request) => request.path.endsWith("/command")))
+  acp.server.send(
+    delivered(acp.sessionId, "msg_first"),
+    durableEvent("session.execution.started", { sessionID: acp.sessionId }),
+    textDelta(acp.sessionId, "msg_first_text", "first"),
+    succeeded(acp.sessionId),
+  )
+  await acp.waitForUpdate(
+    (item) =>
+      item.update.sessionUpdate === "agent_message_chunk" &&
+      item.update.content.type === "text" &&
+      item.update.content.text === "first",
+  )
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  acp.server.send(
+    delivered(acp.sessionId, "msg_second"),
+    durableEvent("session.execution.started", { sessionID: acp.sessionId }),
+    textDelta(acp.sessionId, "msg_second_start", "second start"),
+  )
+  await acp.waitForUpdate(
+    (item) =>
+      item.update.sessionUpdate === "agent_message_chunk" &&
+      item.update.content.type === "text" &&
+      item.update.content.text === "second start",
+  )
+  gate.resolve(new Response(null, { status: 204 }))
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(responded).toBe(false)
+  acp.server.send(textDelta(acp.sessionId, "msg_second_text", "second final"), succeeded(acp.sessionId))
+  await acp.waitForUpdate(
+    (item) =>
+      item.update.sessionUpdate === "agent_message_chunk" &&
+      item.update.content.type === "text" &&
+      item.update.content.text === "second final",
+  )
+  expect((await prompt).stopReason).toBe("end_turn")
+})
+
 describe("acp prompt turns over the wire", () => {
   test("streams an admitted turn and resolves with usage after its terminal event", async () => {
     const releaseAdmission = Promise.withResolvers<void>()
