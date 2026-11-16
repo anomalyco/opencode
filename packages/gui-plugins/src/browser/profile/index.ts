@@ -309,9 +309,15 @@ export async function createBrowserProfile(input: {
 
     const folder = record.directory
     const previous = stored.value.find((item) => item.id === record.id)
+    const previousVersion = previous && details.get(previous.id)?.version
 
     // Chromium keeps the loaded copy's files open, and Windows moves no open file.
-    if (previous && session.extensions.getExtension(previous.id)) session.extensions.removeExtension(previous.id)
+    if (previous) {
+      apis.forget(previous.id)
+
+      if (session.extensions.getExtension(previous.id)) session.extensions.removeExtension(previous.id)
+    }
+
     const swapped = await swapIn(staging, folder)
 
     if (!swapped) {
@@ -322,15 +328,25 @@ export async function createBrowserProfile(input: {
       return { type: "failed", reason: "manifest" }
     }
 
-    const result = await add(record)
+    const restoreMenus = previous && apis.resetMenus(previous.id)
+    const finishInstall = apis.prepareInstall(record.id, previousVersion)
+
+    const result = await add(record).catch((cause: unknown) => {
+      finishInstall(false)
+      throw cause
+    })
+
+    finishInstall(result.type === "installed")
 
     if (result.type === "installed") {
+
       if (swapped.backup) void rm(swapped.backup, { recursive: true, force: true }).catch(() => undefined)
 
       return result
     }
 
     // The new copy did not load: it goes, and the previous one, if any, comes back as it was.
+    restoreMenus?.()
     await rm(folder, { recursive: true, force: true }).catch(() => undefined)
 
     if (swapped.backup) await rename(swapped.backup, folder).catch(() => undefined)

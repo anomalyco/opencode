@@ -31,6 +31,10 @@ export async function createExtensionHost(input: {
   // Listeners by event, then by extension.
   const subscribers = new Map<string, Map<string, Subscriber[]>>()
   const workers = new Map<number, ServiceWorkerMain>()
+
+  type Install = { reason: "install" } | { reason: "update"; previousVersion: string }
+
+  const installs = new Map<string, Promise<Install | undefined>>()
   const file = path.join(input.directory, "extension-preload.js")
 
   // The modules already listen (to cookies, tabs); a host that cannot start lets them go again.
@@ -84,6 +88,14 @@ export async function createExtensionHost(input: {
 
   const subscribe = (extension: Extension | undefined, name: string, subscriber: Subscriber) => {
     if (!extension || !allowed(input.manifest(extension), namespaceOf(namespaces, name))) return
+
+    if (name === "runtime.onInstalled") {
+      const pending = installs.get(extension.id)
+      installs.delete(extension.id)
+
+      return pending
+    }
+
     const byExtension = subscribers.get(name) ?? new Map<string, Subscriber[]>()
     const list = byExtension.get(extension.id) ?? []
 
@@ -95,6 +107,7 @@ export async function createExtensionHost(input: {
 
     if (!same) byExtension.set(extension.id, [...list, subscriber])
     subscribers.set(name, byExtension)
+
   }
 
   const frameContext = (event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) => {
@@ -120,8 +133,8 @@ export async function createExtensionHost(input: {
     contents.ipc.handle("browser-extension:subscribe", (event, name: string) => {
       const context = frameContext(event)
 
-      if (context)
-        subscribe(context.extension, name, {
+      if (context && (name !== "runtime.onInstalled" || (contents.getType() === "backgroundPage" && !context.frame.parent)))
+        return subscribe(context.extension, name, {
           kind: "frame",
           process: context.frame.processId,
           routing: context.frame.routingId,
@@ -210,8 +223,21 @@ export async function createExtensionHost(input: {
 
   return {
     emit,
+    // Only an approved install arms this event, never a startup load. Registration and load completion can race.
+    prepareInstall(id: string, previousVersion: string | undefined) {
+      const pending = Promise.withResolvers<Install | undefined>()
+      installs.set(id, pending.promise)
+      const info: Install = previousVersion === undefined ? { reason: "install" } : { reason: "update", previousVersion }
+
+      return (success: boolean) => {
+        pending.resolve(success ? info : undefined)
+
+        if (!success) installs.delete(id)
+      }
+    },
     /** Forgets an extension's listeners, as when it is removed or turned off. */
     forget(extension: string) {
+      installs.delete(extension)
       subscribers.forEach((byExtension) => byExtension.delete(extension))
       input.modules.forEach((module) => module.forget?.(extension))
     },
@@ -233,6 +259,7 @@ export async function createExtensionHost(input: {
       })
       workers.clear()
       subscribers.clear()
+      installs.clear()
       input.modules.forEach((module) => module.dispose?.())
     },
   }

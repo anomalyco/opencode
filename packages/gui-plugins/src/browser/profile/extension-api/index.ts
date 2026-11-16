@@ -38,7 +38,7 @@ export async function createExtensionApis(input: {
   const extensions = () => input.session.extensions.getAllExtensions()
   const manifest = createManifests()
   const tabs = createExtensionTabs({ emit, extensions, manifest })
-  const menus = createContextMenus({ tabs, emit, extensions, manifest })
+  const menus = createContextMenus({ tabs, emit, extensions, manifest, storage: input.storage })
   const popups = createPopups({ partition: input.partition, tabs })
 
   const actions = createActions({
@@ -58,6 +58,7 @@ export async function createExtensionApis(input: {
     log: input.log,
     manifest,
     modules: [
+      { namespaces: [{ path: "runtime", methods: [], events: ["onInstalled"] }], methods: {} },
       tabs.module,
       actions.module,
       createWebNavigation({ tabs, emit }),
@@ -75,6 +76,8 @@ export async function createExtensionApis(input: {
   return {
     tabs,
     menu: menus.template,
+    prepareInstall: host.prepareInstall,
+    resetMenus: menus.reset,
     /** The toolbar button state the extensions menu shows, for extensions that have a button. */
     action: actions.view,
     /**
@@ -95,6 +98,7 @@ export async function createExtensionApis(input: {
     },
     /** Deletes what an extension kept in this app, as when the user removes it. */
     uninstall(id: string) {
+      menus.remove(id)
       storageSync.remove(id)
     },
     dispose() {
