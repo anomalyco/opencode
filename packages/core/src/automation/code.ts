@@ -92,16 +92,17 @@ export const authorize = Effect.fnUntraced(function* (
   const scanned = CodeMode.scanTools(action.code)
   if (Result.isFailure(scanned)) return yield* Effect.fail(scanned.failure.message)
   const paths = scanned.success
-  const actions = ["execute", ...(yield* resolveTools(paths)).actions]
+  const actions = (yield* resolveTools(paths)).actions
 
   // Fail fast on any explicit deny before asking the user to approve earlier tools.
   yield* Effect.forEach(
-    actions,
+    ["execute", ...actions],
     (item) => permission.assertNotDenied({ action: item, resources: ["*"], sessionID: session.id, agent: agent.id }),
     { discard: true },
   )
+  // Approving the tools covers running the program; a program with no tools asks for `execute` alone.
   yield* Effect.forEach(
-    actions,
+    actions.length === 0 ? ["execute"] : actions,
     (item) =>
       permission.assert({
         action: item,

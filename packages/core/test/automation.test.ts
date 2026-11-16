@@ -434,6 +434,29 @@ describe("Automation", () => {
       yield* automations.tick
       expect(yield* pending).toEqual([{ id: messageID(automation, 1), sessionID: otherID }])
       expect(wakes).toEqual([otherID])
+
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.make("prj_elsewhere"), worktree: AbsolutePath.make("/elsewhere"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .update(SessionTable)
+        .set({ project_id: Project.ID.make("prj_elsewhere") })
+        .where(eq(SessionTable.id, otherID))
+        .run()
+        .pipe(Effect.orDie)
+      expect(
+        yield* Effect.flip(
+          automations.create({
+            sessionID,
+            name: "reach",
+            trigger: every("1 hour"),
+            action: { type: "prompt", prompt: "x", to: { session: otherID } },
+          }),
+        ),
+      ).toMatchObject({ reason: `Session ${otherID} is in another project` })
     }),
   )
 
@@ -493,6 +516,16 @@ describe("Automation", () => {
           automations.create({ name: "x", directory: enabledDirectory, trigger: every("1 hour"), action: code("") }),
         ),
       ).toMatchObject({ reason: "A code action needs a session" })
+      expect(
+        yield* Effect.flip(
+          automations.create({
+            name: "x",
+            directory: "relative",
+            trigger: every("1 hour"),
+            action: { type: "prompt", prompt: "x", to: { new: Agent.defaultID } },
+          }),
+        ),
+      ).toMatchObject({ reason: "Directory must be an absolute path: relative" })
       expect(
         yield* Effect.flip(
           automations.create({
@@ -1074,8 +1107,8 @@ describe("Automation", () => {
           action: code(watchThread, { channel: "#ops" }),
         })
         yield* Fiber.interrupt(answerLoop)
-        expect(asked.map((request) => request.action)).toEqual(["execute", "slack_read_thread", "slack_post"])
-        expect(asked[1]).toMatchObject({
+        expect(asked.map((request) => request.action)).toEqual(["slack_read_thread", "slack_post"])
+        expect(asked[0]).toMatchObject({
           metadata: {
             automation: "thread",
             trigger: { type: "every", every: "1 minute" },
@@ -1092,7 +1125,7 @@ describe("Automation", () => {
         slack.replies = 2
         yield* TestClock.adjust("1 minute")
         yield* automations.tick
-        expect(asked).toHaveLength(3)
+        expect(asked).toHaveLength(2)
         expect(slack.posts).toEqual(["#ops: 2"])
         expect(yield* automations.get(automation.id)).toMatchObject({ runCount: 2, lastOutcome: "fired" })
       }),

@@ -2,6 +2,7 @@ export * as Automation from "./automation.js"
 
 import { randomUUID } from "node:crypto"
 import os from "node:os"
+import path from "node:path"
 import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -614,13 +615,16 @@ const layer = Layer.effect(
       owner: SessionSchema.Info | undefined,
       trigger: Trigger,
       directory: string,
+      projectID: ProjectID,
     ) {
       const action = input.action
       if (action.type === "prompt") {
         const to = action.to ?? (owner === undefined ? undefined : { session: owner.id })
         if (to === undefined)
           return yield* new InvalidError({ reason: "A prompt action needs `to` when there is no session" })
-        if (to.session !== undefined) yield* sessions.get(to.session)
+        // Another project's Session is out of reach, as it is for the automation tools.
+        if (to.session !== undefined && (yield* sessions.get(to.session)).projectID !== projectID)
+          return yield* new InvalidError({ reason: `Session ${to.session} is in another project` })
         if (to.new !== undefined) {
           const agent = yield* Agent.Service.use((agents) => agents.resolve(to.new)).pipe(inDirectory(directory))
           if (agent === undefined) return yield* new InvalidError({ reason: `Unknown agent: ${to.new}` })
@@ -643,6 +647,8 @@ const layer = Layer.effect(
       create: Effect.fn("Automation.create")(function* (input) {
         const owner = input.sessionID === undefined ? undefined : yield* sessions.get(input.sessionID)
         const directory = owner?.location.directory ?? input.directory ?? os.homedir()
+        if (!path.isAbsolute(directory))
+          return yield* new InvalidError({ reason: `Directory must be an absolute path: ${directory}` })
         const missingDirectory = () =>
           Effect.fail(new InvalidError({ reason: `Directory does not exist: ${directory}` }))
         const config = yield* settings(directory).pipe(
@@ -658,10 +664,10 @@ const layer = Layer.effect(
         const expiresAt = expires === undefined ? null : Option.getOrThrow(expires)
         if (expiresAt !== null && first.due > expiresAt)
           return yield* new InvalidError({ reason: "The automation expires before it first runs" })
-        const action = yield* resolveAction(input, owner, first.trigger, directory).pipe(
+        const projectID = owner?.projectID ?? (yield* projects.resolve(AbsolutePath.make(directory))).id
+        const action = yield* resolveAction(input, owner, first.trigger, directory, projectID).pipe(
           Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
         )
-        const projectID = owner?.projectID ?? (yield* projects.resolve(AbsolutePath.make(directory))).id
 
         const row = yield* db
           .insert(AutomationTable)
