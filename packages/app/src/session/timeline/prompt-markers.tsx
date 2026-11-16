@@ -8,6 +8,8 @@ export type PromptMarker = {
   index: number
   /** The user message's ID, which marks the prompt the view currently rests on. */
   id: string
+  /** The prompt's own number among the session's prompts, which a mark shared by several still reports. */
+  ordinal: number
 }
 
 type PromptMarkersProps = {
@@ -54,7 +56,7 @@ export function PromptMarkers(props: PromptMarkersProps) {
       onPointerLeave={() => setState("preview", undefined)}
     >
       <For each={props.markers()}>
-        {(marker, ordinal) => {
+        {(marker) => {
           const active = () => props.activeID() === marker.id
 
           return (
@@ -62,7 +64,7 @@ export function PromptMarkers(props: PromptMarkersProps) {
               type="button"
               class="group pointer-events-auto absolute grid h-2 w-full -translate-y-1/2 cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
               style={{ top: `${props.fraction(marker.id) * 100}%` }}
-              aria-label={language.t("session.timeline.markers.goto", { index: ordinal() + 1 })}
+              aria-label={language.t("session.timeline.markers.goto", { index: marker.ordinal })}
               aria-current={active() ? "true" : undefined}
               onPointerEnter={() => setState("preview", marker.id)}
               onFocusIn={() => setState("preview", marker.id)}

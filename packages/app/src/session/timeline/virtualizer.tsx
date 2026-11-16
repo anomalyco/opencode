@@ -1142,84 +1142,104 @@ export function createTimelineVirtualizer(input: Input) {
       )
     }
 
-    // A prompt's start is read from the rows' measured offsets, so the rail never touches the DOM.
-    const promptRows = createMemo<PromptMarker[]>((previous) => {
-      const next = rows().flatMap((row, index) =>
-        Predicate.isTagged(row, "UserMessage") ? [{ index, id: row.userMessageID }] : [],
-      )
+    // The rail's data is built only while the experiment is on. A memo runs as soon as it is created, so keeping it
+    // here, outside this component, would charge every scroll and every row measurement even with the rail off.
+    function PromptRail() {
+      // A prompt's start is read from the rows' measured offsets, so the rail never touches the DOM.
+      const promptRows = createMemo<PromptMarker[]>((previous) => {
+        const next = rows()
+          .flatMap((row, index) => (Predicate.isTagged(row, "UserMessage") ? [{ index, id: row.userMessageID }] : []))
+          // A mark can stand for more than one prompt, so the ordinal a reader hears is the prompt's own number.
+          .map((row, index) => ({ ...row, ordinal: index + 1 }))
 
-      if (
-        previous?.length === next.length &&
-        previous.every((row, index) => {
-          const other = next[index]
+        if (
+          previous?.length === next.length &&
+          previous.every((row, index) => {
+            const other = next[index]
 
-          return !!other && row.index === other.index && row.id === other.id
+            return !!other && row.index === other.index && row.id === other.id
+          })
+        )
+          return previous
+
+        return next
+      })
+
+      const promptFractions = createMemo(() => {
+        const fractions = new Map<string, number>()
+        const total = virtualizer.getTotalSize()
+
+        if (!total) return fractions
+        // Reading the total first built the measurements this then indexes, so neither is stale.
+        const measurements = virtualizer.measurementsCache
+
+        promptRows().forEach((row) => {
+          fractions.set(row.id, Math.min(1, Math.max(0, (measurements[row.index]?.start ?? 0) / total)))
         })
-      )
-        return previous
 
-      return next
-    })
-
-    const promptFractions = createMemo(() => {
-      const fractions = new Map<string, number>()
-      const total = virtualizer.getTotalSize()
-
-      if (!total) return fractions
-      // Reading the total first built the measurements this then indexes, so neither is stale.
-      const measurements = virtualizer.measurementsCache
-
-      promptRows().forEach((row) => {
-        fractions.set(row.id, Math.min(1, Math.max(0, (measurements[row.index]?.start ?? 0) / total)))
+        return fractions
       })
 
-      return fractions
-    })
+      // Marks that would draw over each other share one, as the rail is too short to show both. The list keeps its
+      // identity while the same prompts are drawn, so a reply streaming below them never rebuilds the rail.
+      const promptMarkers = createMemo<PromptMarker[]>((previous) => {
+        const fractions = promptFractions()
+        const markers: PromptMarker[] = []
+        let last = -1
 
-    // Marks that would draw over each other share one, as the rail is too short to show both. The list keeps its
-    // identity while the same prompts are drawn, so a reply streaming below them never rebuilds the rail.
-    const promptMarkers = createMemo<PromptMarker[]>((previous) => {
-      const fractions = promptFractions()
-      const markers: PromptMarker[] = []
-      let last = -1
+        promptRows().forEach((row) => {
+          const fraction = fractions.get(row.id) ?? 0
 
-      promptRows().forEach((row) => {
-        const fraction = fractions.get(row.id) ?? 0
+          // The gap is measured from the mark that is drawn, not from the prompt that just joined it, so a long run
+          // of close prompts still spaces a mark every MARKER_GAP instead of collapsing into one.
+          if (last >= 0 && fraction - last < MARKER_GAP) {
+            markers[markers.length - 1] = row
 
-        if (last >= 0 && fraction - last < MARKER_GAP) {
-          markers[markers.length - 1] = row
+            return
+          }
+
+          markers.push(row)
           last = fraction
+        })
 
-          return
-        }
+        if (previous?.length === markers.length && previous.every((row, index) => row === markers[index]))
+          return previous
 
-        markers.push(row)
-        last = fraction
+        return markers
       })
 
-      if (previous?.length === markers.length && previous.every((row, index) => row === markers[index])) return previous
+      const activePromptID = createMemo(() => {
+        // The range holds overscan rows above the viewport, so the first one that reaches the view's top edge names
+        // the prompt in view.
+        const items = virtualizer.getVirtualItems()
+        const top = (virtualizer.scrollOffset ?? 0) + (input.showHeader() ? headerHeight() + 16 : 0)
+        const first = items.find((item) => item.end > top)?.index ?? items[0]?.index ?? 0
+        const markers = promptMarkers()
 
-      return markers
-    })
+        return markers.findLast((marker) => marker.index <= first)?.id ?? markers[0]?.id
+      })
 
-    const activePromptID = createMemo(() => {
-      // The range holds overscan rows above the viewport, so the first one that reaches the view's top edge names
-      // the prompt in view.
-      const items = virtualizer.getVirtualItems()
-      const top = (virtualizer.scrollOffset ?? 0) + (input.showHeader() ? headerHeight() + 16 : 0)
-      const first = items.find((item) => item.end > top)?.index ?? items[0]?.index ?? 0
-      const markers = promptMarkers()
+      // The rail only earns its room when the prompts cannot all be seen at once. Its own height, not the scroll
+      // state's, so a timeline restored to its end shows it before the reader scrolls.
+      const overflows = createMemo(
+        () =>
+          viewportHeight() > 0 &&
+          (input.showHeader() ? headerHeight() : 0) + virtualizer.getTotalSize() + bottomInset() > viewportHeight(),
+      )
 
-      return markers.findLast((marker) => marker.index <= first)?.id ?? markers[0]?.id
-    })
-
-    // The rail only earns its room when the prompts cannot all be seen at once. Its own height, not the scroll
-    // state's, so a timeline restored to its end shows it before the reader scrolls.
-    const overflows = createMemo(
-      () =>
-        viewportHeight() > 0 &&
-        (input.showHeader() ? headerHeight() : 0) + virtualizer.getTotalSize() + bottomInset() > viewportHeight(),
-    )
+      return (
+        <Show when={isDesktop() && overflows() && promptMarkers().length > 0}>
+          <PromptMarkers
+            top={input.showHeader() ? headerHeight() : 0}
+            markers={promptMarkers}
+            fraction={(id) => promptFractions().get(id) ?? 0}
+            activeID={activePromptID}
+            text={promptText}
+            onJump={jumpToPrompt}
+          />
+        </Show>
+      )
+    }
 
     const promptText = (id: string) => {
       const message = input.projection.messageByID().get(id)
@@ -1332,15 +1352,8 @@ export function createTimelineVirtualizer(input: Input) {
           class="pointer-events-none absolute inset-x-0 top-0"
           style={{ bottom: `${bottomInset()}px` }}
         >
-          <Show when={input.promptRail?.() && isDesktop() && overflows() && promptMarkers().length > 0}>
-            <PromptMarkers
-              top={input.showHeader() ? headerHeight() : 0}
-              markers={promptMarkers}
-              fraction={(id) => promptFractions().get(id) ?? 0}
-              activeID={activePromptID}
-              text={promptText}
-              onJump={jumpToPrompt}
-            />
+          <Show when={input.promptRail?.()}>
+            <PromptRail />
           </Show>
         </div>
       </div>
