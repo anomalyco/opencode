@@ -11,6 +11,7 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
+import { CallID } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
@@ -130,6 +131,9 @@ export const create = (
                   // The program sees the same failure text the model gets for a direct call.
                   const executed = yield* executeTool(name, tool, input, {
                     ...context,
+                    // Its own ID, so plugin hooks and traces can tell the program's calls apart.
+                    id: CallID.make(`${context.id}_${index}`),
+                    parentID: context.id,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.

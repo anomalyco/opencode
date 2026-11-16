@@ -28,6 +28,11 @@ export interface Context {
   readonly agent: Agent.ID
   readonly messageID: SessionMessage.ID
   readonly id: CallID
+  /**
+   * Set for a call a Code Mode program makes: the ID of the `execute` call running it. Permission requests use it,
+   * so they show on that call's row.
+   */
+  readonly parentID?: CallID
   readonly progress: (update: Metadata) => Effect.Effect<void>
   /**
    * Completes when the user asks the call to stop. A tool that awaits it can stop its work and fail with what it

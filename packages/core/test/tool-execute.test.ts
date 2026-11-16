@@ -418,6 +418,35 @@ test("execute supports callable namespace tools", async () => {
   expect(result.content).toEqual([{ type: "text", text: '["admin","created"]' }])
 })
 
+test("each call in a program gets its own ID and asks permission as the execute call", async () => {
+  const seen: Array<Pick<Tool.Context, "id" | "parentID">> = []
+  const asked: Array<Permission.AssertInput["source"]> = []
+  const input = Schema.Struct({})
+  const record = {
+    name: "record",
+    description: "Record the call",
+    input,
+    execute: (_, context) =>
+      Effect.sync(() => {
+        seen.push({ id: context.id, parentID: context.parentID })
+        asked.push(Permission.invocation(context).source)
+        return { content: "ok" }
+      }),
+  } satisfies Info<typeof input>
+  await Effect.runPromise(
+    createCodeMode(new Map<string, Info>([["record", record]])).execute(
+      { code: "await Promise.all([tools.record({}), tools.record({})])" },
+      context,
+    ),
+  )
+  expect(new Set(seen.map((call) => call.id)).size).toBe(2)
+  expect(seen.map((call) => call.id)).not.toContain(context.id)
+  expect(seen.map((call) => call.parentID)).toEqual([context.id, context.id])
+  const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
+  expect(asked).toEqual([source, source])
+  expect(Permission.invocation(context).source).toEqual(source)
+})
+
 test("executions share the prepared runtime of an inventory while keeping per-call state", async () => {
   let conversions = 0
   const echo: Info = {
@@ -437,7 +466,8 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
         },
       },
     },
-    execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
+    execute: (input, context) =>
+      Effect.succeed({ content: `${context.parentID}:${(input as { value: string }).value}` }),
   }
   const inventory = { tools: new Map([["echo", echo]]) }
   const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)

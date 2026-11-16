@@ -37,10 +37,11 @@ export interface AssertInput extends Omit<Request, "id" | "message"> {
 }
 
 /** The requester fields of a permission request made by a tool call. */
-export const invocation = (context: Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">) => ({
+export const invocation = (context: Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id" | "parentID">) => ({
   sessionID: context.sessionID,
   agent: context.agent,
-  source: { type: "tool" as const, messageID: context.messageID, id: context.id },
+  // A call inside a Code Mode program has no row of its own, so its requests show on the program's.
+  source: { type: "tool" as const, messageID: context.messageID, id: context.parentID ?? context.id },
 })
 
 export interface ReplyInput {
