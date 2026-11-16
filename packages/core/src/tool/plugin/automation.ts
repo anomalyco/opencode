@@ -3,14 +3,14 @@ export * as AutomationTools from "./automation.js"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { optional } from "@opencode/schema/schema"
-import type { Session } from "@opencode/schema/session"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { Automation } from "../../automation.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import PROMPT_AUTOMATION from "../../plugin/command/automation.txt"
-import { Session as SessionService } from "../../session.js"
+import { Session } from "../../session.js"
+import type { SessionSchema } from "../../session/schema.js"
 
 /** An automation as the model reads it, with times in the automation's own zone. */
 export const View = Schema.Struct({
@@ -46,7 +46,7 @@ export const Plugin = {
   effect: Effect.fn("AutomationTools.Plugin")(function* (ctx: Context) {
     const config = yield* Config.Service
     const automations = yield* Automation.Service
-    const sessions = yield* SessionService.Service
+    const sessions = yield* Session.Service
     // Internal plugins are not re-run on config changes, so reload the tools and the command instead.
     const loaded = yield* ConfigEntryObserver.observe(
       config,
@@ -58,7 +58,7 @@ export const Plugin = {
 
     // A request keeps the tools it started with after config reloads, so each call rechecks the flag where the
     // calling Session lives, and returns that Session for scoping.
-    const caller = (sessionID: Session.ID) =>
+    const caller = (sessionID: SessionSchema.ID) =>
       Effect.gen(function* () {
         const session = yield* sessions.get(sessionID)
         const on = yield* automations
@@ -68,7 +68,7 @@ export const Plugin = {
         return session
       })
     // Tools act only on automations in the calling Session's project.
-    const owned = (id: Automation.ID, sessionID: Session.ID) =>
+    const owned = (id: Automation.ID, sessionID: SessionSchema.ID) =>
       Effect.gen(function* () {
         const session = yield* caller(sessionID)
         const info = yield* automations.get(id)
@@ -88,13 +88,9 @@ export const Plugin = {
           output: View,
           options: { namespace: "opencode", codemode: true },
           execute: (input, context) =>
-            automations.create({ ...input, sessionID: context.sessionID }).pipe(
-              Effect.map((info) => {
-                const view = toView(info)
-                return { output: view, content: `Created: ${summary(view)}` }
-              }),
-              Effect.mapError(failure),
-            ),
+            automations
+              .create({ ...input, sessionID: context.sessionID })
+              .pipe(Effect.map(changed("Created")), Effect.mapError(failure)),
         })
         editor.add({
           name: "automation_list",
@@ -122,7 +118,7 @@ export const Plugin = {
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.pause(input.id)),
-              Effect.map((info) => ({ output: toView(info), content: `Paused: ${summary(toView(info))}` })),
+              Effect.map(changed("Paused")),
               Effect.mapError(failure),
             ),
         })
@@ -136,7 +132,7 @@ export const Plugin = {
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.resume(input.id)),
-              Effect.map((info) => ({ output: toView(info), content: `Resumed: ${summary(toView(info))}` })),
+              Effect.map(changed("Resumed")),
               Effect.mapError(failure),
             ),
         })
@@ -173,6 +169,14 @@ export const Plugin = {
       })
     })
   }),
+}
+
+/** What a tool returns for the automation it created, paused or resumed. */
+function changed(verb: string) {
+  return (info: Automation.Info) => {
+    const view = toView(info)
+    return { output: view, content: `${verb}: ${summary(view)}` }
+  }
 }
 
 /** One line per automation, for models that read tool content rather than output (Code Mode off). */

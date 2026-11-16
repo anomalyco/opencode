@@ -67,6 +67,7 @@ export type Outcome =
       readonly invalid?: boolean
     }
 
+/** The tools the program calls, or why it cannot be an automation: it does not parse, or reaches a forbidden tool. */
 function scan(code: string): Result.Result<ReadonlyArray<string>, string> {
   const scanned = CodeMode.scanTools(code)
   if (Result.isFailure(scanned)) return Result.fail(scanned.failure.message)
@@ -74,9 +75,6 @@ function scan(code: string): Result.Result<ReadonlyArray<string>, string> {
   if (forbidden !== undefined) return Result.fail(`Tool ${forbidden} cannot be used inside an automation`)
   return Result.succeed(scanned.success)
 }
-
-/** Validates the program without loading a Location or asking for permissions. */
-export const validate = (code: string): Result.Result<void, string> => Result.map(scan(code), () => undefined)
 
 /**
  * Runs in the creating Session's Location while the user is present: asks once for each tool's permission (and for
@@ -100,7 +98,7 @@ export const authorize = Effect.fnUntraced(function* (
     action: item,
     resources: Array.dedupe([
       "*",
-      ...narrower(rules, item).flatMap((rule) => (rule.effect === "ask" ? [rule.resource] : [])),
+      ...scopedRules(rules, item).flatMap((rule) => (rule.effect === "ask" ? [rule.resource] : [])),
     ]),
     sessionID: session.id,
     agent: agent.id,
@@ -123,7 +121,7 @@ export const authorize = Effect.fnUntraced(function* (
 })
 
 /** Rules for `action` that name specific resources rather than `*`, in order. */
-function narrower(rules: Permission.Ruleset, action: string) {
+function scopedRules(rules: Permission.Ruleset, action: string) {
   return rules.filter((rule) => rule.resource !== "*" && Wildcard.match(action, rule.action))
 }
 
@@ -144,7 +142,7 @@ const resolveTools = Effect.fnUntraced(function* (paths: ReadonlyArray<string>) 
   return { tools, actions: [...actions] }
 })
 
-/** Runs one tick under the permissions authorized at creation, including plugin activation in the wall-clock cap. */
+/** Runs the program once under the permissions authorized at creation. Plugin activation counts toward the time cap. */
 export const run = Effect.fnUntraced(
   function* (session: SessionSchema.Info, action: Automation.CodeAction, input: RunInput) {
     yield* Plugin.awaitActivation
@@ -162,11 +160,11 @@ export const run = Effect.fnUntraced(
 
     const actions = ["execute", ...resolved.success.actions]
     const rules = Permission.merge(agent.info.permissions, session.permissions ?? [])
-    // Unattended rules come after the configured ones and the last match wins, so restate every narrower rule after the
+    // Unattended rules come after the configured ones and the last match wins, so restate every scoped rule after the
     // grant: the approval stands in for the catch-all `*` only, and a scoped `ask` still needs a person.
     const unattended: Permission.Ruleset = actions.flatMap((item) => [
       { action: item, resource: "*", effect: "allow" as const },
-      ...narrower(rules, item),
+      ...scopedRules(rules, item),
     ])
 
     // A deny added to config after creation still wins.
@@ -201,6 +199,7 @@ export const run = Effect.fnUntraced(
         result.error.kind === "UnsupportedSyntax" ||
         result.error.kind === "UnknownTool" ||
         result.error.kind === "InvalidToolInput" ||
+        // A scoped `ask` with nobody present to answer it, in Permission's own wording.
         result.error.message.includes("needs approval")
       return { ok: false as const, error: result.error.message, output, ...(invalid ? { invalid: true } : {}) }
     }
