@@ -155,7 +155,7 @@ export const InstallResult = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("failed"),
-    reason: Schema.Literals(["manifest", "download", "load"]),
+    reason: Schema.Literals(["manifest", "download", "load", "collision"]),
     message: Schema.optionalKey(Schema.String),
   }),
 ])

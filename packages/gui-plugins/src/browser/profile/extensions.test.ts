@@ -11,6 +11,8 @@ import {
   extensionFiles,
   extensionID,
   parseCrx,
+  pinKey,
+  readManifest,
   readZip,
   storeTarget,
   unzip,
@@ -98,6 +100,19 @@ test("names a store listing by its id, from a bare id or either store's link", (
     undefined,
     undefined,
   ])
+})
+
+test("the installer's key replaces any ID requested by the unpacked manifest", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "extension-key-"))
+
+  try {
+    await writeFile(path.join(directory, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Test", version: "1", key: "previous" }))
+    const key = generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey.export({ type: "spki", format: "der" })
+    expect(await pinKey(directory, key)).toBe(true)
+    expect((await readManifest(directory))?.key).toBe(key.toString("base64"))
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
 
 test("a store redirect never sends an HTTP request or leaves that store's delivery hosts", () => {

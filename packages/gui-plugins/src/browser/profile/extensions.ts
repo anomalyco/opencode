@@ -456,8 +456,7 @@ export async function pinKey(directory: string, key: Uint8Array) {
 
   if (!manifest) return false
 
-  if (!("key" in manifest))
-    await writeFile(file, JSON.stringify({ ...manifest, key: Buffer.from(key).toString("base64") }, null, 2))
+  await writeFile(file, JSON.stringify({ ...manifest, key: Buffer.from(key).toString("base64") }, null, 2))
 
   return true
 }

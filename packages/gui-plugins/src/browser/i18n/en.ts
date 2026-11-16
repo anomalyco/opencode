@@ -218,4 +218,5 @@ export default {
   "settings.extensions.source.folder": "From folder {{path}}. Not verified by a store signature.",
   "settings.extensions.source.browser": "Copied from {{source}} ({{profile}}). Not verified by a store signature.",
   "settings.extensions.source.store": "From the store listing. The package signature matches the extension ID.",
+  "extensions.failed.collision": "A different extension already uses this ID. Nothing was replaced.",
 }

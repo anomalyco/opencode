@@ -1,4 +1,5 @@
 import { cp, lstat, readFile, realpath, rename, rm, stat } from "node:fs/promises"
+import { generateKeyPairSync } from "node:crypto"
 import path from "node:path"
 import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
@@ -13,6 +14,7 @@ import { cookiesPersist } from "./probe"
 import { createPreviews } from "./previews"
 import {
   displayName,
+  extensionID,
   extensionIcon,
   extensionFiles,
   extensionPage,
@@ -36,6 +38,8 @@ const StoredExtension = Schema.Struct({
   directory: Schema.String,
   enabled: Schema.Boolean,
   source: Schema.Literals(["folder", "store", "browser"]),
+  origin: Schema.optional(Schema.String),
+  localKey: Schema.optional(Schema.String),
 })
 
 type StoredExtension = typeof StoredExtension.Type
@@ -198,7 +202,8 @@ export async function createBrowserProfile(input: {
    * or that asks for access the user has not seen, loads only with `force`; until then a copy this app made is
    * deleted again.
    */
-  const add = async (folder: string, source: StoredExtension["source"], force = false): Promise<InstallResult> => {
+  const add = async (record: StoredExtension, force = false): Promise<InstallResult> => {
+    const folder = record.directory
     const manifest = await readManifest(folder)
 
     if (!manifest || manifest.theme !== undefined) return { type: "failed", reason: "manifest" }
@@ -215,7 +220,7 @@ export async function createBrowserProfile(input: {
       const name = await displayName(folder, manifest)
       const icon = await extensionIcon(folder, manifest)
 
-      if (source !== "folder") await rm(folder, { recursive: true, force: true }).catch(() => undefined)
+      await rm(folder, { recursive: true, force: true }).catch(() => undefined)
 
       return { type: review, name, icon, compatibility, access }
     }
@@ -226,7 +231,13 @@ export async function createBrowserProfile(input: {
     )
 
     if (extension instanceof Error) return { type: "failed", reason: "load", message: extension.message }
-    const record = { id: extension.id, directory: folder, enabled: true, source }
+
+    if (extension.id !== record.id) {
+      session.extensions.removeExtension(extension.id)
+
+      return { type: "failed", reason: "manifest" }
+    }
+
     stored.set([...stored.value.filter((item) => item.id !== record.id), record])
     errors.delete(record.id)
     await refresh()
@@ -241,16 +252,19 @@ export async function createBrowserProfile(input: {
    * previous copy in place, loaded as it was.
    */
   const replace = async (
-    folder: string,
-    source: "store" | "browser",
+    record: StoredExtension,
     force: boolean | undefined,
     fill: (staging: string) => Promise<boolean>,
   ): Promise<InstallResult> => {
-    const failed: InstallResult = { type: "failed", reason: source === "store" ? "download" : "manifest" }
+    const folder = record.directory
+    const failed: InstallResult = { type: "failed", reason: record.source === "store" ? "download" : "manifest" }
+    const previous = stored.value.find((item) => item.directory === folder || item.id === record.id)
+
+    if (previous && (previous.source !== record.source || previous.directory !== folder || previous.id !== record.id || previous.origin !== record.origin))
+      return { type: "failed", reason: "collision" }
     const staging = await stageExtension(directory, fill)
 
     if (!staging) return failed
-    const previous = stored.value.find((record) => record.directory === folder)
 
     // Chromium keeps the loaded copy's files open, and Windows moves no open file.
     if (previous && session.extensions.getExtension(previous.id)) session.extensions.removeExtension(previous.id)
@@ -264,7 +278,7 @@ export async function createBrowserProfile(input: {
       return failed
     }
 
-    const result = await add(folder, source, force)
+    const result = await add(record, force)
 
     if (result.type === "installed" || (result.type !== "failed" && !swapped.backup)) {
       if (swapped.backup) void rm(swapped.backup, { recursive: true, force: true }).catch(() => undefined)
@@ -402,7 +416,7 @@ export async function createBrowserProfile(input: {
               name: await displayName(item.directory, manifest),
               version: manifest.version,
               icon: await extensionIcon(item.directory, manifest),
-              installed: stored.value.some((record) => record.id === item.id),
+               installed: stored.value.some((record) => record.source === "browser" && record.origin === path.dirname(item.directory)),
               compatibility: await compatibilityOf(item.directory, manifest),
               access: extensionAccess(manifest),
             },
@@ -418,22 +432,31 @@ export async function createBrowserProfile(input: {
         | { kind: "store"; url: string; force?: boolean }
         | { kind: "browser"; source: string; profile: string; id: string; force?: boolean },
     ): Promise<InstallResult> {
-      if (request.kind === "folder") return add(request.path, "folder", request.force)
+      if (request.kind !== "store") {
+        const profile = request.kind === "browser" && await chromiumProfileDirectory(request.source, request.profile)
 
-      if (request.kind === "browser") {
-        const folder = await chromiumProfileDirectory(request.source, request.profile)
-        const found = folder ? (await profileExtensions(folder)).find((item) => item.id === request.id) : undefined
+        const folder = request.kind === "folder" ? await realpath(request.path).catch(() => undefined) :
+          profile && (await profileExtensions(profile)).find((item) => item.id === request.id)?.directory
 
-        if (!found) return { type: "failed", reason: "manifest" }
+        if (!folder) return { type: "failed", reason: "manifest" }
+        // An unpacked manifest cannot authenticate its key. Give each local source a private profile identity, stable
+        // across updates from that source; neither the source nor a claimed store ID chooses which storage it sees.
+        const origin = request.kind === "browser" ? path.dirname(folder) : folder
+        const previous = stored.value.find((record) => record.source === request.kind && record.origin === origin)
 
-        // A copy, so the other browser updating or removing it leaves this one working. Links are left out, so the
-        // copy holds only the package's own files.
-        return replace(path.join(directory, request.id), "browser", request.force, (staging) =>
-          cp(found.directory, staging, {
+        const key = previous?.localKey ? Buffer.from(previous.localKey, "base64") :
+          generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey.export({ format: "der", type: "spki" })
+
+        const id = extensionID(key)
+
+        return replace({ id, enabled: true, source: request.kind, origin, localKey: key.toString("base64"), directory: path.join(directory, id) }, request.force, async (staging) => {
+          await cp(folder, staging, {
             recursive: true,
             filter: async (item) => path.basename(item) !== "_metadata" && !(await lstat(item)).isSymbolicLink(),
-          }).then(() => true),
-        )
+          })
+
+          return pinKey(staging, key)
+        })
       }
 
       const target = storeTarget(request.url)
@@ -444,7 +467,7 @@ export async function createBrowserProfile(input: {
 
       if (!parsed) return { type: "failed", reason: "download" }
 
-      return replace(path.join(directory, target.id), "store", request.force, async (staging) => {
+      return replace({ id: target.id, directory: path.join(directory, target.id), enabled: true, source: "store" }, request.force, async (staging) => {
         await unzip(parsed.zip, staging)
 
         return pinKey(staging, parsed.key)
@@ -460,7 +483,7 @@ export async function createBrowserProfile(input: {
       errors.delete(id)
 
       // Only copies this app made are deleted; a folder the user loaded stays where it is.
-      if (record && record.source !== "folder" && path.dirname(record.directory) === directory)
+      if (record && (record.source !== "folder" || record.localKey) && record.directory === path.join(directory, id))
         await rm(record.directory, { recursive: true, force: true }).catch(() => undefined)
       await refresh()
     },
