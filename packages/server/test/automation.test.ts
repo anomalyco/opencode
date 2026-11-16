@@ -256,7 +256,14 @@ it.live("elects one leader when two server processes boot against a due automati
     const dir = (yield* tmpdirScoped("opencode-automation-leader-")).path
     const dbPath = path.join(dir, "shared.db")
     yield* Effect.promise(() =>
-      fs.writeFile(path.join(dir, "opencode.json"), JSON.stringify({ experimental: { automations: true } })),
+      fs.writeFile(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          experimental: { automations: true },
+          // Exercise the child's durable prompt and wake, not inference through a default provider.
+          policies: [{ action: "provider.use", resource: "*", effect: "deny" }],
+        }),
+      ),
     )
 
     // Seed an active automation in a short-lived scope so it falls due while no server is running.
