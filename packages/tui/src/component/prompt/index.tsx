@@ -1455,6 +1455,11 @@ export function Prompt(props: PromptProps) {
       ? undefined
       : await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
     if (changed()) return
+
+    // Enter shell mode before the chip decision so long shell pastes keep the
+    // normal chip behaviour; shell submit expands chips.
+    if (shellPaste) enterShellMode()
+
     if (attachments) {
       attachments.forEach((attachment) => {
         if (attachment.type === "text") {
@@ -1467,7 +1472,7 @@ export function Prompt(props: PromptProps) {
     }
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-    if (!shellPaste && (lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
+    if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
       const extmark = input.extmarks.getAllForTypeId(promptPartTypeId).find((extmark) => {
         const ref = store.extmarkToPart.get(extmark.id)
         return (
@@ -1480,8 +1485,6 @@ export function Prompt(props: PromptProps) {
       pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
       return
     }
-
-    if (shellPaste) enterShellMode()
 
     input.insertText(insertedText)
 

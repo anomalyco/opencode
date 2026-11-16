@@ -88,6 +88,44 @@ test("pasting a leading ! enters shell mode and submits to the shell", async () 
   expect(promptCalls).toBe(0)
 })
 
+test("a long shell paste keeps the paste chip", async () => {
+  takeDraft(undefined)
+  const sessionID = `ses_paste_shell_chip_${crypto.randomUUID()}`
+  let shellCommand: string | undefined
+  let promptCalls = 0
+  await using setup = await createAppFixture({
+    args: { sessionID },
+    fetch: async (url, request) => {
+      const location = { directory }
+      if (url.pathname === "/api/agent") return json({ location, data: [agent("build")] })
+      if (url.pathname === "/api/model") return json({ location, data: [model("Paste Model")] })
+      if (url.pathname === `/api/session/${sessionID}`) return json({ data: session(sessionID) })
+      if (url.pathname.endsWith("/message") || url.pathname.endsWith("/inbox")) return json({ data: [], cursor: {} })
+      if (url.pathname === `/api/session/${sessionID}/shell`) {
+        shellCommand = (await request.json()).command
+        return json({ data: {} })
+      }
+      if (url.pathname.endsWith("/prompt")) {
+        promptCalls += 1
+        return json({ data: {} })
+      }
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Paste Model"))
+  const text = () => setup.renderer.currentFocusedEditor?.plainText
+  const command = "echo one\necho two\necho three\necho four"
+  await setup.mockInput.pasteBracketedText(`!${command}`)
+  await setup.waitFor(() => text() === "[Pasted ~4 lines] ")
+  expect(text()).toBe("[Pasted ~4 lines] ")
+  expect(shellCommand).toBeUndefined()
+  setup.mockInput.pressEnter()
+  await setup.waitFor(() => shellCommand !== undefined)
+  // Paste chips expand with a trailing space; shell and chat stay consistent.
+  expect(shellCommand).toBe(`${command} `)
+  expect(promptCalls).toBe(0)
+})
+
 test("pasting a Markdown image stays in chat", async () => {
   takeDraft(undefined)
   const sessionID = `ses_paste_markdown_${crypto.randomUUID()}`
