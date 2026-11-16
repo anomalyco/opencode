@@ -11,11 +11,11 @@ import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { INITIAL_KEYBIND_SUSPEND_STATE, selectKeybindsSuspended, transitionKeybindSuspend } from "./suspend-machine"
 import {
+  chordStrokes,
   createAppKeymap,
   IS_MAC,
   keyFromKeyboardEvent,
-  LEADER_DEFAULTS,
-  LEADER_ID,
+  LEADER,
   registerAppLeader,
   registerCommandLayers,
 } from "./keymap"
@@ -24,8 +24,6 @@ import type { ActiveKey, KeySequencePart } from "@opentui/keymap"
 export { keyFromKeyboardEvent }
 
 const PALETTE_ID = "command.palette"
-
-const LEADER_TOKEN = "<leader>"
 
 /** Search commands: Search everything (the palette) limited to commands. */
 export const COMMAND_SEARCH_ID = "commands.search"
@@ -50,6 +48,7 @@ type KeyLabel =
   | "common.key.pageDown"
   | "common.key.insert"
   | "common.key.esc"
+  | "common.key.leader"
 
 function keyText(key: KeyLabel, t?: (key: KeyLabel) => string) {
   return t ? t(key) : en[key]
@@ -113,11 +112,7 @@ export interface CommandOption {
 export function commandPaletteOptions(options: CommandOption[]) {
   return options.filter(
     (option) =>
-      !option.disabled &&
-      !option.hidden &&
-      !option.id.startsWith(SUGGESTED_PREFIX) &&
-      option.id !== "file.open" &&
-      option.id !== LEADER_ID,
+      !option.disabled && !option.hidden && !option.id.startsWith(SUGGESTED_PREFIX) && option.id !== "file.open",
   )
 }
 
@@ -181,50 +176,56 @@ function placeAfterSlash(options: CommandOption[]) {
   })
 }
 
+/** The single-stroke combos of a keybind; chords such as `mod+k mod+c` are left out. */
 export function parseKeybind(config: string): Keybind[] {
   if (!config || config === "none") return []
 
-  return config.split(",").map((combo) => {
-    const parts = combo.trim().toLowerCase().split("+")
+  return config
+    .split(",")
+    .filter((combo) => chordStrokes(combo).length === 1)
+    .map(parseStroke)
+}
 
-    const keybind: Keybind = {
-      key: "",
-      ctrl: false,
-      meta: false,
-      shift: false,
-      alt: false,
+function parseStroke(combo: string): Keybind {
+  const parts = combo.trim().toLowerCase().split("+")
+
+  const keybind: Keybind = {
+    key: "",
+    ctrl: false,
+    meta: false,
+    shift: false,
+    alt: false,
+  }
+
+  for (const part of parts) {
+    switch (part) {
+      case "ctrl":
+      case "control":
+        keybind.ctrl = true
+        break
+      case "meta":
+      case "cmd":
+      case "command":
+        keybind.meta = true
+        break
+      case "mod":
+        if (IS_MAC) keybind.meta = true
+        else keybind.ctrl = true
+        break
+      case "alt":
+      case "option":
+        keybind.alt = true
+        break
+      case "shift":
+        keybind.shift = true
+        break
+      default:
+        keybind.key = part
+        break
     }
+  }
 
-    for (const part of parts) {
-      switch (part) {
-        case "ctrl":
-        case "control":
-          keybind.ctrl = true
-          break
-        case "meta":
-        case "cmd":
-        case "command":
-          keybind.meta = true
-          break
-        case "mod":
-          if (IS_MAC) keybind.meta = true
-          else keybind.ctrl = true
-          break
-        case "alt":
-        case "option":
-          keybind.alt = true
-          break
-        case "shift":
-          keybind.shift = true
-          break
-        default:
-          keybind.key = part
-          break
-      }
-    }
-
-    return keybind
-  })
+  return keybind
 }
 
 export function matchKeybind(keybinds: Keybind[], event: KeyboardEvent): boolean {
@@ -299,18 +300,34 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
   return parts
 }
 
-export function formatKeybindParts(config: string, t?: (key: KeyLabel) => string): string[] {
+/**
+ * The first combo of a keybind as keycap labels. A single stroke gives one label per key (⌘, K); a chord gives one
+ * label per stroke (⌘K, ⌘C). `leader` is the profile's leader key, shown in place of `<leader>`.
+ */
+export function formatKeybindParts(config: string, t?: (key: KeyLabel) => string, leader?: string): string[] {
   if (!config || config === "none") return []
-  const keybind = parseKeybind(config)[0]
+  const strokes = chordStrokes(config.split(",")[0] ?? "")
 
-  return keybind ? displayKeybindParts(keybind, t) : []
+  if (strokes.length === 1 && strokes[0]!.toLowerCase() !== LEADER)
+    return displayKeybindParts(parseStroke(strokes[0]!), t)
+
+  return strokes.map((stroke) => {
+    if (stroke.toLowerCase() !== LEADER) return joinParts(displayKeybindParts(parseStroke(stroke), t))
+
+    return leader ? joinParts(displayKeybindParts(parseStroke(leader), t)) : keyText("common.key.leader", t)
+  })
 }
 
-export function formatKeybind(config: string, t?: (key: KeyLabel) => string): string {
-  const parts = formatKeybindParts(config, t)
+export function formatKeybind(config: string, t?: (key: KeyLabel) => string, leader?: string): string {
+  const strokes = chordStrokes(config && config !== "none" ? (config.split(",")[0] ?? "") : "")
+  const parts = formatKeybindParts(config, t, leader)
 
-  if (parts.length === 0) return ""
+  if (strokes.length > 1 || strokes[0]?.toLowerCase() === LEADER) return parts.join(" ")
 
+  return joinParts(parts)
+}
+
+function joinParts(parts: string[]) {
   return IS_MAC ? parts.join("") : parts.join("+")
 }
 
@@ -343,22 +360,14 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const [catalog, setCatalog, _, catalogReady] = persisted(Persist.global("command.catalog.v1"), CommandCatalog, {})
 
-    const leader = createMemo(() => {
-      const config = settings.keybinds.get(LEADER_ID)
-
-      return config && config !== "none" ? config.split(",")[0]!.trim() : undefined
-    })
+    const leader = settings.keymaps.leader
 
     const bind = (id: string, def: KeybindConfig | undefined, follows?: string) => {
       const base = actionId(id)
       const custom = settings.keybinds.get(base) ?? (follows ? settings.keybinds.get(follows) : undefined)
-      const sequence = !custom && leader() ? LEADER_DEFAULTS.get(base) : undefined
+      const config = custom ?? (base === PALETTE_ID ? DEFAULT_PALETTE_KEYBIND : def)
 
-      const config = [custom ?? (base === PALETTE_ID ? DEFAULT_PALETTE_KEYBIND : def), sequence]
-        .filter((value) => value && value !== "none")
-        .join(",")
-
-      if (!config) return
+      if (!config || config === "none") return
 
       return config
     }
@@ -465,9 +474,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     })
 
     createEffect(() => {
-      const bound = options().filter(
-        (option) => !option.id.startsWith(SUGGESTED_PREFIX) && option.id !== LEADER_ID && !option.disabled,
-      )
+      const bound = options().filter((option) => !option.id.startsWith(SUGGESTED_PREFIX) && !option.disabled)
 
       // The palette's keys come first, so they win over any other command on the same keys.
       onCleanup(
@@ -478,18 +485,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
             ...bound.filter((option) => option.id !== PALETTE_ID),
           ],
           (id) => settings.keybinds.get(id) !== undefined,
+          !!leader(),
         ),
       )
     })
-
-    register("keymap", () => [
-      {
-        id: LEADER_ID,
-        title: language.t("command.keymap.leader"),
-        section: "general",
-        onSelect: () => false,
-      },
-    ])
 
     const optionMap = createMemo(() => {
       const map = new Map<string, CommandOption>()
@@ -543,16 +542,6 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       )
     }
 
-    // The leader stands in for its own key in the shown shortcut: `<leader>n` shows as ⌃X N.
-    const keybindStrokes = (config: string) => {
-      const first = config.split(",")[0]!.trim()
-      const trigger = leader()
-
-      if (!first.startsWith(LEADER_TOKEN) || !trigger) return [first]
-
-      return [trigger, first.slice(LEADER_TOKEN.length)]
-    }
-
     return {
       register,
       trigger(id: string, source?: CommandSource, input?: string) {
@@ -563,14 +552,12 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
         if (!config) return ""
 
-        return keybindStrokes(config)
-          .map((stroke) => formatKeybind(stroke, language.t))
-          .join(" ")
+        return formatKeybind(config, language.t, leader())
       },
       keybindParts(id: string) {
         const config = keybindConfig(id)
 
-        return config ? keybindStrokes(config).flatMap((stroke) => formatKeybindParts(stroke, language.t)) : []
+        return config ? formatKeybindParts(config, language.t, leader()) : []
       },
       /** The key sequence in progress, and the keys that can continue it. */
       pending,

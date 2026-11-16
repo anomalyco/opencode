@@ -2,6 +2,13 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack }
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Menu } from "@opencode/ui/menu"
+import { Select } from "@opencode/ui/select"
+import { TextField } from "@opencode/ui/text-field"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { showToast } from "@/shell/notifications/toast"
 import fuzzysort from "fuzzysort"
 import { Predicate } from "effect"
@@ -13,14 +20,18 @@ import {
   useCommand,
   type CommandSection,
 } from "@/shell/commands/command"
+import { chordStrokes, LEADER, validChord } from "@/shell/commands/keymap"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePluginHost } from "@/runtime/plugin/host"
-import { useSettings } from "@/settings/model"
+import { DEFAULT_KEYMAP, useSettings } from "@/settings/model"
+import { SettingsRow } from "@/settings/row"
 import { SettingsList } from "@/settings/list"
 import { SettingsSearchEmpty } from "@/settings/search-empty"
 import { SettingsSearchField } from "@/settings/search-field"
 import {
   INITIAL_KEYBIND_CAPTURE_STATE,
+  LEADER_SLOT,
+  selectCapturedChord,
   selectCapturingKeybind,
   transitionKeybindCapture,
   type KeybindCaptureEffect,
@@ -134,28 +145,36 @@ function isEditableTarget(target: EventTarget | null) {
   )
 }
 
-function signatures(config: string | undefined) {
-  if (!config) return []
-  const sigs: string[] = []
+// Each combo of a keybind as its strokes' signatures, with `<leader>` spelled as the leader key when one is set.
+function chords(config: string | undefined, leader: string | undefined) {
+  if (!config || config === "none") return []
 
-  for (const kb of parseKeybind(config)) {
-    const parts: string[] = []
+  return config
+    .split(",")
+    .filter(validChord)
+    .map((combo) =>
+      chordStrokes(combo).flatMap((stroke) => {
+        if (stroke.toLowerCase() !== LEADER) return [signature(stroke)]
 
-    if (kb.ctrl) parts.push("ctrl")
+        return [leader ? signature(leader) : LEADER]
+      }),
+    )
+}
 
-    if (kb.alt) parts.push("alt")
+function signature(stroke: string) {
+  const kb = parseKeybind(stroke)[0]
 
-    if (kb.shift) parts.push("shift")
+  if (!kb) return stroke
 
-    if (kb.meta) parts.push("meta")
+  return [kb.ctrl && "ctrl", kb.alt && "alt", kb.shift && "shift", kb.meta && "meta", kb.key].filter(Boolean).join("+")
+}
 
-    if (kb.key) parts.push(kb.key)
+// Two chords clash when one starts the other: the shorter one would run before the longer could finish.
+function clashes(a: readonly string[], b: readonly string[]) {
+  const shorter = a.length <= b.length ? a : b
+  const longer = shorter === a ? b : a
 
-    if (parts.length === 0) continue
-    sigs.push(parts.join("+"))
-  }
-
-  return sigs
+  return shorter.every((stroke, index) => longer[index] === stroke)
 }
 
 function listFor(
@@ -258,14 +277,20 @@ function filteredFor(
   return out
 }
 
+// The pause after a stroke that ends a chord being recorded.
+const CHORD_PAUSE_MS = 1000
+
+// What the recording driver holds between effects: the shortcut suspension and the chord pause.
+type CaptureDriver = { release?: () => void; timer?: ReturnType<typeof setTimeout> }
+
 export function createKeybindSettingsController(
   input: {
     command: Pick<CommandContext, "catalog" | "options" | "suspend">
     /** The ids of the installed GUI plugins; remembered commands of any other plugin are not listed. */
     plugins?: () => ReadonlySet<string>
     settings: {
-      current: { keybinds?: KeybindMap }
-      keybinds: Pick<SettingsContext["keybinds"], "get" | "set" | "resetAll">
+      keybinds: Pick<SettingsContext["keybinds"], "all" | "get" | "set" | "resetAll">
+      keymaps: Pick<SettingsContext["keymaps"], "leader" | "setLeader">
     }
     target?: Document
     notify?: (toast: { title: string; description: string }) => void
@@ -275,7 +300,8 @@ export function createKeybindSettingsController(
   language: Pick<LanguageContext, "locale" | "t"> = useLanguage(),
 ) {
   const [captureState, setCaptureState] = createSignal(INITIAL_KEYBIND_CAPTURE_STATE)
-  const overrides = createMemo(() => input.settings.current.keybinds ?? {})
+  const overrides = createMemo(() => input.settings.keybinds.all())
+  const leader = () => input.settings.keymaps.leader()
 
   const list = createMemo(() => {
     language.locale()
@@ -300,28 +326,38 @@ export function createKeybindSettingsController(
     return input.command.catalog.find((item) => item.id === id)?.keybind
   }
 
-  const used = createMemo(() => {
-    const value = new Map<string, { id: string; title: string }[]>()
+  const used = createMemo(() =>
+    Array.from(list().keys()).flatMap((id) =>
+      chords(effective(id), leader()).map((chord) => ({ id, title: title(id), chord })),
+    ),
+  )
 
-    for (const id of list().keys()) {
-      for (const signature of signatures(effective(id))) {
-        const items = value.get(signature)
+  // The commands a chord would clash with, other than the one being recorded.
+  const conflicts = (keybind: string, id: string) => {
+    const chord = chords(keybind, leader())[0]
 
-        if (items) {
-          items.push({ id, title: title(id) })
-          continue
-        }
+    if (!chord) return []
 
-        value.set(signature, [{ id, title: title(id) }])
-      }
-    }
+    return [...new Set(used().flatMap((item) => (item.id !== id && clashes(chord, item.chord) ? [item.title] : [])))]
+  }
 
-    return value
-  })
+  // A leader key clashes with every shortcut that starts with that key, apart from the leader's own chords.
+  const leaderConflicts = (stroke: string) => {
+    const key = signature(stroke)
+
+    return [
+      ...new Set(
+        Array.from(list().keys()).flatMap((id) =>
+          chords(effective(id), undefined).some((chord) => chord[0] === key) ? [title(id)] : [],
+        ),
+      ),
+    ]
+  }
 
   const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
   const pageActive = () => input.active?.() ?? true
-  let release: (() => void) | undefined
+
+  const driver: CaptureDriver = {}
 
   const dispatch = (event: KeybindCaptureEvent) =>
     untrack(() => {
@@ -332,22 +368,44 @@ export function createKeybindSettingsController(
       next.effects.forEach(run)
     })
 
+  const conflictsFor = (keybind: string) => {
+    const id = selectCapturingKeybind(untrack(captureState))
+
+    if (!id) return []
+
+    return id === LEADER_SLOT ? leaderConflicts(keybind) : conflicts(keybind, id)
+  }
+
   function run(effect: KeybindCaptureEffect) {
     if (effect.type === "keybinds.suspend") {
-      release?.()
-      release = input.command.suspend()
+      driver.release?.()
+      driver.release = input.command.suspend()
 
       return
     }
 
     if (effect.type === "keybinds.resume") {
-      release?.()
-      release = undefined
+      clearTimeout(driver.timer)
+      driver.release?.()
+      driver.release = undefined
+
+      return
+    }
+
+    if (effect.type === "chord.wait") {
+      clearTimeout(driver.timer)
+      driver.timer = setTimeout(
+        () =>
+          dispatch({ type: "chord.timeout", conflictTitles: conflictsFor(selectCapturedChord(untrack(captureState))) }),
+        CHORD_PAUSE_MS,
+      )
 
       return
     }
 
     if (effect.type === "binding.set") return input.settings.keybinds.set(effect.id, effect.value)
+
+    if (effect.type === "leader.set") return input.settings.keymaps.setLeader(effect.value)
 
     if (effect.type === "bindings.reset") return input.settings.keybinds.resetAll()
 
@@ -363,7 +421,7 @@ export function createKeybindSettingsController(
     notify({
       title: language.t("settings.shortcuts.conflict.title"),
       description: language.t("settings.shortcuts.conflict.description", {
-        keybind: formatKeybind(effect.keybind, language.t),
+        keybind: formatKeybind(effect.keybind, language.t, leader()),
         titles: effect.conflictTitles.join(", "),
       }),
     })
@@ -380,35 +438,32 @@ export function createKeybindSettingsController(
     event.preventDefault()
     event.stopPropagation()
     event.stopImmediatePropagation()
-    dispatch({ type: "key.pressed", input: recordedKey(event, id) })
+    dispatch({ type: "key.pressed", input: recordedKey(event) })
   }
 
-  const recordedKey = (event: KeyboardEvent, id: string): RecordedKeyInput => {
+  const recordedKey = (event: KeyboardEvent): RecordedKeyInput => {
+    const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+
     if (event.key === "Escape") return { kind: "escape" }
 
-    const clear =
-      (event.key === "Backspace" || event.key === "Delete") &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      !event.shiftKey
+    if ((event.key === "Backspace" || event.key === "Delete") && plain) return { kind: "backspace" }
 
-    if (clear) return { kind: "clear" }
+    const stroke = recordKeybind(event)
 
-    const keybind = recordKeybind(event)
+    if (!stroke) return { kind: "modifier-only" }
 
-    if (!keybind) return { kind: "modifier-only" }
+    const recorded = selectCapturedChord(untrack(captureState))
+    const chord = recorded ? `${recorded} ${stroke}` : stroke
 
-    const conflicts = new Map<string, string>()
-
-    for (const signature of signatures(keybind)) {
-      for (const item of used().get(signature) ?? []) {
-        if (item.id === id) continue
-        conflicts.set(item.id, item.title)
+    if (event.key === "Enter" && plain)
+      return {
+        kind: "enter",
+        stroke,
+        strokeConflicts: conflictsFor(chord),
+        finishConflicts: recorded ? conflictsFor(recorded) : [],
       }
-    }
 
-    return { kind: "combo", keybind, conflictTitles: [...conflicts.values()] }
+    return { kind: "stroke", stroke, conflictTitles: conflictsFor(chord) }
   }
 
   const target = input.target ?? (typeof document !== "undefined" ? document : undefined)
@@ -430,18 +485,26 @@ export function createKeybindSettingsController(
   createEffect(() => dispatch({ type: "catalog.synced", ids: new Set(list().keys()) }))
   onCleanup(() => dispatch({ type: "disposed" }))
 
+  const format = (config: string | undefined) => formatKeybind(config ?? "", language.t, leader())
+
   return {
     catalog: {
       groups: GROUPS,
-      filtered: (query: string) =>
-        filteredFor(query, list(), grouped(), (id) => formatKeybind(effective(id) ?? "", language.t)),
+      filtered: (query: string) => filteredFor(query, list(), grouped(), (id) => format(effective(id))),
       title,
-      keybind: (id: string) => formatKeybind(effective(id) ?? "", language.t),
+      keybind: (id: string) => format(effective(id)),
     },
     capture: {
       active: () => selectCapturingKeybind(captureState()),
+      /** The chord recorded so far, formatted, while recording. */
+      recorded: () => format(selectCapturedChord(captureState())),
       toggle: (id: string) => dispatch({ type: "capture.toggled", id, pageActive: pageActive() }),
       unbind: (id: string) => dispatch({ type: "unbind.clicked", id }),
+      insertLeader: () => dispatch({ type: "leader.inserted" }),
+    },
+    leader: {
+      keybind: () => format(leader()),
+      set: () => !!leader(),
     },
     settings: {
       hasOverrides: () => Object.values(overrides()).some(Predicate.isString),
@@ -453,6 +516,8 @@ export function createKeybindSettingsController(
 export function SettingsKeybinds(props: { active?: boolean }) {
   const command = useCommand()
   const settings = useSettings()
+  const dialog = useDialog()
+  const language = useLanguage()
   const host = usePluginHost()
   const plugins = createMemo(() => new Set(host.definitions().map((definition) => definition.id)))
 
@@ -463,16 +528,51 @@ export function SettingsKeybinds(props: { active?: boolean }) {
     active: () => props.active ?? true,
   })
 
+  const profileName = (profile: { id: string; name?: string }) =>
+    profile.name ?? language.t("settings.shortcuts.profile.default")
+
+  const activeProfile = () =>
+    settings.keymaps.profiles().find((profile) => profile.id === settings.keymaps.active()) ??
+    settings.keymaps.profiles()[0]!
+
+  const create = (from: "base" | "current") =>
+    settings.keymaps.create(
+      from === "base"
+        ? language.t("settings.shortcuts.profile.newName", { number: String(settings.keymaps.profiles().length + 1) })
+        : language.t("settings.shortcuts.profile.copyName", { name: profileName(activeProfile()) }),
+      from,
+    )
+
+  const rename = () => {
+    const profile = activeProfile()
+
+    void dialog.show(() => (
+      <DialogRenameProfile name={profileName(profile)} onSave={(name) => settings.keymaps.rename(profile.id, name)} />
+    ))
+  }
+
   return (
     <SettingsKeybindsView
       visible={props.active}
+      profiles={settings.keymaps.profiles().map((profile) => ({ id: profile.id, name: profileName(profile) }))}
+      profile={activeProfile().id}
+      onProfileSelect={settings.keymaps.select}
+      onProfileCreate={create}
+      onProfileRename={activeProfile().id === DEFAULT_KEYMAP ? undefined : rename}
+      onProfileDelete={
+        activeProfile().id === DEFAULT_KEYMAP ? undefined : () => settings.keymaps.remove(activeProfile().id)
+      }
+      leader={controller.leader.keybind()}
       groups={controller.catalog.groups}
       filtered={controller.catalog.filtered}
       title={controller.catalog.title}
       keybind={controller.catalog.keybind}
       active={controller.capture.active()}
+      recorded={controller.capture.recorded()}
+      canInsertLeader={controller.leader.set()}
       onCapture={controller.capture.toggle}
       onUnbind={controller.capture.unbind}
+      onInsertLeader={controller.capture.insertLeader}
       hasOverrides={controller.settings.hasOverrides()}
       onReset={controller.settings.reset}
     />
@@ -481,13 +581,23 @@ export function SettingsKeybinds(props: { active?: boolean }) {
 
 function SettingsKeybindsView(props: {
   visible?: boolean
+  profiles: { id: string; name: string }[]
+  profile: string
+  onProfileSelect: (id: string) => void
+  onProfileCreate: (from: "base" | "current") => void
+  onProfileRename?: () => void
+  onProfileDelete?: () => void
+  leader: string
   groups: KeybindGroup[]
   filtered: (query: string) => Map<KeybindGroup, string[]>
   title: (id: string) => string
   keybind: (id: string) => string
   active: string | null
+  recorded: string
+  canInsertLeader: boolean
   onCapture: (id: string) => void
   onUnbind: (id: string) => void
+  onInsertLeader: () => void
   hasOverrides: boolean
   onReset: () => void
 }) {
@@ -517,6 +627,70 @@ function SettingsKeybindsView(props: {
       </div>
       <div class="settings-tab-body">
         <div class="settings-shortcuts settings-section-stack">
+          <Show when={!store.filter}>
+            <div class="settings-section" data-component="keymap-profile">
+              <h3 class="settings-section-title">{language.t("settings.shortcuts.profile.title")}</h3>
+              <SettingsList>
+                <SettingsRow
+                  title={language.t("settings.shortcuts.profile.label")}
+                  description={language.t("settings.shortcuts.profile.description")}
+                >
+                  <div class="flex items-center gap-1">
+                    <Select
+                      data-action="settings-keymap-profile"
+                      options={props.profiles}
+                      current={props.profiles.find((profile) => profile.id === props.profile)}
+                      value={(profile) => profile.id}
+                      label={(profile) => profile.name}
+                      placement="bottom-end"
+                      gutter={6}
+                      onSelect={(profile) => profile && props.onProfileSelect(profile.id)}
+                    />
+                    <Menu gutter={4} modal={false} placement="bottom-end">
+                      <Menu.Trigger
+                        as={IconButton}
+                        variant="ghost-muted"
+                        size="small"
+                        icon={<Icon name="outline-dots" />}
+                        aria-label={language.t("settings.shortcuts.profile.options")}
+                      />
+                      <Menu.Portal>
+                        <Menu.Content>
+                          <Menu.Item onSelect={() => props.onProfileCreate("base")}>
+                            {language.t("settings.shortcuts.profile.createFromBase")}
+                          </Menu.Item>
+                          <Menu.Item onSelect={() => props.onProfileCreate("current")}>
+                            {language.t("settings.shortcuts.profile.createFromCurrent")}
+                          </Menu.Item>
+                          <Show when={props.onProfileRename} keyed>
+                            {(rename) => <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>}
+                          </Show>
+                          <Show when={props.onProfileDelete} keyed>
+                            {(remove) => (
+                              <Menu.Item onSelect={remove}>{language.t("settings.shortcuts.profile.delete")}</Menu.Item>
+                            )}
+                          </Show>
+                        </Menu.Content>
+                      </Menu.Portal>
+                    </Menu>
+                  </div>
+                </SettingsRow>
+                <SettingsRow
+                  title={language.t("command.keymap.leader")}
+                  description={language.t("settings.shortcuts.leader.description")}
+                >
+                  <ShortcutButton
+                    id={LEADER_SLOT}
+                    binding={props.leader}
+                    active={props.active}
+                    recorded={props.recorded}
+                    onCapture={props.onCapture}
+                    onUnbind={props.onUnbind}
+                  />
+                </SettingsRow>
+              </SettingsList>
+            </div>
+          </Show>
           <For each={props.groups}>
             {(group) => (
               <Show when={(filtered().get(group) ?? []).length > 0}>
@@ -524,42 +698,26 @@ function SettingsKeybindsView(props: {
                   <h3 class="settings-section-title">{language.t(groupKey[group])}</h3>
                   <SettingsList>
                     <For each={filtered().get(group) ?? []}>
-                      {(id) => {
-                        const binding = () => props.keybind(id)
-
-                        return (
-                          <div class="flex items-center justify-between gap-4 py-3 border-b border-v2-border-border-base last:border-none">
-                            <span>{props.title(id)}</span>
-                            <div class="flex items-center gap-1">
-                              <Show when={props.active === id && binding()}>
-                                <Button
-                                  type="button"
-                                  size="small"
-                                  variant="ghost-danger"
-                                  onClick={() => props.onUnbind(id)}
-                                >
-                                  {language.t("settings.shortcuts.unbind")}
-                                </Button>
-                              </Show>
-                              <Button
-                                type="button"
-                                size="small"
-                                variant={binding() ? "ghost" : "ghost-muted"}
-                                data-keybind-id={id}
-                                data-expanded={props.active === id ? "" : undefined}
-                                onClick={() => props.onCapture(id)}
-                              >
-                                <Show
-                                  when={props.active === id}
-                                  fallback={binding() || language.t("settings.shortcuts.unassigned")}
-                                >
-                                  {language.t("settings.shortcuts.pressKeys")}
-                                </Show>
+                      {(id) => (
+                        <div class="flex items-center justify-between gap-4 py-3 border-b border-v2-border-border-base last:border-none">
+                          <span>{props.title(id)}</span>
+                          <div class="flex items-center gap-1">
+                            <Show when={props.active === id && props.canInsertLeader && !props.recorded}>
+                              <Button type="button" size="small" variant="ghost" onClick={props.onInsertLeader}>
+                                {language.t("settings.shortcuts.insertLeader")}
                               </Button>
-                            </div>
+                            </Show>
+                            <ShortcutButton
+                              id={id}
+                              binding={props.keybind(id)}
+                              active={props.active}
+                              recorded={props.recorded}
+                              onCapture={props.onCapture}
+                              onUnbind={props.onUnbind}
+                            />
                           </div>
-                        )
-                      }}
+                        </div>
+                      )}
                     </For>
                   </SettingsList>
                 </div>
@@ -574,5 +732,82 @@ function SettingsKeybindsView(props: {
         </div>
       </div>
     </>
+  )
+}
+
+// A shortcut and the button that records it, with Unbind while recording one that is set.
+function ShortcutButton(props: {
+  id: string
+  binding: string
+  active: string | null
+  recorded: string
+  onCapture: (id: string) => void
+  onUnbind: (id: string) => void
+}) {
+  const language = useLanguage()
+  const recording = () => props.active === props.id
+
+  return (
+    <div class="flex items-center gap-1">
+      <Show when={recording() && props.binding && !props.recorded}>
+        <Button type="button" size="small" variant="ghost-danger" onClick={() => props.onUnbind(props.id)}>
+          {language.t("settings.shortcuts.unbind")}
+        </Button>
+      </Show>
+      <Button
+        type="button"
+        size="small"
+        variant={props.binding ? "ghost" : "ghost-muted"}
+        data-keybind-id={props.id}
+        data-expanded={recording() ? "" : undefined}
+        onClick={() => props.onCapture(props.id)}
+      >
+        <Show when={recording()} fallback={props.binding || language.t("settings.shortcuts.unassigned")}>
+          {props.recorded ? `${props.recorded} …` : language.t("settings.shortcuts.pressKeys")}
+        </Show>
+      </Button>
+    </div>
+  )
+}
+
+function DialogRenameProfile(props: { name: string; onSave: (name: string) => void }) {
+  const dialog = useDialog()
+  const language = useLanguage()
+  const [store, setStore] = createStore({ name: props.name })
+
+  const save = (event: SubmitEvent) => {
+    event.preventDefault()
+    const name = store.name.trim()
+
+    if (!name) return
+    props.onSave(name)
+    dialog.close()
+  }
+
+  return (
+    <Dialog fit>
+      <DialogHeader>
+        <DialogTitleGroup title={language.t("settings.shortcuts.profile.rename.title")} />
+      </DialogHeader>
+      <form onSubmit={save}>
+        <DialogBody>
+          <TextField
+            ref={(element: HTMLInputElement) => queueMicrotask(() => element.select())}
+            label={language.t("settings.shortcuts.profile.label")}
+            hideLabel
+            value={store.name}
+            onChange={(value) => setStore("name", value)}
+          />
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="neutral" onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </Button>
+          <Button type="submit" variant="contrast" disabled={!store.name.trim()}>
+            {language.t("common.save")}
+          </Button>
+        </DialogFooter>
+      </form>
+    </Dialog>
   )
 }

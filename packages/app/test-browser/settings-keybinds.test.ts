@@ -2,8 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createKeybindSettingsController } from "../src/settings/keybinds/keybinds"
 
-function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<string>, active?: () => boolean) {
+function setup(
+  overrides: Record<string, string> = {},
+  plugins?: ReadonlySet<string>,
+  active?: () => boolean,
+  initialLeader?: string,
+) {
   const changes: [string, string][] = []
+  const [leader, setLeader] = createSignal(initialLeader)
   const suppression: boolean[] = []
   const notifications: { title: string; description?: string }[] = []
   let resets = 0
@@ -16,6 +22,8 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
           catalog: [
             { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
             { id: "session.beta", title: "Beta", keybind: "mod+b" },
+            { id: "session.chord", title: "Chord", keybind: "mod+k mod+c" },
+            { id: "session.next", title: "Next", keybind: "<leader> n" },
             { id: "acme.open", plugin: "acme", title: "Open Acme", section: "session" },
           ],
           options: [],
@@ -27,8 +35,9 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
         },
         plugins: plugins && (() => plugins),
         settings: {
-          current: { keybinds: overrides },
+          keymaps: { leader, setLeader },
           keybinds: {
+            all: () => overrides,
             get: (id) => overrides[id],
             set: (id, value) => {
               overrides[id] = value
@@ -63,6 +72,7 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
     suppression,
     notifications,
     resets: () => resets,
+    leader,
     dispose,
   }
 }
@@ -72,6 +82,12 @@ function modKey(key: string) {
 
   return new KeyboardEvent("keydown", { key, ctrlKey: !mac, metaKey: mac, bubbles: true, cancelable: true })
 }
+
+function key(key: string, init?: KeyboardEventInit) {
+  return new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
+}
+
+const enter = () => document.dispatchEvent(key("Enter"))
 
 describe("keybind settings controller", () => {
   test("derives the catalog, effective bindings, and filtered groups", () => {
@@ -101,11 +117,13 @@ describe("keybind settings controller", () => {
 
     state.controller.capture.toggle("session.beta")
     document.dispatchEvent(modKey("a"))
+    enter()
     expect(state.changes).toEqual([])
     expect(state.notifications).toHaveLength(1)
     expect(state.controller.capture.active()).toBe("session.beta")
 
     document.dispatchEvent(modKey("x"))
+    enter()
     expect(state.changes).toEqual([["session.beta", "mod+x"]])
     expect(state.suppression).toEqual([false, true])
     expect(state.controller.capture.active()).toBeNull()
@@ -114,7 +132,59 @@ describe("keybind settings controller", () => {
     state.dispose()
     expect(state.suppression).toEqual([false, true, false, true])
     document.dispatchEvent(modKey("z"))
+    enter()
     expect(state.changes).toEqual([["session.beta", "mod+x"]])
+  })
+
+  test("records a chord, and rejects one that starts or is started by another shortcut", () => {
+    const state = setup()
+
+    state.controller.capture.toggle("session.beta")
+    document.dispatchEvent(modKey("k"))
+    enter()
+    expect(state.notifications.map((toast) => toast.description)).toEqual([expect.stringContaining("Chord")])
+
+    document.dispatchEvent(modKey("j"))
+    document.dispatchEvent(modKey("c"))
+    expect(state.controller.capture.recorded()).not.toBe("")
+    enter()
+    expect(state.changes).toEqual([["session.beta", "mod+j mod+c"]])
+
+    state.dispose()
+  })
+
+  test("records the leader key, and rejects one that starts another shortcut", () => {
+    const state = setup()
+
+    state.controller.capture.toggle("keymap.leader")
+    document.dispatchEvent(modKey("a"))
+    expect(state.leader()).toBeUndefined()
+    expect(state.notifications.map((toast) => toast.description)).toEqual([expect.stringContaining("Alpha")])
+
+    document.dispatchEvent(key("x", { ctrlKey: true }))
+    expect(state.leader()).toBe(/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "ctrl+x" : "mod+x")
+    expect(state.controller.capture.active()).toBeNull()
+
+    state.dispose()
+  })
+
+  test("a leader chord starts with the leader, and clashes with shortcuts on the leader's key", () => {
+    const state = setup({}, undefined, undefined, "alt+x")
+
+    expect(state.controller.catalog.keybind("session.next")).toMatch(/X N$/)
+
+    state.controller.capture.toggle("session.beta")
+    state.controller.capture.insertLeader()
+    document.dispatchEvent(key("n"))
+    enter()
+    expect(state.notifications.map((toast) => toast.description)).toEqual([expect.stringContaining("Next")])
+
+    state.controller.capture.insertLeader()
+    document.dispatchEvent(key("m"))
+    enter()
+    expect(state.changes).toEqual([["session.beta", "<leader> m"]])
+
+    state.dispose()
   })
 
   test("moving the recording between rows keeps shortcuts suspended, and hiding the page resumes them", () => {

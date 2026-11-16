@@ -12,25 +12,29 @@ export const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad
 
 export type AppKeymap = Keymap<HTMLElement, HtmlKeymapEvent>
 
-/** The Settings > Shortcuts entry that holds the leader key. It is never bound to a command itself. */
-export const LEADER_ID = "keymap.leader"
+/** Stands for the profile's leader key. It may only start a chord: `<leader> g s`. */
+export const LEADER = "<leader>"
 
 const LEADER_TIMEOUT_MS = 2000
 
 /**
- * Leader sequences each command gains while a leader key is set and the command keeps its default shortcut. Later
- * these defaults should move next to every command's other defaults in one table.
+ * Splits one combo of a keybind into its chord strokes: `mod+k mod+c` into two, `<leader> n` into the leader and `n`.
+ * `<leader>n` without a space is accepted too.
  */
-export const LEADER_DEFAULTS = new Map([
-  ["agent.cycle", "<leader>a"],
-  ["model.choose", "<leader>m"],
-  ["project.select", "<leader>p"],
-  ["review.toggle", "<leader>r"],
-  ["session.new", "<leader>n"],
-  ["settings.open", "<leader>comma"],
-  ["sidebar.toggle", "<leader>b"],
-  ["tab.new", "<leader>t"],
-])
+export function chordStrokes(combo: string) {
+  return combo
+    .trim()
+    .replace(/^<leader>(?=\S)/i, `${LEADER} `)
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+/** Whether a combo is a chord the keymap accepts: no empty strokes, and `<leader>` only as its first stroke. */
+export function validChord(combo: string) {
+  const strokes = chordStrokes(combo)
+
+  return strokes.length > 0 && strokes.every((stroke, index) => (stroke.toLowerCase() === LEADER ? index === 0 : true))
+}
 
 /**
  * The keymap behind every command keybind. It reads keys in the capture phase on the document root, before the
@@ -39,6 +43,30 @@ export const LEADER_DEFAULTS = new Map([
 export function createAppKeymap(input: { blocked: () => boolean; editable: (target: EventTarget | null) => boolean }) {
   const host = createAppKeymapHost(document.documentElement, input.blocked)
   const keymap: AppKeymap = new Keymap(host.host)
+  // Every binding is written by `keymapKey`: strokes separated by spaces, each a `+`-joined combo.
+  keymap.prependBindingParser((ctx) => {
+    if (ctx.index !== 0) return
+    const leader = ctx.tokens.get("leader")
+
+    const parts = ctx.input
+      .trim()
+      .split(/\s+/)
+      .map((stroke) =>
+        stroke === LEADER
+          ? leader
+            ? ctx.parseObjectKey(leader.stroke, { display: LEADER, match: leader.match, tokenName: "leader" })
+            : undefined
+          : ctx.parseObjectKey(strokeInput(stroke), { display: stroke }),
+      )
+
+    if (parts.some((part) => !part)) return { parts: [], nextIndex: ctx.input.length, unknownTokens: ["leader"] }
+
+    return {
+      parts: parts.filter((part) => part !== undefined),
+      nextIndex: ctx.input.length,
+      usedTokens: ctx.input.includes(LEADER) ? ["leader"] : [],
+    }
+  })
   registerDefaultBindingParser(keymap)
   keymap.prependEventMatchResolver((event, ctx) => {
     const original = event.originalEvent
@@ -82,7 +110,12 @@ export function createAppKeymap(input: { blocked: () => boolean; editable: (targ
  * the order given. A command declines a key by returning false from `onSelect`, or through `when` and `skip`; the key
  * then goes to the next command, and finally to the focused element.
  */
-export function registerCommandLayers(keymap: AppKeymap, options: CommandOption[], custom: (id: string) => boolean) {
+export function registerCommandLayers(
+  keymap: AppKeymap,
+  options: CommandOption[],
+  custom: (id: string) => boolean,
+  leader: boolean,
+) {
   const layers = new Map<HTMLElement | undefined, CommandOption[]>()
 
   options
@@ -116,7 +149,9 @@ export function registerCommandLayers(keymap: AppKeymap, options: CommandOption[
         option
           .keybind!.split(",")
           .map((combo) => combo.trim())
-          .filter((combo) => combo && combo !== "none")
+          .filter((combo) => combo && combo !== "none" && validChord(combo))
+          // Without a leader key the profile's `<leader>` chords stay listed but do nothing.
+          .filter((combo) => leader || chordStrokes(combo)[0]?.toLowerCase() !== LEADER)
           .map((combo) => {
             const key = keymapKey(combo)
 
@@ -133,21 +168,41 @@ export function registerAppLeader(keymap: AppKeymap, trigger: string) {
   return registerTimedLeader(keymap, { trigger: keymapKey(trigger), timeoutMs: LEADER_TIMEOUT_MS })
 }
 
-/** Translates one combo of the app's keybind syntax (`mod+shift+arrowup`, `<leader>n`) into the keymap's. */
+/** Translates one combo of the app's keybind syntax (`mod+shift+arrowup`, `<leader> g s`) into the keymap's. */
 export function keymapKey(combo: string) {
-  return combo
-    .trim()
-    .split("+")
-    .map((part) => {
-      const lower = part.toLowerCase()
+  return chordStrokes(combo)
+    .map((stroke) =>
+      stroke.toLowerCase() === LEADER
+        ? LEADER
+        : stroke
+            .split("+")
+            .map((part) => {
+              const lower = part.toLowerCase()
 
-      if (lower === "mod") return IS_MAC ? "super" : "ctrl"
+              if (lower === "mod") return IS_MAC ? "super" : "ctrl"
 
-      if (lower === "meta" || lower === "cmd" || lower === "command") return "super"
+              if (lower === "meta" || lower === "cmd" || lower === "command") return "super"
 
-      return MODIFIER_PARTS.has(lower) ? lower : keymapKeyName(lower)
-    })
-    .join("+")
+              return MODIFIER_PARTS.has(lower) ? lower : keymapKeyName(lower)
+            })
+            .join("+"),
+    )
+    .join(" ")
+}
+
+// One stroke as `keymapKey` writes it, such as `super+shift+[`.
+function strokeInput(stroke: string) {
+  const parts = stroke.split("+")
+  const has = (...names: string[]) => parts.some((part) => names.includes(part))
+
+  return {
+    name: parts.findLast((part) => !MODIFIER_PARTS.has(part)) ?? parts.at(-1)!,
+    ctrl: has("ctrl", "control"),
+    shift: has("shift"),
+    meta: has("alt", "option"),
+    super: has("super"),
+    hyper: has("hyper") || undefined,
+  }
 }
 
 /** Whether the first key of a keymap sequence types a character, so it should stay out of text fields. */

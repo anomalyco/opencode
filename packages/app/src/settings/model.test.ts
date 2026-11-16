@@ -206,6 +206,27 @@ describe("settings schema", () => {
     },
   )
 
+  test("keeps keymap profiles, dropping only their invalid entries", () => {
+    const settings = decode({
+      keybinds: { "tab.new": "mod+t" },
+      keymaps: {
+        active: "p1",
+        leader: 7,
+        profiles: {
+          p1: { name: "Leader", leader: "ctrl+x", keybinds: { "session.new": "<leader> n", broken: 1 } },
+          p2: { leader: "ctrl+a" },
+        },
+      },
+    })
+
+    expect(settings.keybinds).toEqual({ "tab.new": "mod+t" })
+    expect(settings.keymaps).toEqual({
+      active: "p1",
+      profiles: { p1: { name: "Leader", leader: "ctrl+x", keybinds: { "session.new": "<leader> n" } } },
+    })
+    expect(decode(encode(settings))).toEqual(settings)
+  })
+
   test("does not silently repair invalid values during encoding", () => {
     expect(() =>
       Schema.encodeUnknownSync(settingsSchema)({ ...decode({}), appearance: { fontSize: "large" } }),
