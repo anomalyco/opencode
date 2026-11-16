@@ -19,7 +19,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         standalone: args.iter().any(|arg| arg == "--standalone"),
         client_version: "local".to_owned(),
         standalone_fallback: args.iter().any(|arg| arg == "--no-autostart"),
-        on_start: Some(|| eprintln!("Starting background server...")),
+        replace: false,
+        on_start: Some(|_| eprintln!("Starting background server...")),
     };
     let transport = Arc::new(Reqwest::default());
     let connection = connect::resolve(transport.clone(), &Paths::from_env()?, &env, &options).await?;

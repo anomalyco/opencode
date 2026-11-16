@@ -145,6 +145,7 @@ async fn running(transport: Arc<dyn Transport>, server: Option<String>) -> error
             standalone: false,
             client_version: crate::help::VERSION.to_owned(),
             standalone_fallback: false,
+            replace: false,
             on_start: None,
         };
         return Ok(connect::resolve(transport, &paths, &env, &options).await?.endpoint);

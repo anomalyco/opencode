@@ -70,8 +70,8 @@ pub enum Decision {
     Reuse,
     Wait,
     /// The version does not meet the requirement. `handoff` keeps persistent terminals, which only
-    /// a ready service can hand over. The Rust client never replaces a service (plan 6.6); F.9 maps
-    /// this to a warning.
+    /// a ready service can hand over. `ensure` replaces the service only when its caller required a
+    /// version (O-167, `docs/F.9.md`).
     Replace {
         handoff: bool,
     },

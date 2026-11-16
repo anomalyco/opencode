@@ -83,6 +83,7 @@ impl Fixture {
             state: self.dir.path().to_owned(),
             command,
             env: Vec::new(),
+            version: None,
             timing: fast(),
         }
     }
@@ -238,13 +239,18 @@ fn transport() -> Arc<dyn Transport> {
 }
 
 async fn run(options: &Options) -> Result<Ensured, ensure::Error> {
-    ensure::ensure(transport(), options, &mut || {}).await
+    ensure::ensure(transport(), options, &mut |_| {}).await
 }
 
 async fn run_counting(options: &Options) -> (Result<Ensured, ensure::Error>, usize) {
-    let mut starts = 0;
-    let result = ensure::ensure(transport(), options, &mut || starts += 1).await;
-    (result, starts)
+    let (result, reasons) = run_reasons(options).await;
+    (result, reasons.len())
+}
+
+async fn run_reasons(options: &Options) -> (Result<Ensured, ensure::Error>, Vec<ensure::Reason>) {
+    let mut reasons = Vec::new();
+    let result = ensure::ensure(transport(), options, &mut |reason| reasons.push(reason)).await;
+    (result, reasons)
 }
 
 async fn status(url: &str) -> serde_json::Value {
@@ -294,8 +300,50 @@ async fn reuses_a_registered_service() {
     assert!(fixture.running(existing));
 }
 
+// Expected (O-167): with a version required, as TS's `replaces an incompatible registered service`: the service of
+// another version is stopped and replaced, announced once as a version mismatch from its version.
+#[tokio::test(flavor = "multi_thread")]
+async fn replaces_a_service_of_another_version_when_a_version_is_required() {
+    needs_bun!();
+    let mut fixture = Fixture::new();
+    let existing = fixture.spawn("incompatible", &[]);
+    fixture.wait_for_file(&fixture.registration).await;
+    let mut options = fixture.options(fixture.command("delayed-compatible", &["10"]));
+    options.version = Some("2.1.0-next.1".to_owned());
+    let (ensured, reasons) = run_reasons(&options).await;
+    let ensured = ensured.unwrap();
+    fixture.pids.push(ensured.service.registration.pid);
+    fixture.exited(existing).await;
+    assert_eq!(ensured.service.version.as_deref(), Some("2.1.0-next.1"));
+    assert_eq!(ensured.service.endpoint.url, fixture.info()["url"]);
+    assert_eq!(reasons, [ensure::Reason::VersionMismatch { previous: Some("1.9.0".to_owned()) }]);
+}
+
+// Expected (O-167): a service of the required version is reused; one this call started is used whatever its version,
+// so a TS binary of another version than required is not replaced in a loop.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_required_version_reuses_its_service_and_takes_what_it_started() {
+    needs_bun!();
+    let mut fixture = Fixture::new();
+    let existing = fixture.spawn("compatible", &[]);
+    fixture.wait_for_file(&fixture.registration).await;
+    let mut options = fixture.options(fixture.command("delayed-compatible", &["10"]));
+    options.version = Some("2.1.0-next.1".to_owned());
+    let (ensured, reasons) = run_reasons(&options).await;
+    assert_eq!(ensured.unwrap().service.registration.pid, existing);
+    assert!(reasons.is_empty() && fixture.starts().is_empty());
+    assert!(fixture.running(existing));
+    options.version = Some("3.0.0".to_owned());
+    let (ensured, reasons) = run_reasons(&options).await;
+    let ensured = ensured.unwrap();
+    fixture.pids.push(ensured.service.registration.pid);
+    assert_eq!(ensured.service.version.as_deref(), Some("2.1.0-next.1"));
+    assert_ne!(ensured.service.registration.pid, existing);
+    assert_eq!(reasons.len(), 1);
+}
+
 // TS replaces a service of another version (`replaces an incompatible registered service`,
-// `signals an incompatible service before starting its replacement`). Rust uses it.
+// `signals an incompatible service before starting its replacement`). Without a required version, Rust uses it.
 #[tokio::test(flavor = "multi_thread")]
 async fn uses_a_service_of_another_version_and_leaves_it_running() {
     needs_bun!();
@@ -860,4 +908,93 @@ async fn a_managed_client_follows_a_restarted_service() {
     assert!(client.server_info().await.is_err());
     assert_eq!(client.server_info().await.unwrap().pid, i64::from(second));
     assert!(!channel.spawned(), "the client started a service");
+}
+
+// A client of the channel `oc-x` whose TS binary prints `opencode v<binary>` for `--version` and serves `mode` (the
+// fixture's) under `service-oc-x.json`, logging each start to `spawns`: the bundled binary of O-167.
+fn restarting(channel: &Channel, binary: &str, mode: &str) -> (Env, PathBuf) {
+    let root = channel.fixture.dir.path();
+    let spawns = root.join("spawns");
+    let program = root.join("opencode-bundled");
+    write_script(
+        &program,
+        &format!(
+            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo opencode v{binary}; exit 0; fi\necho $$ >> {}\nexec bun {} {} {mode}\n",
+            spawns.display(),
+            fixture_script().display(),
+            channel.fixture.registration.display()
+        ),
+    );
+    let env = Env {
+        ts_bin: Some(program.to_string_lossy().into_owned()),
+        channel: Some("oc-x".to_owned()),
+        ..Env::default()
+    };
+    (env, spawns)
+}
+
+async fn resolve_replacing(channel: &Channel, env: &Env) -> Result<Connection, connect::Error> {
+    let options =
+        connect::Options { client_version: "2.1.0-next.1".to_owned(), replace: true, ..connect::Options::default() };
+    connect::resolve(transport(), &channel.paths, env, &options).await
+}
+
+// Expected (O-167, TS `default.ts` with `mismatch: "replace"`): the TUI's client restarts a service of another version
+// in its channel on the TS binary it resolved, and attaches to the new one.
+#[tokio::test(flavor = "multi_thread")]
+async fn connect_restarts_a_service_of_another_version_and_attaches_to_the_new_one() {
+    needs_bun!();
+    let mut channel = Channel::new();
+    let old = channel.fixture.spawn("incompatible", &[]);
+    channel.fixture.wait_for_file(&channel.fixture.registration).await;
+    let (env, spawns) = restarting(&channel, "2.1.0-next.1", "compatible");
+    let connection = resolve_replacing(&channel, &env).await.unwrap();
+    channel.fixture.pids.push(channel.fixture.pid());
+    channel.fixture.exited(old).await;
+    assert_eq!(connection.version, "2.1.0-next.1");
+    assert_eq!(connection.endpoint.url, channel.fixture.info()["url"]);
+    assert_eq!(status(&connection.endpoint.url).await["pid"], channel.fixture.pid());
+    assert_eq!(spawned(&spawns), 1);
+}
+
+// Expected (O-167): a service of the client's version is not touched; one of another version is used as before when
+// the client does not ask to replace (`mismatch: "ignore"`, every command but the TUI and `mini`), when it is
+// registered in another channel than the client's, or when the resolved binary would start its version again.
+#[tokio::test(flavor = "multi_thread")]
+async fn connect_restarts_nothing_else() {
+    needs_bun!();
+    let mut channel = Channel::new();
+    let same = channel.fixture.spawn("compatible", &[]);
+    channel.fixture.wait_for_file(&channel.fixture.registration).await;
+    let (env, spawns) = restarting(&channel, "2.1.0-next.1", "compatible");
+    assert_eq!(resolve_replacing(&channel, &env).await.unwrap().version, "2.1.0-next.1");
+    assert!(channel.fixture.running(same));
+    signal(same, Signal::KILL);
+    channel.fixture.exited(same).await;
+    let old = channel.fixture.spawn("incompatible", &[]);
+    until(|| channel.fixture.registration.exists() && channel.fixture.pid() == old, "the old service").await;
+    let ignoring = connect::Options { client_version: "2.1.0-next.1".to_owned(), ..connect::Options::default() };
+    let used = connect::resolve(transport(), &channel.paths, &env, &ignoring).await.unwrap();
+    assert_eq!(used.version, "1.9.0");
+    let other_channel = Env { channel: None, ..env.clone() };
+    assert_eq!(resolve_replacing(&channel, &other_channel).await.unwrap().version, "1.9.0");
+    let (same_binary, _) = restarting(&channel, "1.9.0", "incompatible");
+    assert_eq!(resolve_replacing(&channel, &same_binary).await.unwrap().version, "1.9.0");
+    assert!(channel.fixture.running(old));
+    assert_eq!(spawned(&spawns), 0);
+}
+
+// Expected (O-167, TS `ensure`): when the replacement fails to start, the old service is already stopped and the
+// command fails with the start's error, as TS's does; the client attaches to nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn connect_fails_with_the_start_error_when_the_restart_fails() {
+    needs_bun!();
+    let mut channel = Channel::new();
+    let old = channel.fixture.spawn("incompatible", &[]);
+    channel.fixture.wait_for_file(&channel.fixture.registration).await;
+    let (env, spawns) = restarting(&channel, "2.1.0-next.1", "failed");
+    let error = resolve_replacing(&channel, &env).await.unwrap_err().to_string();
+    assert!(error.contains("Server process exited with code 1"), "{error}");
+    channel.fixture.exited(old).await;
+    assert!(spawned(&spawns) >= 1);
 }

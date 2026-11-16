@@ -41,11 +41,20 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
             standalone: context.server.standalone,
             client_version: crate::help::VERSION.to_owned(),
             standalone_fallback: false,
-            // The Rust client never replaces a service, so TS's "Restarting background server (version
-            // mismatch)..." has no counterpart.
-            on_start: Some(|| {
-                log::info!("background service starting reason=missing");
-                eprintln!("Starting background server...");
+            // `mismatch: "replace"` (O-167): a service of another version is restarted, as TS's TUI does.
+            replace: true,
+            on_start: Some(|reason| match reason {
+                connect::Reason::Missing => {
+                    log::info!("background service starting reason=missing");
+                    eprintln!("Starting background server...");
+                }
+                connect::Reason::VersionMismatch { previous } => {
+                    log::info!(
+                        "background service starting reason=version-mismatch previousVersion={}",
+                        previous.as_deref().unwrap_or_default()
+                    );
+                    eprintln!("Restarting background server (version mismatch)...");
+                }
             }),
         },
     ))?;

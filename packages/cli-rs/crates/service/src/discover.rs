@@ -122,26 +122,26 @@ impl Owner {
     }
 
     async fn position_by_version(&self, ready: &[Found]) -> Option<usize> {
-        let version = self.version().await?;
+        let version = binary_version(&self.command).await?;
         ready.iter().position(|found| found.service.version.as_deref() == Some(version.as_str()))
     }
+}
 
-    // The version `<binary> --version` prints: `opencode v1.2.3` gives `1.2.3`, as Desktop's `parseCliVersion` reads
-    // it, and a bare version stays. `None` when it does not run or print within the probe timeout.
-    async fn version(&self) -> Option<String> {
-        let mut command = tokio::process::Command::new(&self.command.program);
-        command
-            .args(&self.command.args)
-            .arg("--version")
-            .stdin(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .kill_on_drop(true);
-        let output = tokio::time::timeout(REQUEST_TIMEOUT, command.output()).await.ok()?.ok()?;
-        let text = String::from_utf8(output.stdout).ok()?;
-        let text = text.trim();
-        let version = text.rsplit_once(" v").map_or(text, |(_, version)| version);
-        (output.status.success() && !version.is_empty()).then(|| version.to_owned())
-    }
+/// The version `<binary> --version` prints: `opencode v1.2.3` gives `1.2.3`, as Desktop's `parseCliVersion` reads it,
+/// and a bare version stays. `None` when it does not run or print within the probe timeout.
+pub async fn binary_version(ts: &TsCommand) -> Option<String> {
+    let mut command = tokio::process::Command::new(&ts.program);
+    command
+        .args(&ts.args)
+        .arg("--version")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    let output = tokio::time::timeout(REQUEST_TIMEOUT, command.output()).await.ok()?.ok()?;
+    let text = String::from_utf8(output.stdout).ok()?;
+    let text = text.trim();
+    let version = text.rsplit_once(" v").map_or(text, |(_, version)| version);
+    (output.status.success() && !version.is_empty()).then(|| version.to_owned())
 }
 
 /// The executable process `pid` runs, real as `resolve` makes it; the image path when it cannot be

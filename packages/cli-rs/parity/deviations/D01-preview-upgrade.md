@@ -14,6 +14,10 @@ This is an OpenCode native CLI preview build; re-run the install script to updat
 
 Any other version (`local`, release versions) delegates as before.
 
+After the install script replaced both binaries, the background service still runs the old version. The next
+`opencode-native` (TUI) or `opencode-native mini` restarts it on the new bundled binary, as TS's client does after
+`opencode upgrade` (O-167, `S03-never-replace`).
+
 Reason: preview builds come from the preview repository's install script, which the TypeScript updater does
 not know about (`shipping/share-builds.md` section 5, step 2), and the install script replaces both binaries
 (bundle-server). The D.2 update flow replaces this.

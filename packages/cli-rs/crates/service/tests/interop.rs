@@ -114,7 +114,7 @@ async fn typescript_service_status_sees_a_service_rust_started() {
     let mut options = Options::new(state.join("service.json"), state.clone(), &TsCommand::new(&wrapper));
     options.timing = Timing { deadline: Duration::from_secs(60), ..Timing::default() };
     let mut started = 0;
-    let ensured = ensure::ensure(Arc::new(Reqwest::default()), &options, &mut || started += 1).await.unwrap();
+    let ensured = ensure::ensure(Arc::new(Reqwest::default()), &options, &mut |_| started += 1).await.unwrap();
     let pid = ensured.service.registration.pid;
     let status = Command::new(&wrapper).args(["service", "status"]).output().unwrap();
     let printed = String::from_utf8_lossy(&status.stdout).trim().to_owned();

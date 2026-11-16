@@ -2,8 +2,11 @@
 //!
 //! Ports `ServerConnection.resolve` (`packages/cli/src/services/server-connection.ts:25-64`) with
 //! two changes (plan 6.6, decision O-21): a service is found through [`discover`], which tries more
-//! than one registration, and a service of another version is used with a warning, never
-//! replaced. When none is found, [`ensure`] starts the TypeScript service (F.9, `docs/F.9.md`).
+//! than one registration, and a service of another version is used with a warning in the log. The
+//! exception is `mismatch: "replace"` ([`Options::replace`], O-167), which the TUI and `mini` ask for
+//! as TS's do: a service of another version registered in the client's own channel is restarted on
+//! the TypeScript binary the client resolved. When none is found, [`ensure`] starts the TypeScript
+//! service (F.9, `docs/F.9.md`).
 
 use opencode_api::error::Error as ApiError;
 use opencode_api::transport::Transport;
@@ -21,6 +24,8 @@ use crate::probe::Endpoint;
 use crate::standalone;
 use crate::ts_command::TsCommand;
 
+pub use crate::ensure::Reason;
+
 /// How long `--server` waits for `/api/info` (`server-connection.ts:40`).
 pub const SERVER_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -34,8 +39,13 @@ pub struct Options {
     /// Use a standalone server instead of starting the service when none runs (`autostart: false`,
     /// which `run` uses so a one-off run leaves no service behind).
     pub standalone_fallback: bool,
-    /// Runs once before the service is started, for "Starting background server...".
-    pub on_start: Option<fn()>,
+    /// `mismatch: "replace"` (O-167): a service of another version than `client_version`, registered in the client's
+    /// own channel, is restarted on the resolved TypeScript binary, as TS's TUI and `mini` restart it. Otherwise any
+    /// version is used (`"ignore"`, the other commands').
+    pub replace: bool,
+    /// Runs once before the service is started or restarted, for "Starting background server..." and "Restarting
+    /// background server (version mismatch)...".
+    pub on_start: Option<fn(&ensure::Reason)>,
 }
 
 /// The environment `resolve` reads.
@@ -105,7 +115,7 @@ pub struct Connection {
     pub version: String,
     pub source: Source,
     /// The mismatch warning for `--server`, already written to stderr. A mismatch with a
-    /// discovered service is only logged (decision O-22): a Rust client is always another version.
+    /// discovered service is only logged (decision O-22), unless [`Options::replace`] restarted it (O-167).
     pub warning: Option<String>,
 }
 
@@ -175,6 +185,7 @@ pub async fn resolve(
     if options.standalone || config.disabled == Some(true) {
         return start_standalone(env).await;
     }
+    let own = registration::Files::new(paths, &channels.channel).file;
     let found = match discover::discover_with(
         transport.as_ref(),
         paths,
@@ -186,9 +197,15 @@ pub async fn resolve(
         Ok(found) => found,
         Err(_) if options.standalone_fallback => return start_standalone(env).await,
         Err(missing) => {
-            let file = registration::Files::new(paths, &channels.channel).file;
-            ensure_missing(transport, paths, env, &config, file, options.on_start, missing).await?
+            ensure_missing(transport.clone(), paths, env, &config, own.clone(), options.on_start, missing).await?
         }
+    };
+    let found = match options.replace && found.file == own && restarts(env, &found, &options.client_version).await {
+        true => {
+            let version = Some(options.client_version.clone());
+            run_ensure(transport, paths, env, &config, found.file, version, options.on_start).await?
+        }
+        false => found,
     };
     log::info!(
         "service connected channel={} file={} url={}",
@@ -239,7 +256,7 @@ async fn ensure_missing(
     env: &Env,
     config: &service_config::Info,
     file: PathBuf,
-    on_start: Option<fn()>,
+    on_start: Option<fn(&ensure::Reason)>,
     missing: discover::Missing,
 ) -> Result<discover::Found, Error> {
     if missing.pending.is_none()
@@ -247,11 +264,48 @@ async fn ensure_missing(
     {
         return Err(Error::new(reason));
     }
-    let mut ensure_options = ensure::Options::new(missing.pending.unwrap_or(file), paths.state.clone(), &env.ts());
+    run_ensure(transport, paths, env, config, missing.pending.unwrap_or(file), None, on_start).await
+}
+
+// Whether a service is restarted (O-167): its version is not the client's, and the TypeScript binary the client
+// resolved would start another version than it runs. That second test is the Rust client's own: TS restarts on its own
+// binary, which is the client's version by construction, as the bundled one is. A binary that says nothing in time is
+// tried; one of the service's version (`OPENCODE_TS_BIN` or `opencode` on `PATH` behind a development build) would only
+// start the same version again, on every start.
+async fn restarts(env: &Env, found: &discover::Found, client_version: &str) -> bool {
+    let running = found.service.version.as_deref();
+    if running == Some(client_version) {
+        return false;
+    }
+    let ts = env.ts();
+    let binary = discover::binary_version(&ts).await;
+    if binary.is_some() && binary.as_deref() == running {
+        log::info!(
+            "background service version={} differs from this client's {client_version}, but {:?} starts the same version; not restarted",
+            running.unwrap_or_default(),
+            ts.program
+        );
+        return false;
+    }
+    true
+}
+
+// `ensure` on `file` with the service config's environment, requiring `version` of the service registered there.
+async fn run_ensure(
+    transport: Arc<dyn Transport>,
+    paths: &Paths,
+    env: &Env,
+    config: &service_config::Info,
+    file: PathBuf,
+    version: Option<String>,
+    on_start: Option<fn(&ensure::Reason)>,
+) -> Result<discover::Found, Error> {
+    let mut ensure_options = ensure::Options::new(file, paths.state.clone(), &env.ts());
     ensure_options.env = service_config::process_env(config.env.as_ref()).unwrap_or_default().into_iter().collect();
-    let ensured = ensure::ensure(transport, &ensure_options, &mut || {
+    ensure_options.version = version;
+    let ensured = ensure::ensure(transport, &ensure_options, &mut |reason| {
         if let Some(on_start) = on_start {
-            on_start();
+            on_start(&reason);
         }
     })
     .await
@@ -336,6 +390,7 @@ mod tests {
             standalone: false,
             client_version: "1.0.0".to_owned(),
             standalone_fallback: false,
+            replace: false,
             on_start: None,
         }
     }
@@ -359,8 +414,9 @@ mod tests {
     #[tokio::test]
     async fn server_flag_connects_with_the_password_and_warns_on_a_mismatch() {
         let env = Env::from_vars(|name| (name == "OPENCODE_SERVER_PASSWORD").then(|| "pw".to_owned()));
-        let (result, server) =
-            run(Server::default().reply(INFO, Reply::json(200, HEALTH)), env, options(Some(URL))).await;
+        // Expected (O-167): `--server` only warns, also for a client that restarts a discovered service.
+        let replacing = Options { replace: true, ..options(Some(URL)) };
+        let (result, server) = run(Server::default().reply(INFO, Reply::json(200, HEALTH)), env, replacing).await;
         let connection = result.unwrap();
         assert_eq!(connection.version, "2.0.0");
         assert_eq!(connection.source, Source::Server);
