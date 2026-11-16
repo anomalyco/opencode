@@ -6,10 +6,19 @@ import type { Shell } from "@opencode/schema/shell"
 export type Result = {
   info: Shell.Info
   // `killed` says why a command was killed when no exit code or signal of its own tells, e.g. the process daemon stopped.
-  capture: { output: string; truncated: boolean; killed?: string } | undefined
+  // `output` is the tail with notes for the model; `text` is the same tail as captured, without them.
+  capture: { output: string; text: string; truncated: boolean; killed?: string } | undefined
 }
 
-type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean; killed?: string }
+type Output = {
+  output: string
+  text: string
+  truncated: boolean
+  exit?: number
+  signal?: string
+  timeout?: boolean
+  killed?: string
+}
 
 const missing = "Shell command output is no longer available."
 export const unavailable: Shell.Output = {
@@ -22,6 +31,7 @@ export const unavailable: Shell.Output = {
 export function output(result: Result): Output {
   return {
     output: result.capture?.output ?? unavailable.output,
+    text: result.capture?.text ?? "",
     truncated: result.capture?.truncated ?? false,
     ...(result.info.exit !== undefined ? { exit: result.info.exit } : {}),
     ...(result.info.signal !== undefined ? { signal: result.info.signal } : {}),

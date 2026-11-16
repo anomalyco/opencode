@@ -16,7 +16,10 @@ const info = (status: Shell.Status): Shell.Info => ({
 describe("ShellResult.interrupted", () => {
   test("names the output file and the shell even when the output fits", () => {
     expect(
-      ShellResult.interrupted({ info: info("killed"), capture: { output: "partial\n", truncated: false } }),
+      ShellResult.interrupted({
+        info: info("killed"),
+        capture: { output: "partial\n", text: "partial\n", truncated: false },
+      }),
     ).toEqual({
       output: "partial",
       notice: "[full output saved to /tmp/sh_result.out]\n\nCommand interrupted by the user (shell ID: sh_result).",
@@ -27,7 +30,9 @@ describe("ShellResult.interrupted", () => {
 
   test("keeps a truncated tail's own notice", () => {
     const output = "tail\n\n[showing lines 9-10 of 10; full output saved to /tmp/sh_result.out]"
-    expect(ShellResult.interrupted({ info: info("killed"), capture: { output, truncated: true } })).toEqual({
+    expect(
+      ShellResult.interrupted({ info: info("killed"), capture: { output, text: "tail", truncated: true } }),
+    ).toEqual({
       output,
       notice: "Command interrupted by the user (shell ID: sh_result).",
       message: `${output}\n\nCommand interrupted by the user (shell ID: sh_result).`,
@@ -36,7 +41,10 @@ describe("ShellResult.interrupted", () => {
 
   test("says once that there was no output, and that a command still stopping is not done", () => {
     expect(
-      ShellResult.interrupted({ info: info("running"), capture: { output: "(no output)", truncated: false } }),
+      ShellResult.interrupted({
+        info: info("running"),
+        capture: { output: "(no output)", text: "", truncated: false },
+      }),
     ).toEqual({
       output: "",
       notice:
@@ -51,7 +59,12 @@ describe("ShellResult.output", () => {
   test("reports a command killed without an exit code or signal of its own", () => {
     const lost = ShellResult.output({
       info: info("killed"),
-      capture: { output: "partial\n", truncated: false, killed: "Command was killed: the process daemon stopped" },
+      capture: {
+        output: "partial\n",
+        text: "partial\n",
+        truncated: false,
+        killed: "Command was killed: the process daemon stopped",
+      },
     })
     expect(ShellResult.notice(lost)).toBe("Command was killed: the process daemon stopped")
     expect(ShellResult.metadata(lost)).toMatchObject({ killed: true })
@@ -59,7 +72,7 @@ describe("ShellResult.output", () => {
 
   test("keeps a removed command's result unchanged", () => {
     const removed = ShellResult.output({ info: info("killed"), capture: undefined })
-    expect(removed).toEqual({ output: ShellResult.unavailable.output, truncated: false })
+    expect(removed).toEqual({ output: ShellResult.unavailable.output, text: "", truncated: false })
     expect(ShellResult.notice(removed)).toBeUndefined()
   })
 })

@@ -4,9 +4,9 @@ import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
-import type { Shell as ShellSchema } from "@opencode/schema/shell"
+import { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
-import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
+import { Clock, Deferred, Duration, Effect, Fiber, Option, Schema } from "effect"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
@@ -67,21 +67,43 @@ export const Input = Schema.Struct({
   }),
 })
 
+export const WaitName = "shell_wait"
+
+const WAIT_DESCRIPTION = [
+  "Wait for a command started by `shell` to finish, for at most `timeout` milliseconds.",
+  "It never stops the command: if it is still running when the wait ends, its status is still running.",
+  "Returns the same result as `shell`.",
+].join(" ")
+
+const WaitInput = Schema.Struct({
+  shellID: Schema.String.annotate({ description: "The shellID that `shell` returned" }),
+  timeout: Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Longest time to wait, in milliseconds (default ${DEFAULT_TIMEOUT_MS})`,
+  }),
+})
+
 const StructuredOutput = Schema.Struct({
-  output: Schema.String,
-  exitCode: Schema.NullOr(Schema.Number),
-  wallTimeSeconds: Schema.Number,
-  outputPath: Schema.optionalKey(Schema.String),
+  shellID: Schema.String.annotate({ description: "Pass to shell_wait to wait for a running command" }),
+  status: Schema.Literals(["completed", "running"]).annotate({
+    description: "running: still running in the background; completed: the command has exited",
+  }),
+  exitCode: Schema.NullOr(Schema.Number).annotate({
+    description: "null while running, or when the command was killed by a signal",
+  }),
   signal: Schema.optionalKey(Schema.String),
-  shellID: Schema.optionalKey(Schema.String),
-  pid: Schema.optionalKey(NonNegativeInt),
+  output: Schema.String.annotate({
+    description: "Combined stdout and stderr captured so far; only the tail when truncated",
+  }),
+  truncated: Schema.Boolean,
+  outputPath: Schema.String.annotate({ description: "File with the full output" }),
+  wallTimeSeconds: Schema.Number,
 })
 
 type Output = ReturnType<typeof ShellResult.output> & {
   status: "completed" | "running"
   wallTimeSeconds: number
-  outputPath?: string
-  shellID?: string
+  shellID: string
+  outputPath: string
   pid?: number
 }
 
@@ -93,8 +115,14 @@ const resultMessages = (output: Output, timeout?: number) => {
 const toolResult = (output: Output, timeout?: number) => {
   return {
     output: {
-      ...Struct.omit(output, ["exit", "status", "truncated", "timeout", "killed"]),
+      shellID: output.shellID,
+      status: output.status,
       exitCode: output.exit ?? null,
+      ...(output.signal !== undefined ? { signal: output.signal } : {}),
+      output: output.text,
+      truncated: output.truncated,
+      outputPath: output.outputPath,
+      wallTimeSeconds: output.wallTimeSeconds,
     },
     content: resultMessages(output, timeout).map((text) => ({
       type: "text" as const,
@@ -103,7 +131,7 @@ const toolResult = (output: Output, timeout?: number) => {
     metadata: {
       status: output.status,
       ...ShellResult.metadata(output),
-      ...(output.shellID !== undefined ? { shellID: output.shellID } : {}),
+      ...(output.status === "running" ? { shellID: output.shellID } : {}),
       ...(output.pid !== undefined ? { pid: output.pid } : {}),
     },
   }
@@ -124,13 +152,14 @@ const backgroundText = (info: ShellSchema.Info, timeout?: number) =>
         ]),
   ].join("\n")
 
-const backgroundResult = (info: ShellSchema.Info, now: number, timeout?: number) => ({
-  output: backgroundText(info, timeout),
-  wallTimeSeconds: wallTimeSeconds(info.time, now),
-  shellID: info.id,
-  outputPath: info.file,
-  ...(info.pid === undefined ? {} : { pid: info.pid }),
-  truncated: false,
+// The model reads where the running command went; a script reads the output captured so far.
+const backgroundResult = (result: ShellResult.Result, now: number, timeout?: number): Output => ({
+  ...ShellResult.output(result),
+  output: backgroundText(result.info, timeout),
+  wallTimeSeconds: wallTimeSeconds(result.info.time, now),
+  shellID: result.info.id,
+  outputPath: result.info.file,
+  ...(result.info.pid === undefined ? {} : { pid: result.info.pid }),
   status: "running" as const,
 })
 
@@ -179,6 +208,8 @@ const startJob = Effect.fnUntraced(function* (
     readonly background?: boolean
     readonly notificationID?: SessionMessage.ID
     readonly timeout?: () => number
+    // A Code Mode script reads its commands through shell_wait: nothing notifies the session or recovers the job.
+    readonly codemode?: boolean
   },
 ) {
   const info = input.info
@@ -189,12 +220,16 @@ const startJob = Effect.fnUntraced(function* (
     type: name,
     title: info.command,
     metadata: { sessionID: input.sessionID, shellID: info.id },
-    recovery: {
-      kind: "shell",
-      sessionID: input.sessionID,
-      shellID: info.id,
-      command: info.command,
-    },
+    ...(input.codemode
+      ? {}
+      : {
+          recovery: {
+            kind: "shell" as const,
+            sessionID: input.sessionID,
+            shellID: info.id,
+            command: info.command,
+          },
+        }),
     ...(input.notificationID ? { notificationID: input.notificationID } : {}),
     background: input.background,
     run: Effect.gen(function* () {
@@ -205,7 +240,8 @@ const startJob = Effect.fnUntraced(function* (
         ...ShellResult.output(result),
         status: "completed" as const,
         wallTimeSeconds: wallTimeSeconds(result.info.time, completed),
-        ...(result.capture.truncated ? { outputPath: result.info.file } : {}),
+        shellID: result.info.id,
+        outputPath: result.info.file,
       }
     }).pipe(
       Effect.tap((output) => Deferred.succeed(settled, output)),
@@ -351,7 +387,7 @@ export const Plugin = {
     })
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
         editor.add({
           name,
           // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool.
@@ -421,14 +457,16 @@ export const Plugin = {
                     sessionID: context.sessionID,
                     info,
                     timeout: () => finalTimeout,
+                    codemode: context.codemode === true,
                   })
                   // Stopped while the command was starting: stop it now.
                   if (yield* Deferred.isDone(stopped)) return yield* cancelled(info, job.id)
 
                   if (input.background === true) {
                     yield* jobs.background(job.id)
-                    yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                    return backgroundResult(info, yield* Clock.currentTimeMillis)
+                    if (!context.codemode)
+                      yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
+                    return backgroundResult(yield* shell.result(info, { wait: 0 }), yield* Clock.currentTimeMillis)
                   }
 
                   const waiting = jobs.block({ id: job.id, sessionID: context.sessionID })
@@ -468,8 +506,13 @@ export const Plugin = {
                     yield* shell.timeout(info.id, 0)
                     const elapsed = "timedOut" in result ? finalTimeout : undefined
                     finalTimeout = 0
-                    yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                    return backgroundResult(info, yield* Clock.currentTimeMillis, elapsed)
+                    if (!context.codemode)
+                      yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
+                    return backgroundResult(
+                      yield* shell.result(info, { wait: 0 }),
+                      yield* Clock.currentTimeMillis,
+                      elapsed,
+                    )
                   }
                   if (result?.info.status === "error")
                     return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
@@ -488,8 +531,36 @@ export const Plugin = {
               Effect.mapError(toolFailure(`Unable to execute command: ${input.command}`)),
             )
           },
-        }),
-      )
+        })
+        if (!fullCodeMode()) return
+        editor.add({
+          name: WaitName,
+          // Visible wherever shell is: denying shell hides both.
+          options: { permission: name },
+          description: WAIT_DESCRIPTION,
+          input: WaitInput,
+          output: StructuredOutput,
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const unknown = new ToolFailure({ message: `No shell command with ID ${input.shellID} in this session.` })
+              if (!Schema.is(ShellSchema.ID)(input.shellID)) return yield* unknown
+              const info = yield* shell.get(input.shellID).pipe(Effect.catchTag("Shell.NotFoundError", () => unknown))
+              if (info.metadata.sessionID !== context.sessionID) return yield* unknown
+              const result = yield* shell.result(info, { wait: Duration.millis(input.timeout ?? DEFAULT_TIMEOUT_MS) })
+              const running = result.info.status === "running"
+              const now = yield* Clock.currentTimeMillis
+              // A finished command's job has nothing left to report; release it.
+              if (!running) yield* jobs.wait({ id: info.id, timeout: 0 })
+              return toolResult({
+                ...ShellResult.output(result),
+                status: running ? "running" : "completed",
+                wallTimeSeconds: wallTimeSeconds(result.info.time, result.info.time.completed ?? now),
+                shellID: info.id,
+                outputPath: info.file,
+              })
+            }),
+        })
+      })
       .pipe(Effect.orDie)
 
     const hook = (event: SessionHooks["context"]) =>

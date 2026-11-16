@@ -881,7 +881,10 @@ describe("ShellTool", () => {
             Effect.gen(function* () {
               const snapshot = yield* registry.snapshot()
               expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-              expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).toEqual(["shell"])
+              expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).toEqual([
+                "shell",
+                "shell_wait",
+              ])
               const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
               const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
               const result = yield* executeTool(registry, {
@@ -895,10 +898,76 @@ describe("ShellTool", () => {
                 },
               }).pipe(Effect.timeout("3 seconds"))
               expect(result.status).toBe("completed")
-              expect(JSON.parse(result.output.output)).toEqual([
-                { output: "one", exitCode: 0, wallTimeSeconds: expect.any(Number) },
-                { output: "two", exitCode: 0, wallTimeSeconds: expect.any(Number) },
-              ])
+              const completed = (output: string) => ({
+                shellID: expect.stringMatching(/^sh_/),
+                status: "completed",
+                exitCode: 0,
+                output,
+                truncated: false,
+                outputPath: expect.any(String),
+                wallTimeSeconds: expect.any(Number),
+              })
+              expect(JSON.parse(result.output.output)).toEqual([completed("one"), completed("two")])
+            }),
+          ),
+        ),
+      )
+    }),
+  )
+
+  it.live("waits for a Code Mode shell with shell_wait and never notifies the session", () =>
+    withTempDir((tmp) => {
+      reset()
+      return Effect.promise(() =>
+        Bun.write(path.join(tmp.path, "opencode.json"), JSON.stringify({ experimental: { full_codemode: true } })),
+      ).pipe(
+        Effect.andThen(
+          withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const bus = yield* Bus.Service
+              const notices: unknown[] = []
+              yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+                Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+                Stream.runForEach((event) => Effect.sync(() => notices.push(event.data.item))),
+                Effect.forkScoped({ startImmediately: true }),
+              )
+              const run = (code: string) =>
+                executeTool(registry, {
+                  sessionID,
+                  ...toolIdentity,
+                  call: { type: "tool-call", id: "call-shell-wait", name: "execute", input: { code } },
+                }).pipe(Effect.map((result) => JSON.parse(result.output.output)))
+              const command = JSON.stringify(progressOverflowCommand(6, "release"))
+
+              const first = yield* run(`
+                const started = await tools.shell({ command: ${command}, background: true })
+                const waited = await tools.shell_wait({ shellID: started.shellID, timeout: 50 })
+                return { started, waited }
+              `)
+              expect(first.started).toMatchObject({ status: "running", exitCode: null })
+              expect(first.waited).toMatchObject({ shellID: first.started.shellID, status: "running", exitCode: null })
+
+              yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+              const finished = yield* run(
+                `return await tools.shell_wait({ shellID: ${JSON.stringify(first.started.shellID)} })`,
+              )
+              expect(finished).toEqual({
+                shellID: first.started.shellID,
+                status: "completed",
+                exitCode: 0,
+                output: "xxxxxx",
+                truncated: false,
+                outputPath: expect.any(String),
+                wallTimeSeconds: expect.any(Number),
+              })
+
+              const unknown = yield* run(
+                `try { await tools.shell_wait({ shellID: "sh_unknown" }) } catch (error) { return { error: error.message } }`,
+              )
+              expect(unknown.error).toContain("No shell command with ID sh_unknown")
+
+              yield* Effect.sleep("100 millis")
+              expect(notices).toEqual([])
             }),
           ),
         ),
@@ -1363,10 +1432,14 @@ describe("ShellTool", () => {
                 exit: 3,
                 truncated: true,
               })
+              // A script reads the captured tail alone; the model's text below keeps the truncation notice.
               expect(settled.output).toEqual({
-                output: expect.stringContaining(`full output saved to ${settled.output.outputPath}]`),
-                outputPath: expect.any(String),
+                shellID: expect.stringMatching(/^sh_/),
+                status: "completed",
                 exitCode: 3,
+                output: expect.stringMatching(/x+output-end$/),
+                truncated: true,
+                outputPath: expect.any(String),
                 wallTimeSeconds: expect.any(Number),
               })
               expect(settled.content).toEqual([
@@ -1413,10 +1486,11 @@ describe("ShellTool", () => {
           })
           expect(result.output).toEqual({
             shellID: id,
-            pid: info.pid,
-            outputPath: info.file,
+            status: "running",
             exitCode: null,
             output: expect.any(String),
+            truncated: false,
+            outputPath: info.file,
             wallTimeSeconds: expect.any(Number),
           })
           expect(result.output.wallTimeSeconds).toBeGreaterThanOrEqual(0.01)
@@ -1862,7 +1936,7 @@ describe("ShellTool", () => {
           const info = yield* shell.get(id)
           expect(info.pid).toBeGreaterThan(0)
           expect(settled.metadata).toMatchObject({ pid: info.pid })
-          expect(settled.output).toMatchObject({ shellID, pid: info.pid })
+          expect(settled.output).toMatchObject({ shellID, status: "running", exitCode: null, outputPath: info.file })
           expect(settled.content).toEqual([
             {
               type: "text",

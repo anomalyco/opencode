@@ -866,6 +866,7 @@ const layer = () =>
             const line = total === undefined ? "the last line" : `line ${total}`
             return {
               output: `${lines[0]}\n\n[showing the last ${formatSize(shownSize)} of ${line} (${lineSize}); ${suffix}${stoppedEarly}`,
+              text: endsWithNewline ? `${lines[0]}\n` : lines[0],
               truncated: true,
               ...killed,
             }
@@ -878,13 +879,14 @@ const layer = () =>
                 total === undefined
                   ? `${kept.join("\n")}\n\n[showing the last ${kept.length} lines; ${suffix}${stoppedEarly}`
                   : `${kept.join("\n")}\n\n[showing lines ${total - kept.length + 1}-${total} of ${total}; ${suffix}${stoppedEarly}`,
+              text: endsWithNewline ? `${kept.join("\n")}\n` : kept.join("\n"),
               truncated: true,
               ...killed,
             }
           }
           // One blank line before the notice, whether or not the output ended with a newline.
           const shown = stoppedEarly && page.endsWith("\n") ? page.slice(0, -1) : page
-          return { output: `${shown || "(no output)"}${stoppedEarly}`, truncated: false, ...killed }
+          return { output: `${shown || "(no output)"}${stoppedEarly}`, text: page, truncated: false, ...killed }
         }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
         return { info, capture }
       })

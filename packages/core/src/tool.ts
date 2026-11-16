@@ -355,6 +355,7 @@ const layer = Layer.effect(
               const context: Tool.Context = {
                 ...input.context,
                 id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
+                codemode: true,
               }
               return yield* run(tool, name, toolInput, context)
             }),

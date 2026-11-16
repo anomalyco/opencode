@@ -524,7 +524,7 @@ describe("Session-owned handles", () => {
               Effect.andThen(Deferred.await(release)),
               Effect.as({
                 info: Info.make({ ...started, status: "exited", exit: 0, time: { started: 0, completed: 1 } }),
-                capture: { output: "owned", truncated: false },
+                capture: { output: "owned", text: "owned", truncated: false },
               }),
             ),
           output: () => Effect.succeed(Output.make({ output: "owned", cursor: 5, size: 5, truncated: false })),

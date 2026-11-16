@@ -34,6 +34,8 @@ export interface Context {
    * has; a tool that does not is interrupted.
    */
   readonly cancel?: Effect.Effect<void>
+  /** Set when a Code Mode script made this call through `execute`, rather than the model calling the tool directly. */
+  readonly codemode?: true
 }
 
 export interface Namespace {
