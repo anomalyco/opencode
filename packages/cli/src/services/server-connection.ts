@@ -20,6 +20,8 @@ export type Args = {
 export type Resolved = {
   readonly endpoint: Endpoint
   readonly service?: ReturnType<typeof managedService>
+  /** A private server started for this command alone. */
+  readonly standalone?: boolean
 }
 
 export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args = {}) {
@@ -47,14 +49,14 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     return { endpoint } satisfies Resolved
   }
   if (standalone || (yield* ServiceConfig.read()).disabled === true) {
-    return { endpoint: yield* Standalone.start() } satisfies Resolved
+    return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
   }
 
   const mismatch = args.mismatch ?? "ignore"
   const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
   if (args.autostart === false) {
     const endpoint = yield* Service.discover({ ...options, version: undefined })
-    if (!endpoint) return { endpoint: yield* Standalone.start() } satisfies Resolved
+    if (!endpoint) return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
     return { endpoint, service: managedService(options) } satisfies Resolved
   }
   return {

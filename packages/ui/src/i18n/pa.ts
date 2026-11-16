@@ -161,6 +161,7 @@ export const dict = {
   "ui.common.dismiss": "برخاست کرو",
   "ui.common.close": "بند کرو",
   "ui.common.next": "اگلا",
+  "ui.common.continue": "جاری رکھو",
   "ui.common.submit": "جمع کراؤ",
   "ui.common.showMore": "مزید وکھاؤ",
   "ui.permission.deny": "منع کرو",

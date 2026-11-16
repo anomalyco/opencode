@@ -69,7 +69,7 @@ story("copies the shell command and its output separately", async ({ mount, page
   expect(await clipboard()).toBe(output)
   await shell.locator('[data-slot="bash-command"]').getByRole("button", { name: "Copy", exact: true }).click()
   expect(await clipboard()).toBe(command)
-  expect(command).toContain("opencode2 api get /openapi.json")
+  expect(command).toContain("opencode api get /openapi.json")
   expect(output).toContain('"name":"OpenCode"')
 })
 
@@ -86,6 +86,8 @@ story("keeps Copied for two seconds after the latest click", async ({ mount, pag
   // The first click's reset falls due here, while the second click's feedback still runs.
   await page.clock.runFor(900)
   await expect(result.getByRole("button", { name: "Copied" })).toBeVisible()
+  await expect(page.getByRole("tooltip", { name: "Copied" })).toBeVisible()
   await page.clock.runFor(1_200)
   await expect(result.getByRole("button", { name: "Copy output", exact: true })).toBeVisible()
+  await expect(page.getByRole("tooltip")).toBeHidden()
 })

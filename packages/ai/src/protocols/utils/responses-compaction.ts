@@ -117,7 +117,7 @@ export const make = (
       auth: route.auth,
       encodeBody: Schema.encodeSync(Schema.fromJsonString(Body)),
     })
-    const response = yield* executor.execute(
+    const response = yield* RequestExecutor.withTls(executor.execute, request.http?.tls)(
       ProviderShared.jsonPost({
         url: parts.url,
         body: parts.bodyText,

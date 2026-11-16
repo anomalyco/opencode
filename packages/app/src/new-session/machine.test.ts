@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import { Session } from "@opencode/schema/session"
 import {
+  NEW_SESSION_CREATE_TIMEOUT_MS,
+  NEW_SESSION_WORKTREE_TIMEOUT_MS,
   createNewSessionStartState,
   transitionNewSessionStart,
   viewNewSessionStart,
@@ -131,9 +133,92 @@ test("a new worktree creates the Session in the created directory", () => {
   const result = replay([start(fresh), { type: "worktree.created", attempt: 1, directory: "/wt" }])
 
   expect(result.effects).toEqual([
-    { type: "worktree.create", attempt: 1, projectDirectory: "/repo", branch: "dev" },
-    { type: "session.create", attempt: 1, sessionID, directory: "/wt" },
+    {
+      type: "worktree.create",
+      attempt: 1,
+      projectDirectory: "/repo",
+      branch: "dev",
+      timeoutMs: NEW_SESSION_WORKTREE_TIMEOUT_MS,
+    },
+    { type: "session.create", attempt: 1, sessionID, directory: "/wt", timeoutMs: NEW_SESSION_CREATE_TIMEOUT_MS },
   ])
+})
+
+// Before, no phase had a time limit: a create whose response stalled left the pending tab on "Starting session" with
+// the prompt locked, for good.
+test.each<{ name: string; events: NewSessionStartEvent[]; effects: NewSessionStartEffect[] }>([
+  {
+    name: "worktree creation",
+    events: [start(fresh, { figma: true }), { type: "timed-out", attempt: 1, phase: "worktree" }],
+    effects: [
+      { type: "toast.timed-out", attempt: 1, title: "prompt.toast.worktreeCreateFailed.title" },
+      { type: "tab.rollback", attempt: 1, worktree: undefined },
+    ],
+  },
+  {
+    name: "MCP preparation in a created worktree",
+    events: [
+      start(fresh, { figma: true }),
+      { type: "worktree.created", attempt: 1, directory: "/wt" },
+      { type: "timed-out", attempt: 1, phase: "mcp" },
+    ],
+    effects: [
+      { type: "toast.timed-out", attempt: 1, title: "session.summary.mcp.prepareFailed" },
+      { type: "tab.rollback", attempt: 1, worktree: { directory: "/wt", mcp: { figma: true } } },
+    ],
+  },
+  {
+    name: "session creation on an existing checkout",
+    events: [start(main), { type: "timed-out", attempt: 1, phase: "session" }],
+    effects: [
+      { type: "toast.timed-out", attempt: 1, title: "prompt.toast.sessionCreateFailed.title" },
+      { type: "tab.rollback", attempt: 1, worktree: undefined },
+    ],
+  },
+])("a stalled $name times out and rolls back to the draft", (row) => {
+  const last = replay(row.events.slice(-1), replay(row.events.slice(0, -1)).state)
+
+  expect(last.state).toEqual({ type: "idle", attempt: 1 })
+  expect(last.effects).toEqual(row.effects)
+  // The draft can send again, as a new attempt.
+  expect(replay([start(main)], last.state).state).toMatchObject({ type: "session", attempt: 2 })
+})
+
+test("each phase's time limit ends only that phase", () => {
+  const mcp = replay([start(fresh, { figma: true }), { type: "worktree.created", attempt: 1, directory: "/wt" }]).state
+  const session = replay([{ type: "mcp.prepared", attempt: 1 }], mcp).state
+
+  const stale = transitionNewSessionStart(mcp, { type: "timed-out", attempt: 1, phase: "worktree" })
+  expect(stale.state).toBe(mcp)
+  expect(stale.effects).toEqual([])
+  expect(transitionNewSessionStart(session, { type: "timed-out", attempt: 1, phase: "mcp" }).state).toBe(session)
+  expect(transitionNewSessionStart(session, { type: "timed-out", attempt: 2, phase: "session" }).state).toBe(session)
+  // A timer that fires after the Session was created changes nothing.
+  const started = replay([{ type: "session.created", attempt: 1 }], session).state
+  expect(transitionNewSessionStart(started, { type: "timed-out", attempt: 1, phase: "session" }).state).toBe(started)
+})
+
+// Before, MCP preparation showed its own error even for an attempt that had already ended.
+test("an MCP failure with a reason toasts through the machine, and nothing toasts once disposed", () => {
+  const preparing = replay([start(main, { figma: true })]).state
+
+  expect(
+    transitionNewSessionStart(preparing, { type: "mcp.failed", attempt: 1, message: "Sign in to figma" }).effects,
+  ).toEqual([
+    { type: "toast", attempt: 1, title: "session.summary.mcp.prepareFailed", message: "Sign in to figma" },
+    { type: "tab.rollback", attempt: 1, worktree: undefined },
+  ])
+
+  const disposed = replay([{ type: "dispose" }], preparing)
+  expect(disposed.effects).toEqual([{ type: "attempt.abort", attempt: 1 }])
+
+  const late: NewSessionStartEvent[] = [
+    { type: "mcp.failed", attempt: 1, message: "Sign in to figma" },
+    { type: "timed-out", attempt: 1, phase: "mcp" },
+    { type: "session.failed", attempt: 1, message: "late" },
+  ]
+
+  late.forEach((event) => expect(transitionNewSessionStart(disposed.state, event).effects).toEqual([]))
 })
 
 test.each<{ name: string; events: NewSessionStartEvent[]; effects: NewSessionStartEffect[] }>([

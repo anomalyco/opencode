@@ -16,6 +16,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionLabel } from "@/session/title"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { shouldOpenSessionInBackground } from "./open"
 import { createAltHold } from "./alt-hold"
 import "./view.css"
@@ -96,7 +97,8 @@ export type HomeSessionsViewProps = {
     title: string,
     signal: AbortSignal,
   ) => Promise<boolean>
-  onExportSession: (server: ServerConnection.Key, session: SessionInfo) => Promise<void>
+  onExportSession: (server: ServerConnection.Key, session: SessionInfo) => void
+  isExportingSession: (server: ServerConnection.Key, session: SessionInfo) => boolean
   onDeleteSession: (server: ServerConnection.Key, session: SessionInfo) => void
   onSetHoverTarget: (element: HTMLElement) => void
   onSetThumbTrack: (element: HTMLDivElement) => void
@@ -577,7 +579,7 @@ function HomeSessionSearchResultRow(
       role="option"
       aria-selected={props.selected}
       class={`
-        flex h-10 w-full shrink-0 cursor-default items-center border-0 py-3 pl-[18px] pr-6 text-left
+        flex h-10 w-full shrink-0 cursor-default items-center border-0 py-3 pl-[18px] pr-6 text-left text-v2-text-text-muted
         transition-[background-color] duration-[120ms] ease-in-out
         hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
       `}
@@ -606,7 +608,7 @@ function HomeSessionSearchResultRow(
       <div data-slot="home-session-labels" class="flex min-w-0 flex-1 items-center gap-1.5">
         <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} search />
         <Show when={showProjectName()}>
-          <HomeSessionProjectName name={props.record.projectName} trailing={props.desktop} search />
+          <HomeSessionProjectName name={props.record.projectName} search />
         </Show>
         <HomeSessionLocation
           location={location()}
@@ -703,7 +705,7 @@ function HomeSessionRow(
                 [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
                  ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
               `}
-                style={{ "--inline-input-shadow": "none", "text-align": "start" }}
+                style={{ "text-align": "start" }}
                 onInput={(event) =>
                   props.onRowEvent({ type: "editor.input", sessionID: sessionID(), draft: event.currentTarget.value })
                 }
@@ -814,7 +816,7 @@ function HomeSessionRow(
           >
             <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
             <Show when={showProjectName()}>
-              <HomeSessionProjectName name={props.record.projectName} trailing={props.desktop} />
+              <HomeSessionProjectName name={props.record.projectName} />
             </Show>
             <HomeSessionLocation
               location={location()}
@@ -860,9 +862,13 @@ function HomeSessionRow(
             >
               {props.language.t("common.rename")}
             </Menu.Item>
-            <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
+            <Menu.Item
+              disabled={props.isExportingSession(props.server, props.record.session)}
+              onSelect={() => props.onExportSession(props.server, props.record.session)}
+            >
               {props.language.t("common.export")}…
             </Menu.Item>
+            <SessionReadMenuItem server={props.server} session={props.record.session} />
             <Menu.Separator />
             <Menu.Item onSelect={() => props.onDeleteSession(props.server, props.record.session)}>
               {props.language.t("common.delete")}…
@@ -948,15 +954,13 @@ function HomeSessionLocation(props: {
   )
 }
 
-function HomeSessionProjectName(props: { name: string; search?: boolean; trailing?: boolean }) {
+function HomeSessionProjectName(props: { name: string; search?: boolean }) {
   return (
     <span
       data-component="home-session-project-name"
       dir="auto"
-      class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]"
+      class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]"
       classList={{
-        "flex-[0_1_auto]": !!props.trailing,
-        "flex-[1_1_auto]": !props.trailing,
         "text-[13px] leading-4 tracking-[-0.04px]": !!props.search,
       }}
     >

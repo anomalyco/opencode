@@ -162,6 +162,7 @@ export const dict = {
   "ui.common.dismiss": "Rad etish",
   "ui.common.close": "Yopish",
   "ui.common.next": "Keyingi",
+  "ui.common.continue": "Davom eting",
   "ui.common.submit": "Yuborish",
   "ui.common.showMore": "Ko'proq ko'rsatish",
   "ui.permission.deny": "Rad etish",

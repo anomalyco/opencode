@@ -8,10 +8,12 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Teardown } from "@opencode/util/teardown"
+import { appExecutionAlias } from "../fixture/app-execution-alias"
 import { testEffect } from "../lib/effect"
 
 const live = LayerNode.compile(CrossSpawnSpawner.node)
 const fx = testEffect(live)
+const pwsh = appExecutionAlias("pwsh.exe")
 
 function js(code: string, opts?: ChildProcess.CommandOptions) {
   return ChildProcess.make("node", ["-e", code], opts)
@@ -577,6 +579,20 @@ describe("cross-spawn spawner", () => {
           ),
         )
         expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+    )
+
+    // Skipped where PowerShell 7 is not installed from the Microsoft Store for the user; see the fixture.
+    const storePwsh = pwsh ? fx.live : fx.live.skip
+    storePwsh(
+      "keeps every line of a command run through an app execution alias",
+      Effect.gen(function* () {
+        const out = yield* ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
+          svc.string(
+            ChildProcess.make(pwsh!.file, ["-NoProfile", "-NonInteractive", "-Command", "echo one\necho two"]),
+          ),
+        )
+        expect(out.trim().split(/\r?\n/)).toEqual(["one", "two"])
       }),
     )
   })

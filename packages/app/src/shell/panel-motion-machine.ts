@@ -15,6 +15,8 @@ export type PanelMotionState =
   | {
       readonly status: "rest" | "flying"
       readonly open: boolean
+      /** The panel started open or has opened since, for callers that keep its contents mounted once it closes. */
+      readonly opened: boolean
       readonly attempt: number
       readonly identity: unknown
       /** A state `sync` asked to show at once. */
@@ -57,6 +59,7 @@ const UNSEEN = Symbol("unseen")
 export const createPanelMotionState = (open: boolean): PanelMotionState => ({
   status: "rest",
   open,
+  opened: open,
   attempt: 0,
   identity: UNSEEN,
   sync: undefined,
@@ -137,7 +140,15 @@ function retarget(
   // Another layout shows its own state at once, without a close or the work queued for this one.
   if (event.identity !== state.identity)
     return {
-      state: { ...state, status: "rest", open, identity: event.identity, sync: undefined, waiters: NO_WAITERS },
+      state: {
+        ...state,
+        status: "rest",
+        open,
+        opened: state.opened || open,
+        identity: event.identity,
+        sync: undefined,
+        waiters: NO_WAITERS,
+      },
       effects: state.status === "flying" ? [{ type: "snap", open }, LAND] : [{ type: "snap", open }],
     }
 
@@ -166,6 +177,7 @@ function retarget(
       ...state,
       status: "flying",
       open,
+      opened: state.opened || open,
       attempt,
       sync: undefined,
       waiters: state.waiters.filter((waiter) => waiter.open === open),
@@ -183,7 +195,7 @@ function land(
   const waiters = state.waiters.filter((waiter) => waiter.open === open).map((waiter) => waiter.run)
 
   return {
-    state: { ...state, status: "rest", open, sync: undefined, waiters: NO_WAITERS },
+    state: { ...state, status: "rest", open, opened: state.opened || open, sync: undefined, waiters: NO_WAITERS },
     effects: [
       ...before,
       ...(state.status === "flying" ? [LAND] : []),
@@ -197,3 +209,6 @@ function land(
 /** The panel renders: open, or in flight either way, until a close lands. */
 export const selectPanelPresent = (state: PanelMotionState) =>
   state.status === "flying" || (state.status === "rest" && state.open)
+
+/** The panel's contents stay mounted from its first open until disposal; true whenever it is present. */
+export const selectPanelMounted = (state: PanelMotionState) => state.status !== "disposed" && state.opened

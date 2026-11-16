@@ -10,22 +10,23 @@ type Client = IpcClient<typeof Updater.spec>
 
 type Context = SetupContext<typeof definition>
 
-/** Restarts into the staged update. A beta build moving to stable confirms the installer download first. */
+/**
+ * Restarts into the staged update; resolves once main took the install or refused it. A beta build moving to stable
+ * confirms the installer download first, and resolves once the dialog shows.
+ */
 export function install(ctx: Context, client: Client) {
   const download = () => client.install().catch((cause: unknown) => requestFailed(ctx, cause))
 
   const state = client.state()
 
-  if (state?.status !== "download-required") {
-    void download()
-
-    return
-  }
+  if (state?.status !== "download-required") return download()
 
   ctx.dialogs.open(
     (dialog) => <DialogStableDownload ctx={ctx} dialog={dialog} version={state.version} download={download} />,
     { replace: true },
   )
+
+  return Promise.resolve()
 }
 
 export async function check(ctx: Context, client: Client) {
@@ -55,7 +56,7 @@ export async function check(ctx: Context, client: Client) {
         description: ctx.t("dialog.ready.message", { version: state.version }),
         persistent: true,
         actions: [
-          { label: ctx.t("dialog.restart"), variant: "primary", onClick: () => install(ctx, client) },
+          { label: ctx.t("dialog.restart"), variant: "primary", onClick: () => void install(ctx, client) },
           { label: ctx.t("dialog.later"), variant: "secondary", onClick: "dismiss" },
         ],
       })

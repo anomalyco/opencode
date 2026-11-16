@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import type { LanguageModelCompatibility } from "../schema/index.js"
+import type { LanguageModelCompatibility, Capabilities } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, ProviderShared } from "./shared.js"
 import { cacheControl } from "./utils/cache.js"
@@ -41,10 +41,11 @@ export type OptionsInput = typeof Options.Type
 
 export const compatibility = {
   maxTokensField: "max_completion_tokens",
-  supportsStrictMode: false,
   reasoningField: "reasoning_content",
   zaiToolStream: false,
 } satisfies LanguageModelCompatibility
+
+export const capabilities = { tools: { strict: false } } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "alibaba-chat",

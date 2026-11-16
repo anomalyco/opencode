@@ -359,13 +359,14 @@ describe("Transcription", () => {
         const failed = JSON.stringify({ id: "tr_2", status: "error", error: "Audio file could not be decoded" })
         const program = Effect.gen(function* () {
           const started = yield* Transcription.start({ model: assemblyai, audio, diarize: true, speakers: 2 })
-          expect(started.status).toBe("queued")
+          expect(started.status).toBe("running")
           const resumed = yield* Transcription.resume(assemblyai, JSON.parse(JSON.stringify(started.token)))
           const response = yield* resumed.await({ poll: { interval: "1 second" } })
-          const failure = yield* Transcription.resume(assemblyai, { transcriptID: "tr_2" }).pipe(
-            Effect.flatMap((generation) => generation.await()),
-            Effect.flip,
-          )
+          const errored = yield* Transcription.resume(assemblyai, { transcriptID: "tr_2" })
+          const refreshed = yield* errored.refresh()
+          expect(refreshed.snapshot).toEqual({ id: "tr_2", status: "error", reason: "failed" })
+          expect(refreshed.terminal).toBe(true)
+          const failure = yield* errored.await().pipe(Effect.flip)
           return { response, failure }
         }).pipe(
           Effect.provide(

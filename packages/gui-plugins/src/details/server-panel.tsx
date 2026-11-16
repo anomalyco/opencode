@@ -4,9 +4,10 @@ import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui
 import { ErrorDetails } from "@opencode/ui/error-details"
 import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
+import { createMcpSignIn, type McpSignInFailure } from "@opencode/ui/mcp-sign-in"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
+import { RedirectPasteForm } from "@opencode/ui/redirect-paste"
 import { Switch } from "@opencode/ui/switch"
-import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { TruncatedText } from "@opencode/ui/truncated-text"
@@ -18,7 +19,6 @@ import {
   For,
   Index,
   onCleanup,
-  onMount,
   Show,
   untrack,
   type Accessor,
@@ -73,7 +73,7 @@ import {
 const services = [
   { type: "mcp", icon: "mcp", label: "mcp" },
   { type: "plugins", icon: "cube", label: "plugins" },
-  { type: "skills", icon: "graduation-cap", label: "skills" },
+  { type: "skills", icon: "post-skill", label: "skills" },
 ] as const satisfies readonly { type: Service; icon: string; label: string }[]
 
 type ServiceProps = {
@@ -1336,13 +1336,13 @@ function createMcpController(server: ServerRef, directory: string, release: () =
           url={signIn.url}
           lifetime={signIn.lifetime}
           directory={directory}
-          onDone={async () => {
+          onSync={async () => {
             const latest = server.data
             latest.location.mcp.server.invalidate(ref)
             latest.location.mcp.resource.invalidate(ref)
             await Promise.all([latest.location.mcp.server.sync(ref), latest.location.mcp.resource.sync(ref)])
-            dialog.close()
           }}
+          onClose={() => dialog.close()}
         />
       ))
 
@@ -1538,10 +1538,11 @@ function McpSignInDialog(props: {
   /** The attempt's lifetime in milliseconds, from the server's `time`; the two clocks may disagree. */
   lifetime: number
   directory: string
-  onDone: () => Promise<void>
+  /** Reloads the MCP server and resource lists once the sign-in succeeded. */
+  onSync: () => Promise<void>
+  onClose: () => void
 }) {
   const ctx = usePlugin()
-  const errorID = createUniqueId()
 
   const attempt = () => ({
     integrationID: props.integrationID,
@@ -1549,80 +1550,32 @@ function McpSignInDialog(props: {
     location: { directory: props.directory },
   })
 
-  const deadline = Date.now() + props.lifetime
-
-  const [store, setStore] = createStore<{ value: string; error?: string; failed?: string; submitting: boolean }>({
-    value: "",
-    submitting: false,
+  // Reads the server's client on every call, so a restarted server's new client answers.
+  const signIn = createMcpSignIn({
+    url: props.url,
+    lifetime: props.lifetime,
+    status: (signal) =>
+      props.server.client.integration.oauth.status(attempt(), { signal }).then((response) => response.data),
+    complete: (code, signal) => props.server.client.integration.oauth.complete({ ...attempt(), code }, { signal }),
+    cancel: () => props.server.client.integration.oauth.cancel(attempt()),
+    sync: props.onSync,
+    openExternal: (url) => ctx.system.openExternal(url),
+    close: props.onClose,
+    message: (error) => error.message,
   })
 
-  let input: HTMLInputElement | undefined
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let disposed = false
-  let settled = false
+  const view = signIn.view
+  const dispatch = signIn.dispatch
 
-  const fail = (message: string) => {
-    settled = true
-    setStore("failed", ctx.t("mcp.signIn.failed", { error: message }))
+  const failure = (value: McpSignInFailure) => {
+    if (value.type === "auth-expired") return ctx.t("mcp.signIn.failed", { error: ctx.t("mcp.signIn.expired") })
+
+    if (value.type === "auth-failed") return ctx.t("mcp.signIn.failed", { error: value.message })
+
+    if (value.type === "sync-failed") return ctx.t("mcp.signIn.syncFailed", { name: props.name, error: value.message })
+
+    return ctx.t("mcp.timedOut", { name: props.name })
   }
-
-  const poll = async () => {
-    const result = await props.server.client.integration.oauth
-      .status(attempt())
-      .then((response) => ({ ok: true as const, status: response.data }))
-      .catch((error) => ({ ok: false as const, error }))
-
-    if (disposed) return
-
-    // A failed request says nothing about the attempt, which may still be pending, so keep polling until it expires.
-    if (!result.ok) {
-      if (Date.now() >= deadline)
-        return fail(result.error instanceof Error ? result.error.message : String(result.error))
-      timer = setTimeout(() => void poll(), 1_000)
-
-      return
-    }
-
-    if (result.status.status === "complete") {
-      settled = true
-
-      return props.onDone()
-    }
-
-    if (result.status.status === "failed") return fail(result.status.message)
-
-    if (result.status.status === "expired") return fail(ctx.t("mcp.signIn.expired"))
-    timer = setTimeout(() => void poll(), 1_000)
-  }
-
-  // A rejected paste leaves the attempt waiting; an accepted one settles through the status poll.
-  const submit = async (event: SubmitEvent) => {
-    event.preventDefault()
-    const code = store.value.trim()
-
-    if (!code) return setStore("error", ctx.t("mcp.signIn.paste.required"))
-    setStore({ error: undefined, submitting: true })
-
-    const error = await props.server.client.integration.oauth
-      .complete({ ...attempt(), code })
-      .then(() => undefined)
-      .catch((error) => (error instanceof Error ? error.message : String(error)))
-
-    setStore({ error, submitting: false })
-  }
-
-  onMount(() => {
-    input?.focus({ preventScroll: true })
-    void poll()
-  })
-  // Dismissing the dialog ends the attempt, so a late browser callback cannot connect the server.
-  onCleanup(() => {
-    disposed = true
-    clearTimeout(timer)
-
-    if (settled) return
-    void props.server.client.integration.oauth.cancel(attempt()).catch(() => undefined)
-  })
 
   return (
     <Dialog>
@@ -1633,7 +1586,7 @@ function McpSignInDialog(props: {
         <div class="flex flex-col gap-5 px-3 pb-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
           <div>{ctx.t("mcp.signIn.description", { name: props.name })}</div>
           <Show
-            when={store.failed}
+            when={view().failure}
             fallback={
               <div class="flex items-center gap-2">
                 <Loader class="size-4 shrink-0 text-v2-icon-icon-muted" />
@@ -1641,45 +1594,36 @@ function McpSignInDialog(props: {
               </div>
             }
           >
-            {(failed) => (
+            {(current) => (
               <div role="alert" class="text-v2-state-fg-danger">
-                {failed()}
+                {failure(current())}
               </div>
             )}
           </Show>
-          <div class="flex flex-wrap items-center gap-2">
-            <Button variant="neutral" icon="arrow-up-right" onClick={() => ctx.system.openExternal(props.url)}>
-              {ctx.t("mcp.signIn.openBrowser")}
-            </Button>
-          </div>
-          <Show when={!store.failed}>
-            <form onSubmit={submit} class="flex flex-col items-start gap-5 self-stretch">
-              <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
-                {ctx.t("mcp.signIn.paste.label")}
-                <TextInput
-                  ref={input}
-                  class="!w-full"
-                  name="redirect"
-                  placeholder={ctx.t("mcp.signIn.paste.placeholder")}
-                  value={store.value}
-                  invalid={store.error !== undefined}
-                  aria-describedby={store.error ? errorID : undefined}
-                  autocomplete="off"
-                  spellcheck={false}
-                  onInput={(event) => setStore({ value: event.currentTarget.value, error: undefined })}
-                />
-              </label>
-              <Show when={store.error}>
-                {(error) => (
-                  <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
-                    {error()}
-                  </div>
-                )}
+          <Show when={view().showOpenBrowser || view().canRetry}>
+            <div class="flex flex-wrap items-center gap-2">
+              <Show when={view().showOpenBrowser}>
+                <Button variant="neutral" icon="arrow-up-right" onClick={() => dispatch({ type: "browser.open" })}>
+                  {ctx.t("mcp.signIn.openBrowser")}
+                </Button>
               </Show>
-              <Button type="submit" variant="contrast" disabled={store.submitting}>
-                {ctx.t("common.continue")}
-              </Button>
-            </form>
+              <Show when={view().canRetry}>
+                <Button variant="neutral" onClick={() => dispatch({ type: "retry.requested" })}>
+                  {ctx.t("common.retry")}
+                </Button>
+              </Show>
+            </div>
+          </Show>
+          <Show when={view().showForm}>
+            <RedirectPasteForm
+              value={view().value}
+              error={view().entryError}
+              locked={view().locked}
+              submitting={view().submitting}
+              autofocus
+              onInput={(value) => dispatch({ type: "paste.changed", value })}
+              onSubmit={() => dispatch({ type: "paste.submitted" })}
+            />
           </Show>
         </div>
       </DialogBody>

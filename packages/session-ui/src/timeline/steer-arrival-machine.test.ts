@@ -4,6 +4,7 @@ import {
   DISPOSED_STEER_ARRIVAL_STATE,
   INITIAL_STEER_ARRIVAL_STATE,
   shouldGrowUserMessage,
+  shouldSnapUserRun,
   transitionSteerArrival,
   type SteerArrivalState,
 } from "./steer-arrival-machine"
@@ -23,6 +24,9 @@ const sync = (state: SteerArrivalState, rows: TimelineRow.TimelineRow[], busy = 
 
 const rendered = (state: SteerArrivalState, messageID: string) =>
   transitionSteerArrival(state, { type: "rendered", messageID })
+
+const grown = (state: SteerArrivalState, messageID: string) =>
+  transitionSteerArrival(state, { type: "grown", messageID })
 
 const page = [user("m50"), assistant("m50", "a50")]
 
@@ -84,6 +88,37 @@ describe("transitionSteerArrival", () => {
     expect(sync(loaded, [...page])).toBe(loaded)
     expect(sync(loaded, [...page], false)).toBe(loaded)
     expect(sync(steered, [...page, user("m51")])).toBe(steered)
+  })
+
+  test("snaps a run from a steer's landing until its row has grown in, however long that takes", () => {
+    const loaded = sync(INITIAL_STEER_ARRIVAL_STATE, page)
+    const steered = sync(loaded, [...page, user("m51")])
+
+    expect(shouldSnapUserRun(loaded)).toBe(false)
+    expect(shouldSnapUserRun(steered)).toBe(true)
+
+    // Before, a 100ms window decided this, so a long frame or a slow device let the arriving row's run spring.
+    const growing = [1, 2, 3].reduce(
+      (state) => sync(state, [...page, user("m51"), assistant("m51", "a51")]),
+      rendered(steered, "m51"),
+    )
+
+    expect(shouldSnapUserRun(growing)).toBe(true)
+
+    const done = grown(growing, "m51")
+
+    expect(shouldSnapUserRun(done)).toBe(false)
+    expect(grown(done, "m51")).toBe(done)
+    expect(grown(loaded, "m51")).toBe(loaded)
+  })
+
+  test("keeps a growing row snapping after the session goes idle, and drops it on another session", () => {
+    const growing = rendered(sync(sync(INITIAL_STEER_ARRIVAL_STATE, page), [...page, user("m51")]), "m51")
+    const idle = sync(growing, [...page, user("m51"), assistant("m51", "a51")], false)
+
+    expect(shouldSnapUserRun(idle)).toBe(true)
+    expect(shouldSnapUserRun(sync(growing, [user("m1")], true, "ses_2"))).toBe(false)
+    expect(shouldSnapUserRun(DISPOSED_STEER_ARRIVAL_STATE)).toBe(false)
   })
 
   test("starts over on another session and stops after disposal", () => {

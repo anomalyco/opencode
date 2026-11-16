@@ -266,7 +266,11 @@ export function createTimelineQuote(input: {
           event.clientY <= rect.bottom,
       )
 
-    dispatch({ type: "pointer.down", clearRange: onSelection ? undefined : range })
+    dispatch({
+      type: "pointer.down",
+      collapsed: selection?.isCollapsed ?? true,
+      clearRange: onSelection ? undefined : range,
+    })
   })
   makeEventListener(document, "keydown", (event) => {
     if (event.defaultPrevented || event.isComposing) return

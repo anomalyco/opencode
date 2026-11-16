@@ -86,10 +86,9 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "70개 이상의 공급자 더 보기",
   "dialog.provider.viewAll": "더 많은 공급자 보기",
   "provider.connect.title": "{{provider}} 연결",
-  "provider.connect.title.anthropicProMax": "Anthropic에 로그인",
   "provider.connect.method.apiKey": "API 키",
   "provider.connect.status.inProgress": "인증 진행 중…",
-  "provider.connect.status.waiting": "인증 대기 중…",
+  "provider.connect.status.waiting": "인증 대기 중",
   "provider.connect.status.failed": "인증 실패: {{error}}",
   "provider.connect.apiKey.description":
     "{{provider}} API 키를 입력하여 계정을 연결하고 OpenCode에서 {{provider}} 모델을 사용하세요.",
@@ -474,7 +473,6 @@ export const dict = {
   "session.new.project.search": "프로젝트 검색",
   "session.new.project.add": "프로젝트 추가",
   "session.new.workspace.runIn": "세션 실행 위치",
-  "session.new.workspace.triggerLocal": "로컬",
   "session.new.workspace.local": "로컬 저장소",
   "session.new.git.none": "Git 없음",
 

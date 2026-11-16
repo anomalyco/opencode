@@ -1,9 +1,16 @@
 import { showToast } from "@opencode/ui/toast"
-import { lazy, onCleanup, Suspense } from "solid-js"
+import { createSignal, lazy, onCleanup, Suspense, untrack } from "solid-js"
 import { Command, createKeyed, SettingsPage, TitlebarItem, type SetupContext, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Updater } from "@opencode/plugin/gui/updater"
 import { updaterAction } from "./action"
+import {
+  ACTION_CHUNK_TIMEOUT_MS,
+  initialWindowUpdater,
+  transitionWindowUpdater,
+  type WindowUpdaterEffect,
+  type WindowUpdaterEvent,
+} from "./window-machine"
 import { webUpdates } from "./web"
 import {
   initWhatsNew,
@@ -17,19 +24,51 @@ import type definition from "./index"
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
   whatsNew(ctx)
-  betaNotes(ctx)
 
   if (!ctx.desktop) return webUpdates(ctx)
   const updater = ctx.main(Updater)
   // Undefined until main's updater is up and has sent its state, and again while it is gone.
   const state = () => updater.state()
+  const [windowState, setWindowState] = createSignal(initialWindowUpdater)
 
-  const act = (name: "check" | "install") => {
-    if (state()) return void import("./actions").then((module) => module[name](ctx, updater))
+  const dispatchWindow = (event: WindowUpdaterEvent) => {
+    const next = transitionWindowUpdater(untrack(windowState), event)
 
-    // Not loaded yet, or not active (failed, or not on this platform): nothing can check or install.
-    showToast({ title: ctx.t("common.requestFailed") })
+    if (next.state !== untrack(windowState)) setWindowState(next.state)
+    next.effects.forEach(runWindow)
   }
+
+  const runWindow = (effect: WindowUpdaterEffect) => {
+    if (effect.type === "toast-failed")
+      return void showToast({ title: ctx.t("common.requestFailed"), description: effect.message })
+    const attempt = effect.attempt
+    const chunk = Promise.withResolvers<never>()
+    const timer = setTimeout(() => chunk.reject(new Error()), ACTION_CHUNK_TIMEOUT_MS)
+
+    void Promise.race([import("./actions"), chunk.promise])
+      .finally(() => clearTimeout(timer))
+      .then(
+        (module) => {
+          if (ctx.signal.aborted) return
+
+          return Promise.try(() => module[effect.action](ctx, updater)).finally(() =>
+            dispatchWindow({ type: "action.settled", attempt }),
+          )
+        },
+        (cause: unknown) =>
+          dispatchWindow({
+            type: "action.failed",
+            attempt,
+            message: cause instanceof Error && cause.message ? cause.message : undefined,
+          }),
+      )
+  }
+
+  onCleanup(() => dispatchWindow({ type: "disposed" }))
+
+  // Main missing (not loaded yet, failed, or not on this platform) answers that nothing can check or install.
+  const act = (name: "check" | "install") =>
+    dispatchWindow({ type: "action.requested", action: name, available: state() !== undefined })
 
   const Section = lazy(() => import("./section"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
@@ -45,7 +84,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     return {
       id: "update",
       label: ctx.t("status.label"),
-      title: ctx.t(updaterAction(current).label),
+      title: ctx.t(updaterAction(current, windowState()).label),
       busy: installing,
       run: () => act("install"),
     }
@@ -66,9 +105,9 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     render: () => (
       <Suspense>
         <Section
-          action={() => updaterAction(state())}
+          action={() => updaterAction(state(), windowState())}
           run={() => {
-            const run = updaterAction(state()).run
+            const run = updaterAction(state(), windowState()).run
 
             if (run) act(run)
           }}
@@ -85,35 +124,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 }
 
 /**
- * What's new in beta as a settings page, to come back to after its dialog closes. Only builds that embed the notes
- * have it: beta builds and the desktop dev server.
- */
-function betaNotes(ctx: SetupContext<typeof definition>) {
-  if (!import.meta.env.OPENCODE_BETA_NOTES) return
-
-  const Page = lazy(() => import("./beta-page"))
-
-  ctx.add(SettingsPage, {
-    id: "whats-new",
-    icon: "outline-list-changelog",
-    group: "about",
-    get title() {
-      return ctx.t("beta.title")
-    },
-    get entries() {
-      return [{ id: "whats-new", title: ctx.t("beta.title"), keywords: "changelog release notes beta" }]
-    },
-    render: () => (
-      <Suspense>
-        <Page />
-      </Suspense>
-    ),
-  })
-}
-
-/**
- * What's New after an update, on every platform: the release highlights since the version last seen, or on beta the
- * features and fixes of the beta builds since then. The first run and a disabled What's New only remember the version.
+ * What's New after an update, on every platform: the release highlights since the version last seen. The first run
+ * and a disabled What's New only remember the version.
  */
 function whatsNew(ctx: SetupContext<typeof definition>) {
   const seen = ctx.stores.seen
@@ -121,10 +133,7 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
 
   const start = initWhatsNew({
     version: ctx.app.version,
-    commit: import.meta.env.OPENCODE_COMMIT,
-    channel: ctx.app.channel === "beta" ? "beta" : "stable",
     previousVersion: seen.value.version,
-    previousCommit: seen.value.commit,
     enabled: ctx.stores.releaseNotes.value.enabled,
   })
 
@@ -142,9 +151,6 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
     if (effect.type === "mark-seen")
       return seen.update((draft) => {
         draft.version = effect.version
-
-        // Beta remembers the build's commit even when nothing shows, so the next update lists what came after it.
-        if (effect.commit) draft.commit = effect.commit
       })
 
     if (effect.type === "abort-load") {
@@ -154,7 +160,7 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
       return
     }
 
-    if (effect.type === "open") return void open(effect.content, effect.previousVersion)
+    if (effect.type === "open") return void open(effect.content)
 
     timer = setTimeout(() => dispatch({ type: "load.timed-out" }), effect.timeoutMs)
     void load(effect).then(
@@ -164,13 +170,6 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
   }
 
   const load = async (effect: Extract<WhatsNewEffect, { type: "load" }>): Promise<WhatsNewContent | undefined> => {
-    if (effect.channel === "beta") {
-      const { readBetaNotes } = await import("./beta-dialog")
-      const notes = readBetaNotes(effect.previousCommit)
-
-      return notes && { channel: "beta", notes }
-    }
-
     const { loadWhatsNewHighlights } = await import("./whats-new")
 
     const highlights = await loadWhatsNewHighlights({
@@ -179,19 +178,11 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
       signal: controller.signal,
     })
 
-    return { channel: "stable", highlights }
+    return { highlights }
   }
 
   // The chunk loaded with the notes, so this resolves at once.
-  const open = async (content: WhatsNewContent, previousVersion: string) => {
-    if (content.channel === "beta") {
-      const { openBetaNotes } = await import("./beta-dialog")
-
-      if (!ctx.signal.aborted) openBetaNotes(ctx, content.notes, previousVersion)
-
-      return
-    }
-
+  const open = async (content: WhatsNewContent) => {
     const { openWhatsNew } = await import("./whats-new")
 
     if (!ctx.signal.aborted) openWhatsNew(ctx, content.highlights)

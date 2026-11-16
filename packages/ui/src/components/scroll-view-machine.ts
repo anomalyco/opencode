@@ -97,7 +97,8 @@ const RELEASE_AND_RESET: readonly ScrollThumbEffect[] = Object.freeze(["release-
 
 const RELEASE_AND_CLEAR: readonly ScrollThumbEffect[] = Object.freeze(["release-capture", "clear-idle-timer"])
 
-const KEEP = new Map<ScrollThumbState, ScrollThumbTransition>(
+// A drag's state is built per drag, so its no-op transition is cached on first use; pointer moves then allocate nothing.
+const KEEP = new WeakMap<ScrollThumbState, ScrollThumbTransition>(
   [...RESTING, DISPOSED].map((state) => [state, Object.freeze({ state, effects: NONE })]),
 )
 
@@ -126,6 +127,11 @@ export function selectShowVerticalThumb(state: ScrollThumbState) {
 
 export function selectShowHorizontalThumb(state: ScrollThumbState) {
   return state.status !== "disposed" && state.horizontalOverflow
+}
+
+/** Scroll-only reveal: a drag shows the thumb through `selectDraggingAxis` instead. */
+export function selectThumbScrolling(state: ScrollThumbState) {
+  return state.status === "scrolling"
 }
 
 export function selectDraggingAxis(state: ScrollThumbState) {
@@ -221,9 +227,16 @@ function release(state: Dragging, vertical: boolean, horizontal: boolean) {
 }
 
 function to(state: ScrollThumbState, effects: readonly ScrollThumbEffect[]): ScrollThumbTransition {
-  const cached = effects === NONE ? KEEP.get(state) : effects === RESET ? RESTART.get(state) : undefined
+  if (effects === NONE) return KEEP.get(state) ?? keep(state)
 
-  return cached ?? { state, effects }
+  return (effects === RESET ? RESTART.get(state) : undefined) ?? { state, effects }
+}
+
+function keep(state: ScrollThumbState) {
+  const transition = Object.freeze({ state, effects: NONE })
+  KEEP.set(state, transition)
+
+  return transition
 }
 
 function resting(status: Resting["status"], hovered: boolean, vertical: boolean, horizontal: boolean) {

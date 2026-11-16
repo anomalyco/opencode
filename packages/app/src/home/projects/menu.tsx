@@ -11,6 +11,7 @@ export function ProjectMenuItems(props: {
   project: LocalProject
   unread: boolean
   canImportSession: boolean
+  importingSession?: boolean
   canRevealProject: (server: ServerConnection.Any) => boolean
   onOpenProjectNewSession: (server: ServerConnection.Any, directory: string) => void
   onImportSession: (server: ServerConnection.Any, project: LocalProject) => void
@@ -29,7 +30,10 @@ export function ProjectMenuItems(props: {
         {language.t("command.session.new")}
       </Menu.Item>
       <Show when={props.canImportSession}>
-        <Menu.Item onSelect={() => props.onImportSession(props.server, props.project)}>
+        <Menu.Item
+          disabled={props.importingSession}
+          onSelect={() => props.onImportSession(props.server, props.project)}
+        >
           {language.t("command.session.import")}
         </Menu.Item>
       </Show>

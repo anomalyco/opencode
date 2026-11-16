@@ -1,8 +1,15 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
+import type { Route, CompactionOperations } from "../route/client.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderID, ToolDefinition, type ModelID, type OpenString, type ProviderOptions } from "../schema/index.js"
+import {
+  ProviderID,
+  ToolDefinition,
+  type ModelID,
+  type OpenString,
+  type ProviderOptions,
+  type RequestOptions,
+} from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
@@ -10,12 +17,14 @@ import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenAISpeech } from "../protocols/openai-speech.js"
 import { OpenAITranscription } from "../protocols/openai-transcription.js"
 import { OpenAIDecisions, type OptionsInput as OpenAIDecisionOptionsInput } from "../protocols/openai-decisions.js"
+import { OpenAIEmbeddings, type OptionsInput as OpenAIEmbeddingOptionsInput } from "../protocols/openai-embeddings.js"
 
 export type { OpenAIOptionsInput, OpenAIResponseIncludable, OpenAIServiceTier } from "./openai-options.js"
 export type { OpenAIImageOptions } from "../protocols/openai-images.js"
 export type { OpenAISpeechOptions } from "../protocols/openai-speech.js"
 export type { OpenAITranscriptionOptions } from "../protocols/openai-transcription.js"
 export type { OptionsInput as OpenAIDecisionOptions } from "../protocols/openai-decisions.js"
+export type { OptionsInput as OpenAIEmbeddingOptions } from "../protocols/openai-embeddings.js"
 
 export const id = ProviderID.make("openai")
 
@@ -24,7 +33,7 @@ export const routes = [OpenAIResponses.route, OpenAIChat.route]
 // This provider facade wraps the lower-level Responses and Chat model factories
 // with OpenAI-specific conveniences: typed options, API-key sugar, env fallback,
 // and default option normalization.
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly queryParams?: Record<string, string>
@@ -98,7 +107,7 @@ export const configure = (input: Config = {}) => {
   const chat = (id: string | ModelID) =>
     chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({
       id,
-      compatibility: { supportsPromptCacheKey: true },
+      capabilities: { promptCacheKey: true },
     })
   const deployment = MediaRoute.deployment(input, auth(input))
   const media = {
@@ -119,6 +128,14 @@ export const configure = (input: Config = {}) => {
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<OpenAIDecisionOptionsInput>({ id: modelID, providerOptions })
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    endpoint: { baseURL: media.baseURL },
+    auth: media.auth,
+    headers: media.headers,
+    http: media.http,
+  })
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    embeddingRoute.model<OpenAIEmbeddingOptionsInput>({ id: modelID, providerOptions })
 
   return {
     id,
@@ -129,6 +146,7 @@ export const configure = (input: Config = {}) => {
     speech,
     transcription,
     decision,
+    embedding,
     configure,
   }
 }
@@ -178,9 +196,14 @@ export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).decision(modelID, input.providerOptions)
 }
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
+}
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
 export const speech = provider.speech
 export const transcription = provider.transcription
 export const decision = provider.decision
+export const embedding = provider.embedding

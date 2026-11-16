@@ -1,6 +1,7 @@
 export * as Flag from "./flag.js"
 
-import { Context, Effect, Option, Record } from "effect"
+import { Context, Effect, Layer, Record } from "effect"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { ConfigFlag } from "@opencode/schema/config/flag"
 import type { Document, Entry } from "@opencode/schema/config"
 import { App } from "./app.js"
@@ -13,6 +14,14 @@ export interface State {
   /** Where `enabled` came from, highest priority first. */
   readonly source: "env" | "config" | "default"
 }
+
+export interface Interface {
+  readonly resolve: (entries: readonly Entry[]) => Record<Key, State>
+  readonly all: Effect.Effect<Record<Key, State>>
+  readonly enabled: (key: Key) => Effect.Effect<boolean>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/Flag") {}
 
 /**
  * `OPENCODE_FLAGS`, a comma-separated list such as `schedules,-media_blob`; a leading `-` turns a flag off, and
@@ -63,19 +72,45 @@ export function resolve(input: {
   })
 }
 
-/** {@link resolve} for this process's channel and `OPENCODE_FLAGS`, for synchronous readers of config entries. */
-export const resolver = Effect.gen(function* () {
-  const app = yield* App.Metadata
-  const overrides = yield* Overrides
-  return (entries: readonly Entry[]) => resolve({ entries, channel: app.channel, overrides })
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const app = yield* App.Service
+    const config = yield* Config.Service
+    const overrides = yield* Overrides
+    const resolveEntries = (entries: readonly Entry[]) => resolve({ entries, channel: app.channel, overrides })
+    const all = Effect.gen(function* () {
+      return resolveEntries(yield* config.entries())
+    })
+    return Service.of({
+      resolve: resolveEntries,
+      all,
+      enabled: (key) => Effect.map(all, (flags) => flags[key].enabled),
+    })
+  }),
+)
+
+export const testLayer = (
+  entries: Entry[] = [],
+  options?: { readonly app?: Partial<App.Info>; readonly overrides?: string },
+) =>
+  Layer.fresh(layer).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        App.layer(options?.app),
+        Config.testLayer(entries),
+        Layer.succeed(Overrides, options?.overrides),
+      ),
+    ),
+  )
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [App.node, Config.node],
 })
 
-/** Every flag with its value and where it came from, read from the Config in scope on each call. */
-export const all = Effect.gen(function* () {
-  const config = yield* Effect.serviceOption(Config.Service)
-  const entries = Option.isSome(config) ? yield* config.value.entries() : []
-  const read = yield* resolver
-  return read(entries)
-})
+/** Every flag with its value and where it came from, read from the location's Config on each call. */
+export const all = Service.use((flags) => flags.all)
 
-export const enabled = (key: Key) => all.pipe(Effect.map((flags) => flags[key].enabled))
+export const enabled = (key: Key) => Service.use((flags) => flags.enabled(key))

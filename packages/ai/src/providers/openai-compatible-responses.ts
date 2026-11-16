@@ -1,8 +1,7 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import type { RouteDefaultsInput } from "../route/client.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 import { toConfig } from "./settings.js"
 
@@ -10,7 +9,7 @@ export type { OpenResponsesOptionsInput, OpenResponsesProviderOptionsInput } fro
 
 export const id = ProviderID.make("openai-compatible")
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly provider?: string
     readonly baseURL: string

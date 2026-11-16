@@ -15,6 +15,7 @@ import {
   createComputed,
   createEffect,
   createMemo,
+  createSignal,
   onCleanup,
   untrack,
   type Accessor,
@@ -65,6 +66,7 @@ import {
   DISPOSED_STEER_ARRIVAL_EVENT,
   INITIAL_STEER_ARRIVAL_STATE,
   shouldGrowUserMessage,
+  shouldSnapUserRun,
   transitionSteerArrival,
 } from "./steer-arrival-machine"
 
@@ -167,7 +169,7 @@ export function createSessionTimelineRowRenderer(input: {
       const presentation = input.presentation(message)
 
       return {
-        kind: status === "steering" || status === "stranded" ? "pending" : "sent",
+        kind: status === "steering" || status === "stranded" || status === "sending" ? "pending" : "sent",
         agent: user.agent,
         model: user.model,
         text: !!(presentation?.displayText ?? message.text),
@@ -184,6 +186,7 @@ export function createSessionTimelineRowRenderer(input: {
 
   const noRows: readonly TimelineRow.TimelineRow[] = []
   const arrivalSync = { type: "sync" as const, sessionID: "", rows: noRows, busy: false }
+  const arrivalGrown = { type: "grown" as const, messageID: "" }
 
   const syncArrivals = () => {
     const sessionID = input.sessionID()
@@ -214,6 +217,70 @@ export function createSessionTimelineRowRenderer(input: {
 
       return true
     })
+
+  const grown = (messageID: string) => {
+    arrivalGrown.messageID = messageID
+    arrivals = transitionSteerArrival(arrivals, arrivalGrown)
+  }
+
+  // A run's gaps and meta lines snap while a steer arrives, because the arriving row grows in. Any other change, such
+  // as a steer delivered into the run above, springs every gap and meta line together, so the bubbles below hold still.
+  // Springs read this on every frame, so it holds for exactly as long as the grow runs.
+  const runSnaps = () =>
+    untrack(() => {
+      syncArrivals()
+
+      return shouldSnapUserRun(arrivals)
+    })
+
+  // The newest delivered prompt; reverting it undoes the last turn, so its menu calls the action Undo.
+  const latestSent = createMemo(
+    () =>
+      [...input.projection.messageByID().values()].findLast(
+        (message) => message.type === "user" && input.actions?.pending?.status(message.id) === undefined,
+      )?.id,
+  )
+
+  // Hovering a run's bubbles, or the gaps between them, shows the meta line its last bubble carries. Each bubble's
+  // body bridges the gaps to its neighbors, so moving between bubbles never hides the line, and an open menu keeps it
+  // while the pointer is on the menu.
+  const [hoveredMessage, setHoveredMessage] = createSignal<string>()
+  const [menuMessage, setMenuMessage] = createSignal<string>()
+
+  const runEnds = createMemo(() => {
+    const ends = new Map<string, string>()
+    const group: string[] = []
+    input.projection.rows().forEach((row) => {
+      if (!Predicate.isTagged(row, "UserMessage")) return
+      group.push(row.userMessageID)
+
+      if (runs().get(row.userMessageID)?.below) return
+      group.splice(0).forEach((id) => ends.set(id, row.userMessageID))
+    })
+
+    return ends
+  })
+
+  const runHovered = (messageID: string) => {
+    const ends = runEnds()
+
+    return [hoveredMessage(), menuMessage()].some((id) => !!id && ends.get(id) === messageID)
+  }
+
+  const bubble = (target: EventTarget | null) =>
+    target instanceof Element ? target.closest('[data-slot="user-message-body"]') : null
+
+  const hoverZone = (messageID: string) => ({
+    onPointerOver: (event: PointerEvent) => {
+      if (bubble(event.target)) setHoveredMessage(messageID)
+    },
+    onPointerOut: (event: PointerEvent) => {
+      const next = bubble(event.relatedTarget)
+
+      if (next && event.currentTarget instanceof Element && event.currentTarget.contains(next)) return
+      setHoveredMessage((current) => (current === messageID ? undefined : current))
+    },
+  })
 
   const run = (messageID: string) =>
     createMemo(() => runs().get(messageID), undefined, {
@@ -620,7 +687,7 @@ export function createSessionTimelineRowRenderer(input: {
   const Frame = (props: { row: FramedTimelineRow; grow?: boolean; children: JSX.Element }) => (
     <div
       ref={(el) => {
-        if (props.grow) growIn(el)
+        if (props.grow) growIn(el, () => grown(props.row.userMessageID))
       }}
       id={Predicate.isTagged(props.row, "UserMessage") ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}
@@ -887,9 +954,17 @@ export function createSessionTimelineRowRenderer(input: {
 
   function TurnDiff(props: { row: TimelineRow.TurnDiff; onSizeChange?: () => void }) {
     const render = ToolRegistry.render("patch") ?? GenericTool
-    // Until the diff loads, list the paths the turn's steps recorded, without change counts.
+    // Until the diff loads, and if it fails, list the paths the turn's steps recorded, without change counts.
     const turn = () => ({ sessionID: input.sessionID(), from: props.row.from })
-    const diffs = () => data.turnDiff?.get(turn())
+    const state = createMemo(() => data.turnDiff?.state(turn()))
+
+    const diffs = () => {
+      const current = state()
+
+      return current?.status === "ready" ? current.diffs : undefined
+    }
+
+    const failed = () => state()?.status === "failed"
     const paths = () => diffs()?.map((diff) => diff.file) ?? props.row.files
     const showAllKey = () => `turn-diff:${props.row.messageID}`
     const showAll = () => input.disclosure.value(showAllKey()) === true
@@ -897,24 +972,47 @@ export function createSessionTimelineRowRenderer(input: {
     const overflow = () => paths().length > turnDiffFileLimit
     const fileKey = (path: string) => `turn-diff:${props.row.messageID}:file:${path}`
 
+    // Loads once per turn. A failure settles until the row remounts or the reader retries.
     createEffect(() => data.turnDiff?.load(turn()))
 
     return (
       <Show when={data.turnDiff && paths().length > 0}>
         <div data-slot="session-turn-diffs" class="flex flex-col gap-2 pt-4">
           <div class="flex h-6 min-w-0 items-center gap-2">
-            <span class="text-14-medium text-v2-text-text-base tabular-nums">
+            <span class="shrink-0 text-14-medium text-v2-text-text-base tabular-nums">
               {i18n.plural("ui.sessionTurn.diffs.changed", paths().length)}
             </span>
             <DiffChanges changes={[...(diffs() ?? [])]} />
-            <Show when={overflow()}>
-              <button
-                type="button"
-                class="ml-auto text-14-regular text-v2-text-text-accent"
-                onClick={() => input.disclosure.set(showAllKey(), !showAll())}
+            <Show when={failed()}>
+              <span
+                data-slot="session-turn-diffs-error"
+                class="min-w-0 truncate text-13-regular leading-text-compact text-v2-text-text-faint"
               >
-                {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
-              </button>
+                {i18n.t("ui.sessionTurn.diffs.failed")}
+              </span>
+            </Show>
+            <Show when={failed() || overflow()}>
+              <div class="ms-auto flex shrink-0 items-center gap-3">
+                <Show when={failed()}>
+                  <button
+                    type="button"
+                    data-slot="session-turn-diffs-retry"
+                    class="text-14-regular text-v2-text-text-accent"
+                    onClick={() => data.turnDiff?.load(turn())}
+                  >
+                    {i18n.t("ui.sessionTurn.diffs.retry")}
+                  </button>
+                </Show>
+                <Show when={overflow()}>
+                  <button
+                    type="button"
+                    class="text-14-regular text-v2-text-text-accent"
+                    onClick={() => input.disclosure.set(showAllKey(), !showAll())}
+                  >
+                    {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
+                  </button>
+                </Show>
+              </div>
             </Show>
           </div>
           <Dynamic
@@ -935,7 +1033,7 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
-  // A run's messages sit as close as the iOS app's (4 px); the gap springs open as a message leaves.
+  // A run's messages sit as close as the iOS app's (4 px); the gap springs as a message joins or leaves.
   function TurnGap(props: { messageID: string }) {
     let element: HTMLDivElement | undefined
     const joined = run(props.messageID)
@@ -946,7 +1044,7 @@ export function createSessionTimelineRowRenderer(input: {
         el.style.height = `${value.height}px`
       },
       // Closing up as a message joins is instant; the joining message grows in instead.
-      { ...userRunSpring, snap: () => !!joined()?.above },
+      { ...userRunSpring, snap: () => !!joined()?.above && runSnaps() },
     )
 
     return (
@@ -981,7 +1079,6 @@ export function createSessionTimelineRowRenderer(input: {
       })
 
       const context = createMemo(() => input.projection.userContextByID().get(current().userMessageID))
-      const previous = createMemo(() => input.projection.previousSelectionByID().get(current().userMessageID))
       const joined = run(current().userMessageID)
       const grow = arriving(current().userMessageID)
 
@@ -992,7 +1089,11 @@ export function createSessionTimelineRowRenderer(input: {
               const presentation = () => input.presentation(message())
 
               return (
-                <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
+                <div
+                  data-slot="session-turn-message-container"
+                  class={`w-full ${padding()}`}
+                  {...hoverZone(message().id)}
+                >
                   <div data-slot="session-turn-message-content" aria-live="off">
                     <SessionUserMessage
                       sessionID={input.sessionID()}
@@ -1003,9 +1104,16 @@ export function createSessionTimelineRowRenderer(input: {
                       voice={presentation()?.voice}
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
-                      previousSelection={previous()}
                       actions={input.actions}
                       run={joined()}
+                      latest={latestSent() === message().id}
+                      runSnaps={runSnaps}
+                      runHovered={runHovered(message().id)}
+                      onMenuOpenChange={(open) =>
+                        setMenuMessage((current) =>
+                          open ? message().id : current === message().id ? undefined : current,
+                        )
+                      }
                       fold={input.foldUserMessages?.()}
                       expanded={input.disclosure.value(`user-expanded:${message().id}`)}
                       onExpandedChange={(open) => input.disclosure.set(`user-expanded:${message().id}`, open)}
@@ -1352,38 +1460,88 @@ function outcomeNoticeKey(state: string | undefined) {
   return "ui.sessionTimeline.notice.finished"
 }
 
-/** Grows a row from nothing to its natural height, clipping its content on the way. Rows below follow its edge. */
-function growIn(el: HTMLElement) {
-  if (prefersReducedMotion()) return
-  const spring = Spring.fromDuration(0, { duration: 0.2, bounce: 0 })
-  const content = el.firstElementChild
+/**
+ * Grows a row from nothing to its natural height while its bubble fades in; rows below follow its edge. A pending
+ * steer's meta line stays in view: a steer that starts a pending run shows its line once the row has settled, and one
+ * that joins a pending run carries the run's line down along the growing edge while the bubble fades into the space.
+ */
+function growIn(el: HTMLElement, onDone: () => void) {
+  if (prefersReducedMotion()) return onDone()
+  const height = Spring.fromDuration(0, { duration: 0.2, bounce: 0 })
+  const opacity = Spring.fromDuration(0, { duration: 0.3, bounce: 0 }).set(1)
+  const content = el.firstElementChild instanceof HTMLElement ? el.firstElementChild : undefined
+  // The row's children mount after its ref runs, so the whole row starts hidden and hands its fade to the bubble on the
+  // first frame.
+  let faded = content ? [content] : []
+  let meta: HTMLElement | undefined
+  let carried = false
   let natural = 0
+  let line = 0
   el.style.height = "0px"
-  el.style.overflow = "clip"
   el.toggleAttribute("data-timeline-grow", true)
+  faded.forEach((element) => (element.style.opacity = "0"))
 
   const remove = frameLoop.addMeasured(
     () => {
-      natural = content instanceof HTMLElement ? content.offsetHeight : 0
+      if (content && !meta) {
+        meta = content.querySelector<HTMLElement>('[data-slot="user-message-copy-wrapper"]') ?? undefined
+
+        const bubbles = [
+          ...content.querySelectorAll<HTMLElement>(
+            '[data-slot="user-message-attachments"], [data-slot="user-message-body"]',
+          ),
+        ]
+
+        if (meta && bubbles.length > 0) {
+          carried = !!content.querySelector('[data-component="user-message"][data-pending][data-run-above]')
+
+          if (!carried) meta.style.visibility = "hidden"
+          content.style.opacity = ""
+          faded = bubbles
+        }
+      }
+
+      natural = content ? content.offsetHeight : 0
+      line = meta ? meta.offsetHeight + parseFloat(getComputedStyle(meta).marginTop) : 0
     },
     (dt) => {
       if (!el.isConnected) return true
-      spring.set(natural)
-      const height = spring.step(dt)
 
-      if (!spring.resting) {
-        el.style.height = `${height}px`
+      height.set(natural)
+      const value = height.step(dt)
+      const progress = natural > 0 ? value / natural : 1
+      const shown = Math.min(1, Math.max(0, opacity.step(dt)))
+
+      // A carried line passes over the bubble's place, so the bubble shows only as the line clears it.
+      faded.forEach((element) => (element.style.opacity = `${carried ? shown * progress : shown}`))
+
+      // The line starts exactly where the run's line just was, just above this row, and settles below the bubble.
+      if (meta && carried) meta.style.transform = `translateY(${-(natural - line + 8) * (1 - progress)}px)`
+
+      if (!height.resting || !opacity.resting) {
+        el.style.height = height.resting ? "" : `${value}px`
 
         return true
       }
 
       el.style.height = ""
-      el.style.overflow = ""
+      faded.forEach((element) => (element.style.opacity = ""))
+
+      if (meta) {
+        meta.style.visibility = ""
+        meta.style.transform = ""
+      }
+
       el.toggleAttribute("data-timeline-grow", false)
+      onDone()
 
       return false
     },
   )
 
-  onCleanup(remove)
+  // A row that unmounts mid-grow, as the virtualizer recycles it, ends its grow too; a second report is a no-op.
+  onCleanup(() => {
+    remove()
+    onDone()
+  })
 }

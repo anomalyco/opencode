@@ -47,7 +47,7 @@ for (const selected of [
   OpenAI.model("fixture", {}),
   model.route.with({ headers: { fixture: "test" } }).model({ id: "fixture" }),
   LanguageModel.make(LanguageModel.input(model)),
-  LanguageModel.update(model, { defaults: { maxTokens: 100 } }),
+  LanguageModel.update(model, { options: { maxTokens: 100 } }),
 ]) {
   ai.compact(ai.request({ model: selected, prompt: "Hello" }), { mechanism: "trigger" })
 }

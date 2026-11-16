@@ -1,6 +1,18 @@
 [data-component="timeline-detail-control"] {
   --timeline-detail-track-background: var(--v2-background-bg-layer-04);
   --timeline-detail-marker-background: var(--v2-grey-500);
+  /* The midpoint of the checked radio's gradient. */
+  --timeline-detail-accent:
+    linear-gradient(var(--v2-alpha-light-10), var(--v2-alpha-light-10)), var(--v2-background-bg-accent);
+  --timeline-detail-thumb:
+    radial-gradient(
+      circle,
+      var(--v2-grey-300) 3.5px,
+      var(--v2-overlay-gradient-depth-overlay-depth-top) 4px,
+      transparent 4px
+    ),
+    radial-gradient(circle at 50% calc(50% + 0.5px), rgb(0 0 0 / 0.4) 4px, transparent 4.5px),
+    linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-accent);
   position: relative;
   display: flex;
   min-width: 0;
@@ -24,16 +36,16 @@
   [data-slot="timeline-detail-scale"] {
     position: relative;
     height: 28px;
-    margin-top: 16px;
+    margin-top: 4px;
     margin-inline: 8px;
   }
 
   [data-slot="timeline-detail-track"] {
     position: absolute;
     inset-inline: 0;
-    top: 12px;
-    height: 4px;
-    border-radius: 2px;
+    top: 13px;
+    height: 2px;
+    border-radius: 1px;
     background: var(--timeline-detail-track-background);
     pointer-events: none;
 
@@ -44,27 +56,35 @@
       width: var(--timeline-detail-progress);
       height: 100%;
       border-radius: inherit;
-      background: var(--v2-background-bg-accent);
+      background: var(--timeline-detail-accent);
     }
 
     span {
       position: absolute;
       top: 50%;
       transform: translate(-50%, -50%);
-      box-sizing: content-box;
-      width: 6px;
-      height: 6px;
-      border: 2px solid var(--v2-background-bg-layer-01);
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       background: var(--timeline-detail-marker-background);
 
       &[data-selected] {
-        background: var(--v2-background-bg-accent);
+        background: var(--timeline-detail-accent);
       }
 
       &:dir(rtl) {
         transform: translate(50%, -50%);
       }
+    }
+  }
+
+  [data-slot="timeline-detail-scale"][data-custom] {
+    input[type="range"]::-webkit-slider-thumb {
+      opacity: 0;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      opacity: 0;
     }
   }
 
@@ -86,29 +106,24 @@
     }
 
     &::-webkit-slider-runnable-track {
-      height: 4px;
+      height: 2px;
       background: transparent;
     }
 
     &::-webkit-slider-thumb {
       appearance: none;
+      box-sizing: border-box;
       width: 16px;
       height: 16px;
-      margin-top: -6px;
+      margin-top: -7px;
       border: 0;
       border-radius: 50%;
-      background:
-        linear-gradient(
-          180deg,
-          var(--v2-overlay-gradient-depth-overlay-depth-top) 0%,
-          var(--v2-overlay-gradient-depth-overlay-depth-bot) 100%
-        ),
-        var(--v2-grey-300);
-      box-shadow: var(--v2-elevation-button-neutral);
+      background: var(--timeline-detail-thumb);
+      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
     }
 
     &::-moz-range-track {
-      height: 4px;
+      height: 2px;
       background: transparent;
     }
 
@@ -118,14 +133,8 @@
       height: 16px;
       border: 0;
       border-radius: 50%;
-      background:
-        linear-gradient(
-          180deg,
-          var(--v2-overlay-gradient-depth-overlay-depth-top) 0%,
-          var(--v2-overlay-gradient-depth-overlay-depth-bot) 100%
-        ),
-        var(--v2-grey-300);
-      box-shadow: var(--v2-elevation-button-neutral);
+      background: var(--timeline-detail-thumb);
+      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
     }
   }
 
@@ -147,9 +156,6 @@
 
     [data-slot="collapsible-arrow"] {
       width: 16px;
-    }
-
-    &:focus-visible [data-slot="collapsible-arrow"] {
       opacity: 1;
     }
 
@@ -213,7 +219,7 @@
   [data-slot="timeline-detail-category"] {
     min-height: 40px;
     padding-block: 8px;
-    padding-inline: 12px;
+    padding-inline: 9.5px 12px;
     border-bottom: 0.5px solid var(--v2-border-border-base);
 
     &:last-child {
@@ -236,7 +242,7 @@
   [data-slot="timeline-detail-activity"] {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     min-width: 0;
 
     > label {
@@ -249,13 +255,13 @@
       flex-shrink: 0;
     }
 
-    [data-action="timeline-detail-visibility"][aria-pressed="true"] {
-      color: var(--v2-icon-icon-base);
+    [data-action="timeline-detail-visibility"][aria-pressed="false"] {
+      color: var(--v2-icon-icon-muted);
     }
 
     /* Labels also activate :hover on their associated button. Keep that feedback local to the icon. */
-    &:has(> label:hover) [data-action="timeline-detail-visibility"][data-variant="ghost-muted"] {
-      background-color: transparent;
+    &:has(> label:hover) [data-action="timeline-detail-visibility"][data-variant="neutral"] {
+      background-image: none;
     }
   }
 }
@@ -279,14 +285,8 @@
 }
 
 [data-color-scheme="dark"] [data-component="timeline-detail-control"] {
-  --timeline-detail-track-background: var(--v2-background-bg-layer-03);
-  --timeline-detail-marker-background:
-    linear-gradient(
-      180deg,
-      var(--v2-overlay-gradient-depth-overlay-depth-top) 0%,
-      var(--v2-overlay-gradient-depth-overlay-depth-bot) 100%
-    ),
-    var(--v2-grey-300);
+  --timeline-detail-track-background: var(--v2-background-bg-layer-02);
+  --timeline-detail-marker-background: var(--v2-grey-700);
 }
 
 @container timeline-detail (max-width: 250px) {

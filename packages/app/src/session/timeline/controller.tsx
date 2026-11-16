@@ -15,25 +15,27 @@ import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { useServerSDK } from "@/runtime/server/client"
 import { sessionHref } from "@/shell/routes/session"
 import { sessionTitle } from "@/session/title"
-import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { showToast } from "@/shell/notifications/toast"
-import { usePlatform } from "@/runtime/platform/platform"
 import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
 import {
   createSessionDeleteState,
-  createSessionHeaderTitleState,
   selectSessionDeleteView,
-  selectSessionHeaderTitleView,
   SESSION_DELETE_TIMEOUT_MS,
-  SESSION_RENAME_TIMEOUT_MS,
   transitionSessionDelete,
-  transitionSessionHeaderTitle,
   type SessionDeleteEffect,
   type SessionDeleteEvent,
+} from "@/session/delete-machine"
+import { useSessionExporter } from "@/session/commands/export-session"
+import {
+  createSessionHeaderTitleState,
+  selectSessionHeaderTitleView,
+  SESSION_RENAME_TIMEOUT_MS,
+  transitionSessionHeaderTitle,
   type SessionHeaderTitleEffect,
   type SessionHeaderTitleEvent,
 } from "./header-actions-machine"
 import { createTimelineProjection } from "./projection"
+import { createNextTimelineProjection } from "@opencode/session-ui/timeline-next"
 import { useServer } from "@/runtime/server/current"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
@@ -68,7 +70,12 @@ export type TimelineSessionSource = {
   history: Pick<SessionModel["history"], "messages">
 }
 
-export function createTimelineController(input: { session: TimelineSessionSource; active: Accessor<boolean> }) {
+export function createTimelineController(input: {
+  session: TimelineSessionSource
+  active: Accessor<boolean>
+  /** Whether this timeline is the New timeline experiment. */
+  next: boolean
+}) {
   const navigate = useNavigate()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
@@ -78,7 +85,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const tabs = useTabs()
   const dialog = useDialog()
   const language = useLanguage()
-  const platform = usePlatform()
+  const exporter = useSessionExporter()
 
   // Pending inputs and the handoff hold with the history while the view is detached, so a hidden view never shows
   // one against history it has not caught up with.
@@ -199,17 +206,23 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
   const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
 
-  const projection = createTimelineProjection({
+  const projectionInput = {
     sessionMessages: projectedMessages,
     status: input.session.data.status,
-    reasoningMode,
-    shellToolDefaultOpen: shellToolPartsExpanded,
-    editToolDefaultOpen: editToolPartsExpanded,
     timelineDetail,
     pendingInputIDs,
     queuedCompactionIDs,
     turnDiffs: settings.general.showTurnDiffs,
-  })
+  }
+
+  const projection = input.next
+    ? createNextTimelineProjection(projectionInput)
+    : createTimelineProjection({
+        ...projectionInput,
+        reasoningMode,
+        shellToolDefaultOpen: shellToolPartsExpanded,
+        editToolDefaultOpen: editToolPartsExpanded,
+      })
 
   const errorMessage = (cause: unknown) =>
     Option.match(decodeErrorData(cause), {
@@ -296,27 +309,6 @@ export function createTimelineController(input: { session: TimelineSessionSource
     if (next) return navigate(href(next))
 
     return tabs.newDraft({ server: server.key, directory: sdk().directory })
-  }
-
-  const exportSession = async (id: string) => {
-    try {
-      const data = await fetchSessionExport({ sessionID: id, api: serverSDK.api })
-      const filename = sessionExportFilename(data.info)
-
-      if (!(await saveSessionExport(filename, data, platform))) return
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("toast.session.export.success.title"),
-        description: language.t("toast.session.export.success.description", { filename }),
-      })
-    } catch (error) {
-      showToast({
-        variant: "error",
-        title: language.t("toast.session.export.failed.title"),
-        description: error instanceof Error ? error.message : language.t("toast.session.export.failed.description"),
-      })
-    }
   }
 
   // Where the view goes once the session is gone, read before the delete hides it from the list.
@@ -460,7 +452,8 @@ export function createTimelineController(input: { session: TimelineSessionSource
         }),
     },
     action: {
-      export: exportSession,
+      export: (id: string) => exporter.export({ server: server.key, sessionID: id }),
+      exporting: (id: string) => exporter.exporting({ server: server.key, sessionID: id }),
       showDelete: (id: string) => dialog.show(() => <DeleteDialog sessionID={id} />),
       navigateParent: () => {
         const id = input.session.data.parentID()

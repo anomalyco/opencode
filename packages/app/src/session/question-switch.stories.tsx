@@ -355,6 +355,31 @@ export const LongPrompt = {
   ),
 }
 
+export const FreeResponse = {
+  render: () => (
+    <SessionPreview
+      title="Name the release"
+      description="opencode · release"
+      document={questionPendingDocument}
+      request={{
+        type: "question",
+        value: {
+          ...activeQuestionRequest,
+          fields: [
+            {
+              key: "name",
+              type: "string",
+              title: "Release name",
+              description: "What should we call this release?",
+              custom: true,
+            },
+          ],
+        },
+      }}
+    />
+  ),
+}
+
 // Closed choices followed by free text, to exercise the field-specific custom policy.
 export const ClosedChoices = {
   render: () => (

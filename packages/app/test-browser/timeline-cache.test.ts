@@ -61,7 +61,7 @@ function setup() {
     const turnDiffSources = new Map<string, TurnDiffSource>()
 
     const turnDiffSource = (label: string) => {
-      const source = turnDiffSources.get(label) ?? { get: () => undefined, load: () => {} }
+      const source = turnDiffSources.get(label) ?? { state: () => ({ status: "loading" }) as const, load: () => {} }
       turnDiffSources.set(label, source)
 
       return source

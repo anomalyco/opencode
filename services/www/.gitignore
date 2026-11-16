@@ -1,6 +1,0 @@
-.astro/
-.wrangler/
-dist/
-node_modules/
-public/cli.json
-public/openapi.json

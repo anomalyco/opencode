@@ -1,0 +1,122 @@
+/* Plate 00: the film, on the ink tone, with a stepped play button over the poster. */
+
+[data-site][data-page="font"] [data-plate="film"] {
+  font-family: var(--font-sans);
+
+  [data-slot="film-screen"] {
+    position: relative;
+    margin: 0;
+
+    video {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 9;
+      background: #0c0c0c;
+    }
+
+    figcaption {
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--hair-strong);
+      margin-top: 0.75rem;
+
+      a {
+        color: inherit;
+        text-underline-offset: 0.2em;
+      }
+    }
+  }
+
+  [data-slot="film-play"] {
+    position: absolute;
+    inset: 0 0 auto;
+    aspect-ratio: 16 / 9;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    background: transparent;
+    cursor: pointer;
+    outline: none;
+
+    /* Square, no blur, one treatment for both posters: near-black at 70% reads over white glyphs,
+       and the white hairline edge reads over black. */
+    [data-slot="film-play-square"] {
+      display: grid;
+      place-items: center;
+      width: 80px;
+      height: 80px;
+      background: rgb(12 12 12 / 0.7);
+      box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.28);
+      transition: background-color 150ms ease;
+
+      @media (max-width: 40rem) {
+        width: 56px;
+        height: 56px;
+      }
+    }
+
+    svg {
+      width: 62%;
+      height: 62%;
+      fill: #fff;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover [data-slot="film-play-square"] {
+        background: rgb(12 12 12 / 0.85);
+      }
+    }
+
+    &:active [data-slot="film-play-square"] {
+      background: rgb(12 12 12 / 0.85);
+    }
+
+    &:focus-visible [data-slot="film-play-square"] {
+      outline: 2px solid var(--link);
+      outline-offset: 3px;
+    }
+  }
+
+  [data-started] [data-slot="film-play"] {
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="film-play-square"] {
+      transition: none;
+    }
+  }
+}
+
+/* While the film plays on screen, the floating chrome (the theme picker, the logo and the GitHub
+   mark) fades out and can't be clicked or tabbed to; visibility flips after the fade, and back at
+   once when it returns. */
+[data-site][data-page="font"]
+  [data-component="bare-chrome"]
+  > :is([data-slot="bare-theme"], [data-slot="logo"], [data-component="github-link"]) {
+  transition:
+    opacity 150ms ease-out,
+    visibility 0s linear 0s;
+}
+
+[data-site][data-page="font"][data-film-playing]
+  [data-component="bare-chrome"]
+  > :is([data-slot="bare-theme"], [data-slot="logo"], [data-component="github-link"]) {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 150ms ease-out,
+    visibility 0s linear 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-site][data-page="font"]
+    [data-component="bare-chrome"]
+    > :is([data-slot="bare-theme"], [data-slot="logo"], [data-component="github-link"]) {
+    transition: none;
+  }
+}

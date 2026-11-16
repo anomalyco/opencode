@@ -379,8 +379,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     setState("pages", sessionKey, undefined)
   }
 
-  // A server whose plugin lacked the browser RPC may have it once its event stream reconnects or a restarted server
-  // replaces its controller. Leaving the list ends the watch too: its next session asks again.
+  // A server whose plugin lacked the browser RPC may have it once its plugins finish loading, its event stream
+  // reconnects, or a restarted server replaces its controller. Leaving the list ends the watch too: its next session
+  // asks again.
   const watchServer = (serverID: string) => {
     servers.get(serverID)?.()
     const changed = () => queueMicrotask(() => dispatch({ type: "server.changed", serverID }))
@@ -397,6 +398,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           (data) => {
             if (data !== marked) return changed()
             onCleanup(data.on("server.connected", changed))
+            onCleanup(data.on("plugin.updated", changed))
           },
           { otherwise: changed },
         )

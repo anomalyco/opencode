@@ -17,8 +17,11 @@ export type SessionTabState = {
   preview?: string
 }
 
-/** Where a pane's "+" menu asked its next new tab to open; with `plugin`, only that plugin's tab. */
-export type SessionPaneTarget = { readonly pane: SessionPane; readonly plugin?: string }
+/**
+ * Where a pane's "+" menu asked its next new tab to open; with `plugin`, only that plugin's tab. With `index`, the tab
+ * lands at that position in the strip, as a reopened tab returns where it closed.
+ */
+export type SessionPaneTarget = { readonly pane: SessionPane; readonly plugin?: string; readonly index?: number }
 
 export const sessionTabPane = (tabs: SessionTabs, tab: string): SessionPane => tabs.panes?.[tab] ?? "side"
 
@@ -87,11 +90,22 @@ export function placeSessionTabs(previous: SessionTabs, next: SessionTabs, targe
   )
 
   return {
-    all: next.all,
+    all: landAt(next.all, kept, target),
     active: next.active,
     panes: Object.keys(panes).length > 0 ? panes : undefined,
     selected: Object.keys(selected).length > 0 ? selected : undefined,
   }
+}
+
+// Moves the new tab `target` asked for to the target's index.
+function landAt(all: string[], kept: ReadonlySet<string>, target: SessionPaneTarget | undefined) {
+  if (target?.index === undefined) return all
+  const landed = all.find((tab) => !kept.has(tab) && paneTargetMatches(target, tab))
+
+  if (landed === undefined) return all
+  const rest = all.filter((tab) => tab !== landed)
+
+  return [...rest.slice(0, target.index), landed, ...rest.slice(target.index)]
 }
 
 /**

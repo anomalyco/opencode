@@ -156,6 +156,49 @@ describe("web update machine", () => {
     expect(result.effects).toEqual([{ type: "announce" }, { type: "reset" }])
   })
 
+  // A check whose request never settled used to hold `checking` for the tab's life, so every later check, the user's
+  // included, joined it and Settings › Updates stayed on "Checking…".
+  test("a check the browser never answers times out, and the next check runs", () => {
+    const quiet = replay([
+      { type: "registered", worker: "none" },
+      auto(0),
+      { type: "check.timeout", attempt: 1 },
+      manual(1),
+    ])
+
+    expect(quiet.state).toMatchObject({ status: "checking", attempt: 2, manual: true })
+    expect(quiet.effects).toEqual([
+      { type: "update", attempt: 1 },
+      { type: "update", attempt: 2 },
+    ])
+
+    // The user's check, or an automatic one the user joined, says it failed; a late answer changes nothing.
+    const asked = replay([
+      { type: "registered", worker: "none" },
+      auto(0),
+      manual(1),
+      { type: "check.timeout", attempt: 1 },
+      { type: "check.settled", attempt: 1, worker: "none" },
+    ])
+
+    expect(asked.state.status).toBe("error")
+    expect(asked.effects.at(-1)).toEqual({ type: "report", result: "failed", message: "" })
+  })
+
+  test("nothing runs after the updater is disposed", () => {
+    const result = replay([
+      { type: "registered", worker: "none" },
+      auto(0),
+      { type: "disposed" },
+      { type: "check.settled", attempt: 1, worker: "waiting" },
+      { type: "controller.changed" },
+      manual(1),
+    ])
+
+    expect(result.state).toEqual({ status: "disposed" })
+    expect(result.effects).toEqual([{ type: "update", attempt: 1 }])
+  })
+
   test("only the reload action runs while a build is ready; checking again offers it again", () => {
     const result = replay([{ type: "registered", worker: "waiting" }, auto(0), manual(0)])
 
