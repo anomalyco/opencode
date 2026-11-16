@@ -8,7 +8,8 @@
 //! - A **project** plugin's is the SHA-256 of every file, its dependencies' too, as its approval names it
 //!   ([`Artifact::tree`]). It is taken again only once a stamp of the tree changed. What the JS host imports is the
 //!   staged copy of the approved bytes, which [`Artifact::stage`] checks as it copies them, so an answer that is
-//!   older than the disk never runs bytes that were not approved.
+//!   older than the disk never runs bytes that were not approved. The copy is made off the UI thread too
+//!   ([`Trees::staged`]).
 //!
 //! The stamp is the metadata of the plugin's own files and of each dependency's package directory and `package.json`.
 
@@ -25,10 +26,14 @@ const DEPTH: usize = 32;
 
 pub(crate) struct Trees {
     state: Arc<Mutex<HashMap<PathBuf, Entry>>>,
-    /// The bytes of plugin files the walks read.
+    /// The copies of approved trees being made, by the tree and its hash, and each one's result until it is taken.
+    stages: Arc<Mutex<Stages>>,
+    /// The bytes of plugin files the walks and copies read.
     hashed: Arc<AtomicU64>,
     wake: Arc<dyn Fn() + Send + Sync>,
 }
+
+type Stages = HashMap<(PathBuf, String), Option<Result<PathBuf, String>>>;
 
 /// What the last walk found of a tree: its light build and its artifact, each `None` until a walk took it.
 type Answer = (Option<Result<u64, String>>, Option<Result<Artifact, String>>);
@@ -40,15 +45,17 @@ struct Entry {
     again: bool,
     /// The full hash is asked for: the plugin is a project's.
     full: bool,
+    /// The next walk hashes whatever the stamp says ([`Trees::rewalk`]).
+    stale: bool,
     stamp: Option<u64>,
     light: Option<Result<u64, String>>,
     artifact: Option<Result<Artifact, String>>,
 }
 
 impl Trees {
-    /// `wake` runs on a walk's thread when a walk found something new.
+    /// `wake` runs on a walk's thread when a walk found something new, and on a copy's when it ended.
     pub(crate) fn new(wake: impl Fn() + Send + Sync + 'static) -> Self {
-        Self { state: Arc::default(), hashed: Arc::default(), wake: Arc::new(wake) }
+        Self { state: Arc::default(), stages: Arc::default(), hashed: Arc::default(), wake: Arc::new(wake) }
     }
 
     /// The build of the global plugin `dir` as the last walk found it, or `None` before the first walk ended.
@@ -61,14 +68,50 @@ impl Trees {
         self.ask(dir, true).1
     }
 
-    /// The bytes of plugin files the walks read so far.
+    /// Hashes the project plugin `dir` whole again, whatever its stamp says: its files changed under a stamp that did
+    /// not, as a stage of the approved bytes found.
+    pub(crate) fn rewalk(&self, dir: &Path) {
+        lock(&self.state).entry(dir.to_path_buf()).or_default().stale = true;
+        self.ask(dir, true);
+    }
+
+    /// The copy of the approved `artifact` under `root` that the JS host imports ([`Artifact::stage`]), made off the UI
+    /// thread, or `None` until it is: a new copy reads and writes the whole tree. A copy made before is used at once.
+    pub(crate) fn staged(&self, artifact: &Artifact, root: &Path) -> Option<Result<PathBuf, String>> {
+        if root.join(&artifact.sha256).is_dir() {
+            return artifact.stage(root).into();
+        }
+        let key = (artifact.path.clone(), artifact.sha256.clone());
+        let mut stages = lock(&self.stages);
+        match stages.get(&key) {
+            Some(None) => return None,
+            Some(Some(_)) => return stages.remove(&key).flatten(),
+            None => {}
+        }
+        stages.insert(key, None);
+        drop(stages);
+        let (stages, hashed, wake) = (self.stages.clone(), self.hashed.clone(), self.wake.clone());
+        let (owned, to) = (artifact.clone(), root.to_owned());
+        let spawned = std::thread::Builder::new().name("plugin-stage".to_owned()).spawn(move || {
+            stage(&stages, &hashed, &owned, &to);
+            wake();
+        });
+        // Without a thread, the copy is made here.
+        if spawned.is_err() {
+            stage(&self.stages, &self.hashed, artifact, root);
+            return self.staged(artifact, root);
+        }
+        None
+    }
+
+    /// The bytes of plugin files the walks and copies read so far.
     pub(crate) fn hashed(&self) -> u64 {
         self.hashed.load(Ordering::Relaxed)
     }
 
-    /// Whether a walk runs.
+    /// Whether a walk or a copy runs.
     pub(crate) fn walking(&self) -> bool {
-        lock(&self.state).values().any(|entry| entry.running)
+        lock(&self.state).values().any(|entry| entry.running) || lock(&self.stages).values().any(Option::is_none)
     }
 
     fn ask(&self, dir: &Path, full: bool) -> Answer {
@@ -99,19 +142,22 @@ impl Trees {
 /// Walks `dir` until no question came during the last walk.
 fn walks(state: &Mutex<HashMap<PathBuf, Entry>>, hashed: &AtomicU64, wake: &dyn Fn(), dir: &Path) {
     loop {
-        let (known, full, has) = {
-            let state = lock(state);
-            let Some(entry) = state.get(dir) else { return };
-            (entry.stamp, entry.full, entry.artifact.is_some())
+        let (known, full, has, stale) = {
+            let mut state = lock(state);
+            let Some(entry) = state.get_mut(dir) else { return };
+            (entry.stamp, entry.full, entry.artifact.is_some(), std::mem::take(&mut entry.stale))
         };
         let (stamp, racy) = match stamp(dir) {
             Ok((stamp, racy)) => (Some(stamp), racy),
             Err(_) => (None, true),
         };
-        let new = racy || stamp != known || (full && !has);
+        let new = racy || stale || stamp != known || (full && !has);
         let found = new.then(|| {
             let before = approval::hashed();
             let light = light(dir);
+            if stale {
+                approval::forget(dir);
+            }
             let artifact = full.then(|| Artifact::tree(dir));
             hashed.fetch_add(approval::hashed() - before, Ordering::Relaxed);
             (light, artifact)
@@ -139,6 +185,14 @@ fn walks(state: &Mutex<HashMap<PathBuf, Entry>>, hashed: &AtomicU64, wake: &dyn 
             return;
         }
     }
+}
+
+/// Copies the approved `artifact` under `root`, and keeps the copy or why it failed for the next question.
+fn stage(stages: &Mutex<Stages>, hashed: &AtomicU64, artifact: &Artifact, root: &Path) {
+    let before = approval::hashed();
+    let staged = artifact.stage(root);
+    hashed.fetch_add(approval::hashed() - before, Ordering::Relaxed);
+    lock(stages).insert((artifact.path.clone(), artifact.sha256.clone()), Some(staged));
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -241,4 +295,34 @@ fn meta(metadata: &std::fs::Metadata, hasher: &mut DefaultHasher) {
     metadata.modified().ok().hash(hasher);
     #[cfg(unix)]
     std::os::unix::fs::MetadataExt::ino(metadata).hash(hasher);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected (js-followups): a file rewritten with its size and time kept is found by a walk asked to hash again
+    // ([`Trees::rewalk`]), also on the thread that hashed the tree before, whose last hash its metadata cannot tell
+    // apart; a walk not asked to keeps the stamp's answer.
+    #[test]
+    fn a_stale_walk_reads_every_file_on_the_same_thread() {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let (dir, file) = (root.path(), root.path().join("tui.ts"));
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(10);
+        let write = |text: &str| {
+            std::fs::write(&file, text).unwrap();
+            std::fs::File::options().write(true).open(&file).unwrap().set_modified(old).unwrap();
+        };
+        write("a");
+        let state = Mutex::new(HashMap::from([(dir.to_path_buf(), Entry { full: true, ..Entry::default() })]));
+        let walk = |stale: bool| {
+            lock(&state).get_mut(dir).unwrap().stale = stale;
+            walks(&state, &AtomicU64::new(0), &|| {}, dir);
+            lock(&state)[dir].artifact.clone().unwrap().unwrap().sha256
+        };
+        let first = walk(false);
+        write("b");
+        assert_eq!(walk(false), first);
+        assert_ne!(walk(true), first);
+    }
 }

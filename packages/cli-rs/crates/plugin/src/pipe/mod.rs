@@ -1645,6 +1645,21 @@ impl Scripts {
         self.trees.artifact(dir)
     }
 
+    /// Hashes the project plugin `dir` whole again off the UI thread, whatever its stamp says.
+    pub(crate) fn rewalk(&self, dir: &Path) {
+        self.trees.rewalk(dir);
+    }
+
+    /// The copy of the approved `artifact` under `root` that the JS host imports, made off the UI thread, or `None`
+    /// until it is (FT-2).
+    pub(crate) fn staged(
+        &self,
+        artifact: &crate::loader::approval::Artifact,
+        root: &Path,
+    ) -> Option<Result<PathBuf, String>> {
+        self.trees.staged(artifact, root)
+    }
+
     /// The bytes of plugin files the walks of the plugins' trees read so far, off the UI thread.
     #[doc(hidden)]
     pub fn hashed(&self) -> u64 {

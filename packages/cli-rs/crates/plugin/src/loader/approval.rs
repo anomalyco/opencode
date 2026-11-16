@@ -166,6 +166,14 @@ thread_local! {
     static HASHED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
+/// Forgets this thread's last hash of the tree `target`: the next [`Artifact::tree`] of it reads every file, however
+/// its entries' metadata stayed.
+pub(crate) fn forget(target: &Path) {
+    if let Ok(path) = std::fs::canonicalize(target) {
+        TREES.with(|trees| trees.borrow_mut().remove(&path));
+    }
+}
+
 /// The bytes of plugin files this thread read to hash them so far.
 #[doc(hidden)]
 pub fn hashed() -> u64 {
