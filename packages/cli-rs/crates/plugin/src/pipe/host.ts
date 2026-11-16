@@ -292,6 +292,8 @@ interface Plugin {
   readErrors: Map<string, string>
   answers: Map<string, Array<(value: Json) => void>>
   replies: Map<number, { resolve: (result: Json) => void; reject: (error: Error) => void }>
+  // CT-5: the parts of each reply too large for one frame, until its call joins them.
+  parts: Map<number, Buffer[]>
   batch: number
   // P8: who hears each snapshot, and the manifest the host was last told.
   listeners: Array<(key: string) => void>
@@ -793,6 +795,7 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     readErrors: new Map(),
     answers: new Map(),
     replies: new Map(),
+    parts: new Map(),
     batch: 0,
     listening: {},
     listeners: [],
@@ -964,7 +967,20 @@ async function handle(message: Json) {
       if (!plugin) return send({ type: "done", seq: message.seq })
       // The route as the call starts, which the host sends while the plugin does not watch it (P8).
       if (message.route !== undefined) plugin.snapshots.set("route", message.route)
+      // A reply too large for one frame: its result is the JSON of the parts that came before it (CT-5).
+      if (message.parted) {
+        const parts = plugin.parts.get(message.call.id) ?? []
+        plugin.parts.delete(message.call.id)
+        message.call.result = JSON.parse(Buffer.concat(parts).toString())
+      }
       return call(message.seq, plugin, message.call)
+    case "part": {
+      if (!plugin) return
+      const parts = plugin.parts.get(message.request) ?? []
+      parts.push(Buffer.from(message.data, "base64"))
+      plugin.parts.set(message.request, parts)
+      return
+    }
     case "mount": {
       if (!plugin || !plugin.active) return send({ type: "done", seq: message.seq })
       const mount: Mount = {

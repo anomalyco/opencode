@@ -503,6 +503,7 @@ fn settles(message: &Down) -> bool {
     matches!(
         message,
         Down::Call { call: Request::Reply { .. }, .. }
+            | Down::Part { .. }
             | Down::Answered { .. }
             | Down::Cancelled { .. }
             | Down::Skipped { .. }
@@ -956,11 +957,15 @@ impl Scripts {
 
     /// Writes `message` to the JS host, after what waits in the overflow.
     fn write(&self, message: &Down) {
-        // One size decision, for the direct send and the overflow alike: what cannot go as one frame is reduced or
-        // refused now, in its place, so nothing past a cap is sent and the overflow never holds a frame the queue would
-        // refuse, which a drain would settle behind what came after it (bigboi's pipe pass).
+        // One size decision, for the direct send and the overflow alike: what cannot go as one frame goes in parts (a
+        // reply the overflow has room for, CT-5), or is reduced or refused now, in its place, so nothing past a cap is
+        // sent and the overflow never holds a frame the queue would refuse, which a drain would settle behind what came
+        // after it (bigboi's pipe pass).
         let size = serde_json::to_vec(message).map_or(usize::MAX, |bytes| bytes.len());
         if !self.fits(size) {
+            if let Some(parts) = self.admit(message) {
+                return parts.iter().for_each(|part| self.write(part));
+            }
             return self.refuse(message, size);
         }
         if !self.overflow.borrow().0.is_empty() || !timed(|| self.encode(message)) {
@@ -1050,12 +1055,13 @@ impl Scripts {
     /// ownership pass): such a message is never dropped while the JS host runs.
     fn settle(&self, message: &Down, size: usize) {
         let kept = match message {
-            Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route }
+            Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route, .. }
                 if !self.sendable(message) =>
             {
                 let result = Err(format!("the reply is {size} bytes, more than the JS host takes"));
                 let call = Request::Reply { id: *reply, result };
-                Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone() }
+                let route = route.clone();
+                Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route, parted: false }
             }
             // A request's ID, a number, is kept: without it the JS host reads an accepted request as refused, which
             // then runs while its caller retries (bigboi's verification). A read's value goes, as a failed read.
@@ -1085,6 +1091,44 @@ impl Scripts {
         }
         overflow.1 += bytes;
         overflow.0.push_back((kept, bytes));
+    }
+
+    /// `message` as the frames it goes in, when it is a reply too large for one ([`Scripts::split`]) whose parts the
+    /// overflow has room for now, within its bound ([`child::Limits::inbox`]): a reply up to 8 MiB by default, where
+    /// one past a frame's 256 KiB failed (CT-5: snippets' `/api/skill`, 450 KB). One past that room is refused as before.
+    fn admit(&self, message: &Down) -> Option<Vec<Down>> {
+        let parts = self.split(message)?;
+        let bytes: usize =
+            parts.iter().map(|part| serde_json::to_vec(part).map_or(usize::MAX, |bytes| bytes.len())).sum();
+        let room = self.config.limits.inbox.saturating_sub(self.overflow.borrow().1);
+        (bytes <= room).then_some(parts)
+    }
+
+    /// A reply as the parts of its result's JSON, each in a frame of its own, and its call after them, which says they
+    /// are its result. None for any other message, and for a queue too small for a part.
+    fn split(&self, message: &Down) -> Option<Vec<Down>> {
+        let Down::Call { seq, id, activation, call: Request::Reply { id: request, result }, route, parted: false } =
+            message
+        else {
+            return None;
+        };
+        // What a part's frame holds past its data: its header, its envelope and the largest request ID.
+        let envelope = wire::encode(wire::CONTROL, &[]).len() + 96;
+        let chunk = wire::CONTROL_CAP.min(self.config.limits.queued).saturating_sub(envelope) / 4 * 3;
+        if chunk == 0 {
+            return None;
+        }
+        let json = serde_json::to_vec(result).ok()?;
+        let part = |bytes: &[u8]| Down::Part {
+            activation: *activation,
+            request: *request,
+            data: opencode_plugin_abi::base64::encode(bytes),
+        };
+        let mut parts: Vec<Down> = json.chunks(chunk).map(part).collect();
+        let call = Request::Reply { id: *request, result: Ok(serde_json::Value::Null) };
+        let route = route.clone();
+        parts.push(Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route, parted: true });
+        Some(parts)
     }
 
     /// Whether `message` goes as one frame: under the queue's bound and the wire's cap, the limits [`Child::send`]
@@ -1640,7 +1684,7 @@ impl Scripts {
     ) {
         let seq = self.next();
         let (id, activation, route) = (guest.id().to_owned(), guest.activation(), guest.unwatched_route());
-        let message = Down::Call { seq, id, activation, call: request.clone(), route };
+        let message = Down::Call { seq, id, activation, call: request.clone(), route, parted: false };
         let call = Call { guest: Rc::downgrade(guest), export, user, request, owner, mount };
         self.send(message, Some(Waiting::Call(Box::new(call))));
         if hold {
@@ -1837,6 +1881,35 @@ pub(crate) fn evaluate(
 mod tests {
     use super::*;
 
+    // Expected (CT-5): a reply too large for a frame goes in parts, each a frame, its call last, while the overflow has
+    // room for all of them within its bound; past that room it does not, and is refused as before. Only a reply does.
+    #[test]
+    fn a_reply_goes_in_parts_only_while_the_overflow_has_room_for_them() {
+        let mut config = Config::new("bun".into());
+        config.limits.inbox = 1 << 20;
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(config, &host);
+        let reply = |bytes: usize| Down::Call {
+            seq: 1,
+            id: "p".into(),
+            activation: 1,
+            call: Request::Reply {
+                id: opencode_plugin_abi::RequestId(3),
+                result: Ok(serde_json::json!("r".repeat(bytes))),
+            },
+            route: None,
+            parted: false,
+        };
+        let parts = scripts.admit(&reply(300 << 10)).expect("a reply within the overflow's room goes in parts");
+        assert!(parts.iter().all(|part| scripts.sendable(part)), "a part past a frame");
+        assert!(matches!(parts.last(), Some(Down::Call { parted: true, .. })), "the call goes last");
+        assert_eq!(scripts.admit(&reply(1 << 20)), None, "past the overflow's bound");
+        scripts.overflowed(Down::Ping { seq: 9 }, 800 << 10);
+        assert_eq!(scripts.admit(&reply(300 << 10)), None, "past what the overflow has room for now");
+        assert_eq!(scripts.admit(&reply(16)).map(|parts| parts.len()), Some(2), "a part and its call");
+        assert_eq!(scripts.admit(&Down::Ping { seq: 2 }), None, "only a reply goes in parts");
+    }
+
     // Expected (bigboi's freeze and ownership passes): what settles the JS host's work waits past a full overflow, in a
     // reserve charged its bytes: a cancellation, the answers that carry a fetch's ID, and a refused call's skipped
     // sequence, in order. Another message without a sequence goes; the answers of a call too large for a frame go as
@@ -1860,6 +1933,7 @@ mod tests {
             activation: 1,
             call: Request::Command { name: "c".into(), input: None },
             route: None,
+            parted: false,
         };
         scripts.overflowed(cancelled.clone(), bytes(&cancelled));
         scripts.overflowed(answered.clone(), bytes(&answered));
@@ -1976,8 +2050,8 @@ mod tests {
     // with a fetch's ID and a large read, its cancellation and a reply behind it, answers and a reply between the queue's
     // bound and the wire's cap and past the cap, a call past the cap, a plugin's load and a watched read's snapshot each
     // under and past the cap (bigboi's pipe sign-off). What the JS host reads is what the written rule makes of each, in
-    // the order they were sent: a message that goes as one frame as it is; one that settles work, reduced (an answer
-    // keeps its scalars, a reply fails); a snapshot, as a failed read; any other, its sequence skipped. Nothing it reads
+    // the order they were sent: a message that goes as one frame as it is; a reply, in parts that join to its result
+    // (CT-5); an answer, reduced to its scalars; a snapshot, as a failed read; any other, its sequence skipped. Nothing it reads
     // is past either cap, so an admission answer is never read after its cancellation or reply. A refused load is failed,
     // as nothing else answers it: the loader reads it failed, not starting.
     #[cfg(unix)]
@@ -1989,6 +2063,7 @@ mod tests {
             activation: 1,
             call: Request::Command { name: "c".into(), input: Some("x".repeat(input)) },
             route: None,
+            parted: false,
         };
         let read = |bytes: usize| serde_json::json!("r".repeat(bytes));
         let answered = |key: &str, id: u64, bytes: usize| Down::Answered {
@@ -2002,6 +2077,7 @@ mod tests {
             activation: 1,
             call: Request::Reply { id: opencode_plugin_abi::RequestId(id), result: Ok(read(bytes)) },
             route: None,
+            parted: false,
         };
         let cancelled = |id: u64| Down::Cancelled { activation: 1, request: opencode_plugin_abi::RequestId(id) };
         let mut failed = Vec::new();
@@ -2060,29 +2136,25 @@ mod tests {
             let fits = |message: &Down| scripts.sendable(message);
             let expected: Vec<Down> = sent
                 .iter()
-                .map(|message| match message {
-                    _ if fits(message) => message.clone(),
-                    Down::Answered { id, key, results } => Down::Answered {
+                .flat_map(|message| match message {
+                    _ if fits(message) => vec![message.clone()],
+                    Down::Answered { id, key, results } => vec![Down::Answered {
                         id: id.clone(),
                         key: key.clone(),
                         results: results
                             .iter()
                             .map(|result| if scalar(result) { result.clone() } else { serde_json::Value::Null })
                             .collect(),
-                    },
-                    Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route } => {
-                        let size = serde_json::to_vec(message).unwrap().len();
-                        let result = Err(format!("the reply is {size} bytes, more than the JS host takes"));
-                        let call = Request::Reply { id: *reply, result };
-                        Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone() }
-                    }
+                    }],
+                    // A reply within the overflow's room goes in parts (CT-5), which join to its result below.
+                    Down::Call { call: Request::Reply { .. }, .. } => scripts.split(message).unwrap(),
                     Down::Snapshot { id, key, .. } => {
                         let size = serde_json::to_vec(message).unwrap().len();
                         let error =
                             Some(format!("the read's snapshot of {size} bytes does not fit the JS host's queue"));
-                        Down::Snapshot { id: id.clone(), key: key.clone(), value: serde_json::Value::Null, error }
+                        vec![Down::Snapshot { id: id.clone(), key: key.clone(), value: serde_json::Value::Null, error }]
                     }
-                    other => Down::Skipped { seq: other.seq().unwrap() },
+                    other => vec![Down::Skipped { seq: other.seq().unwrap() }],
                 })
                 .collect();
             let recv = dir.path().join("recv");
@@ -2112,6 +2184,20 @@ mod tests {
             };
             if got != expected {
                 failed.push(format!("queued {queued}: read {:#?}\nthe rule {:#?}", brief(&got), brief(&expected)));
+            }
+            // The parts the JS host read of request 8, joined, are the reply's result, which goes in no other frame.
+            let joined: Vec<u8> = got
+                .iter()
+                .filter_map(|message| match message {
+                    Down::Part { request, data, .. } if request.0 == 8 => opencode_plugin_abi::base64::decode(data),
+                    _ => None,
+                })
+                .flatten()
+                .collect();
+            let whole: Result<serde_json::Value, String> =
+                serde_json::from_slice(&joined).unwrap_or(Err("none".into()));
+            if whole != Ok(serde_json::json!("r".repeat(300 << 10))) {
+                failed.push(format!("queued {queued}: the parts of the reply joined to {} bytes", joined.len()));
             }
             // What the loader reads of each load: the one sent waits for its answer, the refused one failed.
             let stands =
