@@ -3,10 +3,8 @@ import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
 import { PluginInstalled, PluginMenubarItem, PluginPayload, PluginGuis } from "./plugins"
 
-export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
-  attempt: Schema.Number,
-  urls: Schema.Array(Schema.String),
-}) {}
+// Deep links are waiting; the window takes them with AppTakeDeepLinks.
+export class DeepLinkReceived extends Schema.TaggedClass<DeepLinkReceived>()("DeepLinkReceived", {}) {}
 
 // A Windows toast this window posted was clicked.
 export class ToastActivated extends Schema.TaggedClass<ToastActivated>()("ToastActivated", { tag: Schema.String }) {}
@@ -85,7 +83,7 @@ export class SidecarChanged extends Schema.TaggedClass<SidecarChanged>()("Sideca
 export class SystemResumed extends Schema.TaggedClass<SystemResumed>()("SystemResumed", {}) {}
 
 export const DesktopEvent = Schema.Union([
-  DeepLinksOpened,
+  DeepLinkReceived,
   ToastActivated,
   SidecarChanged,
   SystemResumed,

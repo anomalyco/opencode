@@ -104,7 +104,7 @@ const runtime = Layer.effect(
       win.focus()
     }
 
-    const deepLinks = yield* DeepLinks.make(focusWindow)
+    const deepLinks = DeepLinks.make(focusWindow)
 
     // A development build's jump list would start Electron without the app, so only installed builds set one.
     if (process.platform === "win32" && app.isPackaged) {
@@ -138,12 +138,9 @@ const runtime = Layer.effect(
 
       const urls = deepLinkArguments(argv)
 
-      if (urls.length) {
-        runFork(Effect.logInfo("deep link received via second-instance", { urls }))
-        deepLinks.receive(urls)
-      }
-
-      if (!urls.length) focusWindow(getLastFocusedWindow())
+      if (!urls.length) return focusWindow(getLastFocusedWindow())
+      runFork(Effect.logInfo("deep link received via second-instance", { urls }))
+      deepLinks.receive(urls)
     }
 
     const openUrl = (event: Event, url: string) => {
