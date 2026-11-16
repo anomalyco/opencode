@@ -119,6 +119,15 @@ export interface Interface {
   readonly get: (id: ID) => Effect.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
+  /**
+   * Runs `effect` as a call made by `parent`, such as one inside a Code Mode program. The call has an ID of its own
+   * but no row, so while it runs, requests naming it as their source show on `parent`'s row.
+   */
+  readonly nested: <A, E, R>(
+    call: Tool.CallID,
+    parent: Tool.CallID,
+    effect: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E, R>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -139,6 +148,7 @@ const layer = Layer.effect(
     const saved = yield* PermissionSaved.Service
     const hooks = yield* PluginHooks.Service
     const pending = new Map<ID, Pending>()
+    const parents = new Map<string, Tool.CallID>()
     let closed = false
 
     const close = Effect.gen(function* () {
@@ -181,6 +191,18 @@ const layer = Layer.effect(
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
+    const nested: Interface["nested"] = (call, parent, effect) =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => parents.set(call, parent)),
+        () => effect,
+        () => Effect.sync(() => parents.delete(call)),
+      )
+
+    function row(source: AssertInput["source"]) {
+      const parent = source && parents.get(source.id)
+      return parent ? { ...source, id: parent } : source
+    }
+
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
@@ -193,7 +215,7 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         metadata: input.metadata,
-        source: input.source,
+        source: row(input.source),
         effect,
       })
       const unattended = yield* Unattended
@@ -221,7 +243,7 @@ const layer = Layer.effect(
         metadata:
           input.metadata &&
           Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
-        source: input.source,
+        source: row(input.source),
         message,
       }
     }
@@ -377,7 +399,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, close })
+    return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, nested, close })
   }),
 )
 

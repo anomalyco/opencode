@@ -11,6 +11,7 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
+import { CallID } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
@@ -127,14 +128,19 @@ export const create = (
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                  // Its own ID, so plugin hooks and traces can tell the program's calls apart.
+                  const id = CallID.make(`${context.id}_${index}`)
                   // The program sees the same failure text the model gets for a direct call.
                   const executed = yield* executeTool(name, tool, input, {
                     ...context,
+                    id,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.
                     cancel: undefined,
                   }).pipe(
+                    // The call has no row, so its permission requests show on this one's.
+                    (call) => permission.nested(id, context.id, call),
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
                   const content = resultContent(executed)
