@@ -32,8 +32,8 @@ export interface Content extends Info {
 }
 
 export interface Interface {
-  /** Stores the stream as a new blob. The file appears only once it's whole. */
-  readonly write: <E>(stream: Stream.Stream<Uint8Array, E>) => Effect.Effect<Info, E | UnavailableError>
+  /** Stores the stream as the blob `id`, replacing any earlier one. The file appears only once it's whole. */
+  readonly write: <E>(id: ID, stream: Stream.Stream<Uint8Array, E>) => Effect.Effect<Info, E | UnavailableError>
   readonly read: (id: ID) => Effect.Effect<Content, NotFoundError>
   readonly remove: (id: ID) => Effect.Effect<void>
 }
@@ -70,9 +70,8 @@ const layer = Layer.effect(
     })
 
     // Written to `<id>.part`, synced, then renamed, so a stored blob is always whole.
-    const write = <E>(stream: Stream.Stream<Uint8Array, E>) =>
+    const write = <E>(id: ID, stream: Stream.Stream<Uint8Array, E>) =>
       Effect.gen(function* () {
-        const id = ID.create()
         const part = `${file(id)}.part`
         const unavailable = (cause: unknown) =>
           new UnavailableError({ message: `Could not store blob ${id}: ${String(cause)}` })
@@ -97,7 +96,7 @@ const layer = Layer.effect(
       Effect.flatMap((entries) =>
         FileRetention.cleanup(
           fs,
-          entries.filter((entry) => entry.startsWith("blob_")).map((entry) => path.join(directory, entry)),
+          entries.filter((entry) => entry.startsWith("video_")).map((entry) => path.join(directory, entry)),
           RETENTION,
         ),
       ),

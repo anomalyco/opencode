@@ -145,7 +145,9 @@ export interface VideoCompleted extends Schema.Schema.Type<typeof VideoCompleted
 export const VideoCompleted = Schema.Struct({
   id: VideoID,
   status: Schema.Literal("completed"),
-  blob: BlobStore.Info.annotate(description("The finished video. Read it with GET /api/experimental/blob/:id")),
+  blobs: Schema.Array(BlobStore.Info).annotate(
+    description("The finished videos, usually one. Read each with GET /api/experimental/blob/:id"),
+  ),
 }).annotate({ identifier: "Generate.VideoCompleted" })
 
 export interface VideoError extends Schema.Schema.Type<typeof VideoError> {}

@@ -25,7 +25,7 @@ const generate = makeLocationNode({
       video: {
         start: () => Effect.succeed({ id: "provider_1" }),
         status: () => Effect.succeed({ status: "completed" }),
-        result: () => Effect.succeed({ mime: "video/mp4", stream: Stream.make(video) }),
+        result: () => Effect.succeed([{ mime: "video/mp4", stream: Stream.make(video) }]),
       },
     }),
   ),
@@ -77,11 +77,14 @@ it.live("generates a video in the background and serves its blob with Range and 
       call(`${base}/generate/video/${data.id}`).pipe(
         Effect.flatMap((response) => Effect.promise(() => response.json())),
       ),
-      (body: { data: { status: string; blob?: { id: string } } }) => body.data.status !== "running",
+      (body: { data: Record<string, unknown> }) => body.data.status !== "running",
     )
-    expect(completed.data).toMatchObject({ id: data.id, status: "completed", blob: { mime: "video/mp4", bytes: 20 } })
-    const blob = completed.data.blob?.id ?? ""
-    expect(blob.startsWith("blob_")).toBe(true)
+    const blob = `${data.id}_0`
+    expect(completed.data).toEqual({
+      id: data.id,
+      status: "completed",
+      blobs: [{ id: blob, mime: "video/mp4", bytes: 20, expiresAt: expect.any(Number) }],
+    })
     const route = `${base}/blob/${blob}`
 
     const full = yield* call(route)
@@ -109,13 +112,19 @@ it.live("generates a video in the background and serves its blob with Range and 
     expect(cached.status).toBe(304)
     expect((yield* Effect.promise(() => cached.arrayBuffer())).byteLength).toBe(0)
 
-    // Once its file is gone, the blob is gone.
+    // A restarted server reads the finished job back from its blobs.
+    const restarted = yield* serve(dir, true)
+    const reread = yield* Effect.promise(() => restarted(new Request(`${base}/generate/video/${data.id}`)))
+    expect(((yield* Effect.promise(() => reread.json())) as { data: unknown }).data).toEqual(completed.data)
+
+    // Once its file is gone, the blob and the job are gone.
     yield* Effect.promise(() => fs.rm(path.join(dir, "data", "blobs", blob)))
     expect((yield* call(route)).status).toBe(404)
+    expect((yield* call(`${base}/generate/video/${data.id}`)).status).toBe(404)
 
     expect((yield* call(`${base}/generate/video/${unknown}`)).status).toBe(404)
     // An ID that isn't one never reaches the disk.
-    expect((yield* call(`${base}/blob/blob_..%2F..%2Fsecret`)).status).toBe(400)
+    expect((yield* call(`${base}/blob/video_..%2F..%2Fsecret`)).status).toBe(400)
   }).pipe(Effect.scoped),
 )
 

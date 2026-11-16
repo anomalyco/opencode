@@ -2214,7 +2214,7 @@ export type SessionMessageToolStateError1 = {
 
 export type GenerateVideoCreateResponse = { data: GenerateVideoRunning }
 
-export type GenerateVideoCompleted = { id: GenerateVideoID; status: "completed"; blob: BlobInfo }
+export type GenerateVideoCompleted = { id: GenerateVideoID; status: "completed"; blobs: Array<BlobInfo> }
 
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer

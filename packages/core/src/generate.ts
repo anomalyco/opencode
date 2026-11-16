@@ -105,11 +105,14 @@ export interface Interface {
   readonly text: (input: TextInput) => Effect.Effect<string, Error>
   readonly image: (input: ImageRequest) => Effect.Effect<ImageResult, Error>
   readonly decisions: (input: DecisionRequest) => Effect.Effect<DecisionResult, Error>
-  /** A video is a job: `start` submits it and returns the provider's job ID, which `status` and `result` read. */
+  /**
+   * A video is a job: `start` submits it and returns the provider's job ID, which `status` and `result` read. `result`
+   * returns every video the job made, at least one.
+   */
   readonly video: {
     readonly start: (input: VideoInput) => Effect.Effect<{ readonly id: string }, Error>
     readonly status: (model: Model.Ref, id: string) => Effect.Effect<VideoStatus, Error>
-    readonly result: (model: Model.Ref, id: string) => Effect.Effect<VideoFile, Error>
+    readonly result: (model: Model.Ref, id: string) => Effect.Effect<readonly VideoFile[], Error>
   }
 }
 
@@ -128,24 +131,26 @@ export const layer = Layer.effect(
     const videos = yield* VideoClient.Service
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
-      const resolved = yield* resolver.resolve(input.model).pipe(
-        Effect.catchTag(
-          [
-            "SessionRunnerModel.VariantUnavailableError",
-            "SessionRunnerModel.UnsupportedPackageError",
-            "SessionRunnerModel.ModelConfigurationError",
-            "SessionRunnerModel.ModelInitializationError",
-            "SessionRunnerModel.UnresolvedProviderVariablesError",
-            "SessionRunnerModel.UnsupportedCompactionError",
-          ],
-          (error) =>
-            Effect.fail(
-              input.model
-                ? resolutionError(input.model, "chat", error)
-                : new UnavailableError({ message: error.message, service: error.providerID }),
-            ),
-        ),
-      )
+      const resolved = yield* resolver
+        .resolve(input.model)
+        .pipe(
+          Effect.catchTag(
+            [
+              "SessionRunnerModel.VariantUnavailableError",
+              "SessionRunnerModel.UnsupportedPackageError",
+              "SessionRunnerModel.ModelConfigurationError",
+              "SessionRunnerModel.ModelInitializationError",
+              "SessionRunnerModel.UnresolvedProviderVariablesError",
+              "SessionRunnerModel.UnsupportedCompactionError",
+            ],
+            (error) =>
+              Effect.fail(
+                input.model
+                  ? resolutionError(input.model, "chat", error)
+                  : new UnavailableError({ message: error.message, service: error.providerID }),
+              ),
+          ),
+        )
       if (!resolved && input.model) return yield* missing(input.model, "chat")
       if (!resolved)
         return yield* new UnavailableError({ message: "No model specified and no supported model is available" })
@@ -190,18 +195,20 @@ export const layer = Layer.effect(
         .pipe(Effect.mapError((error) => resolutionError(input.model, "image", error)))
       if (!model) return yield* missing(input.model, "image")
       // `ai.image.generate` turns an invalid request into a typed error; building it with `ai.image.request` would throw.
-      const response = yield* ai.image.generate({
-        model,
-        prompt: input.prompt,
-        images: input.images?.map((file) => Media.base64(file.data, file.mime)),
-        n: input.n,
-        aspect: input.aspect,
-        resolution: input.resolution,
-      }).pipe(
-        Effect.provideService(ImageClient.Service, images),
-        ModelRetry.retryOneShot,
-        Effect.mapError((error) => providerError(input.model, error)),
-      )
+      const response = yield* ai.image
+        .generate({
+          model,
+          prompt: input.prompt,
+          images: input.images?.map((file) => Media.base64(file.data, file.mime)),
+          n: input.n,
+          aspect: input.aspect,
+          resolution: input.resolution,
+        })
+        .pipe(
+          Effect.provideService(ImageClient.Service, images),
+          ModelRetry.retryOneShot,
+          Effect.mapError((error) => providerError(input.model, error)),
+        )
       // URL results are downloaded so every image comes back inline, like the request's own files.
       // Materializing also detects the type of a downloaded image from its bytes when the URL didn't say.
       const outputs = yield* Effect.forEach(response.images, (asset) =>
@@ -228,19 +235,21 @@ export const layer = Layer.effect(
         .resolveDecision(input.model)
         .pipe(Effect.mapError((error) => resolutionError(input.model, "decision", error)))
       if (!model) return yield* missing(input.model, "decision")
-      const response = yield* ai.decision.generate({
-        model,
-        input: input.input.map((part) =>
-          part.type === "file"
-            ? { type: "media" as const, media: Media.base64(part.data, part.mime), filename: part.name }
-            : part,
-        ),
-        questions: input.questions,
-      }).pipe(
-        Effect.provideService(DecisionClient.Service, decisionClient),
-        ModelRetry.retryOneShot,
-        Effect.mapError((error) => providerError(input.model, error)),
-      )
+      const response = yield* ai.decision
+        .generate({
+          model,
+          input: input.input.map((part) =>
+            part.type === "file"
+              ? { type: "media" as const, media: Media.base64(part.data, part.mime), filename: part.name }
+              : part,
+          ),
+          questions: input.questions,
+        })
+        .pipe(
+          Effect.provideService(DecisionClient.Service, decisionClient),
+          ModelRetry.retryOneShot,
+          Effect.mapError((error) => providerError(input.model, error)),
+        )
       const usage = response.usage
       return {
         answers: response.answers,
@@ -268,22 +277,23 @@ export const layer = Layer.effect(
 
     const videoResult = Effect.fnUntraced(function* (ref: Model.Ref, id: string) {
       const response = yield* video(ref, (model) => ai.video.result(model, id))
-      const file = response.video
-      if (!file)
+      if (response.videos.length === 0)
         return yield* new ProviderRequestError({
           providerID: ref.providerID,
           reason: "provider",
           message: `${ref.providerID}/${ref.id} returned no video`,
         })
-      return {
-        mime: file.mediaType,
-        width: file.info?.width,
-        height: file.info?.height,
-        stream: file.stream().pipe(
-          Stream.provideService(RequestExecutor.Service, executor),
-          Stream.mapError((error) => providerError(ref, error)),
-        ),
-      } satisfies VideoFile
+      return response.videos.map(
+        (file): VideoFile => ({
+          mime: file.mediaType,
+          width: file.info?.width,
+          height: file.info?.height,
+          stream: file.stream().pipe(
+            Stream.provideService(RequestExecutor.Service, executor),
+            Stream.mapError((error) => providerError(ref, error)),
+          ),
+        }),
+      )
     })
 
     const credentials = <A, E, R>(effect: Effect.Effect<A, E | Integration.AuthorizationError, R>) =>

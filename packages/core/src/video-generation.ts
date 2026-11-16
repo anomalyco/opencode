@@ -29,8 +29,8 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/VideoGeneration") {}
 
 /**
- * Jobs live in memory only: a restart forgets them, running or finished. A finished video's blob stays readable by
- * its own ID until it expires.
+ * Running and failed jobs live in memory only: a restart forgets them, and a running job's videos are never collected.
+ * A finished job is read from its blobs, so it outlives a restart until they expire.
  *
  * TODO: record jobs durably, so a restart resumes polling them.
  */
@@ -54,19 +54,47 @@ const layer = Layer.effect(
         ),
       )
 
+    // Each video becomes blob `<id>_<n>`, so a restarted server finds them from the job's ID alone.
+    const blobID = (id: VideoID, index: number) => BlobStore.ID.make(`${id}_${index}`)
+
     const store = Effect.fnUntraced(function* (id: VideoID, model: Model.Ref, providerID: string) {
-      const video = yield* generate((service) => service.video.result(model, providerID))
-      const blob = yield* blobs.write(video.stream)
-      if (blob.bytes === 0) {
-        yield* blobs.remove(blob.id)
-        return yield* new Generate.ProviderRequestError({
-          providerID: model.providerID,
-          reason: "provider",
-          message: "The provider returned an empty video",
-        })
-      }
-      return { id, status: "completed", blob } satisfies VideoJob
+      const videos = yield* generate((service) => service.video.result(model, providerID))
+      const stored = yield* Effect.forEach(videos, (video, index) =>
+        blobs.write(blobID(id, index), video.stream).pipe(
+          Effect.flatMap((blob) =>
+            blob.bytes > 0
+              ? Effect.succeed(blob)
+              : Effect.fail(
+                  new Generate.ProviderRequestError({
+                    providerID: model.providerID,
+                    reason: "provider",
+                    message: "The provider returned an empty video",
+                  }),
+                ),
+          ),
+        ),
+      ).pipe(
+        // All or nothing: a job never reports only some of its videos.
+        Effect.onError(() => Effect.forEach(videos, (_, index) => blobs.remove(blobID(id, index)), { discard: true })),
+      )
+      return { id, status: "completed", blobs: stored } satisfies VideoJob
     })
+
+    // A finished job outlives a restart through its blobs: `<id>_0`, `<id>_1`, … up to the first missing one.
+    const stored = (id: VideoID): Effect.Effect<readonly BlobStore.Info[]> =>
+      Effect.gen(function* () {
+        const found: BlobStore.Info[] = []
+        while (true) {
+          const blob = yield* blobs.read(blobID(id, found.length)).pipe(Effect.option)
+          if (Option.isNone(blob)) return found
+          found.push({
+            id: blob.value.id,
+            mime: blob.value.mime,
+            bytes: blob.value.bytes,
+            expiresAt: blob.value.expiresAt,
+          })
+        }
+      })
 
     // A status read that fails is retried at the next interval: the provider may be briefly unavailable.
     const poll = (id: VideoID, model: Model.Ref, providerID: string) =>
@@ -119,8 +147,11 @@ const layer = Layer.effect(
           const running = { id, status: "running" } as const
           jobs.set(id, running)
           yield* Deferred.succeed(submitted, running)
-          // Forgotten with its blob, so the map holds at most one retention's worth of jobs.
-          jobs.set(id, yield* settle(id, input.model, started.id))
+          const settled = yield* settle(id, input.model, started.id)
+          // A finished job's blobs are its record from here on.
+          if (settled.status === "completed") return jobs.delete(id)
+          // A failure is kept as long as a blob would be, so the map holds at most one retention's worth of jobs.
+          jobs.set(id, settled)
           yield* Effect.sleep(BlobStore.RETENTION)
           jobs.delete(id)
         }).pipe(
@@ -134,8 +165,10 @@ const layer = Layer.effect(
 
     const get = Effect.fn("VideoGeneration.get")(function* (id: VideoID) {
       const job = jobs.get(id)
-      if (!job) return yield* new NotFoundError({ id, message: `Video not found: ${id}` })
-      return job
+      if (job) return job
+      const found = yield* stored(id)
+      if (found.length === 0) return yield* new NotFoundError({ id, message: `Video not found: ${id}` })
+      return { id, status: "completed", blobs: found } satisfies VideoJob
     })
 
     return Service.of({ start, get })

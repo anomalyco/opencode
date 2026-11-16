@@ -16301,7 +16301,7 @@
       },
       "Blob.ID": {
         "type": "string",
-        "pattern": "^blob_[0-9a-f]{12}[0-9A-Za-z]{14}$"
+        "pattern": "^video_[0-9a-f]{12}[0-9A-Za-z]{14}_(0|[1-9][0-9]{0,2})$"
       },
       "Blob.Info": {
         "type": "object",
@@ -16321,8 +16321,7 @@
           }
         },
         "required": ["id", "mime", "bytes", "expiresAt"],
-        "additionalProperties": false,
-        "description": "The finished video. Read it with GET /api/experimental/blob/:id"
+        "additionalProperties": false
       },
       "BlobNotFoundErrorEncoded": {
         "type": "object",
@@ -19507,11 +19506,15 @@
             "type": "string",
             "enum": ["completed"]
           },
-          "blob": {
-            "$ref": "#/components/schemas/Blob.Info"
+          "blobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Blob.Info"
+            },
+            "description": "The finished videos, usually one. Read each with GET /api/experimental/blob/:id"
           }
         },
-        "required": ["id", "status", "blob"],
+        "required": ["id", "status", "blobs"],
         "additionalProperties": false
       },
       "Generate.VideoError": {
