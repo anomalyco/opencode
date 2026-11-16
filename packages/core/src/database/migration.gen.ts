@@ -62,6 +62,7 @@ import m59 from "./migration/20261115165607_step-ownership.js"
 import m60 from "./migration/20261115180731_step-parking.js"
 import m61 from "./migration/20261115190335_ambiguous_vapor.js"
 import m62 from "./migration/20261116083730_session_resume_step.js"
+import m63 from "./migration/20261116101937_durable-permission.js"
 
 export const migrations = [
   m00,
@@ -127,4 +128,5 @@ export const migrations = [
   m60,
   m61,
   m62,
+  m63,
 ] satisfies DatabaseMigration.Migration[]

@@ -148,6 +148,7 @@ describe("public event manifest", () => {
         "session.step.parked.1",
         "session.step.settled.1",
         "session.question.resolved.1",
+        "session.permission.resolved.1",
         "session.step.failed.1",
         "session.text.started.1",
         "session.text.ended.1",
@@ -175,6 +176,7 @@ describe("public event manifest", () => {
       SessionEvent.Step.Parked,
       SessionEvent.Step.Settled,
       SessionEvent.QuestionResolution.Resolved,
+      SessionEvent.PermissionResolution.Resolved,
     ])
     expect(SessionEvent.UsageRecorded.durability).toBe("durable")
     expect(EventManifest.Durable.get("session.usage.recorded.1")).toBe(SessionEvent.UsageRecorded)

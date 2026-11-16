@@ -158,7 +158,12 @@ export const make = Effect.gen(function* () {
               restore(executeTool(event, cancel)).pipe(
                 Effect.flatMap((result) => {
                   if ("prepared" in result) {
-                    questions.push({ callID: event.id, questionID: Form.ID.create(), prepared: result.prepared })
+                    questions.push({
+                      callID: event.id,
+                      questionID: Form.ID.create(),
+                      prepared: result.prepared,
+                      ...(result.permission ? { permission: result.permission } : {}),
+                    })
                     return Effect.void
                   }
                   return toolOutput

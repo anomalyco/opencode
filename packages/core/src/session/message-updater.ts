@@ -50,7 +50,7 @@ const projectTerminalSnapshot = (draft: DraftAssistant, event: SessionEvent.Step
 // Question parking and settlement have private transactional SQL projectors.
 type ProjectedEvent = Exclude<
   SessionEvent.DurableEvent,
-  SessionEvent.Step.Parked | SessionEvent.Step.Settled
+  SessionEvent.Step.Parked | SessionEvent.Step.Settled | SessionEvent.PermissionResolution.Resolved
 >
 
 export function update(adapter: Adapter, event: ProjectedEvent) {

@@ -80,7 +80,11 @@ export interface Prepared<Event = SessionRequest> {
   readonly prepareAuthorizedQuestion?: (
     input: Parameters<Tool.Snapshot["execute"]>[0],
   ) => Effect.Effect<
-    { readonly prepared: QuestionTool.Prepared } | { readonly outcome: Tool.NormalizedResult },
+    | {
+        readonly prepared: QuestionTool.Prepared
+        readonly permission?: { readonly request: Permission.Request; readonly agent?: Agent.ID }
+      }
+    | { readonly outcome: Tool.NormalizedResult },
     ExecuteError
   >
 }

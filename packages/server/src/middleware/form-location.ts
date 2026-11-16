@@ -1,5 +1,7 @@
 import { Instance } from "@opencode/core/instance/service"
 import { LocationServiceMap } from "@opencode/core/location-services"
+import { Database } from "@opencode/core/database/database"
+import { Form } from "@opencode/core/form"
 import { Session } from "@opencode/core/session"
 import { LocationNotFoundError, InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { Effect, Layer } from "effect"
@@ -18,6 +20,7 @@ export const formLocationLayer = Layer.effect(
   FormLocationMiddleware,
   Effect.gen(function* () {
     const sessions = yield* Session.Service
+    const db = (yield* Database.Service).db
     const instances = yield* Instance.Service
     const locations = yield* LocationServiceMap.Service
 
@@ -33,10 +36,10 @@ export const formLocationLayer = Layer.effect(
         }
 
         const session = yield* sessionInfo(sessions, route.params.sessionID)
-        // Forms live in memory, so a Session without live capabilities has none pending. Listing must
-        // not boot its Location: clients poll whole subagent trees, including deleted worktrees.
+        // Read durable Questions without booting a cold Location. Ordinary Forms
+        // live in memory; clients also poll Sessions whose worktrees were deleted.
         if (options.endpoint.identifier === "session.form.list" && instances.live && !(yield* instances.live(session)))
-          return HttpServerResponse.jsonUnsafe({ data: [] })
+          return HttpServerResponse.jsonUnsafe({ data: yield* Form.pendingQuestions(db, session.id) })
         return yield* effect.pipe(instances.provide(session), locationErrors)
       }),
     )

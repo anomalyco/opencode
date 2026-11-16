@@ -318,12 +318,18 @@ class RunnerRebuild extends Context.Service<
 
 const layer = Layer.unwrap(
   Effect.map(RunnerState, (state) => {
+    const authorize = (input: Permission.AssertInput) =>
+      Effect.gen(function* () {
+        state.questionAuthorizations.push(input)
+        yield* state.questionAuthorization
+      })
     const permission = permissionLayer({
-      assert: (input) =>
-        Effect.gen(function* () {
-          state.questionAuthorizations.push(input)
-          yield* state.questionAuthorization
-        }),
+      prepare: (input) =>
+        authorize(input).pipe(
+          Effect.orDie,
+          Effect.as(undefined),
+        ),
+      assert: authorize,
     })
     const modelTransport = Layer.succeed(
       SessionModelTransport.Service,

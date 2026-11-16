@@ -76,7 +76,14 @@ export interface Snapshot {
   /** Resolve once, then prepare an eligible Question or execute the ordinary tool. */
   readonly prepareAuthorizedQuestion?: (
     input: Parameters<Snapshot["execute"]>[0],
-  ) => Effect.Effect<{ readonly prepared: QuestionTool.Prepared } | { readonly outcome: NormalizedResult }, Tool.Error>
+  ) => Effect.Effect<
+    | {
+        readonly prepared: QuestionTool.Prepared
+        readonly permission?: { readonly request: Permission.Request; readonly agent?: Agent.ID }
+      }
+    | { readonly outcome: NormalizedResult },
+    Tool.Error
+  >
   readonly execute: (input: {
     readonly sessionID: SessionSchema.ID
     readonly agent: Agent.ID
@@ -343,14 +350,14 @@ const layer = Layer.effect(
               if (!QuestionTool.eligible(resolved.tool) || (yield* hooks.has("tool", "execute.after")))
                 return { outcome: yield* executeTool(resolved.tool, resolved.name, resolved.input, resolved.context) }
               const prepared = yield* QuestionTool.prepare(resolved.tool, resolved.input)
-              yield* permission
-                .assert({
+              const request = yield* permission
+                .prepare({
                   action: "question",
                   resources: ["*"],
                   ...Permission.invocation(resolved.context),
                 })
                 .pipe(Effect.mapError((error) => new Tool.Error({ message: "Permission denied: question", error })))
-              return { prepared }
+              return { prepared, ...(request ? { permission: { request, agent: resolved.context.agent } } : {}) }
             }),
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const resolved = yield* resolve(input)

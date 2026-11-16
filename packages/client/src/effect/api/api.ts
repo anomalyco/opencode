@@ -1469,6 +1469,9 @@ export type ExperimentalSessionLogOutput =
                   readonly adapter: "question@1"
                   readonly input: { readonly questions: ReadonlyArray<Question.Prompt> }
                 }
+                readonly permission?:
+                  | { readonly request: Permission.Request; readonly agent?: Agent.ID | undefined }
+                  | undefined
               },
               ...Array<{
                 readonly callID: string
@@ -1477,6 +1480,9 @@ export type ExperimentalSessionLogOutput =
                   readonly adapter: "question@1"
                   readonly input: { readonly questions: ReadonlyArray<Question.Prompt> }
                 }
+                readonly permission?:
+                  | { readonly request: Permission.Request; readonly agent?: Agent.ID | undefined }
+                  | undefined
               }>,
             ]
           }
@@ -1514,6 +1520,26 @@ export type ExperimentalSessionLogOutput =
             readonly terminal:
               | { readonly status: "answered"; readonly answer: Form.Answer }
               | { readonly status: "cancelled"; readonly message?: string | undefined }
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.permission.resolved"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly assistantMessageID: SessionMessage.ID
+            readonly generation: number
+            readonly callID: string
+            readonly requestID: Permission.ID
+            readonly reply: Permission.Reply
+            readonly save?: boolean | undefined
+            readonly message?: string | undefined
           }
         }
     )

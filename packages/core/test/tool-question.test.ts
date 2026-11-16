@@ -33,22 +33,25 @@ const questionInput = {
     },
   ],
 }
-const permission = permissionLayer({
-  assert: (input) =>
-    Effect.sync(() => assertions.push(input)).pipe(
-      Effect.andThen(
-        deny
-          ? Effect.fail(
-              new Permission.BlockedError({
-                rules: [],
-                permission: input.action,
-                resources: input.resources,
-              }),
-            )
-          : Effect.void,
-      ),
+const authorize = (input: Permission.AssertInput) =>
+  Effect.sync(() => assertions.push(input)).pipe(
+    Effect.andThen(
+      deny
+        ? Effect.fail(
+            new Permission.BlockedError({
+              rules: [],
+              permission: input.action,
+              resources: input.resources,
+            }),
+          )
+        : Effect.void,
     ),
+  )
+const permission = permissionLayer({
+  assert: authorize,
+  prepare: (input) => authorize(input).pipe(Effect.as(undefined)),
 })
+
 const form = Layer.mock(Form.Service, {
   ask: (input: Form.CreateInput) => {
     asks.push(input)

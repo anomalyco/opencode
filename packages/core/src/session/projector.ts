@@ -22,6 +22,7 @@ import {
   SessionPartTable,
   SessionPendingStepTable,
   SessionQuestionTable,
+  SessionPermissionTable,
   SessionTable,
   type SessionPartData,
 } from "./sql.js"
@@ -41,6 +42,9 @@ import { ProjectTable } from "../project/sql.js"
 import { SessionParking } from "./parking.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Form } from "../form.js"
+import { Permission } from "@opencode/schema/permission"
+import { PermissionSaved } from "@opencode/schema/permission-saved"
+import { PermissionTable } from "../permission/sql.js"
 
 type DatabaseService = Database.Interface["db"]
 type MessageEvent = Exclude<
@@ -50,6 +54,7 @@ type MessageEvent = Exclude<
   | SessionEvent.Step.Parked
   | SessionEvent.Step.Settled
   | SessionEvent.QuestionResolution.Resolved
+  | SessionEvent.PermissionResolution.Resolved
 >
 
 type StorageEvent =
@@ -57,6 +62,7 @@ type StorageEvent =
   | SessionEvent.Step.Parked
   | SessionEvent.Step.Settled
   | SessionEvent.QuestionResolution.Resolved
+  | SessionEvent.PermissionResolution.Resolved
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 const encodeStoredUser = Schema.encodeSync(SessionStored.User)
@@ -398,27 +404,101 @@ const projectParked = Effect.fnUntraced(function* (db: DatabaseService, event: S
     calls.some((call) => !callIDs.includes(call.id) && call.state.status !== "completed" && call.state.status !== "error"))
     return yield* Effect.die(new SessionParking.ConflictError({ message: "Questions require original local running calls; ordinary calls must be settled" }))
 
-  yield* db.insert(SessionPendingStepTable).values({
-    session_id: data.sessionID,
-    assistant_message_id: data.assistantMessageID,
-    generation: data.generation,
-    data,
-  }).run().pipe(Effect.orDie)
-  const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
-  yield* Effect.forEach(data.questions, (question) => Effect.gen(function* () {
-    yield* db.insert(SessionQuestionTable).values({
-      id: question.questionID,
+  const permissions = data.questions.flatMap((question) => (question.permission ? [question.permission.request] : []))
+  if (new Set(permissions.map((request) => request.id)).size !== permissions.length)
+    return yield* Effect.die(new SessionParking.ConflictError({ message: "Permission IDs must be unique" }))
+  for (const question of data.questions) {
+    const request = question.permission?.request
+    if (!request) continue
+    if (
+      request.sessionID !== data.sessionID ||
+      request.action !== "question" ||
+      request.resources.length !== 1 ||
+      request.resources[0] !== "*" ||
+      request.source?.messageID !== data.assistantMessageID ||
+      request.source.id !== question.callID
+    )
+      return yield* Effect.die(
+        new SessionParking.ConflictError({ message: "Permission preflight does not match the original invocation" }),
+      )
+  }
+
+  const reserved = yield* db
+    .select({ id: SessionPermissionTable.id })
+    .from(SessionPermissionTable)
+    .where(
+      or(
+        inArray(
+          SessionPermissionTable.id,
+          permissions.map((request) => request.id),
+        ),
+        inArray(SessionPermissionTable.question_id, questionIDs),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
+  if (reserved)
+    return yield* Effect.die(
+      new SessionParking.ConflictError({ message: "Permission or reserved Question already exists" }),
+    )
+
+  yield* db
+    .insert(SessionPendingStepTable)
+    .values({
       session_id: data.sessionID,
       assistant_message_id: data.assistantMessageID,
       generation: data.generation,
-      call_id: question.callID,
-      prepared: question.prepared,
-    }).run().pipe(Effect.orDie)
-    yield* writes.updateAssistantPart(data.assistantMessageID, { type: "tool", callID: question.callID }, (call) => {
-      if (call.state.status !== "running") return
-      call.state = { ...call.state, status: "waiting", questionID: question.questionID, generation: data.generation }
+      data,
     })
-  }), { discard: true })
+    .run()
+    .pipe(Effect.orDie)
+  const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
+  yield* Effect.forEach(
+    data.questions,
+    (question) =>
+      Effect.gen(function* () {
+        const owner = {
+          session_id: data.sessionID,
+          assistant_message_id: data.assistantMessageID,
+          generation: data.generation,
+          call_id: question.callID,
+          prepared: question.prepared,
+        }
+        if (question.permission) {
+          yield* db
+            .insert(SessionPermissionTable)
+            .values({
+              ...owner,
+              id: question.permission.request.id,
+              question_id: question.questionID,
+              request: question.permission.request,
+              agent: question.permission.agent,
+            })
+            .run()
+            .pipe(Effect.orDie)
+        }
+        if (!question.permission)
+          yield* db
+            .insert(SessionQuestionTable)
+            .values({ ...owner, id: question.questionID })
+            .run()
+            .pipe(Effect.orDie)
+        yield* writes.updateAssistantPart(
+          data.assistantMessageID,
+          { type: "tool", callID: question.callID },
+          (call) => {
+            if (call.state.status !== "running") return
+            call.state = {
+              ...call.state,
+              status: "waiting",
+              questionID: question.questionID,
+              generation: data.generation,
+            }
+          },
+        )
+      }),
+    { discard: true },
+  )
   yield* setSession(db, event.data.sessionID, { time_updated: event.created })
 })
 
@@ -559,6 +639,102 @@ const projectStepSettled = Effect.fnUntraced(function* (db: DatabaseService, eve
   if (!cursor) return yield* conflict("Parked Step continuation cursor is already assigned")
 })
 
+/** One human cancellation settles every remaining wait in the original Step. */
+const cancelParkedStep = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  event: SessionEvent.QuestionResolution.Resolved | SessionEvent.PermissionResolution.Resolved,
+  pending: typeof SessionPendingStepTable.$inferSelect,
+  assistant: SessionMessage.Info,
+  terminal: { readonly message?: string },
+  kind: "question" | "permission",
+) {
+  const data = event.data
+  const conflict = (message: string) => Effect.die(new SessionParking.ConflictError({ message }))
+  const parked = Schema.decodeUnknownSync(SessionEvent.Step.ParkedPayload)(pending.data)
+  const message =
+    terminal.message ??
+    (kind === "permission" ? "The user declined this tool call" : "The user dismissed this question")
+  const feedback = kind === "permission" ? Boolean(terminal.message) : terminal.message !== undefined
+  const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
+  yield* db
+    .update(SessionQuestionTable)
+    .set({ status: "cancelled", cancel_message: terminal.message ?? null })
+    .where(
+      and(
+        eq(SessionQuestionTable.session_id, data.sessionID),
+        eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+        eq(SessionQuestionTable.generation, data.generation),
+        eq(SessionQuestionTable.status, "pending"),
+      ),
+    )
+    .run()
+    .pipe(Effect.orDie)
+  yield* db
+    .update(SessionPermissionTable)
+    .set({ status: "reject", message: terminal.message ?? null })
+    .where(
+      and(
+        eq(SessionPermissionTable.session_id, data.sessionID),
+        eq(SessionPermissionTable.assistant_message_id, data.assistantMessageID),
+        eq(SessionPermissionTable.generation, data.generation),
+        eq(SessionPermissionTable.status, "pending"),
+      ),
+    )
+    .run()
+    .pipe(Effect.orDie)
+  if (assistant.type !== "assistant") return yield* conflict("Question owner is not an assistant")
+  const finalized = produce(assistant, (draft) => {
+    for (const part of draft.content) {
+      if (part.type !== "tool" || part.state.status !== "waiting") continue
+      part.time.completed = DateTime.makeUnsafe(event.created)
+      part.state = {
+        status: "error",
+        input: part.state.input,
+        error: {
+          type: feedback ? (kind === "permission" ? "permission.rejected" : "QuestionTool.Cancelled") : "aborted",
+          message,
+        },
+      }
+    }
+    draft.time.completed = DateTime.makeUnsafe(event.created)
+    draft.finish = parked.finish
+    draft.rawFinish = parked.rawFinish
+    draft.native = castDraft(parked.native)
+    draft.cost = parked.cost
+    draft.tokens = castDraft(parked.tokens)
+    if (!feedback) draft.error = { type: "aborted", message }
+    if (parked.snapshot || parked.files)
+      draft.snapshot = {
+        ...draft.snapshot,
+        end: parked.snapshot,
+        files: parked.files ? Array.from(parked.files) : undefined,
+      }
+  })
+  // Envelope-only writes deliberately preserve part rows. Persist cancelled
+  // tool parts through the content writer before finalizing the envelope.
+  yield* writes.replaceAssistantParts(data.assistantMessageID, finalized.content)
+  yield* writes.updateAssistant(finalized)
+  yield* applyUsage(db, data.sessionID, parked, event.created)
+  yield* db
+    .delete(SessionPendingStepTable)
+    .where(eq(SessionPendingStepTable.session_id, data.sessionID))
+    .run()
+    .pipe(Effect.orDie)
+  yield* setSession(
+    db,
+    data.sessionID,
+    feedback
+      ? { resume_step: (parked.step ?? 1) + 1 }
+      : {
+          resume_step: null,
+          time_suspended: null,
+          resume_attempts: 0,
+          time_idle: sql`max(${event.created}, coalesce(${SessionTable.time_idle} + 1, ${event.created}))`,
+          idle_outcome: "interrupted",
+        },
+  )
+})
+
 /** Atomically admit the resolution and finalize the original tool when it has a materialized outcome. */
 const projectQuestionResolved = Effect.fnUntraced(function* (
   db: DatabaseService,
@@ -640,71 +816,7 @@ const projectQuestionResolved = Effect.fnUntraced(function* (
   }
 
   if (data.terminal.status === "cancelled") {
-    const parked = Schema.decodeUnknownSync(SessionEvent.Step.ParkedPayload)(pending.data)
-    const message = data.terminal.message ?? "The user dismissed this question"
-    const feedback = data.terminal.message !== undefined
-    const writes = (yield* partRowsEnabled) ? partRowWrites(db, event) : messageWrites(db, event)
-    yield* db
-      .update(SessionQuestionTable)
-      .set({ status: "cancelled", cancel_message: data.terminal.message ?? null })
-      .where(
-        and(
-          eq(SessionQuestionTable.session_id, data.sessionID),
-          eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
-          eq(SessionQuestionTable.generation, data.generation),
-          eq(SessionQuestionTable.status, "pending"),
-        ),
-      )
-      .run()
-      .pipe(Effect.orDie)
-    if (assistant.type !== "assistant") return yield* conflict("Question owner is not an assistant")
-    const finalized = produce(assistant, (draft) => {
-      for (const part of draft.content) {
-        if (part.type !== "tool" || part.state.status !== "waiting") continue
-        part.time.completed = DateTime.makeUnsafe(event.created)
-        part.state = {
-          status: "error",
-          input: part.state.input,
-          error: { type: feedback ? "QuestionTool.Cancelled" : "aborted", message },
-        }
-      }
-      draft.time.completed = DateTime.makeUnsafe(event.created)
-      draft.finish = parked.finish
-      draft.rawFinish = parked.rawFinish
-      draft.native = castDraft(parked.native)
-      draft.cost = parked.cost
-      draft.tokens = castDraft(parked.tokens)
-      if (!feedback) draft.error = { type: "aborted", message }
-      if (parked.snapshot || parked.files)
-        draft.snapshot = {
-          ...draft.snapshot,
-          end: parked.snapshot,
-          files: parked.files ? Array.from(parked.files) : undefined,
-        }
-    })
-    // Envelope-only writes deliberately preserve part rows. Persist cancelled
-    // tool parts through the content writer before finalizing the envelope.
-    yield* writes.replaceAssistantParts(data.assistantMessageID, finalized.content)
-    yield* writes.updateAssistant(finalized)
-    yield* applyUsage(db, data.sessionID, parked, event.created)
-    yield* db
-      .delete(SessionPendingStepTable)
-      .where(eq(SessionPendingStepTable.session_id, data.sessionID))
-      .run()
-      .pipe(Effect.orDie)
-    yield* setSession(
-      db,
-      data.sessionID,
-      feedback
-        ? { resume_step: (parked.step ?? 1) + 1 }
-        : {
-            resume_step: null,
-            time_suspended: null,
-            resume_attempts: 0,
-            time_idle: sql`max(${event.created}, coalesce(${SessionTable.time_idle} + 1, ${event.created}))`,
-            idle_outcome: "interrupted",
-          },
-    )
+    yield* cancelParkedStep(db, event, pending, assistant, data.terminal, "question")
     return
   }
 
@@ -740,6 +852,119 @@ const projectQuestionResolved = Effect.fnUntraced(function* (
       metadata: restored.metadata,
     }
   })
+})
+
+/** Replay uses only the admitted preflight and decision, never a plugin or executor. */
+const projectPermissionResolved = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  event: SessionEvent.PermissionResolution.Resolved,
+) {
+  const data = event.data
+  const conflict = (message: string) => Effect.die(new SessionParking.ConflictError({ message }))
+  const permission = yield* db
+    .select()
+    .from(SessionPermissionTable)
+    .where(
+      and(
+        eq(SessionPermissionTable.id, data.requestID),
+        eq(SessionPermissionTable.session_id, data.sessionID),
+        eq(SessionPermissionTable.assistant_message_id, data.assistantMessageID),
+        eq(SessionPermissionTable.generation, data.generation),
+        eq(SessionPermissionTable.call_id, data.callID),
+        eq(SessionPermissionTable.status, "pending"),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
+  const pending = yield* db
+    .select()
+    .from(SessionPendingStepTable)
+    .where(
+      and(
+        eq(SessionPendingStepTable.session_id, data.sessionID),
+        eq(SessionPendingStepTable.assistant_message_id, data.assistantMessageID),
+        eq(SessionPendingStepTable.generation, data.generation),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
+  const owner = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.id, data.assistantMessageID),
+        eq(SessionMessageTable.session_id, data.sessionID),
+        eq(SessionMessageTable.step_started_seq, data.generation),
+      ),
+    )
+    .get()
+    .pipe(Effect.orDie)
+  if (!permission || !pending || !owner) return yield* conflict("Permission is missing, stale, or already resolved")
+  const [full = owner] = yield* SessionHistory.withParts(db, [owner])
+  const assistant = SessionHistory.decodeMessageRowSync(full)
+  const call =
+    assistant.type === "assistant"
+      ? assistant.content.find((part) => part.type === "tool" && part.id === data.callID)
+      : undefined
+  if (
+    !call ||
+    call.type !== "tool" ||
+    call.executed !== false ||
+    call.time.completed !== undefined ||
+    call.state.status !== "waiting" ||
+    call.state.generation !== data.generation ||
+    call.state.questionID !== permission.question_id
+  )
+    return yield* conflict("Original permission invocation is no longer waiting")
+  if (data.reply === "reject") {
+    yield* cancelParkedStep(db, event, pending, assistant, data, "permission")
+    return
+  }
+  const updated = yield* db
+    .update(SessionPermissionTable)
+    .set({ status: data.reply, message: data.message ?? null })
+    .where(and(eq(SessionPermissionTable.id, data.requestID), eq(SessionPermissionTable.status, "pending")))
+    .returning({ id: SessionPermissionTable.id })
+    .get()
+    .pipe(Effect.orDie)
+  if (!updated) return yield* conflict("Permission was concurrently resolved")
+  if (data.reply === "always" && data.save !== false && permission.request.save?.length) {
+    const session = yield* db
+      .select({ projectID: SessionTable.project_id })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, data.sessionID))
+      .get()
+      .pipe(Effect.orDie)
+    if (!session) return yield* conflict("Permission Session is missing")
+    yield* db
+      .insert(PermissionTable)
+      .values(
+        permission.request.save.map((resource, index) => ({
+          id: PermissionSaved.ID.make(`psv_${data.requestID}_${index}`),
+          project_id: session.projectID,
+          action: permission.request.action,
+          resource,
+          time_created: event.created,
+          time_updated: event.created,
+        })),
+      )
+      .onConflictDoNothing()
+      .run()
+      .pipe(Effect.orDie)
+  }
+  yield* db
+    .insert(SessionQuestionTable)
+    .values({
+      id: permission.question_id,
+      session_id: data.sessionID,
+      assistant_message_id: data.assistantMessageID,
+      generation: data.generation,
+      call_id: data.callID,
+      prepared: permission.prepared,
+    })
+    .run()
+    .pipe(Effect.orDie)
 })
 
 function run(db: DatabaseService, event: MessageEvent) {
@@ -1565,6 +1790,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Step.Parked, (event) => projectParked(db, event))
     yield* bus.project(SessionEvent.Step.Settled, (event) => projectStepSettled(db, event))
     yield* bus.project(SessionEvent.QuestionResolution.Resolved, (event) => projectQuestionResolved(db, event))
+    yield* bus.project(SessionEvent.PermissionResolution.Resolved, (event) => projectPermissionResolved(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
         yield* requireNoPending(db, event.data.sessionID)
@@ -1643,11 +1869,123 @@ const layer = Layer.effectDiscard(
         yield* SessionBlob.releaseFrom(db, event.data.sessionID, boundary.seq)
       }),
     )
-    yield* bus.subscribe([SessionEvent.Step.Parked, SessionEvent.QuestionResolution.Resolved]).pipe(
-      Stream.runForEach((event) =>
-        Effect.gen(function* () {
-          if (event.type === SessionEvent.Step.Parked.type) {
+    yield* bus
+      .subscribe([
+        SessionEvent.Step.Parked,
+        SessionEvent.QuestionResolution.Resolved,
+        SessionEvent.PermissionResolution.Resolved,
+      ])
+      .pipe(
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            if (event.type === SessionEvent.Step.Parked.type) {
+              const data = event.data
+              const questions = yield* db
+                .select()
+                .from(SessionQuestionTable)
+                .where(
+                  and(
+                    eq(SessionQuestionTable.session_id, data.sessionID),
+                    eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+                    eq(SessionQuestionTable.generation, data.generation),
+                  ),
+                )
+                .all()
+                .pipe(Effect.orDie)
+              yield* Effect.forEach(
+                questions,
+                (question) =>
+                  data.questions.some((item) => item.callID === question.call_id && !item.permission)
+                    ? bus.publish(Form.Event.Created, {
+                        form: Form.fromQuestion(question),
+                      })
+                    : Effect.void,
+                { discard: true },
+              )
+            }
+            if (event.type === SessionEvent.Step.Parked.type) {
+              for (const question of event.data.questions) {
+                if (question.permission) yield* bus.publish(Permission.Event.Asked, question.permission.request)
+              }
+              return
+            }
+            const permissions = yield* db
+              .select()
+              .from(SessionPermissionTable)
+              .where(
+                and(
+                  eq(SessionPermissionTable.session_id, event.data.sessionID),
+                  eq(SessionPermissionTable.assistant_message_id, event.data.assistantMessageID),
+                  eq(SessionPermissionTable.generation, event.data.generation),
+                ),
+              )
+              .all()
+              .pipe(Effect.orDie)
+            if (event.type === SessionEvent.PermissionResolution.Resolved.type) {
+              const data = event.data
+              if (data.reply !== "reject") {
+                yield* bus.publish(Permission.Event.Replied, {
+                  sessionID: data.sessionID,
+                  requestID: data.requestID,
+                  reply: data.reply,
+                })
+                const question = yield* db
+                  .select()
+                  .from(SessionQuestionTable)
+                  .where(
+                    and(
+                      eq(SessionQuestionTable.session_id, data.sessionID),
+                      eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
+                      eq(SessionQuestionTable.generation, data.generation),
+                      eq(SessionQuestionTable.call_id, data.callID),
+                    ),
+                  )
+                  .get()
+                  .pipe(Effect.orDie)
+                if (question) yield* bus.publish(Form.Event.Created, { form: Form.fromQuestion(question) })
+                return
+              }
+            }
+            for (const permission of permissions) {
+              if (permission.status !== "reject") continue
+              yield* bus.publish(Permission.Event.Replied, {
+                sessionID: permission.session_id,
+                requestID: permission.id,
+                reply: "reject",
+              })
+            }
+            if (event.type === SessionEvent.PermissionResolution.Resolved.type) {
+              const questions = yield* db
+                .select()
+                .from(SessionQuestionTable)
+                .where(
+                  and(
+                    eq(SessionQuestionTable.session_id, event.data.sessionID),
+                    eq(SessionQuestionTable.assistant_message_id, event.data.assistantMessageID),
+                    eq(SessionQuestionTable.generation, event.data.generation),
+                    eq(SessionQuestionTable.status, "cancelled"),
+                  ),
+                )
+                .all()
+                .pipe(Effect.orDie)
+              for (const question of questions)
+                yield* bus.publish(Form.Event.Cancelled, {
+                  id: question.id,
+                  sessionID: question.session_id,
+                })
+              yield* publishSessionUsage(db, bus, event.data.sessionID)
+              return
+            }
+            if (event.type !== SessionEvent.QuestionResolution.Resolved.type) return
             const data = event.data
+            if (data.terminal.status === "answered") {
+              yield* bus.publish(Form.Event.Replied, {
+                id: data.questionID,
+                sessionID: data.sessionID,
+                answer: data.terminal.answer,
+              })
+              return
+            }
             const questions = yield* db
               .select()
               .from(SessionQuestionTable)
@@ -1656,6 +1994,7 @@ const layer = Layer.effectDiscard(
                   eq(SessionQuestionTable.session_id, data.sessionID),
                   eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
                   eq(SessionQuestionTable.generation, data.generation),
+                  eq(SessionQuestionTable.status, "cancelled"),
                 ),
               )
               .all()
@@ -1663,49 +2002,17 @@ const layer = Layer.effectDiscard(
             yield* Effect.forEach(
               questions,
               (question) =>
-                bus.publish(Form.Event.Created, {
-                  form: Form.fromQuestion(question),
+                bus.publish(Form.Event.Cancelled, {
+                  id: question.id,
+                  sessionID: question.session_id,
                 }),
               { discard: true },
             )
-          }
-          if (event.type !== SessionEvent.QuestionResolution.Resolved.type) return
-          const data = event.data
-          if (data.terminal.status === "answered") {
-            yield* bus.publish(Form.Event.Replied, {
-              id: data.questionID,
-              sessionID: data.sessionID,
-              answer: data.terminal.answer,
-            })
-            return
-          }
-          const questions = yield* db
-            .select()
-            .from(SessionQuestionTable)
-            .where(
-              and(
-                eq(SessionQuestionTable.session_id, data.sessionID),
-                eq(SessionQuestionTable.assistant_message_id, data.assistantMessageID),
-                eq(SessionQuestionTable.generation, data.generation),
-                eq(SessionQuestionTable.status, "cancelled"),
-              ),
-            )
-            .all()
-            .pipe(Effect.orDie)
-          yield* Effect.forEach(
-            questions,
-            (question) =>
-              bus.publish(Form.Event.Cancelled, {
-                id: question.id,
-                sessionID: question.session_id,
-              }),
-            { discard: true },
-          )
-          yield* publishSessionUsage(db, bus, data.sessionID)
-        }),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
+            yield* publishSessionUsage(db, bus, data.sessionID)
+          }),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      )
     yield* bus
       .subscribe([
         SessionEvent.Step.Ended,

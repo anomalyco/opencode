@@ -168,6 +168,39 @@ export const SessionQuestionTable = sqliteTable(
   ],
 )
 
+/** Authorization and its continuation share the original assistant generation. */
+export const SessionPermissionTable = sqliteTable(
+  "session_permission",
+  {
+    id: text().$type<Permission.ID>().primaryKey(),
+    session_id: text().$type<SessionSchema.ID>().notNull(),
+    assistant_message_id: text().$type<SessionMessage.ID>().notNull(),
+    generation: integer().notNull(),
+    call_id: text().notNull(),
+    question_id: text().$type<Form.ID>().notNull(),
+    prepared: text({ mode: "json" }).$type<typeof QuestionContinuation.Prepared.Encoded>().notNull(),
+    request: text({ mode: "json" }).$type<Permission.Request>().notNull(),
+    agent: text().$type<Agent.ID>(),
+    status: text({ enum: ["pending", "once", "always", "reject"] })
+      .notNull()
+      .default("pending"),
+    message: text(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.session_id, table.assistant_message_id, table.generation],
+      foreignColumns: [SessionMessageTable.session_id, SessionMessageTable.id, SessionMessageTable.step_started_seq],
+    }).onDelete("cascade"),
+    uniqueIndex("session_permission_step_call_unique").on(
+      table.session_id,
+      table.assistant_message_id,
+      table.generation,
+      table.call_id,
+    ),
+    uniqueIndex("session_permission_question_unique").on(table.question_id),
+  ],
+)
+
 export const SessionPartTable = sqliteTable(
   "session_part",
   {

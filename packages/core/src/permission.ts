@@ -1,7 +1,7 @@
 export * as Permission from "./permission.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Schema, Semaphore } from "effect"
 import { Permission } from "@opencode/schema/permission"
 import type { Tool } from "@opencode/schema/tool"
 import { Bus } from "./bus.js"
@@ -13,6 +13,11 @@ import { SessionStore } from "./session/store.js"
 import { Wildcard } from "./util/wildcard.js"
 import { PermissionSaved } from "./permission/saved.js"
 import { PluginHooks } from "./plugin/hooks.js"
+import { and, eq, inArray, isNull } from "drizzle-orm"
+import { Database } from "./database/database.js"
+import { SessionPermissionTable, SessionTable } from "./session/sql.js"
+import { SessionEvent } from "./session/event.js"
+import { SessionParking } from "./session/parking.js"
 
 const PermissionEffect = Permission.Effect
 export { PermissionEffect as Effect }
@@ -108,6 +113,10 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
 }
 
 export interface Interface {
+  /** Evaluate once without creating a process-local waiter; the Step atomically admits an ask. */
+  readonly prepare: (
+    input: AssertInput,
+  ) => Effect.Effect<Request | undefined, BlockedError | SessionErrors.NotFoundError>
   readonly close: Effect.Effect<void>
   readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
   readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
@@ -138,7 +147,34 @@ const layer = Layer.effect(
     const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
     const hooks = yield* PluginHooks.Service
+    const db = (yield* Database.Service).db
+    const replies = Semaphore.makeUnsafe(1)
     const pending = new Map<ID, Pending>()
+    const durable = () =>
+      db
+        .select()
+        .from(SessionPermissionTable)
+        .where(
+          and(
+            eq(SessionPermissionTable.status, "pending"),
+            inArray(
+              SessionPermissionTable.session_id,
+              db
+                .select({ id: SessionTable.id })
+                .from(SessionTable)
+                .where(
+                  and(
+                    eq(SessionTable.directory, location.directory),
+                    location.workspaceID === undefined
+                      ? isNull(SessionTable.workspace_id)
+                      : eq(SessionTable.workspace_id, location.workspaceID),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .all()
+        .pipe(Effect.orDie)
     let closed = false
 
     const close = Effect.gen(function* () {
@@ -153,7 +189,7 @@ const layer = Layer.effect(
           .pipe(Effect.ensuring(Deferred.fail(item.deferred, new DeclinedError()))),
       )
       pending.clear()
-    }).pipe(Effect.uninterruptible)
+    }).pipe(Effect.uninterruptible, replies.withPermit)
     yield* Effect.addFinalizer(() => close)
 
     const savedRules = Effect.fnUntraced(function* () {
@@ -215,14 +251,15 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
-        save: input.save,
-        // Tools copy optional inputs straight into metadata; undefined values are not JSON and would
-        // fail the HttpApi response encoder when clients list pending requests.
-        metadata:
-          input.metadata &&
-          Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
-        source: input.source,
-        message,
+        ...(input.save === undefined ? {} : { save: input.save }),
+        // Tools copy optional inputs into metadata; undefined values are not JSON.
+        ...(input.metadata === undefined
+          ? {}
+          : {
+              metadata: Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
+            }),
+        ...(input.source === undefined ? {} : { source: input.source }),
+        ...(message === undefined ? {} : { message }),
       }
     }
 
@@ -235,7 +272,7 @@ const layer = Layer.effect(
             yield* Deferred.fail(deferred, new DeclinedError())
             return item
           }
-          if (pending.has(request.id))
+          if (pending.has(request.id) || (yield* durable()).some((item) => item.id === request.id))
             return yield* Effect.die(new Error(`Duplicate pending permission ID: ${request.id}`))
           pending.set(request.id, item)
           yield* bus
@@ -244,6 +281,19 @@ const layer = Layer.effect(
           return item
         }),
       )
+
+    const prepare = Effect.fn("Permission.prepare")(function* (input: AssertInput) {
+      if (closed) return yield* Effect.die(new DeclinedError())
+      const result = yield* evaluateInput(input)
+      if (result.effect === "deny")
+        return yield* new BlockedError({
+          rules: relevant(input, result.rules),
+          permission: input.action,
+          resources: input.resources,
+          reason: result.message,
+        })
+      if (result.effect === "ask") return request(input, result.message)
+    })
 
     const ask = Effect.fn("Permission.ask")(function* (input: AssertInput) {
       if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
@@ -303,86 +353,102 @@ const layer = Layer.effect(
       return (yield* evaluateInput(input)).effect === "allow"
     })
 
-    const reply = Effect.fn("Permission.reply")((input: ReplyInput) =>
-      Effect.uninterruptible(
-        Effect.gen(function* () {
-          const existing = pending.get(input.requestID)
-          if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-          yield* bus.publish(Permission.Event.Replied, {
-            sessionID: existing.request.sessionID,
-            requestID: existing.request.id,
+    const resolve = Effect.fnUntraced(function* (request: Request, input: ReplyInput, save = true) {
+      const persisted = (yield* durable()).find((item) => item.id === request.id)
+      if (persisted) {
+        yield* bus
+          .publish(SessionEvent.PermissionResolution.Resolved, {
+            sessionID: persisted.session_id,
+            assistantMessageID: persisted.assistant_message_id,
+            generation: persisted.generation,
+            callID: persisted.call_id,
+            requestID: persisted.id,
             reply: input.reply,
+            ...(save ? {} : { save: false }),
+            ...(input.message === undefined ? {} : { message: input.message }),
           })
-
-          if (input.reply === "reject") {
-            yield* Deferred.fail(
-              existing.deferred,
-              input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
-            )
-            pending.delete(input.requestID)
-            for (const [id, item] of pending) {
-              if (item.request.sessionID !== existing.request.sessionID) continue
-              yield* bus.publish(Permission.Event.Replied, {
-                sessionID: item.request.sessionID,
-                requestID: item.request.id,
-                reply: "reject",
-              })
-              // Feedback applies to the whole batch, so parallel asks don't end the step.
-              yield* Deferred.fail(
-                item.deferred,
-                input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
-              )
-              pending.delete(id)
-            }
-            return
-          }
-
-          if (input.reply === "always" && existing.request.save?.length) {
-            yield* saved.add({
-              projectID: location.project.id,
-              action: existing.request.action,
-              resources: existing.request.save,
-            })
-          }
-          yield* Deferred.succeed(existing.deferred, undefined)
-          pending.delete(input.requestID)
-          if (input.reply !== "always" || !existing.request.save?.length) return
-
-          for (const [id, item] of pending) {
-            const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
-              Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
-            )
-            if (result?.effect !== "allow") continue
-            yield* bus.publish(Permission.Event.Replied, {
-              sessionID: item.request.sessionID,
-              requestID: item.request.id,
-              reply: "always",
-            })
-            yield* Deferred.succeed(item.deferred, undefined)
-            pending.delete(id)
-          }
-        }),
-      ),
-    )
+          .pipe(
+            Effect.catchDefect((error) =>
+              error instanceof SessionParking.ConflictError
+                ? Effect.fail(new NotFoundError({ requestID: request.id }))
+                : Effect.die(error),
+            ),
+          )
+        return
+      }
+      const local = pending.get(request.id)
+      if (!local) return yield* new NotFoundError({ requestID: request.id })
+      if (save && input.reply === "always" && request.save?.length)
+        yield* saved.add({ projectID: location.project.id, action: request.action, resources: request.save })
+      yield* bus.publish(Permission.Event.Replied, {
+        sessionID: request.sessionID,
+        requestID: request.id,
+        reply: input.reply,
+      })
+      pending.delete(request.id)
+      if (input.reply === "reject") {
+        yield* Deferred.fail(
+          local.deferred,
+          input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
+        )
+        return
+      }
+      yield* Deferred.succeed(local.deferred, undefined)
+    })
 
     const list = Effect.fn("Permission.list")(function* () {
-      return Array.from(pending.values(), (item) => item.request)
+      return [
+        ...Array.from(pending.values(), (item) => item.request),
+        ...(yield* durable()).map((item) => item.request),
+      ]
     })
 
     const get = Effect.fn("Permission.get")(function* (id: ID) {
-      return pending.get(id)?.request
+      return pending.get(id)?.request ?? (yield* durable()).find((item) => item.id === id)?.request
     })
+
+    const reply = Effect.fn("Permission.reply")((input: ReplyInput) =>
+      replies.withPermit(
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const request = yield* get(input.requestID)
+            if (!request) return yield* new NotFoundError({ requestID: input.requestID })
+            yield* resolve(request, input)
+            if (input.reply === "once") return
+            if (input.reply === "reject") {
+              for (const item of yield* list()) {
+                if (item.sessionID !== request.sessionID) continue
+                // Resolving one durable rejection also cancels its sibling authorizations atomically.
+                if (!(yield* get(item.id))) continue
+                yield* resolve(item, { ...input, requestID: item.id })
+              }
+              return
+            }
+            if (!request.save?.length) return
+            const agents = new Map((yield* durable()).map((item) => [item.id, item.agent ?? undefined]))
+            for (const item of yield* list()) {
+              const result = yield* evaluateInput({
+                ...item,
+                agent: pending.get(item.id)?.agent ?? agents.get(item.id),
+              }).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.undefined))
+              if (result?.effect !== "allow") continue
+              yield* resolve(item, { requestID: item.id, reply: "always" }, false)
+            }
+          }),
+        ),
+      ),
+    )
 
     const forSession = Effect.fn("Permission.forSession")(function* (sessionID: SessionSchema.ID) {
-      return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
+      return (yield* list()).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, close })
+    return Service.of({ prepare, ask, assert, assertNotDenied, allows, reply, get, forSession, list, close })
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, Location.node, Agent.node, SessionStore.node, PermissionSaved.node, PluginHooks.node],
+  deps: [Bus.node, Location.node, Agent.node, SessionStore.node, PermissionSaved.node, PluginHooks.node, Database.node],
 })

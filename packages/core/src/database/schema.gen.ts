@@ -258,6 +258,22 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`session_permission\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`assistant_message_id\` text NOT NULL,
+          \`generation\` integer NOT NULL,
+          \`call_id\` text NOT NULL,
+          \`question_id\` text NOT NULL,
+          \`prepared\` text NOT NULL,
+          \`request\` text NOT NULL,
+          \`agent\` text,
+          \`status\` text DEFAULT 'pending' NOT NULL,
+          \`message\` text,
+          CONSTRAINT \`fk_session_permission_session_id_assistant_message_id_generation_session_message_session_id_id_step_started_seq_fk\` FOREIGN KEY (\`session_id\`,\`assistant_message_id\`,\`generation\`) REFERENCES \`session_message\`(\`session_id\`,\`id\`,\`step_started_seq\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session_question\` (
           \`id\` text PRIMARY KEY NOT NULL,
           \`session_id\` text NOT NULL,
@@ -368,6 +384,12 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`)
       yield* tx.run(
         `CREATE INDEX \`session_part_session_message_idx\` ON \`session_part\` (\`session_id\`,\`message_id\`,\`ordinal\`);`,
+      )
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`session_permission_step_call_unique\` ON \`session_permission\` (\`session_id\`,\`assistant_message_id\`,\`generation\`,\`call_id\`);`,
+      )
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`session_permission_question_unique\` ON \`session_permission\` (\`question_id\`);`,
       )
       yield* tx.run(
         `CREATE INDEX \`session_question_step_owner_idx\` ON \`session_question\` (\`session_id\`,\`assistant_message_id\`,\`generation\`);`,

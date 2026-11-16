@@ -408,6 +408,8 @@ export namespace Step {
         callID: Schema.String,
         questionID: Form.ID,
         prepared: QuestionContinuation.Prepared,
+        /** Preflight captured before any executor or form is entered. */
+        permission: Schema.Struct({ request: Permission.Request, agent: Agent.ID.pipe(optional) }).pipe(optional),
       }),
     ),
   }).annotate({ identifier: "Session.Step.ParkedPayload" })
@@ -787,6 +789,26 @@ export namespace QuestionResolution {
   export type Resolved = typeof Resolved.Type
 }
 
+/** A decision for a preflight owned by the original parked Step. */
+export namespace PermissionResolution {
+  export const Resolved = Event.durable({
+    type: "session.permission.resolved",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+      generation: NonNegativeInt,
+      callID: Schema.String,
+      requestID: Permission.ID,
+      reply: Permission.Reply,
+      /** False for pending requests released by a newly saved rule. */
+      save: Schema.Boolean.pipe(optional),
+      message: Schema.String.pipe(optional),
+    },
+  })
+  export type Resolved = typeof Resolved.Type
+}
+
 // Internal and replay-only events are excluded from the public manifest.
 export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
@@ -795,6 +817,7 @@ export const DurableDefinitions = Event.inventory(
   Step.Parked,
   Step.Settled,
   QuestionResolution.Resolved,
+  PermissionResolution.Resolved,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

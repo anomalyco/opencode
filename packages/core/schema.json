@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "1bf2e8f3-370f-45b4-8d9e-432fefb02cdb",
-  "prevIds": ["85681386-60a2-4f20-be6f-2efec1fda936"],
+  "id": "806150a9-91ea-4a4e-9de9-601943ff69de",
+  "prevIds": ["1bf2e8f3-370f-45b4-8d9e-432fefb02cdb"],
   "ddl": [
     {
       "name": "account_state",
@@ -86,6 +86,10 @@
     },
     {
       "name": "session_pending_step",
+      "entityType": "tables"
+    },
+    {
+      "name": "session_permission",
       "entityType": "tables"
     },
     {
@@ -1606,6 +1610,116 @@
     },
     {
       "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "assistant_message_id",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "generation",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "call_id",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "question_id",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "prepared",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "request",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "agent",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'pending'",
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message",
+      "entityType": "columns",
+      "table": "session_permission"
+    },
+    {
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
       "default": null,
@@ -2325,6 +2439,17 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
+      "name": "fk_session_permission_session_id_assistant_message_id_generation_session_message_session_id_id_step_started_seq_fk",
+      "entityType": "fks",
+      "table": "session_permission"
+    },
+    {
+      "columns": ["session_id", "assistant_message_id", "generation"],
+      "tableTo": "session_message",
+      "columnsTo": ["session_id", "id", "step_started_seq"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
       "name": "fk_session_question_session_id_assistant_message_id_generation_session_message_session_id_id_step_started_seq_fk",
       "entityType": "fks",
       "table": "session_question"
@@ -2510,6 +2635,13 @@
       "nameExplicit": false,
       "name": "session_message_pk",
       "table": "session_message",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "session_permission_pk",
+      "table": "session_permission",
       "entityType": "pks"
     },
     {
@@ -2849,6 +2981,46 @@
       "name": "session_part_session_message_idx",
       "entityType": "indexes",
       "table": "session_part"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "assistant_message_id",
+          "isExpression": false
+        },
+        {
+          "value": "generation",
+          "isExpression": false
+        },
+        {
+          "value": "call_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "session_permission_step_call_unique",
+      "entityType": "indexes",
+      "table": "session_permission"
+    },
+    {
+      "columns": [
+        {
+          "value": "question_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "session_permission_question_unique",
+      "entityType": "indexes",
+      "table": "session_permission"
     },
     {
       "columns": [

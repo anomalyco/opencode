@@ -98,6 +98,27 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  it.effect("prepares an ask without publishing it and preserves allow, deny, and unattended decisions", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      const permission = yield* Permission.Service
+      expect(yield* permission.prepare(assertion())).toBeUndefined()
+      yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
+      expect(yield* permission.prepare(assertion()).pipe(Effect.flip)).toBeInstanceOf(Permission.BlockedError)
+      yield* setRules([])
+      expect(yield* permission.prepare(assertion())).toEqual(assertion())
+      expect(yield* permission.list()).toEqual([])
+      expect(
+        yield* permission.prepare(assertion()).pipe(Effect.provideService(Permission.Unattended, []), Effect.flip),
+      ).toBeInstanceOf(Permission.BlockedError)
+      expect(
+        yield* permission
+          .prepare(assertion())
+          .pipe(Effect.provideService(Permission.Unattended, [{ action: "read", resource: "*", effect: "allow" }])),
+      ).toBeUndefined()
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])

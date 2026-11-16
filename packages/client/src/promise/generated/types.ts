@@ -185,7 +185,13 @@ export type QuestionPrompt = {
   multiple?: boolean
 }
 
+export type PermissionID = string
+
+export type PermissionSource = { type: "tool"; messageID: string; id: string }
+
 export type FormValue1 = string | number | boolean | Array<string>
+
+export type PermissionReply = "once" | "always" | "reject"
 
 export type ModelType = "chat" | "decision" | "image" | (string & {})
 
@@ -297,17 +303,11 @@ export type ProjectCommands = { start?: string }
 
 export type ProjectTime = { created: number; updated: number; active: number; archived?: number }
 
-export type PermissionID = string
-
-export type PermissionSource = { type: "tool"; messageID: string; id: string }
-
 export type PermissionSavedID = string
 
 export type CommandInfo = { name: string; description?: string }
 
 export type RpcOutput = { output?: any }
-
-export type PermissionReply = "once" | "always" | "reject"
 
 export type PtyID = string
 
@@ -714,6 +714,28 @@ export type ToolContent1 = ToolTextContent | ToolFileContent1
 
 export type QuestionContinuationInput = { questions: Array<QuestionPrompt> }
 
+export type PermissionRequest = {
+  id: PermissionID
+  sessionID: SessionID
+  action: string
+  resources: Array<string>
+  save?: Array<string>
+  metadata?: { [x: string]: any }
+  source?: PermissionSource
+  message?: string
+}
+
+export type PermissionRequest1 = {
+  id: PermissionID
+  sessionID: SessionID
+  action: string
+  resources: Array<string>
+  save?: Array<string>
+  metadata?: { [x: string]: JsonValue }
+  source?: PermissionSource
+  message?: string
+}
+
 export type FormAnswer1 = { [x: string]: FormValue1 }
 
 export type ModelCompatibility = {
@@ -830,17 +852,6 @@ export type Project = {
   commands?: ProjectCommands
   time: ProjectTime
   sandboxes: Array<string>
-}
-
-export type PermissionRequest = {
-  id: PermissionID
-  sessionID: SessionID
-  action: string
-  resources: Array<string>
-  save?: Array<string>
-  metadata?: { [x: string]: JsonValue }
-  source?: PermissionSource
-  message?: string
 }
 
 export type PermissionSavedInfo = {
@@ -1710,6 +1721,25 @@ export type SessionStepSettled = {
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
   data: { sessionID: SessionID; assistantMessageID: SessionMessageID; generation: number }
+}
+
+export type SessionPermissionResolved = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.permission.resolved"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: SessionID
+    assistantMessageID: SessionMessageID
+    generation: number
+    callID: string
+    requestID: PermissionID
+    reply: PermissionReply
+    save?: boolean
+    message?: string
+  }
 }
 
 export type LocationShutdown = {
@@ -2746,8 +2776,18 @@ export type SessionStepParked = {
     snapshot?: SnapshotID
     files?: Array<RelativePath>
     questions: [
-      { callID: string; questionID: FormID; prepared: QuestionContinuationPrepared },
-      ...Array<{ callID: string; questionID: FormID; prepared: QuestionContinuationPrepared }>,
+      {
+        callID: string
+        questionID: FormID
+        prepared: QuestionContinuationPrepared
+        permission?: { request: PermissionRequest; agent?: AgentID }
+      },
+      ...Array<{
+        callID: string
+        questionID: FormID
+        prepared: QuestionContinuationPrepared
+        permission?: { request: PermissionRequest; agent?: AgentID }
+      }>,
     ]
   }
 }
@@ -2970,6 +3010,7 @@ export type SessionEventDurable =
   | SessionStepParked
   | SessionStepSettled
   | SessionQuestionResolved
+  | SessionPermissionResolved
 
 export type V2Event =
   | LocationShutdown
@@ -4358,7 +4399,7 @@ export type FormListOutput = { location: LocationPublicRef; data: Array<FormInfo
 
 export type PermissionRequestListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
-export type PermissionRequestListOutput = { location: LocationPublicRef; data: Array<PermissionRequest> }
+export type PermissionRequestListOutput = { location: LocationPublicRef; data: Array<PermissionRequest1> }
 
 export type PermissionSavedListInput = { readonly projectID?: string | undefined }
 
@@ -4391,11 +4432,11 @@ export type PermissionCreateOutput = { data: { id: PermissionID; effect: Permiss
 
 export type PermissionListInput = { readonly sessionID: string }
 
-export type PermissionListOutput = { data: Array<PermissionRequest> }["data"]
+export type PermissionListOutput = { data: Array<PermissionRequest1> }["data"]
 
 export type PermissionGetInput = { readonly sessionID: string; readonly requestID: string }
 
-export type PermissionGetOutput = { data: PermissionRequest }["data"]
+export type PermissionGetOutput = { data: PermissionRequest1 }["data"]
 
 export type PermissionReplyInput = {
   readonly sessionID: string
