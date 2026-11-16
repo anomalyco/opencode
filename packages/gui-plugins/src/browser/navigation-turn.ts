@@ -32,7 +32,8 @@ export function navigationTurn(
       // initial CDP setup waiting for a renderer that the replacement command cannot start until setup finishes.
       if (method === "reload" && pending && restoring && /^https?:\/\//i.test(restoring)) return restoring
 
-      if (method === "stop" && held !== undefined && heldStop) {
+      // A not-yet-issued initial restore has no committed history entry to traverse.
+      if ((method === "stop" || (restoring && (method === "back" || method === "forward"))) && held !== undefined && heldStop) {
         const address = held
         spinning = false
         cancel()

@@ -130,7 +130,7 @@ export function transitionDocument(state: DocumentState, event: DocumentEvent): 
 
   switch (event.type) {
     case "navigation.held-stopped":
-      return settle(state, { ...state, retry: event.address, busy: false, pending: undefined }, [PUBLISH])
+      return settle(state, { ...state, retry: state.status === "loaded" ? undefined : event.address, busy: false, pending: undefined }, [PUBLISH])
     case "disposed":
       return { state: CLOSED, effects: [] }
     case "loading.started":

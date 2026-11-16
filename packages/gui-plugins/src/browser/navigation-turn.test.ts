@@ -30,6 +30,19 @@ test("only a cross-document main-frame navigation supersedes a gated load", asyn
   }
 })
 
+test("interrupting an unissued restore preserves its address; stopping an agent navigation does not propose one", async () => {
+  for (const [method, restoring, keep, expected] of [["back", "https://saved.test", true, "https://saved.test"], ["forward", "https://saved.test", true, "https://saved.test"], ["stop", undefined, true, "https://saved.test"], ["stop", undefined, false, undefined]] as const) {
+    const gate = Promise.withResolvers<void>()
+    const stopped: (string | undefined)[] = []
+    const navigation = navigationTurn(() => gate.promise, () => {}, () => {}, address => stopped.push(address))
+    const visit = navigation.begin(new AbortController().signal, keep)("https://saved.test", () => { throw Error("load was issued") })
+    navigation.interrupt(method, restoring)
+    gate.resolve()
+    await visit
+    expect(stopped).toEqual([expected])
+  }
+})
+
 test("a gated history traversal settles the spinner when Chromium has no load to stop", async () => {
   const gate = Promise.withResolvers<void>()
   const events: string[] = []

@@ -74,7 +74,7 @@ test("Stop before issue publishes the restore address without inventing a commit
   const address = "https://next.test/report"
   const restore = createDocumentState({ url: address, title: "Report", generation: 4 })
 
-  for (const before of [restore, replay(visit("https://previous.test/")).state]) {
+  for (const before of [restore, replay(visit("https://previous.test/")).state, replay(visit("file:///workspace/report.html")).state]) {
     const cancelled = replay([
       { type: "navigation.started", isMainFrame: true, isSameDocument: false, url: address },
       { type: "loading.started" },
@@ -82,7 +82,7 @@ test("Stop before issue publishes the restore address without inventing a commit
     ], before).state
 
     const saved = documentTab(cancelled, history)
-    expect(saved).toMatchObject({ id: history.id, url: address, loading: false })
+    expect(saved).toMatchObject({ id: history.id, url: before.status === "loaded" ? before.url : address, loading: false })
     expect(saved).not.toHaveProperty("loadError")
     expect(documentVisible(cancelled)).toBe(documentVisible(before))
     expect(documentTab(cancelled, history, false)).toEqual(documentTab(before, history, false))
