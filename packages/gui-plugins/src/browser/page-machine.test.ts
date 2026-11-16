@@ -5,6 +5,7 @@ import {
   documentGeneration,
   documentTab,
   documentVisible,
+  frameStillCurrent,
   isDocumentLoading,
   isNavigationPending,
   transitionDocument,
@@ -27,6 +28,21 @@ const replay = (events: readonly DocumentEvent[], state: DocumentState = createD
   )
 
 const types = (effects: DocumentTransition["effects"]) => effects.map((effect) => effect.type)
+
+test("a redraw after the capture request must still belong to its document and route", () => {
+  const page = replay(visit("https://site.test/a")).state
+  expect(frameStillCurrent(page, transitionDocument(page, { type: "title.updated", title: "Ready" }).state)).toBe(true)
+  const next = transitionDocument(page, { type: "navigation.started", url: "https://site.test/b", isMainFrame: true, isSameDocument: false }).state
+  expect(frameStillCurrent(page, next)).toBe(false)
+  expect(frameStillCurrent(next, next)).toBe(false)
+  expect(frameStillCurrent(page, replay(visit("https://site.test/a"), page).state)).toBe(false)
+  expect(frameStillCurrent(page, transitionDocument(page, { type: "navigation.in-page", isMainFrame: true, url: "https://site.test/b", title: "B" }).state)).toBe(false)
+  expect(frameStillCurrent(page, transitionDocument(page, { type: "disposed" }).state)).toBe(false)
+  const failed = transitionDocument(page, { type: "navigation.failed", url: "https://site.test/a", isMainFrame: true, code: -2, description: "ERR_FAILED" }).state
+  expect(frameStillCurrent(page, failed)).toBe(false)
+  const restoring = createDocumentState({ generation: 1, title: "A", url: "https://site.test/a" })
+  expect(frameStillCurrent(restoring, restoring)).toBe(false)
+})
 
 // Electron's events for a navigation that commits and finishes loading.
 const visit = (url: string, title = url): DocumentEvent[] => [
