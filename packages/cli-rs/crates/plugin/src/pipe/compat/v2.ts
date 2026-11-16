@@ -291,6 +291,12 @@ export function context(base: Base, carrier: Carrier) {
       const rgba = new RGBA(value.r, value.g, value.b, value.a, token)
       at[last] = Object.assign(rgba, typeof at[last] === "object" ? at[last] : {})
     }
+    // A raised surface's theme (`ResolvedTheme.surface`, CT-8): the page's, as the host sends the page's colors alone.
+    // It says so once, where it was undefined and the render crashed (snippets' library).
+    tree.surface = () => {
+      unsupported("theme.surface")
+      return tree
+    }
     return tree
   }
 

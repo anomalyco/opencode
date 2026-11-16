@@ -318,6 +318,17 @@ test("an element's focus is the host's and it emits as OpenTUI's renderables", a
   expect(fake.toasts()).toContain("t.focus: renderer.keyInput is not supported by opencode-native yet")
 })
 
+// CT-8: a raised surface's theme is the page's, which says so once; it was undefined, and snippets' library crashed.
+test("theme.surface answers the page theme", () => {
+  const fake = host()
+  fake.palette = () => ({ mode: "dark", colors: { "text.base": "#ffffffff" } })
+  const ctx = plugin("t.surface", fake)
+  const dialog = ctx.theme.surface("dialog")
+  expect(dialog.text.base.toInts()).toEqual(ctx.theme.text.base.toInts())
+  expect(dialog.surface("dialog.footer").text.base.toInts()).toEqual([255, 255, 255, 255])
+  expect(fake.toasts()).toEqual(["t.surface: theme.surface is not supported by opencode-native yet"])
+})
+
 // Bigboi P8-7: a dialog the host closes without an answer settles at once with nothing, also with no dialog after it;
 // `clear()` closes an asked dialog on the host too; a new `show` starts from the default size and place.
 test("each dialog settles once, and clear closes it", async () => {
