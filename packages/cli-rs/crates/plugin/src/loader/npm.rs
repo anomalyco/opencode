@@ -631,11 +631,12 @@ mod tests {
         assert_eq!(registry("foo@^1"), "foo@^1");
         assert_eq!(registry("foo@latest"), "foo@latest");
         assert_eq!(registry("foo@beta"), "foo@beta");
-        assert_eq!(registry("foo@"), "foo@*");
+        // Windows has no `*`, `<` or `>` in a name: TS's `sanitize` makes each `_` there.
+        assert_eq!(registry("foo@"), if cfg!(windows) { "foo@_" } else { "foo@*" });
         assert_eq!(registry("Foo"), "Foo@latest");
         assert_eq!(registry("@s/foo"), "@s/foo@latest");
         assert_eq!(registry("@s/foo@2"), "@s/foo@2");
-        assert_eq!(registry("@s/foo@>=1 <2"), "@s/foo@>=1 <2");
+        assert_eq!(registry("@s/foo@>=1 <2"), if cfg!(windows) { "@s/foo@_=1 _2" } else { "@s/foo@>=1 <2" });
         // Not registry specs: the spec itself.
         for spec in ["foo@npm:bar@1", "file:../x", "https://x.org/y.tgz", "foo bar"] {
             assert_eq!(registry(spec), sanitize(spec), "{spec}");

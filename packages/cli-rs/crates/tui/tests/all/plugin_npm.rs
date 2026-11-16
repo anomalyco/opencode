@@ -271,7 +271,11 @@ fn a_server_plugins_tui_part_loads_from_what_the_server_reports() {
     let Some(pipe) = open_in(&home, &[], server, None, &user, true) else { return };
     pipe.active("opencode.sidebar.limit");
     pipe.active("sidebar.prompt");
-    assert_eq!(status(&pipe, "opencode-session-usage@0.1.8"), Some(Status::Active));
+    // The ID is active before its target's status says so.
+    pipe.harness.wait("the package's part is active", || {
+        pipe.harness.app.advance(std::time::Duration::from_millis(1));
+        status(&pipe, "opencode-session-usage@0.1.8") == Some(Status::Active)
+    });
     assert_eq!(status(&pipe, "opencode-sidebar-tokens@0.1.3"), None, "a part without a TUI feature was listed");
     assert_eq!(status(&pipe, "not-cached@1.0.0"), None, "a part the cache does not hold was listed");
 }
