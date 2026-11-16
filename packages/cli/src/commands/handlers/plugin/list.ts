@@ -35,12 +35,12 @@ export default Runtime.handler(
         if (local) {
           const directory = fileURLToPath(local)
           const entrypoints = Host.resolve({ directory })
-          return entrypoints.tui ? [{ target: directory, version: "local" }] : []
+          return entrypoints.tui ? [{ target: directory, version: "local", id: Host.packageID({ directory }) }] : []
         }
         if (!(yield* Effect.promise(() => Npm.isInstallablePackage(target)))) return []
         const installed = yield* npm.resolve(target)
         if (!Host.resolve(installed).tui) return []
-        return [{ target, version: installed.version }]
+        return [{ target, version: installed.version, id: Host.packageID(installed) }]
       }),
     )
     const output = format(response.data, configured.flat(), input.builtin)
@@ -54,7 +54,7 @@ export default Runtime.handler(
 
 export function format(
   plugins: readonly PluginInfo[],
-  tui: ReadonlyArray<{ readonly target: string; readonly version?: string }>,
+  tui: ReadonlyArray<{ readonly target: string; readonly version?: string; readonly id?: string }>,
   builtin = false,
 ) {
   const server = plugins
@@ -84,7 +84,7 @@ export function format(
         ),
     )
     .filter((plugin, index, all) => all.findIndex((candidate) => candidate.target === plugin.target) === index)
-    .map((plugin) => ({ id: "-", version: plugin.version ?? "-", target: plugin.target }))
+    .map((plugin) => ({ id: plugin.id || plugin.target, version: plugin.version ?? "-", target: plugin.target }))
   const rows = [...server, ...targets]
     .toSorted((a, b) => a.id.localeCompare(b.id) || a.target.localeCompare(b.target))
     .map((item) => [
