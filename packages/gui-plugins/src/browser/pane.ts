@@ -11,7 +11,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure, CodedError } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { agentDriven, agentRefusal, childActivity, destinationOrigin, refusal, type TabActivity } from "./policy"
+import { agentDriven, agentRefusal, childActivity, destinationOrigin, normalizeURL, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { FindAction, PaneEvent, PromptAnswer } from "./ipc"
@@ -429,7 +429,7 @@ export function createBrowserPane(input: {
       const reason =
         url === undefined
           ? undefined
-          : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding), home: homedir(), remote: remoteSource(binding)?.prefix, artifacts: true })
+          : refusal(url, pagePolicy(binding))
 
       if (reason) throw new Error(reason)
       const closing = command.type === "tabs.close" ? page(binding, command.tabID) : undefined
@@ -551,15 +551,18 @@ export function createBrowserPane(input: {
   }
 
   function release(page: BrowserPage) {
-    searches.get(page)?.dispose()
-    input.profile.permissions.delete(page.contents.id)
-    grants.get(page)?.()
-    downloads.delete(page.contents.id)
-    const done = page.dispose()
-    const settled = done.catch(() => undefined)
-    disposals.set(page, done)
-    releasing.add(settled)
-    void settled.finally(() => releasing.delete(settled))
+    try {
+      searches.get(page)?.dispose()
+      input.profile.permissions.delete(page.nativeID)
+      grants.get(page)?.()
+      downloads.delete(page.nativeID)
+    } finally {
+      const done = page.dispose()
+      const settled = done.catch(() => undefined)
+      disposals.set(page, done)
+      releasing.add(settled)
+      void settled.finally(() => releasing.delete(settled))
+    }
   }
 
   function inventory(binding: string): Browser.State {
@@ -574,6 +577,10 @@ export function createBrowserPane(input: {
     return source?.type === "remote" ? source : undefined
   }
 
+  function pagePolicy(binding: string) {
+    return { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding), home: homedir(), remote: remoteSource(binding)?.prefix, artifacts: true }
+  }
+
   /** The tab's current page. */
   function page(binding: string, tabID: Browser.TabID) {
     const attempt = selectPageAttempt(machine.state, binding, tabID)
@@ -582,7 +589,7 @@ export function createBrowserPane(input: {
   }
 
   /** The tab's page, created the first time the pane shows a restored or crashed tab or a command names it. */
-  function load(binding: string, tabID: Browser.TabID, identity?: string) {
+  function load(binding: string, tabID: Browser.TabID, identity?: string, navigateTo?: string) {
     const existing = page(binding, tabID)
 
     if (existing) return existing
@@ -590,13 +597,22 @@ export function createBrowserPane(input: {
 
     if (slot?.status !== "unloaded") return undefined
     const tab = slot.tab
+    const denied = restoreRefusal(tab.url, pagePolicy(binding))
+
+    if (denied && navigateTo === undefined) {
+      dispatchBinding(binding, { type: "restore.refused", tabID, reason: denied })
+      throw new CodedError(Browser.FailureCode.previewUnavailable, denied === "browser.restore.outside" ? "This file is now outside the session’s workspace. Open a file in the current workspace instead." : "This saved address is no longer allowed in this session.")
+    }
+
+    // The user can replace the refused address. Check the replacement before allocating even a blank page.
+    if (denied && navigateTo !== undefined) normalizeURL(navigateTo, pagePolicy(binding))
 
     // A crashed tab's error belongs to its last page; the new page reports its own.
     return create(binding, {
       identity,
       restore: {
         id: tab.id,
-        url: tab.url,
+        url: denied ? "about:blank" : tab.url,
         title: tab.title,
         loading: false,
         canGoBack: false,
@@ -725,6 +741,15 @@ export function createBrowserPane(input: {
       },
     })
 
+    // Construction succeeded; take ownership before registering with the profile, machine or window.
+    using registering = new DisposableStack()
+    registering.defer(() => {
+      if (current()) return dispatchBinding(binding, { type: "tab.crashed", tabID: id, attempt })
+      handle.pages.delete(attempt)
+      release(page)
+    })
+    void page.ready.catch(() => undefined)
+
     if (handle.shared) {
       grants.set(page, input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused)))
     }
@@ -743,6 +768,8 @@ export function createBrowserPane(input: {
     void page.ready.then(() => {
       if (current()) dispatchBinding(binding, { type: "tab.published", tabID: id, attempt, tab: page.state() })
     }, fail)
+
+    registering.move()
 
     return page
   }
@@ -819,7 +846,7 @@ export function createBrowserPane(input: {
     // A user preview may already have consumed files that the agent may not read. Revoke its origins and
     // discard the complete WebContents before handing the agent a target; rechecking only future fetches is too late.
     const acquire = (id: Browser.TabID) => {
-      if (origin !== "agent") return load(binding, id)
+      if (origin !== "agent") return load(binding, id, undefined, action.type === "navigate" ? action.url : undefined)
       const handle = handles.get(binding)
       const activity = handle?.activity.get(id) ?? { agentRuns: 0 }
       const changed = !agentDriven(activity) || activity.agent !== command.agent
@@ -851,15 +878,20 @@ export function createBrowserPane(input: {
         if (!url || !(remote ? Number.isSafeInteger(await remote.stat(action.path, signal, action.path, true)) : await workspaceFile(url, roots)))
           throw new CodedError(Browser.FailureCode.previewUnavailable, remote?.needsUpdate?.() ? "Update this session's server to open workspace previews." : "The workspace file no longer exists or cannot be read by this session.")
         signal.throwIfAborted()
+        normalizeURL(url, pagePolicy(binding))
         const existing = inventory(binding).tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === url)
         const tab = existing ? acquire(existing.id) : create(binding, {activity: origin === "agent" ? driven : undefined})
 
         if (!tab) throw new Error("Workspace preview tab is unavailable.")
+        using opening = new DisposableStack()
         const tabID = tab.state().id
+
+        if (!existing) opening.defer(() => { if (page(binding, tabID) === tab) dispatchBinding(binding, { type: "tab.closed", tabID }) })
         dispatchBinding(binding, { type: "tab.focused", tabID })
         await tab.ready
         await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
         refresh(binding, tabID, tab)
+        opening.move()
 
         return { value: { path: action.path, tabID, url: tab.state().url }, files: [] }
       }
@@ -875,6 +907,8 @@ export function createBrowserPane(input: {
       const refused = origin === "agent" ? agentRefusal(action, { url: "about:blank", origin: "null" }) : undefined
 
       if (refused) throw new Error(refused)
+
+      if (action.url !== undefined) normalizeURL(action.url, pagePolicy(binding))
 
       if (action.url?.startsWith("artifact:")) {
         const available = await handles.get(binding)?.artifacts?.().exists(action.url)
@@ -901,6 +935,8 @@ export function createBrowserPane(input: {
 
       const opened = create(binding, { activity: origin === "agent" ? driven : inherited })
       const tabID = opened.state().id
+      using opening = new DisposableStack()
+      opening.defer(() => { if (page(binding, tabID) === opened) dispatchBinding(binding, { type: "tab.closed", tabID }) })
 
       if (file) openingFiles.set(opened, file)
 
@@ -913,6 +949,7 @@ export function createBrowserPane(input: {
         if (action.url !== undefined)
           await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
         refresh(binding, tabID, opened)
+        opening.move()
 
         return { value: opened.state(), files: [] }
       } finally {

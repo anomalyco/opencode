@@ -369,6 +369,13 @@ export function normalizeURL(input: string, policy?: Policy) {
   return url
 }
 
+/** A saved address is evidence for the address bar, not authority to reopen a file after a session move. */
+export function restoreRefusal(url: string, policy: Policy) {
+  if (!refusal(url, policy)) return
+
+  return /^(?:file|workspace):/i.test(url) ? "browser.restore.outside" : "browser.restore.refused"
+}
+
 /**
  * Why the pane does not open an address, as the code the window explains it with; undefined when it opens.
  * - `browser.address.credentials`: a web page address with a user name or password.

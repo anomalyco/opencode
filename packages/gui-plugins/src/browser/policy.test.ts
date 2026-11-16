@@ -18,8 +18,20 @@ import {
   normalizeURL,
   pagePermission,
   refusal,
+  restoreRefusal,
   type TabActivity,
 } from "./policy"
+
+test("a saved address is checked against the current workspace before allocating a page", () => {
+  const current = { fileRoots: ["/repo/moved"], artifacts: true }
+  expect(restoreRefusal("file:///repo/index.html", current)).toBe("browser.restore.outside")
+
+  for (const url of ["file:///repo/moved/index.html", "https://example.test/", "about:blank", "artifact://art_report/"]) {
+    expect(restoreRefusal(url, current)).toBeUndefined()
+  }
+
+  expect(restoreRefusal("chrome://settings", current)).toBe("browser.restore.refused")
+})
 
 test("input requires a page document at each step of the route", () => {
   for (const [url, origin, permitted] of [

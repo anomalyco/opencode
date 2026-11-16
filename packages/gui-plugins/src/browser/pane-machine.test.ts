@@ -73,6 +73,16 @@ function attached(restore?: Browser.State) {
   return play(createPaneState(), registered(restore), on({ type: "server.attached", fileRoots: [] })).state
 }
 
+test("a refused restore keeps its saved address, reports the reason once and consumes no page attempt", () => {
+  const url = "file:///old/project/index.html"
+  const start = attached({ tabs: [tab(tabA, url)], focusedTabID: tabA })
+  const event = on({ type: "restore.refused", tabID: tabA, reason: "browser.restore.outside" })
+  const result = transitionPane(start, event)
+  expect(entry(result.state).tabs.get(tabA)).toMatchObject({ status: "unloaded", tab: {url, loadError:"browser.restore.outside"} })
+  expect(entry(result.state).nextAttempt).toBe(entry(start).nextAttempt)
+  expect(transitionPane(result.state, event)).toEqual({state:result.state, effects:[]})
+})
+
 test("reconnect tears down the previous native pages before restoring the same window and session", () => {
   const opened = play(attached(), on({type:"tab.opened", tabID: tabA, attempt:1, tab:tab(tabA,"workspace://session/index.html")}))
   const replacement = registered(undefined, "b2")

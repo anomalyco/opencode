@@ -282,6 +282,10 @@ export function createBrowserPage(
     },
   }
 
+  const initial = options.initialize === false ? undefined : normalizeURL(options.restore?.url || "about:blank", policy)
+  // Until this constructor hands back a BrowserPage there is no tab which could dispose these resources.
+  using constructing = new DisposableStack()
+
   const view = new electron.WebContentsView({
     ...options.popupOptions,
     webPreferences: {
@@ -298,11 +302,16 @@ export function createBrowserPage(
   })
 
   const contents = view.webContents
+  constructing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })
+  constructing.defer(() => options.workspace?.dispose())
+  constructing.defer(() => options.artifacts?.dispose())
   const preview = (url: string) => options.artifacts?.display(url) ?? options.workspace?.display(url)
   // Keep the fence across transient blank/error documents. Page JS cannot clear it by navigating itself.
   let artifactHost: string | undefined
   const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
+
+  if (detachNetwork) constructing.defer(detachNetwork)
   let nativeMenu = true
   contents.on("before-mouse-event", (_event, mouse) => {
     // Unlike keyboard events, Electron 44 does not expose the Blink modifiers on mouse events.
@@ -396,6 +405,7 @@ export function createBrowserPage(
   const documents = new Map<string, string>()
   const sourceURLs = () => [...new Set([state().url, ...documents.values()])].sort()
   const files = createBrowserFiles(sourceURLs)
+  constructing.defer(() => void files.dispose().catch(() => undefined))
 
   const diagnostics = createDiagnostics(cdp, displayURL, (id, sessionID) =>
     Array.from(contexts.values()).some((context) => context.id === id && context.sessionID === sessionID))
@@ -593,6 +603,8 @@ export function createBrowserPage(
 
   // A page's getUserMedia waits for the pane before Blink opens a device, so macOS asks only after the user's Allow.
   const media = guardMediaRequests(cdp, (ask) => prompts.gate(ask))
+  constructing.defer(() => prompts.dispose())
+  constructing.defer(() => dialogs.dispose())
 
   // Chromium uses the document URL as the title of untitled files; don't persist its internal origin as a title.
   const pageTitle = (address = state().url) => {
@@ -878,6 +890,7 @@ export function createBrowserPage(
   // Hidden tabs keep a desktop-sized viewport until the renderer lays the embed out.
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   const embed = options.embeds.create(view, win)
+  constructing.defer(() => embed.dispose())
 
   const menu = attachPageMenu(win, contents, {
     ...options.menu,
@@ -904,6 +917,8 @@ export function createBrowserPage(
     available: () => nativeMenu && !closed() && view.getVisible() && activity.agentRuns === 0,
     failed: () => publish("browser.menu.failed"),
   })
+
+  constructing.defer(() => menu.dispose())
 
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
@@ -974,10 +989,10 @@ export function createBrowserPage(
 
   const ready = navigationDeadline(Promise.all([
     files.ready,
-    ...(options.initialize === false
+    ...(initial === undefined
       ? []
       : [
-          load(normalizeURL(options.restore?.url || "about:blank", policy)).catch((error: Error) => {
+          load(initial).catch((error: Error) => {
             if (!options.restore) throw error
             // A dev server may have stopped while this page was unloaded. Keep its tab available to retry.
             publish(error.message)
@@ -992,9 +1007,12 @@ export function createBrowserPage(
     attachFrames(),
   ])).then(() => undefined)
 
+  constructing.move()
+
   return {
     view,
     contents,
+    nativeID: contents.id,
     state,
     childActivity: () => childActivity(activity),
     previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
@@ -1119,6 +1137,9 @@ export function createBrowserPage(
     },
     async dispose() {
       if (closed()) return
+      // Even a failed cleanup of an embed, recorder or already detached debugger must not orphan its native page.
+      using closing = new DisposableStack()
+      closing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })
       dispatch({ type: "disposed" })
       menu.dispose()
       choosers.dispose()
@@ -1137,7 +1158,6 @@ export function createBrowserPage(
       picked.clear()
       embed.dispose()
 
-      if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false })
       await files.dispose()
     },
   }

@@ -93,6 +93,7 @@ export type BindingEvent =
   | { readonly type: "request.finished"; readonly requestID: string }
   /** A page for `tabID` was created as `attempt`, the binding's `nextAttempt`. */
   | { readonly type: "tab.opened"; readonly tabID: Browser.TabID; readonly attempt: number; readonly tab: Browser.Tab }
+  | { readonly type: "restore.refused"; readonly tabID: Browser.TabID; readonly reason: "browser.restore.outside" | "browser.restore.refused" }
   | {
       readonly type: "tab.published"
       readonly tabID: Browser.TabID
@@ -370,6 +371,15 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
       },
       effects: [],
     }
+  }
+
+  if (event.type === "restore.refused") {
+    const slot = state.tabs.get(event.tabID)
+
+    if (slot?.status !== "unloaded" || slot.tab.loadError === event.reason) return { state, effects: [] }
+    const tabs = new Map(state.tabs).set(event.tabID, { ...slot, tab: { ...slot.tab, loading: false, loadError: event.reason } })
+
+    return publish({ ...state, tabs })
   }
 
   if (event.type === "tab.closed") {

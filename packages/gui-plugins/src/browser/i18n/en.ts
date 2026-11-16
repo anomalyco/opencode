@@ -312,4 +312,6 @@ export default {
   "review.noSites": "No website access requested",
   "review.otherSites": "See site patterns in Details",
   "artifact.missing": "This artifact is not available on this session’s server.",
+  "restore.outside": "This file is now outside the session’s workspace. Open a file in the current workspace instead.",
+  "restore.refused": "This saved address is no longer allowed in this session.",
 }

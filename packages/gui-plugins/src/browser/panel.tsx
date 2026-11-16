@@ -89,6 +89,21 @@ export default function SessionBrowserPane(props: {
   const state = () => props.model.tab(props.session, props.tab().id)
   const address = () => (state()?.url === "about:blank" ? "" : (state()?.url ?? ""))
   const failed = () => !!state()?.loadError
+
+  const failureMessage = () => {
+    const error = state()?.loadError
+
+    if (error === "browser.restore.outside") return "restore.outside"
+
+    if (error === "browser.restore.refused") return "restore.refused"
+
+    if (error === "browser.artifact.missing") return "artifact.missing"
+
+    if (error === "browser.preview.unsupported") return "preview.upgrade"
+
+    return /ERR_(?:CERT_|SSL_)/.test(error ?? "") ? "failed.tls" : "failed.description"
+  }
+
   const serverFile = () => /^(workspace|artifact):/.test(address())
   const offline = () => serverFile() && !props.session.server.connected
   const suspended = () => offline() || props.model.suspended(props.session)
@@ -1007,7 +1022,7 @@ export default function SessionBrowserPane(props: {
             <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
               {plugin.t("failed.title")}
             </div>
-            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t(state()?.loadError === "browser.artifact.missing" ? "artifact.missing" : state()?.loadError === "browser.preview.unsupported" ? "preview.upgrade" : /ERR_(?:CERT_|SSL_)/.test(state()?.loadError ?? "") ? "failed.tls" : "failed.description")}</div>
+            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t(failureMessage())}</div>
           </div>
         </Show>
         <Show when={suspended()}>
