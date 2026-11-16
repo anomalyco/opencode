@@ -18,4 +18,7 @@ test("finds sites by a part of their name, a pasted address or a subdomain", () 
   expect(search("127.0")).toEqual(["127.0.0.1"])
   expect(search("::1")).toEqual(["[::1]"])
   expect(search("gitlab")).toEqual([])
+  // Only a pasted address's host matches a site it belongs to, never text elsewhere in the address.
+  expect(search("https://evil.net/?next=.github.com")).toEqual([])
+  expect(search("javascript:alert(1)//.github.com")).toEqual([])
 })

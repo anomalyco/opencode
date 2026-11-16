@@ -1,6 +1,6 @@
 import { createDecipheriv, createHash, pbkdf2Sync } from "node:crypto"
 import { chromiumTime, type CookieRead, type ImportedCookie } from "./cookie"
-import { snapshotDatabase } from "./database"
+import { snapshotDatabase, type SnapshotScratch } from "./database"
 import type { CookieHost } from "./sites"
 
 /**
@@ -94,15 +94,16 @@ type Row = {
  * plain-text columns only: no value is read, so nothing is decrypted and no key is asked for. Partitioned cookies
  * stay out, as an import leaves them behind.
  */
-export async function readChromiumHosts(database: string): Promise<CookieHost[]> {
-  const rows = await snapshotDatabase(database, (db) => {
+export async function readChromiumHosts(database: string, scratch: SnapshotScratch): Promise<CookieHost[]> {
+  const rows = await snapshotDatabase(database, scratch, (db) => {
     const query = db.prepare(
-      "SELECT host_key, expires_utc, has_expires, last_access_utc FROM cookies WHERE top_frame_site_key IS NULL OR top_frame_site_key = ''",
+      "SELECT host_key, expires_utc, has_expires, last_access_utc FROM cookies WHERE (top_frame_site_key IS NULL OR top_frame_site_key = '') AND typeof(host_key) = 'text'",
     )
 
     query.setReadBigInts(true)
 
-    // SAFETY: the query names Chromium's cookie table columns, whose SQLite types match the row.
+    // SAFETY: the query names Chromium's cookie table columns. SQLite types each value, so it keeps only rows whose
+    // host is text; a damaged row names no site. The rest are integers.
     return query.all() as { host_key: string; expires_utc: bigint; has_expires: bigint; last_access_utc: bigint }[]
   })
 
@@ -121,9 +122,10 @@ export async function readChromiumHosts(database: string): Promise<CookieHost[]>
 export async function readChromiumCookies(
   database: string,
   key: ChromiumKey,
+  scratch: SnapshotScratch,
   keep?: (host: string) => boolean,
 ): Promise<CookieRead> {
-  const rows = await snapshotDatabase(database, (db) => {
+  const rows = await snapshotDatabase(database, scratch, (db) => {
     const query = db.prepare(
       "SELECT host_key, name, value, encrypted_value, path, expires_utc, has_expires, is_secure, is_httponly, samesite, top_frame_site_key FROM cookies",
     )

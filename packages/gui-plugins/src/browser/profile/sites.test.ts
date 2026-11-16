@@ -58,6 +58,8 @@ test("lists one row per site with its cookies that would import, most recently u
         { host: "b.test", expires: undefined, used: 0 },
         { host: "a.test", expires: undefined, used: 0 },
         { host: "", expires: undefined, used: 9999 },
+        // A site longer than any host a browser sends cookies to leaves the list, not the whole list.
+        { host: `${"a".repeat(250)}.${"b".repeat(10)}.test`, expires: undefined, used: 9999 },
       ],
       now,
     ),

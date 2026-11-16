@@ -1,6 +1,6 @@
 import path from "node:path"
 import type { CookieRead, ImportedCookie } from "./cookie"
-import { snapshotDatabase } from "./database"
+import { snapshotDatabase, type SnapshotScratch } from "./database"
 import type { CookieHost } from "./sites"
 
 type Row = {
@@ -18,29 +18,43 @@ type Row = {
  * Reads a Firefox-family profile's `cookies.sqlite`. Firefox stores values in plain text. Cookies of Multi-Account
  * Containers and private origins stay behind; the default container is the one the user browses in.
  */
-export async function readFirefoxCookies(profile: string, keep?: (host: string) => boolean): Promise<CookieRead> {
-  const rows = await snapshotDatabase(
-    path.join(profile, "cookies.sqlite"),
-    (db) =>
-      // SAFETY: the query names Firefox's moz_cookies columns, whose SQLite types match `Row`.
-      db
-        .prepare(
-          "SELECT host, name, value, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies WHERE originAttributes = ''",
-        )
-        .all() as Row[],
-  )
+export async function readFirefoxCookies(
+  profile: string,
+  scratch: SnapshotScratch,
+  keep?: (host: string) => boolean,
+): Promise<CookieRead> {
+  const columns = "SELECT host, name, value, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies WHERE originAttributes = ''"
 
-  return { cookies: rows.filter((row) => !keep || keep(row.host)).map(fromRow), protected: 0, failed: 0 }
+  const rows = await snapshotDatabase(path.join(profile, "cookies.sqlite"), scratch, (db) => {
+    if (!keep)
+      // SAFETY: the query names Firefox's moz_cookies columns, whose SQLite types match `Row`.
+      return db.prepare(columns).all() as Row[]
+
+    // Values are read only for the chosen hosts, a few hundred per statement, within SQLite's limit on parameters.
+    const listed = db.prepare("SELECT DISTINCT host FROM moz_cookies WHERE originAttributes = '' AND typeof(host) = 'text'").all()
+    // SAFETY: the query selects one column, and only rows where SQLite stores it as text.
+    const hosts = (listed as { host: string }[]).flatMap((row) => (keep(row.host) ? [row.host] : []))
+
+    return Array.from({ length: Math.ceil(hosts.length / 500) }, (_, index) => hosts.slice(index * 500, index * 500 + 500)).flatMap(
+      (chunk) =>
+        // SAFETY: as above, with the chosen hosts bound as parameters.
+        db.prepare(`${columns} AND host IN (${chunk.map(() => "?").join(", ")})`).all(...chunk) as Row[],
+    )
+  })
+
+  return { cookies: rows.map(fromRow), protected: 0, failed: 0 }
 }
 
 /** The hosts of a Firefox-family profile's cookies, for the list of its sites; no value is read. */
-export async function readFirefoxHosts(profile: string): Promise<CookieHost[]> {
+export async function readFirefoxHosts(profile: string, scratch: SnapshotScratch): Promise<CookieHost[]> {
   const rows = await snapshotDatabase(
     path.join(profile, "cookies.sqlite"),
+    scratch,
     (db) =>
-      // SAFETY: the query names Firefox's moz_cookies columns, whose SQLite types match the row.
+      // SAFETY: the query names Firefox's moz_cookies columns. SQLite types each value, so it keeps only rows whose host
+      // is text; a damaged row names no site. The others are integers.
       db
-        .prepare("SELECT host, expiry, lastAccessed FROM moz_cookies WHERE originAttributes = ''")
+        .prepare("SELECT host, expiry, lastAccessed FROM moz_cookies WHERE originAttributes = '' AND typeof(host) = 'text'")
         .all() as { host: string; expiry: number | bigint; lastAccessed: number | bigint }[],
   )
 

@@ -36,7 +36,7 @@ function siteList(count: number): SiteList {
     cookies: (index % 7) + 1,
   }))
 
-  return { type: "listed", sites }
+  return { type: "listed", sites, order: "recent" }
 }
 
 // Component-test fixture: the real import dialog in the real dialog host, with main's browser profile faked at its Ipc.

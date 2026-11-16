@@ -183,11 +183,12 @@ export const ProfileSite = Schema.Struct({ site: text(255), cookies: Count })
 export type ProfileSite = typeof ProfileSite.Type
 
 /**
- * The sites a browser profile has cookies for, the ones used most recently first, read without any cookie's name or
- * value. `failed` says why there is no list, with the reasons of `ImportResult`.
+ * The sites a browser profile has cookies for, read without any cookie's name or value: the ones used most recently
+ * first (`order: "recent"`), or by name where the browser records no last use (`"name"`, Safari). `failed` says why
+ * there is no list, with the reasons of `ImportResult`.
  */
 export const SiteList = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("listed"), sites: Schema.Array(ProfileSite) }),
+  Schema.Struct({ type: Schema.Literal("listed"), sites: Schema.Array(ProfileSite), order: Schema.Literals(["recent", "name"]) }),
   Schema.Struct({ type: Schema.Literal("failed"), reason: Schema.Literals(["access", "locked", "read"]) }),
 ])
 

@@ -44,13 +44,15 @@ export function groupSites(cookies: readonly CookieHost[], now: number): Profile
     const site = named.has(cookie.host) ? named.get(cookie.host) : cookieSite(cookie.host)
     named.set(cookie.host, site)
 
-    if (!site) return
+    // A host longer than any name a browser sends cookies to is damage, and leaves the list.
+    if (!site || site.length > 255) return
     const current = sites.get(site)
     sites.set(site, { cookies: (current?.cookies ?? 0) + 1, used: Math.max(current?.used ?? 0, cookie.used) })
   })
 
+  // Names are ASCII, so code-unit order is alphabetical.
   return [...sites]
-    .toSorted((a, b) => b[1].used - a[1].used || a[0].localeCompare(b[0]))
+    .toSorted((a, b) => b[1].used - a[1].used || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .map(([site, entry]) => ({ site, cookies: entry.cookies }))
 }
 

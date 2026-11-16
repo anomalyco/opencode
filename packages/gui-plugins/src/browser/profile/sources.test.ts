@@ -1,11 +1,15 @@
 import { afterEach, expect, test } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import { cookieDetails } from "./cookie"
 import { groupSites, siteFilter } from "./sites"
+import { sweepSnapshots, type SnapshotScratch } from "./database"
+import { madeUpFirefox } from "./made-up-firefox.fixture"
 import { readSource, readSourceHosts } from "./sources"
+
+// Copies go under the made-up home, as the profile puts them under the app's data.
+const scratch = (home: string): SnapshotScratch => ({ directory: path.join(home, "copies"), live: new Set(), log: () => undefined })
 
 const saved = { ...process.env }
 
@@ -16,50 +20,18 @@ afterEach(() => {
   Object.assign(process.env, saved)
 })
 
-// A made-up Firefox profile where this system's Firefox keeps its profiles, with every location the browser list
-// reads pointed at a temporary directory, so no browser on this machine is read.
 async function firefoxProfile() {
-  const home = await mkdtemp(path.join(tmpdir(), "browser-sources-"))
-  Object.assign(process.env, {
-    HOME: home,
-    USERPROFILE: home,
-    APPDATA: path.join(home, "Roaming"),
-    LOCALAPPDATA: path.join(home, "Local"),
-    XDG_CONFIG_HOME: path.join(home, ".config"),
-  })
+  const made = await madeUpFirefox()
+  Object.assign(process.env, made.env)
 
-  const root =
-    new Map([
-      ["win32", path.join(home, "Roaming", "Mozilla", "Firefox")],
-      ["darwin", path.join(home, "Library", "Application Support", "Firefox")],
-    ]).get(process.platform) ?? path.join(home, ".mozilla", "firefox")
-
-  await mkdir(path.join(root, "Profiles", "work.default"), { recursive: true })
-  await writeFile(path.join(root, "profiles.ini"), "[Profile0]\nName=work\nIsRelative=1\nPath=Profiles/work.default\n")
-  const db = new DatabaseSync(path.join(root, "Profiles", "work.default", "cookies.sqlite"))
-  db.exec(
-    "CREATE TABLE moz_cookies (host TEXT, name TEXT, value TEXT, path TEXT, expiry INTEGER, isSecure INTEGER, isHttpOnly INTEGER, sameSite INTEGER, originAttributes TEXT, lastAccessed INTEGER)",
-  )
-  const insert = db.prepare("INSERT INTO moz_cookies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-  const later = Math.floor(Date.now() / 1000) + 86_400
-  insert.run(".github.com", "user_session", "domain-secret", "/", later, 1, 1, 1, "", 3_000_000)
-  insert.run("github.com", "_gh_sess", "host-secret", "/", later, 1, 1, 1, "", 2_000_000)
-  insert.run("api.github.com", "token", "api-secret", "/", later, 1, 1, 0, "", 1_000_000)
-  // A partitioned cookie of a chosen site, and a cookie of a container: neither imports.
-  insert.run("github.com", "chips", "partitioned", "/", later, 1, 0, 0, "^partitionKey=%28https%2Ctop.test%29", 0)
-  insert.run("github.com", "work", "container", "/", later, 1, 0, 0, "^userContextId=1", 0)
-  insert.run(".bank.test", "session", "bank-secret", "/", later, 1, 1, 1, "", 9_000_000)
-  insert.run("mail.test", "session", "mail-secret", "/", later, 1, 1, 1, "", 0)
-  db.close()
-
-  return home
+  return made.home
 }
 
 test("lists a profile's sites from their hosts, and imports only the chosen ones' cookies", async () => {
   const home = await firefoxProfile()
 
   try {
-    const hosts = await readSourceHosts("firefox", "Profiles/work.default")
+    const hosts = await readSourceHosts("firefox", "Profiles/work.default", scratch(home))
 
     if ("failure" in hosts) throw new Error(`The made-up profile did not list: ${hosts.failure}`)
     expect(groupSites(hosts, Date.now() / 1000)).toEqual([
@@ -68,7 +40,7 @@ test("lists a profile's sites from their hosts, and imports only the chosen ones
       { site: "mail.test", cookies: 1 },
     ])
 
-    const read = await readSource("firefox", "Profiles/work.default", siteFilter(["github.com"]))
+    const read = await readSource("firefox", "Profiles/work.default", scratch(home), siteFilter(["github.com"]))
 
     if ("failure" in read) throw new Error(`The made-up profile did not read: ${read.failure}`)
     // Domain cookies keep their domain and host-only cookies stay host-only once written.
@@ -91,8 +63,37 @@ test("a profile that is not one this system's browsers list reads nothing", asyn
   const home = await firefoxProfile()
 
   try {
-    expect(await readSourceHosts("firefox", "../../elsewhere")).toEqual({ failure: "read" })
-    expect(await readSource("firefox", "Profiles/missing", siteFilter(["github.com"]))).toEqual({ failure: "read" })
+    expect(await readSourceHosts("firefox", "../../elsewhere", scratch(home))).toEqual({ failure: "read" })
+    expect(await readSource("firefox", "Profiles/missing", scratch(home), siteFilter(["github.com"]))).toEqual({ failure: "read" })
+  } finally {
+    await rm(home, { recursive: true, force: true }).catch(() => undefined)
+  }
+})
+
+test("sweeps the copies a crash left behind, but never one a read still uses", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "browser-copies-"))
+  const copies = { ...scratch(home), log: (message: string, detail: Record<string, string>) => logged.push([message, detail.directory ?? ""]) }
+  const logged: [string, string][] = []
+  const legacy = path.join(home, "temp")
+
+  try {
+    const left = path.join(copies.directory, "opencode-browser-import-left")
+    const reading = path.join(copies.directory, "opencode-browser-import-reading")
+    const oldTemp = path.join(legacy, "opencode-browser-import-old")
+    const newTemp = path.join(legacy, "opencode-browser-import-new")
+    const unrelated = path.join(copies.directory, "something-else")
+    await Promise.all([left, reading, oldTemp, newTemp, unrelated].map((directory) => mkdir(directory, { recursive: true })))
+    await writeFile(path.join(left, "cookies.sqlite"), "values")
+    // Another app instance's copy in the temporary folder may still be read; one older than a minute is not.
+    await utimes(oldTemp, new Date(Date.now() - 120_000), new Date(Date.now() - 120_000))
+    copies.live.add(reading)
+
+    await sweepSnapshots(copies, [legacy])
+
+    const remaining = async (directory: string) => (await readdir(directory)).toSorted()
+    expect(await remaining(copies.directory)).toEqual(["opencode-browser-import-reading", "something-else"])
+    expect(await remaining(legacy)).toEqual(["opencode-browser-import-new"])
+    expect(logged).toEqual([])
   } finally {
     await rm(home, { recursive: true, force: true }).catch(() => undefined)
   }

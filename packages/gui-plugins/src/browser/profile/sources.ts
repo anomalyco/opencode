@@ -5,6 +5,7 @@ import path from "node:path"
 import { Option, Schema } from "effect"
 import { deriveCbcKey, readChromiumCookies, readChromiumHosts, type ChromiumKey } from "./chromium"
 import type { CookieRead } from "./cookie"
+import type { SnapshotScratch } from "./database"
 import { firefoxProfiles, readFirefoxCookies, readFirefoxHosts } from "./firefox"
 import { parseBinaryCookies } from "./safari"
 import type { CookieHost } from "./sites"
@@ -220,6 +221,7 @@ function applications(id: string) {
 export async function readSource(
   id: string,
   profile: string,
+  scratch: SnapshotScratch,
   keep?: (host: string) => boolean,
 ): Promise<CookieRead | SourceFailure> {
   const located = await locateProfile(id, profile)
@@ -228,7 +230,7 @@ export async function readSource(
   const definition = located.definition
   const target = located.target
 
-  if (definition.engine === "firefox") return readFirefoxCookies(target.directory, keep).catch(readFailure)
+  if (definition.engine === "firefox") return readFirefoxCookies(target.directory, scratch, keep).catch(readFailure)
 
   if (definition.engine === "safari")
     return readFile(target.directory).then((data): CookieRead | SourceFailure => {
@@ -242,19 +244,23 @@ export async function readSource(
 
   if (!key) return { failure: "key" }
 
-  return readChromiumCookies(target.database, key, keep).catch(readFailure)
+  return readChromiumCookies(target.database, key, scratch, keep).catch(readFailure)
 }
 
 /**
  * The hosts of a profile's cookies, for the list of its sites: never a value, so a Chromium browser's key is not
  * asked for and nothing is decrypted. `profile` must be an id `listSources` returned.
  */
-export async function readSourceHosts(id: string, profile: string): Promise<readonly CookieHost[] | SourceFailure> {
+export async function readSourceHosts(
+  id: string,
+  profile: string,
+  scratch: SnapshotScratch,
+): Promise<readonly CookieHost[] | SourceFailure> {
   const located = await locateProfile(id, profile)
 
   if (!located) return { failure: "read" }
 
-  if (located.definition.engine === "firefox") return readFirefoxHosts(located.target.directory).catch(readFailure)
+  if (located.definition.engine === "firefox") return readFirefoxHosts(located.target.directory, scratch).catch(readFailure)
 
   if (located.definition.engine === "safari")
     return readFile(located.target.directory).then((data): readonly CookieHost[] | SourceFailure => {
@@ -265,7 +271,7 @@ export async function readSourceHosts(id: string, profile: string): Promise<read
       return read.cookies.map((cookie) => ({ host: cookie.host, expires: cookie.expires, used: 0 }))
     }, readFailure)
 
-  return readChromiumHosts(located.target.database).catch(readFailure)
+  return readChromiumHosts(located.target.database, scratch).catch(readFailure)
 }
 
 async function locateProfile(id: string, profile: string) {
