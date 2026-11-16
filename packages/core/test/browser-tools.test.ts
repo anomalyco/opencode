@@ -293,7 +293,7 @@ it.live("HTML preview passes the checked relative path and requires a usable tab
   }),
 )
 
-it.live("preview fails for a missing file, and returns attachment status without a desktop", () =>
+it.live("preview fails for a missing file; an unattached inventory stays iterable and actions do not report success", () =>
   Effect.gen(function* () {
     const browser = yield* setup((action) => success(action.type === "preview" ? { path: action.path } : tab))
     yield* Effect.promise(() => Bun.write(join(browser.directory, "chart.svg"), "<svg/>"))
@@ -307,6 +307,7 @@ it.live("preview fails for a missing file, and returns attachment status without
 
     const detached = yield* setup(() => success(tab), { attach: false })
     yield* Effect.promise(() => Bun.write(join(detached.directory, "chart.svg"), "<svg/>"))
-    expect(JSON.parse(yield* detached.run(`return await tools.browser.preview({ path: "chart.svg" })`))).toMatchObject({ connected: false })
+    expect(JSON.parse(yield* detached.run(`const s = await tools.browser.tabs.list({}); return { ...s, tabs: s.tabs.map(t => t.id) }`))).toMatchObject({ connected: false, tabs: [], focusedTabID: null })
+    expect(yield* detached.run(`try { await tools.browser.click({ tabID: "${tabID}", ref: "e1" }); return "Done" } catch (error) { return error.message }`)).toStartWith("[browser.not_attached]")
   }),
 )

@@ -146,7 +146,10 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     const action = input.type === "wait" ? { ...input, plan: yield* parse(() => waitPlan(input)) } : yield* parse(() => normalizeAction(input))
     const paths = "paths" in action ? action.paths.map((path) => BrowserFiles.uploadPath(ctx.location.directory, path)) : undefined
     const approved = yield* connection.authorize(tool, action, paths ?? (action.type === "preview" ? [action.path] : undefined))
-    if (approved.connected === false) return { output: approved, content: [{ type: "text" as const, text: approved.message }] }
+    if (approved.connected === false) {
+      if (action.type === "tabs.list") return { output: { ...approved, tabs: [], focusedTabID: null }, content: [{ type: "text" as const, text: approved.message }] }
+      return yield* new Tool.Error({ metadata: { code: "not_attached" }, message: `[browser.not_attached] ${approved.message}` })
+    }
     if (action.type === "wait") return yield* wait(action.tabID, action.plan, tool, approved)
     if (action.type === "preview" && ctx.location.workspaceID) return yield* new Tool.Error({ message: "Browser preview requires a server-local workspace." })
     const checked = action.type === "preview" ? { ...action, path: yield* previewable(action.path, tool) } : action
@@ -182,7 +185,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
           name: operation.name.slice(separator + 1),
           description: operation.description,
           input: operation.input,
-          output: Schema.Union([operation.output, Schema.Struct({ connected: Schema.Literal(false), message: Schema.String })]),
+          output: operation.name === "tabs.list" ? Schema.Struct({ ...Browser.State.fields, connected: Schema.optional(Schema.Literal(false)), message: Schema.optional(Schema.String) }) : operation.output,
           options: {
             namespace: separator < 0 ? "browser" : `browser.${operation.name.slice(0, separator)}`,
             permission: "browser",

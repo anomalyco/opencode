@@ -427,7 +427,7 @@ it.live("without a deny, a session with no desktop hears that it is disconnected
     const status = (yield* browser.call("build", detached.id)).output
     expect(status).toMatchObject({ connected: false, message: expect.stringContaining("retry only after it attaches") })
     for (const [op, input] of [["preview", { path: "page.html" }], ["preview", { path: "missing.html" }], ["wait", { tabID: tab.id, selector: "#done" }], ["snapshot", { tabID: missingTab }]] as const)
-      expect((yield* browser.run(op, input, "build", detached.id)).output).toEqual(status)
+      expect((yield* browser.run(op, input, "build", detached.id).pipe(Effect.flip)).message).toStartWith("[browser.not_attached]")
     expect(browser.commands.count).toBe(0)
   }),
 )
