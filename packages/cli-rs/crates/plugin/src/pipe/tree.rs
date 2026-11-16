@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use crate::loader::approval::{self, Artifact};
 
@@ -31,6 +31,8 @@ pub(crate) struct Trees {
     /// The bytes of plugin files the walks and copies read.
     hashed: Arc<AtomicU64>,
     wake: Arc<dyn Fn() + Send + Sync>,
+    /// While set, a copy waits before it reads anything ([`Trees::pause_stages`]).
+    paused: Arc<(Mutex<bool>, Condvar)>,
 }
 
 /// Each copy by the tree and its hash: the tree's [`Entry::changes`] when it began, and its result until it is taken.
@@ -59,7 +61,13 @@ struct Entry {
 impl Trees {
     /// `wake` runs on a walk's thread when a walk found something new, and on a copy's when it ended.
     pub(crate) fn new(wake: impl Fn() + Send + Sync + 'static) -> Self {
-        Self { state: Arc::default(), stages: Arc::default(), hashed: Arc::default(), wake: Arc::new(wake) }
+        Self {
+            state: Arc::default(),
+            stages: Arc::default(),
+            hashed: Arc::default(),
+            wake: Arc::new(wake),
+            paused: Arc::default(),
+        }
     }
 
     /// The build of the global plugin `dir` as the last walk found it, or `None` before the first walk ended.
@@ -101,8 +109,10 @@ impl Trees {
         stages.insert(key, (changes, None));
         drop(stages);
         let (stages, hashed, wake) = (self.stages.clone(), self.hashed.clone(), self.wake.clone());
-        let (owned, to) = (artifact.clone(), root.to_owned());
+        let (owned, to, paused) = (artifact.clone(), root.to_owned(), self.paused.clone());
         let spawned = std::thread::Builder::new().name("plugin-stage".to_owned()).spawn(move || {
+            let (flag, resumed) = &*paused;
+            drop(resumed.wait_while(lock(flag), |paused| *paused).unwrap_or_else(|poisoned| poisoned.into_inner()));
             stage(&stages, &hashed, &owned, &to, changes);
             wake();
         });
@@ -112,6 +122,14 @@ impl Trees {
             return self.staged(artifact, root);
         }
         None
+    }
+
+    /// Holds every copy of an approved tree before it reads anything while `paused`, and lets them go on when not: a
+    /// test saves a file between the approval and the copy.
+    pub(crate) fn pause_stages(&self, paused: bool) {
+        let (flag, resumed) = &*self.paused;
+        *lock(flag) = paused;
+        resumed.notify_all();
     }
 
     /// The bytes of plugin files the walks and copies read so far.
