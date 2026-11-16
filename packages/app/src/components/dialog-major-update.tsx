@@ -14,7 +14,7 @@ export const MAJOR_INSTRUCTIONS = "https://opencode.ai/v2/docs"
 const ROW: Record<string, { class: string; path: string }> = {
   new: { class: "text-v2-text-text-accent", path: "M7 3V11M3 7H11" },
   kept: { class: "text-v2-state-fg-success", path: "M3 7.4L5.8 10L11 4" },
-  breaks: { class: "text-v2-state-fg-warning", path: "M7 3.5V8M7 10.2V10.4" },
+  breaks: { class: "text-v2-state-fg-warning", path: "M7 3V7.8M7 9.6V11" },
 }
 
 // The card image ships with the app and is decoded before the dialog opens. The dialog shows this same element, so
