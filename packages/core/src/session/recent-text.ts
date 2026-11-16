@@ -45,7 +45,7 @@ export const messageToText = (message: SessionMessage.Info | SessionStored.User)
           if (part.type === "reasoning") return []
 
           const input = typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input)
-          const call = `[Assistant tool call]: ${part.name}(${input})`
+          const call = `[Assistant tool call]: ${part.name}(${truncateToolOutput(input)})`
           if (part.state.status === "completed") {
             return [call, `[Tool result]: ${truncateToolOutput(serializeToolContent(part.state.content))}`]
           }
