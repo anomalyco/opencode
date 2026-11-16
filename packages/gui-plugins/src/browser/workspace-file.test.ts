@@ -29,6 +29,16 @@ test("external hand-off uses a live grant, its pinned root and the physical HTML
   const open = (url: string) => pages.external(url, async (target) => { launches.push(target) })
   expect(await open(url)).toBe(true)
 
+  await writeFile(path.join(reports, "notes.txt"), "not HTML")
+
+  const linked = await symlink(path.join(reports, "notes.txt"), path.join(reports, "alias.html")).then(() => true, (error: NodeJS.ErrnoException) => {
+    // Some Windows workers lack permission to create file symlinks.
+    if (process.platform === "win32" && error.code === "EPERM") return false
+    throw error
+  })
+
+  if (linked) expect(await open(new URL("alias.html", url).href)).toBe(false)
+
   for (const address of [url.replace(host, "other"), pathToFileURL(file).href, new URL("../other.html", url).href, new URL("file.exe", url).href])
     expect(await open(address)).toBe(false)
 

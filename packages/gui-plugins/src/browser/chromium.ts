@@ -75,6 +75,7 @@ import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { reloadAddress } from "./preview"
 import { externalPage } from "./address"
+import { defaultBrowser } from "./default-browser"
 import { FileVerificationError } from "@opencode/util/file-verification"
 import type { workspacePages } from "./workspace-pages"
 import { artifactLinks } from "./artifact-links"
@@ -924,8 +925,11 @@ export function createBrowserPage(
 
     if (destinationOrigin(actual)) return electron.shell.openExternal(actual)
 
+    const launch = await defaultBrowser()
+
     const opened = await options.workspace?.external(actual, async (file) => {
-      if (!canOpenPage() || contents.getURL() !== actual || await electron.shell.openPath(file)) throw new Error("browser.menu.failed")
+      if (!canOpenPage() || contents.getURL() !== actual) throw new Error("browser.menu.failed")
+      await launch(file)
     })
 
     if (!opened) throw new Error("browser.menu.failed")
