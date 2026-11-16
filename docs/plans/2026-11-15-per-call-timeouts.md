@@ -1,7 +1,7 @@
 ---
 title: Optional per-call Code Mode timeouts
 description: Let agents bound an individual tool invocation without changing provider defaults.
-status: in-progress
+status: done
 date: 2026-11-15
 size: bounded
 specs:
@@ -67,6 +67,7 @@ Update the library README, current tool semantic overview, and an Unreleased cha
 - T3 sensitivity: disabling the feature only in the new test fixtures made both regressions fail immediately; restoring it produced 20 passes across 10 repeats. Coordinator independently ran the complete runner and MCP files: 368 passes, 0 failures, 1,801 assertions.
 - The MCP integration uses the real registration, client, in-memory protocol transport, and server. Only the blocked request receives protocol cancellation; completed siblings remain successful, and a later call succeeds on the same connection.
 - Full Code Mode suite: 1,674 passes, 0 failures across 44 files. Root bun run check: 35 successful tasks, exit 0, with pre-existing lint warnings. Official TypeScript checks through package typecheck:tsc pass for Code Mode and Core. Windows and the original authenticated Z.ai connection were not available for reproduction.
+- Independent package review found no concrete defects and independently repeated library/Core focused checks. Fresh final review approved the full committed change, including the real session and MCP proofs, with no open findings.
 
 ## Deferred
 
