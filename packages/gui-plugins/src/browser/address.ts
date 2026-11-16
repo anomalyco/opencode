@@ -74,7 +74,10 @@ export function connection(url: string) {
 
 /** Whether a host names this machine; for a remote server that is the server's machine, not the user's. */
 export function loopback(hostname: string) {
-  return /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\]|::1)$/i.test(hostname) || hostname.endsWith(".localhost")
+  const host = hostname.toLowerCase().replace(/\.$/, "")
+
+  // URL.hostname canonicalizes IPv4-mapped IPv6 into hex groups, including mapped 0.0.0.0.
+  return /^(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1?\]|::1|\[::ffff:(?:7f[\da-f]{2}:[\da-f]{1,4}|0:0)\])$/.test(host) || host.endsWith(".localhost")
 }
 
 /** A file never goes to the default application. Main resolves the tab's workspace again before revealing it. */
