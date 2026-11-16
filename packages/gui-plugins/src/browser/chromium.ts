@@ -223,7 +223,7 @@ export function createBrowserPage(
     partition: string
     network: BrowserNetwork | null
     publish: (error?: string) => void
-    refused: (notice: RefusalNotice, token: string) => void
+    refused: (notice: RefusalNotice, token: string, site?: string) => void
     /** Reports the element picker starting, stopping, or picking an element. */
     inspect?: (event: { active: boolean; element?: PaneElement }) => void
     /** Reports the page's icon or zoom changing. */
@@ -449,7 +449,12 @@ export function createBrowserPage(
   const attachFrames = (sessionID?: string) => attachChildren(cdp, sessionID)
 
   const activity = options.activity
-  const notices = noticeActions(options.refused, options.menu.open)
+  const notices = noticeActions((notice, token) => options.refused(notice, token, destinationOrigin(contents.getURL())), {
+    tab: options.menu.open,
+    app: (url) => electron.shell.openExternal(url),
+    copy: (url) => electron.clipboard.writeText(url),
+  })
+  constructing.defer(notices.clear)
   const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
   const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
@@ -1177,6 +1182,7 @@ export function createBrowserPage(
     async dispose() {
       if (closed()) return
       pageLifetime.abort()
+      notices.clear()
       // Even a failed cleanup of an embed, recorder or already detached debugger must not orphan its native page.
       using closing = new DisposableStack()
       closing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })

@@ -43,5 +43,7 @@ export function navigationNotice(url: string, policy: Policy, owner: "agent" | "
 
   if (action) return { reason: "external", target: url, source, action: owner === "agent" ? "copy" : action } as const
 
-  return { reason: policy.fileRoots?.length || policy.remote ? "browser.address.workspace" : "browser.address.web" } as const
+  const reason = policy.fileRoots?.length || policy.remote ? "browser.address.workspace" : "browser.address.web"
+
+  return owner === "conversation" ? { reason, source: "conversation" } as const : { reason } as const
 }

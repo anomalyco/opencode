@@ -63,7 +63,7 @@ type ModelState = {
   pages: Record<string, Record<string, PageDetail | undefined> | undefined>
   chrome: Record<
     string,
-    Record<string, { find?: FindView; notice?: RefusalNotice & { token: string }; prompt?: PromptView } | undefined> | undefined
+    Record<string, { find?: FindView; notice?: RefusalNotice & { token: string; site?: string }; prompt?: PromptView } | undefined> | undefined
   >
 }
 
@@ -304,7 +304,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (event.type === "find" || event.type === "refusal") {
       setState("chrome", sessionKey, (old) => ({ ...old, [event.tabID]: {
-        ...old?.[event.tabID], ...(event.type === "find" ? { find: event.view ?? undefined } : { notice: { ...event.notice, token: event.token } }),
+        ...old?.[event.tabID], ...(event.type === "find" ? { find: event.view ?? undefined } : { notice: { ...event.notice, token: event.token, site: event.site } }),
       } }))
 
       return
@@ -645,15 +645,18 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const notice = state.chrome[session.key]?.[tabID]?.notice
 
       if (!notice) return
+      const conversation = notice.reason !== "popup" && notice.source === "conversation"
+      const origin = conversation ? ctx.t("notice.conversation") : notice.site ? ctx.t("notice.site", { site: notice.site }) : ctx.t("notice.page")
 
       if (notice.reason === "external" || notice.reason === "popup") return {
         token: notice.token,
+        origin,
         opensApp: notice.action === "open",
-        text: notice.reason === "external" ? ctx.t(notice.source === "conversation" ? "refused.conversation" : "refused.scheme", { scheme: notice.target.split(":", 1)[0] }) : ctx.t("refused.popup"), target: notice.target,
+        text: notice.reason === "external" ? ctx.t("refused.scheme", { scheme: notice.target.split(":", 1)[0] }) : ctx.t("refused.popup"), target: notice.target,
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
 
-      return { token: notice.token, text: describe(notice.reason) }
+      return { token: notice.token, origin, text: describe(notice.reason) }
     },
     async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean) {
       const token = state.chrome[session.key]?.[tabID]?.notice?.token

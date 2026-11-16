@@ -54,7 +54,7 @@ story("reviews the actual application target only after a trusted click", async 
   await page.mouse.up()
   await expect(pane.getByText(url)).toHaveCount(0)
   await link.click()
-  await expect(pane.getByRole("status").filter({ hasText: "Link from the conversation (obsidian)" })).toContainText(url)
+  await expect(pane.getByRole("status").filter({ hasText: "From the conversation" })).toContainText(url)
   await expect(pane.getByRole("button", { name: "Open", exact: true })).toBeVisible()
 })
 

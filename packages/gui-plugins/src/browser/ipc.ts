@@ -40,7 +40,7 @@ const FindView = Schema.Struct({
 export type FindView = typeof FindView.Type
 
 const RefusalNotice = Schema.Union([
-  Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web", "browser.preview.restricted", "browser.preview.agentRestricted"]) }),
+  Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web", "browser.preview.restricted", "browser.preview.agentRestricted"]), source: Schema.optionalKey(Schema.Literal("conversation")) }),
   Schema.Struct({ reason: Schema.Literal("external"), target: text(2048), source: Schema.Literals(["conversation", "page"]), action: Schema.Literals(["open", "copy"]) }),
   Schema.Struct({ reason: Schema.Literal("popup"), target: text(16384), action: Schema.optionalKey(Schema.Literal("tab")) }),
 ])
@@ -141,7 +141,7 @@ export type PromptAnswer = typeof PromptAnswer.Type
 
 export const PaneEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("find"), tabID: Browser.TabID, view: Schema.NullOr(FindView) }),
-  Schema.Struct({ type: Schema.Literal("refusal"), tabID: Browser.TabID, notice: RefusalNotice, token: text(128) }),
+    Schema.Struct({ type: Schema.Literal("refusal"), tabID: Browser.TabID, notice: RefusalNotice, token: text(128), site: Schema.optional(Schema.String) }),
   // What the tab waits on the user for; null once nothing waits.
   Schema.Struct({ type: Schema.Literal("prompt"), tabID: Browser.TabID, prompt: Schema.NullOr(PromptView) }),
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),

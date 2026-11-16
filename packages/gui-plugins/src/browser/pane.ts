@@ -724,8 +724,8 @@ export function createBrowserPane(input: {
         void runtime.runFork(Effect.logWarning(message))
       },
       fail,
-      refused: (notice, token) => {
-        if (current()) emit(binding, { type: "refusal", tabID: id, notice, token })
+      refused: (notice, token, site) => {
+        if (current()) emit(binding, { type: "refusal", tabID: id, notice, token, site })
       },
       publish: (error) => {
         if (current()) dispatchBinding(binding, { type: "tab.published", tabID: id, attempt, tab: page.state(), error })
