@@ -259,6 +259,7 @@ export function createBrowserPage(
     sites: SitePermissions
     /** The page browses in a remote server's partition, not the profile. */
     serverPartition?: boolean
+    waitForFilters?: (url: string, signal: AbortSignal) => Promise<void> | undefined
     /** Reports what the tab waits on the user for, to the window only. */
     prompt?: (view: PromptView | null) => void
     /** Closes the tab, after the user chose to leave a page that asked to stay. */
@@ -305,6 +306,9 @@ export function createBrowserPage(
   })
 
   const contents = view.webContents
+  const pageLifetime = new AbortController()
+  contents.once("destroyed", () => pageLifetime.abort())
+  constructing.defer(() => pageLifetime.abort())
   constructing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })
   constructing.defer(() => options.workspace?.dispose())
   constructing.defer(() => options.artifacts?.dispose())
@@ -942,10 +946,27 @@ export function createBrowserPage(
     if (!closed()) options.hidden?.()
   })
 
-  const load = async (url: string, retry = false) => {
+  const load = async (url: string, retry = false, commandSignal = options.signal) => {
     const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, (guarded) => notices.show({reason: guarded ? "browser.preview.agentRestricted" : "browser.preview.restricted"}), retry ? contents.getURL() : undefined) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
+    const signal = AbortSignal.any([pageLifetime.signal, commandSignal, options.signal])
+    signal.throwIfAborted()
+    const waiting = options.waitForFilters?.(destination, signal)
+
+    if (waiting) {
+      // Publish after the pane has taken ownership of a newly constructed restored page.
+      await Promise.resolve()
+      dispatch({ type: "navigation.started", url, isMainFrame: true, isSameDocument: false })
+      dispatch({ type: "loading.started" })
+
+      try { await waiting } catch (cause) {
+        if (!closed()) dispatch({ type: "loading.stopped", title: pageTitle() })
+        throw cause
+      }
+
+      signal.throwIfAborted()
+    }
 
     if (options.artifacts?.display(destination)) {
       artifactHost = new URL(destination).host
@@ -1142,6 +1163,7 @@ export function createBrowserPage(
     },
     async dispose() {
       if (closed()) return
+      pageLifetime.abort()
       // Even a failed cleanup of an embed, recorder or already detached debugger must not orphan its native page.
       using closing = new DisposableStack()
       closing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })
@@ -1264,7 +1286,7 @@ export function createBrowserPage(
         signal.addEventListener("abort", cancel, { once: true })
 
         try {
-          await load(url)
+          await load(url, false, signal)
         } finally {
           signal.removeEventListener("abort", cancel)
         }

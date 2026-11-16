@@ -1,7 +1,7 @@
 import { cp, lstat, readFile, realpath, rename, rm, stat } from "node:fs/promises"
 import { generateKeyPairSync } from "node:crypto"
 import path from "node:path"
-import electron, { app, type Session } from "electron"
+import electron, { app, type Extension, type Session } from "electron"
 import { Schema } from "effect"
 import type { Log, Storage } from "@opencode/plugin/gui/main"
 import type { PagePermissions } from "../page-prompts"
@@ -13,7 +13,7 @@ import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
 import { cookiesPersist } from "./probe"
 import { extensionDigest } from "./integrity"
-import { filterStartup, waitForFilter } from "./filter-startup"
+import { createFilterGate, filterReady, networkPermissions } from "./filter-startup"
 import { createPreviews } from "./previews"
 import {
   displayName,
@@ -185,8 +185,21 @@ export async function createBrowserProfile(input: {
     throw cause
   })
 
+  const closing = new AbortController()
+  const lifetime = AbortSignal.any([input.signal, closing.signal])
+  const filters = createFilterGate(lifetime, id => input.log.write("warn", "extension readiness unconfirmed; continuing navigation", { id }))
+
+  const monitor = (extension: Extension) => {
+    if (networkPermissions((extension.manifest.permissions ?? []).filter(Schema.is(Schema.String)))) {
+      filters.start(extension.id, signal => filterReady(session, extension, signal))
+    }
+  }
+
   const load = async (record: StoredExtension) => {
-    if (session.extensions.getExtension(record.id)) return
+    lifetime.throwIfAborted()
+    const existing = session.extensions.getExtension(record.id)
+
+    if (existing) return
 
     const managed = /^[a-p]{32}$/.test(record.id) && record.directory === path.join(directory, record.id) &&
       await realpath(record.directory).catch(() => undefined) === path.join(await realpath(directory), record.id)
@@ -202,6 +215,7 @@ export async function createBrowserProfile(input: {
     }
 
     changed.delete(record.id)
+    lifetime.throwIfAborted()
 
     const loaded = await session.extensions.loadExtension(record.directory, { allowFileAccess: false }).then(
       (extension) => extension,
@@ -212,25 +226,9 @@ export async function createBrowserProfile(input: {
     )
 
     if (loaded) {
-      const filtering = filterStartup(record.id, record.source, loaded.manifest.manifest_version)
-
-      if (filtering) {
-        const failed = await waitForFilter(session, loaded.url, filtering, input.signal).then(() => undefined, (cause: unknown) => String(cause))
-        input.signal.throwIfAborted()
-
-        if (failed !== undefined) {
-          apis.forget(record.id)
-
-          if (session.extensions.getExtension(record.id)) session.extensions.removeExtension(record.id)
-          errors.set(record.id, "browser.extension.filterNotReady")
-          input.log.write("warn", "extension filtering did not start", { id: record.id, version: loaded.version, cause: failed })
-
-          return
-        }
-      }
-
       errors.delete(record.id)
       apis.activate(loaded)
+      monitor(loaded)
     }
   }
 
@@ -239,11 +237,12 @@ export async function createBrowserProfile(input: {
 
   await clearStaging(directory)
     .then(async () => {
-      // Bound open handles and read buffers across the profile, not just inside each extension.
+      // Preserve the shipped registration order and bounded file hashing. Readiness probes are not awaited here.
       for (const record of stored.value) if (record.enabled) await load(record)
     })
     .then(refresh)
     .catch((cause: unknown) => {
+      closing.abort()
       apis.dispose()
       unload()
       release()
@@ -265,6 +264,7 @@ export async function createBrowserProfile(input: {
     }
 
     apis.activate(extension)
+    monitor(extension)
 
     stored.set([...stored.value.filter((item) => item.id !== record.id), record])
     changed.delete(record.id)
@@ -418,6 +418,7 @@ export async function createBrowserProfile(input: {
     /** Each tab's permission prompts by its web contents ID, which the profile's permission handlers call. */
     permissions,
     previews,
+    waitForFilters: filters.wait,
     /** The pane's tabs and windows as extensions see them; the pane registers each tab of the profile. */
     extensionTabs: apis.tabs,
     extensionMenu: apis.menu,
@@ -578,6 +579,8 @@ export async function createBrowserProfile(input: {
       }, target.store)
     },
     async remove(id: string) {
+      filters.remove(id)
+
       if (pending?.record.id === id) await discard()
       const record = stored.value.find((item) => item.id === id)
 
@@ -600,6 +603,8 @@ export async function createBrowserProfile(input: {
       stored.set(stored.value.map((item) => (item.id === id ? next : item)))
 
       if (enabled) await load(next)
+
+      if (!enabled) filters.remove(id)
 
       if (!enabled && session.extensions.getExtension(id)) session.extensions.removeExtension(id)
 
@@ -636,6 +641,7 @@ export async function createBrowserProfile(input: {
       }
     },
     dispose() {
+      closing.abort()
       void discard()
       links.forEach((_mirror, other) => void unmirror(other, false))
       links.clear()

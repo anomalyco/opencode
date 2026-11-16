@@ -74,6 +74,7 @@ test("a private preview is enumerable, but never a matching URL or title in a fi
   const tabs = [tab({ id: 3 }), tab({ id: 4, url: "oc-preview://private/report.html", title: "Q4" })]
   const access = { permissions: ["tabs"], hosts: ["<all_urls>"] }
   expect(answerQuery(tabs, {}, {}, access)[1]).not.toHaveProperty("url")
+
   for (const query of [{ url: "<all_urls>" }, { title: "*" }]) {
     expect(answerQuery(tabs, query, {}, access).map((item) => item.id)).toEqual([3])
   }

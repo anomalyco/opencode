@@ -677,6 +677,7 @@ export function createBrowserPane(input: {
       artifacts: handle.artifacts?.(),
       remote: remoteSource(binding),
       local: handle.shared,
+      waitForFilters: handle.shared ? input.profile.waitForFilters : undefined,
       signal: handle.abort.signal,
       extensions: () => extensions(binding),
       shared,

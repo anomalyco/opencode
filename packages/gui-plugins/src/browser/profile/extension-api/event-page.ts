@@ -27,7 +27,7 @@ export async function eventPage(session: Session, scope: string, fresh: boolean,
 }
 
 /** Run a fixed, read-only query in the extension's own origin. Nothing is exposed to the pane or the caller. */
-export async function manifestQuery(session: Session, scope: string, query: "wake" | "filtering", signal: AbortSignal) {
+export async function manifestQuery(session: Session, scope: string, query: "wake" | "rulesets", signal: AbortSignal) {
   const { WebContentsView } = await import("electron")
   signal.throwIfAborted()
 
@@ -59,11 +59,9 @@ export async function manifestQuery(session: Session, scope: string, query: "wak
 
     if (relay.getURL() !== url) throw new Error("Extension event page did not open.")
 
-    const ready = await relay.executeJavaScript(query === "wake"
-      ? "new Promise(resolve => chrome.runtime.getBackgroundPage(page => resolve(!!page)))"
-      // Lite answers this settings query only after its background has finished enabling its configured rulesets.
-      // Either permission value is legitimate, including when the user has intentionally limited the extension.
-      : "chrome.runtime.sendMessage({what:'hasBroadHostPermissions'}).then(value => typeof value === 'boolean')")
+    const ready = await relay.executeJavaScript(query === "rulesets"
+      ? "chrome.declarativeNetRequest.getEnabledRulesets().then(ids => Array.isArray(ids) && (ids.length > 0 || !chrome.runtime.getManifest().declarative_net_request?.rule_resources?.some(r => r.enabled)))"
+      : "new Promise(resolve => chrome.runtime.getBackgroundPage(page => resolve(!!page)))")
 
     signal.throwIfAborted()
 

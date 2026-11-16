@@ -15,6 +15,12 @@ const href = String(
 )
 
 if (href.startsWith("chrome-extension://")) {
+  ipcRenderer.on("browser-extension:listening", (_event, channel) => {
+    const listening = contextBridge.executeInMainWorld({ func: () => Object.keys(chrome.webRequest ?? {}).some(
+      name => name.startsWith("on") && chrome.webRequest[name]?.hasListeners?.(),
+    ) })
+    ipcRenderer.send(channel, listening === true)
+  })
   const receiver = { dispatch: undefined, last: undefined }
   ipcRenderer.on("browser-extension:event", (_event, name, args, token) => {
     const dispatched = (token && token === receiver.last) || receiver.dispatch?.(name, args)

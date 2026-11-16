@@ -1,83 +1,157 @@
-import type { Session, WebContents } from "electron"
-import { manifestQuery } from "./extension-api/event-page"
+import { once, type EventEmitter } from "node:events"
+import type { Extension, Session } from "electron"
+import { Schema } from "effect"
+import { eventPage, manifestQuery } from "./extension-api/event-page"
 
-// Electron's extension-ready means the package was registered, not that its asynchronous request filter is ready.
-// An unpacked extension, a lookalike name or a different manifest version must not select a package-specific handshake.
-export function filterStartup(id: string, source: string, manifestVersion: number) {
-  if (source !== "store") return
+/** One advisory budget after registration, not one timeout per extension. A cold uBO took 2.3s here. */
+const DEADLINE = 3500
 
-  if (id === "odfafepnkmbhccpbejgmiehpchacaeak" && manifestVersion === 2) return "background"
+/** An advisory barrier for local HTTP navigations, never an extension enable/disable decision. */
+export function createFilterGate(lifetime: AbortSignal, unconfirmed: (id: string) => void) {
+  type Attempt = { abort: AbortController; retry?: ReturnType<typeof setTimeout> }
 
-  if (id === "ddkjiahejlhfcafbddmgiahcphecmpfh" && manifestVersion === 3) return "rulesets"
+  const pending = new Map<string, Attempt>()
+  let batch: { done: ReturnType<typeof Promise.withResolvers<void>>; deadline: ReturnType<typeof setTimeout> } | undefined
+
+  const remove = (id: string) => {
+    const item = pending.get(id)
+
+    if (!item) return
+    pending.delete(id)
+    item.abort.abort()
+    clearTimeout(item.retry)
+
+    if (pending.size || !batch) return
+    clearTimeout(batch.deadline)
+    batch.done.resolve()
+    batch = undefined
+  }
+
+  const clear = () => pending.forEach((_, id) => remove(id))
+  lifetime.addEventListener("abort", clear, { once: true })
+
+  return {
+    remove,
+    start(id: string, probe: (signal: AbortSignal) => Promise<boolean>) {
+      if (lifetime.aborted) return
+      // Replace an attempt in place; existing navigations keep waiting on the same batch.
+      const old = pending.get(id)
+      old?.abort.abort()
+      clearTimeout(old?.retry)
+      const item: Attempt = { abort: new AbortController() }
+      pending.set(id, item)
+      batch ??= {
+        done: Promise.withResolvers<void>(),
+        deadline: setTimeout(() => {
+          pending.forEach((_, key) => unconfirmed(key))
+          clear()
+        }, DEADLINE),
+      }
+
+      const check = async () => {
+        const ready = await probe(item.abort.signal).catch(() => false)
+
+        if (pending.get(id) !== item) return
+
+        if (ready === true) return remove(id)
+        item.retry = setTimeout(() => void check(), 50)
+      }
+
+      void check()
+    },
+    wait(url: string, signal: AbortSignal) {
+      if (!batch || !/^https?:\/\//i.test(url)) return
+      signal.throwIfAborted()
+      const canceled = Promise.withResolvers<never>()
+      const close = () => canceled.reject(signal.reason)
+      signal.addEventListener("abort", close, { once: true })
+
+      return Promise.race([batch.done.promise, canceled.promise]).then(() => {
+        lifetime.throwIfAborted()
+        signal.throwIfAborted()
+      }).finally(() => signal.removeEventListener("abort", close))
+    },
+  }
 }
 
-// uBO's start.js sets readyToFilter *before* initializing its tabs and installing the filtering listener. Wait for
-// the startup promise and check the listener, not merely for a document or a registered chrome.webRequest callback.
-export const filterReadiness = `globalThis.µBlock?.isReadyPromise?.then(() =>
-  globalThis.µBlock.readyToFilter === true && typeof globalThis.vAPI?.net?.suspendableListener === 'function')`
+export function networkPermissions(permissions: readonly string[]) {
+  return permissions.some((p) => ["webRequest", "webRequestBlocking", "declarativeNetRequest", "declarativeNetRequestWithHostAccess"].includes(p))
+}
 
-export async function waitForFilter(
-  session: Session,
-  scope: string,
-  kind: "background" | "rulesets",
-  lifetime: AbortSignal,
-) {
-  const { app, webContents } = await import("electron")
-  const signal = AbortSignal.any([lifetime, AbortSignal.timeout(15_000)])
+const Background = Schema.Struct({
+  page: Schema.optional(Schema.String),
+  scripts: Schema.optional(Schema.Array(Schema.String)),
+  persistent: Schema.optional(Schema.Boolean),
+  service_worker: Schema.optional(Schema.String),
+})
+
+/** Each retry rechecks Chromium's actual background. A failed start/message during registration is not a permanent
+ * failure. Absence of a background is valid for a purely declarative extension. Never expose a package value to main. */
+export async function filterReady(session: Session, extension: Extension, signal: AbortSignal) {
+  const background = Schema.is(Background)(extension.manifest.background) ? extension.manifest.background : undefined
+  const dnr = extension.manifest.permissions?.some((p: string) => p === "declarativeNetRequest" || p === "declarativeNetRequestWithHostAccess")
+  const requests = extension.manifest.permissions?.includes("webRequest")
+
+  if (background?.service_worker) {
+    const worker = await session.serviceWorkers.startWorkerForScope(extension.url)
+
+    if (!worker || worker.isDestroyed() || worker.scope !== extension.url) return false
+
+    // An MV3 webRequest worker may still be adding its listeners. A dedicated acknowledgement from our own
+    // preload checks Chromium's registrations without delivering a synthetic event to the extension.
+    if (requests && !dnr) return workerListening(worker, signal)
+  }
+
   signal.throwIfAborted()
-  const ready = Promise.withResolvers<void>()
 
-  if (kind === "rulesets") {
-    const stop = () => ready.reject(signal.reason)
-    signal.addEventListener("abort", stop, { once: true })
+  if (background?.page || background?.scripts?.length) {
+    const { webContents } = await import("electron")
+    const url = new URL(background.page ?? "_generated_background_page.html", extension.url).href
 
-    try {
-      const initialized = await Promise.race([manifestQuery(session, scope, "filtering", signal), ready.promise])
+    if (!url.startsWith(extension.url)) return false
 
-      if (!initialized) throw new Error("Filter rulesets are not ready.")
+    const page = background.persistent === false
+      ? await eventPage(session, extension.url, false, signal)
+      : webContents.getAllWebContents().find(w => w.session === session && w.getType() === "backgroundPage" && w.getURL() === url)
 
-      return
-    } finally {
-      signal.removeEventListener("abort", stop)
+    if (!page || page.isDestroyed() || page.isCrashed() || page.getURL() !== url || page.isLoadingMainFrame()) return false
+
+    if (requests && !dnr) {
+      const listening = await page.executeJavaScript(`['onBeforeRequest','onBeforeSendHeaders','onHeadersReceived','onAuthRequired','onCompleted','onErrorOccurred','onBeforeRedirect','onResponseStarted','onSendHeaders'].some(name => chrome.webRequest?.[name]?.hasListeners?.())`)
+
+      if (listening !== true) return false
+    }
+
+    // The native listener exists before uBO attaches its filter engine. On three cold restores it passed the ad
+    // while readyToFilter was false. This is advisory even for a local copy: only a boolean leaves the background.
+    if (extension.name === "uBlock Origin" && extension.manifest.manifest_version === 2) {
+      const ready = await page.executeJavaScript("globalThis.µBlock?.readyToFilter === true && typeof globalThis.vAPI?.net?.suspendableListener === 'function'")
+
+      if (ready !== true) return false
     }
   }
 
-  const url = new URL("background.html", scope).href
-  const pages = new Map<WebContents, () => void>()
-  const stop = () => ready.reject(signal.reason)
+  if (dnr) return manifestQuery(session, extension.url, "rulesets", signal)
 
-  const watch = (page: WebContents) => {
-    if (page.session !== session || page.getType() !== "backgroundPage" || pages.has(page)) return
+  return true
+}
 
-    const inspect = () => {
-      if (page.isDestroyed() || page.getURL() !== url) return
-      void page.executeJavaScript(filterReadiness).then(
-        (value) => {
-          if (value === true && !page.isDestroyed() && page.getURL() === url) ready.resolve()
-        },
-        () => {},
-      )
-    }
-
-    pages.set(page, inspect)
-    page.on("did-finish-load", inspect)
-
-    if (!page.isLoadingMainFrame()) inspect()
-  }
-
-  // On first run uBO reloads itself after writing its version. Only the replacement background can report ready.
-  const created = (_event: Electron.Event, page: WebContents) => watch(page)
-  app.on("web-contents-created", created)
-  signal.addEventListener("abort", stop, { once: true })
+/** Chromium can drop a send during startup. Expire this acknowledgement so the gate can probe the new worker
+ * on the next attempt. This never extends the shared navigation deadline. */
+export async function workerListening(worker: { ipc: EventEmitter; send(channel: string, reply: string): void }, signal: AbortSignal) {
+  const channel = `browser-extension:listening:${crypto.randomUUID()}`
+  const ack = new AbortController()
+  const retry = setTimeout(() => ack.abort(), 250)
 
   try {
-    webContents.getAllWebContents().forEach(watch)
-    await ready.promise
+    const [reply] = await Promise.all([
+      once(worker.ipc, channel, { signal: AbortSignal.any([signal, ack.signal]) }),
+      Promise.resolve().then(() => worker.send("browser-extension:listening", channel)),
+    ])
+
+    return reply[1] === true
   } finally {
-    signal.removeEventListener("abort", stop)
-    app.off("web-contents-created", created)
-    pages.forEach((inspect, page) => {
-      if (!page.isDestroyed()) page.off("did-finish-load", inspect)
-    })
+    clearTimeout(retry)
+    ack.abort()
   }
 }
