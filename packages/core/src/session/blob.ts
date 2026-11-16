@@ -1,7 +1,7 @@
 export * as SessionBlob from "./blob.js"
 
 import { createHash } from "node:crypto"
-import { and, eq, exists, gt, gte, inArray, isNotNull, isNull, lte, notExists, or, type SQL, sql } from "drizzle-orm"
+import { and, eq, exists, gt, gte, inArray, isNull, lte, not, or, type SQL, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Effect, Option, Schema } from "effect"
 import { map } from "effect/Array"
 import type { Attachment, FileAttachment } from "@opencode/schema/prompt"
@@ -226,13 +226,11 @@ export function describe(files: ReadonlyArray<Attachment>, meta: ReadonlyMap<str
 }
 
 /**
- * Whether a blob's bytes live in a file under `blobs/` rather than in `data`: an empty `data` (`stored` is its length)
- * with a non-zero size. Every reader of `data` checks this first; {@link onDiskWhere} is the same check in SQL.
+ * A blob whose bytes live in a file under `blobs/` has an empty `data` (`stored` is its length) and a non-zero size.
+ * Every reader of `data` checks this first; {@link onDiskWhere} is the same check in SQL.
  */
-export const onDisk = (row: { readonly bytes: number; readonly stored: number }) => row.bytes > 0 && row.stored === 0
-
-/** {@link onDisk} as a SQL condition. */
-export const onDiskWhere = sql`(length(${BlobTable.data}) = 0 AND ${BlobTable.bytes} > 0)`
+const onDisk = (row: { readonly bytes: number; readonly stored: number }) => row.bytes > 0 && row.stored === 0
+const onDiskWhere = sql`(length(${BlobTable.data}) = 0 AND ${BlobTable.bytes} > 0)`
 
 // SQLite reads a blob's length from its record header, without loading its bytes.
 const stored = sql<number>`length(${BlobTable.data})`
@@ -246,66 +244,45 @@ const live = (db: DatabaseService, now: number) =>
         .from(BlobRefTable)
         .where(eq(BlobRefTable.hash, BlobTable.hash)),
     ),
-    gt(BlobTable.expires_at, now),
+    gt(sql`coalesce(${BlobTable.expires_at}, 0)`, now),
   )
 
-/** The exact negation of {@link live}: no ref and no unexpired `expires_at`. */
-const dead = (db: DatabaseService, now: number) =>
-  and(
-    notExists(
-      db
-        .select({ one: sql`1` })
-        .from(BlobRefTable)
-        .where(eq(BlobRefTable.hash, BlobTable.hash)),
-    ),
-    or(isNull(BlobTable.expires_at), lte(BlobTable.expires_at, now)),
-  )
-
-export interface Stat {
-  readonly mime: string
-  readonly bytes: number
-  /** The bytes live in a file; see {@link onDisk}. */
-  readonly onDisk: boolean
-}
-
-/**
- * One readable blob's type and size without its bytes, for the experimental media route and `media:` prompt
- * attachments. A blob nothing references and whose `expires_at` has passed reads as missing while it awaits its sweep.
- */
+/** A readable blob's type and size, without loading its bytes, so the media route can answer 304 first. */
 export const stat = Effect.fnUntraced(function* (db: DatabaseService, hash: string) {
-  const now = yield* Clock.currentTimeMillis
   const blob = yield* db
     .select({ mime: BlobTable.mime, bytes: BlobTable.bytes, stored })
     .from(BlobTable)
-    .where(and(eq(BlobTable.hash, hash), live(db, now)))
+    .where(and(eq(BlobTable.hash, hash), live(db, yield* Clock.currentTimeMillis)))
     .get()
     .pipe(Effect.orDie)
-  return blob && ({ mime: blob.mime, bytes: blob.bytes, onDisk: onDisk(blob) } satisfies Stat)
+  return blob && { mime: blob.mime, bytes: blob.bytes, onDisk: onDisk(blob) }
 })
 
-/** Whether a row for `hash` exists, live or not. */
-export const has = Effect.fnUntraced(function* (db: DatabaseService, hash: string) {
-  const row = yield* db
+/** Whether a row for `hash` exists, readable or not. */
+export const has = (db: DatabaseService, hash: string) =>
+  db
     .select({ hash: BlobTable.hash })
     .from(BlobTable)
     .where(eq(BlobTable.hash, hash))
     .get()
-    .pipe(Effect.orDie)
-  return row !== undefined
-})
+    .pipe(
+      Effect.orDie,
+      Effect.map((row) => row !== undefined),
+    )
 
-/** {@link stat} with the bytes of a blob stored in `data`; `data` is undefined when they live in a file. */
+/** A readable blob's type and bytes; `data` is undefined when they live in a file. */
 export const read = Effect.fnUntraced(function* (db: DatabaseService, hash: string) {
-  const now = yield* Clock.currentTimeMillis
   const blob = yield* db
     .select({ mime: BlobTable.mime, bytes: BlobTable.bytes, data: BlobTable.data })
     .from(BlobTable)
-    .where(and(eq(BlobTable.hash, hash), live(db, now)))
+    .where(and(eq(BlobTable.hash, hash), live(db, yield* Clock.currentTimeMillis)))
     .get()
     .pipe(Effect.orDie)
   if (!blob) return undefined
-  const disk = onDisk({ bytes: blob.bytes, stored: blob.data.byteLength })
-  return { mime: blob.mime, bytes: blob.bytes, onDisk: disk, data: disk ? undefined : view(blob.data) }
+  return {
+    mime: blob.mime,
+    data: onDisk({ bytes: blob.bytes, stored: blob.data.byteLength }) ? undefined : view(blob.data),
+  }
 })
 
 /** A blob's hash is the lowercase hex SHA-256 of its raw bytes. */
@@ -557,45 +534,31 @@ const release = Effect.fnUntraced(function* (db: DatabaseService, ...where: read
   for (const batch of DatabaseBatch.batches([...new Set(released.map((ref) => ref.hash))], 1, 1))
     yield* db
       .delete(BlobTable)
-      .where(and(inArray(BlobTable.hash, batch), dead(db, now), sql`NOT ${onDiskWhere}`))
+      .where(and(inArray(BlobTable.hash, batch), not(live(db, now)), sql`NOT ${onDiskWhere}`))
       .run()
       .pipe(Effect.orDie)
 })
 
-/**
- * Blobs {@link sweep} may delete at `now`: expired ones with no ref, and file blobs no ref holds that have no expiry,
- * which {@link release} leaves behind.
- */
+/** Blobs `BlobStore.sweep` deletes: expired ones no ref holds, and file blobs that {@link release} left behind. */
 export const sweepable = Effect.fnUntraced(function* (db: DatabaseService, now: number) {
   const rows = yield* db
     .select({ hash: BlobTable.hash })
     .from(BlobTable)
-    .where(
-      and(
-        or(
-          and(isNotNull(BlobTable.expires_at), lte(BlobTable.expires_at, now)),
-          and(isNull(BlobTable.expires_at), onDiskWhere),
-        ),
-        dead(db, now),
-      ),
-    )
+    .where(and(or(lte(BlobTable.expires_at, now), and(isNull(BlobTable.expires_at), onDiskWhere)), not(live(db, now))))
     .all()
     .pipe(Effect.orDie)
   return rows.map((row) => row.hash)
 })
 
-/**
- * Deletes one blob row if it is still dead at `now`, rechecked in the delete itself, and returns whether its bytes
- * lived in a file the caller must now delete. Undefined when the blob is alive again or already gone.
- */
+/** Deletes a blob row if it is still unreadable, rechecked in the delete, and returns whether its bytes were a file. */
 export const sweep = Effect.fnUntraced(function* (db: DatabaseService, hash: string, now: number) {
   const deleted = yield* db
     .delete(BlobTable)
-    .where(and(eq(BlobTable.hash, hash), dead(db, now)))
+    .where(and(eq(BlobTable.hash, hash), not(live(db, now))))
     .returning({ bytes: BlobTable.bytes, stored })
     .get()
     .pipe(Effect.orDie)
-  return deleted && onDisk(deleted)
+  return deleted !== undefined && onDisk(deleted)
 })
 
 /** Releases the blobs a removed message or cancelled inbox row referenced. */

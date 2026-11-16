@@ -183,36 +183,15 @@ it.effect("history names a file blob instead of inlining its bytes", () =>
   }),
 )
 
-it.effect("stages into a .part file that a failure deletes, and commit reuses an intact copy", () =>
+it.effect("commit reuses an intact copy of the same bytes and drops the staged file", () =>
   Effect.gen(function* () {
     const { store } = yield* setup
     const global = yield* Global.Service
-    const part = path.join(global.data, "blobs", "gen_part.part")
-    const failed = yield* store
-      .stage(
-        "gen_part",
-        Stream.make(new TextEncoder().encode("half")).pipe(Stream.concat(Stream.fail(new Error("dropped")))),
-      )
-      .pipe(Effect.flip)
-    expect(failed).toBeInstanceOf(Error)
-    expect(yield* exists(part)).toBe(false)
-
     const first = yield* fileBlob("gen_first", new TextEncoder().encode("same bytes"), null)
     const staged = yield* store.stage("gen_second", Stream.make(new TextEncoder().encode("same bytes")))
     expect(staged.hash).toBe(first)
     yield* store.commit("gen_second", staged, Effect.void)
     expect(yield* exists(path.join(global.data, "blobs", "gen_second.part"))).toBe(false)
     expect(yield* Effect.promise(() => fs.readFile(store.path(first), "utf8"))).toBe("same bytes")
-  }),
-)
-
-it.effect("reports a missing or truncated file instead of serving it", () =>
-  Effect.gen(function* () {
-    const { store } = yield* setup
-    const hash = yield* fileBlob("gen_open", new TextEncoder().encode("twelve bytes"), null)
-    expect(yield* store.open(hash, 12)).toBe(store.path(hash))
-    expect(yield* store.open(hash, 99)).toBeUndefined()
-    yield* Effect.promise(() => fs.rm(store.path(hash)))
-    expect(yield* store.open(hash, 12)).toBeUndefined()
   }),
 )

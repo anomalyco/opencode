@@ -25,7 +25,6 @@ const generate = makeLocationNode({
         start: () => Effect.succeed({ id: "provider_1" }),
         status: () => Effect.succeed({ status: "completed" }),
         result: () => Effect.succeed({ mime: "video/mp4", stream: Stream.make(video) }),
-        cancel: () => Effect.die("unused"),
       },
     }),
   ),

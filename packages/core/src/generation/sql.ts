@@ -1,24 +1,24 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import type { Generate } from "@opencode/schema/generate"
+import type { GenerationID, VideoErrorReason } from "@opencode/schema/generate"
 import type { Model } from "@opencode/schema/model"
 import { Timestamps } from "../database/schema.sql.js"
-import type { Generation } from "../generation.js"
 
 export const GenerationTable = sqliteTable(
   "generation",
   {
-    id: text().$type<Generate.GenerationID>().primaryKey(),
-    kind: text().$type<Generation.Kind>().notNull(),
+    id: text().$type<GenerationID>().primaryKey(),
+    kind: text().$type<"image" | "video">().notNull(),
     model: text({ mode: "json" }).$type<Model.Ref>().notNull(),
     /** Set as soon as the provider accepts the job. A `submitting` row without it is never submitted again. */
     provider_job_id: text(),
-    status: text().$type<Generation.Status>().notNull(),
-    reason: text().$type<Generate.VideoErrorReason>(),
+    /** `submitting` until the provider returns its job ID; clients see it as `running`. */
+    status: text().$type<"submitting" | "running" | "completed" | "error">().notNull(),
+    reason: text().$type<VideoErrorReason>(),
     error: text(),
     /** Hashes of the stored outputs, once `completed`. */
     media: text({ mode: "json" }).$type<ReadonlyArray<string>>(),
-    request: text({ mode: "json" }).$type<Generation.Request>().notNull(),
-    /** When the stored outputs may be deleted, once `completed`. */
+    /** Milliseconds the outputs stay available once the job completes; `expires_at` is set then. */
+    retention: integer().notNull(),
     expires_at: integer(),
     ...Timestamps,
   },

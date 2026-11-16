@@ -23,7 +23,7 @@ import sessionViewedStateMigration from "@opencode/core/database/migration/20260
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
 import blobMigration from "@opencode/core/database/migration/20261025123711_blob"
-import videoGenerationMigration from "@opencode/core/database/migration/20261115234412_video_generation"
+import videoGenerationMigration from "@opencode/core/database/migration/20261116002054_video_generation"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(

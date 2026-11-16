@@ -72,7 +72,6 @@ const it = testEffect(
           start: () => Effect.die("unused"),
           status: () => Effect.die("unused"),
           result: () => Effect.die("unused"),
-          cancel: () => Effect.die("unused"),
         },
       }),
     ),

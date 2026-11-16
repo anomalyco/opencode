@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration.js"
 
 const migration: DatabaseMigration.Migration = {
-  id: "20261115234412_video_generation",
+  id: "20261116002054_video_generation",
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
@@ -15,7 +15,7 @@ const migration: DatabaseMigration.Migration = {
           \`reason\` text,
           \`error\` text,
           \`media\` text,
-          \`request\` text NOT NULL,
+          \`retention\` integer NOT NULL,
           \`expires_at\` integer,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL

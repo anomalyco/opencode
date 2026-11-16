@@ -97,15 +97,11 @@ export const VideoAspect: Schema.Codec<VideoAspect> = Schema.Union([ImageAspect,
   description: "Aspect ratio as width:height, or auto to follow the start image",
 })
 
-/** Open-ended: providers spell other sizes their own way. */
 export type VideoResolution = "480p" | "720p" | "1080p" | "4k" | (string & {})
 export const VideoResolution: Schema.Codec<VideoResolution> = Schema.Union([
   Schema.Literals(["480p", "720p", "1080p", "4k"]),
   Schema.String,
 ]).annotate({ identifier: "Generate.VideoResolution" })
-
-/** The longest `expiresAfter` a request may ask for: 30 days, in seconds. */
-export const MAX_VIDEO_EXPIRES_AFTER = 30 * 24 * 60 * 60
 
 export interface VideoRequest extends Schema.Schema.Type<typeof VideoRequest> {}
 export const VideoRequest = Schema.Struct({
@@ -122,7 +118,7 @@ export const VideoRequest = Schema.Struct({
   sound: Schema.Boolean.pipe(optional).annotate(
     description("Whether the video has a generated soundtrack; unset leaves the model's default"),
   ),
-  expiresAfter: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_VIDEO_EXPIRES_AFTER))
+  expiresAfter: PositiveInt.check(Schema.isLessThanOrEqualTo(30 * 24 * 60 * 60))
     .pipe(optional)
     .annotate(description("Seconds the finished video stays available; defaults to 86400 (24 hours)")),
 }).annotate({ identifier: "Generate.VideoRequest" })

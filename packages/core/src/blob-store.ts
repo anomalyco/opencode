@@ -11,124 +11,100 @@ import { Database } from "./database/database.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { SessionBlob } from "./session/blob.js"
 
-/** One folder for every blob stored as a file, next to the database's other data, like `tool-output/`. */
-const DIRECTORY = "blobs"
-const SWEEP_INTERVAL = Duration.hours(1)
-// Enough leading bytes for `Media.detectMediaType`.
-const HEAD_BYTES = 64
-
-/** A staged file's contents: the hash that names it, its size and its first bytes, for sniffing its type. */
 export interface Staged {
   readonly hash: string
   readonly bytes: number
-  readonly head: Uint8Array
 }
 
 export interface Interface {
-  /** Where a blob stored as a file lives: `<data>/blobs/<first 2 hex>/<hash>`. */
+  /** `<data>/blobs/<first 2 hex>/<hash>`. */
   readonly path: (hash: string) => string
-  /**
-   * Streams bytes into `blobs/<id>.part`, hashing them as they arrive, and syncs the file. A retry with the same `id`
-   * overwrites the earlier attempt; a failure deletes the staged file.
-   */
+  /** Streams into `blobs/<id>.part` while hashing, then syncs it. A retry overwrites it; a failure deletes it. */
   readonly stage: <E, R>(
     id: string,
     stream: Stream.Stream<Uint8Array, E, R>,
   ) => Effect.Effect<Staged, E | PlatformError, R>
   /**
-   * Moves `id`'s staged file to its hash's path, or drops it when an intact copy is already there, then runs `insert`
-   * (which records the row) while holding the hash's lock, so a sweep can't delete the file in between.
+   * Moves the staged file to its hash's path, or drops it when an intact copy is there, then runs `insert` under the
+   * hash's lock, so a sweep can't delete the file before its row exists.
    */
   readonly commit: <A, E, R>(
     id: string,
     staged: Staged,
     insert: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E | PlatformError, R>
-  /** Deletes `id`'s staged file, if any. */
   readonly discard: (id: string) => Effect.Effect<void>
-  /** The path of a blob's file when it is there with the expected size. Otherwise logs an error; the row is kept. */
+  /** The file's path when it exists with the expected size; otherwise logs an error and keeps the row. */
   readonly open: (hash: string, bytes: number) => Effect.Effect<string | undefined>
-  /** Deletes blobs that expired with no ref, row first and then the file. */
+  /** Deletes expired blobs no ref holds: row first, then file. */
   readonly sweep: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BlobStore") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const { db } = yield* Database.Service
-    const directory = path.join((yield* Global.Service).data, DIRECTORY)
+    const directory = path.join((yield* Global.Service).data, "blobs")
     const locks = KeyedMutex.makeUnsafe<string>()
-    // Files whose row is gone but whose delete failed, such as a file another process holds open on Windows. They
-    // are retried on the next sweep; a restart forgets them.
+    // Files whose row is gone but whose delete failed, such as one held open on Windows; retried each sweep.
     const leftover = new Set<string>()
 
     const file = (hash: string) => path.join(directory, hash.slice(0, 2), hash)
     const part = (id: string) => path.join(directory, `${id}.part`)
-
     const discard = (id: string) => fs.remove(part(id), { force: true }).pipe(Effect.ignore)
 
     const stage = <E, R>(id: string, stream: Stream.Stream<Uint8Array, E, R>) =>
       Effect.gen(function* () {
         yield* fs.makeDirectory(directory, { recursive: true })
         const hash = createHash("sha256")
-        const state = { bytes: 0, head: new Uint8Array(0) }
-        yield* Effect.scoped(
-          Effect.gen(function* () {
-            const handle = yield* fs.open(part(id), { flag: "w", mode: 0o600 })
-            yield* stream.pipe(
-              Stream.runForEach((chunk) =>
-                Effect.suspend(() => {
-                  hash.update(chunk)
-                  if (state.head.byteLength < HEAD_BYTES)
-                    state.head = concat(state.head, chunk.subarray(0, HEAD_BYTES - state.head.byteLength))
-                  state.bytes += chunk.byteLength
-                  return handle.writeAll(chunk)
-                }),
-              ),
-            )
-            yield* handle.sync
-          }),
+        const handle = yield* fs.open(part(id), { flag: "w", mode: 0o600 })
+        const bytes = yield* stream.pipe(
+          Stream.runFoldEffect(
+            () => 0,
+            (total, chunk) => {
+              hash.update(chunk)
+              return handle.writeAll(chunk).pipe(Effect.as(total + chunk.byteLength))
+            },
+          ),
         )
-        return { hash: hash.digest("hex"), bytes: state.bytes, head: state.head } satisfies Staged
-      }).pipe(Effect.onError(() => discard(id)))
+        yield* handle.sync
+        return { hash: hash.digest("hex"), bytes }
+      }).pipe(
+        Effect.scoped,
+        Effect.onError(() => discard(id)),
+      )
 
     const commit = <A, E, R>(id: string, staged: Staged, insert: Effect.Effect<A, E, R>) =>
       locks.withLock(staged.hash)(
         Effect.gen(function* () {
           const target = file(staged.hash)
+          // A short copy, from a write that never finished, is replaced.
           const existing = yield* fs.stat(target).pipe(Effect.option)
-          // An intact copy is the same bytes; a short one, from a write that never finished, is replaced.
-          const intact = Option.isSome(existing) && Number(existing.value.size) === staged.bytes
-          if (intact) yield* discard(id)
-          if (!intact) {
-            yield* fs.makeDirectory(path.dirname(target), { recursive: true })
-            yield* fs.rename(part(id), target)
-          }
+          yield* Option.isSome(existing) && Number(existing.value.size) === staged.bytes
+            ? discard(id)
+            : fs
+                .makeDirectory(path.dirname(target), { recursive: true })
+                .pipe(Effect.andThen(fs.rename(part(id), target)))
           leftover.delete(staged.hash)
           return yield* insert
         }),
       )
 
     const open = Effect.fn("BlobStore.open")(function* (hash: string, bytes: number) {
-      const target = file(hash)
-      const info = yield* fs.stat(target).pipe(Effect.option)
-      if (Option.isNone(info)) {
-        yield* Effect.logError("blob file is missing", { hash, path: target })
-        return undefined
-      }
-      if (Number(info.value.size) !== bytes) {
-        yield* Effect.logError("blob file has the wrong size", {
-          hash,
-          path: target,
-          bytes,
-          size: Number(info.value.size),
-        })
-        return undefined
-      }
-      return target
+      const size = yield* fs.stat(file(hash)).pipe(
+        Effect.map((info) => Number(info.size)),
+        Effect.option,
+      )
+      if (Option.isSome(size) && size.value === bytes) return file(hash)
+      yield* Effect.logError("blob file is missing or has the wrong size", {
+        hash,
+        bytes,
+        size: Option.getOrUndefined(size),
+      })
+      return undefined
     })
 
     const unlink = (hash: string) =>
@@ -149,21 +125,18 @@ export const layer = Layer.effect(
         yield* SessionBlob.sweepable(db, now),
         (hash) =>
           locks.withLock(hash)(
-            Effect.gen(function* () {
-              if (yield* SessionBlob.sweep(db, hash, now)) yield* unlink(hash)
-            }),
+            SessionBlob.sweep(db, hash, now).pipe(Effect.flatMap((onDisk) => (onDisk ? unlink(hash) : Effect.void))),
           ),
         { discard: true },
       )
-      // A leftover whose hash was stored again since is that row's file now.
+      // A leftover whose hash was stored again since belongs to that row now.
       yield* Effect.forEach(
         [...leftover],
         (hash) =>
           locks.withLock(hash)(
-            Effect.gen(function* () {
-              if (yield* SessionBlob.has(db, hash)) return leftover.delete(hash)
-              yield* unlink(hash)
-            }),
+            SessionBlob.has(db, hash).pipe(
+              Effect.flatMap((stored) => (stored ? Effect.sync(() => leftover.delete(hash)) : unlink(hash))),
+            ),
           ),
         { discard: true },
       )
@@ -173,20 +146,13 @@ export const layer = Layer.effect(
   }),
 )
 
-function concat(left: Uint8Array, right: Uint8Array) {
-  const joined = new Uint8Array(left.byteLength + right.byteLength)
-  joined.set(left)
-  joined.set(right, left.byteLength)
-  return joined
-}
-
 export const node = makeGlobalNode({
   service: Service,
   layer,
   deps: [FSUtil.node, Database.node, Global.node],
 })
 
-/** Sweeps at startup, then every hour. */
+/** Sweeps at startup, then hourly. */
 export const sweepNode = makeGlobalNode({
   name: "blob-sweep",
   layer: Layer.effectDiscard(
@@ -194,7 +160,7 @@ export const sweepNode = makeGlobalNode({
       const store = yield* Service
       yield* store.sweep.pipe(
         Effect.ignoreCause({ log: "Error", message: "Blob sweep failed" }),
-        Effect.repeat(Schedule.spaced(SWEEP_INTERVAL)),
+        Effect.repeat(Schedule.spaced(Duration.hours(1))),
         Effect.forkScoped,
       )
     }),

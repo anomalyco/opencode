@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "fc6dd24d-21cb-47f6-9f3c-634982c6b951",
+  "id": "76d12184-f482-4772-a474-2aec0d745750",
   "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
   "ddl": [
     {
@@ -551,12 +551,12 @@
       "table": "generation"
     },
     {
-      "type": "text",
+      "type": "integer",
       "notNull": true,
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "request",
+      "name": "retention",
       "entityType": "columns",
       "table": "generation"
     },

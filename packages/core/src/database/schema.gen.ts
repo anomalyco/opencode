@@ -78,7 +78,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`reason\` text,
           \`error\` text,
           \`media\` text,
-          \`request\` text NOT NULL,
+          \`retention\` integer NOT NULL,
           \`expires_at\` integer,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL
