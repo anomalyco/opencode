@@ -38,16 +38,20 @@ const context = {
 const allowAll = permissionService({ assert: () => Effect.void })
 
 // The file services of a Location at `directory`, asking `permission` like the execute call's own.
-const fileServices = (directory: string, permission: Partial<Permission.Interface> = { assert: () => Effect.void }) =>
+const fileServices = (
+  directory: string,
+  permission: Partial<Permission.Interface> = { assert: () => Effect.void },
+  formatter: Formatter.Interface["file"] = () => Effect.succeed(false),
+) =>
   Effect.runSync(
     Effect.context<CodeModeFs.Services>().pipe(
       Effect.provide(
-        AppNodeBuilder.build(LayerNode.group([Environment.node, FileAccess.node, FileWrite.node]), [
+        AppNodeBuilder.build(LayerNode.group([Environment.node, FileAccess.node, FileWrite.node, Location.node]), [
           Environment.node.replace(hostEnvironmentLayer),
           Location.node.replace(
             Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
           ),
-          Formatter.node.replace(Layer.mock(Formatter.Service, { file: () => Effect.succeed(false) })),
+          Formatter.node.replace(Layer.mock(Formatter.Service, { file: formatter })),
           Permission.node.replace(permissionLayer(permission)),
         ]),
       ),
@@ -461,23 +465,29 @@ describe("fs", () => {
         {
           code: `import { readFile } from "node:fs/promises"
             const text = await readFile("notes.txt", "utf8")
+            let missingParent
+            try { fs.writeFileSync("none/copy.txt", "x") } catch (e) { missingParent = e.code }
+            fs.mkdirSync("out")
             fs.writeFileSync("out/copy.txt", text + " world")
-            return [text, fs.readdirSync("out"), path.join("out", "..", "notes.txt")]`,
+            return [text, missingParent, fs.readdirSync("out"), path.join("out", "..", "notes.txt")]`,
         },
         context,
       ),
     )
 
-    expect(JSON.parse(result.output.output)).toEqual(["hello", ["copy.txt"], "notes.txt"])
+    expect(JSON.parse(result.output.output)).toEqual(["hello", "ENOENT", ["copy.txt"], "notes.txt"])
     expect(await Bun.file(path.join(tmp.path, "out", "copy.txt")).text()).toBe("hello world")
     expect(asked.map((input) => [input.action, input.resources, input.sessionID, input.source])).toEqual([
       ["read", ["notes.txt"], context.sessionID, source],
+      ["edit", ["out"], context.sessionID, source],
       ["edit", ["out/copy.txt"], context.sessionID, source],
       ["read", ["out"], context.sessionID, source],
     ])
-    expect(asked[1]?.metadata).toMatchObject({ files: [{ file: "out/copy.txt", status: "added", additions: 1 }] })
+    expect(asked[2]?.metadata).toMatchObject({ files: [{ file: "out/copy.txt", status: "added", additions: 1 }] })
     expect(result.output.toolCalls).toEqual([
       { tool: "fs", status: "completed", input: { method: "readFile", path: "notes.txt" } },
+      { tool: "fs", status: "error", input: { method: "writeFileSync", path: "none/copy.txt" } },
+      { tool: "fs", status: "completed", input: { method: "mkdirSync", path: "out" } },
       { tool: "fs", status: "completed", input: { method: "writeFileSync", path: "out/copy.txt" } },
       { tool: "fs", status: "completed", input: { method: "readdirSync", path: "out" } },
     ])
@@ -641,6 +651,38 @@ describe("fs", () => {
           fs.statSync("missing", { throwIfNoEntry: false }) ?? null, [entry.name, entry.parentPath, entry.isFIFO()]]`,
       ),
     ).toEqual([true, "onetwo", "EEXIST", null, ["log.txt", ".", false]])
+  })
+
+  test("writes keep exactly the bytes written: no formatting, no BOM handling, no parent directories", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "bom.txt"), "\uFEFFold")
+    // A formatter that rewrites every file it's given, so a write that ran it would read back "formatted".
+    const formatter = (file: string) => Effect.promise(() => fs.writeFile(file, "formatted")).pipe(Effect.as(true))
+    const result = await runFs(
+      tmp.path,
+      `fs.writeFileSync("bom.txt", "new")
+      fs.writeFileSync("ugly.ts", "const   x   =1")
+      let missing
+      try { fs.writeFileSync("no/such/dir.txt", "x") } catch (e) { missing = e.code }
+      fs.appendFileSync("ugly.ts", ";")
+      return [missing]`,
+      allowAll,
+      fileServices(tmp.path, undefined, formatter),
+    )
+    expect(result).toEqual(["ENOENT"])
+    expect([...(await fs.readFile(path.join(tmp.path, "bom.txt")))]).toEqual([...Buffer.from("new")])
+    expect(await fs.readFile(path.join(tmp.path, "ugly.ts"), "utf8")).toBe("const   x   =1;")
+  })
+
+  test("path is the host's path module, resolving against the session's directory", async () => {
+    await using tmp = await tmpdir()
+    const [resolved, relative, posix, win32, sep] = await runFs(
+      tmp.path,
+      `return [path.resolve("a", "b"), path.relative("a", "c"), path.posix.join("a", "b"), path.win32.join("a", "b"), path.sep]`,
+    )
+    expect(resolved).toBe(path.resolve(tmp.path, "a", "b"))
+    expect(relative).toBe(path.join("..", "c"))
+    expect([posix, win32, sep]).toEqual(["a/b", "a\\b", path.sep])
   })
 
   test("existsSync is false for a path it may not check, instead of throwing", async () => {

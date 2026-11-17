@@ -10,11 +10,13 @@ import { Glob } from "@opencode/util/glob"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileWrite } from "../file-write.js"
+import { Location } from "../location.js"
 import { Permission } from "../permission.js"
+import { fileDiff } from "../tool/plugin/file-diff.js"
 import { CodeModeExecution } from "./execution.js"
 
 /** The services the `fs` global needs from the execute call's Location. */
-export type Services = FileAccess.Service | FileWrite.Service | Environment.Service
+export type Services = FileAccess.Service | FileWrite.Service | Environment.Service | Location.Service
 
 type Host = {
   readonly context: ToolContext
@@ -22,7 +24,8 @@ type Host = {
   readonly fileWrite: FileWrite.Interface
   readonly files: Environment.Files
 }
-type Encoding = BufferEncoding | { readonly encoding?: BufferEncoding | null } | null
+// "buffer" asks for a Buffer where Node would otherwise return a string (readdir names, readlink, realpath).
+type Encoding = BufferEncoding | "buffer" | { readonly encoding?: BufferEncoding | "buffer" | null } | null
 type Data = string | Uint8Array
 type PathLike = string | URL
 type Op = (...args: never[]) => Effect.Effect<unknown, unknown, Services | CodeModeExecution.Service>
@@ -33,7 +36,7 @@ const ops = {
   readFile: op("open", function* (host, file, options?: Encoding) {
     const bytes = (yield* host.files.read(yield* read(host, file))).bytes
     const encoding = typeof options === "string" ? options : options?.encoding
-    return encoding ? Buffer.from(bytes).toString(encoding) : Buffer.from(bytes)
+    return encoding && encoding !== "buffer" ? Buffer.from(bytes).toString(encoding) : Buffer.from(bytes)
   }),
   writeFile: op("open", function* (host, file, data: Data, options?: Encoding | { readonly flag?: string }) {
     const flag = typeof options === "object" && options !== null && "flag" in options ? options.flag : undefined
@@ -45,9 +48,15 @@ const ops = {
     yield* write(host, file, toBytes(data, encodingOf(options)))
   }),
   appendFile: op("open", (host, file, data: Data, options?: Encoding) => append(host, file, toBytes(data, options))),
-  readdir: op("scandir", function* (host, file, options?: { withFileTypes?: boolean; recursive?: boolean }) {
-    const entries = yield* walk(host.files, yield* read(host, file), options?.recursive === true ? Infinity : 1)
-    if (options?.withFileTypes !== true) return entries.map((entry) => entry.path)
+  readdir: op("scandir", function* (host, file, options?: Encoding | { withFileTypes?: boolean; recursive?: boolean }) {
+    const settings = typeof options === "object" && options !== null ? options : {}
+    const entries = yield* walk(
+      host.files,
+      yield* read(host, file),
+      "recursive" in settings && settings.recursive === true ? Infinity : 1,
+    )
+    if (!("withFileTypes" in settings) || settings.withFileTypes !== true)
+      return entries.map((entry) => (encodingOf(options) === "buffer" ? Buffer.from(entry.path) : entry.path))
     return entries.map((entry) =>
       dirent(path.basename(entry.path), path.join(file, path.dirname(entry.path)), entry.type),
     )
@@ -93,9 +102,8 @@ const ops = {
   truncate: op("open", function* (host, file, length?: number) {
     const [absolute] = yield* edit(host, [file])
     const bytes = (yield* host.files.read(absolute!)).bytes
-    const size = Math.max(0, length ?? 0)
-    const next = new Uint8Array(size)
-    next.set(bytes.subarray(0, size))
+    const next = new Uint8Array(Math.max(0, length ?? 0))
+    next.set(bytes.subarray(0, next.length))
     yield* host.files.write(absolute!, next)
   }),
   rm: op("rm", remove),
@@ -251,23 +259,44 @@ function* edit(host: Host, files: ReadonlyArray<string>) {
   return targets.map((target) => target.absolute)
 }
 
-// Valid UTF-8 goes through FileWrite like the write tool (diff, BOM, formatting); other bytes are written as they are.
+// Writes exactly these bytes, as Node does: no formatting and no BOM handling. The edit request shows the change as a
+// diff when both sides are text, like the write tool's. A missing parent directory is ENOENT, as in Node.
 function* write(host: Host, file: string, content: Uint8Array) {
-  const text = Buffer.from(content).toString("utf8")
-  if (Buffer.from(text).equals(content))
-    return void (yield* host.fileWrite.write({ path: file, content: text }, host.context))
-  const [absolute] = yield* edit(host, [file])
-  yield* host.files.write(absolute, content)
+  const prepared = yield* prepare(host, file, () => content)
+  yield* host.files.write(prepared.target, content)
 }
 
-// Appends under the path's lock, so concurrent appends to one file keep every chunk.
 function* append(host: Host, file: string, bytes: Uint8Array) {
-  const [absolute] = yield* outside(host, [file])
-  const current = yield* host.files.read(absolute!).pipe(
+  const joined = (current: Uint8Array | undefined) => Buffer.concat([current ?? new Uint8Array(), bytes])
+  const prepared = yield* prepare(host, file, joined)
+  yield* host.files.write(prepared.target, joined(prepared.current))
+}
+
+// Resolves a file a write will change, asks edit permission with the resulting change, and checks Node's preconditions.
+function* prepare(host: Host, file: string, next: (current: Uint8Array | undefined) => Uint8Array) {
+  const target = yield* host.fileWrite.target(file, host.context)
+  const current = yield* host.files.read(target.absolute).pipe(
     Effect.map((result) => result.bytes),
-    Effect.catchTag("Environment.NotFound", () => Effect.succeed(new Uint8Array())),
+    Effect.catchTag("Environment.NotFound", () => Effect.undefined),
   )
-  yield* write(host, file, Buffer.concat([current, bytes]))
+  if (current === undefined && (yield* typeOf(host, path.dirname(target.absolute))) === undefined)
+    return yield* Effect.fail("ENOENT" as const)
+  const before = text(current ?? new Uint8Array())
+  const after = text(next(current))
+  yield* host.fileWrite.authorize(
+    target,
+    host.context,
+    before !== undefined && after !== undefined
+      ? fileDiff(target.resource, before, after, current ? "modified" : "added")
+      : undefined,
+  )
+  return { target: target.absolute, current }
+}
+
+// Bytes as text when they are valid UTF-8.
+const text = (bytes: Uint8Array) => {
+  const decoded = Buffer.from(bytes).toString("utf8")
+  return Buffer.from(decoded).equals(bytes) ? decoded : undefined
 }
 
 // A recursive mkdir: like Node, it returns the first directory it created, written the way the path was given, or
@@ -381,16 +410,21 @@ const dirent = (name: string, parentPath: string, type: Environment.FileType) =>
   ...kind(type),
 })
 
+const textEncoding = (encoding: BufferEncoding | "buffer" | null | undefined): BufferEncoding =>
+  encoding && encoding !== "buffer" ? encoding : "utf8"
+
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-const encodingOf = (options: Encoding | { readonly flag?: string } | undefined) =>
-  typeof options === "string"
-    ? options
-    : (options as { readonly encoding?: BufferEncoding | null } | null | undefined)?.encoding
+// The encoding an options argument names: a string, or an object's `encoding`.
+const encodingOf = (options: unknown): BufferEncoding | "buffer" | undefined => {
+  if (typeof options === "string") return options as BufferEncoding | "buffer"
+  if (typeof options !== "object" || options === null || !("encoding" in options)) return undefined
+  return typeof options.encoding === "string" ? (options.encoding as BufferEncoding | "buffer") : undefined
+}
 
 const toBytes = (data: Data, options?: Encoding) =>
   typeof data === "string"
-    ? Buffer.from(data, (typeof options === "string" ? options : options?.encoding) ?? "utf8")
+    ? Buffer.from(data, textEncoding(typeof options === "string" ? options : options?.encoding))
     : data
 
 const messages = {
