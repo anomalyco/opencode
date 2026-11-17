@@ -1051,6 +1051,73 @@ story("asks for a page's prompt text and sends what the user typed", async ({ pa
   await expect(dialog).toBeHidden()
 })
 
+// What the key test below records in the story's window.
+declare global {
+  interface Window {
+    keyLog: KeyboardEvent[]
+    keyBehind: string[]
+  }
+}
+
+story("keeps the keys inside a page prompt, and leaves them to the window once the keyboard is elsewhere", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  // Each key as the window saw it first, and whether its default was cancelled once every handler had seen it.
+  await page.evaluate(() => {
+    const log: KeyboardEvent[] = []
+    // Keys the window's own handlers behind the prompt would see, as the composer's and the zoom's do.
+    const behind: string[] = []
+    Object.assign(window, { keyLog: log, keyBehind: behind })
+    window.addEventListener("keydown", (event) => log.push(event), { capture: true })
+    window.addEventListener("keydown", (event) => behind.push(event.key))
+  })
+  const behind = () => page.evaluate(() => window.keyBehind.splice(0))
+
+  const log = () =>
+    page.evaluate(() =>
+      window.keyLog
+        .splice(0)
+        .filter((event) => !["Control", "Alt", "Shift", "Meta"].includes(event.key))
+        .map((event) => `${event.key}:${event.defaultPrevented ? "prevented" : "default"}`),
+    )
+
+  await root.getByRole("button", { name: "Page prompt", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const dialog = page.getByRole("alertdialog", { name: "alpha.example says" })
+  const field = dialog.getByRole("textbox", { name: "Your answer" })
+  await expect(field).toBeFocused()
+  await field.press("End")
+  await page.keyboard.type(" two")
+  await log()
+
+  // Reload, the agent switch, find, close and new tab, zoom and history do nothing here.
+  for (const chord of ["Control+r", "Control+.", "Control+f", "Control+w", "Control+t", "Control+Equal", "Alt+ArrowLeft", "F5"])
+    await page.keyboard.press(chord)
+  expect(await log()).toEqual(["r", ".", "f", "w", "t", "=", "ArrowLeft", "F5"].map((key) => `${key}:prevented`))
+  // Editing keys edit the field as they do anywhere.
+  await page.keyboard.press("Control+a")
+  await page.keyboard.press("ArrowRight")
+  await page.keyboard.press("Backspace")
+  expect(await log()).toEqual(["a:default", "ArrowRight:default", "Backspace:default"])
+  await expect(field).toHaveValue("Draft tw")
+  await expect(dialog).toBeVisible()
+  // None of them went past the prompt to the window's handlers.
+  expect(await behind()).toEqual([])
+
+  // With the keyboard in the composer, its keys are the app's and the prompt stays open.
+  await root.getByRole("textbox", { name: "Composer stand-in" }).focus()
+  await page.keyboard.press("Control+r")
+  expect(await log()).toEqual(["r:default"])
+  expect(await behind()).toEqual(["Control", "r"])
+  await expect(dialog).toBeVisible()
+
+  await field.focus()
+  await expect(async () => {
+    await field.press("Enter")
+    await expect(root.getByText('Answers: [{"kind":"dialog","accept":true,"text":"Draft tw","stop":false}]', { exact: true })).toBeVisible({
+      timeout: 200,
+    })
+  }).toPass()
+})
+
 story("asks for a site's sign-in with its realm, says the last one failed, and keeps nothing on cancel", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Sign-in request", exact: true }).evaluate((element: HTMLElement) => element.click())

@@ -48,8 +48,6 @@ export default {
   "site.permissions": "Los permisos están bloqueados",
   "site.permissions.description":
     "La cámara, el micrófono, la ubicación y las notificaciones no funcionan en este navegador.",
-  "site.agent": "El agente puede usar esta página",
-  "site.agent.description": "Puede leer la página, ejecutar scripts y rellenar formularios.",
   "page.add": "Añadir página a la sesión",
   "page.placeholder": "Añade contexto sobre esta página",
   "external.open": "Abrir en el navegador del sistema",

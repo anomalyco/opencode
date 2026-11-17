@@ -8,6 +8,7 @@ import {
   frameStillCurrent,
   isDocumentLoading,
   isNavigationPending,
+  retryOnly,
   transitionDocument,
   type DocumentEvent,
   type DocumentState,
@@ -62,13 +63,31 @@ test("a redraw against the filter gate's held navigation: rejected while it is h
   expect(frameStillCurrent(page, cancelled)).toBe(true)
   expect(frameStillCurrent(page, replay(visit("https://site.test/b"), waiting).state)).toBe(false)
 
-  // A restored tab whose held load is stopped shows its blank page; one whose load was never issued stays restoring,
-  // and no redraw of it is current.
+  // An actual native stop with no commit is distinct from stopping before Chromium starts the load.
   const restoring = createDocumentState({ generation: 1, title: "B", url: "https://site.test/b" })
   const blank = replay([...held, { type: "loading.stopped", title: "" }], restoring).state
   expect(blank.status).toBe("blank")
   expect(frameStillCurrent(blank, blank)).toBe(true)
   expect(frameStillCurrent(restoring, blank)).toBe(false)
+})
+
+test("Stop before issue publishes the restore address without inventing a committed document or an error", () => {
+  const address = "https://next.test/report"
+  const restore = createDocumentState({ url: address, title: "Report", generation: 4 })
+
+  for (const before of [restore, replay(visit("https://previous.test/")).state, replay(visit("file:///workspace/report.html")).state]) {
+    const cancelled = replay([
+      { type: "navigation.started", isMainFrame: true, isSameDocument: false, url: address },
+      { type: "loading.started" },
+      { type: "navigation.held-stopped", address },
+    ], before).state
+
+    const saved = documentTab(cancelled, history)
+    expect(saved).toMatchObject({ id: history.id, url: before.status === "loaded" ? before.url : address, loading: false })
+    expect(saved).not.toHaveProperty("loadError")
+    expect(documentVisible(cancelled)).toBe(documentVisible(before))
+    expect(documentTab(cancelled, history, false)).toEqual(documentTab(before, history, false))
+  }
 })
 
 // Electron's events for a navigation that commits and finishes loading.
@@ -92,6 +111,18 @@ const shown = () =>
 test("a failed local history entry has no address to open, not the previous HTTP document", () => {
   const event = { type: "navigation.failed", url: "oc-preview://host/virtual", code: -2, description: "ERR_FAILED", isMainFrame: true } as const
   expect(documentTab(replay([event], shown()).state, history)).toMatchObject({ url: "about:blank", loadError: "ERR_FAILED" })
+})
+
+test("site controls are unavailable for a failed page showing a retry address until that address loads", () => {
+  const url = "https://retry.test/"
+  const failed = transitionDocument(shown(), { type: "navigation.failed", code: -324, description: "ERR_EMPTY_RESPONSE", url: "https://failed.test/", isMainFrame: true }).state
+  const stopped = transitionDocument(failed, { type: "navigation.held-stopped", address: url })
+  expect(documentTab(stopped.state, history).url).toBe(url)
+  expect(retryOnly(stopped.state)).toBe(true)
+  expect(types(stopped.effects)).toContain("detail")
+  const loaded = replay(visit(url), stopped.state)
+  expect(retryOnly(loaded.state)).toBe(false)
+  expect(types(loaded.all)).toContain("detail")
 })
 
 test.each(["workspace://ses_a/report.html", "file:///work/report.html", "artifact://art_a/"])("a failed restore retains its verified retry address %s", (url) => {

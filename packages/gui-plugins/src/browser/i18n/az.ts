@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Təmizlə",
   "site.permissions": "İcazələr bloklanıb",
   "site.permissions.description": "Kamera, mikrofon, məkan və bildirişlər bu brauzerdə işləmir.",
-  "site.agent": "Agent bu səhifədən istifadə edə bilər",
-  "site.agent.description": "O, səhifəni oxuya, skriptlər işlədə və formaları doldura bilər.",
   "page.add": "Səhifəni sessiyaya əlavə et",
   "page.placeholder": "Bu səhifə haqqında kontekst əlavə edin",
   "external.open": "Sistem brauzerində aç",

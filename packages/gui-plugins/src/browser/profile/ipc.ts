@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { Ipc } from "@opencode/plugin/gui"
+import { Browser } from "@opencode/plugin-browser/rpc"
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
@@ -271,6 +272,8 @@ export const BrowserProfile = Ipc.define({
      */
     click: {
       input: Schema.Struct({
+        binding: text(256),
+        tabID: Browser.TabID,
         id: text(64),
         anchor: Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number }),
       }),

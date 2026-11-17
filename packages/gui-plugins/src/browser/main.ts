@@ -1,5 +1,5 @@
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
-import type { Plugin } from "@opencode/plugin/gui/main"
+import { MenubarItem, type Plugin } from "@opencode/plugin/gui/main"
 import type { Pane } from "./pane"
 import type { Profile } from "./profile"
 import { RefsStore } from "./refs"
@@ -132,6 +132,27 @@ const setup: Plugin.MainSetup = (ctx) => {
     return pane()
   }
 
+  if (process.platform === "darwin") {
+    const reload = (window?: number) => {
+      const current = selectPane(paneState)
+
+      return current.kind === "ready" ? current.pane.menuReload(window) : undefined
+    }
+
+    ctx.add(MenubarItem, {
+      menu: "view",
+      id: "hardReload",
+      after: "view.reload",
+      get label() {
+        return ctx.t("menu.hardReload")
+      },
+      enabled: () => !!reload(ctx.windows.focused()?.id),
+      run: (window) => {
+        void reload(window?.id)?.().catch((error: Error) => ctx.log.write("warn", error.message))
+      },
+    })
+  }
+
   const provider = ctx.provide(BrowserPane, {
     register: async (input, caller) => (await load()).register(caller.window, input.binding, input),
     load: async (input, caller) => (await pane()).load(caller.window, input.binding, input.tabID),
@@ -145,6 +166,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     zoom: async (input, caller) => (await pane()).zoom(caller.window, input.binding, input.tabID, input.zoom),
     site: async (input, caller) => (await pane()).site(caller.window, input.binding, input.tabID),
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
+    clearCache: async (input, caller) => (await pane()).clearCache(caller.window, input.binding, input.tabID, input.address),
     reveal: async (input, caller) => (await pane()).reveal(caller.window, input.binding, input.tabID),
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),
     forget: async (input) => (await load()).forget(input.server,input.session),
@@ -185,8 +207,12 @@ const setup: Plugin.MainSetup = (ctx) => {
       // The window lays out in CSS pixels; its content is in device-independent ones.
       const zoom = win.webContents.getZoomFactor()
       const anchor = input.anchor
+      const current = await profile()
+      const tab = (await pane()).toolbarTab(caller.window, input.binding, input.tabID)
 
-      return (await profile()).clickExtension(win, input.id, {
+      if (tab === undefined) return false
+
+      return current.clickExtension(win, input.id, tab, {
         x: Math.round(anchor.x * zoom),
         y: Math.round(anchor.y * zoom),
         width: Math.round(anchor.width * zoom),

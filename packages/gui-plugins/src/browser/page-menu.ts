@@ -39,6 +39,7 @@ export type MenuAction =
         | "back"
         | "forward"
         | "reload"
+        | "hardReload"
         | "copyImage"
         | "cut"
         | "copy"
@@ -79,6 +80,7 @@ export function pageMenu(
     item("back", { type: "back" }, options.back),
     item("forward", { type: "forward" }, options.forward),
     item("reload", { type: "reload" }),
+    item("hardReload", { type: "hardReload" }),
   ]
 
   const links = link

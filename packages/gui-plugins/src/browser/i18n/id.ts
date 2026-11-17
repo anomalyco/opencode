@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Hapus",
   "site.permissions": "Izin diblokir",
   "site.permissions.description": "Kamera, mikrofon, lokasi, dan notifikasi tidak berfungsi di peramban ini.",
-  "site.agent": "Agen dapat menggunakan halaman ini",
-  "site.agent.description": "Agen dapat membaca halaman, menjalankan skrip, dan mengisi formulir.",
   "page.add": "Tambahkan halaman ke sesi",
   "page.placeholder": "Tambahkan konteks tentang halaman ini",
   "external.open": "Buka di peramban sistem",

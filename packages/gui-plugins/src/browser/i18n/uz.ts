@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Tozalash",
   "site.permissions": "Ruxsatlar bloklangan",
   "site.permissions.description": "Bu brauzerda kamera, mikrofon, joylashuv va bildirishnomalar ishlamaydi.",
-  "site.agent": "Agent bu sahifadan foydalanishi mumkin",
-  "site.agent.description": "U sahifani o‘qishi, skriptlarni ishga tushirishi va shakllarni to‘ldirishi mumkin.",
   "page.add": "Sahifani sessiyaga qo‘shish",
   "page.placeholder": "Bu sahifa haqida kontekst qo‘shing",
   "external.open": "Tizim brauzerida ochish",

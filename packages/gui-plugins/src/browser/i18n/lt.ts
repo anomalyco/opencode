@@ -49,8 +49,6 @@ export default {
   "site.cookies.clear": "Išvalyti",
   "site.permissions": "Leidimai užblokuoti",
   "site.permissions.description": "Kamera, mikrofonas, vietovė ir pranešimai šioje naršyklėje neveikia.",
-  "site.agent": "Agentas gali naudoti šį puslapį",
-  "site.agent.description": "Jis gali skaityti puslapį, vykdyti scenarijus ir pildyti formas.",
   "page.add": "Pridėti puslapį prie seanso",
   "page.placeholder": "Pridėkite kontekstą apie šį puslapį",
   "external.open": "Atverti sistemos naršyklėje",

@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "ล้าง",
   "site.permissions": "สิทธิ์ถูกบล็อก",
   "site.permissions.description": "กล้อง ไมโครโฟน ตำแหน่ง และการแจ้งเตือนไม่ทำงานในเบราว์เซอร์นี้",
-  "site.agent": "เอเจนต์ใช้หน้านี้ได้",
-  "site.agent.description": "เอเจนต์สามารถอ่านหน้า เรียกใช้สคริปต์ และกรอกฟอร์มได้",
   "page.add": "เพิ่มหน้าไปยังเซสชัน",
   "page.placeholder": "เพิ่มบริบทเกี่ยวกับหน้านี้",
   "external.open": "เปิดในเบราว์เซอร์ของระบบ",

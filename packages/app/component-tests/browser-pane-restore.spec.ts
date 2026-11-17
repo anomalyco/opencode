@@ -698,3 +698,82 @@ story(
     await expect(tabs).toHaveText(["beta.ts", "Preview"])
   },
 )
+
+story(
+  "runs no shortcut from a page prompt, even after a click on its dimmed page; the permission bar and a drawer keep theirs",
+  async ({ page }) => {
+    const root = page.getByTestId("browser-region-fixture")
+    const reloads = root.getByTestId("browser-reloads")
+    const reviews = root.getByTestId("review-toggles")
+    await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+    await root.getByRole("button", { name: "Beta", exact: true }).click()
+    await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+    await root.getByRole("button", { name: "First inventory", exact: true }).click()
+
+    await root.getByRole("button", { name: "Page prompt", exact: true }).click()
+    const dialog = root.getByRole("alertdialog", { name: "beta.example says" })
+    const field = dialog.getByRole("textbox", { name: "Your answer" })
+    const dimmed = root.locator("[data-browser-prompt]")
+    await expect(field).toBeFocused()
+    // Neither the pane's reload nor the session's review toggle runs from the prompt.
+    await field.press("ControlOrMeta+r")
+    await field.press("ControlOrMeta+Shift+r")
+    // A click on the dimmed page keeps the keyboard in the prompt rather than giving it to the pane behind.
+    await dimmed.click({ position: { x: 4, y: 4 } })
+    await expect(field).toBeFocused()
+    await page.keyboard.press("ControlOrMeta+r")
+    await expect(reloads).toHaveText("0")
+    await expect(reviews).toHaveText("0")
+
+    // F6, Shift+F6 and the address shortcut leave the prompt open for the address field, as in Chrome; Tab comes back.
+    const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+
+    for (const chord of ["F6", "Shift+F6", "ControlOrMeta+l"]) {
+      await field.focus()
+      await page.keyboard.press(chord)
+      await expect(address).toBeFocused()
+      await expect(dialog).toBeVisible()
+    }
+
+    await expect(async () => {
+      await page.keyboard.press("Tab")
+      await expect(field).toBeFocused({ timeout: 100 })
+    }).toPass()
+
+    // The prompt is modal for its tab only: on the address field the pane's shortcuts work and the prompt stays open.
+    await address.click()
+    await address.press("ControlOrMeta+r")
+    await expect(reloads).toHaveText("1")
+    await expect(dialog).toBeVisible()
+    // A click on the dimmed page brings the keyboard back, where Escape is the prompt's cancel.
+    await dimmed.click({ position: { x: 4, y: 4 } })
+    await expect(field).toBeFocused()
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+
+    // The permission bar is not modal: the pane's shortcuts work there, and Escape is its "not now".
+    await root.getByRole("button", { name: "Permission request", exact: true }).click()
+    const bar = root.locator('[data-component="browser-prompt"]')
+    const never = bar.getByRole("button", { name: "Never allow", exact: true })
+    await expect(never).toBeFocused()
+    await never.press("ControlOrMeta+r")
+    await expect(reloads).toHaveText("2")
+    await never.press("Escape")
+    await expect(bar).toBeHidden()
+
+    // Another modal surface, as a mobile drawer, keeps the app's shortcuts; markup alone, as a chat message's, cannot
+    // claim the keyboard.
+    await page.evaluate(() => {
+      const drawer = document.createElement("div")
+      drawer.setAttribute("role", "dialog")
+      drawer.setAttribute("aria-modal", "true")
+      drawer.setAttribute("data-owns-keyboard", "")
+      drawer.append(Object.assign(document.createElement("button"), { textContent: "Drawer action" }))
+      document.body.append(drawer)
+    })
+    const action = page.getByRole("button", { name: "Drawer action", exact: true })
+    await action.focus()
+    await action.press("ControlOrMeta+Shift+r")
+    await expect(reviews).toHaveText("1")
+  },
+)

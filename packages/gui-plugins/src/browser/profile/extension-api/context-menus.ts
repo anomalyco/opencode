@@ -183,6 +183,7 @@ export function menuTarget(
  * it has more than one; the extension API never sees built-in items or a local preview's context.
  */
 export function createContextMenus(input: {
+  grant: (extension: Extension, tabId: number) => void
   tabs: ExtensionTabs
   emit: Emit
   extensions: () => readonly Extension[]
@@ -203,6 +204,7 @@ export function createContextMenus(input: {
   }
 
   const clicked = (extension: Extension, tab: PaneTab, item: MenuItem, params: ContextMenuParams) => {
+    if (params.pageURL === tab.contents.getURL()) input.grant(extension, tab.contents.id)
     const target = menuTarget(params)
     const choice = item.type === "checkbox" || item.type === "radio"
     // The tab that was right-clicked, with its address only for an extension that may read it.

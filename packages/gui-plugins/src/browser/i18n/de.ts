@@ -49,8 +49,6 @@ export default {
   "site.permissions": "Berechtigungen sind blockiert",
   "site.permissions.description":
     "Kamera, Mikrofon, Standort und Benachrichtigungen funktionieren in diesem Browser nicht.",
-  "site.agent": "Agent kann diese Seite verwenden",
-  "site.agent.description": "Er kann die Seite lesen, Skripte ausführen und Formulare ausfüllen.",
   "page.add": "Seite zur Sitzung hinzufügen",
   "page.placeholder": "Kontext zu dieser Seite hinzufügen",
   "external.open": "Im Systembrowser öffnen",

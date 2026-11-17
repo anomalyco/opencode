@@ -68,13 +68,13 @@ type ModelState = {
 }
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
-type PageDetail = { icon?: string; zoom: number }
+type PageDetail = { icon?: string; zoom: number; retryOnly?: boolean }
 
 /** A mounted pane; the newest one answers the reload and inspect commands. */
 type PaneHandle = {
   visible: () => boolean
   address: () => string
-  reload: () => void
+  reload: (ignoreCache?: boolean) => void
   /** Closes the selected browser tab, including a blank page. */
   close: () => void
   inspectable: () => boolean
@@ -421,7 +421,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const page = (sessionKey: string, event: PageEvent) => {
     setState("pages", sessionKey, (pages) => ({
       ...pages,
-      [event.tabID]: event.icon ? { icon: event.icon, zoom: event.zoom } : { zoom: event.zoom },
+      [event.tabID]: { icon: event.icon, zoom: event.zoom, retryOnly: event.retryOnly },
     }))
     const url = sessionTab(machine(), sessionKey, event.tabID)?.url
     const visits = url && event.icon ? withIcon(history.value.visits, url, event.icon) : undefined
@@ -682,8 +682,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     /** The page's cookie count; undefined while the pane cannot answer. */
     site: (session: Session, tabID: Browser.TabID) => registration(session)?.site(tabID),
+    binding: (session: Session) => registration(session)?.binding,
     /** Deletes the page's cookies and stored data, and reloads it. */
     clearSite: (session: Session, tabID: Browser.TabID) => registration(session)?.clearSite(tabID),
+    clearCache: (session: Session, tabID: Browser.TabID, address: string) => registration(session)?.clearCache(tabID, address),
     revealFile: (session: Session, tabID: Browser.TabID) => registration(session)?.reveal(tabID),
     /** Pages the browser showed, newest first. */
     visits: () => history.value.visits.filter((visit) => {

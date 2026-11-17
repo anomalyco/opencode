@@ -13,6 +13,7 @@ import { FileAccess } from "../file-access.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { Plugin } from "../plugin.js"
+import { PluginHooks } from "../plugin/hooks.js"
 import type { SessionMessage } from "../session/message.js"
 import type { SessionSchema } from "../session/schema.js"
 import { ShellParse } from "../shell/parse.js"
@@ -255,6 +256,7 @@ const runCode = Effect.fnUntraced(function* (
 ) {
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
+  const hooks = yield* PluginHooks.Service
   const agent = yield* agents.select(session.agent)
   if (!agent.info) return { ok: false as const, error: `Agent not found: ${agent.id}` }
 
@@ -298,7 +300,7 @@ const runCode = Effect.fnUntraced(function* (
       code: condition.code,
       tools: paths,
       bindings,
-      permissions: Permission.merge(agent.info.permissions, session.permissions ?? []),
+      permissions: yield* Permission.rules(hooks, { session, agent }),
       limits: CODE_LIMITS,
       context: {
         sessionID: session.id,

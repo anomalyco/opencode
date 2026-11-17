@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "지우기",
   "site.permissions": "권한이 차단됨",
   "site.permissions.description": "이 브라우저에서는 카메라, 마이크, 위치, 알림이 작동하지 않습니다.",
-  "site.agent": "에이전트가 이 페이지를 사용할 수 있음",
-  "site.agent.description": "페이지를 읽고, 스크립트를 실행하고, 양식을 작성할 수 있습니다.",
   "page.add": "세션에 페이지 추가",
   "page.placeholder": "이 페이지에 대한 컨텍스트 추가",
   "external.open": "시스템 브라우저에서 열기",

@@ -1,6 +1,24 @@
 import { expect, test } from "bun:test"
-import { navigationTurn } from "./navigation-turn"
+import { navigationTurn, replacementNavigation } from "./navigation-turn"
 import { createDocumentState, transitionDocument } from "./page-machine"
+
+test.each([true, false])("an abort waits for the replacement document, not the original commit: committed=%s", async committed => {
+  const next = replacementNavigation()
+  const start = { isMainFrame: true, isSameDocument: false }
+  const aborted = Object.assign(new Error("aborted"), { errno: -3 })
+  next.start(start)
+  next.commit()
+  next.start({ ...start, isSameDocument: true })
+  next.start({ ...start, isMainFrame: false })
+  expect(next.after(aborted)).toBeUndefined()
+  next.start(start)
+  const result = next.after(aborted)
+
+  if (committed) next.commit()
+  next.stop()
+  expect(await result).toBe(committed)
+  expect(next.after(new Error("network error"))).toBeUndefined()
+})
 
 test.each(["stop", "oc-preview://private/report", "https://next.test"])('a later %s wins over a deferred web navigation', async next => {
   const gate = Promise.withResolvers<void>()
@@ -27,6 +45,19 @@ test("only a cross-document main-frame navigation supersedes a gated load", asyn
     gate.resolve()
     await opening
     expect(issued).toHaveLength(expected)
+  }
+})
+
+test("interrupting an unissued restore preserves its address; stopping an agent navigation does not propose one", async () => {
+  for (const [method, restoring, keep, expected] of [["back", "https://saved.test", true, "https://saved.test"], ["forward", "https://saved.test", true, "https://saved.test"], ["stop", undefined, true, "https://saved.test"], ["stop", undefined, false, undefined]] as const) {
+    const gate = Promise.withResolvers<void>()
+    const stopped: (string | undefined)[] = []
+    const navigation = navigationTurn(() => gate.promise, () => {}, () => {}, address => stopped.push(address))
+    const visit = navigation.begin(new AbortController().signal, keep)("https://saved.test", () => { throw Error("load was issued") })
+    navigation.interrupt(method, restoring)
+    gate.resolve()
+    await visit
+    expect(stopped).toEqual([expected])
   }
 })
 

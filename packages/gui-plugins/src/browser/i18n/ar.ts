@@ -51,8 +51,6 @@ export default {
   "site.cookies.clear": "مسح",
   "site.permissions": "الأذونات محظورة",
   "site.permissions.description": "لا تعمل الكاميرا والميكروفون والموقع والإشعارات في هذا المتصفح.",
-  "site.agent": "يمكن للوكيل استخدام هذه الصفحة",
-  "site.agent.description": "يمكنه قراءة الصفحة وتشغيل البرامج النصية وملء النماذج.",
   "page.add": "إضافة الصفحة إلى الجلسة",
   "page.placeholder": "أضف سياقًا عن هذه الصفحة",
   "external.open": "فتح في متصفح النظام",

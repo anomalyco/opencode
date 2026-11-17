@@ -10,7 +10,7 @@ import { extensionResource } from "./profile/extension-api/resource"
 export type PageMenuHost = {
   t: (key: string) => string
   extensions: (contents: number, params: Electron.ContextMenuParams) => Electron.MenuItemConstructorOptions[]
-  navigate: (action: "back" | "forward" | "reload") => Promise<void>
+  navigate: (action: "back" | "forward" | "reload" | "hardReload") => Promise<void>
   open: (url: string) => Promise<void>
 }
 
@@ -59,6 +59,7 @@ export function attachPageMenu(
         case "back":
         case "forward":
         case "reload":
+        case "hardReload":
           return input.navigate(action.type)
         case "cut":
           return contents.cut()
