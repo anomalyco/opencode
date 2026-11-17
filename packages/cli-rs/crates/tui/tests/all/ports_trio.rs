@@ -438,13 +438,15 @@ fn subagents_sidebar_lists_folds_and_picks_alike_in_ts_rust_and_luau() {
         h.wait_for("Child 12");
         h.settle();
         steps.push(("picker".to_owned(), screen(&h)));
+        // Before the pick: the child it opens is read by the host in its own time.
+        let requests = requests(&h, &["/api/session"]);
         let (last, title, _) = by_update().pop().unwrap();
         h.app.type_text(&title);
         h.wait("the filtered list", || h.app.text().lines().filter(|line| line.contains(&title)).count() >= 2);
         h.app.press("return");
         let child = opencode_tui::Route::Session { id: opencode_api::generated::SessionID(last) };
         h.wait(&format!("{carrier:?}: the pick opens its child"), || h.tui.route() == child);
-        Some(Observed { steps, requests: requests(&h, &["/api/session"]) })
+        Some(Observed { steps, requests })
     });
 }
 
@@ -535,12 +537,15 @@ fn rss(pid: &str) -> u64 {
     kib.unwrap_or(0) * 1024
 }
 
+/// A fake server's handler, as [`open_timed`] takes one.
+type Server = Box<dyn Fn(&Seen) -> Option<Reply> + Send + Sync>;
+
 /// One measured plugin: its package, its ports, its server, options and width, the text its first draw shows, and
 /// what makes it run once (one update).
 struct Measured {
     npm: &'static str,
     port: &'static str,
-    server: fn() -> Box<dyn Fn(&Seen) -> Option<Reply> + Send + Sync>,
+    server: fn() -> Server,
     options: Option<fn() -> Value>,
     width: u16,
     ready: &'static str,
