@@ -238,10 +238,19 @@ export const ContentPart = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"))
 export type ContentPart = Schema.Schema.Type<typeof ContentPart>
 
-/** Tools changed here: `add` appends or redefines tools by name, `remove` drops them by name. */
+/**
+ * Tools changed here: `add` appends or redefines tools by name, `remove` drops them by name. Planning sets the other
+ * fields on each marker it keeps in place, so protocols send it without replaying the history before it.
+ */
 export const ToolChanges = Schema.Struct({
   add: Schema.Array(Schema.suspend((): Schema.Codec<ToolEntry> => ToolEntry)),
   remove: Schema.Array(Schema.String),
+  /** Flattened names of the tools this change takes away, including those a redefined namespace leaves out. */
+  withdrawn: Schema.optional(Schema.Array(Schema.String)),
+  /** Names removed by earlier in-place changes and not declared again, this change's additions included. */
+  unavailable: Schema.optional(Schema.Array(Schema.String)),
+  /** Whether a tool the protocol can declare in place is declared before this change. */
+  incremental: Schema.optional(Schema.Boolean),
 }).annotate({ identifier: "LLM.ToolChanges" })
 export type ToolChanges = Schema.Schema.Type<typeof ToolChanges>
 

@@ -4,6 +4,7 @@
 // them where they are, so the leading declaration, and the prompt cache behind it, stays fixed.
 import { Message, SystemMessage, type LLMRequest, type ToolChanges, type ToolEntry } from "./schema/messages.js"
 import type { Capabilities } from "./schema/options.js"
+import { flattenTools } from "./protocols/shared.js"
 
 export type ToolUpdate = NonNullable<NonNullable<Capabilities["tools"]>["updates"]>[number]
 
@@ -19,6 +20,16 @@ export interface ToolUpdateEncoding {
 export const toolsUpdate = (message: Message): ToolChanges | undefined =>
   message.role === "system" ? message.tools : undefined
 
+/** Whether any marker adds a tool, so a request without top-level tools still declares some. */
+export const addsTools = (request: LLMRequest) =>
+  request.messages.some((message) => (toolsUpdate(message)?.add.length ?? 0) > 0)
+
+/** The changes this route sends in place: the model's `tools.updates` that the protocol's encoding covers. */
+export const toolUpdateKinds = (request: LLMRequest) => {
+  const encoding = request.model.route.toolUpdates
+  return (request.model.capabilities?.tools?.updates ?? []).filter((kind) => encoding?.kinds.includes(kind))
+}
+
 /** Apply one change: removals first, then additions replace a same-named tool in place or append. */
 export const foldTools = <Item extends { readonly name: string }>(
   tools: ReadonlyArray<Item>,
@@ -31,81 +42,92 @@ export const foldTools = <Item extends { readonly name: string }>(
   return [...kept, ...[...added.values()].filter((tool) => !names.has(tool.name))]
 }
 
-/** One tool declaration: the request's `tools` lead at index -1, then each marker at its message index. */
-export interface ToolDeclaration extends ToolChanges {
-  readonly index: number
-}
-
-export const toolDeclarations = (request: LLMRequest): ReadonlyArray<ToolDeclaration> => [
-  { index: -1, add: request.tools, remove: [] },
-  ...request.messages.flatMap((message, index) => {
-    const update = toolsUpdate(message)
-    return update === undefined ? [] : [{ index, ...update }]
-  }),
-]
-
 /**
  * Fold the declarations up to the last one this route can't send in place into the leading one (the request's
- * `tools`), and keep later markers in place, trimmed to their effective changes. A marker is sent in place only
- * after the conversation starts, when the model's `tools.updates` and the protocol's encoding both cover what it
- * does: `add` a new name, `replace` a name declared before (even if removed since), `remove` a current tool.
- * Removing a name that matches no current tool does nothing.
+ * `tools`), and keep later markers in place, trimmed to their effective changes and carrying what a protocol needs
+ * to send them (see `ToolChanges`). A marker is sent in place only after the conversation starts, when the model's
+ * `tools.updates` and the protocol's encoding both cover what it does: `add` a new name, `replace` a name declared
+ * before (even if removed since), `remove` a current tool. Removing a name that matches no current tool does nothing.
  */
-export const planToolUpdates = (request: LLMRequest): LLMRequest => {
-  const encoding = request.model.route.toolUpdates
-  return plan(
-    request,
-    (request.model.capabilities?.tools?.updates ?? []).filter((kind) => encoding?.kinds.includes(kind)),
-  )
-}
+export const planToolUpdates = (request: LLMRequest): LLMRequest => plan(request, toolUpdateKinds(request))
 
 /** Fold every marker into the top-level tools, as a route without in-place tool changes sends them. */
 export const foldToolUpdates = (request: LLMRequest): LLMRequest => plan(request, [])
 
 const plan = (request: LLMRequest, supported: ReadonlyArray<ToolUpdate>): LLMRequest => {
-  const [leading, ...changes] = toolDeclarations(request)
-  if (leading === undefined || changes.length === 0) return request
+  const changes = request.messages.flatMap((message, index) =>
+    message.role === "system" && message.tools !== undefined ? [{ index, ...message.tools }] : [],
+  )
+  if (changes.length === 0) return request
   const encoding = request.model.route.toolUpdates
+  const declarable = (tool: ToolEntry) => encoding?.declarable?.(tool) ?? true
   const firstTurn = request.messages.findIndex((message) => message.role !== "system")
-  const steps = changes.reduce(
+  const steps = changes.reduce<{
+    readonly tools: ReadonlyArray<ToolEntry>
+    readonly declared: ReadonlySet<string>
+    readonly steps: ReadonlyArray<PlanStep>
+  }>(
     (state, change) => {
       const added = change.add.map((tool) => tool.name)
       const removed = state.tools.filter((tool) => change.remove.includes(tool.name) && !added.includes(tool.name))
+      const tools = foldTools(state.tools, change.add, change.remove)
+      const available = new Set(toolNames(tools))
+      const withdrawn = toolNames(state.tools).filter((name) => !available.has(name))
       const kinds = [
-        ...(removed.length > 0 || change.add.some((tool) => dropsTools(state.tools, tool)) ? ["remove" as const] : []),
+        ...(removed.length > 0 || withdrawn.length > 0 ? ["remove" as const] : []),
         ...added.map((name) => (state.declared.has(name) ? ("replace" as const) : ("add" as const))),
       ]
       const native =
         firstTurn !== -1 &&
         change.index > firstTurn &&
         kinds.every((kind) => supported.includes(kind)) &&
-        [...change.add, ...removed].every((tool) => encoding?.declarable?.(tool) ?? true) &&
+        [...change.add, ...removed].every(declarable) &&
         (encoding?.placeable?.(request, change.index) ?? true)
-      const tools = foldTools(state.tools, change.add, change.remove)
       const step = {
         index: change.index,
         native,
         tools,
-        changes: { add: change.add, remove: removed.map((tool) => tool.name) },
+        add: change.add,
+        remove: removed.map((tool) => tool.name),
+        withdrawn,
       }
       return { tools, declared: new Set([...state.declared, ...added]), steps: [...state.steps, step] }
     },
-    {
-      tools: leading.add,
-      declared: new Set(leading.add.map((tool) => tool.name)),
-      steps: [] as ReadonlyArray<PlanStep>,
-    },
+    { tools: request.tools, declared: new Set(request.tools.map((tool) => tool.name)), steps: [] },
   ).steps
   const cut = steps.findLastIndex((step) => !step.native)
-  const kept = new Map(steps.slice(cut + 1).map((step) => [step.index, step.changes]))
+  const leading = cut === -1 ? request.tools : steps[cut]!.tools
+  // Unavailable names and whether tools came before are tracked across the markers kept in place only.
+  const kept = steps.slice(cut + 1).reduce<{
+    readonly declared: boolean
+    readonly unavailable: ReadonlySet<string>
+    readonly markers: ReadonlyMap<number, ToolChanges>
+  }>(
+    (state, step) => {
+      const unavailable = new Set([...state.unavailable].filter((name) => !step.add.some((tool) => tool.name === name)))
+      const marker = {
+        add: step.add,
+        remove: step.remove,
+        withdrawn: step.withdrawn,
+        unavailable: [...unavailable],
+        incremental: state.declared,
+      }
+      return {
+        declared: state.declared || step.add.length > 0,
+        unavailable: new Set([...unavailable, ...step.remove]),
+        markers: new Map([...state.markers, [step.index, marker]]),
+      }
+    },
+    { declared: leading.some(declarable), unavailable: new Set(), markers: new Map() },
+  ).markers
   return {
     ...request,
-    tools: cut === -1 ? leading.add : steps[cut]!.tools,
+    tools: leading,
     messages: request.messages.flatMap((message, index) => {
       if (message.role !== "system" || message.tools === undefined) return [message]
-      const changes = kept.get(index)
-      if (changes !== undefined && (changes.add.length > 0 || changes.remove.length > 0))
-        return [new SystemMessage({ ...message, tools: changes })]
+      const tools = kept.get(index)
+      if (tools !== undefined && (tools.add.length > 0 || tools.remove.length > 0))
+        return [new SystemMessage({ ...message, tools })]
       if (message.content.length === 0) return []
       return [new SystemMessage({ id: message.id, role: "system", content: message.content })]
     }),
@@ -116,21 +138,12 @@ interface PlanStep {
   readonly index: number
   readonly native: boolean
   readonly tools: ReadonlyArray<ToolEntry>
-  readonly changes: ToolChanges
+  readonly add: ReadonlyArray<ToolEntry>
+  readonly remove: ReadonlyArray<string>
+  readonly withdrawn: ReadonlyArray<string>
 }
 
-// Redefining a namespace without some of its tools also removes those tools.
-const dropsTools = (tools: ReadonlyArray<ToolEntry>, tool: ToolEntry) => {
-  const previous = tools.find((entry) => entry.name === tool.name)
-  if (previous === undefined) return false
-  const next = toolNames(tool)
-  return toolNames(previous).some((name) => !next.includes(name))
-}
-
-const toolNames = (tool: ToolEntry): ReadonlyArray<string> =>
-  tool.type === "namespace"
-    ? tool.tools.flatMap((leaf) => toolNames(leaf).map((name) => `${tool.name}_${name}`))
-    : [tool.name]
+const toolNames = (tools: ReadonlyArray<ToolEntry>) => flattenTools(tools).map((tool) => tool.name)
 
 /** Rewrite the tools each marker adds, keeping the request identity when there are no markers. */
 export const mapToolUpdates = (
@@ -142,7 +155,7 @@ export const mapToolUpdates = (
     ...request,
     messages: request.messages.map((message) =>
       message.role === "system" && message.tools !== undefined
-        ? new SystemMessage({ ...message, tools: { add: f(message.tools.add), remove: message.tools.remove } })
+        ? new SystemMessage({ ...message, tools: { ...message.tools, add: f(message.tools.add) } })
         : message,
     ),
   }

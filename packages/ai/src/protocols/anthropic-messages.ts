@@ -29,7 +29,7 @@ import {
 import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared, withUntypedFrames } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
-import { foldTools, toolsUpdate, type ToolUpdateEncoding } from "../tool-updates.js"
+import { addsTools, toolsUpdate, type ToolUpdateEncoding } from "../tool-updates.js"
 import * as Cache from "./utils/cache.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -806,7 +806,6 @@ const lowerWrappedSystemUpdate = Effect.fnUntraced(function* (
 const lowerToolsUpdate = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   update: ToolChanges,
-  removed: ReadonlyArray<string>,
   breakpoints: Cache.Breakpoints,
 ) {
   const text = message.content.length === 0 ? [] : (yield* lowerNativeSystemUpdate(message, breakpoints)).content
@@ -817,7 +816,7 @@ const lowerToolsUpdate = Effect.fnUntraced(function* (
         type: "tool_addition" as const,
         tool: { type: "tool_definition" as const, definition: lowerTool(breakpoints, tool) },
       })),
-      ...removed.map((name) => ({
+      ...(update.withdrawn ?? []).map((name) => ({
         type: "tool_removal" as const,
         tool: { type: "tool_reference" as const, name },
       })),
@@ -825,25 +824,6 @@ const lowerToolsUpdate = Effect.fnUntraced(function* (
     ],
   }
 })
-
-// The flattened tools a marker takes away, including those a redefined namespace leaves out.
-const toolRemovals = (request: LLMRequest) => {
-  const removals = new Map<ToolChanges, ReadonlyArray<string>>()
-  request.messages.reduce((tools, message) => {
-    const update = toolsUpdate(message)
-    if (update === undefined) return tools
-    const next = foldTools(tools, update.add, update.remove)
-    const kept = new Set(ProviderShared.flattenTools(next).map((tool) => tool.name))
-    removals.set(
-      update,
-      ProviderShared.flattenTools(tools)
-        .map((tool) => tool.name)
-        .filter((name) => !kept.has(name)),
-    )
-    return next
-  }, request.tools)
-  return removals
-}
 
 const appendToUserTurn = (messages: AnthropicMessage[], block: AnthropicUserBlock) => {
   const last = messages.at(-1)
@@ -858,14 +838,13 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   // user turn, the nearest spot where Anthropic accepts a native system message.
   const holdUpdates = supportsNativeSystemUpdates(request)
   const held: Array<LLMRequest["messages"][number]> = []
-  const removals = toolRemovals(request)
   const releaseHeld = Effect.fnUntraced(function* () {
     const native = acceptsNativeSystemAfter(messages.findLast((message) => message.role !== "system"))
     for (const update of held.splice(0)) {
       const tools = toolsUpdate(update)
       if (tools !== undefined) {
         if (!native) return yield* invalid("Anthropic Messages tool updates must follow a user message or tool result")
-        const lowered = yield* lowerToolsUpdate(update, tools, removals.get(tools) ?? [], breakpoints)
+        const lowered = yield* lowerToolsUpdate(update, tools, breakpoints)
         if (lowered.content.length > 0) messages.push(lowered)
         continue
       }
@@ -882,8 +861,9 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
         messages.push({ role: "system", content: [], output_config: { effort: update.effort ?? DEFAULT_EFFORT } })
         continue
       }
-      // Held like text updates, so one between a tool call and its result lands after the result.
-      if (holdUpdates && toolsUpdate(message) !== undefined) {
+      // Held like text updates, so one between a tool call and its result lands after the result. Planning keeps a
+      // marker in place only on models that take native system messages.
+      if (toolsUpdate(message) !== undefined) {
         held.push(message)
         continue
       }
@@ -1045,8 +1025,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const flattened = ProviderShared.flattenToolRequest(updates.request)
   const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
   // Anthropic rejects tool_choice when no tool is declared; "none" is only meaningful with tools present.
-  const declared =
-    tools !== undefined || request.messages.some((message) => (toolsUpdate(message)?.add.length ?? 0) > 0)
+  const declared = tools !== undefined || addsTools(request)
   const toolChoice = !declared || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
   const systemParts = request.system.filter((part) => part.text.length > 0)
   const system =

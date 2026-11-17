@@ -675,10 +675,10 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
         input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
         continue
       }
+      // Planning folds every marker on routes whose protocol has no `toolUpdates`, so only adapters with
+      // `lowerToolChanges` see one.
       const tools = toolsUpdate(message)
-      if (tools) {
-        if (adapter.lowerToolChanges === undefined)
-          return yield* ProviderShared.invalidRequest(`${adapter.name} does not support mid-conversation tool updates`)
+      if (tools && adapter.lowerToolChanges) {
         input.push(...(yield* adapter.lowerToolChanges(tools)))
         if (message.content.length === 0) continue
       }

@@ -72,7 +72,9 @@ const folded = [Message.user("Fix it."), Message.assistant("Done."), Message.use
 
 const names = (request: LLMRequest) => request.tools.map((entry) => entry.name)
 const markers = (request: LLMRequest) =>
-  request.messages.flatMap((message) => (message.role === "system" && message.tools ? [message.tools] : []))
+  request.messages.flatMap((message) =>
+    message.role === "system" && message.tools ? [{ add: message.tools.add, remove: message.tools.remove }] : [],
+  )
 const changes = (add: ReadonlyArray<ToolDefinition>, remove: ReadonlyArray<string> = []) => ({ add, remove })
 
 describe("Message.tools", () => {
@@ -189,7 +191,8 @@ describe("planToolUpdates", () => {
       Message.tools({}),
     ])
     expect(names(result)).toEqual(["read", "edit"])
-    expect(result.messages).toEqual([Message.user("One."), Message.make(Message.tools({ remove: ["edit"] }))])
+    expect(result.messages.map((message) => message.role)).toEqual(["user", "system"])
+    expect(markers(result)).toEqual([changes([], ["edit"])])
   })
 
   test("folds markers before the conversation starts into the leading declaration", () => {
