@@ -67,8 +67,12 @@ describe("Mime.detect", () => {
       expect(Mime.detectMedia(Buffer.from(text, "latin1"))).toBeUndefined()
   })
 
-  test("detects WebM from its EBML header", () => {
-    expect(Mime.detect(Uint8Array.of(0x1a, 0x45, 0xdf, 0xa3))).toBe("video/webm")
+  test("detects WebM from its EBML DocType", () => {
+    const webm = ftyp("1a45dfa39f4286810142f7810142f2810442f381084282847765626d4287810442858102")
+    const matroska = ftyp("1a45dfa39f4286810142f7810142f2810442f381084282886d6174726f736b614287810442858102")
+    expect(Mime.detect(webm)).toBe("video/webm")
+    expect(Mime.detectMedia(matroska)).toBeUndefined()
+    expect(Mime.detect(matroska)).toBe("application/octet-stream")
   })
 
   test("tells ISO-BMFF brands apart", () => {
