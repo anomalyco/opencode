@@ -310,6 +310,18 @@ const layer = (options: Options) =>
             remove: (path) => withFiles(path, (files) => files.remove(path)),
             move: (from, to) => withFiles(from, (files) => files.move(from, to)),
             mkdir: (path) => withFiles(path, (files) => files.mkdir(path)),
+            append: (path, bytes) => withFiles(path, (files) => files.append(path, bytes)),
+            writeAt: (path, bytes, offset) => withFiles(path, (files) => files.writeAt(path, bytes, offset)),
+            truncate: (path, length) => withFiles(path, (files) => files.truncate(path, length)),
+            chmod: (path, mode) => withFiles(path, (files) => files.chmod(path, mode)),
+            chown: (path, uid, gid, follow) => withFiles(path, (files) => files.chown(path, uid, gid, follow)),
+            utimes: (path, atimeMs, mtimeMs, follow) =>
+              withFiles(path, (files) => files.utimes(path, atimeMs, mtimeMs, follow)),
+            symlink: (target, path) => withFiles(path, (files) => files.symlink(target, path)),
+            readlink: (path) => withFiles(path, (files) => files.readlink(path)),
+            realpath: (path) => withFiles(path, (files) => files.realpath(path)),
+            link: (existing, path) => withFiles(path, (files) => files.link(existing, path)),
+            statfs: (path) => withFiles(path, (files) => files.statfs(path)),
           }
           return { spawner, overrides }
         }),

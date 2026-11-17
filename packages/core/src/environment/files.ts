@@ -7,6 +7,31 @@ export interface FileInfo {
   readonly type: FileType
   readonly size: number
   readonly mtimeMs: number
+  /** The rest of POSIX stat, where the environment reports it. */
+  readonly dev?: number
+  readonly ino?: number
+  /** File type and permission bits, as in `st_mode`. */
+  readonly mode?: number
+  readonly nlink?: number
+  readonly uid?: number
+  readonly gid?: number
+  readonly rdev?: number
+  readonly blksize?: number
+  readonly blocks?: number
+  readonly atimeMs?: number
+  readonly ctimeMs?: number
+  readonly birthtimeMs?: number
+}
+
+/** Free and total space on the filesystem holding a path, in blocks of `bsize` bytes, as `statfs(2)` reports it. */
+export interface FilesystemInfo {
+  readonly type: number
+  readonly bsize: number
+  readonly blocks: number
+  readonly bfree: number
+  readonly bavail: number
+  readonly files: number
+  readonly ffree: number
 }
 
 export interface DirEntry {
@@ -47,6 +72,32 @@ export interface FilesImpl {
   readonly remove: (path: string) => Effect.Effect<void, Failed>
   readonly move: (from: string, to: string) => Effect.Effect<void, NotFound | Failed>
   readonly mkdir: (path: string) => Effect.Effect<void, Failed>
+  /** Adds bytes to the end of a file, creating it when missing. */
+  readonly append: (path: string, bytes: Uint8Array) => Effect.Effect<void, Failed>
+  /** Writes bytes at `offset` without truncating, extending the file with zeros if needed; creates it when missing. */
+  readonly writeAt: (path: string, bytes: Uint8Array, offset: number) => Effect.Effect<void, Failed>
+  /** Cuts or zero-extends a file to `length` bytes. */
+  readonly truncate: (path: string, length: number) => Effect.Effect<void, NotFound | Failed>
+  /** Sets the permission bits (`mode & 0o7777`), following a final symlink. */
+  readonly chmod: (path: string, mode: number) => Effect.Effect<void, NotFound | Failed>
+  /** Sets the owner; `follow: false` changes a final symlink itself. */
+  readonly chown: (path: string, uid: number, gid: number, follow: boolean) => Effect.Effect<void, NotFound | Failed>
+  /** Sets access and modification times; `follow: false` changes a final symlink itself. */
+  readonly utimes: (
+    path: string,
+    atimeMs: number,
+    mtimeMs: number,
+    follow: boolean,
+  ) => Effect.Effect<void, NotFound | Failed>
+  /** Creates a symlink at `path` holding `target` as given. */
+  readonly symlink: (target: string, path: string) => Effect.Effect<void, Failed>
+  /** The target a symlink holds; `WrongKind` for anything else. */
+  readonly readlink: (path: string) => Effect.Effect<string, NotFound | WrongKind | Failed>
+  /** The canonical absolute path with every symlink resolved. */
+  readonly realpath: (path: string) => Effect.Effect<string, NotFound | Failed>
+  /** Creates a hard link at `path` to the file at `existing`. */
+  readonly link: (existing: string, path: string) => Effect.Effect<void, NotFound | Failed>
+  readonly statfs: (path: string) => Effect.Effect<FilesystemInfo, NotFound | Failed>
 }
 
 export interface Files extends FilesImpl {}

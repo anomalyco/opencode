@@ -1,3 +1,4 @@
+import { constants } from "node:fs"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Effect } from "effect"
@@ -64,6 +65,43 @@ export const makeLocalDriver = (spawner: ChildProcessSpawner["Service"]): Driver
         yield* attempt(from, () => fs.rename(from, destination))
       }),
     mkdir: (value) => attempt(value, () => fs.mkdir(value, { recursive: true }).then(() => undefined)),
+    append: (value, bytes) => attempt(value, () => fs.appendFile(value, bytes)),
+    writeAt: (value, bytes, offset) =>
+      attempt(value, async () => {
+        // Read-write and created when missing, without O_TRUNC, so existing bytes outside the range stay.
+        const handle = await fs.open(value, constants.O_RDWR | constants.O_CREAT)
+        try {
+          await handle.write(bytes, 0, bytes.length, offset)
+        } finally {
+          await handle.close()
+        }
+      }),
+    truncate: (value, length) => attempt(value, () => fs.truncate(value, length), true),
+    chmod: (value, mode) => attempt(value, () => fs.chmod(value, mode & 0o7777), true),
+    chown: (value, uid, gid, follow) => attempt(value, () => (follow ? fs.chown : fs.lchown)(value, uid, gid), true),
+    utimes: (value, atimeMs, mtimeMs, follow) =>
+      attempt(value, () => (follow ? fs.utimes : fs.lutimes)(value, atimeMs / 1_000, mtimeMs / 1_000), true),
+    symlink: (target, value) => attempt(value, () => fs.symlink(target, value)),
+    readlink: (value) =>
+      Effect.gen(function* () {
+        const info = yield* stat(value, false)
+        if (info.type !== "symlink") return yield* new WrongKind({ path: value, actual: info.type })
+        return yield* attempt(value, () => fs.readlink(value), true)
+      }),
+    realpath: (value) => attempt(value, () => fs.realpath(value), true),
+    link: (existing, value) => attempt(existing, () => fs.link(existing, value), true),
+    statfs: (value) =>
+      attempt(value, () => fs.statfs(value), true).pipe(
+        Effect.map((info) => ({
+          type: info.type,
+          bsize: info.bsize,
+          blocks: info.blocks,
+          bfree: info.bfree,
+          bavail: info.bavail,
+          files: info.files,
+          ffree: info.ffree,
+        })),
+      ),
   }
 
   return { spawner, overrides }
@@ -71,7 +109,25 @@ export const makeLocalDriver = (spawner: ChildProcessSpawner["Service"]): Driver
 
 const stat = (value: string, follow: boolean) =>
   attempt(value, () => (follow ? fs.stat(value) : fs.lstat(value)), true).pipe(
-    Effect.map((stats): FileInfo => ({ type: fileType(stats), size: stats.size, mtimeMs: stats.mtimeMs })),
+    Effect.map(
+      (stats): FileInfo => ({
+        type: fileType(stats),
+        size: stats.size,
+        mtimeMs: stats.mtimeMs,
+        dev: stats.dev,
+        ino: stats.ino,
+        mode: stats.mode,
+        nlink: stats.nlink,
+        uid: stats.uid,
+        gid: stats.gid,
+        rdev: stats.rdev,
+        blksize: stats.blksize,
+        blocks: stats.blocks,
+        atimeMs: stats.atimeMs,
+        ctimeMs: stats.ctimeMs,
+        birthtimeMs: stats.birthtimeMs,
+      }),
+    ),
   )
 
 const fileType = (entry: { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean }): FileType => {
