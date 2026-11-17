@@ -75,14 +75,7 @@ export const Input = Schema.Struct({
 const CODE_MODE_DESCRIPTION =
   "Run a shell command and wait for it to exit (up to timeout). Read the result fields below."
 
-const CodeModeInput = Schema.Struct({
-  ...Input.fields,
-  command: Schema.String.annotate({
-    description:
-      "Shell command to run. tools.shell is the only way to run commands in Code Mode: there is no require, child_process or process.",
-  }),
-  timeout: timeoutInput(CODE_MODE_TIMEOUT_MS),
-})
+const CodeModeInput = Schema.Struct({ ...Input.fields, timeout: timeoutInput(CODE_MODE_TIMEOUT_MS) })
 
 const StructuredOutput = Schema.Struct({
   shellID: Schema.optionalKey(Schema.String).annotate({
