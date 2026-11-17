@@ -370,6 +370,9 @@ export const startExtensionCall = <R>(
 ): PromiseObj | ExtensionRequest => {
   const [result, threw] = callHost(host, args)
   const request = { stage: "settle", ...call, host: result, args, threw } as const
+  // A synchronous global's Effect blocks the program until it completes, as `fs.readFileSync` does; the request
+  // settles it in place. An asynchronous global's Effect, and any Promise, become a program promise.
+  if (!threw && Effect.isEffect(result) && !isAsync(host)) return request
   if (!threw && (Effect.isEffect(result) || result instanceof Promise)) return pending(ctx, request, site)
   return request
 }
