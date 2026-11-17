@@ -258,35 +258,32 @@ function* edit(host: Host, files: ReadonlyArray<string>) {
 // Writes exactly these bytes, as Node does: no formatting and no BOM handling. The edit request shows the change as a
 // diff when both sides are text, like the write tool's. A missing parent directory is ENOENT, as in Node.
 function* write(host: Host, file: string, content: Uint8Array) {
-  const prepared = yield* prepare(host, file, () => content)
-  yield* host.files.write(prepared.target, content)
+  yield* host.files.write(yield* prepare(host, file, content, false), content)
 }
 
 function* append(host: Host, file: string, bytes: Uint8Array) {
-  const joined = (current: Uint8Array | undefined) => Buffer.concat([current ?? new Uint8Array(), bytes])
-  const prepared = yield* prepare(host, file, joined)
-  yield* host.files.append(prepared.target, bytes)
+  yield* host.files.append(yield* prepare(host, file, bytes, true), bytes)
 }
 
-// Resolves a file a write will change, asks edit permission with the resulting change, and checks Node's preconditions.
-function* prepare(host: Host, file: string, next: (current: Uint8Array | undefined) => Uint8Array) {
+// Resolves a file a write will change, checks Node's preconditions, and asks edit permission with the change as a diff
+// when it is text. A replacing write diffs against the current file, as the write tool does. An append never reads the
+// file: its diff shows only the bytes being added.
+function* prepare(host: Host, file: string, content: Uint8Array, appending: boolean) {
   const target = yield* host.fileWrite.target(file, host.context)
-  const current = yield* host.files.read(target.absolute).pipe(
-    Effect.map((result) => result.bytes),
-    Effect.catchTag("Environment.NotFound", () => Effect.undefined),
-  )
-  if (current === undefined && (yield* typeOf(host, path.dirname(target.absolute))) === undefined)
+  const type = yield* typeOf(host, target.absolute)
+  if (type === "directory") return yield* Effect.fail("EISDIR" as const)
+  if (type === undefined && (yield* typeOf(host, path.dirname(target.absolute))) === undefined)
     return yield* Effect.fail("ENOENT" as const)
-  const before = text(current ?? new Uint8Array())
-  const after = text(next(current))
+  const before = appending || type === undefined ? "" : text((yield* host.files.read(target.absolute)).bytes)
+  const after = text(content)
   yield* host.fileWrite.authorize(
     target,
     host.context,
     before !== undefined && after !== undefined
-      ? fileDiff(target.resource, before, after, current ? "modified" : "added")
+      ? fileDiff(target.resource, before, after, type === undefined ? "added" : "modified")
       : undefined,
   )
-  return { target: target.absolute, current }
+  return target.absolute
 }
 
 // Bytes as text when they are valid UTF-8.

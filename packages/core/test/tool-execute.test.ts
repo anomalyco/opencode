@@ -672,6 +672,23 @@ describe("fs", () => {
     expect(await fs.readFile(path.join(tmp.path, "ugly.ts"), "utf8")).toBe("const   x   =1;")
   })
 
+  test("an append asks edit with only the new lines, not a diff of the whole file", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "log.txt"), "old line 1\nold line 2\n")
+    const asked: Array<Permission.AssertInput> = []
+    const record = { assert: (input: Permission.AssertInput) => Effect.sync(() => void asked.push(input)) }
+    await runFs(
+      tmp.path,
+      `fs.appendFileSync("log.txt", "new line\\n"); return []`,
+      permissionService(record),
+      fileServices(tmp.path, record),
+    )
+    const edit = asked.find((input) => input.action === "edit")
+    expect(edit?.metadata).toMatchObject({ files: [{ file: "log.txt", status: "modified", additions: 1, deletions: 0 }] })
+    expect(JSON.stringify(edit?.metadata)).not.toContain("old line")
+    expect(await fs.readFile(path.join(tmp.path, "log.txt"), "utf8")).toBe("old line 1\nold line 2\nnew line\n")
+  })
+
   test("concurrent appends to one file keep every chunk", async () => {
     await using tmp = await tmpdir()
     await runFs(
