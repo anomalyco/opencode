@@ -3752,12 +3752,15 @@ impl HostHandle {
         if self.api.is_null() || !self.api.is_aligned() {
             return None;
         }
-        // SAFETY: the host keeps the table alive until it destroys the instance, and every table starts with `size`
-        // and its version.
-        let (size, major) =
-            unsafe { (std::ptr::addr_of!((*self.api).size).read(), std::ptr::addr_of!((*self.api).major).read()) };
+        // SAFETY: the host keeps the table alive until it destroys the instance, and every table starts with `size`.
+        // Nothing past it is read before `size` says the table has it (big-boi's drop-abi1 check).
+        let size = unsafe { std::ptr::addr_of!((*self.api).size).read() };
+        if size < size_of::<HostApi>() {
+            return None;
+        }
         // SAFETY: `size` covers the 2.0 table, which is all of `HostApi`.
-        (size >= size_of::<HostApi>() && major == ABI_MAJOR).then(|| unsafe { &*self.api })
+        let table = unsafe { &*self.api };
+        (table.major == ABI_MAJOR).then_some(table)
     }
 
     /// The JSON text stored under one of the plugin's storage keys.
@@ -5095,6 +5098,13 @@ pub mod runtime {
             if instance.is_null() {
                 return Err("no instance pointer".to_owned());
             }
+            // Setup runs only with a host it can talk to: a table of ABI 2 with every entry of 2.0.
+            if HostHandle::new(host).core().is_none() {
+                return Err(format!(
+                    "the host passed no plugin table of ABI {ABI_MAJOR}.0 or newer; this plugin needs opencode-native \
+                     with plugin ABI {ABI_MAJOR}"
+                ));
+            }
             let options = (!options.is_empty()).then(|| String::from_utf8_lossy(options).into_owned());
             let mut registered = Registered::with_host(id, options, host);
             match catch_unwind(AssertUnwindSafe(|| setup(&mut registered.setup()))) {
@@ -6001,25 +6011,103 @@ mod tests {
         }
     }
 
+    /// A whole host table of 2.0 whose `call` answers every request with an error.
+    fn host_table() -> HostApi {
+        HostApi {
+            size: size_of::<HostApi>(),
+            major: ABI_MAJOR,
+            minor: ABI_MINOR,
+            ctx: std::ptr::null_mut(),
+            call: Some(call),
+            free: Some(free),
+            theme_mode: None,
+            wake: None,
+            send: None,
+            report: None,
+            stopped: None,
+            features: Bytes::new(b"[]"),
+        }
+    }
+
+    thread_local! {
+        /// Whether [`counted_setup`] ran on this thread.
+        static SET_UP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    fn counted_setup(_: &mut Setup) -> Result<(), String> {
+        SET_UP.set(true);
+        Ok(())
+    }
+
+    // Expected (big-boi's check of drop-abi1): `create` through the C ABI refuses, before setup runs and with an error,
+    // a host table it cannot talk to: none, one of ABI 1.6, and one of 2.0 whose `size` covers only its header. Only
+    // `size` is read before it is checked; each table here is allocated whole, so a read past what it states reads
+    // nothing out of bounds. A whole 2.0 table sets the plugin up.
+    #[test]
+    fn create_refuses_a_host_table_it_cannot_read_before_setup() {
+        /// The host table of ABI 1.6, which ends before `send`.
+        #[repr(C)]
+        struct V1_6 {
+            size: usize,
+            major: u32,
+            minor: u32,
+            ctx: *mut c_void,
+            call: Option<unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32>,
+            free: Option<unsafe extern "C" fn(Owned)>,
+            theme_mode: Option<unsafe extern "C" fn(*mut c_void) -> u32>,
+            wake: Option<unsafe extern "C" fn(*mut c_void)>,
+        }
+        let old = V1_6 {
+            size: size_of::<V1_6>(),
+            major: 1,
+            minor: 6,
+            ctx: std::ptr::null_mut(),
+            call: Some(call),
+            free: Some(free),
+            theme_mode: None,
+            wake: None,
+        };
+        let short = HostApi { size: std::mem::offset_of!(HostApi, ctx), ..host_table() };
+        let whole = host_table();
+        let rows: [(&str, *const HostApi, bool); 4] = [
+            ("no table", std::ptr::null(), false),
+            ("a 1.6 table", std::ptr::from_ref(&old).cast(), false),
+            ("a 2.0 table cut to its header", &short, false),
+            ("a whole 2.0 table", &whole, true),
+        ];
+        for (name, host, takes) in rows {
+            SET_UP.set(false);
+            let (mut instance, mut out) = (std::ptr::null_mut(), Owned::EMPTY);
+            // SAFETY: each table lives for the call; `out` is freed by the same library.
+            let (status, text) = unsafe {
+                let status = runtime::create("x", counted_setup, host, Bytes::new(b""), &mut instance, &mut out);
+                let text = String::from_utf8_lossy(&out.to_vec()).into_owned();
+                runtime::free(out);
+                (status, text)
+            };
+            assert_eq!((status == OK, SET_UP.get(), !instance.is_null()), (takes, takes, takes), "{name}: {text}");
+            if takes {
+                // SAFETY: `instance` came from `create`.
+                unsafe { runtime::destroy(instance) };
+            } else {
+                assert!(text.contains("no plugin table of ABI 2.0"), "{name}: {text}");
+            }
+        }
+    }
+
     // Expected: a setup that fails or panics runs the dispose callbacks it registered before `create` returns, last
     // first, and one that panics keeps none of the others from running; `destroy` runs them the same.
     #[test]
     fn a_failed_setup_disposes_what_it_registered() {
         let hook = std::panic::take_hook();
+        let host = host_table();
         for (options, status, message) in
             [("error", ERROR, "setup failed"), ("panic", PANIC, "setup panicked"), ("", OK, "")]
         {
             let (mut instance, mut out) = (std::ptr::null_mut(), Owned::EMPTY);
             // SAFETY: valid pointers for the call; `out` is freed by the same library.
             let (got, bytes) = unsafe {
-                let got = runtime::create(
-                    "x",
-                    failing,
-                    std::ptr::null(),
-                    Bytes::new(options.as_bytes()),
-                    &mut instance,
-                    &mut out,
-                );
+                let got = runtime::create("x", failing, &host, Bytes::new(options.as_bytes()), &mut instance, &mut out);
                 let bytes = out.to_vec();
                 runtime::free(out);
                 (got, bytes)
