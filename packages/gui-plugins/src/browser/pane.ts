@@ -128,6 +128,15 @@ export function createBrowserPane(input: {
   const warned = new Set<string>()
 
   return {
+    menuReload(window: number | undefined) {
+      for (const [binding, handle] of handles) {
+        if (handle.window !== window) continue
+        const tab = inventory(binding).focusedTabID
+
+        if (tab && page(binding, tab)?.view.getVisible())
+          return () => execute(binding, { action: { type: "reload", tabID: tab, ignoreCache: true }, files: [] }, handle.abort.signal, "user")
+      }
+    },
     async register(window: number, binding: string, target: Target) {
       const server = input.serverEndpoints.get(target.server)
 
@@ -432,6 +441,19 @@ export function createBrowserPane(input: {
       owned(window, binding)
 
       return (await page(binding, tabID)?.site()) ?? { cookies: 0 }
+    },
+    async clearCache(window: number, binding: string, tabID: Browser.TabID, address: string) {
+      owned(window, binding)
+      const handle = handles.get(binding)
+      const origin = destinationOrigin(address)
+      const current = () => page(binding, tabID)?.contents.getURL() ?? selectTabSlot(machine.state, binding, tabID)?.tab.url
+
+      if (!handle || !origin || destinationOrigin(current() ?? "") !== origin) throw new Error("browser.site.changed")
+      const session = electron.session.fromPartition(handle.partition)
+      await session.clearData({ origins: [origin], originMatchingMode: "origin-in-all-contexts", dataTypes: ["cache", "serviceWorkers"] })
+
+      if (handle.abort.signal.aborted || destinationOrigin(current() ?? "") !== origin) return
+      await execute(binding, { action: { type: "reload", tabID, ignoreCache: true }, files: [] }, handle.abort.signal, "user")
     },
     async clearSite(window: number, binding: string, tabID: Browser.TabID) {
       owned(window, binding)
@@ -754,7 +776,11 @@ export function createBrowserPane(input: {
       menu: {
         t: input.t,
         extensions: (contents, params) => handle.shared ? input.profile.extensionMenu(contents, params) : [],
-        navigate: async (type) => { if (current()) await execute(binding, { action: { type, tabID: id }, files: [] }, handle.abort.signal, "user") },
+        navigate: async (type) => {
+          const action = type === "hardReload" ? { type: "reload", tabID: id, ignoreCache: true } as const : { type, tabID: id }
+
+          if (current()) await execute(binding, { action, files: [] }, handle.abort.signal, "user")
+        },
         open: async (url) => { if (current()) await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", childActivity(activity)) },
       },
       embeds: input.embeds,
@@ -954,7 +980,6 @@ export function createBrowserPane(input: {
       handle?.activity.set(id, activity)
 
       if (changed && current?.previewUsed()) dispatchBinding(binding, {type:"tab.restricted", tabID:id, url:current.state().url})
-      else if (changed && current) current.contents.setBackgroundThrottling(false)
 
       return load(binding, id, identity)
     }

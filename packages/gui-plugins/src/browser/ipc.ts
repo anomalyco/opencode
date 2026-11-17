@@ -166,8 +166,9 @@ export const PaneEvent = Schema.Union([
   // Details only this desktop shows, kept out of the server's tab state: the page's icon as a data URL, and its zoom
   // factor, 1 at 100%.
   Schema.Struct({
-    type: Schema.Literal("page"),
-    tabID: Browser.TabID,
+      type: Schema.Literal("page"),
+      tabID: Browser.TabID,
+      retryOnly: Schema.optionalKey(Schema.Boolean),
     icon: Schema.optionalKey(detail(MAX_ICON_URL).check(Schema.isStartingWith("data:image/"))),
     zoom: Schema.Finite.check(Schema.isBetween({ minimum: 0.25, maximum: 5 })),
   }),
@@ -250,6 +251,7 @@ export const BrowserPane = Ipc.define({
     },
     // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
+    clearCache: { input: Schema.Struct({ binding, tabID: Browser.TabID, address: text(16_384) }) },
     reveal: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     openPage: { input: Schema.Struct({ binding, tabID: Browser.TabID, expected: text(16_384) }) },
     close: { input: Schema.Struct({ binding }) },

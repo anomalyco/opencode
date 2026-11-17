@@ -8,6 +8,7 @@ import {
   frameStillCurrent,
   isDocumentLoading,
   isNavigationPending,
+  retryOnly,
   transitionDocument,
   type DocumentEvent,
   type DocumentState,
@@ -110,6 +111,18 @@ const shown = () =>
 test("a failed local history entry has no address to open, not the previous HTTP document", () => {
   const event = { type: "navigation.failed", url: "oc-preview://host/virtual", code: -2, description: "ERR_FAILED", isMainFrame: true } as const
   expect(documentTab(replay([event], shown()).state, history)).toMatchObject({ url: "about:blank", loadError: "ERR_FAILED" })
+})
+
+test("site controls are unavailable for a failed page showing a retry address until that address loads", () => {
+  const url = "https://retry.test/"
+  const failed = transitionDocument(shown(), { type: "navigation.failed", code: -324, description: "ERR_EMPTY_RESPONSE", url: "https://failed.test/", isMainFrame: true }).state
+  const stopped = transitionDocument(failed, { type: "navigation.held-stopped", address: url })
+  expect(documentTab(stopped.state, history).url).toBe(url)
+  expect(retryOnly(stopped.state)).toBe(true)
+  expect(types(stopped.effects)).toContain("detail")
+  const loaded = replay(visit(url), stopped.state)
+  expect(retryOnly(loaded.state)).toBe(false)
+  expect(types(loaded.all)).toContain("detail")
 })
 
 test.each(["workspace://ses_a/report.html", "file:///work/report.html", "artifact://art_a/"])("a failed restore retains its verified retry address %s", (url) => {

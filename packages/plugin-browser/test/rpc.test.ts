@@ -59,6 +59,7 @@ test("optional parameters keep their descriptions in the model's JSON Schema", (
   expect(properties("evaluate").expression?.description).toBe("Same as script.")
   expect(properties("evaluate").frameID?.description).toBe("Frame ID from browser.frames. Omit for the main frame.")
   expect(properties("wait").timeout?.description).toBe("Same as timeoutMs.")
+  expect(properties("files.get").fileID?.description).toBe("File ID returned by this tab's capture or download tools.")
 })
 
 test("browser files are bounded bytes, not remote filesystem paths", () => {

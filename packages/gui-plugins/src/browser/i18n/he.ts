@@ -48,8 +48,6 @@ export default {
   "site.cookies.clear": "נקה",
   "site.permissions": "ההרשאות חסומות",
   "site.permissions.description": "מצלמה, מיקרופון, מיקום והתראות אינם פועלים בדפדפן זה.",
-  "site.agent": "הסוכן יכול להשתמש בדף זה",
-  "site.agent.description": "הוא יכול לקרוא את הדף, להריץ סקריפטים ולמלא טפסים.",
   "page.add": "הוסף דף להפעלה",
   "page.placeholder": "הוסף הקשר על דף זה",
   "external.open": "פתח בדפדפן המערכת",

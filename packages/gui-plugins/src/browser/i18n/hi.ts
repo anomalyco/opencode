@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "साफ़ करें",
   "site.permissions": "अनुमतियाँ अवरुद्ध हैं",
   "site.permissions.description": "इस ब्राउज़र में कैमरा, माइक्रोफ़ोन, लोकेशन और सूचनाएँ काम नहीं करतीं।",
-  "site.agent": "एजेंट इस पेज का उपयोग कर सकता है",
-  "site.agent.description": "यह पेज पढ़ सकता है, स्क्रिप्ट चला सकता है और फ़ॉर्म भर सकता है।",
   "page.add": "पेज को सेशन में जोड़ें",
   "page.placeholder": "इस पेज के बारे में कॉन्टेक्स्ट जोड़ें",
   "external.open": "सिस्टम ब्राउज़र में खोलें",

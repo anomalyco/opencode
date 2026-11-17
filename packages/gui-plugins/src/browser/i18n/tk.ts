@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Arassala",
   "site.permissions": "Rugsatlar petiklenen",
   "site.permissions.description": "Kamera, mikrofon, ýerleşiş we habarnamalar bu brauzerde işlemeýär.",
-  "site.agent": "Agent bu sahypany ulanyp biler",
-  "site.agent.description": "Ol sahypany okap, skriptleri işledip we formalary doldurup biler.",
   "page.add": "Sahypany sessiýa goşuň",
   "page.placeholder": "Bu sahypa barada kontekst goşuň",
   "external.open": "Ulgam brauzerinde açyň",

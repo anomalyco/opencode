@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "清除",
   "site.permissions": "權限已封鎖",
   "site.permissions.description": "攝影機、麥克風、位置和通知在此瀏覽器中無法使用。",
-  "site.agent": "代理程式可以使用此頁面",
-  "site.agent.description": "它可以讀取頁面、執行指令碼和填寫表單。",
   "page.add": "將頁面加入工作階段",
   "page.placeholder": "新增此頁面的相關上下文",
   "external.open": "在系統瀏覽器中開啟",

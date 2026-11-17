@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "消去",
   "site.permissions": "権限はブロックされています",
   "site.permissions.description": "このブラウザーでは、カメラ、マイク、位置情報、通知は機能しません。",
-  "site.agent": "エージェントはこのページを使用できます",
-  "site.agent.description": "ページの読み取り、スクリプトの実行、フォームへの入力ができます。",
   "page.add": "ページをセッションに追加",
   "page.placeholder": "このページに関するコンテキストを追加",
   "external.open": "システムのブラウザーで開く",

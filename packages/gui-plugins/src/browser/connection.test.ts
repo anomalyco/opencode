@@ -39,6 +39,7 @@ function fixture(reject?: Error) {
     zoom: async () => undefined,
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
+    clearCache: async () => undefined,
     reveal: async () => undefined,
     openPage: async () => undefined,
     createTab: async () => PluginTabHandle.make("handle"),

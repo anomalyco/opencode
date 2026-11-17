@@ -1,5 +1,5 @@
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
-import type { Plugin } from "@opencode/plugin/gui/main"
+import { MenubarItem, type Plugin } from "@opencode/plugin/gui/main"
 import type { Pane } from "./pane"
 import type { Profile } from "./profile"
 import { RefsStore } from "./refs"
@@ -132,6 +132,27 @@ const setup: Plugin.MainSetup = (ctx) => {
     return pane()
   }
 
+  if (process.platform === "darwin") {
+    const reload = (window?: number) => {
+      const current = selectPane(paneState)
+
+      return current.kind === "ready" ? current.pane.menuReload(window) : undefined
+    }
+
+    ctx.add(MenubarItem, {
+      menu: "view",
+      id: "hardReload",
+      after: "view.reload",
+      get label() {
+        return ctx.t("menu.hardReload")
+      },
+      enabled: () => !!reload(ctx.windows.focused()?.id),
+      run: (window) => {
+        void reload(window?.id)?.().catch((error: Error) => ctx.log.write("warn", error.message))
+      },
+    })
+  }
+
   const provider = ctx.provide(BrowserPane, {
     register: async (input, caller) => (await load()).register(caller.window, input.binding, input),
     load: async (input, caller) => (await pane()).load(caller.window, input.binding, input.tabID),
@@ -147,6 +168,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     zoom: async (input, caller) => (await pane()).zoom(caller.window, input.binding, input.tabID, input.zoom),
     site: async (input, caller) => (await pane()).site(caller.window, input.binding, input.tabID),
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
+    clearCache: async (input, caller) => (await pane()).clearCache(caller.window, input.binding, input.tabID, input.address),
     reveal: async (input, caller) => (await pane()).reveal(caller.window, input.binding, input.tabID),
     openPage: async (input, caller) => (await pane()).openPage(caller.window, input.binding, input.tabID, input.expected),
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),

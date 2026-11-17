@@ -59,8 +59,9 @@ export default {
   "site.permissions": "Permissions",
   "site.permissions.description":
     "Sites ask before they use your camera, microphone, location, notifications, or clipboard. Change saved answers in Browser settings.",
-  "site.agent": "Agent can use this page",
-  "site.agent.description": "It can read the page, run scripts, and fill in forms.",
+  "site.agent": "Agents allowed the browser can use this page",
+  "site.agent.description":
+    "They can read the page, run scripts, and fill in forms. Your browser permission decides which agents can.",
   "page.add": "Add page to session",
   "page.placeholder": "Add context about this page",
   "external.open": "Open in default browser",
@@ -195,6 +196,8 @@ export default {
   "menu.back": "Back",
   "menu.forward": "Forward",
   "menu.reload": "Reload",
+  "menu.hardReload": "Reload ignoring cache",
+  "site.clearCache": "Clear cache for this site",
   "menu.openLink": "Open link in new tab",
   "menu.external": "Open link in default browser",
   "menu.openPage": "Open in default browser",

@@ -59,6 +59,8 @@ function fixture() {
         const item = ask?.({ senderFrame: f })
 
         if (item) css.push(item.css)
+
+        if (item?.remove && item.origin === "user" && id === 8) return void ipc.emit(channel, {}, "user-removal")
         ipc.emit(channel, {}, !!item && id !== 8)
       },
     }
@@ -93,7 +95,7 @@ function fixture() {
 test("a toolbar grant covers only this tab and origin until cross-origin navigation, release or forget", async () => {
   const f = fixture()
   const style = () => f.mv2([{ code: "p{}" }]) // omitted tab ID resolves in the caller's window
-  await expect(style()).rejects.toThrow("Cannot access")
+  await expect(style()).rejects.toThrow(/^Cannot access contents of the page\.$/)
   f.styles.grant(f.extension, 3)
   await style()
   f.navigate(f.root + "other")
@@ -114,6 +116,7 @@ test("private tops deny before frame selection on both paths; a lost child does 
   const f = fixture()
   f.styles.grant(f.extension, 3)
   await f.mv2([{ allFrames: true, code: "p{}" }])
+  await expect(Promise.resolve(f.styles.module.methods["tabs.removeCSS"]!({ extension: f.extension }, [{ allFrames: true, code: "p{}", cssOrigin: "user" }]))).rejects.toThrow("cannot remove a user-origin stylesheet")
   await expect(f.mv2([{ frameId: 8, code: "p{}" }])).rejects.toThrow("no longer available")
   expect(f.mv3({ tabId: 3, allFrames: true })).toEqual({ tabId: 3, frameIds: [0, 8] })
   f.navigate("oc-preview://private/report")

@@ -2,12 +2,14 @@ import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { DialogBody, DialogFooter } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
+import { ownKeyboard } from "@opencode/ui/hooks"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createSignal, createUniqueId, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import { guardActivation } from "./activation-delay"
+import { promptKeyOwner } from "./prompt-keys"
 import type definition from "./index"
 import { PROMPT_TEXT_MAX, SIGN_IN_TEXT_MAX, type PromptAnswer, type PromptSite, type PromptView } from "./ipc"
 
@@ -29,11 +31,15 @@ export function PromptDialog(props: {
   answer: (answer: PromptAnswer) => void
   /** Whether to take keyboard focus as it opens; false while the user works elsewhere in the window. */
   focus: boolean
+  /** Moves the keyboard out to the pane's address field, with the dialog left open. */
+  leave: () => void
 }) {
   const ctx = usePlugin<typeof definition>()
   const title = createUniqueId()
   const description = createUniqueId()
   let box: HTMLDivElement | undefined
+  // Where the keyboard last was inside the dialog, which a click on the dimmed page returns it to.
+  let last: HTMLElement | undefined
   // A page can open a dialog under a click or key press already in flight: its default answer waits for a new one,
   // from each dialog it shows on and each time the page asks again.
   let guard: ReturnType<typeof guardActivation> | undefined
@@ -72,6 +78,12 @@ export function PromptDialog(props: {
     if (!box) return
     guard = guardActivation(box)
     onCleanup(guard.dispose)
+    // The command layer and the native menu run no shortcut while the keyboard is here.
+    onCleanup(ownKeyboard(box))
+    // A listener on the dialog itself, not Solid's on the document, so the dialog's keys stop here.
+    const root = box
+    root.addEventListener("keydown", keyDown)
+    onCleanup(() => root.removeEventListener("keydown", keyDown))
     onCleanup(() => {
       const active = document.activeElement
 
@@ -85,8 +97,26 @@ export function PromptDialog(props: {
     target.focus({ preventScroll: true })
   })
 
-  // Tab and Shift+Tab cycle inside the dialog; the page behind it is a still.
+  // The dialog's keys are its own (prompt-keys.ts): the command layer and the native menu run no shortcut while the
+  // keyboard is inside it (`ownKeyboard`), no other handler of the window sees them, and what the window would do
+  // behind it, as its own reload or zoom, is cancelled. Tab and Shift+Tab cycle inside the dialog; the page behind it is
+  // a still.
   const keyDown = (event: KeyboardEvent) => {
+    const text =
+      event.target instanceof HTMLInputElement && (event.target.type === "text" || event.target.type === "password")
+
+    const owner = promptKeyOwner(event, { inside: true, mac, text })
+
+    if (owner !== "window") event.stopPropagation()
+
+    if (owner === "swallowed") return event.preventDefault()
+
+    if (owner === "exit") {
+      event.preventDefault()
+
+      return props.leave()
+    }
+
     if (cancelKey(event)) {
       event.preventDefault()
       event.stopPropagation()
@@ -95,9 +125,9 @@ export function PromptDialog(props: {
     }
 
     // A click on the dialog's text focuses the dialog, or the page's text, where Enter answers as the main button does.
-    const text = event.target instanceof HTMLElement && event.target.dataset.pageText !== undefined
+    const pageText = event.target instanceof HTMLElement && event.target.dataset.pageText !== undefined
 
-    if (event.key === "Enter" && !event.isComposing && box && (event.target === box || text)) {
+    if (event.key === "Enter" && !composing(event) && box && (event.target === box || pageText)) {
       event.preventDefault()
 
       return box.querySelector("form")?.requestSubmit()
@@ -130,6 +160,8 @@ export function PromptDialog(props: {
       data-component="dialog-v2"
       data-fit
       data-browser-prompt={props.view.ask.kind}
+      // Typing here never moves to the chat composer, and Escape here is the dialog's.
+      data-prevent-autofocus
       // The app's dialog, scoped to the page's box instead of the window; the scrim dims the page's still.
       style={{
         position: "absolute",
@@ -138,17 +170,32 @@ export function PromptDialog(props: {
         "pointer-events": "auto",
         "background-color": "var(--v2-overlay-simple-overlay-scrim)",
       }}
+      // The dimmed page is the dialog's: a click there keeps the keyboard in the dialog, or brings it back, rather than
+      // giving it to the pane behind. The strip, the address field and the chat stay the user's to click.
+      onMouseDown={(event) => {
+        if (event.target !== event.currentTarget || !box) return
+        event.preventDefault()
+
+        if (box.contains(document.activeElement)) return
+
+        const target =
+          last?.isConnected && box.contains(last) ? last : (box.querySelector<HTMLElement>("[autofocus]") ?? box)
+
+        target.focus({ preventScroll: true })
+      }}
     >
       <div
         ref={box}
         data-slot="dialog-container"
         role="alertdialog"
         aria-modal="true"
+        onFocusIn={(event) => {
+          if (event.target instanceof HTMLElement) last = event.target
+        }}
         aria-labelledby={title}
         aria-describedby={described() ? description : undefined}
         tabIndex={-1}
         style={{ width: "min(100%, 480px)", "max-height": "100%", outline: "none" }}
-        onKeyDown={keyDown}
       >
         <Switch>
           <Match when={pageDialog()}>
@@ -432,6 +479,8 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
     <section
       ref={bar}
       data-component="browser-prompt"
+      // Not modal: the app's shortcuts work here; only Escape, which dismisses the bar, is the bar's alone.
+      data-prevent-autofocus
       role={permission() ? "alertdialog" : "status"}
       aria-label={permission() ? ctx.t("prompt.permission.label") : undefined}
       aria-describedby={text}
@@ -515,7 +564,12 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
 
 type Plugin = ReturnType<typeof usePlugin<typeof definition>>
 
-const cancelKey = (event: KeyboardEvent) => !event.isComposing && event.key === "Escape"
+// Chromium reports the key that ends an IME composition with keyCode 229 once isComposing is already false.
+const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229
+
+const cancelKey = (event: KeyboardEvent) => !composing(event) && event.key === "Escape"
+
+const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
 
 function siteSays(ctx: Plugin, site: PromptSite) {
   if (site.kind === "web") return ctx.t(site.embedded ? "prompt.site.embedded" : "prompt.site.web", { host: site.host })

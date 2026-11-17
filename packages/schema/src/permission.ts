@@ -6,6 +6,7 @@ import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { SessionID } from "./session-id.js"
 import { statics } from "./schema.js"
+import { Wildcard } from "./wildcard.js"
 
 export const ID = Schema.String.check(Schema.isStartingWith("per")).pipe(
   Schema.brand("Permission.ID"),
@@ -65,3 +66,12 @@ export const Rule = Schema.Struct({
 
 export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
 export type Ruleset = typeof Ruleset.Type
+
+/**
+ * Whether `rules` deny `action` whatever the resource: the last rule for the action denies `*`. A tool with this
+ * permission is not listed. A narrower deny, or an allow after it, leaves the tool listed for its calls to decide.
+ */
+export function deniesAll(action: string, rules: ReadonlyArray<Rule>, ignoreCase: boolean) {
+  const rule = rules.findLast((rule) => Wildcard.match(action, rule.action, ignoreCase))
+  return rule?.resource === "*" && rule.effect === "deny"
+}

@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Wissen",
   "site.permissions": "Machtigingen zijn geblokkeerd",
   "site.permissions.description": "Camera, microfoon, locatie en meldingen werken niet in deze browser.",
-  "site.agent": "Agent kan deze pagina gebruiken",
-  "site.agent.description": "De agent kan de pagina lezen, scripts uitvoeren en formulieren invullen.",
   "page.add": "Pagina aan sessie toevoegen",
   "page.placeholder": "Voeg context over deze pagina toe",
   "external.open": "Openen in systeembrowser",

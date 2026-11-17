@@ -10,6 +10,10 @@ import type { ExtensionTabs } from "./tabs"
 
 const Origin = Schema.Literals(["author", "user"])
 
+const denied = "Cannot access contents of the page."
+
+class UserSheetRemovalError extends Error {}
+
 const Details = Schema.Struct({ code: Schema.optional(Schema.String), file: Schema.optional(Schema.String), frameId: Schema.optional(Schema.Int), allFrames: Schema.optional(Schema.Boolean), matchAboutBlank: Schema.optional(Schema.Boolean), cssOrigin: Schema.optional(Origin), runAt: Schema.optional(Schema.Literals(["document_start", "document_end", "document_idle"])) })
 
 const Arguments = Schema.Union([Schema.Tuple([Details]), Schema.Tuple([Schema.NullOr(Schema.Int), Details])])
@@ -93,7 +97,7 @@ export function createStyles(tabs: ExtensionTabs, manifest: Manifests) {
     owners.set(extension.id, owner)
     const top = tab.contents.mainFrame
 
-    if (!publicTop(top.url, tab.window.webContents.getURL())) throw new Error("Cannot access contents of the page.")
+    if (!publicTop(top.url, tab.window.webContents.getURL())) throw new Error(denied)
 
     const allowed = (frame: WebFrameMain) => !owner.signal.aborted && !tab.contents.isDestroyed() && tabs.get(tab.contents.id) === tab && !frame.isDestroyed() && !frame.detached &&
       tab.contents.mainFrame === top && canStyle(top.url, frame.url, frame.origin, manifest(extension).hosts, grants.get(tab.contents.id)?.get(extension.id), !!details.matchAboutBlank, tab.window.webContents.getURL())
@@ -103,7 +107,7 @@ export function createStyles(tabs: ExtensionTabs, manifest: Manifests) {
     if (frames.some(f => !f)) throw new Error(`No frame with id ${details.frameId} in tab ${current}.`)
     const targets = frames.filter((f): f is WebFrameMain => !!f && allowed(f))
 
-    if (!targets.length) throw new Error("Cannot access contents of the page. Extension manifest must request permission to access the respective host.")
+    if (!targets.length) throw new Error(denied)
     const css = details.code ?? await packageCSS(extension, details.file ?? "")
 
     const results = await Promise.allSettled(targets.map(async frame => {
@@ -133,7 +137,7 @@ export function createStyles(tabs: ExtensionTabs, manifest: Manifests) {
           Promise.resolve().then(() => frame.send("browser-extension:css", channel, remove ? "document_start" : details.runAt ?? "document_idle", blank)),
         ]).catch(cause => { throw lifetime.signal.reason === absent ? absent : cause })
 
-        if (reply[1] === "user-removal") throw new Error("Electron cannot remove a user-origin stylesheet until the document is reloaded.")
+        if (reply[1] === "user-removal") throw new UserSheetRemovalError("Electron cannot remove a user-origin stylesheet until the document is reloaded.")
 
         if (reply[1] !== true) throw new Error("The target frame is no longer available.")
       } finally {
@@ -144,6 +148,10 @@ export function createStyles(tabs: ExtensionTabs, manifest: Manifests) {
         ipc.removeHandler(channel)
       }
     }))
+
+    for (const result of results) {
+      if (remove && result.status === "rejected" && result.reason instanceof UserSheetRemovalError) throw result.reason
+    }
 
     if (!results.some(result => result.status === "fulfilled")) {
       const failure = results.find(result => result.status === "rejected")
@@ -167,7 +175,7 @@ export function createStyles(tabs: ExtensionTabs, manifest: Manifests) {
     if (!tab) throw new Error(`No tab with id: ${input.target.tabId}.`)
     const top = tab.contents.mainFrame
 
-    if (!publicTop(top.url, tab.window.webContents.getURL())) throw new Error("Cannot access contents of the page.")
+    if (!publicTop(top.url, tab.window.webContents.getURL())) throw new Error(denied)
     const ids = input.target.frameIds ?? [0]
     const frames = top.framesInSubtree.map(frame => ({ frame, id: frame === top ? 0 : frame.frameTreeNodeId }))
 
@@ -175,7 +183,7 @@ export function createStyles(tabs: ExtensionTabs, manifest: Manifests) {
     const requested = frames.filter(f => input.target.allFrames || ids.includes(f.id))
     const allowed = requested.filter(({ frame }) => canStyle(top.url, frame.url, frame.origin, manifest(context.extension).hosts, grants.get(tab.contents.id)?.get(context.extension.id), false, tab.window.webContents.getURL()))
 
-    if (!allowed.length || (!input.target.allFrames && requested.length !== allowed.length)) throw new Error("Cannot access contents of the page.")
+    if (!allowed.length || (!input.target.allFrames && requested.length !== allowed.length)) throw new Error(denied)
 
     return { tabId: tab.contents.id, frameIds: allowed.map(f => f.id) }
   })

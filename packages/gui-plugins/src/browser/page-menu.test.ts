@@ -112,7 +112,7 @@ test.each([
 
     expect(
       template.filter((x) => x.type !== "separator").map((x) => `${x.enabled === false ? "!" : ""}${x.label}`),
-    ).toEqual(["!back", "forward", "reload", "openPage", ...items, "Extension"])
+    ).toEqual(["!back", "forward", "reload", "hardReload", "openPage", ...items, "Extension"])
   },
 )
 

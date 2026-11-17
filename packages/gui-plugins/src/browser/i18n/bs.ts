@@ -48,8 +48,6 @@ export default {
   "site.cookies.clear": "Obriši",
   "site.permissions": "Dozvole su blokirane",
   "site.permissions.description": "Kamera, mikrofon, lokacija i obavještenja ne rade u ovom pregledniku.",
-  "site.agent": "Agent može koristiti ovu stranicu",
-  "site.agent.description": "Može čitati stranicu, pokretati skripte i popunjavati obrasce.",
   "page.add": "Dodaj stranicu u sesiju",
   "page.placeholder": "Dodajte kontekst o ovoj stranici",
   "external.open": "Otvori u sistemskom pregledniku",

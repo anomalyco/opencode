@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { navigationTurn } from "./navigation-turn"
+import { navigationTurn, replacementNavigation } from "./navigation-turn"
 import { createDocumentState, transitionDocument } from "./page-machine"
 
 test.each(["navigate", "reload"] as const)("%s joins the unissued preview restore that bootstraps CDP", async method => {
@@ -10,6 +10,24 @@ test.each(["navigate", "reload"] as const)("%s joins the unissued preview restor
   expect(turn.interrupt(method, saved)).toBe(method === "reload" ? saved : undefined)
   await restore("oc-preview://test/report.html", () => { issued.push(saved) })
   expect(issued).toEqual([saved])
+})
+
+test.each([true, false])("an abort waits for the replacement document, not the original commit: committed=%s", async committed => {
+  const next = replacementNavigation()
+  const start = { isMainFrame: true, isSameDocument: false }
+  const aborted = Object.assign(new Error("aborted"), { errno: -3 })
+  next.start(start)
+  next.commit()
+  next.start({ ...start, isSameDocument: true })
+  next.start({ ...start, isMainFrame: false })
+  expect(next.after(aborted)).toBeUndefined()
+  next.start(start)
+  const result = next.after(aborted)
+
+  if (committed) next.commit()
+  next.stop()
+  expect(await result).toBe(committed)
+  expect(next.after(new Error("network error"))).toBeUndefined()
 })
 
 test.each(["stop", "oc-preview://private/report", "https://next.test"])('a later %s wins over a deferred web navigation', async next => {

@@ -199,6 +199,11 @@ export function documentVisible(state: DocumentState) {
   return state.status === "loaded" && state.revealed
 }
 
+/** The address bar offers another load, not a site whose storage can be inspected or cleared. */
+export function retryOnly(state: DocumentState) {
+  return state.status !== "closed" && state.status !== "loaded" && !!state.retry
+}
+
 export function documentIcon(state: DocumentState) {
   return state.status === "closed" ? undefined : state.icon
 }
@@ -313,7 +318,9 @@ function settle(previous: Open, next: Open, effects: readonly DocumentEffect[]):
   const shown: readonly DocumentEffect[] = visible === documentVisible(previous) ? [] : [{ type: "show", visible }]
   const publish = isDocumentLoading(next) !== isDocumentLoading(previous) && !effects.includes(PUBLISH)
 
-  return { state: next, effects: [...shown, ...effects, ...(publish ? [PUBLISH] : [])] }
+  const siteChanged = retryOnly(previous) !== retryOnly(next) && !effects.includes(DETAIL)
+
+  return { state: next, effects: [...shown, ...(siteChanged ? [DETAIL] : []), ...effects, ...(publish ? [PUBLISH] : [])] }
 }
 
 function unchanged(state: DocumentState): DocumentTransition {

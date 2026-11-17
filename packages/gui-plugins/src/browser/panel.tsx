@@ -334,7 +334,7 @@ export default function SessionBrowserPane(props: {
   // The address field always shows the whole URL; at rest it draws the host emphasized.
   const webParts = createMemo(() => hostDisplay(addressBar().field))
   const parts = () => webParts() ?? addressParts(addressBar().field)
-  const site = () => !!addressBar().field && !addressBar().editing
+  const site = () => !!addressBar().field && !addressBar().editing && !page()?.retryOnly
   const recent = () => props.model.visits().slice(0, RECENT)
 
   // A loopback address opens on the machine that runs the server; the system browser here reaches it only when the
@@ -455,10 +455,10 @@ export default function SessionBrowserPane(props: {
     props.model.mount({
       visible,
       address,
-      reload: () => {
+      reload: (ignoreCache) => {
         const tab = state()
 
-        if (tab) command({ type: "reload", tabID: tab.id })
+        if (tab) command({ type: "reload", tabID: tab.id, ignoreCache })
       },
       close: () => {
         const tab = state()
@@ -612,10 +612,11 @@ export default function SessionBrowserPane(props: {
               size="large"
               disabled={!state()?.loading && !address()}
               aria-label={plugin.t(state()?.loading ? "action.stop" : "action.reload")}
-              onClick={() => {
+              onClick={(event) => {
                 const tab = state()
 
-                if (tab) command({ type: tab.loading ? "stop" : "reload", tabID: tab.id })
+                if (!tab) return
+                command(tab.loading ? { type: "stop", tabID: tab.id } : { type: "reload", tabID: tab.id, ignoreCache: event.shiftKey })
               }}
               icon={
                 <Show when={state()?.loading} fallback={<Icon name="outline-rotate-clockwise" />}>
@@ -683,6 +684,11 @@ export default function SessionBrowserPane(props: {
                     const tab = state()
 
                     return tab ? props.model.clearSite(props.session, tab.id) : undefined
+                  }}
+                  clearCache={() => {
+                    const tab = state()
+
+                    return tab ? props.model.clearCache(props.session, tab.id, address()) : undefined
                   }}
                 />
               </Show>
@@ -1027,7 +1033,9 @@ export default function SessionBrowserPane(props: {
         <Show when={promptKey(true)} keyed>
           {(key) => (
             <Show when={key ? prompt() : undefined}>
-              {(view) => <PromptDialog view={view()} answer={answer} focus={untrack(promptFocus)} />}
+              {(view) => (
+                <PromptDialog view={view()} answer={answer} focus={untrack(promptFocus)} leave={focusAddress} />
+              )}
             </Show>
           )}
         </Show>
@@ -1316,6 +1324,7 @@ function SiteInformation(props: {
   /** The page's cookie count; undefined while the pane cannot answer. */
   site: () => Promise<{ cookies: number }> | undefined
   clear: () => Promise<void> | undefined
+  clearCache: () => Promise<void> | undefined
 }) {
   const plugin = usePlugin()
   const [siteState, setSiteState] = createSignal(initialSiteState)
@@ -1353,7 +1362,7 @@ function SiteInformation(props: {
       return
     }
 
-    const pending = props.clear()
+    const pending = effect.type === "clear-cache" ? props.clearCache() : props.clear()
 
     if (!pending) return dispatch({ type: "clear.failed", attempt })
     void pending.then(
@@ -1459,6 +1468,14 @@ function SiteInformation(props: {
                 {plugin.t(view().failed ? "common.retry" : "site.cookies.clear")}
               </Button>
             </SiteRow>
+            <Button
+              size="small"
+              variant="neutral"
+              disabled={view().actionDisabled || view().failed}
+              onClick={() => dispatch({ type: "clear-cache.clicked" })}
+            >
+              {plugin.t("site.clearCache")}
+            </Button>
             <SiteRow
               icon="outline-eye-slash"
               title={plugin.t("site.permissions")}
