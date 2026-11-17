@@ -16,7 +16,7 @@ import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
-import { activeCredential } from "./credential-settings.js"
+import { storedCredential } from "./credential-settings.js"
 import { ProviderRefresh } from "./refresh.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
@@ -227,7 +227,7 @@ export const ChatGPTPlugin = define({
 
     const load = Effect.fn("ChatGPTPlugin.load")(function* () {
       // const previous = IntegrationConnection.key(source)
-      const { connection, credential } = yield* activeCredential(ctx, integrationID)
+      const { connection, credential } = yield* storedCredential(ctx, integrationID)
       chatgpt = credential?.type === "oauth" && credential.methodID === methodID ? credential : undefined
       const previous = source
       source = chatgpt ? connection : undefined
