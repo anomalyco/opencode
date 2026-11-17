@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test"
-import { InMemoryTransport, type JSONRPCMessage } from "@modelcontextprotocol/client"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Flag } from "@opencode/core/flag"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -10,10 +9,11 @@ import { Tool } from "@opencode/core/tool"
 import { McpEventTools } from "@opencode/core/tool/plugin/mcp-events"
 import { Effect, Layer, PubSub, Stream } from "effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
+import { eventProducer } from "./fixture/event-server"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { registerToolPlugin, toolDefinitions, toolIdentity, toolNodeReplacements } from "./lib/tool"
+import { registerToolPlugin, toolIdentity, toolNodeReplacements } from "./lib/tool"
 
 const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
 const sessionID = Session.ID.make("ses_mcp_events")
@@ -22,48 +22,26 @@ const notFromUser =
 
 /** An MCP server speaking raw JSON-RPC that offers one event type and records the streams opened on it. */
 const eventServer = Effect.fnUntraced(function* () {
-  const [client, server] = InMemoryTransport.createLinkedPair()
-  const state = {
-    streams: [] as Array<{ id: string | number; params: Record<string, unknown> }>,
-    cancelled: [] as unknown[],
-  }
-  const reply = (id: string | number, result: Record<string, unknown>) => server.send({ jsonrpc: "2.0", id, result })
-  server.onmessage = (message: JSONRPCMessage) => {
-    if (!("method" in message)) return
-    const params = message.params ?? {}
-    if (message.method === "notifications/cancelled") state.cancelled.push(params.requestId)
-    if (!("id" in message)) return
-    if (message.method === "initialize")
-      void reply(message.id, {
-        protocolVersion: params.protocolVersion,
-        capabilities: { extensions: { "io.modelcontextprotocol/events": {} } },
-        serverInfo: { name: "jobs", version: "1.0.0" },
-      })
-    if (message.method === "events/list")
-      void reply(message.id, { events: [{ name: "job.finished", description: "A job ended", inputSchema: {} }] })
-    if (message.method === "events/stream") state.streams.push({ id: message.id, params })
-  }
-  yield* Effect.promise(() => server.start())
-  const notify = (type: string, id: string | number, params: Record<string, unknown> = {}) =>
-    Effect.promise(() =>
-      server.send({
-        jsonrpc: "2.0",
-        method: `notifications/events/${type}`,
-        params: { ...params, _meta: { "io.modelcontextprotocol/subscriptionId": id } },
-      }),
-    )
+  const producer = yield* eventProducer([
+    {
+      name: "job.finished",
+      description: "A job ended",
+      delivery: ["push"],
+      inputSchema: {},
+      payloadSchema: { type: "object" },
+    },
+  ])
   const connection = yield* McpClient.connect({
     server: "jobs",
-    config: { type: "attached", transport: client },
+    config: { type: "attached", transport: producer.client },
     directory: import.meta.dir,
     events: true,
   }).pipe(Effect.provide(hostEnvironmentLayer))
   return {
-    state,
+    ...producer,
     connection,
-    notify,
     event: (id: string | number, eventId: string, cursor?: string, fields: Record<string, unknown> = {}) =>
-      notify("event", id, {
+      producer.notify("event", id, {
         eventId,
         name: "job.finished",
         timestamp: "2026-11-10T00:00:00Z",
@@ -71,7 +49,6 @@ const eventServer = Effect.fnUntraced(function* () {
         cursor,
         ...fields,
       }),
-    close: (id: string | number) => Effect.promise(() => reply(id, {})),
   }
 })
 
@@ -85,7 +62,10 @@ const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
     metadata?: Record<string, unknown>
   }> = []
   const asserts: Permission.AssertInput[] = []
-  const deleted = yield* PubSub.unbounded<{ type: "session.deleted"; data: { sessionID: string } }>()
+  const deleted = yield* PubSub.unbounded<{
+    type: "session.deleted"
+    data: { sessionID: string }
+  }>()
   yield* registerToolPlugin(McpEventTools.Plugin, {
     event: { subscribe: () => Stream.fromPubSub(deleted) as never },
     session: { synthetic: (input) => Effect.sync(() => void wakes.push(input)) as never },
@@ -134,7 +114,7 @@ describe("watch_mcp_event", () => {
   it.live("is absent while the mcp_events flag is off", () =>
     Effect.gen(function* () {
       const { registry } = yield* setup({ flag: "-mcp_events" })
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).not.toContain("opencode_watch_mcp_event")
+      expect((yield* registry.list()).map((tool) => tool.id)).not.toContain("opencode_watch_mcp_event")
     }),
   )
 
@@ -142,7 +122,16 @@ describe("watch_mcp_event", () => {
     Effect.gen(function* () {
       const { watch, asserts } = yield* setup()
       expect((yield* watch({})).output).toEqual({
-        events: [{ server: "jobs", name: "job.finished", description: "A job ended", inputSchema: {} }],
+        events: [
+          {
+            server: "jobs",
+            name: "job.finished",
+            description: "A job ended",
+            delivery: ["push"],
+            inputSchema: {},
+            payloadSchema: { type: "object" },
+          },
+        ],
       })
       expect(asserts).toMatchObject([{ action: "opencode_watch_mcp_event", resources: ["jobs"], save: ["jobs"] }])
     }),

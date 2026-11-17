@@ -5,7 +5,7 @@ import path from "node:path"
 import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
 import type { Handoff } from "@opencode/schema/persistent-pty"
 
-const ProtocolVersion = 8
+const ProtocolVersion = 9
 const MaxFrameBytes = 8 * 1024 * 1024
 
 const Lifecycle = Schema.Union([

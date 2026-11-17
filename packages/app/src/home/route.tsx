@@ -2,6 +2,9 @@ import { ScrollView } from "@opencode/ui/scroll-view"
 import { createMediaQuery } from "@solid-primitives/media"
 import { onMount, Show } from "solid-js"
 import { useLayout } from "@/shell/state/layout"
+import { useSettings } from "@/settings/model"
+import { useProjectNavigation } from "@/shell/project-navigation"
+import { ProjectLanding } from "./projects/landing"
 import { createHomeController } from "./model"
 import { createHomeProjectsController } from "./projects/controller"
 import { HomeUtilityNav } from "./projects/view"
@@ -12,6 +15,20 @@ import { createHomeSessionsController } from "./sessions/controller"
 import { HomeSessions } from "./sessions/region"
 
 export function Home() {
+  const settings = useSettings()
+
+  const projectNavigation = useProjectNavigation()
+
+  return (
+    <Show when={settings.ready()}>
+      <Show when={projectNavigation()} fallback={<HomeOverview />}>
+        <ProjectLanding />
+      </Show>
+    </Show>
+  )
+}
+
+function HomeOverview() {
   const layout = useLayout()
   const home = createHomeController()
   const projects = createHomeProjectsController(home)

@@ -416,12 +416,12 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Select file",
   "dialog.directory.action.selectFolder": "Select folder",
-  "dialog.directory.search.placeholder": "Search projects or enter ~/path…",
+  "dialog.directory.breadcrumbs": "Folder path",
+  "dialog.directory.search.placeholder": "Search folders or enter ~/path…",
   "dialog.directory.recent": "Recent",
+  "dialog.directory.moreProjects": "More projects",
   "dialog.directory.recentProject": "{{name}} ({{path}})",
   "dialog.directory.gitRepo": "git repo",
-  "dialog.directory.root": "Root",
-  "dialog.directory.parent": "Parent",
   "dialog.directory.readError": "Unable to read this folder",
 
   "dialog.server.add.title": "Add server",
@@ -722,7 +722,9 @@ export const dict = {
 
   "session.new.project.new": "New project",
   "session.new.project.search": "Search projects",
+  "session.new.project.other.search": "Search other projects",
   "session.new.project.add": "Add project",
+  "project.start.reconnect": "Reconnect",
   "session.new.project.trigger.tooltip": "Choose project",
   "session.new.worktree.creating": "Creating worktree",
   "session.new.starting": "Starting session",
@@ -731,6 +733,7 @@ export const dict = {
   "session.new.workspace.local": "Local repository",
   "session.new.workspace.existingLabel": "Worktree",
   "session.new.workspace.fromBranch": "from {{branch}}",
+  "session.new.workspace.useMainCheckout": "Use main checkout",
   "session.new.workspace.branch.search.placeholder": "Search branches",
   "session.new.git.none": "No Git",
 
@@ -888,7 +891,7 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
-    "Choose how sessions are listed in the sidebar. Only applies to side tabs.",
+    "Choose how to organize sessions in side tabs. On desktop, Projects and Customize replace Home with Settings in the sidebar.",
   "settings.experimental.sidebarOrganize.recent": "Recent",
   "settings.experimental.sidebarOrganize.projects": "Projects",
   "settings.experimental.sidebarOrganize.list": "One list",
@@ -974,6 +977,7 @@ export const dict = {
   "settings.about.tagline": "AI can’t build great software, without you",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "settings.preferences.description": "Customize preferences and theme and default behavior",
+  "settings.helpFeedback": "Help & feedback",
   "settings.appearance.description": "Customize theme and fonts",
   "settings.appearance.row.tabs.title": "Tabs",
   "settings.appearance.row.tabs.description": "Choose how session tabs are arranged",
@@ -1027,6 +1031,11 @@ export const dict = {
   "settings.extensions.console.replaced": "Replaces OpenCode Console",
   "settings.extensions.console.connect": "Connect {{name}} in Console",
   "settings.extensions.console.manage": "Manage {{name}} in Console",
+  "project.browse.title": "Browse projects",
+  "project.browse.history": "View session history…",
+  "project.browse.back": "Back to projects",
+  "project.browse.newSession": "New session here",
+  "project.browse.partial": "Some sessions couldn’t be loaded",
   "project.settings.title": "Edit project",
   "project.settings.autoAccept.description": "Approve this project's permission requests without asking",
   "project.settings.autoAccept.default.on": "Use default (On)",
@@ -1246,6 +1255,17 @@ export const dict = {
   "settings.providers.account.switched.description": "Now using {{account}}.",
   "settings.providers.account.removed.title": "{{account}} removed",
   "settings.providers.account.removed.description": "{{provider}} will no longer use this account.",
+  "settings.providers.account.remove.title": "Remove {{account}}?",
+  "settings.providers.account.remove.description": "{{provider}} will no longer use this account.",
+  "settings.providers.account.remove.finalDescription":
+    "This is your only {{provider}} account, so {{provider}} will be disconnected.",
+  "settings.providers.disconnect.title": "Disconnect {{provider}}?",
+  "settings.providers.disconnect.description":
+    "Its saved credentials will be removed and its models will no longer be available.",
+  "settings.providers.disconnect.consoleDescription.one":
+    "Your sign-in will be removed and {{count}} provider from {{workspace}} will no longer be available.",
+  "settings.providers.disconnect.consoleDescription.other":
+    "Your sign-in will be removed and {{count}} providers from {{workspace}} will no longer be available.",
   "settings.providers.console.available.one": "{{count}} provider available",
   "settings.providers.console.available.other": "{{count}} providers available",
   "settings.providers.section.popular": "Popular providers",

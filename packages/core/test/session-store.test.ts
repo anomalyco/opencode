@@ -36,7 +36,7 @@ const partRows = Config.testLayer([
   }),
 ])
 
-const seedSessions = (rows: { id: string; updated: number }[]) =>
+const seedSessions = (rows: { id: string; updated: number; title?: string }[]) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
     const bus = yield* Bus.Service
@@ -58,7 +58,7 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
           aggregateID: sessionID,
           seq: 1,
           type: Bus.versionedType(SessionEvent.Renamed.type, 1),
-          data: { sessionID, title: row.id },
+          data: { sessionID, title: row.title ?? row.id },
         })
       }),
     )
@@ -163,6 +163,32 @@ describe("SessionStore", () => {
           expect(sessions.map((session) => String(session.id))).toEqual(page.ids)
         }),
       )
+    }),
+  )
+
+  it.effect("searches titles case-insensitively beyond ASCII and keeps LIKE wildcard semantics", () =>
+    Effect.gen(function* () {
+      yield* seedSessions([
+        { id: "ses_cyrillic", updated: 10, title: "Тестова сесия" },
+        { id: "ses_ascii", updated: 20, title: "OpenCode notes" },
+        { id: "ses_percent", updated: 30, title: "100% done" },
+        { id: "ses_underscore", updated: 40, title: "file_name [draft]" },
+      ])
+      const store = yield* SessionStore.Service
+      const search = (text: string) =>
+        store.list({ search: text }).pipe(Effect.map((sessions) => sessions.map((session) => String(session.id))))
+
+      expect(yield* search("тестова")).toEqual(["ses_cyrillic"])
+      expect(yield* search("ТЕСТОВА СЕСИЯ")).toEqual(["ses_cyrillic"])
+      expect(yield* search("opencode")).toEqual(["ses_ascii"])
+      expect(yield* search("OPENCODE")).toEqual(["ses_ascii"])
+      expect(yield* search("тест%сия")).toEqual(["ses_cyrillic"])
+      expect(yield* search("OP_NCODE")).toEqual(["ses_ascii"])
+      expect(yield* search("100%")).toEqual(["ses_percent"])
+      expect(yield* search("file_name")).toEqual(["ses_underscore"])
+      expect(yield* search("[DRAFT]")).toEqual(["ses_underscore"])
+      expect(yield* search("*")).toEqual([])
+      expect(yield* search("?")).toEqual([])
     }),
   )
 

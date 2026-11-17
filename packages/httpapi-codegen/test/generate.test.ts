@@ -493,12 +493,20 @@ describe("HttpApiCodegen.generate", () => {
           ),
       )
       .add(
-        HttpApiGroup.make("server.generate").add(
-          HttpApiEndpoint.post("text", "/experimental/generate/text", {
-            payload: Schema.Struct({ prompt: Schema.String }),
-            success: Schema.String,
-          }),
-        ),
+        HttpApiGroup.make("server.generate")
+          .add(
+            HttpApiEndpoint.post("text", "/experimental/generate/text", {
+              payload: Schema.Struct({ prompt: Schema.String }),
+              success: Schema.String,
+            }),
+          )
+          // Added after the move, so it never had an old path to alias.
+          .add(
+            HttpApiEndpoint.post("video", "/experimental/generate/video", {
+              payload: Schema.Struct({ prompt: Schema.String }),
+              success: Schema.String,
+            }),
+          ),
       )
     const options = {
       groupNames: { "server.session": "session", "server.generate": "generate" },
@@ -512,7 +520,7 @@ describe("HttpApiCodegen.generate", () => {
         .join(""),
     ).not.toContain("@deprecated")
 
-    const contract = compileContract(source, { ...options, aliases: true })
+    const contract = compileContract(source, { ...options, aliases: new Set(["session.stats", "generate.text"]) })
     expect(contract.aliases?.map((alias) => [alias.from.join("."), alias.to.join(".")])).toEqual([
       ["session.stats", "experimental.session.stats"],
       ["generate.text", "experimental.generate.text"],
@@ -532,6 +540,7 @@ describe("HttpApiCodegen.generate", () => {
     expect(Object.keys(client.session)).toEqual(["get", "stats"])
     expect(client.session.stats).toBe(client.experimental.session.stats)
     expect(client.generate.text).toBe(client.experimental.generate.text)
+    expect(Object.keys(client.generate)).toEqual(["text"])
     expect(await client.session.stats({ sessionID: "a" })).toBe("ok")
     expect(paths).toEqual(["/experimental/session/a/stats"])
     const promiseFile = (path: string) => promise.files.find((file) => file.path === path)?.content
@@ -571,7 +580,7 @@ describe("HttpApiCodegen.generate", () => {
       endpoint.path.startsWith("/experimental/") ? "experimental" : undefined
 
     expect(() => compileContract(source, { namespace })).not.toThrow()
-    expect(() => compileContract(source, { namespace, aliases: true })).toThrow("Client alias collision: session.stats")
+    expect(() => compileContract(source, { namespace, aliases: new Set(["session.stats"]) })).toThrow("Client alias collision: session.stats")
   })
 
   test("derives nested paths from OpenAPI operation IDs", () => {

@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} tíðaravmarkað eftir {{timeout}}ms",
   "error.failedPort": "Tað eydnaðist ikki at fáa havn",
   "menu.remove": "Strika",
+  "error.busy": "{{distro}} er upptikið av aðrari uppgávu. Royn aftur, tá ið hon er liðug.",
 }

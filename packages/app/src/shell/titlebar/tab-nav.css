@@ -176,6 +176,11 @@
   transform: none;
 }
 
+/* The whole sidebar edge is the hit target, so a pill would point at a spot that isn't special. */
+[data-slot="vertical-tabs-sidebar"] [data-component="resize-handle"]::after {
+  display: none;
+}
+
 /* Only visible trailing controls need room over the title. */
 @media (hover: hover) {
   [data-slot="vertical-tabs-sidebar"]

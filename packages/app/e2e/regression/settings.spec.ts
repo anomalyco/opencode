@@ -6,6 +6,8 @@ import { mockRemoteServer, mockWorkspace, openSession, openSettings, type Worksp
 import { CONSOLE_URL, consoleGateway, consoleSignIn } from "../utils/console"
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
+import { dict as ar } from "../../src/runtime/i18n/ar"
+import { dict as en } from "../../src/runtime/i18n/en"
 
 const directory = "C:/Projects/settings-demo"
 
@@ -274,8 +276,20 @@ test("request events use real Questions settings without disabling Permissions a
     .toEqual([...previews, expect.stringContaining("alert-01"), expect.stringContaining("alert-01")])
 })
 
-for (const locale of ["en", "ar"]) {
+for (const [locale, dict] of [
+  ["en", en],
+  ["ar", ar],
+] as const) {
   test(`background activity alignment stays physical and persists (${locale})`, async ({ page }) => {
+    const label = dict["settings.timeline.row.backgroundActivity.title"]
+
+    const names = {
+      Hidden: dict["settings.timeline.row.backgroundActivity.off"],
+      Left: dict["settings.timeline.row.backgroundActivity.left"],
+      Center: dict["settings.timeline.row.backgroundActivity.center"],
+      Right: dict["settings.timeline.row.backgroundActivity.right"],
+    }
+
     const id = "ses_activity_settings"
     const childID = "ses_activity_settings_child"
     const stopped: string[] = []
@@ -352,13 +366,13 @@ for (const locale of ["en", "ar"]) {
     for (const value of ["Center", "Right", "Hidden", "Left", "Right"] as const) {
       await page.keyboard.press("Control+,")
       const settings = page.getByTestId("settings-screen")
-      const control = settings.getByLabel("Background activity", { exact: true })
+      const control = settings.getByLabel(label, { exact: true })
       await expect(control).toBeVisible()
       await control.click()
       const options = page.getByRole("listbox")
-      await expect(options.getByRole("option")).toHaveText(["Hidden", "Left", "Center", "Right"])
-      await options.getByRole("option", { name: value, exact: true }).click()
-      await expect(control).toHaveText(value)
+      await expect(options.getByRole("option")).toHaveText([names.Hidden, names.Left, names.Center, names.Right])
+      await options.getByRole("option", { name: names[value], exact: true }).click()
+      await expect(control).toHaveText(names[value])
       await page.goBack()
 
       if (value === "Hidden") {
@@ -413,9 +427,7 @@ for (const locale of ["en", "ar"]) {
       .toBe("right")
     await page.keyboard.press("Control+,")
     await page.reload()
-    await expect(page.getByTestId("settings-screen").getByLabel("Background activity", { exact: true })).toHaveText(
-      "Right",
-    )
+    await expect(page.getByTestId("settings-screen").getByLabel(label, { exact: true })).toHaveText(names.Right)
   })
 }
 
@@ -2251,8 +2263,17 @@ test("providers: the account options rename and remove the active account", asyn
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await expect(trigger).toHaveText("Shared")
 
+  const confirm = page.getByRole("dialog", { name: "Remove Shared?", exact: true })
   await settings.getByRole("button", { name: "Shared options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(confirm).toBeHidden()
+  await expect(trigger).toHaveText("Shared")
+  expect(removed).toEqual([])
+
+  await settings.getByRole("button", { name: "Shared options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Remove", exact: true }).click()
   await expect.poll(() => removed).toEqual(["cred_work"])
 })
 
@@ -2269,6 +2290,10 @@ test("providers: a disconnect that finds no stored credentials keeps the provide
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
 
   await disconnect.click()
+  await page
+    .getByRole("dialog", { name: "Disconnect OpenRouter?", exact: true })
+    .getByRole("button", { name: "Disconnect", exact: true })
+    .click()
   await expect(page.getByText("No removable credentials found for OpenRouter", { exact: true })).toBeVisible()
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
   await expect(disconnect).toBeVisible()

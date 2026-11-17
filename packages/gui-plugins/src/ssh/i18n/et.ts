@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Lisa server",
   "menu.delete": "Kustuta",
+  "error.unavailable": "SSH pole saadaval",
 }
