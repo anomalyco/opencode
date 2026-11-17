@@ -24,26 +24,6 @@ import type {
   PluginCheckOutput,
   PluginUpdateInput,
   PluginUpdateOutput,
-  ExperimentalSessionClientMcpTokenInput,
-  ExperimentalSessionClientMcpTokenOutput,
-  ExperimentalSessionStatsInput,
-  ExperimentalSessionStatsOutput,
-  ExperimentalSessionImportInput,
-  ExperimentalSessionImportOutput,
-  ExperimentalSessionExportInput,
-  ExperimentalSessionExportOutput,
-  ExperimentalSessionSkillInput,
-  ExperimentalSessionSkillOutput,
-  ExperimentalSessionWaitInput,
-  ExperimentalSessionWaitOutput,
-  ExperimentalSessionInstructionsEntryListInput,
-  ExperimentalSessionInstructionsEntryListOutput,
-  ExperimentalSessionInstructionsEntryPutInput,
-  ExperimentalSessionInstructionsEntryPutOutput,
-  ExperimentalSessionInstructionsEntryRemoveInput,
-  ExperimentalSessionInstructionsEntryRemoveOutput,
-  ExperimentalSessionLogInput,
-  ExperimentalSessionLogOutput,
   SessionListInput,
   SessionListOutput,
   SessionCreateInput,
@@ -111,6 +91,26 @@ import type {
   SessionEnvironmentOutput,
   SessionViewInput,
   SessionViewOutput,
+  ExperimentalSessionStatsInput,
+  ExperimentalSessionStatsOutput,
+  ExperimentalSessionImportInput,
+  ExperimentalSessionImportOutput,
+  ExperimentalSessionExportInput,
+  ExperimentalSessionExportOutput,
+  ExperimentalSessionSkillInput,
+  ExperimentalSessionSkillOutput,
+  ExperimentalSessionWaitInput,
+  ExperimentalSessionWaitOutput,
+  ExperimentalSessionInstructionsEntryListInput,
+  ExperimentalSessionInstructionsEntryListOutput,
+  ExperimentalSessionInstructionsEntryPutInput,
+  ExperimentalSessionInstructionsEntryPutOutput,
+  ExperimentalSessionInstructionsEntryRemoveInput,
+  ExperimentalSessionInstructionsEntryRemoveOutput,
+  ExperimentalSessionLogInput,
+  ExperimentalSessionLogOutput,
+  ExperimentalSessionClientMcpTokenInput,
+  ExperimentalSessionClientMcpTokenOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -431,122 +431,6 @@ const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({
   gui: EndpointPluginGui(raw),
   check: EndpointPluginCheck(raw),
   update: EndpointPluginUpdate(raw),
-})
-
-const EndpointExperimentalSessionClientMcpToken =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionClientMcpTokenInput) =>
-    preserveEffect<ExperimentalSessionClientMcpTokenOutput>()(
-      raw["session.clientMcp.token"]({
-        params: { sessionID: input["sessionID"] },
-        query: { location: input["location"], name: input["name"] },
-        headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
-      }).pipe(Effect.mapError(mapClientError)),
-    )
-
-const EndpointExperimentalSessionStats =
-  (raw: RawClient["server.session"]) => (input?: ExperimentalSessionStatsInput) =>
-    preserveEffect<ExperimentalSessionStatsOutput>()(
-      raw["session.stats"]({
-        query: {
-          from: input?.["from"],
-          to: input?.["to"],
-          project: input?.["project"],
-          timezone: input?.["timezone"],
-          tools: input?.["tools"],
-        },
-      }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalSessionImport =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionImportInput) =>
-    preserveEffect<ExperimentalSessionImportOutput>()(
-      raw["session.import"]({
-        payload: { info: input["info"], messages: input["messages"], location: input["location"] },
-      }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalSessionExport =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionExportInput) =>
-    preserveEffect<ExperimentalSessionExportOutput>()(
-      raw["session.export"]({ params: { sessionID: input["sessionID"] }, query: { sanitize: input["sanitize"] } }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalSessionSkill = (raw: RawClient["server.session"]) => (input: ExperimentalSessionSkillInput) =>
-  preserveEffect<ExperimentalSessionSkillOutput>()(
-    raw["session.skill"]({
-      params: { sessionID: input["sessionID"] },
-      payload: { id: input["id"], resume: input["resume"] },
-    }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const EndpointExperimentalSessionWait = (raw: RawClient["server.session"]) => (input: ExperimentalSessionWaitInput) =>
-  preserveEffect<ExperimentalSessionWaitOutput>()(
-    raw["session.wait"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const EndpointExperimentalSessionInstructionsEntryList =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstructionsEntryListInput) =>
-    preserveEffect<ExperimentalSessionInstructionsEntryListOutput>()(
-      raw["session.instructions.entry.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalSessionInstructionsEntryPut =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstructionsEntryPutInput) =>
-    preserveEffect<ExperimentalSessionInstructionsEntryPutOutput>()(
-      raw["session.instructions.entry.put"]({
-        params: { sessionID: input["sessionID"], key: input["key"] },
-        payload: { value: input["value"] },
-      }).pipe(Effect.mapError(mapClientError)),
-    )
-
-const EndpointExperimentalSessionInstructionsEntryRemove =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstructionsEntryRemoveInput) =>
-    preserveEffect<ExperimentalSessionInstructionsEntryRemoveOutput>()(
-      raw["session.instructions.entry.remove"]({ params: { sessionID: input["sessionID"], key: input["key"] } }).pipe(
-        Effect.mapError(mapClientError),
-      ),
-    )
-
-const EndpointExperimentalSessionLog = (raw: RawClient["server.session"]) => (input: ExperimentalSessionLogInput) =>
-  preserveStream<ExperimentalSessionLogOutput>()(
-    Stream.unwrap(
-      raw["session.log"]({
-        params: { sessionID: input["sessionID"] },
-        query: { after: input["after"], follow: input["follow"] },
-      }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError))),
-      ),
-    ),
-  )
-
-const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
-  clientMcp: { token: EndpointExperimentalSessionClientMcpToken(raw) },
-  stats: EndpointExperimentalSessionStats(raw),
-  import: EndpointExperimentalSessionImport(raw),
-  export: EndpointExperimentalSessionExport(raw),
-  skill: EndpointExperimentalSessionSkill(raw),
-  wait: EndpointExperimentalSessionWait(raw),
-  instructions: {
-    entry: {
-      list: EndpointExperimentalSessionInstructionsEntryList(raw),
-      put: EndpointExperimentalSessionInstructionsEntryPut(raw),
-      remove: EndpointExperimentalSessionInstructionsEntryRemove(raw),
-    },
-  },
-  log: EndpointExperimentalSessionLog(raw),
 })
 
 const EndpointSessionList = (raw: RawClient["server.session"]) => (input?: SessionListInput) =>
@@ -911,6 +795,122 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   },
   environment: EndpointSessionEnvironment(raw),
   view: EndpointSessionView(raw),
+})
+
+const EndpointExperimentalSessionStats =
+  (raw: RawClient["server.session"]) => (input?: ExperimentalSessionStatsInput) =>
+    preserveEffect<ExperimentalSessionStatsOutput>()(
+      raw["session.stats"]({
+        query: {
+          from: input?.["from"],
+          to: input?.["to"],
+          project: input?.["project"],
+          timezone: input?.["timezone"],
+          tools: input?.["tools"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalSessionImport =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionImportInput) =>
+    preserveEffect<ExperimentalSessionImportOutput>()(
+      raw["session.import"]({
+        payload: { info: input["info"], messages: input["messages"], location: input["location"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalSessionExport =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionExportInput) =>
+    preserveEffect<ExperimentalSessionExportOutput>()(
+      raw["session.export"]({ params: { sessionID: input["sessionID"] }, query: { sanitize: input["sanitize"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalSessionSkill = (raw: RawClient["server.session"]) => (input: ExperimentalSessionSkillInput) =>
+  preserveEffect<ExperimentalSessionSkillOutput>()(
+    raw["session.skill"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { id: input["id"], resume: input["resume"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalSessionWait = (raw: RawClient["server.session"]) => (input: ExperimentalSessionWaitInput) =>
+  preserveEffect<ExperimentalSessionWaitOutput>()(
+    raw["session.wait"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalSessionInstructionsEntryList =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstructionsEntryListInput) =>
+    preserveEffect<ExperimentalSessionInstructionsEntryListOutput>()(
+      raw["session.instructions.entry.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalSessionInstructionsEntryPut =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstructionsEntryPutInput) =>
+    preserveEffect<ExperimentalSessionInstructionsEntryPutOutput>()(
+      raw["session.instructions.entry.put"]({
+        params: { sessionID: input["sessionID"], key: input["key"] },
+        payload: { value: input["value"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalSessionInstructionsEntryRemove =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstructionsEntryRemoveInput) =>
+    preserveEffect<ExperimentalSessionInstructionsEntryRemoveOutput>()(
+      raw["session.instructions.entry.remove"]({ params: { sessionID: input["sessionID"], key: input["key"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalSessionLog = (raw: RawClient["server.session"]) => (input: ExperimentalSessionLogInput) =>
+  preserveStream<ExperimentalSessionLogOutput>()(
+    Stream.unwrap(
+      raw["session.log"]({
+        params: { sessionID: input["sessionID"] },
+        query: { after: input["after"], follow: input["follow"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError))),
+      ),
+    ),
+  )
+
+const EndpointExperimentalSessionClientMcpToken =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionClientMcpTokenInput) =>
+    preserveEffect<ExperimentalSessionClientMcpTokenOutput>()(
+      raw["session.clientMcp.token"]({
+        params: { sessionID: input["sessionID"] },
+        query: { location: input["location"], name: input["name"] },
+        headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
+  stats: EndpointExperimentalSessionStats(raw),
+  import: EndpointExperimentalSessionImport(raw),
+  export: EndpointExperimentalSessionExport(raw),
+  skill: EndpointExperimentalSessionSkill(raw),
+  wait: EndpointExperimentalSessionWait(raw),
+  instructions: {
+    entry: {
+      list: EndpointExperimentalSessionInstructionsEntryList(raw),
+      put: EndpointExperimentalSessionInstructionsEntryPut(raw),
+      remove: EndpointExperimentalSessionInstructionsEntryRemove(raw),
+    },
+  },
+  log: EndpointExperimentalSessionLog(raw),
+  clientMcp: { token: EndpointExperimentalSessionClientMcpToken(raw) },
 })
 
 const EndpointMessageList = (raw: RawClient["server.message"]) => (input: MessageListInput) =>
@@ -2016,6 +2016,7 @@ const adaptClient = (raw: RawClient) => {
     location: adaptGroupLocation(raw["server.location"]),
     agent: adaptGroupAgent(raw["server.agent"]),
     plugin: adaptGroupPlugin(raw["server.plugin"]),
+    session: adaptGroupSession(raw["server.session"]),
     experimental: {
       ...adaptGroupExperimental(raw["server.experimental"]),
       session: adaptGroupExperimentalSession(raw["server.session"]),
@@ -2028,7 +2029,6 @@ const adaptClient = (raw: RawClient) => {
       usage: adaptGroupExperimentalUsage(raw["server.usage"]),
       config: adaptGroupExperimentalConfig(raw["server.config"]),
     },
-    session: adaptGroupSession(raw["server.session"]),
     message: adaptGroupMessage(raw["server.message"]),
     model: adaptGroupModel(raw["server.model"]),
     provider: adaptGroupProvider(raw["server.provider"]),

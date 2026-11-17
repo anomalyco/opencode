@@ -18,26 +18,6 @@ import type {
   PluginCheckOutput,
   PluginUpdateInput,
   PluginUpdateOutput,
-  ExperimentalSessionClientMcpTokenInput,
-  ExperimentalSessionClientMcpTokenOutput,
-  ExperimentalSessionStatsInput,
-  ExperimentalSessionStatsOutput,
-  ExperimentalSessionImportInput,
-  ExperimentalSessionImportOutput,
-  ExperimentalSessionExportInput,
-  ExperimentalSessionExportOutput,
-  ExperimentalSessionSkillInput,
-  ExperimentalSessionSkillOutput,
-  ExperimentalSessionWaitInput,
-  ExperimentalSessionWaitOutput,
-  ExperimentalSessionInstructionsEntryListInput,
-  ExperimentalSessionInstructionsEntryListOutput,
-  ExperimentalSessionInstructionsEntryPutInput,
-  ExperimentalSessionInstructionsEntryPutOutput,
-  ExperimentalSessionInstructionsEntryRemoveInput,
-  ExperimentalSessionInstructionsEntryRemoveOutput,
-  ExperimentalSessionLogInput,
-  ExperimentalSessionLogOutput,
   SessionListInput,
   SessionListOutput,
   SessionCreateInput,
@@ -105,6 +85,26 @@ import type {
   SessionEnvironmentOutput,
   SessionViewInput,
   SessionViewOutput,
+  ExperimentalSessionStatsInput,
+  ExperimentalSessionStatsOutput,
+  ExperimentalSessionImportInput,
+  ExperimentalSessionImportOutput,
+  ExperimentalSessionExportInput,
+  ExperimentalSessionExportOutput,
+  ExperimentalSessionSkillInput,
+  ExperimentalSessionSkillOutput,
+  ExperimentalSessionWaitInput,
+  ExperimentalSessionWaitOutput,
+  ExperimentalSessionInstructionsEntryListInput,
+  ExperimentalSessionInstructionsEntryListOutput,
+  ExperimentalSessionInstructionsEntryPutInput,
+  ExperimentalSessionInstructionsEntryPutOutput,
+  ExperimentalSessionInstructionsEntryRemoveInput,
+  ExperimentalSessionInstructionsEntryRemoveOutput,
+  ExperimentalSessionLogInput,
+  ExperimentalSessionLogOutput,
+  ExperimentalSessionClientMcpTokenInput,
+  ExperimentalSessionClientMcpTokenOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -607,23 +607,461 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
+    session: {
+      list: (input?: SessionListInput, requestOptions?: RequestOptions) =>
+        request<SessionListOutput>(
+          {
+            method: "GET",
+            path: `/api/session`,
+            query: {
+              limit: input?.["limit"],
+              order: input?.["order"],
+              search: input?.["search"],
+              parentID: input?.["parentID"],
+              archived: input?.["archived"],
+              directory: input?.["directory"],
+              project: input?.["project"],
+              subpath: input?.["subpath"],
+              cursor: input?.["cursor"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      create: (input?: SessionCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/session`,
+            body: {
+              id: input?.["id"],
+              parentID: input?.["parentID"],
+              title: input?.["title"],
+              agent: input?.["agent"],
+              model: input?.["model"],
+              location: input?.["location"],
+              metadata: input?.["metadata"],
+              permissions: input?.["permissions"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      active: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionActiveOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/active`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      get: (input: SessionGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      remove: (input: SessionRemoveInput, requestOptions?: RequestOptions) =>
+        request<SessionRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      fork: (input: SessionForkInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionForkOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/fork`,
+            body: { before: input["before"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      switchAgent: (input: SessionSwitchAgentInput, requestOptions?: RequestOptions) =>
+        request<SessionSwitchAgentOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/agent`,
+            body: { agent: input["agent"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      switchModel: (input: SessionSwitchModelInput, requestOptions?: RequestOptions) =>
+        request<SessionSwitchModelOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/model`,
+            body: { model: input["model"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      update: (input: SessionUpdateInput, requestOptions?: RequestOptions) =>
+        request<SessionUpdateOutput>(
+          {
+            method: "PATCH",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}`,
+            body: {
+              title: input["title"],
+              metadata: input["metadata"],
+              permissions: input["permissions"],
+              archived: input["archived"],
+            },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      move: (input: SessionMoveInput, requestOptions?: RequestOptions) =>
+        request<SessionMoveOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/move`,
+            body: { directory: input["directory"], delivery: input["delivery"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      prompt: (input: SessionPromptInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionPromptOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/prompt`,
+            body: {
+              id: input["id"],
+              text: input["text"],
+              files: input["files"],
+              agents: input["agents"],
+              skills: input["skills"],
+              metadata: input["metadata"],
+              delivery: input["delivery"],
+              resume: input["resume"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 409],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      command: (input: SessionCommandInput, requestOptions?: RequestOptions) =>
+        request<SessionCommandOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/command`,
+            body: {
+              name: input["name"],
+              text: input["text"],
+              files: input["files"],
+              agents: input["agents"],
+              skills: input["skills"],
+              delivery: input["delivery"],
+            },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404, 500],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      synthetic: (input: SessionSyntheticInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionSyntheticOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/synthetic`,
+            body: {
+              id: input["id"],
+              text: input["text"],
+              description: input["description"],
+              metadata: input["metadata"],
+              delivery: input["delivery"],
+              resume: input["resume"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 409],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      shell: (input: SessionShellInput, requestOptions?: RequestOptions) =>
+        request<SessionShellOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/shell`,
+            body: { id: input["id"], command: input["command"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      compact: (input: SessionCompactInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionCompactOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/compact`,
+            body: { id: input["id"], delivery: input["delivery"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 409],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      revert: {
+        stage: (input: SessionRevertStageInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionRevertStageOutput }>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/stage`,
+              body: { messageID: input["messageID"], files: input["files"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 409, 500],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        clear: (input: SessionRevertClearInput, requestOptions?: RequestOptions) =>
+          request<SessionRevertClearOutput>(
+            {
+              method: "DELETE",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/revert`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 409, 500],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        commit: (input: SessionRevertCommitInput, requestOptions?: RequestOptions) =>
+          request<SessionRevertCommitOutput>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/commit`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      context: (input: SessionContextInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionContextOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/context`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 500],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      diff: (input: SessionDiffInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionDiffOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/diff`,
+            query: { from: input["from"], to: input["to"], context: input["context"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 500],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      inbox: {
+        list: (input: SessionInboxListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionInboxListOutput }>(
+            {
+              method: "GET",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        cancel: (input: SessionInboxCancelInput, requestOptions?: RequestOptions) =>
+          request<SessionInboxCancelOutput>(
+            {
+              method: "DELETE",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        update: (input: SessionInboxUpdateInput, requestOptions?: RequestOptions) =>
+          request<SessionInboxUpdateOutput>(
+            {
+              method: "PATCH",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
+              body: { delivery: input["delivery"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      generate: (input: SessionGenerateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionGenerateOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/generate`,
+            body: { prompt: input["prompt"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 503],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      interrupt: (input: SessionInterruptInput, requestOptions?: RequestOptions) =>
+        request<SessionInterruptOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/interrupt`,
+            query: { resume: input["resume"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      background: (input: SessionBackgroundInput, requestOptions?: RequestOptions) =>
+        request<SessionBackgroundOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/background`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      message: {
+        get: (input: SessionMessageGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionMessageGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
+      form: {
+        list: (input: SessionFormListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionFormListOutput }>(
+            {
+              method: "GET",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        create: (input: SessionFormCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionFormCreateOutput }>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
+              body: { id: input["id"], title: input["title"], metadata: input["metadata"], fields: input["fields"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        get: (input: SessionFormGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionFormGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        reply: (input: SessionFormReplyInput, requestOptions?: RequestOptions) =>
+          request<SessionFormReplyOutput>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/reply`,
+              body: { answer: input["answer"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        cancel: (input: SessionFormCancelInput, requestOptions?: RequestOptions) =>
+          request<SessionFormCancelOutput>(
+            {
+              method: "DELETE",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
+              query: { message: input["message"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      environment: (input: SessionEnvironmentInput, requestOptions?: RequestOptions) =>
+        request<SessionEnvironmentOutput>(
+          {
+            method: "PUT",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/environment`,
+            body: { variables: input["variables"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      view: (input: SessionViewInput, requestOptions?: RequestOptions) =>
+        request<SessionViewOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/view`,
+            body: { idle: input["idle"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
     experimental: {
       session: {
-        clientMcp: {
-          token: (input: ExperimentalSessionClientMcpTokenInput, requestOptions?: RequestOptions) =>
-            request<ExperimentalSessionClientMcpTokenOutput>(
-              {
-                method: "POST",
-                path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/client-mcp/token`,
-                query: { location: input["location"], name: input["name"] },
-                headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
-                successStatus: 200,
-                declaredStatuses: [400, 401, 403, 404],
-                empty: false,
-              },
-              requestOptions,
-            ),
-        },
         stats: (input?: ExperimentalSessionStatsInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalSessionStatsOutput }>(
             {
@@ -742,6 +1180,21 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+        clientMcp: {
+          token: (input: ExperimentalSessionClientMcpTokenInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalSessionClientMcpTokenOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/client-mcp/token`,
+                query: { location: input["location"], name: input["name"] },
+                headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+        },
       },
       generate: {
         text: (input: ExperimentalGenerateTextInput, requestOptions?: RequestOptions) =>
@@ -1363,459 +1816,6 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
-    },
-    session: {
-      list: (input?: SessionListInput, requestOptions?: RequestOptions) =>
-        request<SessionListOutput>(
-          {
-            method: "GET",
-            path: `/api/session`,
-            query: {
-              limit: input?.["limit"],
-              order: input?.["order"],
-              search: input?.["search"],
-              parentID: input?.["parentID"],
-              archived: input?.["archived"],
-              directory: input?.["directory"],
-              project: input?.["project"],
-              subpath: input?.["subpath"],
-              cursor: input?.["cursor"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      create: (input?: SessionCreateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionCreateOutput }>(
-          {
-            method: "POST",
-            path: `/api/session`,
-            body: {
-              id: input?.["id"],
-              parentID: input?.["parentID"],
-              title: input?.["title"],
-              agent: input?.["agent"],
-              model: input?.["model"],
-              location: input?.["location"],
-              metadata: input?.["metadata"],
-              permissions: input?.["permissions"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      active: (requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionActiveOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/active`,
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      get: (input: SessionGetInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionGetOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}`,
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      remove: (input: SessionRemoveInput, requestOptions?: RequestOptions) =>
-        request<SessionRemoveOutput>(
-          {
-            method: "DELETE",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}`,
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      fork: (input: SessionForkInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionForkOutput }>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/fork`,
-            body: { before: input["before"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      switchAgent: (input: SessionSwitchAgentInput, requestOptions?: RequestOptions) =>
-        request<SessionSwitchAgentOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/agent`,
-            body: { agent: input["agent"] },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      switchModel: (input: SessionSwitchModelInput, requestOptions?: RequestOptions) =>
-        request<SessionSwitchModelOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/model`,
-            body: { model: input["model"] },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      update: (input: SessionUpdateInput, requestOptions?: RequestOptions) =>
-        request<SessionUpdateOutput>(
-          {
-            method: "PATCH",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}`,
-            body: {
-              title: input["title"],
-              metadata: input["metadata"],
-              permissions: input["permissions"],
-              archived: input["archived"],
-            },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      move: (input: SessionMoveInput, requestOptions?: RequestOptions) =>
-        request<SessionMoveOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/move`,
-            body: { directory: input["directory"], delivery: input["delivery"] },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      prompt: (input: SessionPromptInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionPromptOutput }>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/prompt`,
-            body: {
-              id: input["id"],
-              text: input["text"],
-              files: input["files"],
-              agents: input["agents"],
-              skills: input["skills"],
-              metadata: input["metadata"],
-              delivery: input["delivery"],
-              resume: input["resume"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      command: (input: SessionCommandInput, requestOptions?: RequestOptions) =>
-        request<SessionCommandOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/command`,
-            body: {
-              name: input["name"],
-              text: input["text"],
-              files: input["files"],
-              agents: input["agents"],
-              skills: input["skills"],
-              delivery: input["delivery"],
-            },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404, 500],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      synthetic: (input: SessionSyntheticInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionSyntheticOutput }>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/synthetic`,
-            body: {
-              id: input["id"],
-              text: input["text"],
-              description: input["description"],
-              metadata: input["metadata"],
-              delivery: input["delivery"],
-              resume: input["resume"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      shell: (input: SessionShellInput, requestOptions?: RequestOptions) =>
-        request<SessionShellOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/shell`,
-            body: { id: input["id"], command: input["command"] },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      compact: (input: SessionCompactInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionCompactOutput }>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/compact`,
-            body: { id: input["id"], delivery: input["delivery"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      revert: {
-        stage: (input: SessionRevertStageInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: SessionRevertStageOutput }>(
-            {
-              method: "POST",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/stage`,
-              body: { messageID: input["messageID"], files: input["files"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 409, 500],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        clear: (input: SessionRevertClearInput, requestOptions?: RequestOptions) =>
-          request<SessionRevertClearOutput>(
-            {
-              method: "DELETE",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/revert`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 409, 500],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        commit: (input: SessionRevertCommitInput, requestOptions?: RequestOptions) =>
-          request<SessionRevertCommitOutput>(
-            {
-              method: "POST",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/revert/commit`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 409],
-              empty: true,
-            },
-            requestOptions,
-          ),
-      },
-      context: (input: SessionContextInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionContextOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/context`,
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 500],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      diff: (input: SessionDiffInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionDiffOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/diff`,
-            query: { from: input["from"], to: input["to"], context: input["context"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 500],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      inbox: {
-        list: (input: SessionInboxListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: SessionInboxListOutput }>(
-            {
-              method: "GET",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        cancel: (input: SessionInboxCancelInput, requestOptions?: RequestOptions) =>
-          request<SessionInboxCancelOutput>(
-            {
-              method: "DELETE",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        update: (input: SessionInboxUpdateInput, requestOptions?: RequestOptions) =>
-          request<SessionInboxUpdateOutput>(
-            {
-              method: "PATCH",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
-              body: { delivery: input["delivery"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 409],
-              empty: true,
-            },
-            requestOptions,
-          ),
-      },
-      generate: (input: SessionGenerateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionGenerateOutput }>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/generate`,
-            body: { prompt: input["prompt"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 503],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      interrupt: (input: SessionInterruptInput, requestOptions?: RequestOptions) =>
-        request<SessionInterruptOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/interrupt`,
-            query: { resume: input["resume"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      background: (input: SessionBackgroundInput, requestOptions?: RequestOptions) =>
-        request<SessionBackgroundOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/background`,
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      message: {
-        get: (input: SessionMessageGetInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: SessionMessageGetOutput }>(
-            {
-              method: "GET",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-      },
-      form: {
-        list: (input: SessionFormListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: SessionFormListOutput }>(
-            {
-              method: "GET",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        create: (input: SessionFormCreateInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: SessionFormCreateOutput }>(
-            {
-              method: "POST",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
-              body: { id: input["id"], title: input["title"], metadata: input["metadata"], fields: input["fields"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 409],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        get: (input: SessionFormGetInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: SessionFormGetOutput }>(
-            {
-              method: "GET",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        reply: (input: SessionFormReplyInput, requestOptions?: RequestOptions) =>
-          request<SessionFormReplyOutput>(
-            {
-              method: "POST",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/reply`,
-              body: { answer: input["answer"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 409],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        cancel: (input: SessionFormCancelInput, requestOptions?: RequestOptions) =>
-          request<SessionFormCancelOutput>(
-            {
-              method: "DELETE",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
-              query: { message: input["message"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 409],
-              empty: true,
-            },
-            requestOptions,
-          ),
-      },
-      environment: (input: SessionEnvironmentInput, requestOptions?: RequestOptions) =>
-        request<SessionEnvironmentOutput>(
-          {
-            method: "PUT",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/environment`,
-            body: { variables: input["variables"] },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      view: (input: SessionViewInput, requestOptions?: RequestOptions) =>
-        request<SessionViewOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/view`,
-            body: { idle: input["idle"] },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
     },
     message: {
       list: (input: MessageListInput, requestOptions?: RequestOptions) =>

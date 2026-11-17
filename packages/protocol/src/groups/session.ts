@@ -130,42 +130,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
 ) =>
   HttpApiGroup.make("server.session")
     .add(
-      HttpApiEndpoint.post("session.clientMcp.token", `${SESSION_MCP_CLIENT_PATH}/token`, {
-        params: { sessionID: Session.ID },
-        query: McpClientQuery,
-        headers: Schema.Struct({ [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String) }),
-        success: Location.response(PtyTicket.ConnectToken),
-        error: [ForbiddenError, SessionNotFoundError, LocationNotFoundError],
-      })
-        .annotateMerge(locationQueryOpenApi)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "experimental.session.clientMcp.token",
-            summary: "Create client MCP WebSocket token",
-            description:
-              "Create a short-lived single-use ticket for opening a client MCP WebSocket connection for this session from a browser. Experimental: may change without compatibility guarantees.",
-          }),
-        ),
-    )
-    .add(
-      HttpApiEndpoint.get("session.clientMcp", SESSION_MCP_CLIENT_PATH, {
-        params: { sessionID: Session.ID },
-        query: Schema.Struct({ ...McpClientQuery.fields, [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String) }),
-        success: Schema.Boolean,
-        error: [SessionNotFoundError, ForbiddenError, LocationNotFoundError],
-      })
-        .annotateMerge(locationQueryOpenApi)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "experimental.session.clientMcp",
-            summary: "Attach client MCP server",
-            description:
-              "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; only the specified session can discover and call its tools while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
-            transform: (operation) => ({ ...operation, "x-websocket": true }),
-          }),
-        ),
-    )
-    .add(
       HttpApiEndpoint.get("session.list", "/api/session", {
         query: SessionsQuery,
         success: Schema.Struct({
@@ -867,6 +831,42 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           description: "Mark the idle transition observed by the viewer as viewed.",
         }),
       ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.clientMcp.token", `${SESSION_MCP_CLIENT_PATH}/token`, {
+        params: { sessionID: Session.ID },
+        query: McpClientQuery,
+        headers: Schema.Struct({ [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String) }),
+        success: Location.response(PtyTicket.ConnectToken),
+        error: [ForbiddenError, SessionNotFoundError, LocationNotFoundError],
+      })
+        .annotateMerge(locationQueryOpenApi)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.clientMcp.token",
+            summary: "Create client MCP WebSocket token",
+            description:
+              "Create a short-lived single-use ticket for opening a client MCP WebSocket connection for this session from a browser. Experimental: may change without compatibility guarantees.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.clientMcp", SESSION_MCP_CLIENT_PATH, {
+        params: { sessionID: Session.ID },
+        query: Schema.Struct({ ...McpClientQuery.fields, [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String) }),
+        success: Schema.Boolean,
+        error: [SessionNotFoundError, ForbiddenError, LocationNotFoundError],
+      })
+        .annotateMerge(locationQueryOpenApi)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.clientMcp",
+            summary: "Attach client MCP server",
+            description:
+              "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; only the specified session can discover and call its tools while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
+            transform: (operation) => ({ ...operation, "x-websocket": true }),
+          }),
+        ),
     )
     .annotateMerge(
       OpenApi.annotations({
