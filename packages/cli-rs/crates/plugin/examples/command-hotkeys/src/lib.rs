@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
 use opencode_plugin_abi::task::{Cx, Tasks};
-use opencode_plugin_abi::{Command, Fetch, Host, Read, Route, Setup, Toast, Variant, plugin};
+use opencode_plugin_abi::{Command, Fetch, Host, Route, Setup, Toast, Variant, plugin};
 use serde_json::{Value, json};
 
 const TITLE: &str = "Command Hotkeys";
@@ -97,7 +97,7 @@ impl Runs {
             };
             locks.borrow_mut().remove(&lock);
             if ran.is_err() {
-                cx.toast(Toast::new(Variant::Error, FAILED).title(TITLE).session(session));
+                cx.with(|host| host.toast(Toast::new(Variant::Error, FAILED).title(TITLE).session(session)));
             }
         });
     }
@@ -106,7 +106,7 @@ impl Runs {
 /// TS's goal toggle: the session's location, its goal, then a pause or a resume. A step whose session is no longer
 /// in view, in the base mode, ends the run; an answer that the goal already was so is no failure.
 async fn toggle(cx: &Cx, session: &str) -> Result<(), String> {
-    let current = || cx.mode().is_none() && cx.route() == Route::Session { id: session.to_owned() };
+    let current = || cx.with(|host| host.mode().is_none() && host.route() == Route::Session { id: session.to_owned() });
     let body = cx.fetch(Fetch::new("GET", format!("/api/session/{session}"))).await?;
     if !current() {
         return Ok(());

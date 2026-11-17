@@ -17,7 +17,7 @@
 //!         return;
 //!     }
 //!     match cx.fetch(Fetch::new("DELETE", "/api/x")).await {
-//!         Ok(_) => cx.toast(Toast::new(Variant::Success, "Cleared")),
+//!         Ok(_) => cx.with(|host| host.toast(Toast::new(Variant::Success, "Cleared"))),
 //!         Err(error) => cx.alert(Alert::new("Clear failed", error)).await,
 //!     }
 //! }
@@ -29,9 +29,10 @@
 //! containment and blame apply to what the task does in it, as they do to any handler, and the effects the task asks
 //! for between two waits are that call's. A task that waits costs no time.
 //!
-//! [`Cx`] is the task's host: it is the [`Host`] of the call that polls the task, and it is `Clone + 'static`, so it
-//! moves into the task. Used outside its task's poll (kept in the plugin's state and called from a plain handler, or
-//! from a render), every method panics, which fails the call.
+//! [`Cx`] is the task's handle, `Clone + 'static`, so it moves into the task. Its waits are its own methods; the reads
+//! and verbs are the [`Host`] of the call that polls the task, which [`Cx::with`] lends to a closure. Used outside its
+//! task's poll (kept in the plugin's state and called from a plain handler, or from a render), or after the plugin was
+//! disposed, every method panics, which fails the call.
 //!
 //! - The waits are eager, as a TS promise is: [`Cx::fetch`] sends at once, and [`Cx::select`] shows its dialog at once.
 //! - A dialog closes with no answer as `None`: escape, the backdrop, or another dialog that replaced it, the plugin's
@@ -61,14 +62,9 @@ use std::thread::ThreadId;
 
 use serde_json::Value;
 
-use crate::types::{
-    IntegrationInfo, McpServer, ModelInfo, ModelRef, ProviderInfo, SessionInboxInfo, SessionMessageInfo,
-    UsageLimitsInfo, VcsInfo,
-};
 use crate::{
-    Abi, Action, Alert, Attention, Command, Composer, ComposerEdit, Confirm, Dialog, Family, Fetch, Foreground, Host,
-    Info, KeymapActive, KeymapCommand, KeymapPending, LocationRef, PluginEntry, Prompt, Read, RequestId, Rgba, Route,
-    Select, SelectOption, Session, Setup, Spawner, Tab, TabEdit, ThemeMode, Toast, interact, v2,
+    Action, Alert, Command, Confirm, Dialog, Fetch, Foreground, Host, Prompt, RequestId, Select, SelectOption, Setup,
+    Spawner,
 };
 
 /// The most tasks a plugin has at once.
@@ -205,8 +201,21 @@ impl Cx {
         self.shared.upgrade().expect("a task's Cx was used after its plugin was disposed")
     }
 
-    /// Runs `f` with the host of the call that polls the task.
-    fn with<R>(&self, f: impl FnOnce(&dyn Host) -> R) -> R {
+    /// Runs `f` with the [`Host`] of the call that polls the task: its reads and its verbs.
+    ///
+    /// The host is lent to `f` alone. `f` is a plain closure, so it cannot `.await`, and the host's lifetime is `f`'s
+    /// own, so neither the host nor a borrow of it can be returned, kept in the task, or held across a wait, after which
+    /// another call's host is the task's. A `Cx` kept in the plugin's state and used outside a poll, or after the
+    /// plugin was disposed, panics here instead.
+    ///
+    /// ```compile_fail,E0521
+    /// # use opencode_plugin_abi::{Host, task::Cx};
+    /// async fn kept(cx: Cx) {
+    ///     let mut kept: Option<&dyn Host> = None;
+    ///     cx.with(|host| kept = Some(host));
+    /// }
+    /// ```
+    pub fn with<R>(&self, f: impl FnOnce(&dyn Host) -> R) -> R {
         let shared = self.shared();
         let host = shared.host.get().expect(
             "a task's Cx was used outside its task: it reaches the host only while the task is polled, not from a \
@@ -542,240 +551,6 @@ impl Drop for Polling<'_> {
     }
 }
 
-impl Read for Cx {
-    fn theme_mode(&self) -> ThemeMode {
-        self.with(|host| host.theme_mode())
-    }
-    fn color(&self, token: &str) -> Option<Rgba> {
-        self.with(|host| host.color(token))
-    }
-    fn session(&self, id: &str) -> Option<Session> {
-        self.with(|host| host.session(id))
-    }
-    fn family(&self, id: &str) -> Family {
-        self.with(|host| host.family(id))
-    }
-    fn sessions(&self) -> Vec<Session> {
-        self.with(|host| host.sessions())
-    }
-    fn pending(&self, id: &str) -> Vec<SessionInboxInfo> {
-        self.with(|host| host.pending(id))
-    }
-    fn messages(&self, id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
-        self.with(|host| host.messages(id, visit))
-    }
-    fn message(&self, session: &str, message: &str, visit: &mut dyn FnMut(Option<&SessionMessageInfo>)) {
-        self.with(|host| host.message(session, message, visit))
-    }
-    fn models(&self, location: Option<&LocationRef>) -> Option<Vec<ModelInfo>> {
-        self.with(|host| host.models(location))
-    }
-    fn model(&self) -> Option<ModelRef> {
-        self.with(|host| host.model())
-    }
-    fn limits(&self) -> Option<UsageLimitsInfo> {
-        self.with(|host| host.limits())
-    }
-    fn providers(&self) -> Option<Vec<ProviderInfo>> {
-        self.with(|host| host.providers())
-    }
-    fn storage_get(&self, key: &str) -> Option<Value> {
-        self.with(|host| host.storage_get(key))
-    }
-    fn info(&self) -> Info {
-        self.with(|host| host.info())
-    }
-    fn mcp_servers(&self, location: Option<&LocationRef>) -> Option<Vec<McpServer>> {
-        self.with(|host| host.mcp_servers(location))
-    }
-    fn integrations(&self, location: Option<&LocationRef>) -> Option<Vec<IntegrationInfo>> {
-        self.with(|host| host.integrations(location))
-    }
-    fn vcs(&self, location: Option<&LocationRef>) -> Option<VcsInfo> {
-        self.with(|host| host.vcs(location))
-    }
-    fn route(&self) -> Route {
-        self.with(|host| host.route())
-    }
-    fn interactive(&self) -> bool {
-        self.with(|host| host.interactive())
-    }
-    fn shortcut(&self, name: &str) -> Option<String> {
-        self.with(|host| host.shortcut(name))
-    }
-    fn dialog_open(&self, key: &str) -> bool {
-        self.with(|host| host.dialog_open(key))
-    }
-    fn composer(&self) -> Option<Composer> {
-        self.with(|host| host.composer())
-    }
-    fn abi(&self) -> Abi {
-        self.with(|host| host.abi())
-    }
-    fn variants(&self) -> Vec<String> {
-        self.with(|host| host.variants())
-    }
-    fn tabs_enabled(&self) -> bool {
-        self.with(|host| host.tabs_enabled())
-    }
-    fn tabs(&self) -> Vec<Tab> {
-        self.with(|host| host.tabs())
-    }
-    fn keymap_pending(&self) -> Vec<KeymapPending> {
-        self.with(|host| host.keymap_pending())
-    }
-    fn keymap_active(&self) -> Vec<KeymapActive> {
-        self.with(|host| host.keymap_active())
-    }
-    fn keymap_commands(&self) -> Vec<KeymapCommand> {
-        self.with(|host| host.keymap_commands())
-    }
-    fn shortcuts(&self, name: &str) -> Vec<String> {
-        self.with(|host| host.shortcuts(name))
-    }
-    fn selection(&self) -> Option<String> {
-        self.with(|host| host.selection())
-    }
-    fn theme(&self) -> Option<String> {
-        self.with(|host| host.theme())
-    }
-    fn themes(&self) -> Vec<String> {
-        self.with(|host| host.themes())
-    }
-    fn scroll_state(&self, target: &v2::Target) -> Option<v2::ScrollState> {
-        self.with(|host| host.scroll_state(target))
-    }
-    fn anchors(&self, target: &v2::Target, group: &str) -> Vec<v2::AnchorAt> {
-        self.with(|host| host.anchors(target, group))
-    }
-    fn top_anchor(&self, target: &v2::Target, group: &str, inset: u16) -> Option<v2::AnchorAt> {
-        self.with(|host| host.top_anchor(target, group, inset))
-    }
-    fn transcript(&self) -> Option<v2::TranscriptView> {
-        self.with(|host| host.transcript())
-    }
-    fn rect(&self, id: &str) -> Option<interact::Rect> {
-        self.with(|host| host.rect(id))
-    }
-    fn focused(&self) -> interact::Focused {
-        self.with(|host| host.focused())
-    }
-    fn mode(&self) -> Option<String> {
-        self.with(|host| host.mode())
-    }
-    fn mount(&self) -> Option<v2::MountId> {
-        self.with(|host| host.mount())
-    }
-    fn plugins(&self) -> Vec<PluginEntry> {
-        self.with(|host| host.plugins())
-    }
-    fn setting(&self, name: &str) -> Option<Value> {
-        self.with(|host| host.setting(name))
-    }
-    fn image_size(&self, bytes: &[u8]) -> Option<(u32, u32)> {
-        self.with(|host| host.image_size(bytes))
-    }
-}
-
-impl Host for Cx {
-    fn storage_set(&self, key: &str, value: Value) {
-        self.with(|host| host.storage_set(key, value))
-    }
-    fn storage_merge(&self, key: &str, fields: serde_json::Map<String, Value>) {
-        self.with(|host| host.storage_merge(key, fields))
-    }
-    fn dispatch(&self, name: &str, input: Option<&str>) {
-        self.with(|host| host.dispatch(name, input))
-    }
-    fn toast(&self, toast: Toast) {
-        self.with(|host| host.toast(toast))
-    }
-    fn attention(&self, attention: Attention) {
-        self.with(|host| host.attention(attention))
-    }
-    fn open_route(&self, name: &str) {
-        self.with(|host| host.open_route(name))
-    }
-    fn navigate(&self, route: Route) {
-        self.with(|host| host.navigate(route))
-    }
-    fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
-        self.with(|host| host.try_fetch(fetch))
-    }
-    fn dialog(&self, dialog: Dialog) {
-        self.with(|host| host.dialog(dialog))
-    }
-    fn copy(&self, text: &str, then: Option<Action>) {
-        self.with(|host| host.copy(text, then))
-    }
-    fn edit_composer(&self, edit: ComposerEdit) {
-        self.with(|host| host.edit_composer(edit))
-    }
-    fn set_variant(&self, variant: Option<&str>) -> bool {
-        self.with(|host| host.set_variant(variant))
-    }
-    fn set_model(&self, provider: &str, model: &str) {
-        self.with(|host| host.set_model(provider, model))
-    }
-    fn edit_tab(&self, edit: TabEdit) -> bool {
-        self.with(|host| host.edit_tab(edit))
-    }
-    fn clear_selection(&self) {
-        self.with(|host| host.clear_selection())
-    }
-    fn try_foreground(&self, program: Foreground) -> Result<RequestId, String> {
-        self.with(|host| host.try_foreground(program))
-    }
-    fn set_title(&self, title: &str) {
-        self.with(|host| host.set_title(title))
-    }
-    fn set_theme(&self, name: &str) -> bool {
-        self.with(|host| host.set_theme(name))
-    }
-    fn install_theme(&self, name: &str, theme: Value) {
-        self.with(|host| host.install_theme(name, theme))
-    }
-    fn set_setting(&self, name: &str, value: Value) {
-        self.with(|host| host.set_setting(name, value))
-    }
-    fn scroll(&self, target: v2::Target, verb: v2::Scroll) {
-        self.with(|host| host.scroll(target, verb))
-    }
-    fn open_panel(&self, open: interact::OpenPanel) {
-        self.with(|host| host.open_panel(open))
-    }
-    fn close_panel(&self, surface: &str) {
-        self.with(|host| host.close_panel(surface))
-    }
-    fn overlay(&self, overlay: interact::Overlay) {
-        self.with(|host| host.overlay(overlay))
-    }
-    fn close_overlay(&self, surface: &str) {
-        self.with(|host| host.close_overlay(surface))
-    }
-    fn focus(&self, id: &str) {
-        self.with(|host| host.focus(id))
-    }
-    fn blur(&self) {
-        self.with(|host| host.blur())
-    }
-    fn set_mode(&self, mode: Option<&str>) {
-        self.with(|host| host.set_mode(mode))
-    }
-    fn release_keys(&self) {
-        self.with(|host| host.release_keys())
-    }
-    fn declare_storage_key(&self, key: &str) {
-        self.with(|host| host.declare_storage_key(key))
-    }
-    fn checkpoint(&self) -> Option<u64> {
-        self.with(|host| host.checkpoint())
-    }
-    fn rollback(&self, mark: u64) {
-        self.with(|host| host.rollback(mark))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -783,7 +558,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
-    use crate::{Registered, Variant};
+    use crate::{Attention, Read, Registered, Rgba, Route, ThemeMode, Toast, Variant};
 
     /// A host that records the dialogs and toasts it is asked for, and numbers the fetches from 1.
     #[derive(Default)]
@@ -983,7 +758,7 @@ mod tests {
 
     impl Drop for Guard {
         fn drop(&mut self) {
-            self.0.toast(Toast::new(Variant::Info, "dropped"));
+            self.0.with(|host| host.toast(Toast::new(Variant::Info, "dropped")));
             self.1.borrow_mut().push("dropped".to_owned());
         }
     }
@@ -1023,7 +798,8 @@ mod tests {
             drop(cx.fetch(Fetch::new("GET", "/x")).await);
         });
         let cx = kept.borrow().clone().unwrap();
-        let failed = catch_unwind(AssertUnwindSafe(|| cx.toast(Toast::new(Variant::Info, "late")))).unwrap_err();
+        let failed = catch_unwind(AssertUnwindSafe(|| cx.with(|host| host.toast(Toast::new(Variant::Info, "late")))))
+            .unwrap_err();
         assert!(crate::panic_message(&*failed).contains("outside its task"), "{}", crate::panic_message(&*failed));
         assert!(host.toasts.borrow().is_empty());
         // The task itself goes on.
@@ -1048,7 +824,7 @@ mod tests {
         let (_registered, tasks, _) = plugin();
         let host = Fake::default();
         for _ in 0..MAX_TASKS + 1 {
-            tasks.spawn(&host, |cx| async move { cx.toast(Toast::new(Variant::Info, "done")) });
+            tasks.spawn(&host, |cx| async move { cx.with(|host| host.toast(Toast::new(Variant::Info, "done"))) });
         }
         assert_eq!(host.toasts.borrow().len(), MAX_TASKS + 1);
     }

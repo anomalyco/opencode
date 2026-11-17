@@ -261,9 +261,9 @@ async fn rename(cx: Cx, state: Rc<RefCell<State>>, id: String, prompt: Prompt) {
                 if let Some(session) = state.sessions.iter_mut().find(|session| session.id == id) {
                     session.title = Some(title.clone());
                 }
-                cx.toast(Toast::new(Variant::Success, (state.t().renamed)(&title)));
+                cx.with(|host| host.toast(Toast::new(Variant::Success, (state.t().renamed)(&title))));
             }
-            Err(error) => cx.toast(Toast::new(Variant::Error, error)),
+            Err(error) => cx.with(|host| host.toast(Toast::new(Variant::Error, error))),
         }
     }
     state.borrow_mut().busy = false;
@@ -278,19 +278,23 @@ async fn remove(cx: Cx, state: Rc<RefCell<State>>, removal: Removal) {
             match cx.fetch(Fetch::new("DELETE", format!("/api/session/{id}"))).await {
                 Err(error) if !not_found(&error) && removal.group.is_none() => {
                     state.borrow_mut().busy = false;
-                    return cx.toast(Toast::new(Variant::Error, error));
+                    return cx.with(|host| host.toast(Toast::new(Variant::Error, error)));
                 }
                 Err(error) if !not_found(&error) => failed += 1,
                 _ => done.push(id),
             }
         }
         let mut state = state.borrow_mut();
-        state.forget(&cx, &done);
+        cx.with(|host| state.forget(host, &done));
         let t = state.t();
         match (&removal.group, failed) {
-            (None, _) => cx.toast(Toast::new(Variant::Success, (t.removed)(removal.total))),
-            (Some(_), failed) if failed > 0 => cx.toast(Toast::new(Variant::Error, (t.group_failed)(failed))),
-            (Some(label), _) => cx.toast(Toast::new(Variant::Success, (t.group_removed)(label, removal.total))),
+            (None, _) => cx.with(|host| host.toast(Toast::new(Variant::Success, (t.removed)(removal.total)))),
+            (Some(_), failed) if failed > 0 => {
+                cx.with(|host| host.toast(Toast::new(Variant::Error, (t.group_failed)(failed))))
+            }
+            (Some(label), _) => {
+                cx.with(|host| host.toast(Toast::new(Variant::Success, (t.group_removed)(label, removal.total))))
+            }
         }
         if removal.group.is_some() {
             state.schedule_refresh();
