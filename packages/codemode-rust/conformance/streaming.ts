@@ -538,6 +538,7 @@ programs.push(
   after("const t = { toJSON: () => [1, 2] }", "for (let j = 0; j < 37; j++) await tools.t.echo({ t, p: Promise.resolve(1), e: new Error('x'), u: undefined })"),
   after("", "for (let j = 0; j < 37; j++) await tools.t.echo(Promise.resolve(j)).catch(() => 0)"),
   after("", "for (let j = 0; j < 37; j++) search({ query: Promise.resolve('echo'), limit: 1 })"),
+  after("let o = 1; for (let i = 0; i < 101; i++) o = { o }", "for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(1), o }).catch(() => 0)"),
   during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { tools.t.echo({ t, a: [1, 2, { c: 3 }] }); see(j) }"),
   during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { search({ query: t }); see(j) }"),
   during("const x = { v: 1 }; const many = Array(2049).fill(x)", "for (let j = 0; j < 30; j++) { tools.t.echo({ many }); see(j) }"),

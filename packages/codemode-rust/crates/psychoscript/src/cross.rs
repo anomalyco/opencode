@@ -633,8 +633,8 @@ fn run(
             }
             Act::Read => {
                 let top = c.stack.last().expect("visit");
+                // `$Throw`, a native that throws and so costs nothing.
                 if top.depth > WALK_DEPTH {
-                    vm.fuel(NATIVE_FUEL);
                     return Err(vm.range_error(&format!(
                         "Value exceeds the maximum depth of {WALK_DEPTH}."
                     )));
