@@ -2,6 +2,7 @@ import { builtinMainContext } from "@opencode/plugin/gui/builtin"
 import type { Plugin } from "@opencode/plugin/gui/main"
 import type { Pane } from "./pane"
 import { RefsStore } from "./refs"
+import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import { BrowserPane } from "./ipc"
 import {
   createMainPaneState,
@@ -39,6 +40,7 @@ const setup: Plugin.MainSetup = (ctx) => {
                   storage: builtinMainContext(ctx).storage,
                   refs,
                   embeds: ctx.embeds,
+                  toolbar: viewportToolbarAvailable(ctx.app.channel),
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })

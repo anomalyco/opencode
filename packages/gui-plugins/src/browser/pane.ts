@@ -68,6 +68,8 @@ export function createBrowserPane(input: {
   /** The declared store of reserved element refs. */
   readonly refs: Persisted<number, number>
   readonly embeds: Embeds
+  /** Whether the build offers the device toolbar. */
+  readonly toolbar: boolean
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
@@ -532,6 +534,7 @@ export function createBrowserPane(input: {
         if (current()) emit(binding, { type: "page", tabID: id, ...value })
       },
       zoomed: () => handles.get(binding)?.pages.forEach((page) => page.detail()),
+      toolbar: input.toolbar,
       shortcut: (shortcut) => {
         if (!focused() || win.isDestroyed()) return
         page.focusHost()

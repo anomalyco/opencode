@@ -190,6 +190,8 @@ export function createBrowserPage(
     detail?: (detail: PageDetail) => void
     /** The page's zoom changed, which Chromium applies to every page of the same origin in the partition. */
     zoomed?: () => void
+    /** Whether the build offers the device toolbar, which owns ⇧⌘M. */
+    toolbar: boolean
     /** Hands a browser or shell shortcut to the app window. */
     shortcut?: (shortcut: PageShortcut) => void
     /** The page took keyboard focus. */
@@ -258,7 +260,7 @@ export function createBrowserPage(
       return
     }
 
-    const shortcut = pageShortcut(input, process.platform === "darwin")
+    const shortcut = pageShortcut(input, process.platform === "darwin", options.toolbar)
 
     if (shortcut) {
       event.preventDefault()

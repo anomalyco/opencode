@@ -1210,6 +1210,7 @@ export function mountBrowserRegion(input: RegionHost) {
               alt: event.altKey,
             },
             mac,
+            true,
           )
 
           const binding = latest()?.binding
