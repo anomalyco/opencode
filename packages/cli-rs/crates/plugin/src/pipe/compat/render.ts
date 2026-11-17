@@ -563,7 +563,7 @@ function boxOf(at: VNode, layout: Json, click: Json, reading: Reading): Json {
   const pad = edges(props, "padding")
   const symmetric = pad && pad.left === pad.right && pad.top === pad.bottom && pad.left >= 0 && pad.top >= 0
   // A box whose size the plugin follows carries an id, by which the host answers where it is.
-  if (typeof props.onSizeChange === "function") at.measure()
+  if (typeof (props.onSizeChange ?? (at as unknown as Record<string, unknown>).onSizeChange) === "function") at.measure()
   return compact({
     type: "box",
     id: at.measured ? idOf(at) : undefined,
