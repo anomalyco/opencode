@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 // What the fixture's faked browser profile answers; see `SiteScenario` in the fixture.
-type SiteScenario = { sites: number | "locked"; hold?: boolean; partial?: boolean; query?: string }
+type SiteScenario = { sites: number | "locked"; hold?: boolean; partial?: boolean; site?: { name: string; choose: boolean } }
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
@@ -45,7 +45,8 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   await expect(view.options.first()).toHaveAttribute("data-site", "github.com")
   await expect(view.list).toHaveAttribute("aria-multiselectable", "true")
   await expect(view.options.first()).toHaveAttribute("aria-setsize", "5000")
-  await expect(view.dialog.getByText("0 of 5000 selected · Most recently used first")).toBeVisible()
+  await expect(view.dialog.getByText("0 of 5,000 selected")).toBeVisible()
+  await expect(view.dialog.getByText("Brings the sign-ins of only the sites you select. The sites used most recently come first.")).toBeVisible()
   expect(await view.options.count()).toBeLessThan(45)
   await expect(view.importButton).toBeDisabled()
 
@@ -74,7 +75,7 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   await page.keyboard.type("fig")
   await expect(view.list).toHaveAttribute("aria-activedescendant", /figma\.com$/)
   await page.keyboard.press("Space")
-  await expect(view.dialog.getByText("2 of 5000 selected · Most recently used first")).toBeVisible()
+  await expect(view.dialog.getByText("2 of 5,000 selected")).toBeVisible()
 
   // Enter imports what is selected; a clean import closes the dialog.
   await page.keyboard.press("Enter")
@@ -87,21 +88,44 @@ story("says what Select acts on while a search is active, and only offers what w
   const view = await open(page, { sites: 5_000 })
 
   await view.search.fill("site-01")
-  await expect(view.dialog.getByText("100 shown, 0 selected · Most recently used first")).toBeVisible()
+  await expect(view.dialog.getByText("100 shown, 0 selected")).toBeVisible()
   await view.dialog.getByRole("button", { name: "Select 100 shown", exact: true }).click()
   await expect(view.dialog.getByRole("button", { name: "Deselect 100 shown", exact: true })).toBeEnabled()
   await expect(view.dialog.getByRole("button", { name: "Select 100 shown", exact: true })).toBeDisabled()
   await view.search.fill("github")
   await expect(view.options).toHaveCount(1)
   await view.options.click()
-  await expect(view.dialog.getByText("1 shown, 101 selected · Most recently used first")).toBeVisible()
+  await expect(view.dialog.getByText("1 shown, 101 selected")).toBeVisible()
 
   // In the search, Escape clears it first, and closes the dialog only once it is empty.
   await view.search.focus()
   await page.keyboard.press("Escape")
   await expect(view.search).toHaveValue("")
   await expect(view.dialog).toBeVisible()
-  await expect(view.dialog.getByText("101 of 5000 selected · Most recently used first")).toBeVisible()
+  await expect(view.dialog.getByText("101 of 5,000 selected")).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(view.record).toHaveAttribute("data-closed", "true")
+})
+
+story("leaves Escape and ArrowDown to an input method while it composes", async ({ page }) => {
+  const view = await open(page, { sites: 5 })
+  const composing = { key: "Escape", keyCode: 229, isComposing: true }
+
+  // An empty search: Escape ends the composition, not the dialog.
+  await view.search.dispatchEvent("compositionstart")
+  await view.search.dispatchEvent("keydown", composing)
+  await view.search.dispatchEvent("keydown", { ...composing, key: "ArrowDown" })
+  await expect(view.dialog).toBeVisible()
+  await expect(view.search).toBeFocused()
+  await view.search.dispatchEvent("compositionend")
+
+  await view.search.fill("git")
+  await view.search.dispatchEvent("compositionstart")
+  await view.search.dispatchEvent("keydown", composing)
+  await expect(view.search).toHaveValue("git")
+  await view.search.dispatchEvent("compositionend")
+  await page.keyboard.press("Escape")
+  await expect(view.search).toHaveValue("")
   await page.keyboard.press("Escape")
   await expect(view.record).toHaveAttribute("data-closed", "true")
 })
@@ -114,8 +138,8 @@ story("switches profiles from none chosen, at the top, and reads a profile only 
   await page.keyboard.press("End")
   await view.dialog.getByRole("button", { name: /Browser profile/ }).click()
   await page.getByRole("option", { name: "Google Chrome · Home" }).click()
-  await expect(view.options).toHaveCount(2)
-  await expect(view.dialog.getByText("0 of 2 selected · Most recently used first")).toBeVisible()
+  await expect(view.options).toHaveCount(4)
+  await expect(view.dialog.getByText("0 of 4 selected")).toBeVisible()
   await view.dialog.getByRole("button", { name: /Browser profile/ }).click()
   await page.getByRole("option", { name: "Google Chrome · Work" }).click()
   await expect(view.options.first()).toHaveAttribute("data-site", "github.com")
@@ -124,23 +148,78 @@ story("switches profiles from none chosen, at the top, and reads a profile only 
 })
 
 story("starts from the site a passkey request came from, and stays open to say why an import left cookies behind", async ({ page }) => {
-  const view = await open(page, { sites: 5, query: "accounts.github.com", partial: true })
+  const view = await open(page, { sites: 5, site: { name: "github.com", choose: true }, partial: true })
 
   await expect(view.options).toHaveCount(1)
   await expect(view.options).toHaveAttribute("data-site", "github.com")
-  // The one site the page belongs to is chosen already.
+  // The site the page belongs to is chosen already.
   await expect(view.options).toHaveAttribute("aria-selected", "true")
   await view.importButton.click()
   await expect(view.dialog.getByRole("status")).toHaveText("Imported 2 cookies. Not imported: 1.")
   await expect(view.record).toHaveAttribute("data-closed", "false")
 })
 
-story("opened for a site, moves on to the browser profile that has it", async ({ page }) => {
-  const view = await open(page, { sites: 5, query: "www.netflix.com" })
+story("opened for a site, moves on to the browser profile that has exactly it, and chooses only that one", async ({ page }) => {
+  const view = await open(page, { sites: 5, site: { name: "google.com", choose: true } })
+
+  await expect(view.dialog.getByRole("button", { name: /Browser profile/ })).toContainText("Home")
+  await expect(view.options).toHaveCount(2)
+  await expect(view.dialog.locator('[data-site="google.com"]')).toHaveAttribute("aria-selected", "true")
+  await expect(view.dialog.locator('[data-site="google.com.au"]')).toHaveAttribute("aria-selected", "false")
+  // Counts are grouped for the app's language.
+  await expect(view.dialog.locator('[data-site="google.com"]')).toContainText("120,000 cookies")
+})
+
+story("a page's site that only another site contains chooses nothing, and says no sign-in was found", async ({ page }) => {
+  const view = await open(page, { sites: 5, site: { name: "hub.com", choose: true } })
+
+  // The search still shows github.com, which contains the name, but it is not the page's site.
+  await expect(view.options).toHaveCount(1)
+  await expect(view.options).toHaveAttribute("data-site", "github.com")
+  await expect(view.options).toHaveAttribute("aria-selected", "false")
+  await expect(view.dialog.getByText("No sign-in for hub.com was found in Google Chrome.")).toBeVisible()
+  await expect(view.importButton).toBeDisabled()
+})
+
+story("in a tab the agent drives, the page's site is shown but not chosen", async ({ page }) => {
+  const view = await open(page, { sites: 5, site: { name: "github.com", choose: false } })
 
   await expect(view.options).toHaveCount(1)
-  await expect(view.options).toHaveAttribute("data-site", "netflix.com")
-  await expect(view.dialog.getByRole("button", { name: /Browser profile/ })).toContainText("Home")
+  await expect(view.options).toHaveAttribute("data-site", "github.com")
+  await expect(view.options).toHaveAttribute("aria-selected", "false")
+  await expect(view.importButton).toBeDisabled()
+})
+
+story("keeps the active row off the list's edges, and brings it into view from the search", async ({ page }) => {
+  const view = await open(page, { sites: 5_000 })
+
+  // How far the row is inside the list's frame, above and below.
+  const inset = () =>
+    view.dialog.locator("[data-active]").evaluate((row) => {
+      const frame = row.closest('[role="listbox"]')?.parentElement?.closest(".overflow-hidden")?.getBoundingClientRect()
+      const box = row.getBoundingClientRect()
+
+      return frame ? [Math.round(box.top - frame.top), Math.round(frame.bottom - box.bottom)] : []
+    })
+
+  await view.list.focus()
+  await page.keyboard.press("End")
+  await expect.poll(async () => (await inset())[1]).toBeGreaterThanOrEqual(4)
+  await page.keyboard.press("Home")
+  await expect.poll(async () => (await inset())[0]).toBeGreaterThanOrEqual(4)
+
+  // A wheel scroll leaves the active first row out of view; ArrowDown from the search scrolls back to it.
+  await view.list.hover()
+  await page.mouse.wheel(0, 4_000)
+  await expect(view.dialog.locator('[data-site="github.com"]')).not.toBeInViewport()
+  await view.search.focus()
+  await page.keyboard.press("ArrowDown")
+  await expect(view.list).toBeFocused()
+  await expect(view.dialog.locator('[data-site="github.com"]')).toBeInViewport()
+
+  // The count alone is a live region, so a selection is announced.
+  await page.keyboard.press("Space")
+  await expect(view.dialog.locator('[aria-live="polite"]')).toHaveText("1 of 5,000 selected")
 })
 
 story("shows what the list is doing in its place, with a way to try again", async ({ page }) => {
@@ -173,7 +252,7 @@ story("keeps site names left to right in a right-to-left layout, the box at the 
   const view = await open(page, { sites: 6 }, "rtl")
   const row = view.dialog.locator('[data-site="xn--mnchen-3ya.de"]')
   const box = await row.locator('[data-slot="checkbox-v2-control"]').boundingBox()
-  const name = await row.locator("bdi").boundingBox()
+  const name = await row.locator("bdi").first().boundingBox()
   const count = await row.getByText("5 cookies").boundingBox()
 
   expect(box && name && count && box.x > name.x && name.x > count.x).toBe(true)

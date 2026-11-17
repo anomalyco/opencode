@@ -14,7 +14,8 @@ import { CodedError, missingArtifact } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
 import { guardMediaRequests } from "./media-gate"
-import { agentPasskeyRefusal, guardWebAuthn } from "./webauthn-gate"
+import { afterRefusal, agentPasskeyRefusal, guardWebAuthn } from "./webauthn-gate"
+import { cookieSite } from "./profile/sites"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
 import { agentKeyRefusal, hardwareInput, pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
@@ -641,31 +642,37 @@ export function createBrowserPage(
     refused: (asker) => {
       // Another site's frame does not speak for the page: its request is refused without a word.
       if (!asker.mainFrame && (!asker.origin || asker.origin !== contents.mainFrame.origin)) return
-      const site = URL.parse(displayURL(contents.getURL()))?.host
+      const address = URL.parse(displayURL(contents.getURL()))
 
       if (activity.agentRuns > 0 && !passkeyPage.interrupted) {
         passkeyPage.interrupted = true
-        prompts.interruptAgent(new CodedError(Browser.FailureCode.signInRequired, agentPasskeyRefusal(site)))
+        prompts.interruptAgent(new CodedError(Browser.FailureCode.signInRequired, agentPasskeyRefusal(address?.host)))
       }
 
       if (passkeyPage.noticed) return
       passkeyPage.noticed = true
-      notices.show({ reason: native && agentDriven(activity) ? "browser.passkey.agent" : "browser.passkey" })
+      const site = address?.hostname ? cookieSite(address.hostname) : undefined
+      // On Windows only an enforced tab refuses, and a new tab of the person's would reach the system's dialog.
+      const reason = native ? "browser.passkey.off" : agentDriven(activity) ? "browser.passkey.agent" : "browser.passkey"
+      notices.show(site && site.length <= 255 ? { reason, site } : { reason })
     },
   })
 
   // A page that can never reach the system's dialog, or one the agent drove or could script, refuses in the browser
-  // process before its first document loads. On Windows a failure to do so leaves it unguarded, so the tab fails.
+  // process before its first document loads. On Windows a failure to do so, whenever it happens, leaves it with the
+  // system's dialog, so the tab fails.
   const restrictPasskeys = () => {
     if (native) options.restrictPasskeys?.()
 
-    return passkeys.enforce()
+    const enforcing = passkeys.enforce()
+
+    if (native) void enforcing.catch(() => options.fail())
+
+    return enforcing
   }
 
   if (!native || agentDriven(options.activity) || options.passkeysRestricted?.())
-    void restrictPasskeys().catch(() => {
-      if (native) options.fail()
-    })
+    void restrictPasskeys().catch(() => undefined)
 
   constructing.defer(() => prompts.dispose())
   constructing.defer(() => dialogs.dispose())
@@ -1203,7 +1210,7 @@ export function createBrowserPage(
       try {
         return await Promise.race([
           // The agent drives the tab from here on: refuse passkeys in the browser process before its action runs.
-          Promise.all([choosers.update(), origin === "agent" ? restrictPasskeys() : undefined]).then(() => {
+          afterRefusal(origin === "agent" ? restrictPasskeys : undefined, choosers.update(), () => {
             abortError(run.controller.signal)
 
             return perform(command, run.controller.signal, origin, saved)

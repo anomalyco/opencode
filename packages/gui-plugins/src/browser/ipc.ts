@@ -41,9 +41,13 @@ export type FindView = typeof FindView.Type
 
 const RefusalNotice = Schema.Union([
   Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web", "browser.preview.restricted", "browser.preview.agentRestricted"]) }),
-  // A site asked for a passkey or security key, refused at once: this browser shows no request for it, or (`agent`) the
-  // agent drives the tab.
-  Schema.Struct({ reason: Schema.Literals(["browser.passkey", "browser.passkey.agent"]) }),
+  // A site asked for a passkey or security key, refused at once: this browser shows no request for it, in a tab of the
+  // person's or (`agent`) one the agent drives; or (`off`) the system's dialog would answer, but the tab refuses since
+  // the agent used it or a window linked to it. `site` is the page's registrable domain.
+  Schema.Struct({
+    reason: Schema.Literals(["browser.passkey", "browser.passkey.agent", "browser.passkey.off"]),
+    site: Schema.optionalKey(text(255)),
+  }),
   Schema.Struct({ reason: Schema.Literal("external"), target: text(2048), action: Schema.Literals(["open", "copy"]) }),
   Schema.Struct({ reason: Schema.Literal("popup"), target: text(16384), action: Schema.optionalKey(Schema.Literal("tab")) }),
 ])

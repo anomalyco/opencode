@@ -367,25 +367,24 @@ export default function SessionBrowserPane(props: {
     if (tab && address()) command({ type: "reload", tabID: tab.id })
   }
 
-  // A passkey sign-in this browser cannot do: the import opens on the page's site, and a clean one loads the page again.
+  // A passkey sign-in this browser cannot do: the import opens on the page's site, chosen already only in a tab of the
+  // person's. The notice stays until an import brought cookies, which then load the page again; a cancelled import
+  // leaves it, to try again.
   const owner = getOwner()
 
-  const importSignIn = () => {
-    const site = URL.parse(address())?.hostname
-    const tab = state()
-
+  const importSignIn = (tabID: Browser.TabID, passkey: { site?: string; choose: boolean }) =>
     runWithOwner(owner, () =>
       plugin.dialogs.open((dialog) => (
         <SiteChooserDialog
-          query={site}
+          site={passkey.site ? { name: passkey.site, choose: passkey.choose } : undefined}
           imported={() => {
-            if (tab) command({ type: "reload", tabID: tab.id })
+            void props.model.answerNotice(props.session, tabID, true).catch(() => undefined)
+            command({ type: "reload", tabID })
           }}
           close={() => dialog.close()}
         />
       )),
     )
-  }
 
   const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
   const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
@@ -976,10 +975,20 @@ export default function SessionBrowserPane(props: {
               {(notice) => (
                 <RefusalBar
                   notice={notice()}
-                  answer={(dismiss) => {
-                    if (!dismiss && notice().passkey) importSignIn()
+                  answer={async (dismiss) => {
+                    const passkey = notice().passkey
 
-                    return props.model.answerNotice(props.session, id, dismiss || !!notice().passkey)
+                    if (dismiss || !passkey) return props.model.answerNotice(props.session, id, dismiss)
+
+                    if ("newTab" in passkey) {
+                      const url = address()
+
+                      if (url) props.model.openURL(props.session, url)
+
+                      return props.model.answerNotice(props.session, id, true)
+                    }
+
+                    importSignIn(id, passkey)
                   }}
                 />
               )}

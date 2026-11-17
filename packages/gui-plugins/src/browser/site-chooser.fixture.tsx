@@ -11,13 +11,13 @@ import { SiteChooserDialog } from "./site-chooser"
 
 /**
  * What main answers the dialog: how many made-up sites the first profile has (or why it has none), whether the
- * listing waits for the test, and whether an import brings everything (`clean`) or leaves a cookie behind.
+ * listing waits for the test, whether an import brings everything or (`partial`) leaves a cookie behind, and the page's site it opens for (`site`).
  */
 export type SiteScenario = {
   readonly sites: number | "locked"
   readonly hold?: boolean
   readonly partial?: boolean
-  readonly query?: string
+  readonly site?: { readonly name: string; readonly choose: boolean }
 }
 
 const sources: ProfileSource[] = [
@@ -87,7 +87,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
 
       if (input.scenario.hold) await held.promise
 
-      if (request.profile === "Profile 1") return { type: "listed", sites: [{ site: "netflix.com", cookies: 4 }, { site: "bbc.co.uk", cookies: 2 }], order: "recent" }
+      if (request.profile === "Profile 1") return { type: "listed", sites: [{ site: "netflix.com", cookies: 4 }, { site: "bbc.co.uk", cookies: 2 }, { site: "google.com", cookies: 120000 }, { site: "google.com.au", cookies: 3 }], order: "recent" }
 
       return input.scenario.sites === "locked" ? { type: "failed", reason: "locked" } : siteList(input.scenario.sites)
     },
@@ -109,6 +109,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     id: "browser",
     ui: input.ui,
     t,
+    locale: { locale: () => "en", direction: () => input.direction ?? "ltr" },
     plural: (key: string, count: number, params?: Parameters<typeof t>[1]) =>
       t(`${key}.${count === 1 ? "one" : "other"}`, { ...params, count }),
     use: () => live,
@@ -129,7 +130,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
         () => (
           <PluginContext.Provider value={plugin}>
             <SiteChooserDialog
-              query={input.scenario.query}
+              site={input.scenario.site}
               imported={() => setStore("imported", (count) => count + 1)}
               close={() => dialog.close()}
             />

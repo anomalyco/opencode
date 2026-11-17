@@ -641,13 +641,17 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
 
-      // Its action brings the site's sign-in from the user's own browser; the pane opens the import for it.
+      // Where the system's dialog works, a new tab does; elsewhere the action brings the site's sign-in from the user's
+      // own browser, which the pane opens the import for, with the site chosen only in a tab of the person's.
+      if (notice.reason === "browser.passkey.off")
+        return { token: notice.token, text: ctx.t("refused.passkey.off"), label: ctx.t("refused.passkey.newTab"), passkey: { newTab: true } }
+
       if (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")
         return {
           token: notice.token,
-          text: ctx.t(notice.reason === "browser.passkey" ? "refused.passkey" : "refused.passkey.agent"),
+          text: ctx.t("refused.passkey"),
           label: ctx.t("refused.passkey.import"),
-          passkey: true,
+          passkey: { site: notice.site, choose: notice.reason === "browser.passkey" },
         }
 
       return { token: notice.token, text: describe(notice.reason) }

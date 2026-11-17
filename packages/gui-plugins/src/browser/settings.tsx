@@ -126,6 +126,7 @@ export default function BrowserSettings() {
                   fallback="outline-globe"
                   name={choice.source.name}
                   detail={choice.source.profiles.length > 1 ? choice.profile.name : undefined}
+                  keep
                   message={
                     jobs.importing(choice) ? jobs.notice() : results().get(resultKey(choice.source.id, choice.profile.id))
                   }
@@ -664,8 +665,18 @@ function InstallReview(props: {
   )
 }
 
-/** A row's subject: its icon, its name, and under it a detail or what the last action on it did. */
-function Identity(props: { image?: string; fallback: IconName; name: string; detail?: string; message?: JobMessage }) {
+/**
+ * A row's subject: its icon, its name, and under it a detail or what the last action on it did; with `keep`, the
+ * detail stays before the message, so rows of one browser still say which profile each is.
+ */
+function Identity(props: {
+  image?: string
+  fallback: IconName
+  name: string
+  detail?: string
+  keep?: boolean
+  message?: JobMessage
+}) {
   return (
     <span class="flex min-w-0 items-center gap-3">
       <Glyph image={props.image} fallback={props.fallback} />
@@ -673,12 +684,14 @@ function Identity(props: { image?: string; fallback: IconName; name: string; det
         <span class="truncate">{props.name}</span>
         <Show when={props.message} fallback={<Show when={props.detail}>{(detail) => <Muted>{detail()}</Muted>}</Show>}>
           {(message) => (
-            <span
-              role={message().error ? "alert" : "status"}
-              class="text-[13px] font-[440] leading-[var(--line-height-base)]"
-              classList={{ "text-v2-state-fg-danger": message().error, "text-v2-text-text-muted": !message().error }}
-            >
-              {message().text}
+            <span class="text-[13px] font-[440] leading-[var(--line-height-base)]">
+              <Show when={props.keep && props.detail}>{(detail) => <span class="text-v2-text-text-muted">{detail()} · </span>}</Show>
+              <span
+                role={message().error ? "alert" : "status"}
+                classList={{ "text-v2-state-fg-danger": message().error, "text-v2-text-text-muted": !message().error }}
+              >
+                {message().text}
+              </span>
             </span>
           )}
         </Show>
