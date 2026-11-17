@@ -263,6 +263,9 @@ struct Admitted {
     opened: HashMap<String, (u64, u64)>,
     /// The rows the subtree under each id built.
     rows: HashMap<String, u64>,
+    /// The fence nodes the subtree under each id holds, kept subtrees and list items' data included: a keep of the id
+    /// counts them as its spelled-out subtree would (bigboi's review of contract 2.x).
+    fences: HashMap<String, u32>,
 }
 
 /// What the tree holds under an id: the nearest ancestor with an id, the layout levels its subtree takes, the nodes
@@ -663,26 +666,27 @@ impl Tree {
     /// The ids of the boxes and the fields that can take the focus, in the mounted items of lists too: none in a hidden box, which
     /// OpenTUI focuses not (review carbon-5).
     pub fn focusable(&self) -> Vec<String> {
-        fn walk(nodes: &[Mounted], out: &mut Vec<String>) {
+        let field = crate::loader::native::serves(abi::FOCUS_INPUT);
+        fn walk(nodes: &[Mounted], field: bool, out: &mut Vec<String>) {
             for node in nodes.iter().filter(|node| !node.node.is_hidden()) {
                 // A box that asks for it, and a field with an id, which takes the focus as a click gives it
                 // (`abi::FOCUS_INPUT`).
                 let focusable = match &node.node {
                     Node::Box { id: Some(id), interact, .. } if interact.focusable => Some(id),
-                    Node::Input { id: Some(id), .. } => Some(id),
+                    Node::Input { id: Some(id), .. } if field => Some(id),
                     _ => None,
                 };
                 out.extend(focusable.cloned());
                 if let Extra::List(list) = &node.extra {
                     list.items.iter().filter_map(|item| item.mounted.as_ref()).for_each(|mounted| {
-                        walk(&mounted.tree.nodes, out);
+                        walk(&mounted.tree.nodes, field, out);
                     });
                 }
-                walk(&node.children, out);
+                walk(&node.children, field, out);
             }
         }
         let mut out = Vec::new();
-        walk(&self.nodes, &mut out);
+        walk(&self.nodes, field, &mut out);
         out
     }
 
@@ -790,6 +794,10 @@ impl Tree {
                         if self.keeps.contains(key.as_str()) || self.ids.contains(key.as_str()) {
                             return Err(Refused::Duplicate(key.clone()));
                         }
+                        // The fence nodes it stands for count as written out: one a tree, in a fence claim's only.
+                        let kept = self.tree.admitted.fences.get(key.as_str()).copied().unwrap_or(0);
+                        self.fence(kept)?;
+                        self.admitted.fences.insert(key.clone(), kept);
                         // A keep inside a placeholder's subtree is checked and not held again.
                         if mode == Mode::Dropped {
                             self.keeps.insert(key);
@@ -873,11 +881,9 @@ impl Tree {
                     if let Node::Image { content: Source::PartOutput(_), .. } = node {
                         return Err(Refused::Output);
                     }
+                    let fences = self.fences;
                     if let Node::Fence { .. } = node {
-                        self.fences += 1;
-                        if self.env.fence.is_none() || self.fences > 1 {
-                            return Err(Refused::Fence);
-                        }
+                        self.fence(1)?;
                     }
                     if let Node::List { items, .. } = node
                         && items.iter().map(|item| u64::from(item.estimate.max(1))).sum::<u64>() > MAX_ROWS
@@ -944,6 +950,9 @@ impl Tree {
                             self.nodes(entry, depth, Some((list, key)), inner, &mut absorbing)?;
                         }
                     }
+                    if let Some(id) = node.id() {
+                        self.admitted.fences.insert(id.to_owned(), self.fences - fences);
+                    }
                     // What a keep of the id stands for: a node opened stands for its whole subtree, and the subtree
                     // under an id built the rows its nodes took.
                     if let (Some(id), true) = (node.id(), stands) {
@@ -955,6 +964,15 @@ impl Tree {
                     }
                 }
                 Ok(())
+            }
+
+            /// Counts `count` more fence nodes: a tree holds one at most, and only a fence claim's.
+            fn fence(&mut self, count: u32) -> Result<(), Refused> {
+                self.fences += count;
+                match count > 0 && (self.env.fence.is_none() || self.fences > 1) {
+                    true => Err(Refused::Fence),
+                    false => Ok(()),
+                }
             }
 
             /// Admits `node`, with `cost`, and returns how its children are counted; or why it is over a limit.

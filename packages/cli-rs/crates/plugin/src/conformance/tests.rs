@@ -583,6 +583,61 @@ fn a_library_may_ask_stopped_and_report_on_the_ui_thread() {
     );
 }
 
+/// What the `conf-fence` claim of the library `load` gives draws, on a host table that states `features`, its bytes
+/// as they are: the text of the screen.
+fn fenced_with(load: &Load<'_>, features: &'static [u8]) -> String {
+    let host = host();
+    let registry = Registry::define(Vec::new(), []);
+    native::STATED.set(Some(features));
+    let (definition, error) = load_plugin(&host, 2, load, None).unwrap();
+    registry.load(&dynamic(&host), definition.external(TARGET, error));
+    let theme = host.theme();
+    let renderers = registry.code_blocks({
+        let theme = theme.clone();
+        Rc::new(move || theme.clone())
+    });
+    let syntax = opencode_ui::code::syntax_theme(&theme);
+    let view = opencode_ui::markdown::view(host.app(), &theme, &syntax, &renderers, true, false);
+    view.set_markdown("```conf-fence\nhello\n```\n");
+    host.app().root().add(&view);
+    host.app.render();
+    native::STATED.set(None);
+    host.app.text()
+}
+
+// Expected (bigboi's review of contract 2.x): a library reads the host's features as a JSON array of strings, element
+// by element: a name spelled with an escape is the name, and a name that only holds the feature's quoted spelling, or
+// one longer, is not. The Rust SDK and the C plugin each draw the fence node exactly when `fence-node` is stated, and
+// lower it to text otherwise.
+#[test]
+fn a_library_reads_the_features_it_is_offered_as_json() {
+    let cases: [(&'static [u8], bool); 6] = [
+        (br#"["fence-node"]"#, true),
+        (br#"["fence-node"]"#, true),
+        (br#"[ "image-bounds" , "fence-node" ]"#, true),
+        (br#"["prefix\"fence-node"]"#, false),
+        (br#"["fence-nodes"]"#, false),
+        (br#"["FENCE-NODE"]"#, false),
+    ];
+    #[cfg(unix)]
+    let c = c_library(2);
+    #[cfg(not(unix))]
+    let c: Option<Vec<u8>> = None;
+    for (features, drawn) in cases {
+        let mut loads = vec![("the Rust SDK", Load::Reference)];
+        if let Some(library) = &c {
+            loads.push(("the C plugin", Load::Library(library)));
+        }
+        for (name, load) in loads {
+            let screen = fenced_with(&load, features);
+            let lowered = screen.contains("fenced hello");
+            let stated = String::from_utf8_lossy(features);
+            assert!(screen.contains("fence conf-fence"), "{name}, {stated}: the claim did not draw:\n{screen}");
+            assert_eq!(!lowered, drawn, "{name}, {stated}:\n{screen}");
+        }
+    }
+}
+
 // Expected (P2's `search`, read only as in process): a library's search that asks the host for an effect is answered
 // ERROR, and nothing of it applies, the plugin staying active with its answer taken; through any library (the player)
 // and through a real one (the C plugin). In process a search gets the host's reads alone, so it cannot ask.

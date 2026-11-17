@@ -192,6 +192,23 @@
     ]
   },
   {
+    "transcript": "interact-older",
+    "about": "a host that states no focus-input does what such a host does: a focus of the field asked for anyway leaves it unfocused, and the plugin, which sees the feature absent, falls back and says the field needs a click",
+    "library": 2,
+    "script": [
+      { "do": "load", "features": ["image-bounds", "fence-node"] },
+      { "do": "open", "route": "rows" },
+      { "do": "command", "name": "conf.ui" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.field" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" }
+    ]
+  },
+  {
     "transcript": "fence-twice",
     "about": "a fence claim whose tree holds two fence nodes: the host refuses the tree, and the fence shows the host's code view; the plugin stays active",
     "library": 2,

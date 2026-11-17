@@ -528,7 +528,7 @@ static FEATURES_JSON: std::sync::LazyLock<Vec<u8>> =
 #[cfg(test)]
 thread_local! {
     /// The features a test's host tables state instead, as an older host's would: a library then lowers what that host
-    /// lacks. The host itself behaves as it does.
+    /// lacks, and the host does what such a host does for a feature that changes its behavior ([`serves`]).
     pub(crate) static STATED: Cell<Option<&'static [u8]>> = const { Cell::new(None) };
 }
 
@@ -539,6 +539,17 @@ fn features_json() -> &'static [u8] {
         return stated;
     }
     &FEATURES_JSON
+}
+
+/// Whether the host serves `feature`, which it states ([`HostApi::features`]): it does only what it states, as a host
+/// that lacks the feature would not (`focus-input`'s focus of a field).
+pub(crate) fn serves(feature: &str) -> bool {
+    #[cfg(test)]
+    if let Some(stated) = STATED.get() {
+        return serde_json::from_slice::<Vec<String>>(stated)
+            .is_ok_and(|stated| stated.iter().any(|name| name == feature));
+    }
+    abi::FEATURES.contains(&feature)
 }
 
 pub(crate) enum Effect {

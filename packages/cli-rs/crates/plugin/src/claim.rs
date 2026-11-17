@@ -664,9 +664,9 @@ impl Core {
         let has = |handle: ContentRef| bytes(&handle).is_some() || unheld.contains(&handle);
         let gone = |handle: ContentRef| unheld.contains(&handle);
         // A fence claim's tree may show the host's code view of its part once, with the newest revision.
+        // Read as the node is built, with no copy of the part: a tool call's mount has no code view.
         let code = self.fence.borrow().clone();
-        let part = self.part.borrow().clone();
-        let fence_view = || match (&code, &part) {
+        let fence_view = || match (&code, &*self.part.borrow()) {
             (Some(code), Some(Part::Fence(fence))) => Some(code.show(fence).as_any()),
             _ => None,
         };
@@ -994,15 +994,16 @@ impl Fence {
         let shows = self.core.shows.get();
         self.core.root.visible(shows);
         self.slot.visible(!shows);
-        let Some(Part::Fence(fence)) = self.core.part.borrow().clone() else { return };
+        // A tree without a fence node shows no code view, and reads nothing of the part.
+        if shows && !self.core.holds_fence() {
+            return self.code.hide();
+        }
+        let part = self.core.part.borrow();
+        let Some(Part::Fence(fence)) = &*part else { return };
+        let holder = self.code.show(fence);
         if shows {
-            match self.core.holds_fence() {
-                true => drop(self.code.show(&fence)),
-                false => self.code.hide(),
-            }
             return;
         }
-        let holder = self.code.show(&fence);
         if !self.slot.children().iter().any(|child| child.id() == holder.id()) {
             self.slot.clear();
             self.slot.add(&holder);

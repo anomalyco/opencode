@@ -84,6 +84,23 @@ fn recorder(host: &TestHost) -> Act {
 
 /// [`apply`], with clicks running `act`.
 fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::Node], act: Act) -> Result<(), Refused> {
+    apply_in(host, tree, parent, nodes, act, None)
+}
+
+/// [`apply`] as a fence claim's tree, which may hold a fence node: its code view is a text of the host's.
+fn apply_fenced(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::Node]) -> Result<(), Refused> {
+    let code = || Some(Text::new(&host.app, "HOST CODE").as_any());
+    apply_in(host, tree, parent, nodes, recorder(host), Some(&code))
+}
+
+fn apply_in(
+    host: &TestHost,
+    tree: &mut Tree,
+    parent: &View,
+    nodes: &[v2::Node],
+    act: Act,
+    fence: Option<&dyn Fn() -> Option<AnyWidget>>,
+) -> Result<(), Refused> {
     let theme = host.theme();
     let slot = |_: &View, _: &str| -> Option<SlotMount> { None };
     let source = |source: &v2::Source| match source {
@@ -108,7 +125,7 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
         owner: None,
         plugin: None,
         item: false,
-        fence: None,
+        fence,
     };
     tree.apply(&env, parent, nodes)
 }
@@ -1494,4 +1511,36 @@ fn a_fill_that_goes_paints_nothing() {
     host.app.render();
     apply(&host, &mut tree, &parent, &filled(None)).unwrap();
     assert_eq!(host.app.render(), fresh(&filled(None), 0, &|_| None).capture);
+}
+
+// Expected (bigboi's review of contract 2.x): a tree holds one fence node, counted through what it keeps: a revision
+// that keeps a subtree holding one and adds another is refused as the same revision spelled out is, also when the
+// kept fence is in a list item's data or behind a keep of a keep; a revision that keeps it and adds none is adopted.
+#[test]
+fn a_kept_fence_counts_against_the_one_a_tree_holds() {
+    let text = |text: &str| v2::Node::text(vec![abi::Span::new(text)]);
+    let card = || v2::Node::column(vec![text("card"), v2::Node::fence().with_id("old")]).with_id("card");
+    let listed = || {
+        let item = v2::ListItem::new(v2::Node::column(vec![v2::Node::fence().with_id("old")]).with_id("item"), 1);
+        v2::Node::list(vec![item]).with_id("card")
+    };
+    for first in [card(), listed()] {
+        let host = host(0);
+        let parent = root(&host);
+        let mut tree = Tree::default();
+        let fresh = || v2::Node::fence().with_id("fresh");
+        apply_fenced(&host, &mut tree, &parent, &[v2::Node::column(vec![first.clone()]).with_id("page")]).unwrap();
+        let spelled = [v2::Node::column(vec![first.clone(), fresh()]).with_id("page")];
+        let kept = [v2::Node::column(vec![v2::Node::keep("card"), fresh()]).with_id("page")];
+        let whole = [v2::Node::column(vec![v2::Node::keep("page"), fresh()])];
+        for (name, nodes) in [("spelled out", &spelled[..]), ("kept", &kept), ("a keep of its parent", &whole)] {
+            assert_eq!(apply_fenced(&host, &mut tree, &parent, nodes), Err(Refused::Fence), "{name}: {first:?}");
+        }
+        let alone = [v2::Node::column(vec![v2::Node::keep("card"), text("no fence")]).with_id("page")];
+        assert_eq!(apply_fenced(&host, &mut tree, &parent, &alone), Ok(()), "{first:?}");
+        // The keep of a keep still counts the fence it stood for.
+        let again = [v2::Node::column(vec![v2::Node::keep("card"), fresh()]).with_id("page")];
+        assert_eq!(apply_fenced(&host, &mut tree, &parent, &again), Err(Refused::Fence), "{first:?}");
+        assert_eq!(apply(&host, &mut tree, &parent, &alone), Err(Refused::Fence), "outside a fence claim: {first:?}");
+    }
 }

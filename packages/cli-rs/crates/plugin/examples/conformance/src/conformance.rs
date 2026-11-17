@@ -14,8 +14,9 @@
 //!   reads answered; `conf.bump` changes what `kept` shows; `conf.message` reads message `msg_1` of session `ses_a`
 //!   and toasts "message ID", or "message none" (P6a); `conf.plugins` reads the plugin list and toasts "plugins N
 //!   KEY", its length and its first entry's key (P6b); `conf.fence` makes the next view of `conf` hold a fence node,
-//!   which only a fence claim's tree may; `conf.field` gives the field `field` of `rows` the focus; `conf.dialogs` shows a select, an alert and a confirm, each centered, the
-//!   select and the alert extra large (contract 2.x additions).
+//!   which only a fence claim's tree may; `conf.field` gives the field `field` of `rows` the focus, or on a host
+//!   without `focus-input` toasts "field needs a click"; `conf.dialogs` shows a select, an alert and a confirm, each
+//!   centered, the select and the alert extra large (contract 2.x additions).
 //! - It hears that the plugin list changed (P6b), and toasts "plugins changed N KEY" from the list read then.
 //! - A route surface `conf`: a column `root` of a text `count`, "views N, messages M" (the views run and the messages
 //!   arrived, in this instance), and a Markdown node `fixed` of the content "# fixed", memoized: built once a mount and
@@ -171,7 +172,11 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         let label = v2::Node::text(vec![Span::new("fences")]);
         Some(v2::Node::column(vec![label, v2::Node::fence(), v2::Node::fence()]).with_id("fences"))
     }));
-    setup.command(command("conf.field"), |host, _| host.focus("field"));
+    // On a host without `focus-input` the field takes the focus from the user's click alone: the plugin says so.
+    setup.command(command("conf.field"), |host, _| match host.abi().has_feature(opencode_plugin_abi::FOCUS_INPUT) {
+        true => host.focus("field"),
+        false => host.toast(Toast::new(Variant::Info, "field needs a click")),
+    });
     let fencing = state.clone();
     setup.command(command("conf.fence"), move |_, _| fencing.fenced.set(true));
     setup.command(command("conf.dialogs"), |host, _| {
