@@ -1266,9 +1266,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Posunout dolů",
   "settings.experimental.row.newIcons.title": "Nové ikony",
   "settings.experimental.row.newIcons.description": "Vyzkoušejte aktualizovanou sadu ikon",
-  "settings.experimental.row.foldUserMessages.title": "Sbalit dlouhé zprávy",
-  "settings.experimental.row.foldUserMessages.description":
-    "Sbalit vaše zprávy delší než 12 řádků za tlačítko Číst dále",
   "settings.experimental.row.newTimeline.title": "Nová časová osa",
   "settings.experimental.row.newTimeline.description":
     "Přepracovaná časová osa relace, která seskupuje činnost agenta a pod krokem zobrazuje jeden stavový řádek",
@@ -1398,6 +1395,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Zobrazit podagenty samostatně. Ostatní aktivitu seskupit se sbalenými podrobnostmi.",
   "settings.timeline.description.quiet": "Zobrazit podagenty samostatně a seskupit úpravy. Ostatní aktivitu skrýt.",
+  "settings.timeline.row.foldUserMessages.title": "Sbalit dlouhé zprávy",
+  "settings.timeline.row.foldUserMessages.description":
+    "Sbalit vaše zprávy delší než 12 řádků za tlačítko Číst dále",
   "settings.timeline.row.turnDiffs.title": "Změněné soubory",
   "settings.timeline.row.turnDiffs.description": "Po dokončení kroku vypsat soubory, které změnil",
   "settings.timeline.category.commentary": "Komentář",

@@ -1235,8 +1235,6 @@ export const dict = {
   "sidebar.recent.moveDown": "تھلے لے جاؤ",
   "settings.experimental.row.newIcons.title": "نویں آئیکن",
   "settings.experimental.row.newIcons.description": "اپ ڈیٹ کیتے آئیکن سیٹ دا پیش نظارہ ویکھو",
-  "settings.experimental.row.foldUserMessages.title": "لمبے سنیہے سمیٹو",
-  "settings.experimental.row.foldUserMessages.description": "12 لائناں توں لمبے اپنے سنیہے «ہور پڑھو» بٹن پچھے سمیٹو",
   "settings.experimental.row.newTimeline.title": "نویں ٹائم لائن",
   "settings.experimental.row.newTimeline.description":
     "نویں ڈیزائن آلی سیشن ٹائم لائن جیہڑی ایجنٹ دے کیتے کم نوں گروپ کردی اے، واری دے تھلے اک سٹیٹس لائن نال",
@@ -1365,6 +1363,8 @@ export const dict = {
   "settings.timeline.row.width.wide": "چوڑی",
   "settings.timeline.description.compact": "سب ایجنٹ وکھرے وکھاؤ۔ ہور سرگرمی نوں سمیٹیاں تفصیلاں نال گروپ کرو۔",
   "settings.timeline.description.quiet": "سب ایجنٹ وکھرے وکھاؤ تے ترمیماں گروپ کرو۔ ہور سرگرمی لُکاؤ۔",
+  "settings.timeline.row.foldUserMessages.title": "لمبے سنیہے سمیٹو",
+  "settings.timeline.row.foldUserMessages.description": "12 لائناں توں لمبے اپنے سنیہے «ہور پڑھو» بٹن پچھے سمیٹو",
   "settings.timeline.row.turnDiffs.title": "بدلیاں فائلاں",
   "settings.timeline.row.turnDiffs.description": "ہر واری مُکن تے اوہدیاں بدلیاں فائلاں دی فہرست وکھاؤ",
   "settings.timeline.category.commentary": "تبصرہ",

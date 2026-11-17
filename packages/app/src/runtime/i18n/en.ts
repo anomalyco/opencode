@@ -881,9 +881,6 @@ export const dict = {
   "settings.experimental.description": "Try experimental features",
   "settings.experimental.row.newIcons.title": "New icons",
   "settings.experimental.row.newIcons.description": "Preview the updated icon set",
-  "settings.experimental.row.foldUserMessages.title": "Fold long messages",
-  "settings.experimental.row.foldUserMessages.description":
-    "Fold your messages past 12 lines behind a Read more button",
   "settings.experimental.row.newTimeline.title": "New timeline",
   "settings.experimental.row.newTimeline.description":
     "A redesigned session timeline that groups what the agent did, with one status line below the turn",
@@ -1105,6 +1102,8 @@ export const dict = {
   "settings.timeline.description.text-only": "Hide all activity.",
   "settings.timeline.description.custom": "Uses advanced settings.",
   "settings.timeline.custom": "Custom",
+  "settings.timeline.row.foldUserMessages.title": "Collapse long messages",
+  "settings.timeline.row.foldUserMessages.description": "Show the first few lines. Expand to read your full message.",
   "settings.timeline.row.turnDiffs.title": "Changed files",
   "settings.timeline.row.turnDiffs.description": "List the files each turn changed when it finishes",
   "settings.timeline.advanced": "Advanced",

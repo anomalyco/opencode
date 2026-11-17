@@ -1229,9 +1229,6 @@ export const dict = {
   "sidebar.recent.moveDown": "ქვემოთ გადატანა",
   "settings.experimental.row.newIcons.title": "ახალი ხატულები",
   "settings.experimental.row.newIcons.description": "განახლებული ხატულების ნაკრების წინასწარი ნახვა",
-  "settings.experimental.row.foldUserMessages.title": "გრძელი შეტყობინებების დაკეცვა",
-  "settings.experimental.row.foldUserMessages.description":
-    "12 ხაზზე გრძელი შეტყობინებების დაკეცვა „მეტის წაკითხვა“ ღილაკის მიღმა",
   "settings.experimental.row.newTimeline.title": "ახალი დროის ხაზი",
   "settings.experimental.row.newTimeline.description":
     "სესიის გადამუშავებული დროის ხაზი, რომელიც აჯგუფებს აგენტის ქმედებებს და სვლის ქვემოთ აჩვენებს ერთ სტატუსის ხაზს",
@@ -1362,6 +1359,9 @@ export const dict = {
   "settings.timeline.description.compact": "ქვეაგენტების ცალკე ჩვენება. სხვა აქტივობის დაჯგუფება დაკეცილი დეტალებით.",
   "settings.timeline.description.quiet":
     "ქვეაგენტების ცალკე ჩვენება და რედაქტირებების დაჯგუფება. სხვა აქტივობის დამალვა.",
+  "settings.timeline.row.foldUserMessages.title": "გრძელი შეტყობინებების დაკეცვა",
+  "settings.timeline.row.foldUserMessages.description":
+    "12 ხაზზე გრძელი შეტყობინებების დაკეცვა „მეტის წაკითხვა“ ღილაკის მიღმა",
   "settings.timeline.row.turnDiffs.title": "შეცვლილი ფაილები",
   "settings.timeline.row.turnDiffs.description": "თითოეული სვლის დასრულებისას მის მიერ შეცვლილი ფაილების ჩამოთვლა",
   "settings.timeline.category.commentary": "კომენტარები",

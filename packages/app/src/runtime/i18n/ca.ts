@@ -1261,9 +1261,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Mou avall",
   "settings.experimental.row.newIcons.title": "Icones noves",
   "settings.experimental.row.newIcons.description": "Previsualitza el conjunt d'icones actualitzat",
-  "settings.experimental.row.foldUserMessages.title": "Plega els missatges llargs",
-  "settings.experimental.row.foldUserMessages.description":
-    "Plega els vostres missatges de més de 12 línies darrere d'un botó Llegeix-ne més",
   "settings.experimental.row.newTimeline.title": "Cronologia nova",
   "settings.experimental.row.newTimeline.description":
     "Una cronologia de sessió redissenyada que agrupa el que ha fet l'agent, amb una sola línia d'estat sota el torn",
@@ -1394,6 +1391,9 @@ export const dict = {
     "Mostra els subagents per separat. Agrupa l'altra activitat amb els detalls plegats.",
   "settings.timeline.description.quiet":
     "Mostra els subagents per separat i agrupa les edicions. Amaga l'altra activitat.",
+  "settings.timeline.row.foldUserMessages.title": "Plega els missatges llargs",
+  "settings.timeline.row.foldUserMessages.description":
+    "Plega els vostres missatges de més de 12 línies darrere d'un botó Llegeix-ne més",
   "settings.timeline.row.turnDiffs.title": "Fitxers modificats",
   "settings.timeline.row.turnDiffs.description": "Llista els fitxers que ha modificat cada torn quan acaba",
   "settings.timeline.category.commentary": "Comentaris",

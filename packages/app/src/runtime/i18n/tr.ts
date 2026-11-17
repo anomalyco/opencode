@@ -1303,9 +1303,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Aşağı taşı",
   "settings.experimental.row.newIcons.title": "Yeni simgeler",
   "settings.experimental.row.newIcons.description": "Güncellenmiş simge setini önizleyin",
-  "settings.experimental.row.foldUserMessages.title": "Uzun mesajları katla",
-  "settings.experimental.row.foldUserMessages.description":
-    "12 satırı aşan mesajlarınızı Devamını oku düğmesinin arkasına katlayın",
   "settings.experimental.row.newTimeline.title": "Yeni zaman çizelgesi",
   "settings.experimental.row.newTimeline.description":
     "Ajanın yaptıklarını gruplayan ve turun altında tek bir durum satırı gösteren yeniden tasarlanmış oturum zaman çizelgesi",
@@ -1436,6 +1433,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Alt ajanları ayrı göster. Diğer etkinlikleri ayrıntıları daraltılmış olarak grupla.",
   "settings.timeline.description.quiet": "Alt ajanları ayrı göster ve düzenlemeleri grupla. Diğer etkinlikleri gizle.",
+  "settings.timeline.row.foldUserMessages.title": "Uzun mesajları katla",
+  "settings.timeline.row.foldUserMessages.description":
+    "12 satırı aşan mesajlarınızı Devamını oku düğmesinin arkasına katlayın",
   "settings.timeline.row.turnDiffs.title": "Değişen dosyalar",
   "settings.timeline.row.turnDiffs.description": "Her tur bittiğinde değiştirdiği dosyaları listele",
   "settings.timeline.category.commentary": "Açıklamalar",

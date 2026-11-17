@@ -1239,9 +1239,6 @@ export const dict = {
   "sidebar.recent.moveDown": "下へ移動",
   "settings.experimental.row.newIcons.title": "新しいアイコン",
   "settings.experimental.row.newIcons.description": "更新されたアイコンセットをプレビュー",
-  "settings.experimental.row.foldUserMessages.title": "長いメッセージを折りたたむ",
-  "settings.experimental.row.foldUserMessages.description":
-    "12行を超えるメッセージを「続きを読む」ボタンで折りたたみます",
   "settings.experimental.row.newTimeline.title": "新しいタイムライン",
   "settings.experimental.row.newTimeline.description":
     "エージェントの作業をグループ化し、ターンの下に1行のステータスを表示する、再設計されたセッションタイムライン",
@@ -1370,6 +1367,9 @@ export const dict = {
     "サブエージェントを個別に表示します。他のアクティビティは詳細を折りたたんでグループ化します。",
   "settings.timeline.description.quiet":
     "サブエージェントを個別に表示し、編集をグループ化します。他のアクティビティは非表示にします。",
+  "settings.timeline.row.foldUserMessages.title": "長いメッセージを折りたたむ",
+  "settings.timeline.row.foldUserMessages.description":
+    "12行を超えるメッセージを「続きを読む」ボタンで折りたたみます",
   "settings.timeline.row.turnDiffs.title": "変更されたファイル",
   "settings.timeline.row.turnDiffs.description": "各ターンの完了時に、そのターンで変更されたファイルを一覧表示します",
   "settings.timeline.category.commentary": "コメント",
