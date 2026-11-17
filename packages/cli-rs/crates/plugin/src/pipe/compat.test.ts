@@ -46,6 +46,15 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
     },
     uncommand() {},
     storage() {},
+    // Contract 2.x, step D: the renderer claims, as `host.ts` keeps them, each ended by its disposer.
+    claims: [] as Json[],
+    claim(target: Json, view: (part: Json) => Json) {
+      const claim = { target, view, ended: false }
+      fake.claims.push(claim)
+      return () => {
+        claim.ended = true
+      }
+    },
     subscriptions: [] as Json[],
     on(types: string[], handler: (event: Json) => unknown) {
       fake.subscriptions.push({ types, handler })
@@ -678,7 +687,7 @@ test("a spinner draws and an inert async method resolves", async () => {
 // CT-15: a renderable the plugin built itself, added to a node by its ref, adds nothing and says so, where the render
 // crashed on `e.children.indexOf` (opencode-quick-quote). CT-17: the renderer has a root that takes nothing and the
 // focus members a plugin probes for (opencode-dollar-skills refused to start without them), each reported as read.
-test("a built renderable adds nothing and the renderer has a root", () => {
+test("a built renderable added by a ref draws, and the renderer has a root", () => {
   const fake = host()
   const ctx = plugin("t.built", fake)
   const core = modules["@opentui/core"] as Json
@@ -686,14 +695,14 @@ test("a built renderable adds nothing and the renderer has a root", () => {
   ctx.ui.slot({ append: "home.footer", render: () => h("box", { ref: (el: Json) => (refs.box = el) }) })
   const mount = view(fake, 0, "a")
   mount.draw()
-  refs.box.add(new core.BoxRenderable({}, {}))
-  expect(mount.draw().children[0].children ?? []).toEqual([])
+  // Contract 2.x, step D: a renderable built with `new` is the node its JSX makes (CT-15 lifted).
+  refs.box.add(new core.BoxRenderable({}, { backgroundColor: "#ff0000" }))
+  expect(mount.draw().children[0].children).toEqual([{ type: "box", bg: "#ff0000", children: [] }])
   const renderer = ctx.renderer
   expect(["currentFocusedEditor" in renderer, "currentFocusedRenderable" in renderer]).toEqual([true, true])
   expect(typeof renderer.root.add).toBe("function")
   expect(renderer.currentFocusedEditor).toBeUndefined()
   expect(fake.warnings()).toEqual([
-    "t.built: a renderable built with new is not supported by opencode-native yet",
     "t.built: renderer.root is not supported by opencode-native yet",
     "t.built: renderer.currentFocusedEditor is not supported by opencode-native yet",
   ])
@@ -802,13 +811,28 @@ test("a mount a reload begins again adopts the one it ended", async () => {
 // CT-15: a render that returns a renderable it built itself (opencode-quick-quote's slot marker) draws nothing and says
 // so, where it crashed on `e.children.indexOf`. CT-15, CT-24: a node's `getLayout()`, `width` and `onSizeChange` are the
 // host's layout of it (`Read::rect`), once the host said: the node carries an id from its next view.
-test("a built renderable returned draws nothing, and a node's layout is the host's", () => {
+test("a built renderable returned draws, and a node's layout is the host's", () => {
   const fake = host()
   const ctx = plugin("t.layout", fake)
   const core = modules["@opentui/core"] as Json
-  ctx.ui.slot({ append: "home.footer", render: () => new core.BoxRenderable({}, {}) })
-  expect(view(fake, 0, "a").draw().children ?? []).toEqual([])
-  expect(fake.warnings()).toEqual(["t.layout: a renderable built with new is not supported by opencode-native yet"])
+  // Contract 2.x, step D: what a render returns built with `new` draws as its JSX (CT-15: opencode-quick-quote).
+  ctx.ui.slot({
+    append: "home.footer",
+    render: () => {
+      const box = new core.BoxRenderable({}, { flexDirection: "row", paddingLeft: 1 })
+      box.add(new core.TextRenderable({}, { content: "quote", fg: "#00ff00" }))
+      return box
+    },
+  })
+  expect(view(fake, 0, "a").draw().children).toEqual([
+    {
+      type: "box",
+      row: true,
+      padding_sides: { top: 0, right: 0, bottom: 0, left: 1 },
+      children: [{ type: "text", spans: [{ text: "quote" }], fg: "#00ff00" }],
+    },
+  ])
+  expect(fake.warnings()).toEqual([])
   const refs: Json = {}
   const sizes: number[] = []
   ctx.ui.slot({
@@ -1193,8 +1217,12 @@ test("the layer exports every name of OpenTUI's packages", async () => {
   expect([fence.describe(), fence instanceof Fence, fence instanceof core.BoxRenderable]).toEqual(["fence", true, true])
   expect(`${core.SyntaxStyle.fromStyles({ keyword: {} })}`).toBe("")
   expect(core.addDefaultParsers([])).toBeDefined()
-  // opencode-good-fences spreads a Map's values at setup.
-  expect([...core.extensionToFiletype.values()]).toEqual([])
+  // opencode-good-fences spreads these Maps' values at setup, and registers the filetype each resolves to: OpenTUI's
+  // own (contract 2.x, step D).
+  expect([...core.extensionToFiletype]).toEqual([...real.extensionToFiletype])
+  expect([...core.basenameToFiletype]).toEqual([...real.basenameToFiletype])
+  for (const info of ["ts", "TypeScript", "sh", "zsh", "Dockerfile", "makefile", "rust,no_run", "  py  extra", "x.tsx", ".md", "unknownlang", ""])
+    expect(core.infoStringToFiletype(info)).toBe(real.infoStringToFiletype(info))
 })
 
 // FT-6: a method of OpenTUI's renderer that the layer lacks warns once and does nothing, rather than throw; an emitter's
@@ -1262,4 +1290,95 @@ test("a plugin's real path follows its links", async () => {
   symlinkSync(nodePath.join(root, "real-state"), nodePath.join(root, "link-state"))
   expect(real(nodePath.join(root, "link-state"))).toBe(nodePath.join(root, "real-state"))
   expect(real(nodePath.join(root, "missing", ".."))).toBe(root)
+})
+
+// Contract 2.x, step D: a fence part as the host sends it to a fence claim.
+const fence = (info: string, code: string, closed = true) => ({ language: "", info, code, streaming: !closed, closed })
+
+// Contract 2.x, step D: good-fences' renderer, as `opencode-good-fences@0.1.0` writes it (`dist/tui.js`), on the layer:
+// a fence claim of the filetype, whose tree is its box of the label and the host's own code view, in the box's color.
+test("a code block's renderer draws its box around the host's code view", async () => {
+  const fake = host()
+  const ctx = plugin("t.fences", fake)
+  const core = modules["@opentui/core"] as Json
+  const surface = "#222222"
+  const render = (token: Json, cx: Json) => {
+    const inner = cx.defaultRender()
+    if (!inner) return undefined
+    inner.bg = surface
+    const box = new core.BoxRenderable(ctx.renderer, { width: "100%", flexDirection: "column", backgroundColor: surface, paddingLeft: 2, paddingRight: 1 })
+    const language = (token.lang ?? "").trim()
+    if (language) box.add(new core.TextRenderable(ctx.renderer, { content: language, fg: "#808080", width: "100%" }))
+    box.add(inner)
+    return box
+  }
+  ctx.markdown.registerCodeBlockRenderer("ts", render)
+  expect(fake.claims.map((claim: Json) => claim.target)).toEqual([{ type: "fence", name: "typescript" }])
+  const tree = fake.claims[0].view(fence("ts", "let x = 1"))
+  expect(tree).toEqual({
+    type: "box",
+    padding_sides: { top: 0, right: 1, bottom: 0, left: 2 },
+    bg: surface,
+    layout: { width: { percent: 100 } },
+    children: [
+      { type: "text", spans: [{ text: "ts" }], fg: "#808080", layout: { width: { percent: 100 } } },
+      { type: "fence", bg: surface },
+    ],
+  })
+  await turn()
+  expect(fake.warnings()).toEqual([])
+})
+
+// Contract 2.x, step D: as TS's registry, a language is its filetype, which the plugin registers once (a second throws,
+// also by another name of it); one with no filetype throws; the disposer ends the claim, and the language is free.
+test("a code block's language is its filetype, registered once", () => {
+  const fake = host()
+  const ctx = plugin("t.once", fake)
+  const render = () => undefined
+  const dispose = ctx.markdown.registerCodeBlockRenderer("ts", render)
+  expect(() => ctx.markdown.registerCodeBlockRenderer("typescript", render)).toThrow(
+    "Markdown code-block renderer already registered: typescript",
+  )
+  expect(() => ctx.markdown.registerCodeBlockRenderer("  ", render)).toThrow("Markdown code-block language is required")
+  dispose()
+  expect(fake.claims[0].ended).toBe(true)
+  ctx.markdown.registerCodeBlockRenderer("TypeScript", render)
+  expect(fake.claims.map((claim: Json) => [claim.target.name, claim.ended])).toEqual([
+    ["typescript", true],
+    ["typescript", false],
+  ])
+})
+
+// Contract 2.x, step D: a renderer that returns nothing declines (the host's code view stays); one that throws throws on
+// to the JS host, which falls the part back, with one toast once it returned; what it set on the default render
+// other than `bg`, and a value that is no renderable of the layer's, are reported once it returned.
+test("a code block's renderer declines, throws, and what it cannot draw is reported", async () => {
+  const fake = host()
+  const ctx = plugin("t.odd", fake)
+  let mode = "decline"
+  ctx.markdown.registerCodeBlockRenderer("py", (_token: Json, cx: Json) => {
+    if (mode === "throw") throw new Error("boom")
+    if (mode === "plain") return { type: "box" }
+    if (mode === "fg") {
+      const inner = cx.defaultRender()
+      inner.fg = "#ffffff"
+      return inner
+    }
+    return null
+  })
+  const view = fake.claims[0].view
+  expect(view(fence("py", "x"))).toBeNull()
+  mode = "throw"
+  expect(() => view(fence("py", "x"))).toThrow("boom")
+  mode = "plain"
+  expect(view(fence("py", "x"))).toBeNull()
+  mode = "fg"
+  expect(view(fence("py", "x"))).toEqual({ type: "fence" })
+  expect([fake.toasts(), fake.warnings()]).toEqual([[], []])
+  await turn()
+  expect(fake.toasts()).toEqual(["t.odd crashed in code block python: boom"])
+  expect(fake.warnings()).toEqual([
+    "t.odd: a code block's renderable built outside @opentui/core's classes is not supported by opencode-native yet",
+    "t.odd: a code block's default render fg is not supported by opencode-native yet",
+  ])
 })

@@ -236,6 +236,24 @@ interface Surface {
   unmount?: (mount: Json, handover?: boolean) => void
 }
 
+// A renderer claim (contract 2.x, step D): a code block's renderer of the layer, which draws a part of the claim's
+// target, or declines (`null`), or throws.
+interface Claim {
+  target: Json
+  view: (part: Json) => Json
+}
+
+// A part a claim draws: its newest revision, and the revision in flight, one at a time.
+interface ClaimMount {
+  id: Json
+  claim: number
+  part: Json
+  rev: number
+  inflight: boolean
+  dirty: boolean
+  last?: string
+}
+
 interface ViewContext {
   readonly input: Json
   readonly mount: Json
@@ -295,8 +313,13 @@ interface Plugin {
   // P2: the key layers of setup, each with its handler.
   layers: Array<{ layer: Json; handler: (event: Json) => unknown }>
   surfaces: Surface[]
+  claims: Claim[]
+  // A claim's view runs: what it asks of the host is dropped (contract 2.x, step D), which the log says once.
+  claiming?: boolean
+  claimEffects?: boolean
   cleanups: Array<() => unknown>
   mounts: Map<string, Mount>
+  claimMounts: Map<string, ClaimMount>
   snapshots: Map<string, Json>
   readErrors: Map<string, string>
   answers: Map<string, Array<(value: Json) => void>>
@@ -369,6 +392,14 @@ function thrown(error: unknown) {
 function effect(plugin: Plugin, request: Request, mount?: Json): Promise<Json> {
   return new Promise((resolve) => {
     if (plugin.failed) return resolve(undefined)
+    // A claim's view reads only, on every carrier (contract 2.x, step D).
+    if (plugin.claiming) {
+      if (!plugin.claimEffects) {
+        plugin.claimEffects = true
+        send({ type: "log", id: plugin.id, level: "warn", message: "a code block's renderer asked the host for something as it drew; it is dropped" })
+      }
+      return resolve(undefined)
+    }
     if (plugin.setting) {
       plugin.setupEffects.push(request)
       plugin.resolvers.push(resolve)
@@ -484,6 +515,45 @@ function viewAll(plugin: Plugin) {
   for (const mount of plugin.mounts.values()) view(plugin, mount)
 }
 
+// Draws the newest part of a claimed part's mount, a whole tree each time, unless one is in flight: then once the host
+// adopted it. A renderer that throws sends its error, and the host falls the part back; the plugin goes on.
+function viewClaim(plugin: Plugin, mount: ClaimMount) {
+  if (plugin.failed || !plugin.active) return
+  if (mount.inflight) {
+    mount.dirty = true
+    return
+  }
+  mount.dirty = false
+  const claim = plugin.claims[mount.claim]
+  if (!claim) return
+  let node: Json = null
+  let error: string | undefined
+  let text = "null"
+  plugin.claiming = true
+  try {
+    node = claim.view(mount.part) ?? null
+    text = JSON.stringify(node)
+  } catch (caught) {
+    error = thrown(caught)
+  } finally {
+    plugin.claiming = false
+  }
+  if (error === undefined && text === mount.last) return
+  mount.rev += 1
+  mount.inflight = true
+  mount.last = text
+  frame(TREE, {
+    id: plugin.id,
+    mount: mount.id,
+    rev: mount.rev,
+    base: 0,
+    epoch: 0,
+    whole: true,
+    node: error === undefined ? node : null,
+    ...(error === undefined ? {} : { error }),
+  })
+}
+
 // Runs plugin code for a message without a sequence (a view after an adoption or a snapshot, an answer's resolvers, a
 // cleanup): the host is told whose it is, so an end within it names that plugin (review carbon-3).
 function within(plugin: Plugin, run: () => void) {
@@ -557,6 +627,19 @@ function context(plugin: Plugin) {
         unmount: options?.unmount,
       })
       changed(plugin)
+    },
+    // A renderer claim (contract 2.x, step D), as contract 2.0's `Setup::claim`: `view` draws a part of `target`. It
+    // goes as the returned function runs.
+    claim(target: Json, view: Claim["view"]) {
+      const claim: Claim = { target, view }
+      plugin.claims.push(claim)
+      changed(plugin)
+      return () => {
+        const index = plugin.claims.indexOf(claim)
+        if (index === -1) return
+        plugin.claims.splice(index, 1)
+        changed(plugin)
+      }
     },
     // A key layer of the activation, as contract 2.0's `Setup::layer`. What the handler returns is advisory: the host
     // answers a key from the layer's declaration, as it cannot wait.
@@ -707,6 +790,7 @@ function manifestOf(plugin: Plugin) {
       ...(surface.layers.length ? { layers: surface.layers } : {}),
       ...(surface.mounts ? { mounts: true } : {}),
     })),
+    ...(plugin.claims.length ? { claims: plugin.claims.map((claim) => ({ target: claim.target })) } : {}),
   }
 }
 
@@ -824,8 +908,10 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     events: [],
     layers: [],
     surfaces: [],
+    claims: [],
     cleanups: [],
     mounts: new Map(),
+    claimMounts: new Map(),
     snapshots: new Map(),
     readErrors: new Map(),
     answers: new Map(),
@@ -915,6 +1001,7 @@ function deactivate(plugin: Plugin) {
     } catch {}
   }
   plugin.mounts.clear()
+  plugin.claimMounts.clear()
   for (const cleanup of plugin.cleanups.splice(0).reverse()) {
     try {
       const done = cleanup()
@@ -978,7 +1065,7 @@ const work: Json[] = []
 let running = false
 
 // The work whose start the host times: a load's setup, a handler, a mount's or an input's view.
-const STARTED = new Set(["load", "setup", "call", "mount", "input"])
+const STARTED = new Set(["load", "setup", "call", "mount", "input", "claim"])
 
 async function handle(message: Json) {
   const plugin =
@@ -1064,7 +1151,19 @@ async function handle(message: Json) {
       }
       return send({ type: "done", seq: message.seq })
     }
+    // A part a claim draws: its first sight begins its mount; a newer revision is drawn now, or once the one in flight
+    // was adopted (contract 2.x, step D).
+    case "claim": {
+      if (!plugin || !plugin.active) return send({ type: "done", seq: message.seq })
+      const key = mountKey(message.mount)
+      const mount = plugin.claimMounts.get(key) ?? { id: message.mount, claim: message.claim, part: message.part, rev: 0, inflight: false, dirty: false }
+      mount.part = message.part
+      plugin.claimMounts.set(key, mount)
+      viewClaim(plugin, mount)
+      return send({ type: "done", seq: message.seq })
+    }
     case "unmount": {
+      if (plugin?.claimMounts.delete(mountKey(message.mount))) return
       const mount = plugin?.mounts.get(mountKey(message.mount))
       plugin?.mounts.delete(mountKey(message.mount))
       // A reload's end of a mount it begins again (`handover`), which the layer may take the state of (CT-21).
@@ -1072,6 +1171,13 @@ async function handle(message: Json) {
       return
     }
     case "adopted": {
+      const claimed = plugin?.claimMounts.get(mountKey(message.mount))
+      if (plugin && claimed) {
+        if (message.rev !== claimed.rev || !claimed.inflight) return
+        claimed.inflight = false
+        if (claimed.dirty) within(plugin, () => viewClaim(plugin, claimed))
+        return
+      }
       const mount = plugin?.mounts.get(mountKey(message.mount))
       if (!plugin || !mount || message.rev !== mount.rev || !mount.inflight) return
       mount.adopted = message.rev
@@ -1085,6 +1191,13 @@ async function handle(message: Json) {
       return
     }
     case "refused": {
+      const claimed = plugin?.claimMounts.get(mountKey(message.mount))
+      if (plugin && claimed) {
+        if (message.rev !== claimed.rev) return
+        claimed.inflight = false
+        claimed.last = undefined
+        return within(plugin, () => viewClaim(plugin, claimed))
+      }
       const mount = plugin?.mounts.get(mountKey(message.mount))
       if (!plugin || !mount || message.rev !== mount.rev) return
       mount.adopted = message.adopted
@@ -1127,8 +1240,10 @@ async function handle(message: Json) {
       return
     }
     case "ping": {
-      const waiting = [...plugins.values()].some((plugin) =>
-        [...plugin.mounts.values()].some((mount) => mount.inflight || mount.dirty),
+      const waiting = [...plugins.values()].some(
+        (plugin) =>
+          [...plugin.mounts.values()].some((mount) => mount.inflight || mount.dirty) ||
+          [...plugin.claimMounts.values()].some((mount) => mount.inflight || mount.dirty),
       )
       return send({ type: "pong", seq: message.seq, waiting })
     }

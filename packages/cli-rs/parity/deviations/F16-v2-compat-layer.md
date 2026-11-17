@@ -149,17 +149,12 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
 - **Not mapped**, each reported once a plugin in the client's log, by the plugin's name (`plugin <id>: <id>: <feature>
   is not supported by opencode-native yet`), and doing nothing (a list answers empty). The report is no toast: a toast
   covered the plugin's own surface until it timed out (`P.8/file-browser`'s field focus, navigator's `minWidth`), which
-  TS never shows and a checkpoint saw or not by the machine's speed. Not mapped: `markdown.registerCodeBlockRenderer`,
-  `data.project.permission`, the location's `mcp.resource` list, `renderer` members other than
+  TS never shows and a checkpoint saw or not by the machine's speed. Not mapped: `data.project.permission`, the location's `mcp.resource` list, `renderer` members other than
   `requestRender`, `width`, `height` and `keyInput` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's
   returns the renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS),
   `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `minWidth` other than 0,
   `maxWidth`,
   `alignSelf` and `flexBasis`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
-  A code block renderer (opencode-good-fences) would need two contract additions: the JS host to register a fence
-  claim whose rows it answers after the frame, the host's code view showing until they come (a claim answers within
-  the frame today, which the JS host cannot), and a node that stands for the host's own code view, which the
-  renderer's `defaultRender()` returns; its renderables built with `new` would also need to draw (below).
   `data.project.permission` has no client call to load it through and would need a contract read; the location's
   `mcp.resource` list is not mapped yet, though it could load through `client.mcp.resource.catalog` as those below.
   A `<select>` draws as OpenTUI's renderable draws it, rows of the options that fit with the selected one marked
@@ -176,6 +171,25 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   each reported as it is read, so a plugin that checks they exist starts (CT-17: opencode-dollar-skills). What such a
   plugin then does with the composer's editor (opencode-vim-navigation's modal editing, dollar-skills' completion)
   would need the composer as a renderable a plugin edits, where the contract has only `ComposerEdit`.
+- **Code-block renderers** (contract 2.x, addition 3, step D): `markdown.registerCodeBlockRenderer(language, render)`
+  is a fence claim of the host's, registered by the filetype the language resolves to (OpenTUI's own maps and
+  `infoStringToFiletype`); a second registration of a filetype by the plugin throws, as in TS, and across plugins the
+  last wins, an external plugin after the built-ins (good-fences takes `latex` from the built-in LaTeX, as in TS).
+  `render` gets the fence as OpenTUI's Markdown gives it (`lang`, `text`, `raw`) and a context whose `defaultRender()`
+  is the host's own code view of the fence (`Node::Fence`), whose `bg` it may set, also its code's; any other write to
+  it is reported. It returns a renderable built with `new` (below), or nothing to keep the host's view.
+  - **After the frame**: the renderer runs on the JS host, so a fence shows the host's code view in the frame it
+    first shows, and the plugin's tree once the JS host answered, a frame or more later; the transcript may shift
+    once a fence (good-fences adds the label's row). TS draws the plugin's from the start. While the fence streams its
+    code follows in the frame, and a tree that drew the code itself is a round trip behind (`P.8/good-fences`).
+  - **A renderer that throws** falls its part back to the host's code view for the part's mount, with one toast
+    (`<id> crashed in code block <language>: …`); the plugin stays active, where TS throws on out of Markdown's build.
+  - **Bounds** (host policy): a plugin holds 256 claims (good-fences registers about 60; TS has none); a fence whose
+    code is over 256 KiB keeps the host's code view, logged once a plugin; a part waits, the host's view showing,
+    while the queue to the JS host is backed up, and is sent as it drains. What a renderer asks the host for as it
+    draws (a toast, a fetch) is dropped, logged once: a claim's view reads only, on every carrier.
+  - The renderer's context has no `syntaxStyle` or `treeSitterClient`; a click on a node of its tree runs nothing
+    (reported), as a claim has no handler.
 - **The `data` collections the contract has no read of** (`data.project`, `data.shell`, `data.session.permission`,
   `data.session.form`, the location's `agent`, `command`, `reference` and `skill` lists) load through the plugin's
   `client` over the host's fetch: as the plugin first lists or syncs one, on `invalidate`, and on each event that
@@ -189,9 +203,12 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   which a text node's `content` draws chunk by chunk, CT-27: @encoredigitalgroup/opencode's panels drew
   "[object Object]"; its tarball is proprietary, so a layer test pins it) the layer gives, each is inert: a class constructs, extends and answers its methods with nothing, a function does
   nothing, and the first use of each warns once in the JS host's log, not in a toast, as the module cannot tell which
-  plugin used it. A renderable a plugin builds itself (`new BoxRenderable(…)`) draws nothing, and adding one to a node
-  by its ref, or returning one from a render, adds nothing and is reported (CT-15: opencode-quick-quote returns one as
-  its slot's element; opencode-gpt-live and opencode-task-completion-loop the same). A call of a method any of OpenTUI's
+  plugin used it. A renderable a plugin builds itself (`new BoxRenderable(renderer, options)`, and `TextRenderable`,
+  `MarkdownRenderable`, `CodeRenderable`, `ScrollBoxRenderable`, `InputRenderable`) is the node its JSX intrinsic makes,
+  with its options as its props, `add`, `insertBefore`, `remove` and the option setters, and draws as that JSX would:
+  returned from a code block's renderer, from a render, or added to a node by its ref (contract 2.x, step D; CT-15,
+  opencode-quick-quote returns one as its slot's element, opencode-gpt-live and opencode-task-completion-loop the same,
+  not checked one by one). What OpenTUI does with the renderer it is given is the host's. A call of a method any of OpenTUI's
   declarations returns a promise from answers a resolved promise of an inert value, so a chain such as
   `getTreeSitterClient().initialize().then(…)` runs on (CT-16, `P.8/shell-highlighting`): the grammar it registers is
   not the host's, which would need the contract to take a plugin's tree-sitter grammar. The `effect` package is not

@@ -181,7 +181,6 @@ export default Plugin.define({
         {
           id: "v2probe.unmapped",
           run: () => {
-            context.markdown.registerCodeBlockRenderer("probe", () => undefined as never)
             log({ panel: context.ui.panel.open("side") })
           },
         },

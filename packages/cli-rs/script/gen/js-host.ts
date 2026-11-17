@@ -3,7 +3,8 @@
 // client, as one module the client embeds beside `host.ts`. First it writes `compat/opentui.gen.ts`: every name the
 // installed `@opentui/core` and `@opentui/solid` export, with the values of their small plain-data exports (enums,
 // border sets), and the methods of `CliRenderer`, so the layer exports each name and a plugin's import of one links
-// (FT-5, FT-6). Then `compat/events.gen.ts`: the event types the generated client names, which `data.listen` hears.
+// (FT-5, FT-6), and OpenTUI's filetype maps, which `infoStringToFiletype` reads (contract 2.x, step D: good-fences
+// registers a renderer for each filetype they name). Then `compat/events.gen.ts`: the event types the generated client names, which `data.listen` hears.
 import path from "node:path"
 
 const root = new URL("../..", import.meta.url).pathname
@@ -64,6 +65,8 @@ async function opentui() {
     return { names: names.filter((key) => !(key in values)), values }
   }
   const core = await listed("@opentui/core")
+  const module = await import(Bun.resolveSync("@opentui/core", compat))
+  const filetypes = { extensions: [...module.extensionToFiletype], basenames: [...module.basenameToFiletype] }
   const solid = await listed("@opentui/solid")
   const { CliRenderer } = await import(Bun.resolveSync("@opentui/core", compat))
   const methods = new Set<string>()
@@ -92,7 +95,8 @@ async function opentui() {
     line("solid", solid) +
     line("rendererMethods", [...methods].sort()) +
     line("rendererPromises", promised.filter((name) => methods.has(name)).sort()) +
-    line("promises", [...promises].sort())
+    line("promises", [...promises].sort()) +
+    line("filetypes", filetypes)
   )
 }
 

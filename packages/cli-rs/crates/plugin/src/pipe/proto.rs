@@ -114,6 +114,19 @@ pub enum Down {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         handover: bool,
     },
+    /// A part fence claim `claim` of plugin `id` draws (contract 2.x, step D): its first sight, which begins the part's
+    /// mount, or a newer revision of it. The JS host answers with a whole revision of the mount ([`Up::Tree`]): its
+    /// tree, a decline (a null node), or the renderer's error; then [`Up::Done`]. One is in flight a mount: a part that
+    /// comes meanwhile is drawn once that one is adopted. [`Down::Unmount`] ends the mount.
+    Claim {
+        seq: u64,
+        id: String,
+        /// The activation it is for: the load whose setup made it. Another one's never answers it.
+        activation: u64,
+        claim: usize,
+        mount: v2::MountId,
+        part: opencode_plugin_abi::claim::Part,
+    },
     /// The host adopted revision `rev` of `mount`: the next one builds on it.
     Adopted { id: String, mount: v2::MountId, rev: u64 },
     /// The host refused revision `rev` of `mount`; the next one is whole and builds on `adopted`.
@@ -161,6 +174,7 @@ impl Down {
             | Down::Call { seq, .. }
             | Down::Mount { seq, .. }
             | Down::Input { seq, .. }
+            | Down::Claim { seq, .. }
             | Down::Unmount { seq, .. }
             | Down::Ping { seq }
             | Down::Skipped { seq } => Some(*seq),
@@ -338,4 +352,7 @@ pub struct Revision {
     pub released: Vec<v2::ContentRef>,
     #[serde(default)]
     pub memo: usize,
+    /// A claimed part's renderer threw (contract 2.x, step D): the part falls back to the host's row for its mount.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }

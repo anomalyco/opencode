@@ -397,6 +397,8 @@ pub struct Crossed {
     pub started: u64,
     /// Messages the host had no room for, not sent.
     pub refused_sends: u64,
+    /// Claimed parts that waited for the queue to drain before they were sent (contract 2.x, step D).
+    pub deferred_parts: u64,
     /// Time the UI thread spent in the carrier's own code: encoding and queueing what it sends, taking what came, and
     /// reading a revision's tree. Not the host's work on the tree, which every carrier has.
     pub host: Duration,
@@ -405,7 +407,7 @@ pub struct Crossed {
 thread_local! {
     static CROSSED: Cell<Crossed> = const { Cell::new(Crossed {
         sent: 0, sent_bytes: 0, received: 0, trees: 0, received_bytes: 0, tree_bytes: 0, adopted: 0, refused: 0,
-        dropped: 0, started: 0, refused_sends: 0, host: Duration::ZERO,
+        dropped: 0, started: 0, refused_sends: 0, deferred_parts: 0, host: Duration::ZERO,
     }) };
 }
 
@@ -530,7 +532,10 @@ struct Call {
 /// Whether `message` settles work the JS host keeps or waits for: a fetch's reply, the answers of a call's or a
 /// batch's effects, which carry a fetch's ID, a cancellation, a sequence skipped, which lets the stream go on, and a
 /// deactivation, which settles what the activation still awaits (big-boi's catalog review: one the full overflow
-/// refused left two of its promises waiting for good). It is never dropped while the JS host runs ([`Scripts::settle`]).
+/// refused left two of its promises waiting for good), and the host's word on a revision, adopted or refused, without
+/// which the JS host keeps the mount's tree in flight for good and draws it no more (contract 2.x, step D: 300 fences
+/// at once on a small queue lost 53 of them, and the JS host never settled). It is never dropped while the JS host runs
+/// ([`Scripts::settle`]).
 fn settles(message: &Down) -> bool {
     matches!(
         message,
@@ -540,6 +545,8 @@ fn settles(message: &Down) -> bool {
             | Down::Cancelled { .. }
             | Down::Skipped { .. }
             | Down::Deactivate { .. }
+            | Down::Adopted { .. }
+            | Down::Refused { .. }
     )
 }
 
@@ -662,6 +669,9 @@ pub struct Scripts {
     started: RefCell<std::collections::HashSet<u64>>,
     /// Messages the running JS host's queue had no room for yet, in order, and their bytes: they go once it reads.
     overflow: RefCell<(VecDeque<(Down, usize)>, usize)>,
+    /// The guests whose claimed parts the queue refused, oldest first, which draw them again once it drained
+    /// (contract 2.x, step D).
+    reoffers: RefCell<Vec<Weak<Guest>>>,
     /// When each plugin's registrations changed after setup, within the last [`RELOAD_WINDOW`] ([`Scripts::reloaded`]).
     reloads: RefCell<HashMap<String, VecDeque<Instant>>>,
     /// The theme's mode and the theme the JS host was told last.
@@ -753,6 +763,7 @@ impl Scripts {
             waiting: RefCell::default(),
             started: RefCell::default(),
             overflow: RefCell::default(),
+            reoffers: RefCell::default(),
             reloads: RefCell::default(),
             theme: RefCell::default(),
             entered: RefCell::default(),
@@ -1114,10 +1125,28 @@ impl Scripts {
         overflow.0.push_back((message, size));
     }
 
-    /// Writes what waits in the overflow while the queue takes it.
+    /// Whether what the host sends waits in its overflow: the JS host does not read as fast as the host sends.
+    fn backed_up(&self) -> bool {
+        !self.overflow.borrow().0.is_empty()
+    }
+
+    /// Keeps `guest` to draw its claimed parts again once the queue drained ([`Scripts::drain`]).
+    fn reoffer(&self, guest: &Rc<Guest>) {
+        let mut reoffers = self.reoffers.borrow_mut();
+        if !reoffers.iter().any(|kept| std::ptr::eq(kept.as_ptr(), Rc::as_ptr(guest))) {
+            reoffers.push(Rc::downgrade(guest));
+        }
+    }
+
+    /// Writes what waits in the overflow while the queue takes it. Once nothing waits, the parts the queue refused are
+    /// drawn again, and sent as they are, oldest first (contract 2.x, step D).
     fn drain(&self) {
         loop {
-            let Some((message, size)) = self.overflow.borrow_mut().0.pop_front() else { return };
+            let Some((message, size)) = self.overflow.borrow_mut().0.pop_front() else {
+                let reoffers = self.reoffers.take();
+                reoffers.iter().filter_map(Weak::upgrade).for_each(|guest| guest.reoffer());
+                return;
+            };
             self.overflow.borrow_mut().1 -= size;
             if !timed(|| self.encode(&message)) {
                 let mut overflow = self.overflow.borrow_mut();
@@ -1134,6 +1163,12 @@ impl Scripts {
     fn refuse(&self, message: &Down, size: usize) {
         log::warn!("a message of {size} bytes for the JS host has no room; it is not sent");
         count(|crossed| crossed.refused_sends += 1);
+        // A claimed part is offered again as the queue drains (contract 2.x, step D).
+        if let Down::Claim { id, mount, .. } = message
+            && let Some(guest) = self.guest(id)
+        {
+            guest.claim_refused(mount);
+        }
         if settles(message) {
             return self.settle(message, size);
         }
@@ -1337,7 +1372,10 @@ impl Scripts {
         log::trace!("js host -> {}", String::from_utf8_lossy(&payload));
         let wait = match message {
             Down::Load { .. } | Down::Setup { .. } => child::Wait::Setup,
-            Down::Call { .. } | Down::Ping { .. } | Down::Mount { .. } | Down::Input { .. } => child::Wait::Answer,
+            // A claimed part's view is owed as a mount's is (contract 2.x, step D): one that never returns is a hang.
+            Down::Call { .. } | Down::Ping { .. } | Down::Mount { .. } | Down::Input { .. } | Down::Claim { .. } => {
+                child::Wait::Answer
+            }
             _ => child::Wait::Ack,
         };
         let sent = self.child.borrow().as_ref().map(|child| child.send(wire::CONTROL, &payload, seq, wait));

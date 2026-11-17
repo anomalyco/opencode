@@ -2,6 +2,8 @@
 // attributes. The package's other exports are inert (`inert.ts`): a plugin that imports a renderable class loads, and
 // the class does nothing.
 
+import { filetypes } from "./opentui.gen"
+
 export const TextAttributes = {
   NONE: 0,
   BOLD: 1 << 0,
@@ -153,8 +155,43 @@ export function t(strings: TemplateStringsArray, ...values: Stylable[]) {
   return new StyledText(chunks)
 }
 
-// The file types a fenced code block's info string names, as OpenTUI's `infoStringToFiletype` reads them.
+// OpenTUI's filetype maps and the functions that read them, as its own (contract 2.x, step D): good-fences registers a
+// renderer for each filetype they name, and the host routes a fence by the filetype its info string resolves to.
+export const extensionToFiletype = new Map<string, string>(filetypes.extensions as Array<[string, string]>)
+export const basenameToFiletype = new Map<string, string>(filetypes.basenames as Array<[string, string]>)
+
+function normalizeFiletypeToken(value: string) {
+  return value.trim().replace(/^\./, "").toLowerCase() || undefined
+}
+
+function basenameOf(value: string) {
+  const text = value.trim().replaceAll("\\", "/")
+  if (!text) return undefined
+  return text.replace(/\/+$/, "").split("/").at(-1)?.toLowerCase() || undefined
+}
+
+export function extToFiletype(extension: string) {
+  const token = normalizeFiletypeToken(extension)
+  return token ? extensionToFiletype.get(token) : undefined
+}
+
+export function pathToFiletype(path: string) {
+  if (typeof path !== "string") return undefined
+  const basename = basenameOf(path)
+  if (!basename) return undefined
+  const known = basenameToFiletype.get(basename)
+  if (known) return known
+  const dot = basename.lastIndexOf(".")
+  if (dot === -1 || dot === basename.length - 1) return undefined
+  return extToFiletype(basename.substring(dot + 1))
+}
+
 export function infoStringToFiletype(info: string) {
-  const name = info.trim().split(/\s+/)[0]?.toLowerCase()
-  return name || undefined
+  if (typeof info !== "string") return undefined
+  const token = info.trim().split(/\s+/, 1)[0] ?? ""
+  const direct = basenameToFiletype.get(token.toLowerCase())
+  if (direct) return direct
+  const normalized = normalizeFiletypeToken(token)
+  if (!normalized) return undefined
+  return basenameToFiletype.get(normalized) ?? pathToFiletype(normalized) ?? extToFiletype(normalized) ?? normalized
 }

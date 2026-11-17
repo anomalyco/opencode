@@ -89,7 +89,7 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
 
 /// [`apply`] as a fence claim's tree, which may hold a fence node: its code view is a text of the host's.
 fn apply_fenced(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::Node]) -> Result<(), Refused> {
-    let code = || Some(Text::new(&host.app, "HOST CODE").as_any());
+    let code = |_| Some(Text::new(&host.app, "HOST CODE").as_any());
     apply_in(host, tree, parent, nodes, recorder(host), Some(&code))
 }
 
@@ -99,7 +99,7 @@ fn apply_in(
     parent: &View,
     nodes: &[v2::Node],
     act: Act,
-    fence: Option<&dyn Fn() -> Option<AnyWidget>>,
+    fence: Option<&dyn Fn(Option<opentui::style::Color>) -> Option<AnyWidget>>,
 ) -> Result<(), Refused> {
     let theme = host.theme();
     let slot = |_: &View, _: &str| -> Option<SlotMount> { None };
