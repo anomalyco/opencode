@@ -13,6 +13,7 @@ export {
   type Outcome,
   type Program,
   type ProgramOptions,
+  type RunOptions,
   type Runtime,
   type Snapshot,
   type SnapshotHeader,
