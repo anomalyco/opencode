@@ -254,6 +254,11 @@ export const environmentConformance = <E>(
         expect(readlinkFile).toBeInstanceOf(WrongKind)
         expect(yield* Effect.flip(harness.files.readlink(`${harness.root}/missing`))).toBeInstanceOf(NotFound)
         expect(yield* Effect.flip(harness.files.realpath(`${harness.root}/missing`))).toBeInstanceOf(NotFound)
+        // Onto an existing directory both fail, instead of creating the link inside it.
+        yield* harness.files.mkdir(`${harness.root}/dir`)
+        expect(yield* Effect.flip(harness.files.symlink("real.txt", `${harness.root}/dir`))).toBeInstanceOf(Failed)
+        expect(yield* Effect.flip(harness.files.link(target, `${harness.root}/dir`))).toBeInstanceOf(Failed)
+        expect(yield* harness.files.list(`${harness.root}/dir`)).toEqual([])
         yield* harness.files.link(target, `${harness.root}/hard.txt`)
         expect(text((yield* harness.files.read(`${harness.root}/hard.txt`)).bytes)).toBe("real")
         expect(yield* Effect.flip(harness.files.link(`${harness.root}/missing`, `${harness.root}/x`))).toBeInstanceOf(

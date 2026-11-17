@@ -196,7 +196,7 @@ touch -c ${follow ? "" : "-h"} -a -d "@$2" -- "$1" && touch -c ${follow ? "" : "
         [String(atimeMs / 1_000), String(mtimeMs / 1_000)],
       ),
     symlink: (target, path) =>
-      run(path, `ln -s -- "$2" "$1"`, [target]).pipe(Effect.flatMap((result) => complete(path, result))),
+      run(path, `ln -sT -- "$2" "$1"`, [target]).pipe(Effect.flatMap((result) => complete(path, result))),
     readlink: (path) =>
       run(
         path,
@@ -206,7 +206,7 @@ touch -c ${follow ? "" : "-h"} -a -d "@$2" -- "$1" && touch -c ${follow ? "" : "
       run(path, `[ -e "$1" ] || exit ${NOT_FOUND}; realpath -e -- "$1"`).pipe(
         Effect.flatMap((result) => classifyPlain(path, result, (stdout) => trimNewline(stdout))),
       ),
-    link: (existing, path) => plain(existing, `[ -e "$1" ] || exit ${NOT_FOUND}; ln -- "$1" "$2"`, [path]),
+    link: (existing, path) => plain(existing, `[ -e "$1" ] || exit ${NOT_FOUND}; ln -T -- "$1" "$2"`, [path]),
     statfs: (path) =>
       run(
         path,

@@ -241,7 +241,9 @@ export const makeMemoryDriver = (): MemoryDriver => {
       Effect.try({
         try: () => {
           requireParent(value)
-          put(resolveKey(value, false) ?? key(value), { type: "symlink", target, mtimeMs: Date.now() })
+          const destination = resolveKey(value, false) ?? key(value)
+          if (nodes.has(destination)) throw new Error(`Path already exists: ${value}`)
+          put(destination, { type: "symlink", target, mtimeMs: Date.now() })
         },
         catch: (cause) => failed(value, cause),
       }),
@@ -266,6 +268,7 @@ export const makeMemoryDriver = (): MemoryDriver => {
         yield* Effect.try({
           try: () => {
             requireParent(value)
+            if (nodes.has(key(value))) throw new Error(`Path already exists: ${value}`)
             // A copy rather than a shared inode: the memory driver keeps no link counts.
             nodes.set(key(value), { ...node })
           },
