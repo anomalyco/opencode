@@ -40,6 +40,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   the plugin across its builds, as one that names a command anew on each mount does, fails with "it changed its
   registrations … and never settled", where TS would keep it running. A fetch the plugin waits for across a reload
   settles once (CT-1).
+- **`data.listen`** hears every event as `{ details }`, through one subscription of the plugin to each type the generated
+  client names (`EventSubscribeInput`), made with its first listener; a type the client does not name, as a plugin's
+  own `rpc.*` events, never comes. The streaming deltas (`session.*.delta`) do not come, as the host's store sends no
+  plugin a delta.
 - **Server RPC** (CT-4): `@opencode/plugin/rpc` gives `Rpc.define`, and `client.rpc(definition)` calls each method as
   TS's client does (`/api/rpc/<id>/<method>`, the output answered), with its events heard as the host's events of type
   `rpc.<id>.<name>`. An error the server gives an RPC reaches the plugin as the client's error, not as TS's
@@ -53,7 +57,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   the host's focus of the node, any node emits `focused` and `blurred` as OpenTUI's do, and other events are heard and
   never come. A scroll box's `scrollTop`, `scrollHeight` and `viewport` are the host's state of the scroll once it came
   (before, the viewport's height is `Infinity`, so a plugin scrolls nothing by it), and `scrollTo` and `scrollBy` are
-  the host's scroll verb. Other renderable members are undefined.
+  the host's scroll verb. Other renderable members are undefined: `getLayout()`, which opencode-tokscope's sidebar
+  measures itself by within a few timer ticks and draws nothing without, would need the node's layout as the plugin
+  asks; the contract's `Read::rect` answers from the last settled frame, which reaches the JS host later.
 - **Fields** (CT-11): an `<input>` or `<textarea>` hears the host's field: `onInput` each edit, `onChange` and
   `onSubmit` its submit, and `value` is what was typed. An edit gives it the plugin's focus. The contract's focus takes
   only a node with `interact.focusable`, so the host refuses a field's `focus()`, which is reported once: the plugin
@@ -87,7 +93,7 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   as TS's `<Slot>` is a fragment; OpenTUI's Rust layout has no way back, so the box stays absolute if a later render
   of the claim is in the flow.
 - **Not mapped**, each reported once a plugin with a warning toast (`<id>: <feature> is not supported by
-  opencode-native yet`) and doing nothing (a list answers empty): `markdown.registerCodeBlockRenderer`, `data.listen`, `data.project`,
+  opencode-native yet`) and doing nothing (a list answers empty): `markdown.registerCodeBlockRenderer`, `data.project`,
   `data.shell`, `data.session.permission`, `data.session.form`, the
   location's `agent`, `command`, `mcp.resource`, `reference` and `skill` lists, `renderer` members other than
   `requestRender`, `width`, `height` and `keyInput` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's
