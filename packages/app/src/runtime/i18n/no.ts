@@ -1291,9 +1291,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Flytt ned",
   "settings.experimental.row.newIcons.title": "Nye ikoner",
   "settings.experimental.row.newIcons.description": "Forhåndsvis det oppdaterte ikonsettet",
-  "settings.experimental.row.foldUserMessages.title": "Fold sammen lange meldinger",
-  "settings.experimental.row.foldUserMessages.description":
-    "Fold sammen meldingene dine etter 12 linjer bak en Les mer-knapp",
   "settings.experimental.row.newTimeline.title": "Ny tidslinje",
   "settings.experimental.row.newTimeline.description":
     "En redesignet økttidslinje som grupperer det agenten gjorde, med én statuslinje under runden",
@@ -1422,6 +1419,9 @@ export const dict = {
   "settings.timeline.row.width.wide": "Bred",
   "settings.timeline.description.compact": "Vis underagenter separat. Grupper annen aktivitet med detaljer skjult.",
   "settings.timeline.description.quiet": "Vis underagenter separat og grupper redigeringer. Skjul annen aktivitet.",
+  "settings.timeline.row.foldUserMessages.title": "Fold sammen lange meldinger",
+  "settings.timeline.row.foldUserMessages.description":
+    "Fold sammen meldingene dine etter 12 linjer bak en Les mer-knapp",
   "settings.timeline.row.turnDiffs.title": "Endrede filer",
   "settings.timeline.row.turnDiffs.description": "List opp filene hver runde endret når den er ferdig",
   "settings.timeline.category.commentary": "Kommentarer",

@@ -1212,9 +1212,6 @@ export const dict = {
   "sidebar.recent.moveDown": "הזז למטה",
   "settings.experimental.row.newIcons.title": "סמלים חדשים",
   "settings.experimental.row.newIcons.description": "תצוגה מקדימה של ערכת הסמלים המעודכנת",
-  "settings.experimental.row.foldUserMessages.title": "קיפול הודעות ארוכות",
-  "settings.experimental.row.foldUserMessages.description":
-    "קפל את ההודעות שלך שארוכות מ-12 שורות מאחורי כפתור „קרא עוד”",
   "settings.experimental.row.newTimeline.title": "ציר זמן חדש",
   "settings.experimental.row.newTimeline.description":
     "ציר זמן מעוצב מחדש להפעלה שמקבץ את מה שהסוכן עשה, עם שורת מצב אחת מתחת לכל תגובה",
@@ -1340,6 +1337,9 @@ export const dict = {
   "settings.timeline.row.width.wide": "רחב",
   "settings.timeline.description.compact": "הצג סוכני משנה בנפרד. קבץ פעילות אחרת עם פרטים מכווצים.",
   "settings.timeline.description.quiet": "הצג סוכני משנה בנפרד וקבץ עריכות. הסתר פעילות אחרת.",
+  "settings.timeline.row.foldUserMessages.title": "קיפול הודעות ארוכות",
+  "settings.timeline.row.foldUserMessages.description":
+    "קפל את ההודעות שלך שארוכות מ-12 שורות מאחורי כפתור „קרא עוד”",
   "settings.timeline.row.turnDiffs.title": "קבצים שהשתנו",
   "settings.timeline.row.turnDiffs.description": "בסוף כל תגובה, הצג את הקבצים שהיא שינתה",
   "settings.timeline.category.commentary": "הערות",

@@ -1238,9 +1238,6 @@ export const dict = {
   "sidebar.recent.moveDown": "အောက်သို့ ရွှေ့ရန်",
   "settings.experimental.row.newIcons.title": "အိုင်ကွန်အသစ်များ",
   "settings.experimental.row.newIcons.description": "အပ်ဒိတ်လုပ်ထားသော အိုင်ကွန်အစုံကို အစမ်းကြည့်ပါ",
-  "settings.experimental.row.foldUserMessages.title": "ရှည်သော မက်ဆေ့ချ်များကို ခေါက်ရန်",
-  "settings.experimental.row.foldUserMessages.description":
-    "လိုင်း 12 ကျော်သော သင့်မက်ဆေ့ချ်များကို ပိုဖတ်ရန် ခလုတ်နောက်တွင် ခေါက်ထားပါ",
   "settings.experimental.row.newTimeline.title": "အချိန်ဇယားအသစ်",
   "settings.experimental.row.newTimeline.description":
     "အေးဂျင့်လုပ်ဆောင်ခဲ့သည်များကို အုပ်စုဖွဲ့ပြီး အလှည့်အောက်တွင် အခြေအနေလိုင်းတစ်ကြောင်းပြသသော ပြန်လည်ဒီဇိုင်းထားသည့် စက်ရှင်အချိန်ဇယား",
@@ -1373,6 +1370,9 @@ export const dict = {
     "အေးဂျင့်ခွဲများကို သီးခြားပြပါ။ အခြားလှုပ်ရှားမှုများကို အသေးစိတ်ခေါက်ထားပြီး အုပ်စုဖွဲ့ပါ။",
   "settings.timeline.description.quiet":
     "အေးဂျင့်ခွဲများကို သီးခြားပြပြီး တည်းဖြတ်မှုများကို အုပ်စုဖွဲ့ပါ။ အခြားလှုပ်ရှားမှုများကို ဖျောက်ပါ။",
+  "settings.timeline.row.foldUserMessages.title": "ရှည်သော မက်ဆေ့ချ်များကို ခေါက်ရန်",
+  "settings.timeline.row.foldUserMessages.description":
+    "လိုင်း 12 ကျော်သော သင့်မက်ဆေ့ချ်များကို ပိုဖတ်ရန် ခလုတ်နောက်တွင် ခေါက်ထားပါ",
   "settings.timeline.row.turnDiffs.title": "ပြောင်းလဲထားသော ဖိုင်များ",
   "settings.timeline.row.turnDiffs.description":
     "အလှည့်တစ်ခုစီ ပြီးဆုံးသောအခါ ၎င်းပြောင်းလဲခဲ့သော ဖိုင်များကို စာရင်းပြပါ",

@@ -1338,9 +1338,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Перемістити вниз",
   "settings.experimental.row.newIcons.title": "Нові іконки",
   "settings.experimental.row.newIcons.description": "Попередній перегляд оновленого набору іконок",
-  "settings.experimental.row.foldUserMessages.title": "Згортати довгі повідомлення",
-  "settings.experimental.row.foldUserMessages.description":
-    "Згортати ваші повідомлення довші за 12 рядків під кнопку «Читати далі»",
   "settings.experimental.row.newTimeline.title": "Нова хронологія",
   "settings.experimental.row.newTimeline.description":
     "Перероблена хронологія сесії, що групує дії агента, з одним рядком статусу під кроком",
@@ -1473,6 +1470,9 @@ export const dict = {
     "Показувати субагентів окремо. Групувати іншу активність зі згорнутими деталями.",
   "settings.timeline.description.quiet":
     "Показувати субагентів окремо й групувати редагування. Приховати іншу активність.",
+  "settings.timeline.row.foldUserMessages.title": "Згортати довгі повідомлення",
+  "settings.timeline.row.foldUserMessages.description":
+    "Згортати ваші повідомлення довші за 12 рядків під кнопку «Читати далі»",
   "settings.timeline.row.turnDiffs.title": "Змінені файли",
   "settings.timeline.row.turnDiffs.description":
     "Показувати список файлів, змінених кожним кроком, після його завершення",

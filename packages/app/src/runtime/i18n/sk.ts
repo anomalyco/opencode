@@ -1272,9 +1272,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Posunúť nadol",
   "settings.experimental.row.newIcons.title": "Nové ikony",
   "settings.experimental.row.newIcons.description": "Ukážka aktualizovanej sady ikon",
-  "settings.experimental.row.foldUserMessages.title": "Zbaliť dlhé správy",
-  "settings.experimental.row.foldUserMessages.description":
-    "Zbaliť vaše správy dlhšie ako 12 riadkov pod tlačidlo Čítať ďalej",
   "settings.experimental.row.newTimeline.title": "Nová časová os",
   "settings.experimental.row.newTimeline.description":
     "Prepracovaná časová os relácie, ktorá zoskupuje činnosť agenta, s jedným stavovým riadkom pod krokom",
@@ -1404,6 +1401,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Zobraziť podagentov samostatne. Ostatnú aktivitu zoskupiť so zbalenými podrobnosťami.",
   "settings.timeline.description.quiet": "Zobraziť podagentov samostatne a zoskupiť úpravy. Ostatnú aktivitu skryť.",
+  "settings.timeline.row.foldUserMessages.title": "Zbaliť dlhé správy",
+  "settings.timeline.row.foldUserMessages.description":
+    "Zbaliť vaše správy dlhšie ako 12 riadkov pod tlačidlo Čítať ďalej",
   "settings.timeline.row.turnDiffs.title": "Zmenené súbory",
   "settings.timeline.row.turnDiffs.description": "Po dokončení kroku zobraziť zoznam súborov, ktoré zmenil",
   "settings.timeline.category.commentary": "Komentár",

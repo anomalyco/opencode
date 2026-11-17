@@ -1222,9 +1222,6 @@ export const dict = {
   "sidebar.recent.moveDown": "انتقال به پایین",
   "settings.experimental.row.newIcons.title": "نمادهای جدید",
   "settings.experimental.row.newIcons.description": "پیش‌نمایش مجموعه نمادهای به‌روزشده",
-  "settings.experimental.row.foldUserMessages.title": "جمع کردن پیام‌های طولانی",
-  "settings.experimental.row.foldUserMessages.description":
-    "پیام‌های بیش از ۱۲ خط شما پشت دکمه «ادامه مطلب» جمع می‌شوند",
   "settings.experimental.row.newTimeline.title": "خط زمانی جدید",
   "settings.experimental.row.newTimeline.description":
     "خط زمانی بازطراحی‌شده جلسه که کارهای عامل را گروه‌بندی می‌کند و یک خط وضعیت زیر هر نوبت دارد",
@@ -1356,6 +1353,9 @@ export const dict = {
     "عامل‌های فرعی را جداگانه نشان بده. فعالیت‌های دیگر را با جزئیات جمع‌شده گروه‌بندی کن.",
   "settings.timeline.description.quiet":
     "عامل‌های فرعی را جداگانه نشان بده و ویرایش‌ها را گروه‌بندی کن. فعالیت‌های دیگر را پنهان کن.",
+  "settings.timeline.row.foldUserMessages.title": "جمع کردن پیام‌های طولانی",
+  "settings.timeline.row.foldUserMessages.description":
+    "پیام‌های بیش از ۱۲ خط شما پشت دکمه «ادامه مطلب» جمع می‌شوند",
   "settings.timeline.row.turnDiffs.title": "فایل‌های تغییریافته",
   "settings.timeline.row.turnDiffs.description": "فهرست کردن فایل‌هایی که هر نوبت تغییر داده است، پس از پایان آن",
   "settings.timeline.category.commentary": "توضیحات",

@@ -1241,9 +1241,6 @@ export const dict = {
   "sidebar.recent.moveDown": "نیچے منتقل کریں",
   "settings.experimental.row.newIcons.title": "نئے آئیکنز",
   "settings.experimental.row.newIcons.description": "آئیکنز کے تازہ سیٹ کا پیش منظر دیکھیں",
-  "settings.experimental.row.foldUserMessages.title": "طویل پیغامات سمیٹیں",
-  "settings.experimental.row.foldUserMessages.description":
-    '12 لائنوں سے زیادہ طویل پیغامات کو "مزید پڑھیں" بٹن کے پیچھے سمیٹ دیں',
   "settings.experimental.row.newTimeline.title": "نئی ٹائم لائن",
   "settings.experimental.row.newTimeline.description":
     "سیشن کی نئے انداز کی ٹائم لائن جو ایجنٹ کے کیے گئے کاموں کو گروپ کرتی ہے، اور باری کے نیچے ایک اسٹیٹس لائن دکھاتی ہے",
@@ -1373,6 +1370,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "ذیلی ایجنٹس الگ دکھائیں۔ دوسری سرگرمی کو سمٹی ہوئی تفصیلات کے ساتھ گروپ کریں۔",
   "settings.timeline.description.quiet": "ذیلی ایجنٹس الگ دکھائیں اور ترامیم کو گروپ کریں۔ دوسری سرگرمی چھپائیں۔",
+  "settings.timeline.row.foldUserMessages.title": "طویل پیغامات سمیٹیں",
+  "settings.timeline.row.foldUserMessages.description":
+    '12 لائنوں سے زیادہ طویل پیغامات کو "مزید پڑھیں" بٹن کے پیچھے سمیٹ دیں',
   "settings.timeline.row.turnDiffs.title": "تبدیل شدہ فائلیں",
   "settings.timeline.row.turnDiffs.description":
     "ہر باری کے مکمل ہونے پر اس میں تبدیل ہونے والی فائلوں کی فہرست دکھائیں",

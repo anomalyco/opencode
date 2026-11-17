@@ -132,7 +132,6 @@ const generalSchema = Persistence.struct({
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
   // The "New icons" design experiment, off until it ships.
   newIcons: Schema.Boolean,
-  // The "Fold long messages" experiment, off until it ships.
   foldUserMessages: Schema.Boolean,
   // The redesigned keyboard-first question dock, off until it ships.
   newQuestionUI: Schema.Boolean,

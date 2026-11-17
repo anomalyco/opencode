@@ -1223,9 +1223,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Aşak süýşür",
   "settings.experimental.row.newIcons.title": "Täze nyşanlar",
   "settings.experimental.row.newIcons.description": "Täzelenen nyşanlar toplumyny synap görüň",
-  "settings.experimental.row.foldUserMessages.title": "Uzyn habarlary ýygyň",
-  "settings.experimental.row.foldUserMessages.description":
-    "12 setirden uzyn habarlaryňyzy «Dowamyny oka» düwmesiniň aňyrsyna ýygyň",
   "settings.experimental.row.newTimeline.title": "Täze wagt çyzgysy",
   "settings.experimental.row.newTimeline.description":
     "Agentiň eden işlerini toparlaýan we tapgyryň aşagynda bir ýagdaý setirini görkezýän täzeden işlenen sessiýa wagt çyzgysy",
@@ -1357,6 +1354,9 @@ export const dict = {
     "Kiçi agentleri aýratyn görkez. Beýleki işjeňligi ýygylan jikme-jiklikler bilen toparla.",
   "settings.timeline.description.quiet":
     "Kiçi agentleri aýratyn görkez we redaktirlemeleri toparla. Beýleki işjeňligi gizle.",
+  "settings.timeline.row.foldUserMessages.title": "Uzyn habarlary ýygyň",
+  "settings.timeline.row.foldUserMessages.description":
+    "12 setirden uzyn habarlaryňyzy «Dowamyny oka» düwmesiniň aňyrsyna ýygyň",
   "settings.timeline.row.turnDiffs.title": "Üýtgedilen faýllar",
   "settings.timeline.row.turnDiffs.description": "Her tapgyr tamamlananda onuň üýtgeden faýllaryny sanaň",
   "settings.timeline.category.commentary": "Düşündirişler",

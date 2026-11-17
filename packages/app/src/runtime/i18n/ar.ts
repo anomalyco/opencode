@@ -1298,8 +1298,6 @@ export const dict = {
   "sidebar.recent.moveDown": "نقل لأسفل",
   "settings.experimental.row.newIcons.title": "أيقونات جديدة",
   "settings.experimental.row.newIcons.description": "معاينة مجموعة الأيقونات المحدّثة",
-  "settings.experimental.row.foldUserMessages.title": "طي الرسائل الطويلة",
-  "settings.experimental.row.foldUserMessages.description": "طي رسائلك التي تتجاوز 12 سطرًا خلف زر «قراءة المزيد»",
   "settings.experimental.row.newTimeline.title": "مخطط زمني جديد",
   "settings.experimental.row.newTimeline.description":
     "مخطط زمني للجلسة بتصميم جديد يجمع ما قام به الوكيل، مع سطر حالة واحد أسفل الدور",
@@ -1430,6 +1428,8 @@ export const dict = {
   "settings.timeline.row.width.wide": "عريض",
   "settings.timeline.description.compact": "إظهار الوكلاء الفرعيين على حدة. تجميع بقية النشاط مع طي التفاصيل.",
   "settings.timeline.description.quiet": "إظهار الوكلاء الفرعيين على حدة وتجميع التعديلات. إخفاء بقية النشاط.",
+  "settings.timeline.row.foldUserMessages.title": "طي الرسائل الطويلة",
+  "settings.timeline.row.foldUserMessages.description": "طي رسائلك التي تتجاوز 12 سطرًا خلف زر «قراءة المزيد»",
   "settings.timeline.row.turnDiffs.title": "الملفات المعدّلة",
   "settings.timeline.row.turnDiffs.description": "سرد الملفات التي غيّرها كل دور عند انتهائه",
   "settings.timeline.category.commentary": "التعليقات",
