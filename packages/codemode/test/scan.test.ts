@@ -39,6 +39,21 @@ describe("CodeMode.scanTools", () => {
     expect(Result.isFailure(CodeMode.scanTools("return Object.keys(tools)"))).toBe(true)
   })
 
+  test("rejects loading tools as a module, which would hide the calls from the scan", () => {
+    for (const code of [
+      'import t from "tools"\nawait t.slack.post({})',
+      'const t = require("tools"); await t.slack.post({})',
+      'const t = require("node:tools"); await t.slack.post({})',
+      'const t = await import("tools"); await t.slack.post({})',
+      "const t = require(name); await t.slack.post({})",
+    ]) {
+      expect(Result.isFailure(CodeMode.scanTools(code))).toBe(true)
+    }
+    expect(CodeMode.scanTools('const fs = require("fs"); return await tools.slack.read_thread({})')).toEqual(
+      Result.succeed(["slack.read_thread"]),
+    )
+  })
+
   test("binds outer globals that programs can read or shadow while keeping line numbers", async () => {
     const read = await Effect.runPromise(
       CodeMode.execute({

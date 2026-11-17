@@ -216,7 +216,7 @@ export default function OpenInAppButton(props: { session: MountedSession; screen
             aria-label={ctx.t("open.menu")}
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-down" />
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="open-in-app-v2-menu">
@@ -300,7 +300,7 @@ export function OpenInAppMenuItemsV2(props: {
             props.state.copyPath(path())
           }}
         >
-          <Icon name="copy" size="small" class="text-icon-weak" />
+          <Icon name="copy" class="text-icon-weak" />
           {ctx.t("open.copyPath")}
         </Menu.Item>
       </Show>

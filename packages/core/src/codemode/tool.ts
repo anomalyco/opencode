@@ -11,13 +11,17 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { Identifier } from "@opencode/schema/identifier"
+import { CallID } from "@opencode/schema/tool"
+import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
+import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
+import { CodeModePath } from "./path.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -86,6 +90,8 @@ export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
+  /** With `full_codemode`, the session's Location, which turns on the experimental `path` global. */
+  location?: Location.Interface,
 ) => {
   return {
     name: "execute",
@@ -121,15 +127,22 @@ export const create = (
             }),
           )
         const result = yield* runtime(inventory)
-          .execute(code)
+          .execute(code, undefined, {
+            extensions: location ? [CodeModeFetch.extension, CodeModePath.extension] : [CodeModeFetch.extension],
+          })
           .pipe(
             Effect.provideService(Run, {
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                  // Its own ID, so plugin hooks and traces can tell the program's calls apart. It has no row, so
+                  // until the program ends its permission requests show on this call's.
+                  const id = CallID.make(`call_${Identifier.ascending()}`)
+                  yield* permission.nested(id, context.id).pipe(Scope.provide(scope))
                   // The program sees the same failure text the model gets for a direct call.
                   const executed = yield* executeTool(name, tool, input, {
                     ...context,
+                    id,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.
@@ -152,6 +165,7 @@ export const create = (
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
             Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
             Effect.provideService(Permission.Service, permission),
+            (program) => (location ? Effect.provideService(program, Location.Service, location) : program),
           )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -276,9 +290,10 @@ function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
   if (cached) return cached
   const tools = inventoryTools(inventory)
-  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
+  // Every extension a run may get; `create` picks each run's.
+  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension, typeof CodeModePath.extension]>({
     tools,
-    extensions: [CodeModeFetch.extension],
+    extensions: [CodeModeFetch.extension, CodeModePath.extension],
     hooks: runHooks,
   })
   runtimes.set(inventory, created)
@@ -318,7 +333,9 @@ function inventoryTools(inventory: Inventory) {
       description: child.description,
       input: child.inputSchema,
       freeform: registration.freeform !== undefined,
-      output: child.outputSchema ?? Schema.NullOr(Schema.String),
+      // JSON Schema, which Code Mode renders but does not check: Core has validated the result of the tool that ran,
+      // and a plugin may have renamed the call to a tool with another output.
+      output: child.outputSchema ?? { type: ["string", "null"] },
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
   }
@@ -425,7 +442,9 @@ function formatResult(result: CodeMode.Result) {
       ? `Warnings:\n${result.warnings.map((item) => `- [${item.kind}] ${item.message}`).join("\n")}`
       : undefined
   const logs = result.logs && result.logs.length > 0 ? `Logs:\n${result.logs.join("\n")}` : undefined
-  return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
+  // A program that only logs returns undefined (sent as null); a "null" line before its logs says nothing.
+  const value = result.ok && result.value === null && (warnings || logs) ? undefined : output
+  return [value, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
 // Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.

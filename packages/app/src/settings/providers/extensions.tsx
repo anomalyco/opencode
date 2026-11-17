@@ -1,5 +1,16 @@
-import type { McpServer } from "@opencode/client/promise"
-import { Component, For, Show, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import type { McpServer, PluginInfo } from "@opencode/client/promise"
+import {
+  Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  untrack,
+  type JSX,
+} from "solid-js"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
@@ -10,6 +21,8 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection } from "@/runtime/server/registry"
+import { formatServerError } from "@/runtime/server/errors"
+import { showToast } from "@/shell/notifications/toast"
 import { useMcpController } from "@/providers/connect/mcp"
 import { mcpRowView } from "@/providers/connect/mcp-machine"
 import { DialogMcp } from "@/providers/connect/mcp-dialog"
@@ -20,6 +33,14 @@ import { SettingsList } from "@/settings/list"
 import { createExtensionLoad, ExtensionLoadFailed } from "@/settings/extension-load"
 import type { SettingsView } from "@/settings/surface"
 import { ConsoleName, ConsoleReplaced, createConsoleSources } from "./console-link"
+import {
+  createPluginUpdateState,
+  pluginUpdateChecking,
+  pluginUpdateView,
+  transitionPluginUpdate,
+  type PluginUpdateEffect,
+  type PluginUpdateEvent,
+} from "./plugin-update-machine"
 import "@/settings/settings.css"
 import "@/shell/search-list.css"
 
@@ -69,20 +90,93 @@ export const SettingsExtensions: Component<{
 
   const plugins = createExtensionLoad({
     key: () => serverSdk.scope,
-    task: (_, signal) => serverSdk.api.plugin.list(undefined, { signal }).then((result) => result.data),
+    task: (_, signal) => serverSdk.api.plugin.list(undefined, { signal }),
   })
 
-  onCleanup(
-    serverSdk.event.on("plugin.updated", (event) => {
-      if (!event.location) plugins.invalidate()
-    }),
-  )
+  // Plugin registries are per Location, so every `plugin.updated` names one; the default Location's names its resolved
+  // directory rather than none, and a filter on a missing location never matched. Listing again is cheap and coalesced.
+  onCleanup(serverSdk.event.on("plugin.updated", () => plugins.invalidate()))
 
   const pluginList = createMemo(() => {
     const current = plugins.view()
 
-    return current.status === "ready" ? current.value : undefined
+    return current.status === "ready" ? current.value.data : undefined
   })
+
+  const [updateState, setUpdateState] = createSignal(createPluginUpdateState())
+
+  const dispatchUpdate = (event: PluginUpdateEvent) => {
+    const previous = untrack(updateState)
+    const result = transitionPluginUpdate(previous, event)
+
+    if (result.state !== previous) setUpdateState(() => result.state)
+    result.effects.forEach(runUpdate)
+  }
+
+  const runUpdate = (effect: PluginUpdateEffect) => {
+    if (effect.type === "refresh") return plugins.invalidate()
+
+    if (effect.type === "failed")
+      return showToast({
+        title: language.t("common.requestFailed"),
+        description: effect.message,
+      })
+
+    if (effect.type === "check") {
+      const attempt = effect.attempt
+
+      return void serverSdk.api.plugin.check().then(
+        (result) =>
+          dispatchUpdate({
+            type: "check.succeeded",
+            attempt,
+            outdated: packageFlags(result.data),
+          }),
+        (error) => dispatchUpdate({ type: "check.failed", attempt, message: formatServerError(error, language.t) }),
+      )
+    }
+
+    const id = effect.id
+
+    void serverSdk.api.plugin.update({ targets: [effect.target] }).then(
+      () => dispatchUpdate({ type: "update.succeeded", id }),
+      (error) => dispatchUpdate({ type: "update.failed", id, message: formatServerError(error, language.t) }),
+    )
+  }
+
+  createEffect(
+    on(
+      () => serverSdk.scope,
+      () => dispatchUpdate({ type: "server.changed" }),
+      { defer: true },
+    ),
+  )
+
+  const packageFlags = (list: readonly PluginInfo[]) =>
+    Object.fromEntries(
+      list.flatMap((plugin) =>
+        plugin.source.type === "package" ? [[plugin.source.target, plugin.source.outdated === true]] : [],
+      ),
+    )
+
+  createEffect(
+    on(
+      () => plugins.view(),
+      (current) => {
+        if (current.status !== "ready") return
+        dispatchUpdate({ type: "list.loaded", outdated: packageFlags(current.value.data) })
+      },
+      { defer: true },
+    ),
+  )
+
+  const hasPackages = () => pluginList()?.some((plugin) => plugin.source.type === "package") ?? false
+  onCleanup(() => dispatchUpdate({ type: "disposed" }))
+
+  const pluginUpdates = {
+    view: (source: Parameters<typeof pluginUpdateView>[1]) => pluginUpdateView(updateState(), source),
+    update: (target: string) => dispatchUpdate({ type: "update.requested", target }),
+  }
 
   // The desktop window runs the GUIs of its own server's plugins, so only that server's rows control them.
   const own = () => !!platform.plugins && ServerConnection.builtin(serverSdk.server)
@@ -243,17 +337,33 @@ export const SettingsExtensions: Component<{
 
           <Tabs.Content value="plugins">
             <div class="settings-section">
-              <div class="flex items-center justify-between">
+              <div class="flex flex-wrap items-center justify-between gap-2">
                 <span class="settings-extension-heading text-13-medium">
                   {language.t("settings.extensions.availableAll")}
                 </span>
-                <span class="text-13-regular text-v2-text-text-muted">
-                  {language.t("settings.extensions.manageConfig")}
-                </span>
+                <div class="flex items-center gap-3">
+                  <span class="text-13-regular text-v2-text-text-muted">
+                    {language.t("settings.extensions.manageConfig")}
+                  </span>
+                  <Show when={hasPackages()}>
+                    <Button
+                      size="small"
+                      variant="ghost-muted"
+                      class="shrink-0 whitespace-nowrap"
+                      disabled={pluginUpdateChecking(updateState())}
+                      aria-busy={pluginUpdateChecking(updateState())}
+                      onClick={() => dispatchUpdate({ type: "check.requested" })}
+                    >
+                      {language.t(
+                        pluginUpdateChecking(updateState()) ? "settings.plugins.checking" : "settings.plugins.check",
+                      )}
+                    </Button>
+                  </Show>
+                </div>
               </div>
               {/* The desktop's own server also lists the plugins main runs, so its rows stay while the list loads. */}
               <Show when={own() || pluginList()}>
-                <ExtensionPlugins plugins={pluginList() ?? []} own={own()} />
+                <ExtensionPlugins plugins={pluginList() ?? []} own={own()} updates={pluginUpdates} />
               </Show>
               <Show when={plugins.view().status === "loading" && !own()}>
                 <p class="project-settings-extension-empty-description">{language.t("common.loading")}</p>

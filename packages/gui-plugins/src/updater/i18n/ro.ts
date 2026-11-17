@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Următorul",
   "releaseNotes.action.hideFuture": "Nu mai arăta acestea pe viitor",
   "releaseNotes.media.alt": "Previzualizare lansare",
+  "action.reload": "Reîncarcă pentru actualizare",
+  "action.reloading": "Se reîncarcă…",
+  "web.ready.title": "Actualizare pregătită",
+  "web.ready.message":
+    "O versiune nouă de OpenCode este pregătită. Reîncarcă pentru a o folosi în toate ferestrele deschise.",
+  "web.reload": "Reîncarcă",
+  "web.reset.title": "Reîncarcă de pe server",
+  "web.reset.description": "Șterge copia salvată a aplicației și încarcă versiunea curentă de pe server",
+  "web.reset.action": "Reîncarcă de pe server",
 }

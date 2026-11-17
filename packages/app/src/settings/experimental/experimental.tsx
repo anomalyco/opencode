@@ -44,28 +44,6 @@ export const SettingsExperimental: Component = () => {
               />
             </SettingsRow>
             <SettingsRow
-              title={language.t("settings.experimental.row.newIcons.title")}
-              description={language.t("settings.experimental.row.newIcons.description")}
-            >
-              <div data-action="settings-new-icons">
-                <Switch
-                  checked={settings.general.newIcons()}
-                  onChange={(checked) => settings.general.setNewIcons(checked)}
-                />
-              </div>
-            </SettingsRow>
-            <SettingsRow
-              title={language.t("settings.experimental.row.foldUserMessages.title")}
-              description={language.t("settings.experimental.row.foldUserMessages.description")}
-            >
-              <div data-action="settings-fold-user-messages">
-                <Switch
-                  checked={settings.general.foldUserMessages()}
-                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
-                />
-              </div>
-            </SettingsRow>
-            <SettingsRow
               title={language.t("settings.experimental.row.newTimeline.title")}
               description={language.t("settings.experimental.row.newTimeline.description")}
             >

@@ -298,7 +298,7 @@ function Side(props: ParentProps<{ turn: Turn; expand: boolean; count: number; o
               <IconButton
                 size="small"
                 variant="ghost-muted"
-                icon={<Icon name="xmark-small" />}
+                icon={<Icon name="close" />}
                 aria-label={language.t("common.closeTab")}
                 onClick={() => props.onClose()}
               />

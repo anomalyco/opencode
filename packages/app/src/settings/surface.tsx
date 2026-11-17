@@ -3,6 +3,7 @@ import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack }
 import { createSimpleContext } from "@opencode/ui/context"
 import { useLayout, type LayoutRoute } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { useServers } from "@/runtime/server/registry"
 import { useCommand } from "@/shell/commands/command"
 import { createSettingsPages } from "@/runtime/plugin/settings-pages"
@@ -52,6 +53,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
     const servers = useSettingsServers()
     const registry = useServers()
     const tabs = useTabs()
+    const projectNavigation = useProjectNavigation()
 
     const location = useLocation<{
       settings?: { route: Exclude<LayoutRoute, { type: "settings" }>; view?: SettingsTransientView }
@@ -74,6 +76,9 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
     // The server of the tab settings opened from, which per-server pages show until another is selected.
     const sourceServer = createMemo(() => {
       const route = source()
+
+      if (projectNavigation() && open())
+        return tabs.restoreTab(route)?.server ?? tabs.lastTarget()?.server ?? layout.home.selection().server
 
       if (route.type === "session") return route.server
 

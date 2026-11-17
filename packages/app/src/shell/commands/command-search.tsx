@@ -32,6 +32,7 @@ export function DialogCommandSearch() {
       placeholder={language.t("command.commands.search")}
       items={(query) => entries().filter((entry) => matchesCommandPaletteEntry(entry, query))}
       sources={[]}
+      bare
       highlight={preview.highlight}
       select={select}
       close={() => dialog.close()}

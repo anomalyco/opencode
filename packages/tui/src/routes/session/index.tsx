@@ -13,7 +13,7 @@ import {
   type Accessor,
 } from "solid-js"
 import path from "node:path"
-import { EOL } from "node:os"
+import { EOL, tmpdir } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
@@ -208,7 +208,6 @@ export function Session(props: {
     return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
   })
   const permissions = createMemo(() => {
-    if (session()?.parentID) return []
     return [route.sessionID, ...descendantSessionIDs()].flatMap(
       (sessionID) => data.session.permission.list(sessionID) ?? [],
     )
@@ -234,6 +233,9 @@ export function Session(props: {
     open: false,
     tab: undefined as string | undefined,
   })
+  const composerVisible = createMemo(
+    () => promptedPermissions().length === 0 && (composer.open || (!!session()?.parentID && forms().length === 0)),
+  )
   props.onTerminalPicker?.(() => setComposer({ open: true, tab: "terminals" }))
   onCleanup(() => props.onTerminalPicker?.(undefined))
   createEffect(() => {
@@ -1378,7 +1380,7 @@ export function Session(props: {
           }
 
           const filepath = path.join(
-            paths.cwd,
+            options.location === "temp" ? tmpdir() : paths.cwd,
             `session-${crypto.randomUUID()}.${options.format === "markdown" ? "md" : "json"}`,
           )
           await writeExport(filepath, content)
@@ -1602,7 +1604,7 @@ export function Session(props: {
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
-                open={composer.open || (!!session()?.parentID && forms().length === 0)}
+                open={composerVisible()}
                 defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
                 onClose={() => {
                   const parent = session()?.parentID
@@ -1616,7 +1618,7 @@ export function Session(props: {
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
-                <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
+                <Match when={composerVisible()}>{null}</Match>
                 <Match when={promptedPermissions().length > 0}>
                   <Show when={promptedPermissions()[0]?.id} keyed>
                     {(_) => {

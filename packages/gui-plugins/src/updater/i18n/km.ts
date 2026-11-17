@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "បន្ទាប់",
   "releaseNotes.action.hideFuture": "កុំបង្ហាញទាំងនេះនៅពេលអនាគត",
   "releaseNotes.media.alt": "ចេញផ្សាយការមើលជាមុន",
+  "action.reload": "ផ្ទុកឡើងវិញដើម្បីធ្វើបច្ចុប្បន្នភាព",
+  "action.reloading": "កំពុងផ្ទុកឡើងវិញ…",
+  "web.ready.title": "បច្ចុប្បន្នភាពរួចរាល់",
+  "web.ready.message": "កំណែថ្មីរបស់ OpenCode រួចរាល់ហើយ។ ផ្ទុកឡើងវិញដើម្បីប្រើវាក្នុងគ្រប់បង្អួចដែលបើក។",
+  "web.reload": "ផ្ទុកឡើងវិញ",
+  "web.reset.title": "ផ្ទុកឡើងវិញពីម៉ាស៊ីនមេ",
+  "web.reset.description": "សម្អាតច្បាប់ចម្លងដែលបានរក្សាទុករបស់កម្មវិធី ហើយផ្ទុកកំណែបច្ចុប្បន្នរបស់ម៉ាស៊ីនមេ",
+  "web.reset.action": "ផ្ទុកឡើងវិញពីម៉ាស៊ីនមេ",
 }

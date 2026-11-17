@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Sesi disimpan ke {{filename}}",
   "export.failed.title": "Gagal mengekspor sesi",
   "export.failed.description": "Terjadi kesalahan saat mengekspor sesi",
+  "usage.toggle": "Alihkan konteks sesi",
 }

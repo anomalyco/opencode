@@ -100,9 +100,9 @@ export function PromptProjectAddButton(props: { controller: PromptProjectControl
       class="flex h-7 min-w-0 max-w-[160px] items-center gap-1.5 rounded-sm px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
       onClick={() => props.controller.add()}
     >
-      <Icon name="folder-add-left" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+      <Icon name="folder-add-left" class="shrink-0 text-v2-icon-icon-muted" />
       <span class="min-w-0 truncate leading-5">{props.controller.labels.new()}</span>
-      <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+      <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
     </button>
   )
 }

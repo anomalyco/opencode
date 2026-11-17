@@ -364,9 +364,9 @@ export default function PierreFileTree(props: {
       sort: isLive ? (a, b) => pierreTreeCompareOrder(untrack(machine), a.path, b.path) : "default",
       icons: {
         set: "complete",
-        spriteSheet: `<svg data-icon-sprite aria-hidden="true" width="0" height="0" xmlns="http://www.w3.org/2000/svg"><symbol id="outline-chevron-right" viewBox="${getIcon("outline-chevron-right").viewBox}" fill="none">${getIcon("outline-chevron-right").body}</symbol></svg>`,
+        spriteSheet: `<svg data-icon-sprite aria-hidden="true" width="0" height="0" xmlns="http://www.w3.org/2000/svg"><symbol id="chevron-right" viewBox="${getIcon("chevron-right").viewBox}" fill="none">${getIcon("chevron-right").body}</symbol></svg>`,
         remap: {
-          "file-tree-icon-chevron": { name: "outline-chevron-right", width: 16, height: 16, viewBox: "0 0 16 16" },
+          "file-tree-icon-chevron": { name: "chevron-right", width: 16, height: 16, viewBox: "0 0 16 16" },
         },
       },
       itemHeight: FILE_TREE_ROW_HEIGHT,
