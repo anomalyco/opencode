@@ -391,6 +391,7 @@ describe("Code Mode session jobs", () => {
       yield* s.release
       yield* Fiber.join(delivered)
       yield* s.idle
+      expect(yield* s.h.jobs.pendingBackground).toEqual([])
       const text = `<codemode id="${job.id}" state="completed">\nresult: done\n</codemode>`
       expect((yield* s.h.llm.requests()).at(-1)?.messages).toContainEqual(
         expect.objectContaining({ content: expect.arrayContaining([expect.objectContaining({ type: "text", text })]) }),

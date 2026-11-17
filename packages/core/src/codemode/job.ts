@@ -5,7 +5,6 @@ import { Cause, Context, Deferred, Effect, Exit, Option, type Scope, Semaphore }
 import { extension } from "mime-types"
 import { Flag } from "../flag.js"
 import { Job } from "../job.js"
-import { Permission } from "../permission.js"
 import type { Session } from "../session.js"
 import type { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -31,14 +30,20 @@ export const make = Effect.fnUntraced(function* (
   synthetic: Session.Interface["synthetic"],
   scope: Scope.Scope,
 ) {
-  const location = Context.pick(
-    Flag.Service,
-    ToolOutput.Service,
-  )(yield* Effect.context<Flag.Service | ToolOutput.Service>())
+  // A custom session runner can drain without installing the Location's tool services.
+  const services = Option.all({
+    flags: yield* Effect.serviceOption(Flag.Service),
+    output: yield* Effect.serviceOption(ToolOutput.Service),
+  })
+  if (Option.isNone(services)) return
+  const { flags, output } = services.value
+  const truncate = Effect.fnUntraced(function* (text: string) {
+    const bounded = yield* output.truncate({ content: [{ type: "text", text }] })
+    return bounded.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+  })
 
   return Effect.fn("CodeModeJob.execute")(function* (context: Tool.Context, execute: Execute) {
-    if (!(yield* Flag.enabled("full_codemode"))) return yield* execute(context)
-    const output = yield* ToolOutput.Service
+    if (!(yield* flags.enabled("full_codemode"))) return yield* execute(context)
     const id = `cm_${Identifier.ascending()}`
     const sessionID = context.sessionID
     const result = yield* Deferred.make<Tool.NormalizedResult, Tool.Error>()
@@ -60,19 +65,13 @@ export const make = Effect.fnUntraced(function* (
                     Effect.flatMap((done) => (done ? Effect.void : context.progress(update))),
                   ),
                 ),
-            }).pipe(
-              Effect.provideService(Job.BlockingParent, id),
-              Effect.provideService(Permission.PromptUntil, detached),
-              Effect.interruptible,
-              Effect.exit,
-            )
+            }).pipe(Effect.provideService(Job.BlockingParent, id), Effect.interruptible, Effect.exit)
             yield* Deferred.done(result, exit)
             if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
             const text = Exit.isFailure(exit)
               ? Cause.pretty(exit.cause)
               : exit.value.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
-            const bounded = yield* output.truncate({ content: [{ type: "text", text }] })
-            const body = bounded.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+            const body = yield* truncate(text)
             if (Exit.isFailure(exit) || exit.value.metadata?.error === true) return yield* Effect.fail(new Error(body))
             return body
           }),
@@ -101,17 +100,9 @@ export const make = Effect.fnUntraced(function* (
               .save(Buffer.from(file.uri.slice(prefix.length), "base64"), ext ? `.${ext}` : "")
               .pipe(Effect.catchDefect(() => Effect.succeed(`Could not save ${file.mime} attachment.`)))
           })
-          const body = paths.length
-            ? yield* output.truncate({
-                content: [{ type: "text", text: [info.output ?? info.error, ...paths].join("\n") }],
-              })
-            : undefined
           const message = notice(
-            body
-              ? {
-                  ...info,
-                  output: body.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
-                }
+            paths.length
+              ? { ...info, output: yield* truncate([info.output ?? info.error, ...paths].join("\n")) }
               : info,
           )
           yield* synthetic({ id: notificationID, sessionID, ...message }).pipe(
@@ -127,5 +118,5 @@ export const make = Effect.fnUntraced(function* (
         }
       }),
     )
-  }, Effect.provide(location)) satisfies Run
+  }) satisfies Run
 })

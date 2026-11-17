@@ -447,6 +447,7 @@ export const make = Effect.gen(function* () {
 
   const block: Interface["block"] = Effect.fnUntraced(function* (input) {
     const parent = yield* BlockingParent
+    const tracksSession = parent === undefined || parent === input.id
     const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [BlockStart, Map<string, Active>] => {
       const job = jobs.get(input.id)
       if (!job) return [{ type: "missing" }, jobs]
@@ -454,12 +455,12 @@ export const make = Effect.gen(function* () {
       if (job.isBackgrounded) return [{ type: "backgrounded", info: snapshot(job) }, jobs]
       return [
         { type: "wait", wait: { done: job.done, backgrounded: job.backgrounded, generation: job.scope } },
-        parent && parent !== input.id
-          ? jobs
-          : new Map(jobs).set(input.id, {
+        tracksSession
+          ? new Map(jobs).set(input.id, {
               ...job,
               blockingSessions: incrementSession(job.blockingSessions, input.sessionID),
-            }),
+            })
+          : jobs,
       ]
     })
     if (result.type === "missing") return undefined
@@ -473,7 +474,7 @@ export const make = Effect.gen(function* () {
       Deferred.await(result.wait.backgrounded).pipe(Effect.map((info) => ({ type: "backgrounded" as const, info }))),
     ).pipe(
       Effect.tap((outcome) => (outcome.type === "finished" ? consume(input.id, result.wait.generation) : Effect.void)),
-      Effect.ensuring(removeBlock(input)),
+      Effect.ensuring(tracksSession ? removeBlock(input) : Effect.void),
     )
   })
 

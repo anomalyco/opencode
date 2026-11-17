@@ -64,11 +64,6 @@ export const Unattended = Context.Reference<Permission.Ruleset | undefined>("@op
   defaultValue: () => undefined,
 })
 
-/** A caller that leaves the foreground can no longer host an interactive approval. */
-export const PromptUntil = Context.Reference<Deferred.Deferred<void> | undefined>("@opencode/Permission/PromptUntil", {
-  defaultValue: () => undefined,
-})
-
 export class DeclinedError extends Schema.TaggedError<DeclinedError>()("Permission.DeclinedError", {}) {}
 
 export class CorrectedError extends Schema.TaggedError<CorrectedError>()("Permission.CorrectedError", {
@@ -290,34 +285,8 @@ const layer = Layer.effect(
               })
             }
             if (result.effect === "allow") return
-            const until = yield* PromptUntil
-            const background = () =>
-              new BlockedError({
-                rules: relevant(input, result.rules),
-                permission: input.action,
-                resources: input.resources,
-                reason: `Permission ${input.action} needs approval in the foreground`,
-              })
-            if (until && (yield* Deferred.isDone(until))) return yield* background()
             const item = yield* create(request(input, result.message), input.agent)
-            const wait = Deferred.await(item.deferred)
-            return yield* restore(
-              until
-                ? Effect.raceFirst(
-                    wait,
-                    Deferred.await(until).pipe(
-                      Effect.andThen(
-                        bus.publish(Permission.Event.Replied, {
-                          sessionID: input.sessionID,
-                          requestID: item.request.id,
-                          reply: "reject",
-                        }),
-                      ),
-                      Effect.andThen(Effect.fail(background())),
-                    ),
-                  )
-                : wait,
-            ).pipe(
+            return yield* restore(Deferred.await(item.deferred)).pipe(
               // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
               // must not convert a user's decline into model-facing tool output. The decline
               // resurfaces as a typed failure at SessionModelRequest.executeTool. A decline
