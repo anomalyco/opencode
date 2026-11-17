@@ -128,24 +128,59 @@ return plugin.define(function(setup)
     if #bindings == 0 then
         return
     end
-    -- The runs in flight: a lock per session and binding, and the step each request's reply moves on to.
+    -- The runs in flight: a lock per session and binding.
     local locks: { [string]: boolean } = {}
-    local waiting: { [number]: { step: string, session: string, binding: string, race: string? } } = {}
 
-    local function finish(host: plugin.Host, session: string, binding: string, failed: boolean)
-        locks[`{session}\0{binding}`] = nil
-        if failed then
-            host:toast({ variant = "error", title = TITLE, message = FAILED, session = session })
+    -- One run of `binding` in `session`: whether it failed. It stops once the user left the session or opened a
+    -- dialog, as TS's does.
+    local function run(host: plugin.Host, session: string, binding: Binding): boolean
+        if not binding.goal then
+            local _, err = host:fetch(command(session, binding.command :: string, binding.text))
+            return err ~= nil
         end
-    end
-
-    local function send(host: plugin.Host, fetch: plugin.Fetch, step: string, session: string, binding: string, race: string?)
-        local id = host:fetch(fetch)
-        if id then
-            waiting[id] = { step = step, session = session, binding = binding, race = race }
-        else
-            finish(host, session, binding, true)
+        local function away(): boolean
+            local route = host:route()
+            return host:mode() ~= nil or route.type ~= "session" or route.id ~= session
         end
+        local body, err = host:fetch({ method = "GET", path = `/api/session/{session}` })
+        if err then
+            return true
+        elseif away() then
+            return false
+        end
+        local location = body and body.data and body.data.location
+        local directory = trimmed(location and location.directory)
+        if not directory then
+            return true
+        end
+        local reply, failure = host:fetch({
+            method = "POST",
+            path = "/api/rpc/opencode.goal/get",
+            query = { { "location[directory]", directory } },
+            body = { input = { sessionID = session } },
+        })
+        if failure then
+            return true
+        elseif away() then
+            return false
+        end
+        local goal = reply and reply.output
+        if goal == nil then
+            return false
+        elseif type(goal) ~= "table" or not trimmed(goal.id) then
+            return true
+        elseif goal.status == "complete" then
+            return false
+        end
+        -- A goal another client paused or resumed meanwhile is no failure.
+        local verb, race = "pause", "No active goal to pause."
+        if goal.status == "paused" then
+            verb, race = "resume", "No paused goal to resume."
+        elseif goal.status ~= "active" then
+            return true
+        end
+        local _, toggled = host:fetch(command(session, "goal", verb))
+        return toggled ~= nil and not toggled:find(race, 1, true)
     end
 
     -- TS `execute`: one run per session and binding at a time.
@@ -154,15 +189,16 @@ return plugin.define(function(setup)
         if route.type ~= "session" then
             return
         end
-        local lock = `{route.id}\0{binding.id}`
+        local session = route.id
+        local lock = `{session}\0{binding.id}`
         if locks[lock] then
             return
         end
         locks[lock] = true
-        if binding.goal then
-            send(host, { method = "GET", path = `/api/session/{route.id}` }, "session", route.id, binding.id)
-        else
-            send(host, command(route.id, binding.command :: string, binding.text), "command", route.id, binding.id)
+        local failed = run(host, session, binding)
+        locks[lock] = nil
+        if failed then
+            host:toast({ variant = "error", title = TITLE, message = FAILED, session = session })
         end
     end
 
@@ -189,53 +225,5 @@ return plugin.define(function(setup)
         end
         execute(host, binding)
         return "consume"
-    end)
-    setup:onReply(function(host, id, body, failure)
-        local run = waiting[id]
-        if not run then
-            return
-        end
-        waiting[id] = nil
-        local session, binding = run.session, run.binding
-        if failure then
-            local race = run.race and failure:find(run.race, 1, true)
-            return finish(host, session, binding, not race)
-        end
-        if run.step == "command" or run.step == "toggle" then
-            return finish(host, session, binding, false)
-        end
-        local route = host:route()
-        if host:mode() ~= nil or route.type ~= "session" or route.id ~= session then
-            return finish(host, session, binding, false)
-        end
-        if run.step == "session" then
-            local location = body and body.data and body.data.location
-            local directory = trimmed(location and location.directory)
-            if not directory then
-                return finish(host, session, binding, true)
-            end
-            local fetch: plugin.Fetch = {
-                method = "POST",
-                path = "/api/rpc/opencode.goal/get",
-                query = { { "location[directory]", directory } },
-                body = { input = { sessionID = session } },
-            }
-            return send(host, fetch, "goal", session, binding)
-        end
-        local goal = body and body.output
-        if goal == nil then
-            return finish(host, session, binding, false)
-        end
-        if type(goal) ~= "table" or not trimmed(goal.id) then
-            return finish(host, session, binding, true)
-        end
-        if goal.status == "complete" then
-            return finish(host, session, binding, false)
-        elseif goal.status == "active" then
-            return send(host, command(session, "goal", "pause"), "toggle", session, binding, "No active goal to pause.")
-        elseif goal.status == "paused" then
-            return send(host, command(session, "goal", "resume"), "toggle", session, binding, "No paused goal to resume.")
-        end
-        return finish(host, session, binding, true)
     end)
 end)

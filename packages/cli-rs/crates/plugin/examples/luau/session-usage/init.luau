@@ -58,6 +58,80 @@ local function family(read: plugin.Read, session: string): { string }
     return if #roots > 0 then roots else { session }
 end
 
+-- TS `fetchMessages`: every message of `session`, page by page; `nil` once a request failed, or once `run` failed.
+local function fetchMessages(host: plugin.Host, session: string, run: { failed: boolean }): { plugin.SessionMessageInfo }?
+    local list, cursor = {}, nil
+    for _ = 1, MAX_PAGES do
+        local body, err = host:fetch(messages(session, cursor))
+        if err or not body or run.failed then
+            return nil
+        end
+        for _, message in body.data or {} do
+            table.insert(list, message)
+        end
+        cursor = cursorOf(body)
+        if not cursor then
+            break
+        end
+    end
+    return list
+end
+
+-- TS `costOfSessions`' reads: the messages of each of `ids`, `COST_CONCURRENCY` sessions at a time; `nil` once a
+-- request failed, which stops the other sessions of its batch at their next page.
+local function fetchAll(host: plugin.Host, ids: { string }): { { plugin.SessionMessageInfo } }?
+    local sets, run = {}, { failed = false }
+    for first = 1, #ids, COST_CONCURRENCY do
+        local batch = {}
+        for index = first, math.min(first + COST_CONCURRENCY - 1, #ids) do
+            table.insert(batch, function(): (any, any)
+                local list = fetchMessages(host, ids[index], run)
+                run.failed = run.failed or list == nil
+                return list, if list then nil else "failed"
+            end)
+        end
+        local lists = plugin.all(batch)
+        if not lists then
+            return nil
+        end
+        table.move(lists, 1, #lists, #sets + 1, sets)
+    end
+    return sets
+end
+
+-- TS `familyIDs`' walk down: the children of each session of `ids`, level by level, added to `ids`; `false` once a
+-- request failed.
+local function discover(host: plugin.Host, ids: { string }): boolean
+    local frontier, depth = table.clone(ids), 0
+    while depth < MAX_DEPTH and #frontier > 0 and #ids < MAX_SESSIONS do
+        local found = {}
+        for _, parent in frontier do
+            local listed, cursor = {}, nil
+            for page = 1, MAX_PAGES do
+                local body, err = host:fetch(children(parent, cursor))
+                if err or not body then
+                    return false
+                end
+                for _, child in body.data or {} do
+                    table.insert(listed, child.id)
+                end
+                cursor = cursorOf(body)
+                if not cursor or page >= MAX_PAGES or #listed >= MAX_SESSIONS then
+                    break
+                end
+            end
+            for _, child in listed do
+                if not table.find(ids, child) and #ids < MAX_SESSIONS then
+                    table.insert(ids, child)
+                    table.insert(found, child)
+                end
+            end
+        end
+        frontier, depth = found, depth + 1
+    end
+    return true
+end
+
 return plugin.define(function(setup)
     local config = configure(setup.options)
     local at = { path = if config.position == "bottom" then "sidebar.footer" else "sidebar.content", kind = if config.position == "bottom" then "prepend" else "append" }
@@ -67,21 +141,21 @@ return plugin.define(function(setup)
     local session: string? = nil
     local tree: { string } = {}
     local go: any = nil
-    local limits: number? = nil
+    local limits = false
     local lastLoaded, lastForced = 0, 0
-    local run: any = nil
+    local running = false
     local queued: boolean? = nil
     local priced: { location: plugin.LocationRef?, sessions: { { plugin.SessionMessageInfo } } }? = nil
     local total: number? = nil
-    local runs = 0
 
     -- TS `location()`: the session's location, else where the TUI works.
-    local function location(read: plugin.Read)
+    local function location(read: plugin.Read): plugin.LocationRef
         local info = session and read:session(session)
         return if info then { directory = info.info.location.directory } else read:info().location
     end
 
-    -- TS `load`: the usage limits, at most once per `refreshMs`, and a forced read at most once a second.
+    -- TS `load`: the usage limits, at most once per `refreshMs`, and a forced read at most once a second. A failed read
+    -- hides the meters.
     local function load(host: plugin.Host, force: boolean)
         local time = now()
         if limits or (not force and (config.refreshMs == 0 or time - lastLoaded < config.refreshMs)) then
@@ -94,103 +168,53 @@ return plugin.define(function(setup)
         if force then
             lastForced = time
         end
-        local query = { { "location[directory]", location(host).directory } }
-        local id = host:fetch({ method = "GET", path = "/api/experimental/usage/limits", query = query })
-        if id then
-            limits = id
-        else
-            go = nil
-        end
+        limits = true
+        plugin.spawn(function()
+            local query = { { "location[directory]", location(host).directory } }
+            local body, err = host:fetch({ method = "GET", path = "/api/experimental/usage/limits", query = query })
+            limits = false
+            go = if err then nil else body and body.data and body.data.go
+        end)
     end
 
-    local refreshCost: (host: plugin.Host, reload: boolean) -> ()
-
-    -- The run ended: when it read every page of the session still in view, its messages wait for the location's
-    -- models to price them. Then a queued run starts.
-    local function finish(host: plugin.Host, done: boolean)
-        local ended = run
-        run = nil
-        if ended and done and session == ended.session then
-            priced = { location = ended.location, sessions = ended.messages }
-        end
-        if queued ~= nil then
-            local reload = queued
-            queued = nil
-            refreshCost(host, reload :: boolean)
-        end
-    end
-
-    -- Fetches `fetch` for the run, waiting for `want`; false when the host did not take it.
-    local function ask(host: plugin.Host, fetch: plugin.Fetch, want: any): boolean
-        local id = host:fetch(fetch)
-        if id then
-            run.waiting[id] = want
-        end
-        return id ~= nil
-    end
-
-    -- Sends what the run needs next, or finishes it.
-    local function step(host: plugin.Host)
-        while run do
-            if run.stage == "discover" then
-                if next(run.waiting) ~= nil then
-                    return
-                end
-                if run.at > 1 and run.at > #run.frontier then
-                    run.frontier, run.nextDepth, run.at = run.nextDepth, {}, 1
-                    run.depth += 1
-                end
-                if run.at == 1 and (run.depth >= MAX_DEPTH or #run.frontier == 0 or #run.ids >= MAX_SESSIONS) then
-                    -- TS drops a tree found for a session no longer in view.
-                    if session ~= run.session then
-                        return finish(host, false)
-                    end
-                    tree = run.ids
-                    run.stage, run.batch, run.open, run.messages = "price", 1, 0, {}
-                elseif not ask(host, children(run.frontier[run.at]), { page = 0 }) then
-                    return finish(host, false)
-                else
-                    return
-                end
-            else
-                if run.open > 0 then
-                    return
-                end
-                if run.batch > #run.ids then
-                    return finish(host, true)
-                end
-                local last = math.min(run.batch + COST_CONCURRENCY - 1, #run.ids)
-                for index = run.batch, last do
-                    run.messages[index] = {}
-                    if not ask(host, messages(run.ids[index]), { index = index, page = 0 }) then
-                        return finish(host, false)
-                    end
-                end
-                run.open, run.batch = last - run.batch + 1, last + 1
+    -- One run: the tree when it is new or asked again, then every message of it. When it read every page of the session
+    -- still in view, its messages wait for the location's models to price them. A failed request keeps the last total,
+    -- as TS's `catch` does.
+    local function cost(host: plugin.Host, reload: boolean)
+        local current, where = session :: string, location(host)
+        local ids = table.clone(tree)
+        if reload or #tree == 0 then
+            ids = family(host, current)
+            -- TS drops a tree found for a session no longer in view.
+            if not discover(host, ids) or session ~= current then
                 return
             end
+            tree = ids
+        end
+        local sets = fetchAll(host, ids)
+        if sets and session == current then
+            priced = { location = where, sessions = sets }
         end
     end
 
     -- TS `refreshCost`: one run at a time; a request during a run runs once it ends.
-    refreshCost = function(host, reload: boolean)
-        if run then
+    local function refreshCost(host: plugin.Host, reload: boolean)
+        if running then
             queued = (queued or false) or reload
             return
         end
         if not session then
             return
         end
-        runs += 1
-        run = { id = runs, session = session, location = location(host), waiting = {} }
-        if reload or #tree == 0 then
-            local ids = family(host, session)
-            run.stage, run.ids, run.frontier, run.at, run.listed, run.nextDepth, run.depth =
-                "discover", ids, table.clone(ids), 1, {}, {}, 0
-        else
-            run.stage, run.ids, run.batch, run.open, run.messages = "price", table.clone(tree), 1, 0, {}
-        end
-        step(host)
+        running = true
+        plugin.spawn(function()
+            local again: boolean? = reload
+            while again ~= nil and session do
+                cost(host, again)
+                again, queued = queued, nil
+            end
+            running = false
+        end)
     end
 
     -- TS `touchesTree`.
@@ -312,54 +336,4 @@ return plugin.define(function(setup)
         end
     end)
 
-    setup:onReply(function(host, id, body, failure)
-        if id == limits then
-            limits = nil
-            -- A failed read hides the meters.
-            go = if failure then nil else body and body.data and body.data.go
-            return
-        end
-        local want = run and run.waiting[id]
-        if not want then
-            return
-        end
-        run.waiting[id] = nil
-        -- A failed request ends the run and keeps the last total, as TS's `catch` does.
-        if failure or not body then
-            return finish(host, false)
-        end
-        local cursor = cursorOf(body)
-        if want.index then
-            local list = run.messages[want.index]
-            for _, message in body.data or {} do
-                table.insert(list, message)
-            end
-            if cursor and want.page + 1 < MAX_PAGES then
-                if not ask(host, messages(run.ids[want.index], cursor), { index = want.index, page = want.page + 1 }) then
-                    finish(host, false)
-                end
-                return
-            end
-            run.open -= 1
-            return step(host)
-        end
-        for _, child in body.data or {} do
-            table.insert(run.listed, child.id)
-        end
-        if cursor and want.page + 1 < MAX_PAGES and #run.listed < MAX_SESSIONS then
-            if not ask(host, children(run.frontier[run.at], cursor), { page = want.page + 1 }) then
-                finish(host, false)
-            end
-            return
-        end
-        for _, child in run.listed do
-            if not table.find(run.ids, child) and #run.ids < MAX_SESSIONS then
-                table.insert(run.ids, child)
-                table.insert(run.nextDepth, child)
-            end
-        end
-        run.listed = {}
-        run.at += 1
-        step(host)
-    end)
 end)
