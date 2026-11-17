@@ -3,7 +3,7 @@ export * as WebSearchTool from "./websearch.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { ToolFailure } from "@opencode/ai/effect"
-import { Effect, Schema, Semaphore, Stream } from "effect"
+import { Effect, Schema, Semaphore } from "effect"
 import { HttpClientError } from "effect/http"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
@@ -45,28 +45,9 @@ export const Plugin = {
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
-    const visible = websearch.default().pipe(
-      Effect.as(true),
-      Effect.catchTag("WebSearch.Disabled", () => Effect.succeed(false)),
-      Effect.flatMap((enabled) =>
-        enabled ? websearch.providers().pipe(Effect.map((providers) => providers.length > 0)) : Effect.succeed(false),
-      ),
-    )
-    const availability = { visible: yield* visible }
-    yield* ctx.event.subscribe({ types: ["websearch.updated"] }).pipe(
-      Stream.runForEach(() =>
-        visible.pipe(
-          Effect.tap((value) => Effect.sync(() => (availability.visible = value))),
-          Effect.andThen(ctx.tool.reload()),
-        ),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    availability.visible = yield* visible
 
     yield* ctx.tool
-      .transform((editor) => {
-        if (flags.resolve(loaded.entries).full_codemode.enabled && !availability.visible) return
+      .transform((editor) =>
         editor.add({
           name,
           options: { codemode: flags.resolve(loaded.entries).full_codemode.enabled },
@@ -206,14 +187,18 @@ export const Plugin = {
                 })
               }),
             ),
-        })
-      })
+        }),
+      )
       .pipe(Effect.orDie)
 
     const hook = (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
+        const disabled = yield* websearch.default().pipe(
+          Effect.as(false),
+          Effect.catchTag("WebSearch.Disabled", () => Effect.succeed(true)),
+        )
         // Policy can remove every provider, and the model shouldn't be offered a tool that can't search.
-        if (!(yield* visible)) delete event.tools[name]
+        if (disabled || (yield* websearch.providers()).length === 0) delete event.tools[name]
       })
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)

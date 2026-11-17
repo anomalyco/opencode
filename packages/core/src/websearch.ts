@@ -118,10 +118,7 @@ const layer = Layer.effect(
           set: (selection) => (editor.selection = selection),
         },
       }),
-      notify: State.changes(
-        (data) => ({ providers: providers(data), selection: data.selection }),
-        () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
-      ),
+      notify: State.changes(providers, () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid)),
     })
 
     const requireProvider = (providers: Map<ID, ProviderImplementation>, providerID: ID) => {
@@ -183,8 +180,6 @@ const layer = Layer.effect(
       }),
       select: Effect.fn("WebSearch.select")(function* (selection) {
         yield* kv.set(ProviderKey, selection)
-        // The stored choice is global, so refresh availability in every loaded Location.
-        yield* bus.publish(WebSearch.Event.Updated, {}, { global: true })
       }),
       query: Effect.fn("WebSearch.query")(function* (input, options) {
         const choice = input.providerID ? undefined : yield* selection()
