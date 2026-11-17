@@ -104,6 +104,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   // Everything here serves a mounted session, so the attachment model and the pane's protocol
   // schemas load when the first session opens instead of at startup.
   const owner = getOwner()
+  // Each load in flight by attempt, for a caller that needs the model before its chunk arrived.
+  const loads = new Map<number, Promise<void>>()
 
   const dispatchModel = (event: BrowserModelEvent<Model>) => {
     const next = transitionBrowserModel(untrack(modelState), event)
@@ -117,22 +119,26 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     const deadline = Promise.withResolvers<never>()
     const timer = setTimeout(() => deadline.reject(new Error(ctx.t("model.timedOut"))), BROWSER_MODEL_LOAD_TIMEOUT_MS)
 
-    void Promise.race([import("./model"), deadline.promise])
-      .finally(() => clearTimeout(timer))
-      .then(
-        (module) => {
-          if (ctx.signal.aborted || !isLoadingBrowserModel(untrack(modelState), attempt)) return
-          const created = runWithOwner(owner, () => module.createModel(ctx))!
+    loads.set(
+      attempt,
+      Promise.race([import("./model"), deadline.promise])
+        .finally(() => clearTimeout(timer))
+        .then(
+          (module) => {
+            if (ctx.signal.aborted || !isLoadingBrowserModel(untrack(modelState), attempt)) return
+            const created = runWithOwner(owner, () => module.createModel(ctx))!
 
-          dispatchModel({ type: "load.succeeded", attempt, model: created })
-        },
-        (cause: unknown) =>
-          dispatchModel({
-            type: "load.failed",
-            attempt,
-            error: cause instanceof Error ? cause.message : String(cause),
-          }),
-      )
+            dispatchModel({ type: "load.succeeded", attempt, model: created })
+          },
+          (cause: unknown) =>
+            dispatchModel({
+              type: "load.failed",
+              attempt,
+              error: cause instanceof Error ? cause.message : String(cause),
+            }),
+        )
+        .finally(() => loads.delete(attempt)),
+    )
   }
 
   onCleanup(() => dispatchModel({ type: "disposed" }))
@@ -148,7 +154,14 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       async open(session, url) {
         signal.throwIfAborted()
         ctx.signal.throwIfAborted()
-        const pane = model()
+        // A plugin may ask as its session first mounts, while the model's chunk still loads.
+        dispatchModel({ type: "load.requested" })
+        const loading = untrack(modelState)
+
+        if (loading.status === "loading") await loads.get(loading.attempt)
+        signal.throwIfAborted()
+        ctx.signal.throwIfAborted()
+        const pane = untrack(model)
 
         if (!pane) throw new Error("browser.pane.unavailable")
 
