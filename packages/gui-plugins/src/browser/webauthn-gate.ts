@@ -119,6 +119,14 @@ export function agentPasskeyRefusal(site: string | undefined) {
 export type PasskeyAsker = { readonly origin: string | undefined; readonly mainFrame: boolean }
 
 /**
+ * A command's action, started once the steps it waits for are done and, for the agent's, once the tab refuses
+ * passkeys in the browser process (`restrict`); if that failed, the action never starts.
+ */
+export function afterRefusal<T>(restrict: (() => Promise<void>) | undefined, steps: Promise<unknown>, action: () => T | Promise<T>) {
+  return Promise.all([steps, restrict?.()]).then(action)
+}
+
+/**
  * Whether the tab refuses (`enforced`), the environment's command while it is sent or once it succeeded (`enabling`),
  * and the tab's main frame (`top`).
  */

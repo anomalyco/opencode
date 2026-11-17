@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { Cdp } from "./cdp"
-import { agentPasskeyRefusal, guardWebAuthn, type PasskeyAsker } from "./webauthn-gate"
+import { afterRefusal, agentPasskeyRefusal, guardWebAuthn, type PasskeyAsker } from "./webauthn-gate"
 
 /** The parts of CDP events the gate reads. */
 type CdpEvent = {
@@ -14,7 +14,7 @@ type CdpEvent = {
 // The page's side and the browser process run in the pinned Electron (electron-webauthn.test.ts), which never lets a
 // request reach the system, so no system dialog opens. This drives the pane's decision at the CDP boundary, where
 // letting a request through is only a reply.
-async function gate(native: boolean) {
+async function gate(native: boolean, enable: () => Promise<object> = async () => ({})) {
   const sent: { method: string; params: { name?: string; expression?: string } }[] = []
   const listeners = new Map<string, ((event: CdpEvent, sessionID?: string) => void)[]>()
   const asked: PasskeyAsker[] = []
@@ -28,7 +28,7 @@ async function gate(native: boolean) {
     send: async (method: string, params: { name?: string; expression?: string } = {}) => {
       sent.push({ method, params })
 
-      return {}
+      return method === "WebAuthn.enable" ? enable() : {}
     },
   }
 
@@ -90,4 +90,34 @@ test("ignores calls that are not the gate's own, and leaves no fixed name for a 
 test("tells an agent which site asked, and what to do instead", () => {
   expect(agentPasskeyRefusal("accounts.google.com")).toStartWith("accounts.google.com asked for a passkey or security key (WebAuthn).")
   expect(agentPasskeyRefusal(undefined)).toStartWith("The page asked")
+})
+
+test("an agent's action starts only once Chromium turned the refusal on, and never if it could not", async () => {
+  const answer = Promise.withResolvers<object>()
+  const tab = await gate(true, () => answer.promise)
+  const order: string[] = []
+
+  const run = afterRefusal(tab.guard.enforce, Promise.resolve(), () => order.push("action"))
+  await Bun.sleep(0)
+  expect(tab.sent.filter((item) => item.method === "WebAuthn.enable")).toHaveLength(1)
+  expect(order).toEqual([])
+  order.push("enabled")
+  answer.resolve({})
+  await run
+  expect(order).toEqual(["enabled", "action"])
+
+  // A failed command stops the action, and the next one sends it again.
+  const failing = await gate(true, () => Promise.reject(new Error("WebAuthn.enable failed")))
+  const action = { ran: false }
+  await expect(afterRefusal(failing.guard.enforce, Promise.resolve(), () => (action.ran = true))).rejects.toThrow("WebAuthn.enable failed")
+  expect(action.ran).toBe(false)
+  await failing.guard.enforce().catch(() => undefined)
+  expect(failing.sent.filter((item) => item.method === "WebAuthn.enable")).toHaveLength(2)
+  // The page-side refusal holds meanwhile.
+  expect(failing.guard.enforced()).toBe(true)
+
+  // The person's command waits for nothing of the kind.
+  const person = await gate(true, () => new Promise(() => undefined))
+  expect(await afterRefusal(undefined, Promise.resolve(), () => "ran")).toBe("ran")
+  expect(person.sent.some((item) => item.method === "WebAuthn.enable")).toBe(false)
 })

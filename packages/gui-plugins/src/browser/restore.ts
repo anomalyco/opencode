@@ -1,6 +1,7 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
 import type { BuiltinMainStorage, MainStoreFrom } from "@opencode/plugin/gui/builtin"
+import type { TabActivity } from "./policy"
 
 const Stored = Schema.Struct({
   // `agent`: the agent drove the tab, which keeps every agent-driven limit when it comes back.
@@ -11,6 +12,14 @@ const Stored = Schema.Struct({
 type Stored = typeof Stored.Type
 
 const empty: Stored = { tabs: [], focusedTabID: null }
+
+/**
+ * What the pane seeds its tabs' activity with from a saved state: a tab the agent drove stays agent-driven for good,
+ * though no command runs in it now and none ended recently.
+ */
+export function restoredActivity(saved: Stored) {
+  return new Map<Browser.TabID, TabActivity>(saved.tabs.flatMap((tab) => (tab.agent ? [[tab.id, { agentRuns: 0, agentEndedAt: 0 }]] : [])))
+}
 
 /** Tab URLs and focus per `${server}\n${session}`, imported once from the desktop's own `opencode.browser.dat` rows. */
 export function createBrowserRestoreStore(storage: BuiltinMainStorage) {

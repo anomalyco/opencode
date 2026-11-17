@@ -80,6 +80,12 @@ test(
       // The password manager answered its own passkey; the request it handed on was refused.
       expect(result.manager).toEqual(["from-manager", "NotAllowedError"])
       expect(result.refusals).toBe(4)
+      // Another site's frame, in a process of its own, answers from the environment: no platform authenticator, then
+      // the virtual one, then none; so after the page went to another site, and after its renderer crashed.
+      expect(result.frameOutOfProcess).toEqual([true, false, true, false])
+      expect(result.frameAfterNavigation).toEqual([true, false, true, false])
+      expect(result.frameAfterCrash).toEqual([true, false, true, false])
+      expect(result.pageAfterCrash).toBe(false)
       expect(PASSKEY_REFUSAL).toContain("not supported in this browser")
     } finally {
       await rm(out, { recursive: true, force: true })

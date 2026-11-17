@@ -18,9 +18,11 @@ electron.app.commandLine.appendSwitch("host-resolver-rules", "MAP localhost 127.
 /** What a page answers `executeJavaScript` with here: JSON values. */
 type Json = string | number | boolean | null | undefined | Json[] | { [key: string]: Json }
 
-const server = createServer((_request, response) => {
+// `?frame=<url>` embeds that address, which on another site runs in a renderer process of its own.
+const server = createServer((request, response) => {
+  const frame = new URL(request.url ?? "/", "http://localhost").searchParams.get("frame")
   response.writeHead(200, { "content-type": "text/html" })
-  response.end("<!doctype html><title>passkeys</title>")
+  response.end(`<!doctype html><title>passkeys</title>${frame ? `<iframe src="${encodeURI(frame)}"></iframe>` : ""}`)
 })
 
 const get = (extra = "") =>
@@ -48,7 +50,7 @@ void electron.app.whenReady().then(async () => {
   }
 
   // A tab as the pane makes one: the environment, if any, is turned on before the first document loads.
-  const tab = async (name: string, input: { native: boolean; wrapper: boolean; enforce: boolean }) => {
+  const tab = async (name: string, input: { native: boolean; wrapper: boolean; enforce: boolean; path?: string }) => {
     const view = new electron.WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true, partition: `webauthn-${name}` } })
     win.contentView.addChildView(view)
     const contents = view.webContents
@@ -64,7 +66,7 @@ void electron.app.whenReady().then(async () => {
       input.wrapper ? gate.attach() : undefined,
     ])
 
-    await contents.loadURL(`${origin}/`)
+    await contents.loadURL(`${origin}${input.path ?? "/"}`)
     await ready
     const run = (code: string): Promise<Json> => contents.executeJavaScript(code)
 
@@ -183,7 +185,43 @@ void electron.app.whenReady().then(async () => {
   })()`)
 
   result.refusals = mac.refusals.count
-  ;[plain, bare, agent, mac].forEach((item) => item.gate.dispose())
+
+  // 5. Out-of-process frames: the environment covers another site's frame, after the page goes to another site, and
+  // after its renderer crashed and the page loaded again. Only the platform-authenticator check runs here.
+  const other = `http://127.0.0.1:${address instanceof Object ? address.port : 0}`
+  const frames = await tab("frames", { native: true, wrapper: false, enforce: true, path: `/?frame=${other}/` })
+
+  const frameCovered = async () => {
+    const frame = frames.contents.mainFrame.frames[0]
+
+    if (!frame) return "no frame"
+    const separate = frame.osProcessId !== frames.contents.mainFrame.osProcessId
+    // A frame answers `unknown`; this one answers a boolean, or the check failed.
+    const ask = () => frame.executeJavaScript(uvpaa).then((value): Json => (value === true || value === false ? value : "unreadable"))
+    const before = await ask()
+    const { authenticatorId } = await frames.cdp.send("WebAuthn.addVirtualAuthenticator", { options: authenticator })
+    const during = await ask()
+    await frames.cdp.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId })
+    const after = await ask()
+
+    return [separate, before, during, after]
+  }
+
+  const loaded = () => new Promise<void>((resolve) => frames.contents.once("did-finish-load", () => resolve()))
+  const gone = () => new Promise<void>((resolve) => frames.contents.once("render-process-gone", () => resolve()))
+
+  result.frameOutOfProcess = await frameCovered()
+  await frames.contents.loadURL(`${other}/?frame=${origin}/`)
+  result.frameAfterNavigation = await frameCovered()
+  const crashed = gone()
+  frames.contents.forcefullyCrashRenderer()
+  await crashed
+  const reloaded = loaded()
+  frames.contents.reload()
+  await reloaded
+  result.frameAfterCrash = await frameCovered()
+  result.pageAfterCrash = await frames.run(uvpaa)
+  ;[plain, bare, agent, mac, frames].forEach((item) => item.gate.dispose())
   print()
 }).catch((error: Error) => {
   process.stdout.write(`${JSON.stringify({ stopped: String(error) })}\n`)

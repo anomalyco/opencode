@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import { agentDriven } from "./policy"
-import { createBrowserRestoreStore } from "./restore"
+import { createBrowserRestoreStore, restoredActivity } from "./restore"
 
 test("keeps which tabs the agent drove across a restart, so they come back with every agent-driven limit", () => {
   const values = new Map<string, unknown>()
@@ -30,7 +30,9 @@ test("keeps which tabs the agent drove across a restart, so they come back with 
     (tabID) => tabID === agentTab,
   )
 
-  expect(createBrowserRestoreStore(storage).load("server\nses_a")).toEqual({
+  const saved = createBrowserRestoreStore(storage).load("server\nses_a")
+
+  expect(saved).toEqual({
     tabs: [
       { id: agentTab, url: "https://accounts.example/pk", agent: true },
       { id: userTab, url: "https://docs.example/" },
@@ -38,8 +40,10 @@ test("keeps which tabs the agent drove across a restart, so they come back with 
     focusedTabID: userTab,
   })
 
-  // What the pane seeds a restored agent tab with: agent-driven for good, but not running or recent.
-  const restored = { agentRuns: 0, agentEndedAt: 0 }
-  expect(agentDriven(restored)).toBe(true)
-  expect(agentDriven(restored, Date.now())).toBe(false)
+  // The pane seeds its tabs from the mark: the agent's tab is agent-driven for good, but not running or recent.
+  const activity = restoredActivity(saved)
+  const restored = activity.get(agentTab)
+  expect([...activity.keys()]).toEqual([agentTab])
+  expect(restored && agentDriven(restored)).toBe(true)
+  expect(restored && agentDriven(restored, Date.now())).toBe(false)
 })
