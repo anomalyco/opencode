@@ -1735,8 +1735,9 @@ through them; see [Native WebSocket](#native-websocket-experimental).
 - A hook that fails fails the request.
 
 `event.kind` says why the call was made: `"primary"`, `"compaction"`, `"title"` or `"generate"` for Session requests,
-`"text"`, `"image"`, `"decision"` or `"video"` for Generate, and `"voice"` for voice sessions. `event.session` is set for a Session's own model requests. A
-tool that calls Generate from inside a Session, like the built-in image tool, makes a Generate call with no `session`.
+`"text"`, `"image"`, `"decision"` or `"video"` for Generate, and `"voice"` for voice sessions. `event.session` is set
+for a Session's own model requests. A tool that calls Generate from inside a Session, like the built-in image tool,
+makes a Generate call with no `session`.
 Generate calls made through the HTTP API run in the global config location, so only globally configured plugins see
 them.
 
