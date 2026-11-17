@@ -2494,6 +2494,107 @@ fn a_read_past_the_frame_with_its_snapshot_fails_alone() {
     assert_eq!(toasted(&pipe, "read error"), "read error none");
 }
 
+// Expected (big-boi's catalog review, last): a plugin disabled while the JS host reads nothing and the overflow is full
+// still has its activation deactivated once the JS host reads again, so a fetch the host took settles once, refused, and
+// the reply that comes after reaches nothing. The full overflow refused the deactivation, and the fetch waited for good.
+#[test]
+fn a_deactivation_past_a_full_overflow_settles_what_it_awaits() {
+    let Some(mut config) = config() else { return };
+    (config.limits.queued, config.limits.inbox, config.limits.ordered) = (40 << 10, 64 << 10, 1 << 16);
+    let root = opencode_util::temp::tempdir().unwrap();
+    let (log, stalled, gate) = (root.path().join("settled"), root.path().join("stalled"), root.path().join("gate"));
+    let plugin = root.path().join("config").join("plugins").join("ending");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        r#"import {{ appendFileSync, existsSync, writeFileSync }} from "node:fs"
+const [LOG, STALLED, GATE] = {paths}
+export default {{ id: "example.ending", setup(api) {{
+  const carrier = api[Symbol.for("opencode.carrier")]
+  const command = (name, run) => carrier.command({{ name, title: name }}, run)
+  command("ending.fetch", () => {{
+    carrier.fetch({{ method: "GET", path: "/api/held" }}).then((result) => appendFileSync(LOG, "settled " + Object.keys(result ?? {{}}).join(",") + "\n"))
+  }})
+  // The JS host reads nothing until the gate opens.
+  command("ending.stall", () => setTimeout(() => {{
+    writeFileSync(STALLED, "")
+    while (!existsSync(GATE)) {{}}
+  }}, 0))
+  command("ending.noop", () => {{}})
+}} }}
+"#,
+        paths = serde_json::json!([log, stalled, gate]),
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let open = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let asked = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (server_gate, seen) = (open.clone(), asked.clone());
+    let server = support::Fake::new(move |request| match request.path.as_str() {
+        "/api/held" => {
+            seen.store(true, std::sync::atomic::Ordering::SeqCst);
+            let begun = Instant::now();
+            while !server_gate.load(std::sync::atomic::Ordering::SeqCst) && begun.elapsed() < Duration::from_secs(20) {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            (200, serde_json::json!({ "held": true }))
+        }
+        "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    });
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.ending");
+    pipe.settle();
+    let (h, scripts) = (&pipe.harness, pipe.scripts());
+    h.tui.keymap.dispatch("ending.fetch", None);
+    h.wait("the server has the request", || {
+        h.app.advance(Duration::from_millis(1));
+        asked.load(std::sync::atomic::Ordering::SeqCst)
+    });
+    h.tui.keymap.dispatch("ending.stall", None);
+    h.wait("the JS host stalled", || {
+        h.app.advance(Duration::from_millis(1));
+        stalled.exists()
+    });
+    // A backlog until the overflow refuses what comes: it is full.
+    let refused = pipe::crossed().refused_sends;
+    for _ in 0..10_000 {
+        if pipe::crossed().refused_sends > refused {
+            break;
+        }
+        h.tui.keymap.dispatch("ending.noop", Some(&"x".repeat(2 << 10)));
+    }
+    assert!(pipe::crossed().refused_sends > refused, "the overflow never filled");
+    // To its last bytes, with pings smaller than a deactivation.
+    let refused = pipe::crossed().refused_sends;
+    for _ in 0..10_000 {
+        if pipe::crossed().refused_sends > refused {
+            break;
+        }
+        scripts.ping();
+    }
+    assert!(pipe::crossed().refused_sends > refused, "a ping still had room");
+    h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "example.ending", false);
+    for _ in 0..20 {
+        h.app.advance(Duration::from_millis(1));
+    }
+    std::fs::write(&gate, "").unwrap();
+    pipe.settle();
+    assert_eq!(scripts.overflow_bytes(), 0, "the overflow drained");
+    h.wait("the fetch settled", || {
+        h.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+    });
+    open.store(true, std::sync::atomic::Ordering::SeqCst);
+    for _ in 0..200 {
+        h.app.advance(Duration::from_millis(2));
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    pipe.settle();
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "settled Err\n", "settled once, refused");
+}
+
 // Expected (bigboi's pipe sign-off, recheck): a watched read whose snapshot fits a frame but not what is left of the
 // overflow goes as a failed read, and charges the plugin's content nothing: once the queue drained, the ledger holds
 // what it held before, and a neighbouring read that needs that room is pushed.
