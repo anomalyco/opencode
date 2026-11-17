@@ -4,6 +4,7 @@ import { ConfigProvider, Effect, type FileSystem, type Scope, Option } from "eff
 import { afterAll, expect, mock, test } from "bun:test"
 import { mkdir, rm } from "node:fs/promises"
 import path from "node:path"
+import { Server } from "../src/commands/commands"
 import { Config } from "../src/config"
 import type { MiniCommandInput } from "../src/mini"
 import { OPENCODE_VERSION } from "../src/version"
@@ -58,8 +59,6 @@ async function runHandler(input: {
           screenReader: input.flag,
         })
       : handler({
-          server: url,
-          standalone: false,
           continue: false,
           session: Option.none(),
           fork: false,
@@ -73,7 +72,7 @@ async function runHandler(input: {
           auto: input.auto ?? false,
           yolo: false,
           dangerouslySkipPermissions: false,
-        })
+        }).pipe(Effect.provideService(Server, url))
     await Effect.runPromise(
       // The plain handler also needs services that it only reaches after the screen reader handoff.
       (command as Effect.Effect<void, unknown, Config.Service | Global.Service | FileSystem.FileSystem | Scope.Scope>).pipe(

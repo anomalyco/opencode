@@ -47,6 +47,7 @@ async function replies(permissions: "prompt" | "autoaccept", onReply?: () => Pro
     footer.event({ type: "stream.view", view: { type: "permission", request } })
     await app.renderOnce()
     await Bun.sleep(0)
+    await app.renderOnce()
     return { sent, frame: app.captureCharFrame() }
   } finally {
     footer.destroy()

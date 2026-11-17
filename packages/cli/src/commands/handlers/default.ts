@@ -1,7 +1,7 @@
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { run } from "@opencode/tui"
-import { Commands } from "../commands"
+import { Commands, Server, Standalone } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
 import { Context, Effect, FileSystem, Option, Queue, Schedule, Semaphore } from "effect"
@@ -28,8 +28,6 @@ export default Runtime.handler(Commands, (input) =>
       // The full-screen interface redraws in place, which screen readers cannot follow. Mini appends to scrollback.
       const { start } = yield* Effect.promise(() => import("./mini"))
       return yield* start({
-        server: input.server,
-        standalone: input.standalone,
         continue: input.continue,
         session: input.session,
         fork: false,
@@ -44,7 +42,10 @@ export default Runtime.handler(Commands, (input) =>
         auto: input.auto || settings.session?.permissions === "autoaccept",
         yolo: input.yolo,
         dangerouslySkipPermissions: input.dangerouslySkipPermissions,
-      })
+      }).pipe(
+        Effect.provideService(Server, input.server),
+        Effect.provideService(Standalone, input.standalone),
+      )
     }
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))

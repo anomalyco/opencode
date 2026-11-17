@@ -18,7 +18,7 @@ async function firstLine(enabled: boolean) {
         background={() => "transparent"}
         rail={() => "white"}
         mono
-        cursorStyle={undefined}
+        cursorStyle={{ style: "block", blinking: false }}
         placeholder={() => ""}
         onSubmit={() => {}}
         onKeyDown={() => {}}
@@ -59,7 +59,7 @@ test("the open menu owns the terminal cursor in screen reader mode", async () =>
         background={() => "transparent"}
         rail={() => "white"}
         mono
-        cursorStyle={undefined}
+        cursorStyle={{ style: "block", blinking: false }}
         placeholder={() => ""}
         onSubmit={() => {}}
         onKeyDown={() => {}}
