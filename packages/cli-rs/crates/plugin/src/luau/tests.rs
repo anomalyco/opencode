@@ -422,8 +422,8 @@ fn a_plugin_that_catches_running_out_of_memory_fails() {
     assert!(error.contains("out of memory") && error.contains("of its 4 MiB heap"), "{error}");
 }
 
-// Expected (luau-spike 1.4): no file system, no process, no `require` outside the plugin, no `loadstring`, frozen
-// globals; one plugin's VM shares nothing with another's.
+// Expected (luau-spike 1.4, luau-safety 5): no file system, no process, no `require` outside the plugin, no
+// `loadstring`, no `integer` library, frozen globals; one plugin's VM shares nothing with another's.
 #[test]
 fn the_sandbox_holds_a_plugin_to_its_own_files() {
     let host = host();
@@ -438,6 +438,7 @@ fn the_sandbox_holds_a_plugin_to_its_own_files() {
                     getenv = tostring(os.getenv),
                     loadstring = tostring(loadstring),
                     dofile = tostring(dofile),
+                    integer = tostring(integer),
                     up = refused(function() return require("../escape") end),
                     climb = refused(function() return require("./../escape") end),
                     absolute = refused(function() return require("/etc/passwd") end),
@@ -466,6 +467,8 @@ fn the_sandbox_holds_a_plugin_to_its_own_files() {
     assert_eq!(seen["getenv"], "nil");
     assert_eq!(seen["loadstring"], "nil");
     assert_eq!(seen["dofile"], "nil");
+    // Luau 740's 64-bit `integer` library, which 747 removed: no plugin comes to depend on it.
+    assert_eq!(seen["integer"], "nil");
     assert!(seen["up"].contains("could not get parent of requiring context"), "{message}");
     assert!(seen["climb"].contains("could not get parent of requiring context"), "{message}");
     assert!(seen["absolute"].contains("must start with a valid prefix"), "{message}");
