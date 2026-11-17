@@ -519,7 +519,7 @@ describe("imports", () => {
   test("a module that isn't provided, or a missing export, fails at the import", async () => {
     const target = CodeMode.make({ extensions: [files] })
     expect((await failure(`import yaml from "yaml"`, target)).message).toStartWith(
-      `Error: Cannot import "yaml": it isn't available in Code Mode, which can't load packages or files.`,
+      `Error: Cannot import "yaml": it isn't available here, where packages and files can't be loaded.`,
     )
     expect(await value(`try { await import("child_process") } catch (e) { return e.message }`, target)).toStartWith(
       `Cannot import "child_process"`,
@@ -639,7 +639,7 @@ describe("configuration", () => {
     expect(result.toolCalls).toEqual([])
   })
 
-  test("a result handed to a tool is plain data", async () => {
+  test("a result with functions can't be handed to a tool; its data can", async () => {
     const tools = CodeMode.make({
       extensions: [extension],
       tools: {
@@ -651,12 +651,15 @@ describe("configuration", () => {
         }),
       },
     })
-    expect(await value(`return await tools.echo({ v: await fetch("https://a.test/") })`, tools)).toEqual({
-      status: 200,
-      ok: true,
-      headers: {},
-      handlers: [null],
-    })
+    expect((await failure(`return await tools.echo({ v: await fetch("https://a.test/") })`, tools)).message).toContain(
+      "contains a function, which cannot be passed to the host",
+    )
+    expect(
+      await value(
+        `const { status, ok } = await fetch("https://a.test/"); return await tools.echo({ v: { status, ok } })`,
+        tools,
+      ),
+    ).toEqual({ status: 200, ok: true })
   })
 
   test("a run can get only some of the runtime's extensions", async () => {

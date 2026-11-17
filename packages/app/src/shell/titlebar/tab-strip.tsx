@@ -352,10 +352,17 @@ export function createSessionRowNavigation(input: {
   const command = useCommand()
   const language = useLanguage()
 
+  // The destination composer leaves focus on a control that still holds it (session/composer/focus.tsx), so a shortcut
+  // that opens another session releases focus first, as clicking its tab does.
+  const navigate = (key: string, reveal: boolean) => {
+    if (key !== input.current() && document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    input.navigate(key, reveal)
+  }
+
   const selectAdjacent = (offset: -1 | 1, include?: (key: string) => boolean) => {
     const key = adjacentTabKey(input.keys(), input.current(), offset, include)
 
-    if (key) input.navigate(key, false)
+    if (key) navigate(key, false)
   }
 
   command.register("titlebar-tab-cycle", () => [
@@ -415,7 +422,7 @@ export function createSessionRowNavigation(input: {
         title: "",
         keybind: `mod+${index + 1}`,
         hidden: true,
-        onSelect: () => input.navigate(key, true),
+        onSelect: () => navigate(key, true),
       })),
   )
 

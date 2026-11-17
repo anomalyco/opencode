@@ -504,7 +504,7 @@ test("option arrows move to the previous or next tab, and with shift to the next
   await expectPath(page, sessionHref(c.id))
 })
 
-for (const navigation of ["horizontal", "vertical", "keyboard"] as const) {
+for (const navigation of ["horizontal", "vertical", "keyboard", "numbered"] as const) {
   test(`switching session tabs restores the caret and pastes into the destination draft (${navigation})`, async ({
     page,
     context,
@@ -525,14 +525,24 @@ for (const navigation of ["horizontal", "vertical", "keyboard"] as const) {
     const tabB = strip.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
     await editor.fill("Draft A")
 
-    await (navigation === "keyboard" ? page.keyboard.press("Control+Alt+ArrowRight") : tabB.click())
+    if (navigation === "keyboard") await page.keyboard.press("Control+Alt+ArrowRight")
+
+    if (navigation === "numbered") {
+      // A titlebar control stays mounted across sessions, so it still holds focus when the destination composer mounts.
+      const home = page.locator('[data-slot="titlebar-v2"]').getByRole("button", { name: "Home", exact: true })
+      await home.focus()
+      await expect(home).toBeFocused()
+      await page.keyboard.press("ControlOrMeta+2")
+    }
+
+    if (navigation === "horizontal" || navigation === "vertical") await tabB.click()
     await expectPath(page, sessionHref(b.id))
     await expect(editor).toBeFocused()
     await page.evaluate(() => navigator.clipboard.writeText("Draft B"))
     await page.keyboard.press("ControlOrMeta+V")
     await expect(editor).toHaveText("Draft B")
 
-    await page.keyboard.press("Control+Alt+ArrowLeft")
+    await page.keyboard.press(navigation === "numbered" ? "ControlOrMeta+1" : "Control+Alt+ArrowLeft")
     await expectPath(page, sessionHref(a.id))
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("Draft A")
@@ -540,7 +550,7 @@ for (const navigation of ["horizontal", "vertical", "keyboard"] as const) {
     await page.keyboard.press("ControlOrMeta+V")
     await expect(editor).toHaveText("Draft A appended")
 
-    await tabB.click()
+    await (navigation === "numbered" ? page.keyboard.press("ControlOrMeta+2") : tabB.click())
     await expectPath(page, sessionHref(b.id))
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("Draft B")
