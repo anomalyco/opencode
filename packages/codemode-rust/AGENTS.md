@@ -26,7 +26,7 @@ Out of scope: classes (rejected, like the reference), `export`/modules/`import`,
 - Unsupported syntax returns `UnsupportedSyntax` with a location; never panic on user input.
 - No `unsafe` unless measured and justified in a comment.
 - Dependencies: pure Rust only, and few. Justify each in the commit that adds it.
-- test262 parity: `bash test262/run.sh` must pass, and `test262/rust-skipped.txt` may only shrink.
+- test262 parity runs both ways: `bash test262/run.sh` must pass, and `test262/rust-skipped.txt` and `test262/reference-gaps.txt` may only shrink.
 - `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` must pass.
 - Benchmark claims need the command, machine and numbers in `bench/RESULTS.md`.
 - Nothing in the repo mentions internal tooling, private chats, home paths, hostnames or secrets.

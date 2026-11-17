@@ -70,10 +70,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      # The sync script needs only Bun itself, not the workspace's dependencies.
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
+      # The reference runs the listed reference gaps, so its dependencies are installed too.
+      - uses: ./.github/actions/setup-bun
       - name: Install Rust
         run: rustup toolchain install --no-self-update
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -91,8 +89,10 @@ jobs:
         with:
           path: ${{ steps.test262.outputs.checkout }}
           key: test262-${{ steps.test262.outputs.revision }}
-      # Fails when a file fails that test262/rust-skipped.txt does not list, or a listed file passes.
-      - name: Run test262 against rust-skipped.txt
+      # Parity both ways. Fails when a file fails that test262/rust-skipped.txt does not list, or a listed file
+      # passes; and when a file the reference skips passes but test262/reference-gaps.txt does not list it, or a
+      # listed file fails here, leaves the reference's skipped.txt, or passes in the reference.
+      - name: Run test262 against rust-skipped.txt and reference-gaps.txt
         env:
           TEST262_CHECKOUT: ${{ steps.test262.outputs.checkout }}
         run: bash test262/run.sh

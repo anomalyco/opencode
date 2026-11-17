@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Runs the reference's pinned test262 file set through PsychoScript and checks it against test262/rust-skipped.txt.
+# Runs the reference's pinned test262 file set through PsychoScript and checks both gap lists:
+# test262/rust-skipped.txt (fails here, passes in the reference) and test262/reference-gaps.txt (passes here, skipped by
+# the reference, and still failing when the reference runs it).
 # Usage: bash test262/run.sh [--write] [prefix]. Extra arguments go to the runner; see test262/src/main.rs.
 #
 # - Clones tc39/test262 at the reference manifest's revision into TEST262_CHECKOUT (default: a cache directory).
 # - Runs the reference's own sync script into TEST262_FILES (default: target/test262), so the file set and its
 #   filters are exactly the reference's.
 # - The reference CodeMode package is ../codemode relative to this workspace; set CODEMODE_REF to override it.
-# Needs git, bun and cargo.
+# Needs git, bun, cargo, and the reference package's dependencies installed (bun install).
 set -euo pipefail
 [ -n "${CODEMODE_REF:-}" ] && CODEMODE_REF=$(cd "$CODEMODE_REF" && pwd)
 cd "$(dirname "$0")/.."
@@ -41,8 +43,30 @@ if [ "$(cat "$FILES/stamp" 2>/dev/null)" != "$REVISION $(cksum <"$MANIFEST") $(c
 fi
 
 cargo build --release --locked -p psychoscript-test262 >&2
-exec target/release/psychoscript-test262 \
+status=0
+target/release/psychoscript-test262 \
   --root "$SYNCED" \
   --reference-skipped "$REF_PKG/test/test262/skipped.txt" \
   --skipped test262/rust-skipped.txt \
-  "$@"
+  --reference-gaps test262/reference-gaps.txt \
+  "$@" || status=$?
+
+# The other direction: every listed reference gap must still fail in the reference itself.
+WRITE="" PREFIX="" SKIP=""
+for arg in "$@"; do
+  if [ -n "$SKIP" ]; then SKIP=""; continue; fi
+  case $arg in
+    --write) WRITE=1 ;;
+    --jobs) SKIP=1 ;;
+    --*) ;;
+    *) PREFIX=$arg ;;
+  esac
+done
+if [ -z "$WRITE" ]; then
+  bun test262/reference.ts "$REF_PKG" "$SYNCED" test262/reference-gaps.txt "$PREFIX" >"$FILES/reference.txt" || status=1
+  passing=$(grep -c '^pass' "$FILES/reference.txt" || true)
+  sed -n 's/^pass\t/PASSES IN THE REFERENCE NOW, remove it from reference-gaps.txt  /p' "$FILES/reference.txt"
+  echo "the reference fails $(grep -c '^fail' "$FILES/reference.txt" || true) of the listed reference gaps and passes $passing"
+  [ "$passing" = 0 ] || status=1
+fi
+exit "$status"
