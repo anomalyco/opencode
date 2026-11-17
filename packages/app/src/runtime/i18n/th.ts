@@ -1262,9 +1262,6 @@ export const dict = {
   "sidebar.recent.moveDown": "ย้ายลง",
   "settings.experimental.row.newIcons.title": "ไอคอนใหม่",
   "settings.experimental.row.newIcons.description": "ดูตัวอย่างชุดไอคอนที่อัปเดต",
-  "settings.experimental.row.foldUserMessages.title": "พับข้อความยาว",
-  "settings.experimental.row.foldUserMessages.description":
-    "พับข้อความของคุณที่ยาวเกิน 12 บรรทัดไว้หลังปุ่ม อ่านเพิ่มเติม",
   "settings.experimental.row.newTimeline.title": "ไทม์ไลน์ใหม่",
   "settings.experimental.row.newTimeline.description":
     "ไทม์ไลน์เซสชันที่ออกแบบใหม่ ซึ่งจัดกลุ่มสิ่งที่เอเจนต์ทำ พร้อมบรรทัดสถานะเดียวใต้เทิร์น",
@@ -1391,6 +1388,9 @@ export const dict = {
   "settings.timeline.row.width.wide": "กว้าง",
   "settings.timeline.description.compact": "แสดงเอเจนต์ย่อยแยกกัน จัดกลุ่มกิจกรรมอื่นโดยย่อรายละเอียดไว้",
   "settings.timeline.description.quiet": "แสดงเอเจนต์ย่อยแยกกันและจัดกลุ่มการแก้ไข ซ่อนกิจกรรมอื่น",
+  "settings.timeline.row.foldUserMessages.title": "พับข้อความยาว",
+  "settings.timeline.row.foldUserMessages.description":
+    "พับข้อความของคุณที่ยาวเกิน 12 บรรทัดไว้หลังปุ่ม อ่านเพิ่มเติม",
   "settings.timeline.row.turnDiffs.title": "ไฟล์ที่เปลี่ยนแปลง",
   "settings.timeline.row.turnDiffs.description": "แสดงรายการไฟล์ที่แต่ละเทิร์นเปลี่ยนแปลงเมื่อเทิร์นเสร็จสิ้น",
   "settings.timeline.category.commentary": "คำอธิบาย",

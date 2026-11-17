@@ -1231,9 +1231,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Alih ke bawah",
   "settings.experimental.row.newIcons.title": "Ikon baharu",
   "settings.experimental.row.newIcons.description": "Pratonton set ikon yang dikemas kini",
-  "settings.experimental.row.foldUserMessages.title": "Lipat mesej panjang",
-  "settings.experimental.row.foldUserMessages.description":
-    "Lipat mesej anda yang melebihi 12 baris di sebalik butang Baca lagi",
   "settings.experimental.row.newTimeline.title": "Garis masa baharu",
   "settings.experimental.row.newTimeline.description":
     "Garis masa sesi yang direka semula yang mengumpulkan perkara yang dilakukan ejen, dengan satu baris status di bawah giliran",
@@ -1365,6 +1362,9 @@ export const dict = {
     "Tunjukkan subagen secara berasingan. Kumpulkan aktiviti lain dengan butiran diruntuhkan.",
   "settings.timeline.description.quiet":
     "Tunjukkan subagen secara berasingan dan kumpulkan suntingan. Sembunyikan aktiviti lain.",
+  "settings.timeline.row.foldUserMessages.title": "Lipat mesej panjang",
+  "settings.timeline.row.foldUserMessages.description":
+    "Lipat mesej anda yang melebihi 12 baris di sebalik butang Baca lagi",
   "settings.timeline.row.turnDiffs.title": "Fail yang diubah",
   "settings.timeline.row.turnDiffs.description": "Senaraikan fail yang diubah oleh setiap giliran apabila ia selesai",
   "settings.timeline.category.commentary": "Ulasan",

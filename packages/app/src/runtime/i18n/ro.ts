@@ -1257,9 +1257,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Mută în jos",
   "settings.experimental.row.newIcons.title": "Pictograme noi",
   "settings.experimental.row.newIcons.description": "Previzualizează setul de pictograme actualizat",
-  "settings.experimental.row.foldUserMessages.title": "Pliază mesajele lungi",
-  "settings.experimental.row.foldUserMessages.description":
-    "Pliază mesajele tale mai lungi de 12 linii în spatele unui buton Citește mai mult",
   "settings.experimental.row.newTimeline.title": "Cronologie nouă",
   "settings.experimental.row.newTimeline.description":
     "O cronologie a sesiunii reproiectată, care grupează ce a făcut agentul, cu o singură linie de stare sub rundă",
@@ -1392,6 +1389,9 @@ export const dict = {
     "Afișează subagenții separat. Grupează restul activității cu detaliile restrânse.",
   "settings.timeline.description.quiet":
     "Afișează subagenții separat și grupează editările. Ascunde restul activității.",
+  "settings.timeline.row.foldUserMessages.title": "Pliază mesajele lungi",
+  "settings.timeline.row.foldUserMessages.description":
+    "Pliază mesajele tale mai lungi de 12 linii în spatele unui buton Citește mai mult",
   "settings.timeline.row.turnDiffs.title": "Fișiere modificate",
   "settings.timeline.row.turnDiffs.description":
     "Listează fișierele modificate de fiecare rundă când aceasta se încheie",

@@ -1226,8 +1226,6 @@ export const dict = {
   "sidebar.recent.moveDown": "아래로 이동",
   "settings.experimental.row.newIcons.title": "새 아이콘",
   "settings.experimental.row.newIcons.description": "업데이트된 아이콘 세트 미리 보기",
-  "settings.experimental.row.foldUserMessages.title": "긴 메시지 접기",
-  "settings.experimental.row.foldUserMessages.description": "12줄이 넘는 메시지를 더 읽기 버튼 뒤로 접기",
   "settings.experimental.row.newTimeline.title": "새 타임라인",
   "settings.experimental.row.newTimeline.description":
     "에이전트가 한 일을 그룹으로 묶고 턴 아래에 상태 줄 하나를 표시하는 새로 디자인된 세션 타임라인",
@@ -1355,6 +1353,8 @@ export const dict = {
   "settings.timeline.description.compact":
     "하위 에이전트를 별도로 표시합니다. 다른 활동은 세부 정보를 접은 채 그룹화합니다.",
   "settings.timeline.description.quiet": "하위 에이전트를 별도로 표시하고 편집을 그룹화합니다. 다른 활동은 숨깁니다.",
+  "settings.timeline.row.foldUserMessages.title": "긴 메시지 접기",
+  "settings.timeline.row.foldUserMessages.description": "12줄이 넘는 메시지를 더 읽기 버튼 뒤로 접기",
   "settings.timeline.row.turnDiffs.title": "변경된 파일",
   "settings.timeline.row.turnDiffs.description": "각 턴이 끝나면 해당 턴에서 변경된 파일 나열",
   "settings.timeline.category.commentary": "해설",

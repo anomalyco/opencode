@@ -1258,9 +1258,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Pārvietot uz leju",
   "settings.experimental.row.newIcons.title": "Jaunas ikonas",
   "settings.experimental.row.newIcons.description": "Priekšskatīt atjaunināto ikonu kopu",
-  "settings.experimental.row.foldUserMessages.title": "Sakļaut garus ziņojumus",
-  "settings.experimental.row.foldUserMessages.description":
-    "Sakļaut jūsu ziņojumus, kas garāki par 12 rindām, aiz pogas “Lasīt vairāk”",
   "settings.experimental.row.newTimeline.title": "Jauna laika skala",
   "settings.experimental.row.newTimeline.description":
     "Pārveidota sesijas laika skala, kas grupē aģenta paveikto, ar vienu statusa rindu zem gājiena",
@@ -1390,6 +1387,9 @@ export const dict = {
   "settings.timeline.row.width.wide": "Plats",
   "settings.timeline.description.compact": "Rādīt apakšaģentus atsevišķi. Grupēt citas darbības ar sakļautām detaļām.",
   "settings.timeline.description.quiet": "Rādīt apakšaģentus atsevišķi un grupēt labojumus. Slēpt citas darbības.",
+  "settings.timeline.row.foldUserMessages.title": "Sakļaut garus ziņojumus",
+  "settings.timeline.row.foldUserMessages.description":
+    "Sakļaut jūsu ziņojumus, kas garāki par 12 rindām, aiz pogas “Lasīt vairāk”",
   "settings.timeline.row.turnDiffs.title": "Mainītie faili",
   "settings.timeline.row.turnDiffs.description": "Pēc katra gājiena beigām uzskaitīt tajā mainītos failus",
   "settings.timeline.category.commentary": "Komentāri",
