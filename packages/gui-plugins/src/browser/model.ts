@@ -16,13 +16,14 @@ import {
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
-import { BrowserPane, type PaneEvent } from "./ipc"
+import { BrowserPane, type PaneEvent, type PillPresentation } from "./ipc"
 import {
   addressFocusTab,
   createInitialState,
   serverSupported,
   sessionAttached,
   sessionBrowser,
+  sessionConnection,
   sessionEmbed,
   sessionError,
   sessionPending,
@@ -99,6 +100,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       ? { status: "active", generation: current.generation }
       : { status: current.status }
   }
+
+  const lockSnapshot = () => client()?.state()?.locked
 
   const owner = getOwner()
   const history = ctx.stores.history
@@ -233,7 +236,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (!drive) return
 
-    if (!current) return dispatch({ type: "register.failed", sessionKey, attempt, unavailable: true, closed: false })
+    if (!current)
+      return dispatch({ type: "register.failed", sessionKey, attempt, unavailable: true, closed: false, locked: false })
     registrations.get(sessionKey)?.registration.close()
     const target = { server: drive.ref.server.id, session: drive.ref.id }
 
@@ -255,6 +259,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
             attempt,
             unavailable: unavailable(cause),
             closed: cause instanceof Error && cause.message === "browser.pane.registration.closed",
+            locked: cause instanceof Error && cause.message === "browser.pane.locked",
           }),
         listener: (event) => receive(drive, attempt, event),
       }),
@@ -265,10 +270,20 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     const sessionKey = drive.ref.key
 
     if (event.type === "state")
-      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error })
+      return dispatch({
+        type: "pane.state",
+        sessionKey,
+        attempt,
+        state: event.state,
+        // A lock close that arrives after the authoritative unlock is a lost connection, not a new lock.
+        error: event.error === "browser.pane.locked" && !lockSnapshot() ? "browser.pane.disconnected" : event.error,
+      })
 
     if (event.type === "embed")
       return dispatch({ type: "pane.embed", sessionKey, attempt, tabID: event.tabID, embed: event.embed })
+
+    if (event.type === "unembed")
+      return dispatch({ type: "pane.unembed", sessionKey, attempt, tabID: event.tabID })
 
     if (event.type === "focus") return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
 
@@ -372,6 +387,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const detach = (sessionKey: string) => {
     const drive = drives.get(sessionKey)
     drives.delete(sessionKey)
+
+    if (drive) {
+      // Releases an unbound (disconnected or locked) record too; closing a binding alone would leave it behind.
+      void client()
+        ?.release({ server: drive.ref.server.id, session: drive.ref.id })
+        .catch(() => undefined)
+    }
+
     drive?.dispose()
     Array.from(recorded.keys())
       .filter((item) => item.startsWith(`${sessionKey}\n`))
@@ -410,6 +433,16 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // The SDK removes the listener when the Ipc's generation ends.
   createKeyed(pane, (current) => current.on("event", (value) => listeners.get(value.binding)?.(value.event)))
+  // A plain `createKeyed` treats false as no key, so the unlock (false) would never reach the machine.
+  createKeyed(
+    () => {
+      const locked = lockSnapshot()
+
+      return locked === undefined ? undefined : { locked }
+    },
+    ({ locked }) => dispatch({ type: locked ? "screen.locked" : "screen.unlocked" }),
+    { equals: (previous, next) => previous.locked === next.locked },
+  )
 
   const wakeCurrent = () => {
     if (document.visibilityState !== "visible") return
@@ -434,6 +467,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (drives.has(sessionKey) || !serverSupported(untrack(machine), ref.server.id)) return
     const drive: Drive = { ref, previews: [], dispose: () => undefined }
     drives.set(sessionKey, drive)
+
+    if (lockSnapshot()) dispatch({ type: "screen.locked" })
     dispatch({ type: "session.attached", sessionKey, serverID: ref.server.id, located: !!ref.location })
 
     // The attachment's own root, not the route effect that happened to call attach(), so `detach` ends it.
@@ -453,6 +488,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
               if (event.data.sessionID === ref.id) dispatch({ type: "session.wake", sessionKey })
             }),
           )
+          // A restarted server announces itself; a pane that lost the connection retries at once instead of waiting
+          // out the rest of its backoff.
+          onCleanup(data.on("server.connected", () => dispatch({ type: "session.reconnect", sessionKey })))
         },
       )
 
@@ -626,6 +664,21 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return code === undefined ? undefined : describe(code)
     },
     suspended: (session: Session) => sessionSuspended(machine(), session.key),
+    /** Sends the pill's resolved label and appearance to its small native view. */
+    pill(input: PillPresentation) {
+      void client()
+        ?.pill(input)
+        .catch(() => undefined)
+    },
+    /** The host embed id of this window's native pill view. */
+    pillEmbed: () => client()?.state()?.pill,
+    /** The screen lock currently holds every attachment; its notice replaces the reconnect one. */
+    locked() {
+      const current = machine()
+
+      return current.status === "open" && current.locked
+    },
+    connection: (session: Session) => sessionConnection(machine(), session.key),
     /** The host embed of a tab's page, once main created the page. */
     embed: (session: Session, tabID: string) => sessionEmbed(machine(), session.key, tabID),
     /**

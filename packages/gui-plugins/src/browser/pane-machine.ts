@@ -20,6 +20,8 @@ export type TabSlot =
 type Inventory = {
   readonly binding: string
   readonly window: number
+  /** The live record key: window + server + session. Saved tabs keep the window-independent `storageKey`. */
+  readonly liveKey: string
   readonly storageKey: string
   readonly tabs: ReadonlyMap<Browser.TabID, TabSlot>
   /** Null or a key of `tabs`. */
@@ -80,13 +82,15 @@ export type BindingEvent =
   | { readonly type: "server.attached"; readonly fileRoots: readonly string[] }
   | { readonly type: "handshake.unsupported" }
   | { readonly type: "control.unrecognized"; readonly controlType: string | undefined }
-  | { readonly type: "attachment.ended"; readonly outcome: AttachmentOutcome }
+  | { readonly type: "attachment.ended"; readonly outcome: AttachmentOutcome; readonly keep?: boolean }
   | { readonly type: "register.timed-out" }
   /** The window navigated or was destroyed. */
   | { readonly type: "owner.closed" }
   /** The window closed the binding; its saved tabs are forgotten. */
   | { readonly type: "client.closed" }
   | { readonly type: "pane.disposed" }
+  /** The screen locked: the attachment ends and its tabs wait in the window. */
+  | { readonly type: "screen.locked" }
   | { readonly type: "request.started"; readonly requestID: string }
   | { readonly type: "request.targeted"; readonly requestID: string; readonly tabID: Browser.TabID }
   | { readonly type: "request.cancelled"; readonly requestID: string }
@@ -99,6 +103,13 @@ export type BindingEvent =
       readonly attempt: number
       readonly tab: Browser.Tab
       readonly error?: string
+    }
+  /** A page that was already live when a binding adopted it is dead; report its tab as unloaded. */
+  | {
+      readonly type: "tab.failed"
+      readonly tabID: Browser.TabID
+      readonly tab: Browser.Tab
+      readonly error: string
     }
   /** The page's renderer crashed, its debugger detached, or it failed to become ready. */
   | {
@@ -121,6 +132,8 @@ export type PaneMachineEvent =
       readonly saved: StoredRestore
     }
   | { readonly type: "binding"; readonly binding: string; readonly event: BindingEvent }
+  /** The screen locked: every binding closes. */
+  | { readonly type: "locked" }
   | { readonly type: "disposed" }
 
 type StateEvent = Extract<PaneEvent, { readonly type: "state" }>
@@ -140,6 +153,8 @@ export type PaneEffect =
   | { readonly type: "emit"; readonly binding: string; readonly event: PaneEvent }
   | { readonly type: "abort-requests"; readonly binding: string; readonly requestIDs: readonly string[] }
   | { readonly type: "release-pages"; readonly binding: string; readonly attempts: readonly number[] }
+  /** The session's live pages, proxy and partition are going away with its last binding. */
+  | { readonly type: "release-record"; readonly liveKey: string }
   /** Rejects a pending `register` call, stops the timer and listeners, and ends the attachment. Always last. */
   | { readonly type: "teardown"; readonly binding: string }
   | { readonly type: "warn"; readonly message: string; readonly detail: string | undefined }
@@ -200,6 +215,14 @@ export function transitionPane(state: PaneState, event: PaneMachineEvent): PaneT
       ),
     }
 
+  if (event.type === "locked")
+    return {
+      state: { status: "active", bindings: new Map() },
+      effects: Array.from(state.bindings.values()).flatMap(
+        (binding) => transitionBinding(binding, { type: "screen.locked" }).effects,
+      ),
+    }
+
   if (event.type === "registered") {
     if (state.bindings.has(event.binding)) return { state, effects: [] }
 
@@ -256,7 +279,10 @@ function closeReason(state: ActiveBinding, event: BindingEvent): PaneCloseReason
 
   if (event.type === "owner.closed" || event.type === "client.closed") return "browser.pane.registration.closed"
 
-  if (event.type === "pane.disposed") return "browser.pane.suspended"
+  // The plugin is going away, taking its pages with it.
+  if (event.type === "pane.disposed") return "browser.pane.registration.closed"
+
+  if (event.type === "screen.locked") return "browser.pane.locked"
 
   if (event.type === "register.timed-out")
     return state.status === "connecting" ? "browser.pane.registration.closed" : undefined
@@ -269,34 +295,45 @@ function closeReason(state: ActiveBinding, event: BindingEvent): PaneCloseReason
 
   if (event.outcome === "unsupported") return "browser.pane.unsupported"
 
-  // A server that drops an attachment it accepted, as on idle eviction, suspends it; one that never accepted it has no
-  // browser plugin.
+  // A retry of a session whose pages are still alive keeps them, even though this attempt never reached the server.
+  if (event.keep && state.status !== "attached") return "browser.pane.disconnected"
+
+  // A server that drops an attachment it accepted, as on idle eviction, suspends it without a retry timer. One that
+  // never accepted it has no browser plugin.
   if (event.outcome === "unavailable")
     return state.status === "attached" ? "browser.pane.suspended" : "browser.pane.unsupported"
 
-  return "browser.pane.registration.closed"
+  // The stream ended after the server accepted the binding: the connection went away, not the window.
+  return state.status === "attached" ? "browser.pane.disconnected" : "browser.pane.registration.closed"
 }
 
 function close(state: ActiveBinding, reason: PaneCloseReason, forget: boolean): BindingTransition {
   const requestIDs = state.status === "attached" ? Array.from(state.requests.keys()) : []
   const attempts = Array.from(state.tabs.values()).flatMap((slot) => (slot.status === "live" ? [slot.attempt] : []))
   const effects: PaneEffect[] = []
+  // A lost server connection leaves the live pages, their proxy and partition in place. The record waits for the
+  // reconnecting binding that adopts it; only a close that ends the pane releases them.
+
+  const keep =
+    reason === "browser.pane.disconnected" || reason === "browser.pane.suspended" || reason === "browser.pane.locked"
 
   if (forget) effects.push({ type: "remove-restore", storageKey: state.storageKey })
 
   if (requestIDs.length) effects.push({ type: "abort-requests", binding: state.binding, requestIDs })
-  // A suspended binding hands its tabs to the window, which keeps them until it registers again.
+  // A kept binding, including a locked one, hands its tabs to the window, which keeps them until it registers again.
   effects.push({
     type: "emit",
     binding: state.binding,
     event: {
       type: "state",
-      state: reason === "browser.pane.suspended" ? selectInventory(state) : null,
+      state: keep ? selectInventory(state) : null,
       error: reason,
     },
   })
 
-  if (attempts.length) effects.push({ type: "release-pages", binding: state.binding, attempts })
+  if (attempts.length && !keep) effects.push({ type: "release-pages", binding: state.binding, attempts })
+
+  if (!keep) effects.push({ type: "release-record", liveKey: state.liveKey })
   effects.push({ type: "teardown", binding: state.binding })
 
   return { state: { status: "closed", binding: state.binding, reason }, effects }
@@ -370,6 +407,26 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     const focusedTabID = state.focusedTabID === event.tabID ? (tabs.keys().next().value ?? null) : state.focusedTabID
 
     return withoutTab({ ...state, tabs, focusedTabID }, event.tabID, closed, undefined)
+  }
+
+  if (event.type === "tab.failed") {
+    const slot = state.tabs.get(event.tabID)
+
+    if (!slot) return { state, effects: [] }
+
+    const tabs = new Map(state.tabs).set(event.tabID, {
+      status: "unloaded",
+      tab: {
+        ...event.tab,
+        loading: false,
+        loadError: event.error,
+        canGoBack: false,
+        canGoForward: false,
+        generation: Math.max(slot.tab.generation, event.tab.generation) + 1,
+      },
+    })
+
+    return publish({ ...state, tabs }, event.error)
   }
 
   if (event.type !== "tab.published" && event.type !== "tab.crashed") return { state, effects: [] }
@@ -449,6 +506,8 @@ function publish(state: AttachedBinding, error?: string): AttachedTransition {
 }
 
 function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "registered" }>): ActiveBinding {
+  const liveKey = `${event.window}\n${event.storageKey}`
+
   const restore = event.restore ?? {
     tabs: event.saved.tabs.map((tab) => ({
       id: tab.id,
@@ -477,6 +536,7 @@ function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "reg
     status: "connecting",
     binding: event.binding,
     window: event.window,
+    liveKey,
     storageKey: event.storageKey,
     tabs,
     focusedTabID:
@@ -516,6 +576,11 @@ export function selectTabSlot(state: PaneState, binding: string, tabID: Browser.
   const entry = selectBinding(state, binding)
 
   return entry?.status === "attached" ? entry.tabs.get(tabID) : undefined
+}
+
+/** The attempt the binding's next new page gets; live pages adopted from a previous binding take the ones before it. */
+export function selectNextAttempt(state: PaneState, binding: string) {
+  return selectBinding(state, binding)?.nextAttempt
 }
 
 /** The attempt of the tab's current page, if it has one. */

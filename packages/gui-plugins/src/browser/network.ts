@@ -6,32 +6,95 @@ import { BrowserProxy } from "@opencode/plugin-browser/proxy"
 import { Effect } from "effect"
 import { Base64 } from "effect/encoding"
 
+/** The connection a live page's proxy tunnels through. Absent while the server is disconnected. */
+export type BrowserNetworkUpstream = {
+  readonly rpc: RpcClient<typeof Browser.Definition, unknown>
+  readonly attachment: { sessionID: Session.ID; connectionID: string }
+  readonly location: { directory: string; workspace?: string }
+}
+
 export type BrowserNetwork = Effect.Success<ReturnType<typeof createBrowserNetwork>>
 
+/** A session's proxy and partition, kept for as long as the session's live pages are. */
 export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function* (input: {
-  rpc: RpcClient<typeof Browser.Definition, unknown>
-  attachment: { sessionID: Session.ID; connectionID: string }
-  location: { directory: string; workspace?: string }
-  partition: string
+  readonly partition: string
+  /** The current binding's tunnel RPC, or undefined while the server is disconnected. */
+  readonly upstream: () => BrowserNetworkUpstream | undefined
 }) {
-  const options = { location: input.location }
+  const current = () => {
+    const upstream = input.upstream()
+
+    if (!upstream) throw new Error("browser.network.disconnected")
+
+    return upstream
+  }
+
+  // A tunnel belongs to the binding that opened it. Read/write/close never resolve the upstream again: after a
+  // disconnect or reconnect, an old tunnel ID fails locally instead of being sent to the new binding.
+  const tunnels = new Map<string, BrowserNetworkUpstream>()
+
+  const tunnel = (tunnelID: string) => {
+    const upstream = tunnels.get(tunnelID)
+
+    if (!upstream || upstream !== input.upstream()) {
+      tunnels.delete(tunnelID)
+      throw new Error("browser.network.tunnel.closed")
+    }
+
+    return upstream
+  }
 
   const proxy = yield* Effect.acquireRelease(
     Effect.tryPromise(() =>
       BrowserProxy.make({
-        open: (target, signal) =>
-          Effect.runPromise(input.rpc["tunnel.open"]({ ...input.attachment, target }, options), { signal }),
-        read: (tunnelID, signal) =>
-          Effect.runPromise(input.rpc["tunnel.read"]({ ...input.attachment, tunnelID }, options), { signal }),
-        write: (tunnelID, data, end, signal) =>
-          Effect.runPromise(
-            input.rpc["tunnel.write"]({ ...input.attachment, tunnelID, data: Base64.encode(data), end }, options),
+        // The proxy calls these from stream callbacks that expect a promise. A stale tunnel must reject there, not
+        // throw through the callback.
+        open: async (target, signal) => {
+          const upstream = current()
+
+          const tunnelID = await Effect.runPromise(
+            upstream.rpc["tunnel.open"]({ ...upstream.attachment, target }, { location: upstream.location }),
             { signal },
-          ),
-        close: (tunnelID) =>
-          Effect.runPromise(
-            input.rpc["tunnel.close"]({ ...input.attachment, tunnelID }, options).pipe(Effect.timeout("5 seconds")),
-          ),
+          )
+
+          // A binding that changed while the server opened the tunnel does not own the new tunnel ID.
+          if (upstream !== input.upstream()) throw new Error("browser.network.tunnel.closed")
+          tunnels.set(tunnelID, upstream)
+
+          return tunnelID
+        },
+        read: async (tunnelID, signal) => {
+          const upstream = tunnel(tunnelID)
+
+          return Effect.runPromise(
+            upstream.rpc["tunnel.read"]({ ...upstream.attachment, tunnelID }, { location: upstream.location }),
+            { signal },
+          )
+        },
+        write: async (tunnelID, data, end, signal) => {
+          const upstream = tunnel(tunnelID)
+
+          return Effect.runPromise(
+            upstream.rpc["tunnel.write"](
+              { ...upstream.attachment, tunnelID, data: Base64.encode(data), end },
+              { location: upstream.location },
+            ),
+            { signal },
+          )
+        },
+        close: async (tunnelID) => {
+          const upstream = tunnels.get(tunnelID)
+          tunnels.delete(tunnelID)
+
+          // A stale tunnel's attachment is gone; never send its ID over a replacement connection.
+          if (!upstream || upstream !== input.upstream()) return
+
+          return Effect.runPromise(
+            upstream.rpc["tunnel.close"]({ ...upstream.attachment, tunnelID }, { location: upstream.location }).pipe(
+              Effect.timeout("5 seconds"),
+            ),
+          )
+        },
       }),
     ),
     (proxy) => Effect.promise(() => proxy.close()),
@@ -70,6 +133,12 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
       contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
 
       return () => contents.off("login", login)
+    },
+    /** Ends the page connections that still run through the old binding; new requests fail fast. */
+    disconnect: () => {
+      tunnels.clear()
+
+      return partition.closeAllConnections()
     },
     /**
      * Fetches a page icon through the server's network, as the page loaded it. Resolves undefined for anything but a

@@ -402,12 +402,35 @@ export interface Lifecycle {
   restart(handoff?: () => void | Promise<void>): Promise<void>
 }
 
+/**
+ * Whether the user's screen is locked: the lock screen, sleep, or (macOS) another login session. Tools this desktop
+ * provides to agents stop while it is locked. Linux reports a lock only where its desktop tells Chromium.
+ */
+export interface ScreenLock {
+  /** Whether the screen is locked now. */
+  locked(): boolean
+  /**
+   * Calls `listener` each time the screen locks or unlocks.
+   *
+   * @param listener - Called with the new value.
+   * @returns Stops listening.
+   *
+   * @example
+   * ```ts
+   * ctx.onCleanup(builtinMainContext(ctx).screenLock.on((locked) => locked && pause()))
+   * ```
+   */
+  on(listener: (locked: boolean) => void): () => void
+}
+
 /** The main context as the desktop host builds it for every plugin, with the members only built-ins use. */
 export interface BuiltinMainContext extends MainContext {
   /** Synchronous storage whose stores may import older homes. */
   readonly storage: BuiltinMainStorage
   /** Restarts the app, keeping this plugin through a handoff. */
   readonly lifecycle: Lifecycle
+  /** Whether the user's screen is locked. */
+  readonly screenLock: ScreenLock
 }
 
 /**
