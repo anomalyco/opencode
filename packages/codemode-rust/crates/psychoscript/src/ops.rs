@@ -7,6 +7,7 @@ use crate::value::{Id, Value, num_to_string, str_to_num};
 use crate::vm::{REQ_NEXT, REQ_RETURN, Reaction, Res, Vm};
 
 pub const MAX_STRING_LEN: usize = 1 << 24;
+const UNAWAITED: &str = "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`.";
 pub const MAX_ARRAY_LEN: usize = 10_000_000;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -22,7 +23,16 @@ impl<'rt> Vm<'rt> {
     #[inline(never)]
     pub fn get(&mut self, v: &Value, key: Atom) -> Res {
         match v {
-            Value::Obj(id) => Ok(self.get_obj(*id, key)),
+            Value::Obj(id) => {
+                let v = self.get_obj(*id, key);
+                if matches!(v, Value::Undef)
+                    && matches!(self.heap[*id as usize].kind, Kind::Promise(_))
+                    && !self.has_key(*id, key)
+                {
+                    return Err(self.invalid_data(UNAWAITED));
+                }
+                Ok(v)
+            }
             Value::Str(s) => {
                 let s = *s;
                 if key == self.names.length {
@@ -187,6 +197,38 @@ impl<'rt> Vm<'rt> {
         })
     }
 
+    // ---------- data guards ----------
+
+    /// Promises and tool references are not data: operators reject them, as the reference does.
+    pub fn is_opaque_operand(&self, v: &Value) -> bool {
+        matches!(v, Value::Obj(id) if matches!(self.heap[*id as usize].kind, Kind::Promise(_) | Kind::ToolRef(_)))
+    }
+
+    pub fn data_operand(&mut self, v: &Value, msg: &str) -> Result<(), Value> {
+        if self.is_opaque_operand(v) {
+            return Err(self.invalid_data(msg));
+        }
+        Ok(())
+    }
+
+    #[inline]
+    pub fn data_operands(&mut self, a: &Value, b: &Value) -> Result<(), Value> {
+        if self.is_opaque_operand(a) || self.is_opaque_operand(b) {
+            return Err(self.invalid_data("Binary operators require data values."));
+        }
+        Ok(())
+    }
+
+    /// `==` compares objects by identity and nullish values without coercion, so only a mixed comparison of an
+    /// opaque value with data is rejected.
+    pub fn loose_eq_operands(&mut self, a: &Value, b: &Value) -> Result<(), Value> {
+        match (a, b) {
+            (Value::Obj(_), Value::Obj(_)) => Ok(()),
+            (x, y) if x.is_nullish() || y.is_nullish() => Ok(()),
+            _ => self.data_operands(a, b),
+        }
+    }
+
     // ---------- property writes ----------
 
     /// Rejects storing `value` into `container` when `container` is reachable from it through data objects, as
@@ -261,6 +303,9 @@ impl<'rt> Vm<'rt> {
 
     #[inline(never)]
     pub fn set_obj(&mut self, id: Id, key: Atom, val: Value) -> Result<(), Value> {
+        if matches!(self.heap[id as usize].kind, Kind::Promise(_)) && !self.has_key(id, key) {
+            return Err(self.invalid_data(UNAWAITED));
+        }
         let flags = self.heap[id as usize].flags;
         let length = self.names.length;
         let index = self.atoms.index(key);
@@ -601,6 +646,17 @@ impl<'rt> Vm<'rt> {
         keys.into_iter().map(|k| (k, self.get_obj(id, k))).collect()
     }
 
+    /// Own enumerable properties keyed by the two confined symbols, which spread and `Object.assign` copy too.
+    pub fn own_symbol_entries(&self, id: Id) -> Vec<(Atom, Value)> {
+        self.heap[id as usize]
+            .props
+            .items
+            .iter()
+            .filter(|p| p.key <= SYM_ASYNC_ITERATOR && p.flags & ENUMERABLE != 0)
+            .map(|p| (p.key, p.value))
+            .collect()
+    }
+
     #[inline(never)]
     pub fn copy_props(&mut self, target: Id, src: &Value, excluded: &[Atom]) -> Result<(), Value> {
         match src {
@@ -611,7 +667,9 @@ impl<'rt> Vm<'rt> {
                 {
                     return Ok(());
                 }
-                for (k, v) in self.own_entries(*id) {
+                let mut entries = self.own_entries(*id);
+                entries.extend(self.own_symbol_entries(*id));
+                for (k, v) in entries {
                     if !excluded.contains(&k) {
                         self.define(target, k, v);
                     }
@@ -846,6 +904,7 @@ impl<'rt> Vm<'rt> {
             }
             _ => {}
         }
+        self.data_operands(&a, &b)?;
         let pa = self.primitive_of(&a, Hint::Default)?;
         let pb = self.primitive_of(&b, Hint::Default)?;
         if matches!(pa, Value::Str(_)) || matches!(pb, Value::Str(_)) {
@@ -860,6 +919,9 @@ impl<'rt> Vm<'rt> {
     #[inline(never)]
     pub fn arith(&mut self, op: crate::bytecode::Arith, a: Value, b: Value) -> Res {
         use crate::bytecode::Arith as A;
+        if !matches!(op, A::Add | A::StrictEq | A::StrictNe) {
+            self.data_operands(&a, &b)?;
+        }
         Ok(match op {
             A::Add => return self.add(a, b),
             A::Sub | A::Mul | A::Div | A::Mod => {
@@ -985,6 +1047,76 @@ impl<'rt> Vm<'rt> {
         Ok(out)
     }
 
+    /// GetIterator, with the error for a value that is not iterable worded for where it is iterated.
+    pub fn get_iterator_in(&mut self, v: &Value, ctx: u8) -> Res {
+        if !self.is_iterable(v) {
+            return Err(self.not_iterable(v, ctx));
+        }
+        self.get_iterator(v)
+    }
+
+    /// Whether `v` has a sync iterator to get.
+    pub fn is_iterable(&mut self, v: &Value) -> bool {
+        match v {
+            Value::Str(_) => true,
+            Value::Obj(id) => match &self.heap[*id as usize].kind {
+                Kind::Array(_)
+                | Kind::Arguments(_)
+                | Kind::Map(_)
+                | Kind::Set(_)
+                | Kind::Generator(_)
+                | Kind::ArrayIter { .. }
+                | Kind::MapIter { .. }
+                | Kind::StrIter { .. }
+                | Kind::ListIter { .. } => true,
+                _ => !self.get_obj(*id, SYM_ITERATOR).is_nullish(),
+            },
+            _ => false,
+        }
+    }
+
+    /// How the reference names a value in a data error: `a data object`, `a function`, `null`.
+    pub fn describe_data(&self, v: &Value) -> &'static str {
+        match v {
+            Value::Undef | Value::Uninit => "undefined",
+            Value::Null => "null",
+            Value::Bool(_) => "a boolean",
+            Value::Num(_) => "a number",
+            Value::Str(_) => "a string",
+            Value::Sym(_) => "a symbol",
+            Value::Obj(id) => match &self.heap[*id as usize].kind {
+                Kind::Ordinary => "a data object",
+                Kind::Array(_) => "an array",
+                Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => "a function",
+                Kind::Promise(_) => "an un-awaited Promise",
+                Kind::Error(_) => "an Error",
+                Kind::ToolRef(_) => "a tool reference",
+                Kind::Generator(_) | Kind::AsyncGenerator(_) => "a generator",
+                _ => "an object",
+            },
+        }
+    }
+
+    pub fn not_iterable(&mut self, v: &Value, ctx: u8) -> Value {
+        use crate::bytecode::{ITER_DELEGATE, ITER_DESTRUCTURE, ITER_FOR_AWAIT, ITER_SPREAD};
+        match ctx {
+            ITER_DESTRUCTURE => {
+                self.type_error("Array destructuring requires a supported iterable value.")
+            }
+            ITER_DELEGATE => self.type_error("yield* requires a compatible iterable value."),
+            ITER_SPREAD => self.type_error("Spread requires a synchronous iterable."),
+            _ => {
+                let what = if ctx == ITER_FOR_AWAIT {
+                    "for await...of"
+                } else {
+                    "for...of"
+                };
+                let d = self.describe_data(v);
+                self.invalid_data(&format!("{what} requires an iterable value, received {d}."))
+            }
+        }
+    }
+
     #[inline(never)]
     pub fn get_iterator(&mut self, v: &Value) -> Res {
         let proto = self.realm.iter_proto;
@@ -1080,14 +1212,19 @@ impl<'rt> Vm<'rt> {
         it: Value,
         kind: u8,
         arg: Option<Value>,
+        cached_next: Value,
     ) -> Result<Option<Value>, Value> {
         if let Value::Obj(id) = it
-            && let Kind::AsyncFromSync(sync) = self.heap[id as usize].kind
+            && let Kind::AsyncFromSync { sync, next } = self.heap[id as usize].kind
         {
-            return self.async_from_sync_call(sync, kind, arg).map(Some);
+            return self.async_from_sync_call(sync, next, kind, arg).map(Some);
         }
-        let name = self.request_name(kind);
-        let m = self.get(&it, name)?;
+        let m = if kind == REQ_NEXT && !cached_next.is_nullish() {
+            cached_next
+        } else {
+            let name = self.request_name(kind);
+            self.get(&it, name)?
+        };
         if kind != REQ_NEXT && m.is_nullish() {
             return Ok(None);
         }
@@ -1132,22 +1269,24 @@ impl<'rt> Vm<'rt> {
                 return Ok(it);
             }
         }
-        let sync = self.get_iterator(v)?;
+        let sync = self.get_iterator_in(v, crate::bytecode::ITER_FOR_AWAIT)?;
         let Value::Obj(sync) = sync else {
             return Err(self.type_error("Result of the Symbol.iterator method is not an object"));
         };
+        let next = self.record_next(&Value::Obj(sync))?;
         let proto = self.realm.async_from_sync_proto;
-        Ok(Value::Obj(
-            self.alloc(Obj::new(Some(proto), Kind::AsyncFromSync(sync))),
-        ))
+        Ok(Value::Obj(self.alloc(Obj::new(
+            Some(proto),
+            Kind::AsyncFromSync { sync, next },
+        ))))
     }
 
     /// The promise of an async-from-sync iterator's `next`, `throw` or `return`.
-    fn async_from_sync_call(&mut self, sync: Id, kind: u8, arg: Option<Value>) -> Res {
+    fn async_from_sync_call(&mut self, sync: Id, next: Value, kind: u8, arg: Option<Value>) -> Res {
         let made = self.new_promise();
         let sv = Value::Obj(sync);
         let step = match kind {
-            REQ_NEXT => self.sync_step(sv, arg),
+            REQ_NEXT => self.sync_step(sv, arg, next),
             _ => {
                 let name = self.request_name(kind);
                 let m = self.get_obj(sync, name);
@@ -1192,11 +1331,18 @@ impl<'rt> Vm<'rt> {
     }
 
     /// One `next` on a sync iterator, as a value and a done flag.
-    fn sync_step(&mut self, it: Value, arg: Option<Value>) -> Result<(Value, bool), Value> {
+    fn sync_step(
+        &mut self,
+        it: Value,
+        arg: Option<Value>,
+        next: Value,
+    ) -> Result<(Value, bool), Value> {
         if let Some(Some(step)) = self.sync_delegate_step(it, REQ_NEXT, arg.unwrap_or_default())? {
             return Ok(step);
         }
-        let r = self.delegate_call(it, REQ_NEXT, arg)?.unwrap_or_default();
+        let r = self
+            .delegate_call(it, REQ_NEXT, arg, next)?
+            .unwrap_or_default();
         self.iter_result_parts(&r)
     }
 
@@ -1206,11 +1352,37 @@ impl<'rt> Vm<'rt> {
         if it.is_nullish() {
             return Ok(None);
         }
-        self.delegate_call(it, REQ_RETURN, None)
+        self.delegate_call(it, REQ_RETURN, None, Value::Undef)
     }
 
     #[inline(never)]
     pub fn iter_step(&mut self, it: &Value) -> Result<Option<Value>, Value> {
+        self.iter_step_with(it, Value::Undef)
+    }
+
+    /// The `next` method of an iterator the VM does not run itself, read once when it opens, as iterator records
+    /// keep it; `Undef` for any other iterator.
+    pub fn record_next(&mut self, it: &Value) -> Res {
+        let Value::Obj(id) = it else {
+            return Ok(Value::Undef);
+        };
+        match self.heap[*id as usize].kind {
+            Kind::ArrayIter { .. }
+            | Kind::MapIter { .. }
+            | Kind::StrIter { .. }
+            | Kind::ListIter { .. }
+            | Kind::Generator(_)
+            | Kind::AsyncFromSync { .. } => Ok(Value::Undef),
+            _ => {
+                let next = self.names.next;
+                self.get(it, next)
+            }
+        }
+    }
+
+    /// One iterator step, calling `next` (when not `Undef`) instead of reading the iterator's `next` again.
+    #[inline(never)]
+    pub fn iter_step_with(&mut self, it: &Value, next: Value) -> Result<Option<Value>, Value> {
         let Value::Obj(id) = it else { return Ok(None) };
         let id = *id;
         match &self.heap[id as usize].kind {
@@ -1289,8 +1461,12 @@ impl<'rt> Vm<'rt> {
                 Ok(if done { None } else { Some(v) })
             }
             _ => {
-                let next = self.names.next;
-                let f = self.get_obj(id, next);
+                let f = if next.is_nullish() {
+                    let nk = self.names.next;
+                    self.get_obj(id, nk)
+                } else {
+                    next
+                };
                 let r = self.call(&f, *it, &[])?;
                 let Value::Obj(rid) = r else {
                     let d = self.describe(&r);

@@ -445,6 +445,12 @@ impl<'rt> Vm<'rt> {
         self.failure(p, msg, DiagnosticKind::ExecutionFailure)
     }
 
+    /// A `TypeError` that reports an invalid data value.
+    pub fn invalid_data(&mut self, msg: &str) -> Value {
+        let p = self.realm.type_error_proto;
+        self.failure(p, msg, DiagnosticKind::InvalidDataValue)
+    }
+
     pub fn range_error(&mut self, msg: &str) -> Value {
         let p = self.realm.range_error_proto;
         self.failure(p, msg, DiagnosticKind::ExecutionFailure)
@@ -491,7 +497,44 @@ impl<'rt> Vm<'rt> {
     // ---------- calls ----------
 
     /// Calls any callable value from native code and runs it to completion (or its first suspension).
+    #[inline(always)]
     pub fn call(&mut self, f: &Value, this: Value, args: &[Value]) -> Res {
+        match self.call_packed(f, this, args) {
+            Ok(v) => Ok(v.get()),
+            Err(e) => Err(e.get()),
+        }
+    }
+
+    /// `call` with each outcome packed in one word, so it comes back in registers: a two-word `Value` returned
+    /// through memory stalls the caller's reload on store forwarding, measurably on short callbacks.
+    #[inline(never)]
+    fn call_packed(&mut self, f: &Value, this: Value, args: &[Value]) -> Result<Slot, Slot> {
+        let probe = 0u8;
+        if let Value::Obj(id) = *f
+            && matches!(self.heap[id as usize].kind, Kind::Closure(_))
+            && self.native_depth < MAX_NATIVE_DEPTH
+            && self.stack_base.abs_diff(&probe as *const u8 as usize) <= self.stack_budget
+        {
+            let fpos = self.stack.len();
+            self.push(*f);
+            self.push(this);
+            self.stack.extend(args.iter().map(|v| Slot::pack(*v)));
+            self.push_closure_frame(id, fpos, args.len(), true)
+                .map_err(Slot::pack)?;
+            self.native_depth += 1;
+            let r = self.run();
+            self.native_depth -= 1;
+            return match r {
+                Ok(Exit::Return(v)) | Ok(Exit::Yield(v)) => Ok(v),
+                Err(e) => Err(Slot::pack(e)),
+            };
+        }
+        self.call_slow(f, this, args)
+            .map(Slot::pack)
+            .map_err(Slot::pack)
+    }
+
+    fn call_slow(&mut self, f: &Value, this: Value, args: &[Value]) -> Res {
         let probe = 0u8;
         if self.stack_base.abs_diff(&probe as *const u8 as usize) > self.stack_budget {
             return Err(self.range_error("Maximum call stack size exceeded"));
@@ -1229,6 +1272,7 @@ impl<'rt> Vm<'rt> {
                     } else {
                         let b = self.pop();
                         let a = self.pop();
+                        tri!(self.data_operands(&a, &b));
                         let x = tri!(self.number_of(&a));
                         let y = tri!(self.number_of(&b));
                         self.push(Value::Num(f(x, y)));
@@ -1239,6 +1283,7 @@ impl<'rt> Vm<'rt> {
                 ($f:expr) => {{
                     let b = self.pop();
                     let a = self.pop();
+                    tri!(self.data_operands(&a, &b));
                     let x = tri!(self.number_of(&a));
                     let y = tri!(self.number_of(&b));
                     let f: fn(f64, f64) -> f64 = $f;
@@ -1257,6 +1302,7 @@ impl<'rt> Vm<'rt> {
                     }
                     let b = self.pop();
                     let a = self.pop();
+                    tri!(self.data_operands(&a, &b));
                     let r = match (&a, &b) {
                         (Value::Num(x), Value::Num(y)) => *x $op *y,
                         (Value::Str(x), Value::Str(y)) => self.atoms.get(*x) $op self.atoms.get(*y),
@@ -1580,6 +1626,9 @@ impl<'rt> Vm<'rt> {
                             continue 'outer;
                         }
                         let src = self.pop();
+                        if !self.is_iterable(&src) {
+                            throw!(self.not_iterable(&src, crate::bytecode::ITER_SPREAD));
+                        }
                         let items = tri!(self.iterate_to_vec(&src));
                         if let Value::Obj(id) = self.top()
                             && let Kind::Array(arr) = &mut self.heap[id as usize].kind
@@ -1652,12 +1701,14 @@ impl<'rt> Vm<'rt> {
                     Op::Eq => {
                         let b = self.pop();
                         let a = self.pop();
+                        tri!(self.loose_eq_operands(&a, &b));
                         let r = tri!(self.loose_eq(&a, &b));
                         self.push(Value::Bool(r));
                     }
                     Op::Ne => {
                         let b = self.pop();
                         let a = self.pop();
+                        tri!(self.loose_eq_operands(&a, &b));
                         let r = tri!(self.loose_eq(&a, &b));
                         self.push(Value::Bool(!r));
                     }
@@ -1679,6 +1730,7 @@ impl<'rt> Vm<'rt> {
                     Op::Ge => cmp_op!(>=, false, true),
                     Op::Neg => {
                         let a = self.pop();
+                        tri!(self.data_operand(&a, "Unary operators require data values."));
                         let x = match a {
                             Value::Num(x) => x,
                             _ => tri!(self.number_of(&a)),
@@ -1687,6 +1739,16 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::ToNumber | Op::ToNumeric => {
                         let a = self.pop();
+                        if self.is_opaque_operand(&a) {
+                            let msg = match (op, code.get(pc..pc + 3)) {
+                                (Op::ToNumeric, Some(next)) if next.contains(&Op::Dec) => {
+                                    "'--' requires a data value."
+                                }
+                                (Op::ToNumeric, _) => "'++' requires a data value.",
+                                _ => "Unary operators require data values.",
+                            };
+                            throw!(self.invalid_data(msg));
+                        }
                         let x = match a {
                             Value::Num(x) => x,
                             _ => tri!(self.number_of(&a)),
@@ -1699,6 +1761,7 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::BitNot => {
                         let a = self.pop();
+                        tri!(self.data_operand(&a, "Unary operators require data values."));
                         let x = tri!(self.number_of(&a));
                         self.push(Value::Num(!to_i32(x) as f64));
                     }
@@ -1720,6 +1783,12 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::Inc | Op::Dec => {
                         let a = self.pop();
+                        let msg = if matches!(op, Op::Inc) {
+                            "'++' requires a data value."
+                        } else {
+                            "'--' requires a data value."
+                        };
+                        tri!(self.data_operand(&a, msg));
                         let x = match a {
                             Value::Num(x) => x,
                             _ => tri!(self.number_of(&a)),
@@ -1789,6 +1858,7 @@ impl<'rt> Vm<'rt> {
                         if v.is_num() {
                             self.stack[slot] = Slot::num(v.f() + 1.0);
                         } else {
+                            tri!(self.data_operand(&v.get(), "'++' requires a data value."));
                             let x = tri!(self.number_of(&v.get()));
                             self.stack[slot] = Slot::num(x + 1.0);
                         }
@@ -2133,11 +2203,13 @@ impl<'rt> Vm<'rt> {
                         }
                     }
 
-                    Op::GetIter(slot) => {
+                    Op::GetIter(slot, ctx) => {
                         self.frames[fi].pc = pc;
                         let v = self.pop();
-                        let it = tri!(self.get_iterator(&v));
+                        let it = tri!(self.get_iterator_in(&v, ctx));
+                        let next = tri!(self.record_next(&it));
                         self.stack[base + slot as usize] = Slot::pack(it);
+                        self.stack[base + slot as usize + 1] = Slot::pack(next);
                     }
                     Op::IterNext(slot, exit) => {
                         self.frames[fi].pc = pc;
@@ -2149,7 +2221,10 @@ impl<'rt> Vm<'rt> {
                             continue 'outer;
                         }
                         let it = it.get();
-                        match step!(slot, self.iter_step(&it)) {
+                        match step!(
+                            slot,
+                            self.iter_step_with(&it, self.stack[base + slot as usize + 1].get())
+                        ) {
                             Some(v) => self.push(v),
                             None => {
                                 self.stack[base + slot as usize] = Slot::UNDEF;
@@ -2194,7 +2269,8 @@ impl<'rt> Vm<'rt> {
                             }
                         }
                         let arg = (flags & DELEGATE_NO_ARG == 0).then(|| received.get());
-                        match tri!(self.delegate_call(it.get(), kind, arg)) {
+                        let next = self.stack[base + slot as usize + 1].get();
+                        match tri!(self.delegate_call(it.get(), kind, arg, next)) {
                             Some(r) => self.push(r),
                             None => {
                                 self.stack.push(received);
@@ -2214,7 +2290,9 @@ impl<'rt> Vm<'rt> {
                         self.frames[fi].pc = pc;
                         let v = self.pop();
                         let it = tri!(self.get_async_iterator(&v));
+                        let next = tri!(self.record_next(&it));
                         self.stack[base + slot as usize] = Slot::pack(it);
+                        self.stack[base + slot as usize + 1] = Slot::pack(next);
                     }
                     Op::AsyncClose(slot, skip) => {
                         self.frames[fi].pc = pc;
@@ -2243,7 +2321,10 @@ impl<'rt> Vm<'rt> {
                             continue 'outer;
                         }
                         let it = it.get();
-                        match step!(slot, self.iter_step(&it)) {
+                        match step!(
+                            slot,
+                            self.iter_step_with(&it, self.stack[base + slot as usize + 1].get())
+                        ) {
                             Some(v) => self.push(v),
                             None => {
                                 self.stack[base + slot as usize] = Slot::UNDEF;
@@ -2268,7 +2349,10 @@ impl<'rt> Vm<'rt> {
                         }
                         let it = it.get();
                         let mut items = Vec::new();
-                        while let Some(v) = step!(slot, self.iter_step(&it)) {
+                        while let Some(v) = step!(
+                            slot,
+                            self.iter_step_with(&it, self.stack[base + slot as usize + 1].get())
+                        ) {
                             items.push(v);
                         }
                         self.stack[base + slot as usize] = Slot::UNDEF;
@@ -2285,6 +2369,11 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::ForIn(slot) => {
                         let v = self.pop();
+                        if self.as_promise(&v).is_some() {
+                            throw!(self.invalid_data(
+                                "for...in received an un-awaited Promise; await it before inspecting the result."
+                            ));
+                        }
                         let keys = self.for_in_keys(&v);
                         let proto = self.realm.iter_proto;
                         let id = self.alloc(Obj::new(

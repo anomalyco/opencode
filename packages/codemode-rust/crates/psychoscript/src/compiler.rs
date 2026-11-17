@@ -16,7 +16,10 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::DiagnosticKind;
-use crate::bytecode::{Arith, Capture, FuncProto, Op, Program, TemplateSite};
+use crate::bytecode::{
+    Arith, Capture, FuncProto, ITER_DELEGATE, ITER_DESTRUCTURE, ITER_FOR_OF, Op, Program,
+    TemplateSite,
+};
 use crate::strings::{Atom, Strings};
 use crate::value::{Value, num_to_string};
 
@@ -394,6 +397,13 @@ impl<'a, 's> Compiler<'a, 's> {
             Op::AsyncClose(s, _) => Op::AsyncClose(s, target),
             other => other,
         };
+    }
+
+    /// Two locals for an open iterator: the iterator, then its `next` method, read once when it opens.
+    fn iter_slot(&mut self) -> u32 {
+        let slot = self.new_local();
+        self.new_local();
+        slot
     }
 
     fn new_local(&mut self) -> u32 {
@@ -1184,11 +1194,11 @@ impl<'a, 's> Compiler<'a, 's> {
     fn yield_delegate(&mut self) -> R<()> {
         let is_async = self.f().is_async;
         let flag = if is_async { DELEGATE_ASYNC } else { 0 };
-        let it = self.new_local();
+        let it = self.iter_slot();
         self.emit(if is_async {
             Op::GetAsyncIter(it)
         } else {
-            Op::GetIter(it)
+            Op::GetIter(it, ITER_DELEGATE)
         });
         self.emit(Op::Undef);
         let lp = self.here();
@@ -1522,8 +1532,8 @@ impl<'a, 's> Compiler<'a, 's> {
         };
         self.init_scope(&syms);
         self.loop_head_expr(&f.right, &syms)?;
-        let slot = self.new_local();
-        self.emit(Op::GetIter(slot));
+        let slot = self.iter_slot();
+        self.emit(Op::GetIter(slot, ITER_FOR_OF));
         let handler = self.emit(Op::PushFinally(0));
         let top = self.here();
         let exit = self.emit(Op::IterNext(slot, 0));
@@ -1557,7 +1567,7 @@ impl<'a, 's> Compiler<'a, 's> {
         };
         self.init_scope(&syms);
         self.loop_head_expr(&f.right, &syms)?;
-        let slot = self.new_local();
+        let slot = self.iter_slot();
         self.emit(Op::GetAsyncIter(slot));
         let top = self.here();
         self.emit(Op::Undef);
@@ -1624,7 +1634,7 @@ impl<'a, 's> Compiler<'a, 's> {
         };
         self.init_scope(&syms);
         self.loop_head_expr(&f.right, &syms)?;
-        let slot = self.new_local();
+        let slot = self.iter_slot();
         self.emit(Op::ForIn(slot));
         let top = self.here();
         let exit = self.emit(Op::IterNext(slot, 0));
@@ -1851,8 +1861,8 @@ impl<'a, 's> Compiler<'a, 's> {
                 }
             }
             BindingPattern::ArrayPattern(a) => {
-                let slot = self.new_local();
-                self.emit(Op::GetIter(slot));
+                let slot = self.iter_slot();
+                self.emit(Op::GetIter(slot, ITER_DESTRUCTURE));
                 let guard = self.emit(Op::PushFinally(0));
                 self.f().controls.push(Control::Iter(slot));
                 for el in &a.elements {
@@ -1905,8 +1915,8 @@ impl<'a, 's> Compiler<'a, 's> {
     fn assign_target(&mut self, t: &'a AssignmentTarget<'a>) -> R<()> {
         match t {
             AssignmentTarget::ArrayAssignmentTarget(a) => {
-                let slot = self.new_local();
-                self.emit(Op::GetIter(slot));
+                let slot = self.iter_slot();
+                self.emit(Op::GetIter(slot, ITER_DESTRUCTURE));
                 let guard = self.emit(Op::PushFinally(0));
                 self.f().controls.push(Control::Iter(slot));
                 for el in &a.elements {
@@ -2114,7 +2124,9 @@ impl<'a, 's> Compiler<'a, 's> {
             Expression::NewExpression(n) => {
                 self.expr(&n.callee)?;
                 self.emit(Op::Undef);
-                match self.args(&n.arguments)? {
+                let argc = self.args(&n.arguments)?;
+                self.pos = n.span.start;
+                match argc {
                     Some(argc) => self.emit(Op::New(argc)),
                     None => self.emit(Op::NewSpread),
                 };
@@ -2300,6 +2312,7 @@ impl<'a, 's> Compiler<'a, 's> {
             match el {
                 ArrayExpressionElement::SpreadElement(s) => {
                     self.expr(&s.argument)?;
+                    self.pos = s.span.start;
                     self.emit(Op::ArraySpread);
                 }
                 ArrayExpressionElement::Elision(_) => {
@@ -2366,6 +2379,7 @@ impl<'a, 's> Compiler<'a, 's> {
             match a {
                 Argument::SpreadElement(s) => {
                     self.expr(&s.argument)?;
+                    self.pos = s.span.start;
                     self.emit(Op::ArraySpread);
                 }
                 other => {
@@ -2411,7 +2425,9 @@ impl<'a, 's> Compiler<'a, 's> {
             }
         }
         self.pos = c.span.start;
-        match self.args(&c.arguments)? {
+        let argc = self.args(&c.arguments)?;
+        self.pos = c.span.start;
+        match argc {
             Some(argc) => self.emit(Op::Call(argc)),
             None => self.emit(Op::CallSpread),
         };

@@ -150,7 +150,8 @@ pub enum Op {
     PushFinally(u32),
     PopTry,
 
-    GetIter(u32),
+    /// Opens an iterator into a slot; the context (`ITER_*`) words the error for a value that is not iterable.
+    GetIter(u32, u8),
     IterNext(u32, u32),
     /// One `yield*` step: `received` -> `result`, calling the iterator's `next`, `throw` or `return` (the flag's low
     /// bits 0, 1, 2) with it. Jumps with `received` when `throw` or `return` is missing. Without the async flag, an
@@ -171,6 +172,12 @@ pub enum Op {
     IterCloseQuiet(u32),
     ForIn(u32),
 }
+
+pub const ITER_FOR_OF: u8 = 0;
+pub const ITER_DESTRUCTURE: u8 = 1;
+pub const ITER_DELEGATE: u8 = 2;
+pub const ITER_SPREAD: u8 = 3;
+pub const ITER_FOR_AWAIT: u8 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Arith {

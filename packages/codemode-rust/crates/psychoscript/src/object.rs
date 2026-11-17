@@ -287,7 +287,10 @@ pub enum Kind {
     },
     AsyncGenerator(Box<AsyncGen>),
     /// An async iterator over a sync one, for `for await` and an async generator's `yield*`.
-    AsyncFromSync(Id),
+    AsyncFromSync {
+        sync: Id,
+        next: Value,
+    },
 }
 
 pub struct Combinator {
