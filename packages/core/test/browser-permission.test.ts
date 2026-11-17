@@ -638,6 +638,8 @@ const truth: ReadonlyArray<{
   { name: "whole browser denied, one operation allowed after", global: [rule("*", "deny"), rule("tabs.list", "allow")], attached: true, listed: true, list: "allow", open: "deny" },
 ]
 
+const unattached = Schema.is(Schema.Struct({ output: Schema.Struct({ connected: Schema.Literal(false) }) }))
+
 // What `operation` comes to for `agent` in `sessionID`.
 const outcome = (
   browser: Effect.Success<ReturnType<typeof setup>>,
@@ -658,12 +660,13 @@ const settle = Effect.fnUntraced(function* (
   const before = browser.commands.count
   const reached = () => browser.commands.count > before
   const settled = call.pipe(
-    Effect.as<Outcome | string>("allow"),
+    // Without a desktop, tabs.list answers that the browser is not attached instead of failing.
+    Effect.map((result): Outcome | string => (unattached(result) ? "disconnected" : "allow")),
     Effect.catch((error) =>
       Effect.succeed(
         error.message.startsWith("[browser.denied]") || error.message.startsWith("Permission denied") || error.error instanceof Permission.BlockedError
           ? "deny"
-          : error.message.startsWith("[browser.disconnected]")
+          : error.message.startsWith("[browser.disconnected]") || error.message.startsWith("[browser.not_attached]")
             ? "disconnected"
             : reached()
               ? "allow"
