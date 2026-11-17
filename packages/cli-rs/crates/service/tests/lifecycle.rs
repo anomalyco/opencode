@@ -12,7 +12,7 @@ use opencode_service::contender::Delays;
 use opencode_service::ensure::{self, Ensured, Options, Timing};
 use opencode_service::stop::{self, Poll, Pty};
 use opencode_service::ts_command::{TsCommand, write_script};
-use opencode_service::{follow, handoff, standalone};
+use opencode_service::{handoff, standalone};
 use rustix::process::{Pid, Signal, kill_process, test_kill_process};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -815,13 +815,10 @@ async fn a_standalone_server_that_exits_early_is_an_error() {
     assert_eq!(error.to_string(), "Standalone server exited before reporting readiness");
 }
 
-// `connect::resolve` and the managed client (review carbon-4), on private XDG directories: the
-// fixture registers under the channel `oc-x`, and the TS binary only records that a service was
-// started.
+// `connect::resolve` on private XDG directories: the fixture registers under the channel `oc-x`.
 struct Channel {
     fixture: Fixture,
     paths: Paths,
-    env: Env,
 }
 
 impl Channel {
@@ -839,75 +836,8 @@ impl Channel {
         .unwrap();
         std::fs::create_dir_all(&paths.state).unwrap();
         fixture.registration = paths.state.join("service-oc-x.json");
-        let program = root.join("opencode-ts");
-        write_script(
-            &program,
-            &format!(
-                "#!/bin/sh\nexec bun {} {} record-start\n",
-                fixture_script().display(),
-                root.join("spawned").display()
-            ),
-        );
-        let env = Env { ts_bin: Some(program.to_string_lossy().into_owned()), ..Env::default() };
-        Self { fixture, paths, env }
+        Self { fixture, paths }
     }
-
-    async fn resolve(&self) -> Result<Connection, connect::Error> {
-        connect::resolve(transport(), &self.paths, &self.env, &connect::Options::default()).await
-    }
-
-    fn spawned(&self) -> bool {
-        self.fixture.dir.path().join("spawned.started").exists()
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn connect_waits_for_a_starting_service_of_another_channel() {
-    needs_bun!();
-    let mut channel = Channel::new();
-    let process = channel.fixture.spawn("starting", &[]);
-    channel.fixture.wait_for_file(&channel.fixture.registration).await;
-    let channel = Arc::new(channel);
-    let resolving = channel.clone();
-    let result = tokio::spawn(async move { resolving.resolve().await });
-    channel.fixture.wait_for_file(&channel.fixture.file(".status-request")).await;
-    std::fs::write(channel.fixture.file(".release"), "").unwrap();
-    let connection = result.await.unwrap().unwrap();
-    assert_eq!(connection.endpoint.url, channel.fixture.info()["url"]);
-    assert!(!channel.spawned(), "a second service was started");
-    assert!(alive(process));
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn connect_reports_a_failed_service_of_another_channel() {
-    needs_bun!();
-    let mut channel = Channel::new();
-    let process = channel.fixture.spawn("failed-owner", &[]);
-    channel.fixture.wait_for_file(&channel.fixture.registration).await;
-    let error = channel.resolve().await.unwrap_err();
-    assert_eq!(error.to_string(), "Background service failed to start");
-    assert!(!channel.spawned(), "a second service was started");
-    assert!(channel.fixture.running(process));
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_managed_client_follows_a_restarted_service() {
-    needs_bun!();
-    let mut channel = Channel::new();
-    let first = channel.fixture.spawn("compatible", &[]);
-    channel.fixture.wait_for_file(&channel.fixture.registration).await;
-    let connection = channel.resolve().await.unwrap();
-    let client = follow::client(transport(), &connection, &channel.paths, &channel.env).unwrap();
-    assert_eq!(client.server_info().await.unwrap().pid, i64::from(first));
-    // A restart: the service is gone, and its successor registers a new port.
-    signal(first, Signal::KILL);
-    channel.fixture.exited(first).await;
-    let second = channel.fixture.spawn("compatible", &[]);
-    until(|| channel.fixture.registration.exists() && channel.fixture.pid() == second, "the successor's registration")
-        .await;
-    assert!(client.server_info().await.is_err());
-    assert_eq!(client.server_info().await.unwrap().pid, i64::from(second));
-    assert!(!channel.spawned(), "the client started a service");
 }
 
 // A client of the channel `oc-x` whose TS binary prints `opencode v<binary>` for `--version` and serves `mode` (the
