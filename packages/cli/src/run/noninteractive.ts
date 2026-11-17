@@ -277,9 +277,8 @@ export async function runNonInteractivePrompt(input: Input) {
       const ended = state.ended.promise
       await input.client.experimental.session.wait({ sessionID: input.sessionID })
       const pending = await background()
-      // Wait only for work this client can stop.
-      if (!pending || (pending.length > 0 && pending.every((job) => job.kind !== "shell" && job.kind !== "subagent")))
-        return
+      // Image jobs can't be cancelled through the API, so waiting on them would only hold the exit.
+      if (!pending || (pending.length > 0 && pending.every((job) => job.kind === "image"))) return
       await ended
     }
   }

@@ -475,9 +475,7 @@ describe("subagent idle reports end to end", () => {
         })
         const parent = (yield* h.llm.requests()).find((request) => request.model.id === "build")
         expect(parent?.messages).toContainEqual(
-          expect.objectContaining({
-            content: expect.arrayContaining([expect.objectContaining({ type: "text", text })]),
-          }),
+          expect.objectContaining({ content: expect.arrayContaining([expect.objectContaining({ type: "text", text })]) }),
         )
         yield* h.sessions.wait(childID)
         yield* h.jobs.wait({ id: childID })
