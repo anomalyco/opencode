@@ -1287,3 +1287,60 @@ fn a_keyed_select_shown_again_takes_its_new_title() {
     harness.tui.keymap.dispatch("titled.show", Some("Second title"));
     harness.wait_for("Second title");
 }
+
+/// A plugin whose keyed select is centered when its command's input says `on`, and whose alert and confirm are extra
+/// large and centered (contract 2.x additions).
+fn presented() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.command(Command::default().with_name("presented.select".to_owned()), |host, input| {
+            let action = abi::Action::Command { name: "presented.select".to_owned(), input: None };
+            let rows = ["alpha", "beta", "gamma"].map(|row| abi::SelectOption::new(row, row)).to_vec();
+            let select = abi::Select::new("Presented", rows, action)
+                .with_key(Some("p".to_owned()))
+                .with_centered(input == Some("on"));
+            host.dialog(abi::Dialog::Select(select));
+        });
+        setup.command(Command::default().with_name("presented.alert".to_owned()), |host, _| {
+            let alert = abi::Alert::new("Told", "said").with_size(Some(abi::PanelSize::XLarge)).with_centered(true);
+            host.dialog(abi::Dialog::Alert(alert));
+        });
+        setup.command(Command::default().with_name("presented.confirm".to_owned()), |host, _| {
+            let action = abi::Action::Command { name: "presented.alert".to_owned(), input: None };
+            let confirm = abi::Confirm::new("Asked", "sure?", action).with_size(Some(abi::PanelSize::Large));
+            host.dialog(abi::Dialog::Confirm(confirm.with_centered(true)));
+        });
+        Ok(())
+    }
+    abi::Plugin { id: "test.presented", setup }
+}
+
+// Expected (contract 2.x additions, TS `dialog.set({ size, centered })`): a select with `centered` shows in the middle
+// of the screen, lower than one without; a keyed select shown again with `centered` changed moves and keeps its filter
+// and its selected row; an alert and a confirm take their size and their centering, and a dialog without them is
+// medium and a quarter of the way down.
+#[test]
+fn a_dialog_takes_its_size_and_centering() {
+    let (harness, _) = open(&[]);
+    let tui = &harness.tui;
+    opencode_tui::plugins::host::add(tui, presented().into());
+    let row = |text: &str| support::at(&harness.app.render().text(), text).map(|(_, y)| y);
+    tui.keymap.dispatch("presented.select", Some("off"));
+    harness.wait_for("Presented");
+    assert!(!tui.dialogs.centered());
+    let high = row("Presented").unwrap();
+    harness.app.type_text("et");
+    harness.wait("the filter took", || row("alpha").is_none() && row("beta").is_some());
+    tui.keymap.dispatch("presented.select", Some("on"));
+    harness.wait("the select moved", || row("Presented").is_some_and(|low| low > high));
+    assert!(tui.dialogs.centered());
+    assert!(row("beta").is_some() && row("alpha").is_none(), "the filter went:\n{}", harness.app.text());
+    tui.keymap.dispatch("presented.alert", None);
+    harness.wait_for("Told");
+    assert_eq!((tui.dialogs.size(), tui.dialogs.centered()), (opencode_ui::dialog::DialogSize::XLarge, true));
+    tui.keymap.dispatch("presented.confirm", None);
+    harness.wait_for("Asked");
+    assert_eq!((tui.dialogs.size(), tui.dialogs.centered()), (opencode_ui::dialog::DialogSize::Large, true));
+    tui.keymap.dispatch("presented.select", Some("off"));
+    harness.wait_for("Presented");
+    assert_eq!((tui.dialogs.size(), tui.dialogs.centered()), (opencode_ui::dialog::DialogSize::Medium, false));
+}

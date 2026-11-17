@@ -426,8 +426,9 @@ fn input_is_equal_on_every_carrier() {
 // Expected (`carrier-equal` for panels, overlays, focus, a hold and the reads, P2): beside a session, the board's panel
 // opens with the focus, focuses its pad and reads it back with its place, holds a key and releases it at once, so the
 // key after it is heard in the same step; its overlay opens under the pad, closes on its own key and, on escape, tells
-// the panel; it gives the focus back, and closes; a select lists what the plugin's search finds. Frames, toasts and status are the same on
-// every carrier.
+// the panel; it gives the focus back; a click puts it in the panel's field, and so does a command of the plugin, away
+// from the composer, after which what the user types is the field's (`focus-input`); it closes; a centered select
+// lists what the plugin's search finds. Frames, toasts and status are the same on every carrier.
 #[test]
 fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     let run = |run: Run| {
@@ -469,6 +470,14 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
         app.type_text("yo");
         app.press("enter");
         step("say", &mut seen);
+        // The plugin gives its field the focus, away from the composer: what the user types next is the field's.
+        app.press("b");
+        settle(&board.harness);
+        tui.keymap.dispatch("board.say", None);
+        settle(&board.harness);
+        app.type_text("ya");
+        app.press("enter");
+        step("field", &mut seen);
         tui.keymap.dispatch("board.unnotes", None);
         step("close", &mut seen);
         tui.keymap.dispatch("board.pick", None);
@@ -494,6 +503,8 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     assert_eq!(heard("blur"), heard("escape"), "blur kept the focus: {}", at("blur"));
     assert!(at("blur").contains("notes focused=false at"), "the panel did not hear it lost the focus: {}", at("blur"));
     assert!(at("say").contains("said c:y c:yo s:yo"), "the input's events: {}", at("say"));
+    assert!(at("field").contains("notes focused=true at say"), "the field did not take the focus: {}", at("field"));
+    assert!(at("field").contains("c:yoy c:yoya s:yoya"), "the focused field's events: {}", at("field"));
     assert!(!at("close").contains("notes focused"), "the panel did not close");
     let search = at("search");
     assert!(search.contains("card 3") && !search.contains("card 4"), "the search did not list the rows: {search}");
@@ -593,6 +604,8 @@ fn claimed(run: Run) -> Vec<(&'static str, Seen)> {
     seen.push(("fence", observe()));
     let screen = harness.app.text();
     assert!(screen.contains("fence board") && !screen.contains("board call_2 Error"), "{run:?}:\n{screen}");
+    // The card holds the host's code view of the fence, which followed it as it streamed (`fence-node`).
+    assert!(screen.contains("alpha") && screen.contains("beta"), "{run:?}:\n{screen}");
     tui.theme.borrow_mut().set("tokyonight");
     tui.theme_changed();
     settle(harness);

@@ -23,14 +23,18 @@ use crate::support::{self, Harness};
 enum Kind {
     Fetch,
     Foreground,
-    /// The effects a call asks of the input: an overlay of the plugin's, a mode, the focus of node `n`, a blur, an
-    /// offset of scroll `s`, and a move of the session transcript, the app's, which the user's handler may ask for.
+    /// The effects a call asks of the input: an overlay of the plugin's, a mode, the focus of node `n`, the focus of
+    /// field `fld` (`focus-input`), a blur, an offset of scroll `s`, and a move of the session transcript, the app's,
+    /// which the user's handler may ask for.
     Overlay,
     Mode,
     Focus,
+    FocusField,
     Blur,
     Scroll,
     Transcript,
+    /// A select of the plugin's, centered (contract 2.x additions): a dialog is the activation's, whichever call asked.
+    Dialog,
 }
 
 impl Kind {
@@ -114,6 +118,7 @@ fn expected(row: Row) -> Outcome {
         // before it, in order. The mount's own effects close with it.
         let closed = match row.kind {
             Kind::Transcript => matches!(row.close, Close::BeforeDispatch | Close::Racing),
+            Kind::Dialog => false,
             _ => matches!(row.close, Close::BeforeDispatch | Close::InFlight | Close::Racing),
         };
         return match mount_owned && closed {
@@ -137,17 +142,19 @@ fn unreachable(carrier: Carrier, row: Row) -> Option<&'static str> {
         return match (row.kind, row.origin, row.close) {
             (_, _, Close::Launched | Close::AfterReply) => Some("an effect has no reply and no launch"),
             (_, _, Close::Other) => Some("the control's overlay is an overlay itself, and takes the focus"),
+            (Kind::Dialog, Origin::Setup, Close::Never) => None,
+            (Kind::Dialog, Origin::Setup, _) => Some("setup asks before any mount shows"),
             (_, Origin::Setup, _) => Some("setup holds no input: its verbs are refused (P2)"),
             (Kind::Blur, ..) => {
                 Some("on a plugin's route the host has no composer to give the focus to: a blur moves nothing to see")
             }
-            (Kind::Focus | Kind::Scroll, Origin::MountBegin | Origin::MountEnd, _) => {
+            (Kind::Focus | Kind::FocusField | Kind::Scroll, Origin::MountBegin | Origin::MountEnd, _) => {
                 Some("a mount's begin comes before its first view, its end after its tree: no node to name")
             }
             (Kind::Transcript, Origin::MountBegin | Origin::MountEnd, _) => Some(
                 "a mount's begin and end are no handler of the user's input: a transcript verb from them is refused",
             ),
-            (Kind::Focus | Kind::Scroll, Origin::Global, close) if close != Close::Never => {
+            (Kind::Focus | Kind::FocusField | Kind::Scroll, Origin::Global, close) if close != Close::Never => {
                 Some("an activation's verb names the newest mount that holds the node: with the route closed, none")
             }
             (_, Origin::MountEnd, close) if close != Close::BeforeDispatch => {
@@ -178,9 +185,11 @@ fn rows(carrier: Carrier) -> Vec<Row> {
         Kind::Overlay,
         Kind::Mode,
         Kind::Focus,
+        Kind::FocusField,
         Kind::Blur,
         Kind::Scroll,
         Kind::Transcript,
+        Kind::Dialog,
     ];
     let origins = [Origin::Setup, Origin::Global, Origin::Route, Origin::MountBegin, Origin::MountEnd, Origin::Input];
     let closes = [
@@ -348,7 +357,18 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         (Outcome::Cancelled, Kind::Fetch, _) => served.load(Ordering::SeqCst) == asked.load(Ordering::SeqCst),
         (Outcome::Cancelled, Kind::Foreground, _) => !probe.asked().is_empty(),
         (Outcome::Applied | Outcome::Dropped, ..)
-        | (_, Kind::Overlay | Kind::Mode | Kind::Focus | Kind::Blur | Kind::Scroll | Kind::Transcript, _) => {
+        | (
+            _,
+            Kind::Overlay
+            | Kind::Mode
+            | Kind::Focus
+            | Kind::FocusField
+            | Kind::Blur
+            | Kind::Scroll
+            | Kind::Transcript
+            | Kind::Dialog,
+            _,
+        ) => {
             unreachable!("an effect's row runs in run_effect")
         }
     };
@@ -504,6 +524,8 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
             Kind::Overlay => now.overlays > before.overlays,
             Kind::Mode => now.modes > before.modes,
             Kind::Focus => last.focused.as_deref() == Some("n"),
+            Kind::FocusField => last.focused.as_deref() == Some("fld"),
+            Kind::Dialog => h.tui.dialogs.centered() && h.app.text().contains("probe pick"),
             Kind::Blur => last.focused.is_none(),
             Kind::Scroll => last.offsets.iter().any(|(id, offset)| id == "s" && *offset == 3),
             Kind::Transcript => moved.get() > 0,
@@ -731,6 +753,16 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
             host.focus("n");
             Err("asked".to_owned())
         }
+        Kind::FocusField => {
+            host.focus("fld");
+            Err("asked".to_owned())
+        }
+        Kind::Dialog => {
+            let action = abi::Action::Command { name: "probe.global".into(), input: None };
+            let select = abi::Select::new("probe pick", vec![abi::SelectOption::new("one", "1")], action);
+            host.dialog(abi::Dialog::Select(select.with_centered(true)));
+            Err("asked".to_owned())
+        }
         Kind::Blur => {
             host.blur();
             Err("asked".to_owned())
@@ -807,6 +839,7 @@ fn page() -> v2::Node {
             .with_id("n")
             .interact(Interact { focusable: true, ..Interact::default() }),
         v2::Node::scroll(rows).with_id("s").layout(abi::Layout::default().height(abi::Width::Cells(5))),
+        v2::Node::input("").with_id("fld"),
     ])
 }
 
@@ -846,6 +879,8 @@ export default {{ id: "example.probe", setup(api) {{
     else if (KIND === "Overlay") carrier.effect({{ type: "overlay", surface: "other", anchor: {{ point: {{ x: 0, y: 0 }} }}, width: 20, height: 1 }})
     else if (KIND === "Mode") carrier.effect({{ type: "set-mode", mode: "probe" }})
     else if (KIND === "Focus") carrier.effect({{ type: "focus", node: "n" }})
+    else if (KIND === "FocusField") carrier.effect({{ type: "focus", node: "fld" }})
+    else if (KIND === "Dialog") carrier.effect({{ type: "dialog", dialog: {{ type: "select", title: "probe pick", options: [{{ title: "one", value: "1" }}], action: {{ type: "command", name: "probe.global" }}, centered: true }} }})
     else if (KIND === "Blur") carrier.effect({{ type: "blur" }})
     else if (KIND === "Transcript") carrier.effect({{ type: "scroll", target: {{ type: "transcript" }}, verb: {{ type: "by", rows: 3 }} }})
     else carrier.effect({{ type: "scroll", target: {{ type: "node", surface: "probe", id: "s" }}, verb: {{ type: "offset", offset: 3 }} }})
