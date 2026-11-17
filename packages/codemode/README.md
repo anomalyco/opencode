@@ -101,6 +101,11 @@ runs before the call reaches the host, and a failing one denies it: the host fun
 catches the failure as a thrown error. A denied call fails the way the call itself would: a tool call or asynchronous
 global rejects its promise, and a synchronous global throws.
 
+`tool.missing` answers a call to a path with no tool, such as a misspelled name, with the input as the program wrote
+it. It runs between `tool.before` and `tool.after` and counts toward `maxToolCalls`. Return `Option.some(value)` to
+give the call a result, or `Option.none()` to fail it with the usual unknown-tool error and suggestions. A host can use
+it to route a call to the tool it meant. Such a call is plain: a suspend waits for it to finish.
+
 ### Suspending and resuming a run
 
 `CodeMode.make` returns a `CodeMode.Runtime`, which can also run a program step by step:

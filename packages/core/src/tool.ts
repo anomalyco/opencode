@@ -5,7 +5,7 @@ export type { Context, Metadata, Namespace, Options, Result } from "@opencode/sc
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
-import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
+import { Context, Effect, Layer, Option, Ref, Result, Schema, SchemaIssue, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -182,17 +182,19 @@ const layer = Layer.effect(
     })
 
     // A plugin may rename a call in a Code Mode program, as it may a direct call, to another of the program's tools.
+    // `tool` is missing when the program called a name with no tool: None then means no plugin renamed it.
     const run = Effect.fnUntraced(function* (
       tools: ReadonlyMap<string, Tool.Info>,
-      tool: Tool.Info,
+      tool: Tool.Info | undefined,
       name: string,
       input: unknown,
       context: Tool.Context,
     ) {
       const event = yield* beforeExecute(name, input, context)
       const selected = event.tool === name ? tool : tools.get(event.tool)
-      if (!selected) return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
-      return yield* executeTool(selected, event.tool, event.input, context)
+      if (selected) return Option.some(yield* executeTool(selected, event.tool, event.input, context))
+      if (event.tool === name) return Option.none()
+      return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
     })
 
     let catalog:

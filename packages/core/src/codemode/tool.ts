@@ -13,7 +13,7 @@ import type {
 } from "@opencode/schema/tool"
 import { Identifier } from "@opencode/schema/identifier"
 import { CallID } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
+import { Clock, Context, Effect, Option, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { Permission } from "../permission.js"
@@ -63,7 +63,12 @@ type Tools = {
 class Run extends Context.Service<
   Run,
   {
-    readonly executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>
+    /** `tool` is missing for a call to a name with no tool. None: nothing ran, because no plugin renamed it. */
+    readonly executeTool: (
+      name: string,
+      tool: Info | undefined,
+      input: unknown,
+    ) => Effect.Effect<Option.Option<unknown>, unknown>
     readonly hooks: CodeMode.Hooks
   }
 >()("@opencode/CodeModeTool/Run") {}
@@ -86,7 +91,12 @@ const description = [
 
 export const create = (
   inventory: Inventory,
-  executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
+  executeTool: (
+    name: string,
+    tool: Info | undefined,
+    input: unknown,
+    context: ToolContext,
+  ) => Effect.Effect<Option.Option<Result>, Error>,
   permission: Permission.Interface,
 ) => {
   return {
@@ -144,11 +154,12 @@ export const create = (
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
-                  const content = resultContent(executed)
+                  if (Option.isNone(executed)) return executed
+                  const content = resultContent(executed.value)
                   const outputFileParts = outputFiles(content)
                   if (outputFileParts.length > 0)
                     yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-                  return resultValue(executed)
+                  return Option.some(resultValue(executed.value))
                 }),
               hooks: progressHooks(record),
             }),
@@ -300,7 +311,7 @@ export const check = (
   code: string,
   bindings: Readonly<Record<string, CodeMode.DataValue>>,
   limits: CodeMode.ExecutionLimits,
-  executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
+  executeTool: (name: string, tool: Info | undefined, input: unknown) => Effect.Effect<Option.Option<Result>, Error>,
 ) =>
   CodeMode.make({
     tools: inventoryTools(inventory),
@@ -310,7 +321,7 @@ export const check = (
     .execute(code, bindings)
     .pipe(
       Effect.provideService(Run, {
-        executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
+        executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(Option.map(resultValue))),
         hooks: {},
       }),
     )
@@ -328,7 +339,9 @@ function inventoryTools(inventory: Inventory) {
       // JSON Schema, which Code Mode renders but does not check: Core has validated the result of the tool that ran,
       // and a plugin may have renamed the call to a tool with another output.
       output: child.outputSchema ?? { type: ["string", "null"] },
-      execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
+      // A registered tool always runs or fails, so there is a result to take.
+      execute: (input) =>
+        Run.use((run) => run.executeTool(name, registration, input)).pipe(Effect.map(Option.getOrThrow)),
     })
   }
   return renderTools(root)
@@ -351,6 +364,9 @@ function resultValue(executed: Result) {
 const runHooks = {
   "tool.before": (call) => Run.use((run) => run.hooks["tool.before"]?.(call) ?? Effect.void),
   "tool.after": (call, result) => Run.use((run) => run.hooks["tool.after"]?.(call, result) ?? Effect.void),
+  // A name with no tool still goes to the plugins, as the path the program wrote. They may rename it to the ID of one
+  // of the program's tools.
+  "tool.missing": (call) => Run.use((run) => run.executeTool(call.name, undefined, call.input)),
   "extension.before": (call) => Run.use((run) => run.hooks["extension.before"]?.(call) ?? Effect.void),
   "extension.after": (call, result) => Run.use((run) => run.hooks["extension.after"]?.(call, result) ?? Effect.void),
 } satisfies CodeMode.Hooks<Run>

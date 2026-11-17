@@ -19,6 +19,10 @@ export interface ToolEditor {
 
 export interface ToolHooks {
   readonly "execute.before": {
+    /**
+     * The tool's ID, such as `github_list`. Set it to another tool's ID to run that tool instead. For a call a Code
+     * Mode program makes to a name with no tool, this is the path the program wrote, such as `github.lst`.
+     */
     tool: string
     readonly sessionID: Session.ID
     readonly agent: Agent.ID

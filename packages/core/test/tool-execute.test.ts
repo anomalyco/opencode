@@ -7,7 +7,7 @@ import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Deferred, Effect, Fiber, Schema } from "effect"
+import { Deferred, Effect, Fiber, Option, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
@@ -22,8 +22,12 @@ const context = {
 
 const allowAll = permissionService({ assert: () => Effect.void })
 
+// Stands in for Core's tool runner: runs the tool Code Mode found, and claims no name it did not.
+const runTool = (_: string, tool: Info | undefined, input: unknown, context: Tool.Context) =>
+  tool ? execute(tool, input, context).pipe(Effect.map(Option.some)) : Effect.succeed(Option.none())
+
 const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
+  CodeModeTool.create({ tools }, runTool, permission)
 
 test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
   const input = Schema.Struct({ text: Schema.NonEmptyString })
@@ -463,10 +467,10 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
     execute: (input) => Effect.succeed({ content: (input as { value: string }).value }),
   }
   const inventory = { tools: new Map([["echo", echo]]) }
-  const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
+  const codeMode = CodeModeTool.create(inventory, runTool, allowAll)
   const run = (id: string) => {
     const progress: Array<Tool.Metadata> = []
-    return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
+    return CodeModeTool.create(inventory, runTool, allowAll)
       .execute(
         { code: `return await tools.echo({ value: "${id}" })` },
         { ...context, id: Tool.CallID.make(id), progress: (update) => Effect.sync(() => progress.push(update)) },
