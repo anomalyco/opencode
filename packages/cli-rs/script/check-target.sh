@@ -72,8 +72,10 @@ case $target in
     *) printf '#!/bin/sh\nexec %s ar "$@"\n' "$zig" > "$tools/ar" ;;
 esac
 # The objects are never linked. zig cc takes the target from -target, so the wrapper drops cc-rs's --target, and the
-# -arch pair Apple's clang takes.
-cat > "$tools/cc" <<EOF
+# -arch pair Apple's clang takes. C++ (Luau's, with the luau feature) goes through zig c++ the same way: without it
+# cc-rs falls back to the host's GNU c++, which makes ELF objects for Windows and refuses Apple's flags.
+for tool in cc c++; do
+    cat > "$tools/$tool" <<EOF
 #!/bin/sh
 skip=
 for arg do
@@ -88,14 +90,15 @@ for arg do
     esac
     set -- "\$@" "\$arg"
 done
-exec $zig cc -target $zig_target "\$@"
+exec $zig $tool -target $zig_target "\$@"
 EOF
-chmod +x "$tools/ar" "$tools/cc"
+done
+chmod +x "$tools/ar" "$tools/cc" "$tools/c++"
 
 variable=$(printf '%s' "$target" | tr - _)
 export OPENTUI_LIB_DIR="$tools/lib"
 export RUSTC_BOOTSTRAP=1 CARGO_UNSTABLE_BUILD_STD=std
-export "CC_$variable=$tools/cc" "AR_$variable=$tools/ar"
+export "CC_$variable=$tools/cc" "CXX_$variable=$tools/c++" "AR_$variable=$tools/ar"
 cargo=${CARGO:-cargo}
 "$cargo" clippy --locked --target "$target" --workspace --all-targets "$@" -- -D warnings < /dev/null
 printf 'PASS: compile checks (%s)\n' "$target"
