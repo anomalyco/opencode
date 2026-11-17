@@ -266,7 +266,7 @@ export default Plugin.define({
             if (mode() === "throw") throw new Error("boom")
             if (mode() === "loop") while (true) {}
             // An intrinsic the contract has no node for, and text outside a `<text>`.
-            if (mode() === "select") return <select />
+            if (mode() === "select") return <tab_select />
             if (mode() === "bare") return <box>bare words</box>
             return (
               <text fg={context.theme.text.muted}>
