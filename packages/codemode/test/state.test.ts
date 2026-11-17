@@ -3,19 +3,19 @@ import { Glob } from "bun"
 import path from "node:path"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import { Host } from "../src/host-function.js"
-import { parseProgram } from "../src/runtime/execute.js"
-import { hostGlobals } from "../src/runtime/extensions.js"
-import { Interpreter } from "../src/runtime/interpreter.js"
-import { createBuiltins } from "../src/runtime/intrinsics.js"
-import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../src/runtime/objects.js"
-import { normal } from "../src/runtime/signals.js"
-import { Code } from "../src/code.js"
-import { AsyncFromSyncIterator } from "../src/generators.js"
-import { VmIntrinsic } from "../src/internal-prelude.js"
-import { Cell, CodeFlags } from "../src/opcodes.js"
-import type { Stop } from "../src/scheduler.js"
-import { CustomIter, Frame, Mode, Vm } from "../src/vm.js"
+import { Host } from "../src/language/host-function.js"
+import { parseProgram } from "../src/language/runtime/execute.js"
+import { hostGlobals } from "../src/language/runtime/extensions.js"
+import { Interpreter } from "../src/language/runtime/interpreter.js"
+import { createBuiltins } from "../src/language/runtime/intrinsics.js"
+import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../src/language/runtime/objects.js"
+import { normal } from "../src/language/runtime/signals.js"
+import { Code } from "../src/language/code.js"
+import { AsyncFromSyncIterator } from "../src/language/generators.js"
+import { VmIntrinsic } from "../src/language/internal-prelude.js"
+import { Cell, CodeFlags } from "../src/language/opcodes.js"
+import type { Stop } from "../src/language/scheduler.js"
+import { CustomIter, Frame, Mode, Vm } from "../src/language/vm.js"
 
 // The VM (`src/vm.ts`) runs programs as bytecode frames, and keeps the jobs, promises, and host calls they wait on as
 // data: a frame is its code, pc, and registers, and every suspension point is one. The Effect driver only does what
@@ -399,25 +399,19 @@ describe("vm", () => {
 
   test("the VM does not import Effect", async () => {
     const root = path.join(import.meta.dir, "..")
+    // The language's host boundary and driver; Code Mode (src/codemode/) is built on Effect throughout.
     const host = new Set([
-      "src/codemode.ts",
-      "src/extension.ts",
-      "src/host-function.ts",
-      "src/runtime.ts",
-      "src/scan.ts",
-      "src/tool-error.ts",
-      "src/tool-runtime.ts",
-      "src/tool-schema.ts",
-      "src/tool.ts",
-      "src/runtime/driver.ts",
-      "src/runtime/execute.ts",
-      "src/runtime/extensions.ts",
-      "src/runtime/signals.ts",
+      "src/language/host-function.ts",
+      "src/language/runtime.ts",
+      "src/language/runtime/driver.ts",
+      "src/language/runtime/execute.ts",
+      "src/language/runtime/extensions.ts",
+      "src/language/runtime/signals.ts",
     ])
     // Glob paths use the platform's separator.
-    const files = (await Array.fromAsync(new Glob("src/**/*.ts").scan({ cwd: root })))
+    const files = (await Array.fromAsync(new Glob("src/language/**/*.ts").scan({ cwd: root })))
       .map((file) => file.split(path.sep).join("/"))
-      .filter((file) => !file.startsWith("src/openapi/") && !host.has(file))
+      .filter((file) => !host.has(file))
     expect(files.length).toBeGreaterThan(0)
     for (const file of files) {
       expect(await Bun.file(path.join(root, file)).text()).not.toMatch(/from "effect"/)

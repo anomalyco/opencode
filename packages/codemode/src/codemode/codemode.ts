@@ -13,7 +13,7 @@ import {
   type SnapshotHeader,
   SuspendError,
   toBytes,
-} from "./language.js"
+} from "../language/index.js"
 
 export { fromBytes, scanTools, SnapshotError, SuspendError, toBytes }
 export type { Snapshot, SnapshotHeader }

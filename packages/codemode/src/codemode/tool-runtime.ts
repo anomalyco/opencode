@@ -1,11 +1,11 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
-import type { Json } from "./data.js"
-import { compareText } from "./runtime/operations.js"
+import type { Json } from "../language/data.js"
+import { compareText } from "../language/runtime/operations.js"
 import type { DiagnosticKind } from "./codemode.js"
 import { ToolError, toolError } from "./tool-error.js"
-import { Host } from "./host-function.js"
-import { HostFailure } from "./runtime/model.js"
-import type { Run } from "./runtime/execute.js"
+import { Host } from "../language/host-function.js"
+import { HostFailure } from "../language/runtime/model.js"
+import type { Run } from "../language/runtime/execute.js"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,

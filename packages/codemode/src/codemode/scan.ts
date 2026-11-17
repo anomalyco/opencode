@@ -1,9 +1,9 @@
 import type { AnyNode, BlockStatement, ModuleDeclaration, Pattern, Program, Statement } from "acorn"
 import { Result } from "effect"
 import type { Diagnostic } from "./codemode.js"
-import { parseProgram } from "./runtime/execute.js"
-import { formatLocation } from "./runtime/model.js"
-import { moduleName } from "./runtime/modules.js"
+import { parseProgram } from "../language/runtime/execute.js"
+import { formatLocation } from "../language/runtime/model.js"
+import { moduleName } from "../language/runtime/modules.js"
 
 /**
  * Extracts every `tools.<path>` referenced by a Code Mode program, in first-seen order. Fails on syntax errors,

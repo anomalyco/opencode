@@ -5,8 +5,8 @@
 
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
-import { Interpreter } from "../src/runtime/interpreter.js"
-import { createBuiltins } from "../src/runtime/intrinsics.js"
+import { Interpreter } from "../src/language/runtime/interpreter.js"
+import { createBuiltins } from "../src/language/runtime/intrinsics.js"
 
 const index = process.argv.indexOf("--iterations")
 const iterations = index === -1 ? 2000 : Number(process.argv[index + 1])

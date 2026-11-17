@@ -1,4 +1,4 @@
-export * as Language from "./language.js"
+export * as Language from "./index.js"
 
 // The language layer: the compiler, VM, runtime, standard library, snapshots, and the Effect driver. It knows nothing
 // about tools; a host gives programs its functions through `Host` and runs them with `Runtime.make`.

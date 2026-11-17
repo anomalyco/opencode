@@ -15,7 +15,7 @@ export const fromBytes = (bytes: Uint8Array): unknown => {
   }
 }
 
-/** The snapshot format this build writes and reads (see `src/snapshot.ts`). */
+/** The snapshot format this build writes and reads (see `src/language/snapshot.ts`). */
 export const FORMAT = 3
 
 /**

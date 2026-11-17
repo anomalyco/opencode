@@ -4,12 +4,12 @@
 // failure messages are the host's (`$assert`).
 import path from "node:path"
 import { Effect } from "effect"
-import { finishExecution, type Setup, startProgram } from "../../src/runtime/execute.js"
-import type { Interpreter } from "../../src/runtime/interpreter.js"
-import { Throw } from "../../src/runtime/model.js"
-import { createErrorValue } from "../../src/runtime/intrinsics.js"
-import { constructor, fn, methods } from "../../src/runtime/native.js"
-import { Callable, define, get, hidden, Arr, Fn, Obj, type Value } from "../../src/runtime/objects.js"
+import { finishExecution, type Setup, startProgram } from "../../src/language/runtime/execute.js"
+import type { Interpreter } from "../../src/language/runtime/interpreter.js"
+import { Throw } from "../../src/language/runtime/model.js"
+import { createErrorValue } from "../../src/language/runtime/intrinsics.js"
+import { constructor, fn, methods } from "../../src/language/runtime/native.js"
+import { Callable, define, get, hidden, Arr, Fn, Obj, type Value } from "../../src/language/runtime/objects.js"
 
 export const root = import.meta.dir
 
