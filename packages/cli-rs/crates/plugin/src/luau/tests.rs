@@ -412,7 +412,10 @@ fn a_luau_build_reloads_and_a_broken_one_keeps_the_running_version() {
     assert!(settle(&loader, &host, &registry));
     let status = entry(&registry.entries(), &target).status.clone();
     let Status::Failed(error) = status else { panic!("{status:?}") };
-    assert!(error.starts_with("init.luau:") && error.ends_with("(previous version still active)"), "{error}");
+    assert!(
+        error.starts_with("example.luau-hello: init.luau:1: ") && error.ends_with("(previous version still active)"),
+        "{error}"
+    );
     assert!(footer(&host, &registry).contains("hello"));
     let fixed = fs::read_to_string(example("hello").join("init.luau")).unwrap().replace("\"hello\", {", "\"hi\", {");
     fs::write(dir.join("init.luau"), fixed).unwrap();
@@ -669,6 +672,60 @@ fn require_resolves_by_luaus_rules_within_the_plugin_and_reads_no_file_after_loa
     assert_eq!(seen["late"], "late", "{message}");
 }
 
+/// What plugin `test.luau` fails with once its command `probe` ran, with `init` and the extra `files`.
+fn failed_probe(init: &str, files: &[(&str, &str)]) -> String {
+    let host = host();
+    let mut sources = sources(init);
+    for (path, text) in files {
+        sources.files.insert((*path).into(), text.as_bytes().to_vec());
+    }
+    let registry = running(&host, define(&sources, None).unwrap().0);
+    keymap(&host).dispatch("probe", None);
+    host.app.advance(Duration::from_millis(1));
+    failure(&registry, "test.luau").expect("the probe failed the plugin")
+}
+
+const PROBE: &str = r#"
+    local plugin = require("@opencode/plugin")
+    local util = require("@self/lib/util")
+    return plugin.define(function(setup)
+        setup:command({ name = "probe" }, function(host)
+            util.width(nil)
+        end)
+    end)
+"#;
+
+// Expected (better-audit 2): a runtime error reads `<plugin id>: <file>.luau:<line>: <message>`, with no `runtime
+// error:` prefix, and its traceback keeps the plugin's own frames only: no `[C]`, mlua `require` or host frames.
+#[test]
+fn a_luau_runtime_error_names_the_plugin_the_file_and_the_line() {
+    let util = "local util = {}\nfunction util.width(node)\n    return #node.text\nend\nreturn util";
+    let error = failed_probe(PROBE, &[("lib/util.luau", util)]);
+    assert!(error.starts_with("test.luau: lib/util.luau:3: attempt to index nil with 'text'\n"), "{error}");
+    let traceback = error.split_once("\nstack traceback:\n").map(|(_, frames)| frames).unwrap_or_default();
+    assert!(traceback.starts_with("\tlib/util.luau:3: in function 'width'\n\tinit.luau:6:"), "{error}");
+    for noise in ["runtime error", "[C]", "__mlua_require", "@opencode/plugin", "panicked"] {
+        assert!(!error.contains(noise), "{noise}: {error}");
+    }
+}
+
+// Expected (better-audit 2): `error("...")` reads the same way, at the line that raised it.
+#[test]
+fn a_luau_error_call_names_the_plugin_the_file_and_the_line() {
+    let init = PROBE.replace("util.width(nil)", "error(\"boom\")");
+    let error = failed_probe(&init, &[("lib/util.luau", "return {}")]);
+    assert!(error.starts_with("test.luau: init.luau:6: boom"), "{error}");
+}
+
+// Expected (better-audit 2): a syntax error reads `<plugin id>: <file>.luau:<line>: <message>`, not
+// `init.luau: syntax error: 3: ...`.
+#[test]
+fn a_luau_syntax_error_names_the_plugin_the_file_and_the_line() {
+    let error = define(&sources("local plugin = require(\"@opencode/plugin\")\n\nlocal = 1\n"), None).err().unwrap();
+    assert!(error.starts_with("test.luau: init.luau:3: "), "{error}");
+    assert!(!error.contains("syntax error"), "{error}");
+}
+
 // Expected (call cost): the tables a render's input and `Changed` come in are reused from call to call, so each call
 // sees its own values and nothing of the one before, also through a table the plugin kept, and the plugin cannot
 // write into them.
@@ -691,7 +748,7 @@ fn a_reused_input_table_shows_each_call_its_own_values() {
         end)
     "#;
     let mut registered = abi::Registered::new("test.luau", None);
-    let compiled = Rc::new(vm::Compiled::new(&sources(init), "init.luau").unwrap());
+    let compiled = Rc::new(vm::Compiled::new(&sources(init), "test.luau", "init.luau").unwrap());
     let _plugin = bind::setup(&compiled, &mut registered.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
     let (_, _, render) = registered.renders().next().unwrap();
     let shown = |input: &abi::SlotInput, changed: &abi::Changed| match render(&Nop, input, changed) {
@@ -773,7 +830,8 @@ fn measure_one_call_on_each_carrier() {
     let mut linked = abi::Registered::new("example.hello", None);
     hello(&mut linked.setup()).unwrap();
     let mut luau = abi::Registered::new("example.luau-hello", None);
-    let compiled = Rc::new(vm::Compiled::new(&Sources::read(&example("hello")).unwrap(), "init.luau").unwrap());
+    let compiled =
+        Rc::new(vm::Compiled::new(&Sources::read(&example("hello")).unwrap(), "test.luau", "init.luau").unwrap());
     let _plugin = bind::setup(&compiled, &mut luau.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
     let rounds = 200_000;
     for (name, registered) in [("linked", &linked), ("luau", &luau)] {
@@ -829,7 +887,7 @@ fn parts_of_a_render() {
         end)
     "#;
     let mut registered = abi::Registered::new("test.luau", None);
-    let compiled = Rc::new(vm::Compiled::new(&sources(init), "init.luau").unwrap());
+    let compiled = Rc::new(vm::Compiled::new(&sources(init), "test.luau", "init.luau").unwrap());
     let _plugin = bind::setup(&compiled, &mut registered.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
     let (input, changed) = (abi::SlotInput::default(), abi::Changed::everything());
     let names = ["keep", "kept node", "built node", "built, keep"];
@@ -892,7 +950,7 @@ fn heavy_calls() {
     let mut linked = abi::Registered::new("test.heavy", None);
     heavy(&mut linked.setup()).unwrap();
     let mut luau = abi::Registered::new("test.luau", None);
-    let compiled = Rc::new(vm::Compiled::new(&sources(HEAVY), "init.luau").unwrap());
+    let compiled = Rc::new(vm::Compiled::new(&sources(HEAVY), "test.luau", "init.luau").unwrap());
     let _plugin = bind::setup(&compiled, &mut luau.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
     let rounds = 20_000;
     let plain = abi::SlotInput::default();

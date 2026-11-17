@@ -19,10 +19,11 @@ pub const MEMORY: usize = 32 << 20;
 /// How many interrupts pass between two reads of the clock, as rune-luau's watchdog does.
 const TICKS: u32 = 256;
 
-/// The modules of a build, compiled once: bytecode by module name (`init`, `lib/util`, `x/init`), the plugin's
-/// `.luaurc` files by their directory (`""` is the plugin's root), every directory that holds either, and the entry's
-/// name.
+/// The modules of plugin `id`'s build, compiled once: bytecode by module name (`init`, `lib/util`, `x/init`), the
+/// plugin's `.luaurc` files by their directory (`""` is the plugin's root), every directory that holds either, and the
+/// entry's name.
 pub(crate) struct Compiled {
+    id: String,
     modules: BTreeMap<String, Vec<u8>>,
     configs: BTreeMap<String, Vec<u8>>,
     dirs: BTreeSet<String>,
@@ -30,8 +31,9 @@ pub(crate) struct Compiled {
 }
 
 impl Compiled {
-    /// Compiles every `.luau` file of `sources`; a syntax error is the build's, before any setup.
-    pub(crate) fn new(sources: &Sources, entry: &str) -> Result<Self, String> {
+    /// Compiles every `.luau` file of `sources`; a syntax error is the build's, before any setup, and reads
+    /// `<id>: <file>.luau:<line>: <message>`.
+    pub(crate) fn new(sources: &Sources, id: &str, entry: &str) -> Result<Self, String> {
         let compiler = mlua::chunk::Compiler::new().set_optimization_level(1).set_debug_level(1);
         let (mut modules, mut configs) = (BTreeMap::new(), BTreeMap::new());
         for (path, bytes) in sources.files() {
@@ -40,7 +42,11 @@ impl Compiled {
                 continue;
             }
             let Some(name) = path.strip_suffix(".luau") else { continue };
-            let code = compiler.compile(bytes).map_err(|error| format!("{path}: {error}"))?;
+            let code = compiler.compile(bytes).map_err(|error| match error {
+                // Luau's message starts with the line: `3: Expected identifier ...`.
+                mlua::Error::SyntaxError { message, .. } => format!("{id}: {path}:{}", message.trim_start_matches(':')),
+                error => format!("{id}: {path}: {error}"),
+            })?;
             modules.insert(name.to_owned(), code);
         }
         let dirs = modules
@@ -55,7 +61,7 @@ impl Compiled {
         if !modules.contains_key(&entry) {
             return Err(format!("plugin.toml names the entry {entry}.luau, which the plugin does not have"));
         }
-        Ok(Self { modules, configs, dirs, entry })
+        Ok(Self { id: id.to_owned(), modules, configs, dirs, entry })
     }
 
     /// The module at `path` (`""` is the plugin's root), as Luau's require-by-string finds one: `path.luau` or
@@ -128,6 +134,8 @@ pub(crate) struct Vm {
     budget: Rc<Budget>,
     /// The modules being loaded, outermost first: one asked for again is a cycle.
     loading: Rc<RefCell<Vec<String>>>,
+    /// The plugin's ID, which its errors start with.
+    id: String,
 }
 
 impl Vm {
@@ -150,7 +158,7 @@ impl Vm {
         // `require`, and `loadstring`, which would compile code the sandbox never saw.
         globals.raw_set("loadstring", Value::Nil)?;
         globals.raw_set("require", lua.create_require_function(files)?)?;
-        Ok(Self { lua, budget, loading })
+        Ok(Self { lua, budget, loading, id: compiled.id.clone() })
     }
 
     /// Runs the entry module and returns what it returned. Freezes the globals first (`Lua::sandbox`). The entry is
@@ -169,7 +177,7 @@ impl Vm {
     }
 
     /// Calls into the VM within the budget: the outermost call arms it. A Luau error, the budget's interrupt (also
-    /// one the plugin caught) or an allocation over the cap is the error's text.
+    /// one the plugin caught) or an allocation over the cap is the error's text, after the plugin's ID ([`report`]).
     pub(crate) fn call<R>(&self, f: impl FnOnce() -> mlua::Result<R>) -> Result<R, String> {
         let outer = self.budget.armed.get().is_none();
         if outer {
@@ -184,8 +192,8 @@ impl Vm {
         }
         self.budget.armed.set(None);
         match self.budget.stopped.take() {
-            Some(stopped) => Err(stopped),
-            None => result.map_err(|error| error.to_string()),
+            Some(stopped) => Err(format!("{}: {stopped}", self.id)),
+            None => result.map_err(|error| report(&self.id, &error.to_string())),
         }
     }
 
@@ -193,6 +201,23 @@ impl Vm {
     pub(crate) fn memory(&self) -> usize {
         self.lua.used_memory()
     }
+}
+
+/// What an author reads for Luau error `error` of plugin `id`: `<id>: <file>.luau:<line>: <message>`, then the
+/// traceback's frames in the plugin's own files. mlua's `runtime error:` prefix goes, and so do the frames of C
+/// functions, of mlua's `require` and of the host's `@opencode/plugin`, which say nothing about the plugin.
+fn report(id: &str, error: &str) -> String {
+    let (message, traceback) = error.split_once("\nstack traceback:\n").unwrap_or((error, ""));
+    let message = message.trim_end().strip_prefix("runtime error: ").unwrap_or(message.trim_end());
+    let frames: Vec<&str> = traceback
+        .lines()
+        .map(|line| line.trim_start_matches(['\t', ' ', '>']))
+        .filter(|frame| frame.split(':').next().is_some_and(|file| file.ends_with(".luau")))
+        .collect();
+    if frames.is_empty() {
+        return format!("{id}: {message}");
+    }
+    format!("{id}: {message}\nstack traceback:\n\t{}", frames.join("\n\t"))
 }
 
 /// Fails the running call of the VM `lua` with `reason`, also when the plugin catches the error a binding raises: the

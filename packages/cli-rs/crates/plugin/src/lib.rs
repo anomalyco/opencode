@@ -993,6 +993,8 @@ impl Scope {
             log::error!("plugin {}: {export} took {took} ms, a host bug in a built-in", self.id);
         }
         let error = match out {
+            // An external carrier's failure is its own report, which names the plugin and where in it (a Luau error).
+            Some(Err(panic)) if self.external => Some(panic.to_string()),
             Some(Err(panic)) => Some(format!("{export} panicked: {panic}")),
             // A call that returned late did return: what it asked for happens, then it fails, as over the C ABI.
             _ if timed.overrun && self.external => {
