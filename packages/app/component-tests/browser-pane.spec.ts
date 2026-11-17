@@ -10,6 +10,12 @@ const modules = {
   language: source("../src/runtime/i18n/language.tsx"),
 }
 
+// Panel motion reads `navigator.platform` on each drag, so a test pins the platform whose behaviour it covers.
+const pinPlatform = (page: Page, platform: string) =>
+  page.evaluate((value) => {
+    Object.defineProperty(navigator, "platform", { value, configurable: true })
+  }, platform)
+
 story.beforeEach(async ({ mount, page }) => {
   // Any story loads the app styles; the fixture mounts the pane beside it on the real host embeds.
   await mount("ui-line-comment--editor")
@@ -107,10 +113,11 @@ story("paints a still of the page in place of the native view while a resize han
   const handle = root.getByTestId("pane-resize-handle")
   const native = root.getByTestId("native-Alpha")
   const still = root.locator("#browser-panel img")
+  await pinPlatform(page, "Linux x86_64")
 
-  // A native view's bounds land on screen frames before the DOM around it, so one left up through a drag jumps against
-  // its pane on every move. A click on the handle moves nothing and must not blink the page out. Read in the same task
-  // as each event, so a view hidden and shown again before the next frame cannot pass.
+  // On Linux a native view's bounds land on screen frames before the DOM around it, so one left up through a drag jumps
+  // against its pane on every move. A click on the handle moves nothing and must not blink the page out. Read in the
+  // same task as each event, so a view hidden and shown again before the next frame cannot pass.
   const visible = await handle.evaluate((element) => {
     const read = () => document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
     const box = element.getBoundingClientRect()
@@ -137,11 +144,39 @@ story("paints a still of the page in place of the native view while a resize han
   await expect(still).toHaveCount(0)
 })
 
+story("keeps the native view live while a resize handle is dragged on macOS", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const handle = root.getByTestId("pane-resize-handle")
+  const still = root.locator("#browser-panel img")
+  await pinPlatform(page, "MacIntel")
+
+  // macOS puts a native view's bounds and the DOM around it on the same frame, so the page keeps laying out through the
+  // drag instead of freezing behind a still. Read in the same task as each move, so a blink between frames cannot pass.
+  const visible = await handle.evaluate((element) => {
+    const read = () => document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
+    const box = element.getBoundingClientRect()
+    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
+    const dragging = read()
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 80 }))
+    const moved = read()
+    document.dispatchEvent(new PointerEvent("pointerup", at))
+
+    return { dragging, moved }
+  })
+
+  expect(visible).toEqual({ dragging: "true", moved: "true" })
+  await expect(handle).not.toHaveAttribute("data-dragging")
+  await expect(still).toHaveCount(0)
+})
+
 story("shows the native view again when the window loses focus mid-drag", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const handle = root.getByTestId("pane-resize-handle")
   const native = root.getByTestId("native-Alpha")
   const still = root.locator("#browser-panel img")
+  await pinPlatform(page, "Linux x86_64")
 
   // Alt+Tab mid-drag delivers no pointerup; the page must not stay locked behind a still.
   await handle.evaluate((element) => {
