@@ -1,6 +1,6 @@
 --!strict
 -- `@opencode/plugin`: what every Luau plugin requires. `define` names the setup; the rest builds the contract's tables
--- (`schema/v2.json`), which a plugin may also write by hand. Types: `opencode.d.luau`.
+-- (`schema/v2.json`), which a plugin may also write by hand. Types: `opencode/plugin.luau`.
 
 local plugin = {}
 
