@@ -1,6 +1,6 @@
 export * as SessionStore from "./store.js"
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, ne, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Project } from "@opencode/schema/project"
 import { Workspace } from "@opencode/schema/workspace"
@@ -45,6 +45,8 @@ export type MessagesInput = {
   limit?: number
   order?: "asc" | "desc"
   type?: SessionMessage.Type
+  /** Include the hidden system messages that record tool changes. Only session export needs them. */
+  toolChanges?: boolean
   cursor?: {
     id: SessionMessage.ID
     direction: "previous" | "next"
@@ -134,6 +136,12 @@ const layer = Layer.effect(
             eq(SessionMessageTable.session_id, input.sessionID),
             boundary,
             input.type === undefined ? undefined : eq(SessionMessageTable.type, input.type),
+            input.toolChanges
+              ? undefined
+              : or(
+                  ne(SessionMessageTable.type, "system"),
+                  sql`json_extract(${SessionMessageTable.data}, '$.tools') IS NULL`,
+                ),
           ),
         )
         .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))

@@ -52,50 +52,6 @@ test("uses the configured initial window and retains normal cursor page sizes", 
   }
 })
 
-test("leaves recorded tool changes out of the transcript", async () => {
-  const tools = (id: string, created: number) => ({
-    id,
-    type: "system",
-    text: "",
-    tools: { add: [{ name: "lookup", description: "Look up", inputSchema: {} }], remove: [] },
-    time: { created },
-  })
-  const api = OpenCode.make({
-    baseUrl: "http://opencode.local",
-    fetch: async (input, init) => {
-      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
-      const cursor = url.searchParams.get("cursor")
-      return Response.json(
-        cursor
-          ? { data: [tools("msg_1", 1)], cursor: {} }
-          : {
-              data: [
-                { id: "msg_4", type: "system", text: "Instructions changed", time: { created: 4 } },
-                tools("msg_3", 3),
-                { id: "msg_2", type: "user", text: "History", time: { created: 2 } },
-              ],
-              cursor: { next: "older" },
-            },
-      )
-    },
-  })
-  const setup = createRoot((dispose) => ({
-    data: createData({
-      api: () => api,
-      directory: "/project",
-      event: { on: () => () => {}, listen: () => () => {} },
-    }),
-    dispose,
-  }))
-  try {
-    await setup.data.session.message.sync("ses_refresh")
-    await setup.data.session.message.loadMore("ses_refresh")
-    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_2", "msg_4"])
-  } finally {
-    setup.dispose()
-  }
-})
-
 test("counts every subagent page in a root session's cost", async () => {
   const child = (index: number): SessionInfo => ({
     ...session(0),

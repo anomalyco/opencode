@@ -2684,11 +2684,13 @@ describe("SessionRunnerLLM", () => {
         ],
         [{ add: ["fresh"], remove: ["lookup"] }, undefined],
       ])
-      // The changes are hidden history: their messages hold no text, and replaying the events restores them.
-      const recorded = (yield* s.messages).filter((message) => message.type === "system")
+      // The changes are hidden history: the model context holds them with no text, the message listing leaves them
+      // out, and replaying the events restores them.
+      const recorded = (yield* s.context).filter((message) => message.type === "system")
       expect(recorded.map((message) => message.type === "system" && message.text)).toEqual(["", ""])
+      expect((yield* s.messages).filter((message) => message.type === "system")).toEqual([])
       yield* replaySessionProjection(sessionID)
-      expect((yield* s.messages).filter((message) => message.type === "system")).toEqual(recorded)
+      expect((yield* s.context).filter((message) => message.type === "system")).toEqual(recorded)
     })
 
     scenario("runs an added tool and refuses a removed one", function* (s) {

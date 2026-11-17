@@ -55,8 +55,7 @@ export const epoch = (
 export const replay = (message: SessionMessage.Info, index: number, epoch: Epoch | undefined) => {
   const recorded = changes(message)
   if (recorded === undefined || epoch === undefined || index <= epoch.start) return undefined
-  // Without the message ID, so it matches the marker the recording step sent.
-  return Message.make(Message.tools({ add: recorded.add.map(ToolDefinition.make), remove: recorded.remove }))
+  return marker(recorded)
 }
 
 /** Compares the offered tools with the epoch's and decides what the request declares. */
@@ -86,10 +85,15 @@ export const plan = (input: {
   if (change.add.length === 0 && change.remove.length === 0) return { tools }
   return {
     tools,
-    marker: Message.make(Message.tools({ add: change.add.map(ToolDefinition.make), remove: change.remove })),
+    marker: marker(change),
     record: change,
   }
 }
+
+// The one place a change becomes a request message, so the step that records it and every later replay send the
+// same bytes. No message ID, since the recording step has none yet.
+const marker = (change: Tool.Changes) =>
+  Message.make(Message.tools({ add: change.add.map(ToolDefinition.make), remove: change.remove }))
 
 const changes = (message: SessionMessage.Info | undefined) => (message?.type === "system" ? message.tools : undefined)
 

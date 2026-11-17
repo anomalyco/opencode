@@ -61,7 +61,9 @@ const layer = Layer.effect(
       export: Effect.fn("SessionTransfer.export")(function* (input) {
         const data = {
           info: yield* sessions.get(input.sessionID),
-          messages: (yield* sessions.messages({ sessionID: input.sessionID, order: "asc" })).filter(isSettled),
+          messages: (yield* sessions.messages({ sessionID: input.sessionID, order: "asc", toolChanges: true })).filter(
+            isSettled,
+          ),
         }
         return input.sanitize ? sanitize(data) : data
       }),
