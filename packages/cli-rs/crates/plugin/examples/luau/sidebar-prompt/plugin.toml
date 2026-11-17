@@ -1,5 +1,6 @@
 # The port of `opencode-sidebar-prompt` (`examples/sidebar-prompt`) in Luau.
-id = "sidebar.prompt.luau"
+# Its ID is the original's, as the native port's is, so it keeps what the original stored.
+id = "sidebar.prompt"
 name = "Last prompt"
 version = "0.1.6"
 contract = "2.0"
