@@ -388,6 +388,39 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   expect(fake.toasts()).toEqual(["t.keys: focus() of an <input> is not supported by opencode-native yet"])
 })
 
+// CT-18: a box's border as OpenTUI's: `true` or an array of sides draws, anything else (`{ type: "single" }`, the
+// OMO-Slim family's) draws none, and a border style or color set while the border is `false` makes it `true`.
+test("a border draws as OpenTUI's box draws it", () => {
+  const fake = host()
+  const ctx = plugin("t.border", fake)
+  const cases: Json[] = [
+    {},
+    { border: true },
+    { border: ["left", "right"] },
+    { border: { type: "single" } },
+    { border: { type: "single" }, borderColor: "#ff0000" },
+    { borderColor: "#ff0000" },
+    { borderStyle: "rounded" },
+    { border: false },
+    { border: false, borderColor: "#ff0000" },
+    { borderColor: "#ff0000", border: false },
+  ]
+  ctx.ui.slot({ append: "home.footer", render: () => cases.map((props) => h("box", props)) })
+  const tree = view(fake, 0, "a").draw()
+  expect(tree.children.map((child: Json) => child.border)).toEqual([
+    undefined,
+    {},
+    { sides: { top: false, right: true, bottom: false, left: true } },
+    undefined,
+    undefined,
+    { color: "#ff0000" },
+    { style: "rounded" },
+    undefined,
+    { color: "#ff0000" },
+    undefined,
+  ])
+})
+
 // CT-8: a raised surface's theme is the page's, which says so once; it was undefined, and snippets' library crashed.
 test("theme.surface answers the page theme", () => {
   const fake = host()

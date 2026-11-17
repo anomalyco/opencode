@@ -16,6 +16,7 @@ host through the V2 compatibility layer. Before a scenario runs, each side unpac
 | `opencode-sidebar-tokens.tgz` | `opencode-sidebar-tokens@0.1.3` (field test FT-7) | `sha512-tx/FBEbZJJ1mwdYMg3rKvUdthtkETLHYqeg26cM3f1Z1a0yzlM1kCG2ymp1GbjevLrNUWqUEparQJFG6CfeLzQ==` |
 | `opencode-plugin-context.tgz` | `opencode-plugin-context@2.0.2` (catalog CT-9) | `sha512-6rDmEGNqO+7ozS0lYoa1Hw6srd3hFLy8IXexd8xugmvsTw43wnUB5C3tj/30FjlCCfsUpp+R3HdgfvSelxyhSA==` |
 | `opencode-file-browser.tgz` | `opencode-file-browser@1.0.4` (catalog CT-11) | `sha512-gnpKQHYyjlqEDZcTtH8V4IiuhNSML9IOp9AyJLFDMxqr5R3A8gc3ZQhWq8TR2ewwox4K7iU5gOshfXYx5EBB+g==` |
+| `mighty-reviewer.tgz` | `mighty-reviewer@0.14.0` (catalog CT-18) | `sha512-2v8eUKRogeXXPyJ6d5G7APEFKDpl25JJCZiHgSqNd8MlITS4T1jJ1WrpaZxbfrqXDzOdrzk+Tit7dUMpPQsYBw==` |
 
 `integrity.json` pins the same digests; TS's recorder (`parity/app/scenarios.test.tsx`) and the Rust rows
 (`crates/tui/tests/all/{app,ports}.rs`) refuse a tarball whose SHA-512 is not its pin before they unpack it.

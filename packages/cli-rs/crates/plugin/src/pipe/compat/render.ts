@@ -13,6 +13,8 @@ const SPANS = new Set(["span", "b", "strong", "i", "em", "u", "a", "br"])
 const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input", "textarea", ...SPANS])
 // The intrinsics of OpenTUI's catalogue the contract has no node for.
 const UNSUPPORTED = new Set(["select", "tab_select", "ascii_font", "diff", "line_number", "image", "video"])
+// The props whose setter turns a box's border on (OpenTUI's `initializeBorder`).
+const BORDER_ON = new Set(["borderStyle", "borderColor", "focusedBorderColor", "customBorderChars"])
 // The events of a field the layer maps (CT-11).
 const FIELD_EVENTS = new Set(["onInput", "onChange", "onSubmit", "onKeyDown"])
 
@@ -642,10 +644,16 @@ function edges(props: Json, name: "padding" | "margin") {
   return out.top || out.right || out.bottom || out.left ? out : undefined
 }
 
+// As OpenTUI's box (CT-18), whose props the reconciler sets in order: `border` sets it, and a border style or color set
+// while it is `false` makes it `true`. It draws all four sides for `true`, the sides an array names, and none for
+// anything else, such as `{ type: "single" }`.
 function borderOf(props: Json) {
-  const border = props.border
-  if (!border && !props.borderStyle && !props.borderColor) return undefined
-  if (border === false) return undefined
+  let border: unknown = false
+  for (const name of Object.keys(props)) {
+    if (name === "border") border = props.border
+    else if (BORDER_ON.has(name) && border === false) border = true
+  }
+  if (border !== true && !Array.isArray(border)) return undefined
   const sides = Array.isArray(border)
     ? {
         top: border.includes("top"),
