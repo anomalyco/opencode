@@ -1201,10 +1201,12 @@ impl<'rt> Vm<'rt> {
                 if self.is_callable(&f) {
                     let it = self.call(&f, *v, &[])?;
                     if !matches!(it, Value::Obj(_)) {
-                        return Err(self
-                            .type_error("Result of the Symbol.iterator method is not an object"));
+                        return Err(self.type_error("Iterator method result must be an object."));
                     }
                     return Ok(it);
+                }
+                if !f.is_nullish() {
+                    return Err(self.type_error("Iterator method must be a function."));
                 }
             }
             Value::Str(s) => {
@@ -1310,17 +1312,19 @@ impl<'rt> Vm<'rt> {
         if let Value::Obj(id) = v {
             let f = self.get_obj(*id, SYM_ASYNC_ITERATOR);
             if !f.is_nullish() {
+                if !self.is_callable(&f) {
+                    return Err(self.type_error("Iterator method must be a function."));
+                }
                 let it = self.call(&f, *v, &[])?;
                 if !matches!(it, Value::Obj(_)) {
-                    return Err(self
-                        .type_error("Result of the Symbol.asyncIterator method is not an object"));
+                    return Err(self.type_error("Iterator method result must be an object."));
                 }
                 return Ok(it);
             }
         }
         let sync = self.get_iterator_in(v, crate::bytecode::ITER_FOR_AWAIT)?;
         let Value::Obj(sync) = sync else {
-            return Err(self.type_error("Result of the Symbol.iterator method is not an object"));
+            return Err(self.type_error("Iterator method result must be an object."));
         };
         let next = self.record_next(&Value::Obj(sync))?;
         let proto = self.realm.async_from_sync_proto;

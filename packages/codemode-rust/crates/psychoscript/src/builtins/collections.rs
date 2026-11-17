@@ -305,8 +305,42 @@ fn promise_reject(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Obj(p))
 }
 
+/// The members of a combinator's input, or the promise it returns already rejected when iterating it fails.
+fn combinator_items(
+    vm: &mut Vm,
+    args: &[Value],
+    name: &str,
+) -> Result<Result<Vec<Value>, Id>, Value> {
+    let items = arg(args, 0);
+    let listed = if vm.is_iterable(&items) {
+        vm.iterate_to_vec(&items)
+    } else {
+        let d = vm.describe_data(&items);
+        Err(vm.type_error(&format!(
+            "Promise.{name} expects a synchronous iterable, received {d}."
+        )))
+    };
+    match listed {
+        Ok(items) => Ok(Ok(items)),
+        Err(e) if vm.fatal.is_some() => Err(e),
+        Err(e) => {
+            let p = vm.new_promise();
+            vm.reject(p, e);
+            Ok(Err(p))
+        }
+    }
+}
+
 fn combinator(vm: &mut Vm, args: &[Value], kind: CombKind) -> Res {
-    let items = vm.iterate_to_vec(&arg(args, 0))?;
+    let name = match kind {
+        CombKind::All => "all",
+        CombKind::AllSettled => "allSettled",
+        CombKind::Any => "any",
+    };
+    let items = match combinator_items(vm, args, name)? {
+        Ok(items) => items,
+        Err(rejected) => return Ok(Value::Obj(rejected)),
+    };
     let result = vm.new_promise();
     let n = items.len();
     if n == 0 {
@@ -361,7 +395,10 @@ fn promise_any(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn promise_race(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let items = vm.iterate_to_vec(&arg(args, 0))?;
+    let items = match combinator_items(vm, args, "race")? {
+        Ok(items) => items,
+        Err(rejected) => return Ok(Value::Obj(rejected)),
+    };
     let result = vm.new_promise();
     if items.is_empty() {
         let e = vm.type_error(
