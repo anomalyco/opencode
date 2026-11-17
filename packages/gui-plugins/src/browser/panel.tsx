@@ -938,8 +938,8 @@ export default function SessionBrowserPane(props: {
                     {plugin.t("link.copy")}
                   </Menu.Item>
                   <Show when={menuPage()?.serverFile}>
-                    <Menu.GroupLabel class="!h-auto !py-1.5">
-                      <span dir="auto" class="break-words">{plugin.t("menu.privateAddress")}</span>
+                    <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
+                      <span dir="auto" class="break-words leading-4">{plugin.t("menu.privateAddress")}</span>
                     </Menu.GroupLabel>
                   </Show>
                 </Menu.Group>
@@ -952,8 +952,8 @@ export default function SessionBrowserPane(props: {
                     {plugin.t("menu.openPage")}
                   </Menu.Item>
                   <Show when={!menuPage()?.open}>
-                    <Menu.GroupLabel class="!h-auto !py-1.5">
-                      <span dir="auto" class="break-words">{plugin.t("menu.pageUnavailable")}</span>
+                    <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
+                      <span dir="auto" class="break-words leading-4">{plugin.t("menu.pageUnavailable")}</span>
                     </Menu.GroupLabel>
                   </Show>
                 </Menu.Group>
