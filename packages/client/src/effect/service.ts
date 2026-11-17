@@ -57,7 +57,7 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
-  const unresponsive = unresponsiveOwner(options.unresponsiveTimeout ?? timing.unresponsiveTimeout)
+  const unresponsive = unresponsiveOwner(timing.unresponsiveTimeout)
   let deadline = (yield* Clock.currentTimeMillis) + timing.promiseTimeout
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>

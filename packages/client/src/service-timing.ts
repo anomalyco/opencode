@@ -17,7 +17,9 @@ const timings = new WeakMap<object, EnsureTiming>()
 export const defaultEnsureTiming: EnsureTiming = {
   pollInterval: 25,
   requestTimeout: 2_000,
-  unresponsiveTimeout: 30_000,
+  // Every client shares one service, and replacing it drops all of their sessions and terminals, so every caller
+  // waits the same: a per-caller budget would let the least patient one decide for all of them.
+  unresponsiveTimeout: 3 * 60_000,
   spawnDelay: 5_000,
   maxSpawnDelay: 30_000,
   promiseTimeout: 120_000,

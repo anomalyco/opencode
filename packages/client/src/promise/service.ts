@@ -37,7 +37,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   let deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
-  const unresponsive = unresponsiveOwner(options.unresponsiveTimeout ?? timing.unresponsiveTimeout)
+  const unresponsive = unresponsiveOwner(timing.unresponsiveTimeout)
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {

@@ -4,16 +4,20 @@ import { Effect } from "effect"
 import { Service } from "../src/effect/service"
 import { ensure, stop } from "../src/promise/service"
 import type { EnsureOptions, EnsureReason, StopOptions } from "../src/service"
-import { withEnsureTiming } from "../src/service-timing"
+import type { EnsureTiming } from "../src/service-timing"
 import { serviceFixture, stopSignal, stoppedExitCode } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
 
-const effect = accelerate(Service.ensure)
 const clients = [
-  { name: "Promise", ensure: accelerate(ensure), stop },
+  {
+    name: "Promise",
+    ensure: (options: EnsureOptions, timing?: Partial<EnsureTiming>) => accelerate(ensure, timing)(options),
+    stop,
+  },
   {
     name: "Effect",
-    ensure: (options: EnsureOptions) => Effect.runPromise(effect(options).pipe(Effect.provide(NodeFileSystem.layer))),
+    ensure: (options: EnsureOptions, timing?: Partial<EnsureTiming>) =>
+      Effect.runPromise(accelerate(Service.ensure, timing)(options).pipe(Effect.provide(NodeFileSystem.layer))),
     stop: (options: StopOptions) => Effect.runPromise(Service.stop(options).pipe(Effect.provide(NodeFileSystem.layer))),
   },
 ]
@@ -100,27 +104,15 @@ for (const client of clients) {
     const original = await Bun.file(fixture.registration).json()
     const starts: EnsureReason[] = []
 
-    const pending = client.ensure({
-      file: fixture.registration,
-      command: fixture.command("record-start"),
-      unresponsiveTimeout: 60_000,
-      onStart: (reason) => starts.push(reason),
-    })
-
-    const deadline = Date.now() + 3_000
-    while (true) {
-      const count = (
-        await Bun.file(fixture.registration + ".requests")
-          .text()
-          .catch(() => "")
-      )
-        .trim()
-        .split("\n")
-        .filter(Boolean).length
-      if (count >= 5) break
-      if (Date.now() >= deadline) throw new Error(`Expected >= 5 timed-out probes, saw ${count}`)
-      await Bun.sleep(10)
-    }
+    const pending = client.ensure(
+      {
+        file: fixture.registration,
+        command: fixture.command("record-start"),
+        onStart: (reason) => starts.push(reason),
+      },
+      { unresponsiveTimeout: 60_000 },
+    )
+    await fixture.waitForRequests(5)
 
     expect(owner.exitCode).toBe(null)
     expect(await Bun.file(fixture.registration + ".signal").exists()).toBe(false)
@@ -138,18 +130,11 @@ for (const client of clients) {
     const owner = fixture.spawn("hanging")
     await fixture.waitForFile()
     const original = await Bun.file(fixture.registration).json()
-    const options = withEnsureTiming(
-      {
-        file: fixture.registration,
-        command: fixture.command("delayed", "10"),
-        unresponsiveTimeout: 700,
-      },
-      { pollInterval: 20, requestTimeout: 80, spawnDelay: 100, promiseTimeout: 250 },
-    )
     const started = Date.now()
-    const endpoint = await (client.name === "Promise"
-      ? ensure(options)
-      : Effect.runPromise(Service.ensure(options).pipe(Effect.provide(NodeFileSystem.layer))))
+    const endpoint = await client.ensure(
+      { file: fixture.registration, command: fixture.command("delayed", "10") },
+      { requestTimeout: 80, unresponsiveTimeout: 700, spawnDelay: 100, promiseTimeout: 250 },
+    )
     const replacement = await Bun.file(fixture.registration).json()
     fixture.track(replacement.pid)
 
