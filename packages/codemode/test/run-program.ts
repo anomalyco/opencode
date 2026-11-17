@@ -12,6 +12,7 @@ import { Interruption } from "../src/runtime/signals.js"
 import type { Source } from "../src/runtime/source.js"
 import type { ToolRuntime } from "../src/tool-runtime.js"
 import type { Snapshot } from "../src/snapshot/snapshot.js"
+import { captureVm, restoreVm } from "../src/snapshot.js"
 
 /** A quoted `file:` URL for a module relative to `test`, to import from a script run with `bun -e` on any platform. */
 export const moduleUrl = (relative: string) =>
@@ -79,11 +80,11 @@ export const runProgram = (code: string, options?: RunOptions): Result => {
     const stop = vm.run()
     if (stop.kind === "slice") {
       if (roundTrip !== undefined && vm.tripEvery > 0) {
-        const { snapshot } = vm.capture({ strict: true })
+        const { snapshot } = captureVm(vm, { strict: true })
         options?.onTrip?.(snapshot)
         ctx = runtime(undefined)
         vm = ctx.vm
-        vm.restore(JSON.parse(JSON.stringify(snapshot)), {
+        restoreVm(vm, JSON.parse(JSON.stringify(snapshot)), {
           parse: (code) => {
             const again = parseVmSource(code)
             if (!again.ok) throw new Error(again.error.message)

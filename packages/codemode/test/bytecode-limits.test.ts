@@ -5,7 +5,7 @@ import type { ToolRuntime } from "../src/tool-runtime.js"
 import { CodeBuilder, CodeSizeOverflow, hashOf } from "../src/code.js"
 import { compileSource } from "../src/compiler/compile.js"
 import { CodeFlags, EMPTY_CELLS, Op, packWord, PutKind } from "../src/opcodes.js"
-import { Mode } from "../src/vm.js"
+import { Mode } from "../src/frame.js"
 import { parseVmSource, type RunOptions, runProgram } from "./run-program.js"
 import { verifyAll, verifyCode } from "./verify-bytecode.js"
 

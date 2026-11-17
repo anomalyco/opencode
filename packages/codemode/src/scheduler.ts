@@ -4,7 +4,7 @@ import { locate } from "./runtime/errors.js"
 import type { AstNode } from "./runtime/model.js"
 import type { Callable, Cursor, GeneratorObj, Obj, PromiseObj, Value } from "./runtime/objects.js"
 import type { Completion } from "./runtime/signals.js"
-import type { Frame } from "./vm.js"
+import type { Frame } from "./frame.js"
 
 // The scheduler's records: jobs, reactions, resolvers, and host calls. All of them are data the VM keeps, so a run's
 // queue and the work it waits on can be read (and saved) between `run()`s.

@@ -10,7 +10,8 @@ import { type ExtensionRequest, HostCall, type HostRequest, Resolving } from "./
 import type { ExtensionInvocation } from "./tool-runtime.js"
 import type { Code } from "./code.js"
 import { internalCode, tryFastBoundaryOrJson, VmIntrinsic } from "./internal-prelude.js"
-import { type FrameMode, Mode, type Vm } from "./vm.js"
+import { type FrameMode, Mode } from "./frame.js"
+import type { Vm } from "./vm.js"
 
 // The VM's side of host work (plan §4.10): tool calls, `search`, and extension calls, the host calls they queue, and
 // the blocking call a job may wait on.

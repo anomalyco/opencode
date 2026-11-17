@@ -12,7 +12,10 @@ import { HostCalls } from "./host.js"
 import { getInternalPrelude } from "./internal-prelude.js"
 import { compiledPrelude } from "./prelude/prelude.js"
 import { Cell, CodeFlags, EMPTY_CELLS, HOLE, Op } from "./opcodes.js"
-import { CustomIter, Frame, Mode, Vm, VmInternalFn } from "./vm.js"
+import { CustomIter, Frame, Mode, VmInternalFn } from "./frame.js"
+import { AsyncFromSyncIterator } from "./generators.js"
+import { Interpreter } from "./runtime/interpreter.js"
+import { Vm } from "./vm.js"
 
 // Snapshots of the bytecode VM (plan §6): the generic graph codec, plus records for the VM's own classes.
 //
@@ -40,7 +43,6 @@ export type RestoreOptions = {
 
 let specs: ReadonlyArray<ClassSpec> | undefined
 
-// Built on first use: this module and vm.ts import each other, so the classes aren't there at load time.
 const vmSpecs = (): ReadonlyArray<ClassSpec> =>
   (specs ??= [
     {
@@ -99,6 +101,20 @@ const vmSpecs = (): ReadonlyArray<ClassSpec> =>
     { name: "AsyncFromSyncCloseTarget", ctor: AsyncFromSyncCloseTarget, fields: ["made", "reason"] },
     { name: "Cell", ctor: Cell, fields: ["v"] },
     { name: "CustomIter", ctor: CustomIter, fields: ["done", "rawGen", "iterator", "next"] },
+    {
+      name: "AsyncFromSyncIterator",
+      ctor: AsyncFromSyncIterator,
+      fields: ["sync", "site"],
+      obj: true,
+      constants: { tag: "AsyncFromSyncIterator" },
+    },
+    {
+      name: "Interpreter",
+      ctor: Interpreter,
+      anchor: "ctx",
+      fields: ["logs", "globalScope", "modules", "namespaces"],
+      skip: ["tools", "builtins", "vm", "intrinsics", "extensionWork", "hosts", "sources", "prelude"],
+    },
   ])
 
 let build: string | undefined
@@ -127,6 +143,7 @@ export const captureVm = (
   vm: Vm,
   options: CaptureOptions,
 ): { readonly snapshot: Snapshot; readonly lost: ReadonlyArray<string> } => {
+  vm.ensureIntrinsics()
   vm.compact()
   const ctx = vm.ctx
   const lost: Array<string> = []
@@ -183,6 +200,7 @@ export const captureVm = (
  * after checking the snapshot belongs to this build, these host globals, its own sources and their bytecode.
  */
 export const restoreVm = (vm: Vm, saved: unknown, options: RestoreOptions): Snapshot => {
+  vm.ensureIntrinsics()
   const snapshot = validate(saved)
   const header = snapshot.header
   const ctx = vm.ctx

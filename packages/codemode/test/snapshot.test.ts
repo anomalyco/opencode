@@ -8,7 +8,7 @@ import { ToolRuntime } from "../src/tool-runtime.js"
 import { hashOf } from "../src/code.js"
 import { compileSource } from "../src/compiler/compile.js"
 import { moduleUrl, parseVmSource, runProgram } from "./run-program.js"
-import { buildId } from "../src/snapshot.js"
+import { buildId, captureVm, restoreVm } from "../src/snapshot.js"
 
 // The VM's snapshots: a run saved and restored into a fresh runtime anywhere it slices goes on as if it never stopped.
 
@@ -153,7 +153,7 @@ const sliced = (code = `let n = 0\nfor (let i = 0; i < 10; i++) { try { n += i }
   vm.start(parse(code))
   vm.tripEvery = 3
   expect(vm.run().kind).toBe("slice")
-  const { snapshot, lost } = vm.capture({ strict: true })
+  const { snapshot, lost } = captureVm(vm, { strict: true })
   expect(lost).toEqual([])
   return JSON.parse(JSON.stringify(snapshot)) as Saved
 }
@@ -168,7 +168,7 @@ const regsOf = (snapshot: ReturnType<typeof sliced>) => {
 
 const refusal = (snapshot: unknown) => {
   try {
-    runtime().vm.restore(snapshot, restoreOptions)
+    restoreVm(runtime().vm, snapshot, restoreOptions)
   } catch (error) {
     expect(error).toBeInstanceOf(SnapshotError)
     return (error as Error).message
@@ -190,7 +190,7 @@ describe("snapshots", () => {
 
   test("a restored VM runs to the same result", () => {
     const vm = runtime().vm
-    vm.restore(sliced(), restoreOptions)
+    restoreVm(vm, sliced(), restoreOptions)
     const stop = vm.run()
     expect(stop).toEqual({ kind: "done", completion: { ok: true, value: 45 } })
   })
@@ -204,7 +204,7 @@ describe("snapshots", () => {
         expect(stop).toEqual({ kind: "done", completion: { ok: true, value: 45 } })
         break
       }
-      vm.capture({ strict: true })
+      captureVm(vm, { strict: true })
     }
   })
 
@@ -241,7 +241,7 @@ describe("snapshots", () => {
     )
     vm.tripEvery = 1
     expect(vm.run().kind).toBe("slice")
-    const snapshot = JSON.parse(JSON.stringify(vm.capture({ strict: true }).snapshot))
+    const snapshot = JSON.parse(JSON.stringify(captureVm(vm, { strict: true }).snapshot))
     const regs = regsOf(snapshot)
     const code = compileSource(parse(snapshot.header.sources[0].code))[0]!
     expect(regs.length).toBeGreaterThan(code.locals)

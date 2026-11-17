@@ -14,7 +14,8 @@ import { AsyncFromSyncIterator } from "../src/generators.js"
 import { VmIntrinsic } from "../src/internal-prelude.js"
 import { Cell, CodeFlags } from "../src/opcodes.js"
 import type { Stop } from "../src/scheduler.js"
-import { CustomIter, Frame, Mode, Vm } from "../src/vm.js"
+import { CustomIter, Frame, Mode } from "../src/frame.js"
+import { Vm } from "../src/vm.js"
 
 // The VM (`src/vm.ts`) runs programs as bytecode frames, and keeps the jobs, promises, and host calls they wait on as
 // data: a frame is its code, pc, and registers, and every suspension point is one. The Effect driver only does what
