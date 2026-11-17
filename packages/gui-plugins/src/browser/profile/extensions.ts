@@ -6,6 +6,12 @@ import { inflateRaw } from "node:zlib"
 import { Option, Schema } from "effect"
 import { extensionLabel } from "./extension-api/label"
 
+// A toolbar button's icon: one file, or files by size. Kept as given, so an unusual value never makes a manifest
+// unreadable; `declaredIcon` reads it.
+const Button = Schema.Struct({ default_popup: Schema.optional(Schema.String), default_icon: Schema.optional(Schema.Unknown) })
+
+const IconSet = Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.String)])
+
 const Manifest = Schema.Struct({
   manifest_version: Schema.Number,
   name: Schema.String,
@@ -14,8 +20,8 @@ const Manifest = Schema.Struct({
   key: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.Unknown),
   icons: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  action: Schema.optional(Schema.Struct({ default_popup: Schema.optional(Schema.String) })),
-  browser_action: Schema.optional(Schema.Struct({ default_popup: Schema.optional(Schema.String) })),
+  action: Schema.optional(Button),
+  browser_action: Schema.optional(Button),
   options_page: Schema.optional(Schema.String),
   options_ui: Schema.optional(Schema.Struct({ page: Schema.optional(Schema.String) })),
   // What the compatibility check reads. Lists keep any entry, and the keys below only need to be present, so an
@@ -25,7 +31,7 @@ const Manifest = Schema.Struct({
   optional_permissions: Schema.optional(Schema.Array(Schema.Unknown)),
   optional_host_permissions: Schema.optional(Schema.Array(Schema.Unknown)),
   background: Schema.optional(Schema.Unknown),
-  page_action: Schema.optional(Schema.Struct({ default_popup: Schema.optional(Schema.String) })),
+  page_action: Schema.optional(Button),
   commands: Schema.optional(Schema.Unknown),
   devtools_page: Schema.optional(Schema.Unknown),
   side_panel: Schema.optional(Schema.Unknown),
@@ -153,11 +159,33 @@ export function within(root: string, file: string) {
     : undefined
 }
 
-/** Of an icon given in several sizes, by size, the one closest to 32px. */
-export function closestIcon<T>(sizes: Readonly<Record<string, T>>) {
-  return Object.entries(sizes)
+/** A row draws an icon at 20 CSS px; twice that stays sharp on a 2x display. */
+const ICON_TARGET = 40
+
+/**
+ * Of an icon given in several sizes, the smallest that is at least `target` px, so it is never drawn enlarged and
+ * soft; the largest when none is that big.
+ */
+export function closestIcon<T>(sizes: Readonly<Record<string, T>>, target = ICON_TARGET) {
+  const listed = Object.entries(sizes)
     .filter(([size]) => Number.isFinite(Number(size)))
-    .toSorted((a, b) => Math.abs(Number(a[0]) - 32) - Math.abs(Number(b[0]) - 32))[0]?.[1]
+    .toSorted((a, b) => Number(a[0]) - Number(b[0]))
+
+  return (listed.find(([size]) => Number(size) >= target) ?? listed.at(-1))?.[1]
+}
+
+/**
+ * The icon file a manifest declares: its `icons`, else the toolbar button's `default_icon` of `action`,
+ * `browser_action` or `page_action`, which is one file or files by size. Some extensions declare only the latter.
+ */
+export function declaredIcon(manifest: Pick<Manifest, "icons" | "action" | "browser_action" | "page_action">) {
+  return [manifest.icons, manifest.action?.default_icon, manifest.browser_action?.default_icon, manifest.page_action?.default_icon]
+    .map((value) => {
+      const set = Option.getOrUndefined(Schema.decodeUnknownOption(IconSet)(value))
+
+      return set === undefined || Schema.is(Schema.String)(set) ? set : closestIcon(set)
+    })
+    .find((file) => !!file)
 }
 
 /** An icon file's type by extension; any other is read as PNG. */
@@ -177,9 +205,9 @@ export async function readIcon(root: string, file: string) {
   return target && size <= ICON_BYTES ? readFile(target).catch(() => undefined) : undefined
 }
 
-/** The icon closest to 32px, as a data URL; undefined when it has none or the file is large. */
+/** The extension's declared icon as a data URL; undefined when it declares none or the file is large. */
 export async function extensionIcon(directory: string, manifest: Manifest) {
-  const file = closestIcon(manifest.icons ?? {})
+  const file = declaredIcon(manifest)
   const data = file ? await readIcon(directory, file) : undefined
   const extension = file ? path.extname(file).toLowerCase() : ""
   const mime = ICON_TYPES.find((entry) => entry[0] === extension)?.[1] ?? "image/png"

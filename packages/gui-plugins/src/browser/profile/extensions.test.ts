@@ -6,6 +6,8 @@ import path from "node:path"
 import { deflateRawSync } from "node:zlib"
 import { storeRedirect } from "./install"
 import {
+  closestIcon,
+  declaredIcon,
   displayName,
   entryPath,
   extensionFiles,
@@ -15,9 +17,9 @@ import {
   readManifest,
   readZip,
   storeTarget,
+  type Manifest,
   unzip,
   within,
-  type Manifest,
 } from "./extensions"
 
 const field = (number: number, value: Uint8Array) => {
@@ -316,4 +318,28 @@ test("finds page scripts that read synced settings, and reads nothing outside th
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test.each([
+  ["top-level icons, by size", { icons: { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" } }, "icons/48.png"],
+  ["only small icons: the largest", { icons: { "16": "a16.png", "32": "a32.png" } }, "a32.png"],
+  ["a leading slash is kept for the reader, which resolves it inside the package", { icons: { "128": "/img/icon.svg" } }, "/img/icon.svg"],
+  ["action.default_icon as one file", { action: { default_icon: "images/toolbar.png" } }, "images/toolbar.png"],
+  ["action.default_icon by size", { action: { default_icon: { "16": "a16.png", "32": "a32.png", "64": "a64.png" } } }, "a64.png"],
+  ["browser_action.default_icon by size (manifest v2)", { browser_action: { default_icon: { "19": "b19.png", "38": "b38.png" } } }, "b38.png"],
+  ["page_action.default_icon", { page_action: { default_icon: "page.png" } }, "page.png"],
+  ["icons win over the toolbar button's", { icons: { "48": "icon.png" }, action: { default_icon: "toolbar.png" } }, "icon.png"],
+  ["icons with no numeric size fall through to the button's", { icons: { large: "big.png" }, action: { default_icon: "toolbar.png" } }, "toolbar.png"],
+  ["a value that is neither a file nor files by size", { action: { default_icon: 7 } }, undefined],
+  ["no icon declared", { action: { default_popup: "popup.html" } }, undefined],
+] as const)("an extension's row icon: %s", (_label, manifest, expected) => {
+  expect(declaredIcon(manifest)).toBe(expected)
+})
+
+test("an icon given by size is never enlarged at the drawn size on a 2x display", () => {
+  // Dark Reader declares 16, 48 and 128: the old rule took the 16 px file for a 20 px row.
+  expect(closestIcon({ "16": "dr_16.png", "48": "dr_48.png", "128": "dr_128.png" })).toBe("dr_48.png")
+  expect(closestIcon({ "128": "only.png" })).toBe("only.png")
+  expect(closestIcon({ "19": "a", "38": "b" }, 32)).toBe("b")
+  expect(closestIcon({})).toBeUndefined()
 })

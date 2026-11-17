@@ -160,7 +160,18 @@ export async function listSources(): Promise<Source[]> {
     }),
   )
 
-  return found.filter((source) => source.profiles.length > 0).toSorted((a, b) => b.used - a.used)
+  const sources = found.filter((source) => source.profiles.length > 0).toSorted((a, b) => b.used - a.used)
+
+  if (process.platform !== "win32") return sources
+  // A browser installed outside the usual folders still has its icon: Windows knows where its program is.
+  const unknown = sources.flatMap((source) => (source.application ? [] : (APP_PATH_NAMES.get(source.id) ?? [])))
+  const paths = await windowsAppPaths(unknown)
+
+  return sources.map((source) => {
+    const file = source.application ? undefined : paths.get(APP_PATH_NAMES.get(source.id) ?? "")
+
+    return file ? { ...source, application: file } : source
+  })
 }
 
 /**
@@ -497,11 +508,20 @@ const decodeIcons = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Reco
 export async function windowsIcons(files: readonly string[]) {
   if (files.length === 0) return new Map<string, string>()
 
+  // The program's own 64 px icon, which a row draws at 20 px and stays sharp on a 2x display; the 32 px associated
+  // icon when the file has no icon of that size.
   const script =
     "Add-Type -AssemblyName System.Drawing;$o=@{};" +
+    "try{Add-Type -Namespace OC -Name Icons -MemberDefinition '" +
+    '[DllImport("user32.dll",CharSet=CharSet.Unicode)]public static extern uint PrivateExtractIcons(string f,int i,int cx,int cy,IntPtr[] h,uint[] id,uint n,uint fl);' +
+    '[DllImport("user32.dll")]public static extern bool DestroyIcon(IntPtr h);' +
+    "'}catch{};" +
     'foreach($p in ([Console]::In.ReadToEnd() -split "`n")){$p=$p.Trim();if(-not $p){continue};' +
-    "try{$m=New-Object IO.MemoryStream;" +
-    "[Drawing.Icon]::ExtractAssociatedIcon($p).ToBitmap().Save($m,[Drawing.Imaging.ImageFormat]::Png);" +
+    "try{$m=New-Object IO.MemoryStream;$h=New-Object IntPtr[] 1;$b=$null;" +
+    "try{if([OC.Icons]::PrivateExtractIcons($p,0,64,64,$h,$null,1,0) -gt 0 -and $h[0] -ne [IntPtr]::Zero)" +
+    "{$b=[Drawing.Icon]::FromHandle($h[0]).ToBitmap();[void][OC.Icons]::DestroyIcon($h[0])}}catch{};" +
+    "if(-not $b){$b=[Drawing.Icon]::ExtractAssociatedIcon($p).ToBitmap()};" +
+    "$b.Save($m,[Drawing.Imaging.ImageFormat]::Png);" +
     "$o[$p]=[Convert]::ToBase64String($m.ToArray())}catch{}};" +
     "$o|ConvertTo-Json -Compress"
 
@@ -514,6 +534,43 @@ export async function windowsIcons(files: readonly string[]) {
   const icons = Option.getOrUndefined(decodeIcons(output.trim())) ?? {}
 
   return new Map(Object.entries(icons).map(([file, data]) => [file, `data:image/png;base64,${data}`]))
+}
+
+/** The program names Windows registers an install path under, for a browser installed outside the usual folders. */
+const APP_PATH_NAMES = new Map([
+  ["chrome", "chrome.exe"],
+  ["edge", "msedge.exe"],
+  ["brave", "brave.exe"],
+  ["vivaldi", "vivaldi.exe"],
+  ["opera", "opera.exe"],
+  ["firefox", "firefox.exe"],
+  ["zen", "zen.exe"],
+  ["librewolf", "librewolf.exe"],
+  ["floorp", "floorp.exe"],
+])
+
+/**
+ * Where Windows says each program is installed (its "App Paths" entry, for the user first, then the machine), by
+ * program name, in one Windows PowerShell run. Only for the icon: a path counts when it is absolute and ends in the
+ * name asked for. A failed run finds nothing.
+ */
+async function windowsAppPaths(names: readonly string[]) {
+  if (names.length === 0) return new Map<string, string>()
+
+  const script =
+    "$o=@{};" +
+    'foreach($n in ([Console]::In.ReadToEnd() -split "`n")){$n=$n.Trim();if(-not $n){continue};' +
+    "foreach($h in 'HKCU:','HKLM:'){" +
+    "try{$v=(Get-Item -LiteralPath \"$h\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\$n\" -ErrorAction Stop).GetValue('');" +
+    "if($v -and -not $o.ContainsKey($n)){$o[$n]=\"$v\".Trim([char]34)}}catch{}}};" +
+    "$o|ConvertTo-Json -Compress"
+
+  const output = await run(windowsPowerShell(), ["-NoProfile", "-NonInteractive", "-Command", script], names.join("\n")).catch(() => "")
+  const found = Option.getOrUndefined(decodeIcons(output.trim())) ?? {}
+
+  return new Map(
+    Object.entries(found).filter(([name, file]) => path.win32.isAbsolute(file) && path.win32.basename(file).toLowerCase() === name),
+  )
 }
 
 /**
