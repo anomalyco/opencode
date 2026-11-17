@@ -12,6 +12,8 @@ describe("SessionModelRequest.unsupportedParts", () => {
           Message.text("Describe these files"),
           { type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: "logo.png" },
           { type: "media", media: Media.base64("JVBERg==", "application/pdf"), filename: "document.pdf" },
+          { type: "media", media: Media.base64("bXA0", "video/mp4"), filename: "clip.mp4" },
+          { type: "media", media: Media.base64("YXVkaW8=", "audio/mpeg"), filename: "voice.mp3" },
         ]),
       ],
       capabilities(["text"]),
@@ -21,6 +23,8 @@ describe("SessionModelRequest.unsupportedParts", () => {
       Message.text("Describe these files"),
       Message.text('ERROR: Cannot read "logo.png" (this model does not support image input). Inform the user.'),
       Message.text('ERROR: Cannot read "document.pdf" (this model does not support pdf input). Inform the user.'),
+      Message.text('ERROR: Cannot read "clip.mp4" (this model does not support video input). Inform the user.'),
+      Message.text('ERROR: Cannot read "voice.mp3" (this model does not support audio input). Inform the user.'),
     ])
   })
 
@@ -105,8 +109,14 @@ describe("SessionModelRequest.unsupportedParts", () => {
   })
 
   test("preserves supported media", () => {
-    const message = Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png") })
-    expect(unsupportedParts([message], capabilities(["text", "image"]))[0]?.content).toEqual(message.content)
+    const message = Message.user([
+      { type: "media", media: Media.base64("aGVsbG8=", "image/png") },
+      { type: "media", media: Media.base64("bXA0", "video/mp4") },
+      { type: "media", media: Media.base64("YXVkaW8=", "audio/mpeg") },
+    ])
+    expect(unsupportedParts([message], capabilities(["text", "image", "video", "audio"]))[0]?.content).toEqual(
+      message.content,
+    )
   })
 
   test("returns the same messages when nothing is unsupported", () => {
