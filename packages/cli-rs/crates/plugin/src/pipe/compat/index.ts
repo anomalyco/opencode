@@ -121,4 +121,6 @@ export const modules: Record<string, Record<string, unknown>> = {
 }
 
 export { context, reported }
+export { effectModules } from "./effect-modules.gen"
+
 export { inside, real } from "./paths"

@@ -25,7 +25,7 @@ import { existsSync, readFileSync, writeSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { isBuiltin } from "node:module"
 import { plugin as runtime } from "bun"
-import { context as compat, inside, modules, real, reported } from "./compat.js"
+import { context as compat, effectModules, inside, modules, real, reported } from "./compat.js"
 
 const MAGIC = "opencode-js-host"
 const VERSION = 1
@@ -63,9 +63,17 @@ runtime({
       const ids = new Set([name, RUNTIME + encodeURIComponent(name), RUNTIME + name])
       for (const id of ids) build.module(id, () => ({ exports, loader: "object" }))
     }
+    // The `effect` package, as TS's runtime serves its own (CT-13), loaded once a plugin imports it; `effect/<Module>`
+    // is that module of it, as TS's loader gives it. Its sub-packages (`effect/http` and the rest) are not served.
+    let effect: Record<string, unknown> | undefined
+    const loadEffect = () => (effect ??= require(path.join(import.meta.dir, "effect.js")) as Record<string, unknown>)
+    build.module("effect", () => ({ exports: loadEffect(), loader: "object" }))
+    for (const name of effectModules as string[])
+      for (const id of [`effect/${name}`, `effect/${name}/index`])
+        build.module(id, () => ({ exports: loadEffect()[name] as Record<string, unknown>, loader: "object" }))
     build.onResolve({ filter: /.*/ }, (args) => {
       const importer = args.importer?.split("?")[0]
-      const layer = args.path in modules || args.path.startsWith(RUNTIME)
+      const layer = args.path in modules || /^effect(\/|$)/.test(args.path) || args.path.startsWith(RUNTIME)
       if (!importer || resolving || confined.size === 0 || layer || builtin(args.path)) return undefined
       // The root itself is an importer too, as `resolveEntry` resolves from it (carbon jsnpm-3), and resolves from
       // itself rather than from its parent.
