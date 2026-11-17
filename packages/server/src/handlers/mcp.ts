@@ -60,6 +60,6 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
         }),
       )
       .handle("mcp.clientToken", (ctx) => client.token(ctx.request, ctx.query.name, undefined))
-      .handleRaw("mcp.client", (ctx) => client.socket(ctx.request, ctx.query, undefined, Effect.succeed(undefined)))
+      .handleRaw("mcp.client", (ctx) => client.socket(ctx.request, ctx.query))
   }),
 )

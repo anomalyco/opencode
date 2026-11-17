@@ -8,7 +8,7 @@ import { Session } from "@opencode/core/session"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { ForbiddenError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "@opencode/protocol/groups/pty"
-import { Effect, Queue, Stream } from "effect"
+import { Effect, Queue, type Scope, Stream } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { Socket } from "effect/socket"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
@@ -54,32 +54,23 @@ export const clientMcp = Effect.gen(function* () {
       }),
     )
   })
-  const socket = Effect.fnUntraced(function* <E>(
+  const socket = Effect.fnUntraced(function* <E = never>(
     request: HttpServerRequest.HttpServerRequest,
     { name, ticket }: { name: string; ticket?: string },
-    owner: Session.ID | undefined,
-    resolve: Effect.Effect<Session.Info | undefined, E>,
+    resolve?: (outbox: Queue.Queue<Outbound>) => Effect.Effect<Session.Info, E, Scope.Scope>,
   ) {
     if (!isAllowedRequestOrigin(request.headers.origin, request.headers.host, cors))
       return HttpServerResponse.empty({ status: 403 })
 
     const outbox = yield* Queue.unbounded<Outbound>()
-    // Subscribe before looking up placement: a move or deletion during the handshake must close this socket too.
-    if (owner)
-      yield* bus.subscribe([SessionEvent.Moved, SessionEvent.Deleted]).pipe(
-        Stream.filter((event) => event.data.sessionID === owner),
-        Stream.take(1),
-        Stream.runForEach(() => Queue.offer(outbox, new Socket.CloseEvent(1000, "session moved or deleted"))),
-        Effect.forkScoped({ startImmediately: true }),
-      )
-    const session = yield* resolve
+    const session = resolve ? yield* resolve(outbox) : undefined
     const ref = session?.location ?? LocationServiceMap.canonical(requestRef(request))
     if (
       ticket &&
       !(yield* tickets.consume({
         ticket,
         mcpClient: name,
-        sessionID: owner,
+        sessionID: session?.id,
         directory: ref.directory,
         workspaceID: ref.workspaceID,
       }))
@@ -102,7 +93,7 @@ export const clientMcp = Effect.gen(function* () {
       })
       const decoder = new TextDecoder()
       // The attachment lives in this scope, so it ends with the socket.
-      yield* mcp.attach(name, transport, owner).pipe(
+      yield* mcp.attach(name, transport, session?.id).pipe(
         Effect.tap(() =>
           Effect.sync(() => {
             state.attached = true
@@ -152,7 +143,18 @@ export const clientMcp = Effect.gen(function* () {
       query: { name: string; ticket?: string },
       owner: Session.ID,
     ) =>
-      socket(request, query, owner, owned(owner, request)).pipe(
+      socket(request, query, (outbox) =>
+        Effect.gen(function* () {
+          // Subscribe before resolving placement so a move during the handshake also closes the socket.
+          yield* bus.subscribe([SessionEvent.Moved, SessionEvent.Deleted]).pipe(
+            Stream.filter((event) => event.data.sessionID === owner),
+            Stream.take(1),
+            Stream.runForEach(() => Queue.offer(outbox, new Socket.CloseEvent(1000, "session moved or deleted"))),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          return yield* owned(owner, request)
+        }),
+      ).pipe(
         Effect.catchTag("SessionNotFoundError", (error) =>
           query.ticket ? Effect.succeed(HttpServerResponse.empty({ status: 403 })) : Effect.fail(error),
         ),
