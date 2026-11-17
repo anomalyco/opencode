@@ -29,6 +29,7 @@ export function AutomationListRow(props: {
   onSelect: () => void
 }) {
   const language = useLanguage()
+
   return (
     <button
       type="button"
@@ -99,20 +100,28 @@ export function AutomationInspector(props: {
   const t = language.t
   const row = () => props.entry.row
   const action = createMemo(() => props.entry.row.action)
+
   const event = createMemo(() => {
     const trigger = row().trigger
+
     return trigger.type === "event" ? trigger : undefined
   })
+
   const prompt = createMemo(() => {
     const a = action()
+
     return a.type === "prompt" ? a : undefined
   })
+
   const code = createMemo(() => {
     const a = action()
+
     return a.type === "code" ? a : undefined
   })
+
   const date = (at: number) =>
     new Date(at).toLocaleString(language.intl(), { dateStyle: "medium", timeStyle: "short", timeZone: row().tz })
+
   const link = (id: string, name: string) => (
     <button
       type="button"
@@ -123,6 +132,7 @@ export function AutomationInspector(props: {
       <Icon name="arrow-up-right" size="small" />
     </button>
   )
+
   return (
     <article class="mx-auto flex w-full max-w-[760px] flex-col gap-5 p-5 lg:p-6">
       <header class="flex flex-wrap items-start justify-between gap-3">

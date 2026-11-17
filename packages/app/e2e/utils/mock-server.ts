@@ -908,7 +908,11 @@ function mockHandlers(
         command: (ctx) =>
           Effect.sync(() => {
             const directory = requestDirectory(config, ctx.request)
-            return { location: location(config, directory), data: typeof config.commands === "function" ? config.commands(directory) : config.commands ?? [] }
+
+            return {
+              location: location(config, directory),
+              data: Predicate.isFunction(config.commands) ? config.commands(directory) : config.commands ?? [],
+            }
           }),
         skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
         plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),

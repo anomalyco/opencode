@@ -14,24 +14,29 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
     const servers = useServers()
     const layout = useLayout()
     const tabs = useTabs()
+
     const connections = createMemo(() =>
       servers.visible.flatMap((conn) => {
         const server = ServerConnection.key(conn)
         const ctx = global.serverCtx(server)
+
         if (!ctx || ctx.sdk.connection.status() !== "connected") return []
         const selected = layout.home.selection()
         const last = tabs.lastTarget()
         const route = layout.route()
+
         const draft =
           route.type === "draft"
             ? tabs.store.find((tab) => tab.type === "draft" && tab.draftID === route.draftID)
             : undefined
+
         const active =
           route.type === "session" && route.server === server
             ? ctx.data.session.get(route.sessionId)?.location.directory
             : draft?.type === "draft" && draft.server === server
               ? draft.directory
               : undefined
+
         const directories = [
           ...new Set(
             [
@@ -49,7 +54,9 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
             ].filter((directory): directory is string => !!directory),
           ),
         ]
+
         if (!directories.length && ctx.sync.data.path.home) directories.push(ctx.sync.data.path.home)
+
         return [{ server, ctx, directories, serverLabel: servers.label(conn) }]
       }),
     )
@@ -61,11 +68,13 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
         for (const directory of directories) void ctx.data.location.command.sync({ directory }).catch(() => undefined)
       }
     })
+
     const enabled = createMemo(() =>
       connections().flatMap((item) => {
         const directories = item.directories.filter((directory) =>
           item.ctx.data.location.command.list({ directory })?.some((command) => command.name === "automation"),
         )
+
         return directories.length ? [{ ...item, directories }] : []
       }),
     )
@@ -76,6 +85,7 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
       queries: connections().map((item) => {
         const offered = enabled().some((target) => target.server === item.server)
         const interval = layout.route().type === "automations" ? 5_000 : 30_000
+
         return {
           queryKey: [item.ctx.sdk.scope, "automations"] as const,
           queryFn: ({ signal }: { signal: AbortSignal }) =>
@@ -87,13 +97,17 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
         }
       }),
     }))
+
     const entries = createMemo(() =>
       connections().flatMap((item, index) => {
         const query = queries[index]
+
         if (!query?.isSuccess) return []
+
         return (query.data?.() ?? []).map((row) => ({ ...item, row, key: `${item.server}\0${row.id}` }))
       }),
     )
+
     return {
       enabled,
       entries,

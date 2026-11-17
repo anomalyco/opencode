@@ -383,6 +383,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
               />
             )
+
             const automations = useAutomationSource()
 
             const toggleAutomations = () =>

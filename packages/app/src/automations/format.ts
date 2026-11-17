@@ -2,6 +2,7 @@ import type { AutomationInfo } from "@opencode/client/promise"
 import type { useLanguage } from "@/runtime/i18n/language"
 
 export type AutomationFilter = "all" | AutomationInfo["status"]
+
 type Translate = ReturnType<typeof useLanguage>["t"]
 
 export function triggerLabel(trigger: AutomationInfo["trigger"], t: Translate) {
@@ -19,11 +20,14 @@ export function triggerLabel(trigger: AutomationInfo["trigger"], t: Translate) {
 
 export function statusLabel(row: AutomationInfo, t: Translate) {
   if (row.status === "paused" && row.lastOutcome === "failed") return t("automations.status.failed")
+
   if (row.status === "done" && row.lastOutcome === "expired") return t("automations.status.expired")
+
   return t(`automations.status.${row.status}`)
 }
 
 const rank = { active: 0, paused: 1, done: 2 }
+
 export function compareAutomations(a: AutomationInfo, b: AutomationInfo) {
   return (
     rank[a.status] - rank[b.status] ||

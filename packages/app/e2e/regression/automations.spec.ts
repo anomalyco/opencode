@@ -8,6 +8,7 @@ test("inspects event and timer automations and manages the selected row", async 
   await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/Atlas"
   const now = Date.UTC(2026, 10, 17, 9, 10)
+
   const base = {
     projectID: "proj_atlas",
     directory: `${directory}/release`,
@@ -17,6 +18,7 @@ test("inspects event and timer automations and manages the selected row", async 
     runCount: 3,
     time: { created: now, updated: now },
   } as const
+
   const automations: AutomationInfo[] = [
     {
       ...base,
@@ -48,6 +50,7 @@ test("inspects event and timer automations and manages the selected row", async 
       action: { type: "prompt", prompt: "Review the documentation changes.", to: { subagent: "reviewer" } },
     },
   ]
+
   await mockWorkspace(page, {
     name: "Atlas",
     directory,
@@ -109,10 +112,12 @@ test("discovers an enabled empty project and withdraws the entry when the server
   page,
 }) => {
   let enabled = true
+
   const { push, directory } = await mockWorkspace(page, {
     name: "Empty",
     commands: () => (enabled ? [{ name: "automation" }] : []),
   })
+
   await page.goto("/automations")
   await expect(page.getByRole("heading", { name: "No automations yet" })).toBeVisible()
   enabled = false
@@ -189,6 +194,7 @@ test("keeps identically keyed automations on separate servers and starts the dra
       servers.map((server) => {
         const name = server === SERVER ? "Local" : "Remote"
         const directory = `/projects/${name.toLowerCase()}`
+
         const row: AutomationInfo = {
           id: "aut_brief",
           name: `${name} brief`,
@@ -201,6 +207,7 @@ test("keeps identically keyed automations on separate servers and starts the dra
           action: { type: "prompt", prompt: "Review the release notes.", to: { session: "ses_notes" } },
           time: { created: 1, updated: 1 },
         }
+
         return [
           server,
           {

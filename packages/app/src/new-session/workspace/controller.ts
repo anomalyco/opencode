@@ -25,6 +25,7 @@ export function resolveNewSessionWorktree(input: {
   // An explicitly placed draft (for example from an automation) can start in a subdirectory,
   // including a non-Git folder. Its initial destination is not the user's default worktree.
   if (input.selected && input.directory && sameDirectory(input.selected, input.directory)) return input.directory
+
   if (!input.enabled) return "main"
 
   if (input.selected) return input.selected
@@ -149,7 +150,9 @@ export function createNewSessionWorkspaceController(input: {
     const worktree = input.selectedWorktree()
 
     if (!worktree) return
+
     if (sameDirectory(worktree, sdk().directory)) return worktree
+
     if (!project) return
 
     if (isWorkspaceSelection(project, worktree)) return worktree
