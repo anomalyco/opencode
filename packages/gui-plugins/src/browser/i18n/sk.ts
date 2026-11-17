@@ -51,8 +51,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofón, poloha a upozornenia v tomto prehliadači nefungujú.",
   "page.add": "Pridať stránku do relácie",
   "page.placeholder": "Pridajte kontext k tejto stránke",
-  "external.open": "Otvoriť v systémovom prehliadači",
-  "external.menu": "Otvoriť v prehliadači",
   "external.unavailable": "Táto adresa funguje iba na počítači so serverom.",
   options: "Možnosti prehliadača",
   "zoom.in": "Priblížiť",

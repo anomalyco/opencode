@@ -51,8 +51,6 @@ export default {
   "site.permissions.description": "Câmera, microfone, localização e notificações não funcionam neste navegador.",
   "page.add": "Adicionar página à sessão",
   "page.placeholder": "Adicione contexto sobre esta página",
-  "external.open": "Abrir no navegador do sistema",
-  "external.menu": "Abrir no navegador",
   "external.unavailable": "Este endereço só funciona na máquina do servidor.",
   options: "Opções do navegador",
   "zoom.in": "Ampliar",

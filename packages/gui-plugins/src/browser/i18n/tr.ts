@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, konum ve bildirimler bu tarayıcıda çalışmaz.",
   "page.add": "Sayfayı oturuma ekle",
   "page.placeholder": "Bu sayfa hakkında bağlam ekleyin",
-  "external.open": "Sistem tarayıcısında aç",
-  "external.menu": "Tarayıcıda aç",
   "external.unavailable": "Bu adres yalnızca sunucunun makinesinde çalışır.",
   options: "Tarayıcı seçenekleri",
   "zoom.in": "Yakınlaştır",

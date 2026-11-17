@@ -51,8 +51,6 @@ export default {
     "A kamera, a mikrofon, a helymeghatározás és az értesítések nem működnek ebben a böngészőben.",
   "page.add": "Oldal hozzáadása a munkamenethez",
   "page.placeholder": "Kontextus hozzáadása ehhez az oldalhoz",
-  "external.open": "Megnyitás a rendszer böngészőjében",
-  "external.menu": "Megnyitás böngészőben",
   "external.unavailable": "Ez a cím csak a szerver gépén működik.",
   options: "Böngésző beállításai",
   "zoom.in": "Nagyítás",

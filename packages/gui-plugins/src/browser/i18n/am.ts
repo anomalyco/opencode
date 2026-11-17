@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "ካሜራ፣ ማይክሮፎን፣ አካባቢ እና ማሳወቂያዎች በዚህ አሳሽ ውስጥ አይሰሩም።",
   "page.add": "ገጹን ወደ ክፍለ ጊዜ አክል",
   "page.placeholder": "ስለዚህ ገጽ አውድ ያክሉ",
-  "external.open": "በስርዓቱ አሳሽ ውስጥ ክፈት",
-  "external.menu": "በአሳሽ ውስጥ ክፈት",
   "external.unavailable": "ይህ አድራሻ የሚሰራው በአገልጋዩ ማሽን ላይ ብቻ ነው።",
   options: "የአሳሽ አማራጮች",
   "zoom.in": "አጉላ",

@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "摄像头、麦克风、位置和通知在此浏览器中不可用。",
   "page.add": "将页面添加到会话",
   "page.placeholder": "添加关于此页面的上下文",
-  "external.open": "在系统浏览器中打开",
-  "external.menu": "在浏览器中打开",
   "external.unavailable": "此地址仅在服务器所在机器上有效。",
   options: "浏览器选项",
   "zoom.in": "放大",

@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, posisjon og varsler fungerer ikke i denne nettleseren.",
   "page.add": "Legg til side i økten",
   "page.placeholder": "Legg til kontekst om denne siden",
-  "external.open": "Åpne i systemets nettleser",
-  "external.menu": "Åpne i nettleser",
   "external.unavailable": "Denne adressen fungerer bare på serverens maskin.",
   options: "Nettleseralternativer",
   "zoom.in": "Zoom inn",

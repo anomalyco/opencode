@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, placering og notifikationer virker ikke i denne browser.",
   "page.add": "Føj side til session",
   "page.placeholder": "Tilføj kontekst om denne side",
-  "external.open": "Åbn i systembrowser",
-  "external.menu": "Åbn i browser",
   "external.unavailable": "Denne adresse virker kun på serverens maskine.",
   options: "Browserindstillinger",
   "zoom.in": "Zoom ind",

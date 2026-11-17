@@ -50,8 +50,6 @@ export default {
   "site.permissions.description": "מצלמה, מיקרופון, מיקום והתראות אינם פועלים בדפדפן זה.",
   "page.add": "הוסף דף להפעלה",
   "page.placeholder": "הוסף הקשר על דף זה",
-  "external.open": "פתח בדפדפן המערכת",
-  "external.menu": "פתח בדפדפן",
   "external.unavailable": "כתובת זו פועלת רק במחשב של השרת.",
   options: "אפשרויות דפדפן",
   "zoom.in": "הגדלה",

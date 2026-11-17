@@ -50,8 +50,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, lokacija i obavještenja ne rade u ovom pregledniku.",
   "page.add": "Dodaj stranicu u sesiju",
   "page.placeholder": "Dodajte kontekst o ovoj stranici",
-  "external.open": "Otvori u sistemskom pregledniku",
-  "external.menu": "Otvori u pregledniku",
   "external.unavailable": "Ova adresa radi samo na računaru servera.",
   options: "Opcije preglednika",
   "zoom.in": "Uvećaj",

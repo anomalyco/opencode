@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kaamera, mikrofon, asukoht ja teavitused selles brauseris ei tööta.",
   "page.add": "Lisa leht seansile",
   "page.placeholder": "Lisa selle lehe kohta konteksti",
-  "external.open": "Ava süsteemi brauseris",
-  "external.menu": "Ava brauseris",
   "external.unavailable": "See aadress töötab ainult serveri masinas.",
   options: "Brauseri valikud",
   "zoom.in": "Suumi sisse",

@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "دوربین، میکروفون، موقعیت مکانی و اعلان‌ها در این مرورگر کار نمی‌کنند.",
   "page.add": "افزودن صفحه به جلسه",
   "page.placeholder": "زمینه‌ای درباره این صفحه اضافه کنید",
-  "external.open": "باز کردن در مرورگر سیستم",
-  "external.menu": "باز کردن در مرورگر",
   "external.unavailable": "این نشانی فقط روی دستگاه سرور کار می‌کند.",
   options: "گزینه‌های مرورگر",
   "zoom.in": "بزرگ‌نمایی",

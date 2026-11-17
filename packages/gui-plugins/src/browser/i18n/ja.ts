@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "このブラウザーでは、カメラ、マイク、位置情報、通知は機能しません。",
   "page.add": "ページをセッションに追加",
   "page.placeholder": "このページに関するコンテキストを追加",
-  "external.open": "システムのブラウザーで開く",
-  "external.menu": "ブラウザーで開く",
   "external.unavailable": "このアドレスはサーバーのマシン上でのみ機能します。",
   options: "ブラウザーのオプション",
   "zoom.in": "拡大",

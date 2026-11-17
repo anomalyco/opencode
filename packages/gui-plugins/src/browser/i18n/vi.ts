@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Camera, micrô, vị trí và thông báo không hoạt động trong trình duyệt này.",
   "page.add": "Thêm trang vào phiên",
   "page.placeholder": "Thêm ngữ cảnh về trang này",
-  "external.open": "Mở trong trình duyệt hệ thống",
-  "external.menu": "Mở trong trình duyệt",
   "external.unavailable": "Địa chỉ này chỉ hoạt động trên máy chạy máy chủ.",
   options: "Tùy chọn trình duyệt",
   "zoom.in": "Phóng to",

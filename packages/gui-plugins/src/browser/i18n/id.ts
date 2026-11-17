@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, lokasi, dan notifikasi tidak berfungsi di peramban ini.",
   "page.add": "Tambahkan halaman ke sesi",
   "page.placeholder": "Tambahkan konteks tentang halaman ini",
-  "external.open": "Buka di peramban sistem",
-  "external.menu": "Buka di peramban",
   "external.unavailable": "Alamat ini hanya berfungsi di mesin server.",
   options: "Opsi peramban",
   "zoom.in": "Perbesar",

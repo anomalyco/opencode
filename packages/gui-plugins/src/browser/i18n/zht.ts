@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "攝影機、麥克風、位置和通知在此瀏覽器中無法使用。",
   "page.add": "將頁面加入工作階段",
   "page.placeholder": "新增此頁面的相關上下文",
-  "external.open": "在系統瀏覽器中開啟",
-  "external.menu": "在瀏覽器中開啟",
   "external.unavailable": "此位址只能在伺服器的電腦上使用。",
   options: "瀏覽器選項",
   "zoom.in": "放大",

@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofoni, sijainti ja ilmoitukset eivät toimi tässä selaimessa.",
   "page.add": "Lisää sivu istuntoon",
   "page.placeholder": "Lisää kontekstia tästä sivusta",
-  "external.open": "Avaa järjestelmän selaimessa",
-  "external.menu": "Avaa selaimessa",
   "external.unavailable": "Tämä osoite toimii vain palvelimen koneella.",
   options: "Selaimen asetukset",
   "zoom.in": "Lähennä",

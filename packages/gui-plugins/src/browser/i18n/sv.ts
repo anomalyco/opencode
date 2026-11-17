@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, plats och aviseringar fungerar inte i den här webbläsaren.",
   "page.add": "Lägg till sidan i sessionen",
   "page.placeholder": "Lägg till kontext om den här sidan",
-  "external.open": "Öppna i systemets webbläsare",
-  "external.menu": "Öppna i webbläsaren",
   "external.unavailable": "Den här adressen fungerar bara på serverns dator.",
   options: "Webbläsaralternativ",
   "zoom.in": "Zooma in",

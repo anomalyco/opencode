@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Myndatól, mikrofon, staðseting og fráboðanir virka ikki í hesum kaganum.",
   "page.add": "Legg síðu afturat setuni",
   "page.placeholder": "Legg samanhang um hesa síðuna afturat",
-  "external.open": "Lat upp í skipanarkaganum",
-  "external.menu": "Lat upp í kaga",
   "external.unavailable": "Henda adressan virkar bert á teldu ambætarans.",
   options: "Kagamøguleikar",
   "zoom.in": "Zooma inn",

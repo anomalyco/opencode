@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "이 브라우저에서는 카메라, 마이크, 위치, 알림이 작동하지 않습니다.",
   "page.add": "세션에 페이지 추가",
   "page.placeholder": "이 페이지에 대한 컨텍스트 추가",
-  "external.open": "시스템 브라우저에서 열기",
-  "external.menu": "브라우저에서 열기",
   "external.unavailable": "이 주소는 서버 컴퓨터에서만 작동합니다.",
   options: "브라우저 옵션",
   "zoom.in": "확대",

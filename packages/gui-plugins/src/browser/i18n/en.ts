@@ -21,7 +21,6 @@ export default {
   "address.search": "Search or enter a URL",
   "address.suggestions": "Suggestions",
   "refused.web": "Only web pages can open here.",
-  "refused.external": "This link opens another app.",
   "refused.scheme": "Application link ({{scheme}}):",
   "notice.conversation": "From the conversation",
   "notice.page": "From this page",

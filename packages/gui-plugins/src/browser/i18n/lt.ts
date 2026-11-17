@@ -51,8 +51,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofonas, vietovė ir pranešimai šioje naršyklėje neveikia.",
   "page.add": "Pridėti puslapį prie seanso",
   "page.placeholder": "Pridėkite kontekstą apie šį puslapį",
-  "external.open": "Atverti sistemos naršyklėje",
-  "external.menu": "Atverti naršyklėje",
   "external.unavailable": "Šis adresas veikia tik serverio kompiuteryje.",
   options: "Naršyklės parinktys",
   "zoom.in": "Priartinti",

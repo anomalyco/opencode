@@ -51,8 +51,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, lokalizacja i powiadomienia nie działają w tej przeglądarce.",
   "page.add": "Dodaj stronę do sesji",
   "page.placeholder": "Dodaj kontekst dotyczący tej strony",
-  "external.open": "Otwórz w przeglądarce systemowej",
-  "external.menu": "Otwórz w przeglądarce",
   "external.unavailable": "Ten adres działa tylko na maszynie serwera.",
   options: "Opcje przeglądarki",
   "zoom.in": "Powiększ",

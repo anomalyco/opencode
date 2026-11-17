@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, ýerleşiş we habarnamalar bu brauzerde işlemeýär.",
   "page.add": "Sahypany sessiýa goşuň",
   "page.placeholder": "Bu sahypa barada kontekst goşuň",
-  "external.open": "Ulgam brauzerinde açyň",
-  "external.menu": "Brauzerde açyň",
   "external.unavailable": "Bu salgy diňe serweriň kompýuterinde işleýär.",
   options: "Brauzer sazlamalary",
   "zoom.in": "Ulalt",

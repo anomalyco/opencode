@@ -50,8 +50,6 @@ export default {
     "La càmera, el micròfon, la ubicació i les notificacions no funcionen en aquest navegador.",
   "page.add": "Afegeix la pàgina a la sessió",
   "page.placeholder": "Afegeix context sobre aquesta pàgina",
-  "external.open": "Obre al navegador del sistema",
-  "external.menu": "Obre al navegador",
   "external.unavailable": "Aquesta adreça només funciona a la màquina del servidor.",
   options: "Opcions del navegador",
   "zoom.in": "Amplia",

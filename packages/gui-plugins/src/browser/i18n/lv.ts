@@ -50,8 +50,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofons, atrašanās vieta un paziņojumi šajā pārlūkprogrammā nedarbojas.",
   "page.add": "Pievienot lapu sesijai",
   "page.placeholder": "Pievienojiet kontekstu par šo lapu",
-  "external.open": "Atvērt sistēmas pārlūkprogrammā",
-  "external.menu": "Atvērt pārlūkprogrammā",
   "external.unavailable": "Šī adrese darbojas tikai servera datorā.",
   options: "Pārlūkprogrammas opcijas",
   "zoom.in": "Tuvināt",

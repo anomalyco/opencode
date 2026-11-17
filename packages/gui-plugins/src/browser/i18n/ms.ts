@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, lokasi dan pemberitahuan tidak berfungsi dalam pelayar ini.",
   "page.add": "Tambah halaman ke sesi",
   "page.placeholder": "Tambah konteks tentang halaman ini",
-  "external.open": "Buka dalam pelayar sistem",
-  "external.menu": "Buka dalam pelayar",
   "external.unavailable": "Alamat ini hanya berfungsi pada mesin pelayan.",
   options: "Pilihan pelayar",
   "zoom.in": "Zum masuk",

@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Myndavél, hljóðnemi, staðsetning og tilkynningar virka ekki í þessum vafra.",
   "page.add": "Bæta síðu við setu",
   "page.placeholder": "Bættu við samhengi um þessa síðu",
-  "external.open": "Opna í kerfisvafra",
-  "external.menu": "Opna í vafra",
   "external.unavailable": "Þetta veffang virkar aðeins á vél netþjónsins.",
   options: "Valkostir vafra",
   "zoom.in": "Auka aðdrátt",

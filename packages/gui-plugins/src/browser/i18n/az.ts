@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, məkan və bildirişlər bu brauzerdə işləmir.",
   "page.add": "Səhifəni sessiyaya əlavə et",
   "page.placeholder": "Bu səhifə haqqında kontekst əlavə edin",
-  "external.open": "Sistem brauzerində aç",
-  "external.menu": "Brauzerdə aç",
   "external.unavailable": "Bu ünvan yalnız serverin maşınında işləyir.",
   options: "Brauzer seçimləri",
   "zoom.in": "Böyüt",

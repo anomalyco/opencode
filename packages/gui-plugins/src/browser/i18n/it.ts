@@ -50,8 +50,6 @@ export default {
   "site.permissions.description": "Fotocamera, microfono, posizione e notifiche non funzionano in questo browser.",
   "page.add": "Aggiungi pagina alla sessione",
   "page.placeholder": "Aggiungi contesto su questa pagina",
-  "external.open": "Apri nel browser di sistema",
-  "external.menu": "Apri nel browser",
   "external.unavailable": "Questo indirizzo funziona solo sulla macchina del server.",
   options: "Opzioni del browser",
   "zoom.in": "Ingrandisci",

@@ -50,8 +50,6 @@ export default {
     "La cámara, el micrófono, la ubicación y las notificaciones no funcionan en este navegador.",
   "page.add": "Añadir página a la sesión",
   "page.placeholder": "Añade contexto sobre esta página",
-  "external.open": "Abrir en el navegador del sistema",
-  "external.menu": "Abrir en el navegador",
   "external.unavailable": "Esta dirección solo funciona en el equipo del servidor.",
   options: "Opciones del navegador",
   "zoom.in": "Ampliar",

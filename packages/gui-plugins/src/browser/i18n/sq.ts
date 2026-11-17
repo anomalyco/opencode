@@ -50,8 +50,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofoni, vendndodhja dhe njoftimet nuk funksionojnë në këtë shfletues.",
   "page.add": "Shto faqen në sesion",
   "page.placeholder": "Shtoni kontekst për këtë faqe",
-  "external.open": "Hap në shfletuesin e sistemit",
-  "external.menu": "Hap në shfletues",
   "external.unavailable": "Kjo adresë funksionon vetëm në makinën e serverit.",
   options: "Opsionet e shfletuesit",
   "zoom.in": "Zmadho",

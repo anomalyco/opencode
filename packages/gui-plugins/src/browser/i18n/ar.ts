@@ -53,8 +53,6 @@ export default {
   "site.permissions.description": "لا تعمل الكاميرا والميكروفون والموقع والإشعارات في هذا المتصفح.",
   "page.add": "إضافة الصفحة إلى الجلسة",
   "page.placeholder": "أضف سياقًا عن هذه الصفحة",
-  "external.open": "فتح في متصفح النظام",
-  "external.menu": "فتح في المتصفح",
   "external.unavailable": "يعمل هذا العنوان على جهاز الخادم فقط.",
   options: "خيارات المتصفح",
   "zoom.in": "تكبير",

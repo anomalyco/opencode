@@ -50,8 +50,6 @@ export default {
   "site.permissions.description": "Camera, microfonul, locația și notificările nu funcționează în acest browser.",
   "page.add": "Adaugă pagina în sesiune",
   "page.placeholder": "Adaugă context despre această pagină",
-  "external.open": "Deschide în browserul sistemului",
-  "external.menu": "Deschide în browser",
   "external.unavailable": "Această adresă funcționează doar pe mașina serverului.",
   options: "Opțiuni browser",
   "zoom.in": "Mărește",

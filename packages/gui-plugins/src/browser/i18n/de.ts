@@ -51,8 +51,6 @@ export default {
     "Kamera, Mikrofon, Standort und Benachrichtigungen funktionieren in diesem Browser nicht.",
   "page.add": "Seite zur Sitzung hinzufügen",
   "page.placeholder": "Kontext zu dieser Seite hinzufügen",
-  "external.open": "Im Systembrowser öffnen",
-  "external.menu": "Im Browser öffnen",
   "external.unavailable": "Diese Adresse funktioniert nur auf dem Rechner des Servers.",
   options: "Browseroptionen",
   "zoom.in": "Vergrößern",

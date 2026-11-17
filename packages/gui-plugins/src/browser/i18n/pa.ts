@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "ایس براؤزر وچ کیمرہ، مائیکروفون، مقام تے نوٹیفکیشن کم نئیں کردے۔",
   "page.add": "صفحہ سیشن وچ شامل کرو",
   "page.placeholder": "ایس صفحے بارے تناظر شامل کرو",
-  "external.open": "سسٹم براؤزر وچ کھولو",
-  "external.menu": "براؤزر وچ کھولو",
   "external.unavailable": "ایہہ پتہ صرف سرور دی مشین تے کم کردا اے۔",
   options: "براؤزر دے اختیارات",
   "zoom.in": "وڈا کرو",

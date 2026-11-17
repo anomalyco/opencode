@@ -51,8 +51,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, poloha a oznámení v tomto prohlížeči nefungují.",
   "page.add": "Přidat stránku do relace",
   "page.placeholder": "Přidejte kontext k této stránce",
-  "external.open": "Otevřít v systémovém prohlížeči",
-  "external.menu": "Otevřít v prohlížeči",
   "external.unavailable": "Tato adresa funguje pouze na stroji serveru.",
   options: "Možnosti prohlížeče",
   "zoom.in": "Přiblížit",

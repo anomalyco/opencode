@@ -51,8 +51,6 @@ export default {
   "site.permissions.description": "Kamera, mikrofon, lokacija in obvestila v tem brskalniku ne delujejo.",
   "page.add": "Dodaj stran v sejo",
   "page.placeholder": "Dodajte kontekst o tej strani",
-  "external.open": "Odpri v sistemskem brskalniku",
-  "external.menu": "Odpri v brskalniku",
   "external.unavailable": "Ta naslov deluje samo na računalniku strežnika.",
   options: "Možnosti brskalnika",
   "zoom.in": "Povečaj",

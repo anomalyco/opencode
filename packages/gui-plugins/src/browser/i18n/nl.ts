@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Camera, microfoon, locatie en meldingen werken niet in deze browser.",
   "page.add": "Pagina aan sessie toevoegen",
   "page.placeholder": "Voeg context over deze pagina toe",
-  "external.open": "Openen in systeembrowser",
-  "external.menu": "Openen in browser",
   "external.unavailable": "Dit adres werkt alleen op de machine van de server.",
   options: "Browseropties",
   "zoom.in": "Inzoomen",

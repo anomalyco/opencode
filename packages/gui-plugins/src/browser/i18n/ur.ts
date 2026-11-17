@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "اس براؤزر میں کیمرہ، مائیکروفون، مقام اور اطلاعات کام نہیں کرتے۔",
   "page.add": "صفحہ سیشن میں شامل کریں",
   "page.placeholder": "اس صفحے کے بارے میں سیاق و سباق شامل کریں",
-  "external.open": "سسٹم براؤزر میں کھولیں",
-  "external.menu": "براؤزر میں کھولیں",
   "external.unavailable": "یہ پتہ صرف سرور والی مشین پر کام کرتا ہے۔",
   options: "براؤزر کے اختیارات",
   "zoom.in": "بڑا کریں",

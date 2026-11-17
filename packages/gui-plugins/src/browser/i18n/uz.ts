@@ -49,8 +49,6 @@ export default {
   "site.permissions.description": "Bu brauzerda kamera, mikrofon, joylashuv va bildirishnomalar ishlamaydi.",
   "page.add": "Sahifani sessiyaga qo‘shish",
   "page.placeholder": "Bu sahifa haqida kontekst qo‘shing",
-  "external.open": "Tizim brauzerida ochish",
-  "external.menu": "Brauzerda ochish",
   "external.unavailable": "Bu manzil faqat server kompyuterida ishlaydi.",
   options: "Brauzer parametrlari",
   "zoom.in": "Kattalashtirish",
