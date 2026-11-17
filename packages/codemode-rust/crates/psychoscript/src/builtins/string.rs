@@ -1052,15 +1052,52 @@ fn m_min(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn m_hypot(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let mut sum = 0.0;
+    // Every argument converts before any is examined, so a later conversion's throw is not skipped.
+    let mut xs = Vec::with_capacity(args.len());
     for a in args {
-        let x = vm.number_of(a)?;
-        if x.is_infinite() {
-            return Ok(Value::Num(f64::INFINITY));
-        }
-        sum += x * x;
+        xs.push(vm.number_of(a)?);
     }
-    Ok(Value::Num(sum.sqrt()))
+    Ok(Value::Num(hypot(&xs)))
+}
+
+/// `Math.hypot` as JavaScriptCore computes it: libm for two values, a scaled sum for three, and a running scaled
+/// fused sum beyond.
+fn hypot(xs: &[f64]) -> f64 {
+    if xs.iter().any(|x| x.is_infinite()) {
+        return f64::INFINITY;
+    }
+    if xs.iter().any(|x| x.is_nan()) {
+        return f64::NAN;
+    }
+    match xs {
+        [] => 0.0,
+        [x] => x.abs(),
+        [x, y] => x.hypot(*y),
+        [x, y, z] => {
+            let (x, y, z) = (x.abs(), y.abs(), z.abs());
+            let a = x.max(y).max(z);
+            if a == 0.0 {
+                return 0.0;
+            }
+            let (x, y, z) = (x / a, y / a, z / a);
+            a * (x * x + y * y + z * z).sqrt()
+        }
+        _ => {
+            let (mut max, mut sum) = (0.0f64, 0.0f64);
+            for x in xs {
+                let a = x.abs();
+                if max < a {
+                    let s = max / a;
+                    sum = sum.mul_add(s * s, 1.0);
+                    max = a;
+                } else if max != 0.0 {
+                    let s = a / max;
+                    sum = s.mul_add(s, sum);
+                }
+            }
+            if max == 0.0 { 0.0 } else { sum.sqrt() * max }
+        }
+    }
 }
 
 fn m_random(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res {
