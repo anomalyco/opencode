@@ -169,8 +169,6 @@ describe("path", () => {
 
   test("without the experimental flag there is no path", async () => {
     expect(await run("return [typeof path]", createCodeMode(new Map()))).toEqual(["undefined"])
-    expect(createCodeMode(new Map()).description).not.toContain("`path`")
-    expect(withPath().description).toContain("`path`")
   })
 
   test("path is the host's path module, resolving against the session's directory", async () => {
@@ -178,15 +176,7 @@ describe("path", () => {
       await run(
         `return [path.resolve("a", "b"), path.relative("a", "c"), path.join("out", "..", "x.txt"), path.basename("/a/b.ts", ".ts"), path.posix.join("a", "b"), path.win32.join("a", "b"), path.sep]`,
       ),
-    ).toEqual([
-      path.resolve(directory, "a", "b"),
-      path.join("..", "c"),
-      "x.txt",
-      "b",
-      "a/b",
-      "a\\b",
-      path.sep,
-    ])
+    ).toEqual([path.resolve(directory, "a", "b"), path.join("..", "c"), "x.txt", "b", "a/b", "a\\b", path.sep])
   })
 
   test("path is importable by its Node module names", async () => {

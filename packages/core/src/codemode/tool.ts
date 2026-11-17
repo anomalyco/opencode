@@ -76,29 +76,26 @@ export type Inventory = {
 }
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
-const description = (path: boolean) =>
-  [
-    "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-    "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
-    path
-      ? "`fetch` is available for HTTP requests, and Node's `path` (also importable as `node:path`), whose `resolve` starts from the session directory. Other imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`."
-      : "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-    "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-    'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-    "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-    "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
-  ].join("\n")
+const description = [
+  "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+  "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
+  "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
+  "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+  'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
+  "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
+  "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+].join("\n")
 
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
-  /** The session's Location, which turns on the experimental `path` global. */
+  /** With `full_codemode`, the session's Location, which turns on the experimental `path` global. */
   location?: Location.Interface,
 ) => {
   return {
     name: "execute",
-    description: description(location !== undefined),
+    description,
     input: CodeMode.Input,
     freeform: { type: "text" },
     output: ExecuteOutput,
@@ -133,41 +130,39 @@ export const create = (
           ? pathRuntime(inventory).execute(code).pipe(Effect.provideService(Location.Service, location))
           : runtime(inventory).execute(code)
         const result = yield* program.pipe(
-            Effect.provideService(Run, {
-              executeTool: (name, tool, input) =>
-                Effect.gen(function* () {
-                  const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-                  // Its own ID, so plugin hooks and traces can tell the program's calls apart. It has no row, so
-                  // until the program ends its permission requests show on this call's.
-                  const id = CallID.make(`call_${Identifier.ascending()}`)
-                  yield* permission.nested(id, context.id).pipe(Scope.provide(scope))
-                  // The program sees the same failure text the model gets for a direct call.
-                  const executed = yield* executeTool(name, tool, input, {
-                    ...context,
-                    id,
-                    // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
-                    progress: () => Effect.void,
-                    // A stop is the execute call's to handle: a nested call never fails it with its own error.
-                    cancel: undefined,
-                  }).pipe(
-                    Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
-                  )
-                  const content = resultContent(executed)
-                  const outputFileParts = outputFiles(content)
-                  if (outputFileParts.length > 0)
-                    yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-                  return resultValue(executed)
-                }),
-              hooks: progressHooks(record),
-            }),
-            // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
-            Effect.onError(() =>
-              lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
-            ),
-            // Readers outlive the fetch call that returned them, up to the end of this program's scope.
-            Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
-            Effect.provideService(Permission.Service, permission),
-          )
+          Effect.provideService(Run, {
+            executeTool: (name, tool, input) =>
+              Effect.gen(function* () {
+                const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                // Its own ID, so plugin hooks and traces can tell the program's calls apart. It has no row, so
+                // until the program ends its permission requests show on this call's.
+                const id = CallID.make(`call_${Identifier.ascending()}`)
+                yield* permission.nested(id, context.id).pipe(Scope.provide(scope))
+                // The program sees the same failure text the model gets for a direct call.
+                const executed = yield* executeTool(name, tool, input, {
+                  ...context,
+                  id,
+                  // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
+                  progress: () => Effect.void,
+                  // A stop is the execute call's to handle: a nested call never fails it with its own error.
+                  cancel: undefined,
+                }).pipe(Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })))
+                const content = resultContent(executed)
+                const outputFileParts = outputFiles(content)
+                if (outputFileParts.length > 0)
+                  yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
+                return resultValue(executed)
+              }),
+            hooks: progressHooks(record),
+          }),
+          // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
+          Effect.onError(() =>
+            lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
+          ),
+          // Readers outlive the fetch call that returned them, up to the end of this program's scope.
+          Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
+          Effect.provideService(Permission.Service, permission),
+        )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)

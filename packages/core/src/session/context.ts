@@ -7,7 +7,6 @@ import { Agent } from "../agent.js"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { Database } from "../database/database.js"
-import { Flag } from "../flag.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
@@ -91,7 +90,6 @@ const layer = Layer.effect(
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
-    const flags = yield* Flag.Service
 
     const resolveModel = (
       session: SessionSchema.Info,
@@ -148,9 +146,7 @@ const layer = Layer.effect(
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
       const loaded = yield* Effect.all(
         {
-          tools: flags
-            .enabled("full_codemode")
-            .pipe(Effect.flatMap((enabled) => registry.snapshot(permissions, enabled ? location : undefined))),
+          tools: registry.snapshot(permissions, location),
           builtins: builtins.load(),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
@@ -221,7 +217,6 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Agent.node,
-    Flag.node,
     Model.node,
     Database.node,
     InstructionBuiltIns.node,

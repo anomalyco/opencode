@@ -11,8 +11,9 @@ import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
 import { CodeModeJob } from "./codemode/job.js"
 import { CodeModeTool } from "./codemode/tool.js"
-import type { Location } from "./location.js"
+import { Flag } from "./flag.js"
 import { Image } from "./image.js"
+import type { Location } from "./location.js"
 import { Permission } from "./permission.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
@@ -45,7 +46,7 @@ type Data = {
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
-  /** `location` turns on the experimental `path` global in Code Mode, resolving against its directory. */
+  /** With `full_codemode`, Code Mode gets the experimental `path` global, resolving against `location`'s directory. */
   readonly snapshot: (permissions?: Permission.Ruleset, location?: Location.Interface) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
@@ -92,6 +93,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
     const permission = yield* Permission.Service
+    const flags = yield* Flag.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -202,7 +204,7 @@ const layer = Layer.effect(
       | {
           data: Data
           names: string
-          location: Location.Interface | undefined
+          path: boolean
           inventory: CodeModeTool.Inventory
           value: CodeModeCatalog.Inventory
           definition: ToolDefinition
@@ -267,7 +269,8 @@ const layer = Layer.effect(
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
       snapshot: Effect.fn("Tool.snapshot")((permissions, location) =>
-        Effect.sync(() => {
+        Effect.map(flags.enabled("full_codemode"), (enabled) => {
+          const path = enabled && location !== undefined
           const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
@@ -286,14 +289,14 @@ const layer = Layer.effect(
           // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
           // are cached by identity, and the execute tool's definition across steps.
           const cached =
-            catalog?.data === data && catalog.names === names && catalog.location === location ? catalog : undefined
+            catalog?.data === data && catalog.names === names && catalog.path === path ? catalog : undefined
           const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
                 codeModeInventory,
                 (name, tool, input, context) => run(codeModeInventory.tools, tool, name, input, context),
                 permission,
-                location,
+                path ? location : undefined,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -304,7 +307,7 @@ const layer = Layer.effect(
             catalog = {
               data,
               names,
-              location,
+              path,
               inventory: codeModeInventory,
               value: codeModeCatalog,
               definition: codeModeDefinition,
@@ -447,5 +450,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node, Permission.node],
+  deps: [PluginHooks.node, Image.node, Permission.node, Flag.node],
 })
