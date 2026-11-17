@@ -1025,8 +1025,8 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
           </Show>
         </span>
-        {/* The row's flyout leads with the budget instead, while it shows. */}
-        <Show when={flyoutId() !== row.model.id && usage(item())}>
+        {/* The active row shows its variant instead; its flyout leads with the budget. */}
+        <Show when={!active() && usage(item())}>
           {(value) => (
             <span data-slot="model-dialog-variant">
               <ModelUsageTag usage={value()} />
