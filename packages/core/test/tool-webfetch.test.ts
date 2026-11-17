@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { Duration, Effect, Fiber, Layer, Schema } from "effect"
+import { Context, Duration, Effect, Fiber, Layer, PubSub, Schema, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { Event } from "@opencode/schema/event"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
+import { Image } from "@opencode/core/image"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { Permission } from "@opencode/core/permission"
@@ -11,16 +17,26 @@ import { Tool } from "@opencode/core/tool"
 import { WebFetchTool } from "@opencode/core/tool/plugin/webfetch"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
+import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
+import {
+  codeModeListings,
+  toolIdentity,
+  executeTool,
+  registerToolPlugin,
+  toolDefinitions,
+  toolNodeReplacements,
+  waitForTool,
+} from "./lib/tool"
 
 const webFetchToolNode = makeLocationNode({
   name: "test/webfetch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WebFetchTool.Plugin)),
-  deps: [Tool.node, Permission.node, LayerNodePlatform.httpClient],
+  deps: [Tool.node, Config.node, Flag.node, Permission.node, LayerNodePlatform.httpClient],
 })
 
 const sessionID = Session.ID.make("ses_webfetch_test")
+const configUpdated = () => ({ id: Event.ID.create(), created: Date.now(), type: "config.updated" as const, data: {} })
 const webFetchUserAgent =
   "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OpenCode-User/1.0; +https://opencode.ai"
 const requests: Array<{ readonly url: string; readonly headers: Record<string, string> }> = []
@@ -59,6 +75,8 @@ const toolLayer = (replacements: LayerNode.Replacements = []) =>
   ])
 const it = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)]))
 const live = testEffect(toolLayer())
+// For tests that build their own tool graph, so the shared one above is not in scope.
+const standalone = testEffect(Layer.empty)
 
 const reset = () => {
   requests.length = 0
@@ -732,5 +750,70 @@ describe("WebFetchTool registration", () => {
         error: { type: "unknown", message: "Request timed out" },
       })
     }),
+  )
+
+  standalone.live("is absent with full_codemode while Code Mode fetch still works, and returns when it is turned off", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({ port: 0, fetch: () => new Response("served", { headers: { "content-type": "text/plain" } }) }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          reset()
+          const config = yield* Layer.build(
+            Config.testLayer([
+              new Document({
+                type: "document",
+                info: new Info({ experimental: new ConfigExperimental.Info({ full_codemode: true }) }),
+              }),
+            ]),
+          )
+          const updates = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
+          const node = makeLocationNode({
+            name: "test/webfetch-tool-plugin-observed",
+            layer: Layer.effectDiscard(
+              registerToolPlugin(WebFetchTool.Plugin, { event: { subscribe: () => Stream.fromPubSub(updates) } }),
+            ),
+            deps: [Tool.node, Config.node, Flag.node, Permission.node, LayerNodePlatform.httpClient],
+          })
+          yield* Effect.gen(function* () {
+            const registry = yield* Tool.Service
+            const snapshot = yield* registry.snapshot()
+            expect([
+              ...snapshot.definitions.map((tool) => tool.name),
+              ...(snapshot.codeModeCatalog ? codeModeListings(snapshot.codeModeCatalog).map((entry) => entry.path) : []),
+            ]).not.toContain("webfetch")
+            const url = new URL("/page", server.url).toString()
+            expect(yield* executeTool(registry, call({ url, format: "text" }))).toMatchObject({ status: "error" })
+
+            const result = yield* executeTool(registry, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-execute",
+                name: "execute",
+                input: { code: `return await (await fetch(${JSON.stringify(url)})).text()` },
+              },
+            })
+            expect(result.status).toBe("completed")
+            expect(JSON.stringify(result.content)).toContain("served")
+            expect(assertions).toMatchObject([{ action: "webfetch", resources: [url] }])
+
+            yield* Context.get(config, Config.Test).setEntries([])
+            yield* PubSub.publish(updates, configUpdated())
+            yield* waitForTool(registry, "webfetch")
+          }).pipe(
+            Effect.provide(
+              AppNodeBuilder.build(LayerNode.group([Tool.node, node]), [
+                Config.node.replace(Layer.succeedContext(config)),
+                Image.node.replace(imagePassthrough),
+                Permission.node.replace(permission),
+              ]),
+            ),
+          )
+        }).pipe(Effect.scoped),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
   )
 })
