@@ -3,6 +3,7 @@
 use super::{arg, fuel, this_obj};
 use crate::convert;
 use crate::object::*;
+use crate::ops::Hint;
 use crate::value::{Id, Value, parse_float_prefix, to_int32};
 use crate::vm::{Res, Vm};
 
@@ -606,7 +607,19 @@ fn error_ctor(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
         .native_data(callee)
         .as_obj()
         .unwrap_or(vm.realm.error_proto);
-    make_error_from(vm, proto, &arg(args, 0), &arg(args, 1))
+    let mut c = fuel::Conversions::default();
+    let message = error_message(vm, &mut c, arg(args, 0))?;
+    let r = make_error_from(vm, proto, &message, &arg(args, 1));
+    c.finish(vm, r)
+}
+
+/// An error constructor's message, when there is one, is its list of conversions, made a string.
+fn error_message(vm: &mut Vm, c: &mut fuel::Conversions, message: Value) -> Res {
+    let mut m = [message];
+    if !matches!(message, Value::Undef) {
+        c.convert(vm, &[Hint::String], &mut m, true)?;
+    }
+    Ok(m[0])
 }
 
 fn aggregate_error_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
@@ -614,11 +627,13 @@ fn aggregate_error_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) ->
         .native_data(callee)
         .as_obj()
         .unwrap_or(vm.realm.aggregate_error_proto);
-    let e = make_error_from(vm, proto, &arg(args, 1), &arg(args, 2))?;
+    let mut c = fuel::Conversions::default();
+    let message = error_message(vm, &mut c, arg(args, 1))?;
+    let e = make_error_from(vm, proto, &message, &arg(args, 2))?;
     // The errors are read in the reference's prelude (`aggregateError`), after the call itself when it is not `new`.
     let called = !matches!(this, Value::Uninit);
     if called {
-        fuel::handoff(vm);
+        c.handoff(vm);
     } else {
         fuel::method(vm);
     }
@@ -690,7 +705,16 @@ fn symbol_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 // ---------- JSON ----------
 
 fn json_parse(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let text = vm.string_of(&arg(args, 0))?;
+    let mut c = fuel::Conversions::default();
+    let r = parse(vm, &mut c, args);
+    c.finish(vm, r)
+}
+
+/// `JSON.parse` after its text, a list of conversions of its own.
+fn parse(vm: &mut Vm, c: &mut fuel::Conversions, args: &[Value]) -> Res {
+    let mut text = [arg(args, 0)];
+    c.convert(vm, &[Hint::String], &mut text, false)?;
+    let text = vm.string_of(&text[0])?;
     let text = vm.text(text).to_owned();
     let v = convert::parse(vm, &text)?;
     let reviver = arg(args, 1);
@@ -701,7 +725,7 @@ fn json_parse(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let empty = vm.atoms.intern_static("");
     vm.define(holder, empty, v);
     // The reference revives in its prelude (`revive`), after `JSON.parse`'s own call.
-    fuel::native(vm);
+    c.call(vm);
     let r = revive(vm, &reviver, Value::Obj(holder), empty)?;
     vm.bytecode_builtin();
     Ok(r)
@@ -981,8 +1005,13 @@ fn console_table(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 // ---------- global functions ----------
 
 pub fn global_parse_int(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let s = vm.string_of(&arg(args, 0))?;
-    let mut radix = to_int32(vm.number_of(&arg(args, 1))?);
+    let listed = [arg(args, 0), arg(args, 1)];
+    fuel::with_primitives(vm, &[Hint::String, Hint::Number], listed, false, parse_int)
+}
+
+fn parse_int(vm: &mut Vm, [text, radix]: [Value; 2]) -> Res {
+    let s = vm.string_of(&text)?;
+    let mut radix = to_int32(vm.number_of(&radix)?);
     let owned = vm.text(s).to_owned();
     let t = owned.trim_start_matches(crate::value::is_js_whitespace);
     let (neg, mut t) = match t.as_bytes().first() {
@@ -1020,14 +1049,20 @@ pub fn global_parse_int(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res
 }
 
 pub fn global_parse_float(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let s = vm.string_of(&arg(args, 0))?;
-    Ok(Value::Num(parse_float_prefix(vm.text(s))))
+    fuel::with_primitives(vm, &[Hint::String], [arg(args, 0)], false, |vm, [v]| {
+        let s = vm.string_of(&v)?;
+        Ok(Value::Num(parse_float_prefix(vm.text(s))))
+    })
 }
 
 fn global_is_nan(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    Ok(Value::Bool(vm.number_of(&arg(args, 0))?.is_nan()))
+    fuel::with_primitives(vm, &[Hint::Number], [arg(args, 0)], false, |vm, [v]| {
+        Ok(Value::Bool(vm.number_of(&v)?.is_nan()))
+    })
 }
 
 fn global_is_finite(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    Ok(Value::Bool(vm.number_of(&arg(args, 0))?.is_finite()))
+    fuel::with_primitives(vm, &[Hint::Number], [arg(args, 0)], false, |vm, [v]| {
+        Ok(Value::Bool(vm.number_of(&v)?.is_finite()))
+    })
 }

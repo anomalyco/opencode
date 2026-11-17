@@ -1,8 +1,9 @@
 //! String, Number and Math.
 
+use super::fuel::{self, Conversions};
 use super::{arg, regexp, to_index};
 use crate::object::*;
-use crate::ops::MAX_STRING_LEN;
+use crate::ops::{Hint, MAX_STRING_LEN};
 use crate::strings::{StrId, StrRef};
 use crate::value::{
     Id, Value, is_js_whitespace, num_to_fixed, num_to_string, to_integer, to_uint32,
@@ -170,6 +171,40 @@ fn this_str(vm: &mut Vm, this: &Value) -> Result<StrId, Value> {
     }
 }
 
+/// The reference's `simple` for a `String.prototype` method: the receiver (with the string hint) and the arguments
+/// the method reads (`hints`, one each) are one list of conversions (see `fuel::Conversions`), after the receiver's
+/// null check and before `body` runs on the receiver's text and the arguments.
+fn simple(
+    vm: &mut Vm,
+    this: Value,
+    args: &[Value],
+    hints: &[Hint],
+    body: impl FnOnce(&mut Vm, &mut Conversions, StrId, &[Value]) -> Res,
+) -> Res {
+    let n = hints.len().min(args.len());
+    let mut c = Conversions::default();
+    if !matches!(this, Value::Obj(_)) && !args[..n].iter().any(|v| matches!(v, Value::Obj(_))) {
+        let s = this_str(vm, &this)?;
+        let r = body(vm, &mut c, s, args);
+        return c.finish(vm, r);
+    }
+    if this.is_nullish() {
+        this_str(vm, &this)?;
+    }
+    let mut list = Vec::with_capacity(args.len() + 1);
+    list.push(this);
+    list.extend_from_slice(&args[..n]);
+    let mut kinds = Vec::with_capacity(n + 1);
+    kinds.push(Hint::String);
+    kinds.extend_from_slice(&hints[..n]);
+    c.convert(vm, &kinds, &mut list, false)?;
+    let s = this_str(vm, &list[0])?;
+    list.remove(0);
+    list.extend_from_slice(&args[n..]);
+    let r = body(vm, &mut c, s, &list);
+    c.finish(vm, r)
+}
+
 fn arg_str(vm: &mut Vm, args: &[Value], i: usize) -> Result<StrId, Value> {
     let v = arg(args, i);
     vm.string_of(&v)
@@ -184,10 +219,10 @@ fn string_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if args.is_empty() {
         return Ok(vm.static_str(""));
     }
-    match &args[0] {
-        Value::Sym(s) => Ok(vm.atom_val(*s)),
-        v => Ok(Value::Str(vm.string_of(v)?)),
-    }
+    fuel::with_primitives(vm, &[Hint::String], [args[0]], false, |vm, [v]| match v {
+        Value::Sym(s) => Ok(vm.atom_val(s)),
+        v => Ok(Value::Str(vm.string_of(&v)?)),
+    })
 }
 
 fn string_from_char_code(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -197,11 +232,13 @@ fn string_from_char_code(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Re
         let c = (to_uint32(n) & 0xffff) as u16;
         return Ok(vm.char_str(c));
     }
-    let mut units = Vec::with_capacity(args.len());
-    for a in args {
-        units.push((to_uint32(vm.number_of(a)?) & 0xffff) as u16);
-    }
-    Ok(Value::Str(vm.atoms.alloc_units(&units)))
+    fuel::with_primitive_list(vm, &[Hint::Number], args, true, |vm, args| {
+        let mut units = Vec::with_capacity(args.len());
+        for a in args {
+            units.push((to_uint32(vm.number_of(a)?) & 0xffff) as u16);
+        }
+        Ok(Value::Str(vm.atoms.alloc_units(&units)))
+    })
 }
 
 fn string_raw(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -230,31 +267,34 @@ fn string_raw(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
             parts.push(args[i + 1]);
         }
     }
-    let mut prims = Vec::with_capacity(parts.len());
-    for p in &parts {
-        prims.push(vm.primitive_of(p, crate::ops::Hint::String)?);
-    }
-    let mut out = String::new();
-    for p in &prims {
-        let t = vm.string_of(p)?;
-        out.push_str(vm.text(t));
-    }
-    if out.encode_utf16().count() > MAX_STRING_LEN {
-        return Err(vm.range_error("Invalid string length"));
-    }
-    Ok(vm.string_val(out))
+    fuel::with_primitive_list(vm, &[Hint::String], &parts, true, |vm, parts| {
+        let mut out = String::new();
+        for p in parts {
+            let t = vm.string_of(p)?;
+            out.push_str(vm.text(t));
+        }
+        if out.encode_utf16().count() > MAX_STRING_LEN {
+            return Err(vm.range_error("Invalid string length"));
+        }
+        Ok(vm.string_val(out))
+    })
 }
 
 fn string_from_code_point(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let mut out = String::new();
-    for a in args {
-        let n = vm.number_of(a)?;
-        match char::from_u32(n as u32) {
-            Some(c) if n.fract() == 0.0 && n >= 0.0 => out.push(c),
-            _ => return Err(vm.range_error(&format!("Invalid code point {}", num_to_string(n)))),
+    fuel::with_primitive_list(vm, &[Hint::Number], args, true, |vm, args| {
+        let mut out = String::new();
+        for a in args {
+            let n = vm.number_of(a)?;
+            match char::from_u32(n as u32) {
+                Some(c) if n.fract() == 0.0 && n >= 0.0 => out.push(c),
+                _ => {
+                    let msg = format!("Invalid code point {}", num_to_string(n));
+                    return Err(vm.range_error(&msg));
+                }
+            }
         }
-    }
-    Ok(vm.string_val(crate::strings::external_text(out)))
+        Ok(vm.string_val(crate::strings::external_text(out)))
+    })
 }
 
 fn pos_arg(vm: &mut Vm, args: &[Value], i: usize) -> Result<f64, Value> {
@@ -262,67 +302,71 @@ fn pos_arg(vm: &mut Vm, args: &[Value], i: usize) -> Result<f64, Value> {
 }
 
 fn s_char_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let i = pos_arg(vm, args, 0)?;
-    let c = if i < 0.0 {
-        None
-    } else {
-        vm.atoms.sref(s).code_unit(i as usize)
-    };
-    Ok(match c {
-        Some(c) => vm.char_str(c),
-        None => vm.static_str(""),
+    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
+        let i = pos_arg(vm, args, 0)?;
+        let c = if i < 0.0 {
+            None
+        } else {
+            vm.atoms.sref(s).code_unit(i as usize)
+        };
+        Ok(match c {
+            Some(c) => vm.char_str(c),
+            None => vm.static_str(""),
+        })
     })
 }
 
 fn s_char_code_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let i = pos_arg(vm, args, 0)?;
-    if i < 0.0 {
-        return Ok(Value::Num(f64::NAN));
-    }
-    Ok(Value::Num(
-        vm.atoms
-            .sref(s)
-            .code_unit(i as usize)
-            .map(|c| c as f64)
-            .unwrap_or(f64::NAN),
-    ))
+    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
+        let i = pos_arg(vm, args, 0)?;
+        if i < 0.0 {
+            return Ok(Value::Num(f64::NAN));
+        }
+        Ok(Value::Num(
+            vm.atoms
+                .sref(s)
+                .code_unit(i as usize)
+                .map(|c| c as f64)
+                .unwrap_or(f64::NAN),
+        ))
+    })
 }
 
 fn s_code_point_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let i = pos_arg(vm, args, 0)?;
-    let units = vm.atoms.sref(s).utf16();
-    if i < 0.0 || i as usize >= units.len() {
-        return Ok(Value::Undef);
-    }
-    let i = i as usize;
-    let a = units[i];
-    if (0xd800..0xdc00).contains(&a)
-        && let Some(&b) = units.get(i + 1)
-        && (0xdc00..0xe000).contains(&b)
-    {
-        return Ok(Value::Num(
-            (((a as u32 - 0xd800) << 10) + (b as u32 - 0xdc00) + 0x10000) as f64,
-        ));
-    }
-    Ok(Value::Num(a as f64))
+    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
+        let i = pos_arg(vm, args, 0)?;
+        let units = vm.atoms.sref(s).utf16();
+        if i < 0.0 || i as usize >= units.len() {
+            return Ok(Value::Undef);
+        }
+        let i = i as usize;
+        let a = units[i];
+        if (0xd800..0xdc00).contains(&a)
+            && let Some(&b) = units.get(i + 1)
+            && (0xdc00..0xe000).contains(&b)
+        {
+            return Ok(Value::Num(
+                (((a as u32 - 0xd800) << 10) + (b as u32 - 0xdc00) + 0x10000) as f64,
+            ));
+        }
+        Ok(Value::Num(a as f64))
+    })
 }
 
 fn s_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let len = vm.atoms.sref(s).len16() as f64;
-    let mut i = pos_arg(vm, args, 0)?;
-    if i < 0.0 {
-        i += len;
-    }
-    if i < 0.0 || i >= len {
-        return Ok(Value::Undef);
-    }
-    Ok(match vm.atoms.sref(s).code_unit(i as usize) {
-        Some(c) => vm.char_str(c),
-        None => Value::Undef,
+    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
+        let len = vm.atoms.sref(s).len16() as f64;
+        let mut i = pos_arg(vm, args, 0)?;
+        if i < 0.0 {
+            i += len;
+        }
+        if i < 0.0 || i >= len {
+            return Ok(Value::Undef);
+        }
+        Ok(match vm.atoms.sref(s).code_unit(i as usize) {
+            Some(c) => vm.char_str(c),
+            None => Value::Undef,
+        })
     })
 }
 
@@ -356,25 +400,39 @@ fn rfind16(hay: StrRef, needle: StrRef, from: usize) -> Option<usize> {
 }
 
 fn s_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let n = arg_str(vm, args, 0)?;
-    let len = vm.atoms.sref(s).len16() as f64;
-    let from = pos_arg(vm, args, 1)?.clamp(0.0, len) as usize;
-    let r = find16(vm.atoms.sref(s), vm.atoms.sref(n), from);
-    Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
+    simple(
+        vm,
+        this,
+        args,
+        &[Hint::String, Hint::Number],
+        |vm, _, s, args| {
+            let n = arg_str(vm, args, 0)?;
+            let len = vm.atoms.sref(s).len16() as f64;
+            let from = pos_arg(vm, args, 1)?.clamp(0.0, len) as usize;
+            let r = find16(vm.atoms.sref(s), vm.atoms.sref(n), from);
+            Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
+        },
+    )
 }
 
 fn s_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let n = arg_str(vm, args, 0)?;
-    let pos = vm.number_of(&arg(args, 1))?;
-    let from = if pos.is_nan() {
-        usize::MAX
-    } else {
-        to_integer(pos).max(0.0) as usize
-    };
-    let r = rfind16(vm.atoms.sref(s), vm.atoms.sref(n), from);
-    Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
+    simple(
+        vm,
+        this,
+        args,
+        &[Hint::String, Hint::Number],
+        |vm, _, s, args| {
+            let n = arg_str(vm, args, 0)?;
+            let pos = vm.number_of(&arg(args, 1))?;
+            let from = if pos.is_nan() {
+                usize::MAX
+            } else {
+                to_integer(pos).max(0.0) as usize
+            };
+            let r = rfind16(vm.atoms.sref(s), vm.atoms.sref(n), from);
+            Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
+        },
+    )
 }
 
 /// `includes`, `startsWith` and `endsWith` reject a RegExp before converting their arguments.
@@ -388,88 +446,119 @@ fn reject_regexp(vm: &mut Vm, args: &[Value], name: &str) -> Result<(), Value> {
 }
 
 fn s_includes(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    reject_regexp(vm, args, "includes")?;
-    let n = arg_str(vm, args, 0)?;
-    let len = vm.atoms.sref(s).len16() as f64;
-    let from = pos_arg(vm, args, 1)?.clamp(0.0, len) as usize;
-    Ok(Value::Bool(
-        find16(vm.atoms.sref(s), vm.atoms.sref(n), from).is_some(),
-    ))
+    simple(vm, this, args, &[], |vm, c, s, args| {
+        reject_regexp(vm, args, "includes")?;
+        let listed = &args[..args.len().min(2)];
+        let args = c.converted(vm, &[Hint::String, Hint::Number], listed, false)?;
+        let n = arg_str(vm, &args, 0)?;
+        let len = vm.atoms.sref(s).len16() as f64;
+        let from = pos_arg(vm, &args, 1)?.clamp(0.0, len) as usize;
+        Ok(Value::Bool(
+            find16(vm.atoms.sref(s), vm.atoms.sref(n), from).is_some(),
+        ))
+    })
 }
 
 fn s_starts_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    reject_regexp(vm, args, "startsWith")?;
-    let n = arg_str(vm, args, 0)?;
-    let len = vm.atoms.sref(s).len16() as f64;
-    let from = pos_arg(vm, args, 1)?.clamp(0.0, len) as usize;
-    let (h, n) = (vm.atoms.sref(s), vm.atoms.sref(n));
-    if h.ascii && n.ascii {
-        return Ok(Value::Bool(h.s[from..].starts_with(n.s)));
-    }
-    let (h, n) = (h.utf16(), n.utf16());
-    Ok(Value::Bool(
-        h.len() >= from + n.len() && h[from..from + n.len()] == n[..],
-    ))
+    simple(vm, this, args, &[], |vm, c, s, args| {
+        reject_regexp(vm, args, "startsWith")?;
+        let listed = &args[..args.len().min(2)];
+        let args = c.converted(vm, &[Hint::String, Hint::Number], listed, false)?;
+        let n = arg_str(vm, &args, 0)?;
+        let len = vm.atoms.sref(s).len16() as f64;
+        let from = pos_arg(vm, &args, 1)?.clamp(0.0, len) as usize;
+        let (h, n) = (vm.atoms.sref(s), vm.atoms.sref(n));
+        if h.ascii && n.ascii {
+            return Ok(Value::Bool(h.s[from..].starts_with(n.s)));
+        }
+        let (h, n) = (h.utf16(), n.utf16());
+        Ok(Value::Bool(
+            h.len() >= from + n.len() && h[from..from + n.len()] == n[..],
+        ))
+    })
 }
 
 fn s_ends_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    reject_regexp(vm, args, "endsWith")?;
-    let n = arg_str(vm, args, 0)?;
-    let len = vm.atoms.sref(s).len16();
-    let end = match arg(args, 1) {
-        Value::Undef => len,
-        v => to_integer(vm.number_of(&v)?).clamp(0.0, len as f64) as usize,
-    };
-    let h = vm.atoms.sref(s).utf16();
-    let n = vm.atoms.sref(n).utf16();
-    Ok(Value::Bool(
-        end >= n.len() && h[end - n.len()..end] == n[..],
-    ))
+    simple(vm, this, args, &[], |vm, c, s, args| {
+        reject_regexp(vm, args, "endsWith")?;
+        let listed = &args[..args.len().min(2)];
+        let args = c.converted(vm, &[Hint::String, Hint::Number], listed, false)?;
+        let n = arg_str(vm, &args, 0)?;
+        let len = vm.atoms.sref(s).len16();
+        let end = match arg(&args, 1) {
+            Value::Undef => len,
+            v => to_integer(vm.number_of(&v)?).clamp(0.0, len as f64) as usize,
+        };
+        let h = vm.atoms.sref(s).utf16();
+        let n = vm.atoms.sref(n).utf16();
+        Ok(Value::Bool(
+            end >= n.len() && h[end - n.len()..end] == n[..],
+        ))
+    })
 }
 
 fn s_slice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let len = vm.atoms.sref(s).len16();
-    let start = to_index(vm, &arg(args, 0), len, 0)?;
-    let end = to_index(vm, &arg(args, 1), len, len)?;
-    if start == 0 && end >= len {
-        return Ok(Value::Str(s));
-    }
-    let out = vm.atoms.sref(s).slice16(start, end);
-    Ok(vm.string_val(out))
+    simple(
+        vm,
+        this,
+        args,
+        &[Hint::Number, Hint::Number],
+        |vm, _, s, args| {
+            let len = vm.atoms.sref(s).len16();
+            let start = to_index(vm, &arg(args, 0), len, 0)?;
+            let end = to_index(vm, &arg(args, 1), len, len)?;
+            if start == 0 && end >= len {
+                return Ok(Value::Str(s));
+            }
+            let out = vm.atoms.sref(s).slice16(start, end);
+            Ok(vm.string_val(out))
+        },
+    )
 }
 
 fn s_substring(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let len = vm.atoms.sref(s).len16() as f64;
-    let a = pos_arg(vm, args, 0)?.clamp(0.0, len) as usize;
-    let b = match arg(args, 1) {
-        Value::Undef => len as usize,
-        v => to_integer(vm.number_of(&v)?).clamp(0.0, len) as usize,
-    };
-    let out = vm.atoms.sref(s).slice16(a.min(b), a.max(b));
-    Ok(vm.string_val(out))
+    simple(
+        vm,
+        this,
+        args,
+        &[Hint::Number, Hint::Number],
+        |vm, _, s, args| {
+            let len = vm.atoms.sref(s).len16() as f64;
+            let a = pos_arg(vm, args, 0)?.clamp(0.0, len) as usize;
+            let b = match arg(args, 1) {
+                Value::Undef => len as usize,
+                v => to_integer(vm.number_of(&v)?).clamp(0.0, len) as usize,
+            };
+            let out = vm.atoms.sref(s).slice16(a.min(b), a.max(b));
+            Ok(vm.string_val(out))
+        },
+    )
 }
 
 fn s_substr(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let len = vm.atoms.sref(s).len16();
-    let start = to_index(vm, &arg(args, 0), len, 0)?;
-    let count = match arg(args, 1) {
-        Value::Undef => len,
-        v => to_integer(vm.number_of(&v)?).max(0.0) as usize,
-    };
-    let out = vm.atoms.sref(s).slice16(start, start.saturating_add(count));
-    Ok(vm.string_val(out))
+    simple(
+        vm,
+        this,
+        args,
+        &[Hint::Number, Hint::Number],
+        |vm, _, s, args| {
+            let len = vm.atoms.sref(s).len16();
+            let start = to_index(vm, &arg(args, 0), len, 0)?;
+            let count = match arg(args, 1) {
+                Value::Undef => len,
+                v => to_integer(vm.number_of(&v)?).max(0.0) as usize,
+            };
+            let out = vm.atoms.sref(s).slice16(start, start.saturating_add(count));
+            Ok(vm.string_val(out))
+        },
+    )
 }
 
 fn map_text(vm: &mut Vm, this: &Value, f: fn(&str) -> String) -> Res {
-    let s = this_str(vm, this)?;
-    let out = f(vm.text(s));
-    Ok(vm.string_val(out))
+    simple(vm, *this, &[], &[], |vm, _, s, _| {
+        let out = f(vm.text(s));
+        Ok(vm.string_val(out))
+    })
 }
 
 fn s_to_upper(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -497,35 +586,42 @@ fn s_trim_end(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn pad(vm: &mut Vm, this: Value, args: &[Value], at_start: bool) -> Res {
-    let s = this_str(vm, &this)?;
-    let target = to_integer(vm.number_of(&arg(args, 0))?);
-    let fill = match arg(args, 1) {
-        Value::Undef => " ".to_owned(),
-        v => {
-            let f = vm.string_of(&v)?;
-            vm.text(f).to_owned()
-        }
-    };
-    if target > MAX_STRING_LEN as f64 {
-        return Err(vm.range_error("Invalid string length"));
-    }
-    let len = vm.atoms.sref(s).len16();
-    if target <= len as f64 || fill.is_empty() {
-        return Ok(Value::Str(s));
-    }
-    let need = target as usize - len;
-    let padding: Vec<u16> = crate::strings::units_of(&fill)
-        .into_iter()
-        .cycle()
-        .take(need)
-        .collect();
-    let padding = crate::strings::from_units(&padding);
-    let out = if at_start {
-        padding + vm.text(s)
-    } else {
-        vm.text(s).to_owned() + &padding
-    };
-    Ok(vm.string_val(out))
+    simple(
+        vm,
+        this,
+        args,
+        &[Hint::Number, Hint::String],
+        |vm, _, s, args| {
+            let target = to_integer(vm.number_of(&arg(args, 0))?);
+            let fill = match arg(args, 1) {
+                Value::Undef => " ".to_owned(),
+                v => {
+                    let f = vm.string_of(&v)?;
+                    vm.text(f).to_owned()
+                }
+            };
+            if target > MAX_STRING_LEN as f64 {
+                return Err(vm.range_error("Invalid string length"));
+            }
+            let len = vm.atoms.sref(s).len16();
+            if target <= len as f64 || fill.is_empty() {
+                return Ok(Value::Str(s));
+            }
+            let need = target as usize - len;
+            let padding: Vec<u16> = crate::strings::units_of(&fill)
+                .into_iter()
+                .cycle()
+                .take(need)
+                .collect();
+            let padding = crate::strings::from_units(&padding);
+            let out = if at_start {
+                padding + vm.text(s)
+            } else {
+                vm.text(s).to_owned() + &padding
+            };
+            Ok(vm.string_val(out))
+        },
+    )
 }
 
 fn s_pad_start(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -537,28 +633,49 @@ fn s_pad_end(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn s_repeat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let n = to_integer(vm.number_of(&arg(args, 0))?);
-    if n < 0.0 || n.is_infinite() {
-        return Err(vm.range_error("String.repeat expects a finite non-negative count."));
-    }
-    if vm.text(s).len() as f64 * n > MAX_STRING_LEN as f64 {
-        return Err(vm.range_error("Invalid string length"));
-    }
-    let out = vm.text(s).repeat(n as usize);
-    Ok(vm.string_val(out))
+    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
+        let n = to_integer(vm.number_of(&arg(args, 0))?);
+        if n < 0.0 || n.is_infinite() {
+            return Err(vm.range_error("String.repeat expects a finite non-negative count."));
+        }
+        if vm.text(s).len() as f64 * n > MAX_STRING_LEN as f64 {
+            return Err(vm.range_error("Invalid string length"));
+        }
+        let out = vm.text(s).repeat(n as usize);
+        Ok(vm.string_val(out))
+    })
 }
 
 fn s_split(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    if let Some(re) = regexp::as_regexp(vm, &arg(args, 0)) {
-        return regexp::string_split(vm, s, re, arg(args, 1));
+    simple(vm, this, args, &[], split)
+}
+
+/// The reference's `split` body: the limit, then a separator that is not a RegExp, are one list of conversions.
+fn split(vm: &mut Vm, c: &mut Conversions, s: StrId, args: &[Value]) -> Res {
+    let re = regexp::as_regexp(vm, &arg(args, 0));
+    let mut listed = [
+        arg(args, 1),
+        if re.is_some() {
+            Value::Undef
+        } else {
+            arg(args, 0)
+        },
+    ];
+    c.convert(vm, &[Hint::Number, Hint::String], &mut listed, false)?;
+    // Whether there is a limit is the argument's question; a limit that converts to undefined is NaN, so zero.
+    let limit = match (arg(args, 1), listed[0]) {
+        (Value::Undef, _) => Value::Undef,
+        (_, Value::Undef) => Value::Num(f64::NAN),
+        (_, v) => v,
+    };
+    if let Some(re) = re {
+        return regexp::string_split(vm, s, re, limit);
     }
-    let limit = match arg(args, 1) {
+    let limit = match limit {
         Value::Undef => u32::MAX as usize,
         v => to_uint32(vm.number_of(&v)?) as usize,
     };
-    let sep = arg(args, 0);
+    let sep = listed[1];
     let parts: Vec<Value> = match sep {
         Value::Undef if limit == 0 => Vec::new(),
         Value::Undef => vec![Value::Str(s)],
@@ -634,13 +751,32 @@ fn expand_replacement(template: &str, matched: &str, pos: usize, subject: &str) 
 }
 
 fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
-    let s = this_str(vm, &this)?;
-    if let Some(re) = regexp::as_regexp(vm, &arg(args, 0)) {
-        return regexp::string_replace(vm, s, re, &arg(args, 1), all);
-    }
-    let pat = arg_str(vm, args, 0)?;
+    simple(vm, this, args, &[], |vm, c, s, args| {
+        replace_in(vm, c, s, args, all)
+    })
+}
+
+/// The reference's `replace` body: a pattern that is not a RegExp, then a replacement that is not a callback, are
+/// one list of conversions.
+fn replace_in(vm: &mut Vm, c: &mut Conversions, s: StrId, args: &[Value], all: bool) -> Res {
+    let re = regexp::as_regexp(vm, &arg(args, 0));
     let rep = arg(args, 1);
     let callable = vm.is_callable(&rep);
+    let mut listed = [
+        if re.is_some() {
+            Value::Undef
+        } else {
+            arg(args, 0)
+        },
+        if callable { Value::Undef } else { rep },
+    ];
+    c.convert(vm, &[Hint::String], &mut listed, false)?;
+    if let Some(re) = re {
+        let rep = if callable { rep } else { listed[1] };
+        return regexp::string_replace(vm, c, s, re, &rep, all);
+    }
+    let pat = vm.string_of(&listed[0])?;
+    let rep = if callable { rep } else { listed[1] };
     let template = if callable {
         None
     } else {
@@ -648,7 +784,7 @@ fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
         Some(vm.text(t).to_owned())
     };
     if !(vm.atoms.sref(s).ascii && vm.atoms.sref(pat).ascii) {
-        return replace16(vm, s, pat, &rep, template, all);
+        return replace16(vm, c, s, pat, &rep, template, all);
     }
     let subject = vm.text(s).to_owned();
     let needle = vm.text(pat).to_owned();
@@ -672,7 +808,7 @@ fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
     }
     // With a callback, the reference finds the matches, then hands them to its prelude's `replaceWith`.
     if callable {
-        super::fuel::handoff(vm);
+        c.handoff(vm);
     }
     if positions.is_empty() {
         if callable {
@@ -712,6 +848,7 @@ fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
 /// between code units, even inside a pair.
 fn replace16(
     vm: &mut Vm,
+    c: &Conversions,
     s: StrId,
     pat: StrId,
     rep: &Value,
@@ -744,7 +881,7 @@ fn replace16(
     }
     let callable = template.is_none();
     if callable {
-        super::fuel::handoff(vm);
+        c.handoff(vm);
     }
     if positions.is_empty() {
         if callable {
@@ -823,20 +960,19 @@ fn s_replace_all(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn s_concat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let mut out = vm.text(s).to_owned();
-    for a in args {
-        let t = vm.string_of(a)?;
-        out.push_str(vm.text(t));
-    }
-    Ok(vm.string_val(out))
+    simple(vm, this, args, &[], |vm, c, s, args| {
+        let args = c.converted(vm, &[Hint::String], args, false)?;
+        let mut out = vm.text(s).to_owned();
+        for a in args.iter() {
+            let t = vm.string_of(a)?;
+            out.push_str(vm.text(t));
+        }
+        Ok(vm.string_val(out))
+    })
 }
 
-fn s_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    match this {
-        Value::Str(s) => Ok(Value::Str(s)),
-        _ => Err(vm.type_error("String.prototype.toString requires that 'this' be a String")),
-    }
+fn s_to_string(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    simple(vm, this, args, &[], |_, _, s, _| Ok(Value::Str(s)))
 }
 
 fn s_locale_compare(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -853,21 +989,22 @@ fn s_locale_compare(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
             options.strength = Some(Strength::Primary);
             Collator::try_new(Default::default(), options).ok()
         });
-    let s = this_str(vm, &this)?;
-    let o = arg_str(vm, args, 0)?;
-    let (a, b) = (vm.atoms.sref(s), vm.atoms.sref(o));
-    let order = match (COLLATOR.as_ref(), PRIMARY.as_ref()) {
-        (Some(c), Some(p)) if a.units.is_some() || b.units.is_some() => {
-            compare_lone(c, p, &a.utf16(), &b.utf16())
-        }
-        (Some(c), _) => c.compare(a.s, b.s),
-        _ => a.cmp16(b),
-    };
-    Ok(Value::Num(match order {
-        std::cmp::Ordering::Less => -1.0,
-        std::cmp::Ordering::Equal => 0.0,
-        std::cmp::Ordering::Greater => 1.0,
-    }))
+    simple(vm, this, args, &[Hint::String], |vm, _, s, args| {
+        let o = arg_str(vm, args, 0)?;
+        let (a, b) = (vm.atoms.sref(s), vm.atoms.sref(o));
+        let order = match (COLLATOR.as_ref(), PRIMARY.as_ref()) {
+            (Some(c), Some(p)) if a.units.is_some() || b.units.is_some() => {
+                compare_lone(c, p, &a.utf16(), &b.utf16())
+            }
+            (Some(c), _) => c.compare(a.s, b.s),
+            _ => a.cmp16(b),
+        };
+        Ok(Value::Num(match order {
+            std::cmp::Ordering::Less => -1.0,
+            std::cmp::Ordering::Equal => 0.0,
+            std::cmp::Ordering::Greater => 1.0,
+        }))
+    })
 }
 
 /// Collates strings with lone surrogates as the reference's ICU does, where each weighs like an unassigned code
@@ -904,36 +1041,45 @@ fn compare_lone(
     full.compare_utf16(&ta, &tb)
 }
 
-/// A pattern argument: a RegExp as is, anything else converted with the string hint first.
-fn pattern_value(vm: &mut Vm, args: &[Value]) -> Res {
-    let p = arg(args, 0);
-    if regexp::as_regexp(vm, &p).is_some() {
-        return Ok(p);
+/// The reference's `withPattern`: a RegExp as is, anything else a list of its own, converted with the string hint.
+fn pattern_value(vm: &mut Vm, c: &mut Conversions, args: &[Value]) -> Res {
+    let mut p = [arg(args, 0)];
+    if regexp::as_regexp(vm, &p[0]).is_some() {
+        return Ok(p[0]);
     }
-    vm.primitive_of(&p, crate::ops::Hint::String)
+    c.convert(vm, &[Hint::String], &mut p, false)?;
+    Ok(p[0])
 }
 
 fn s_match(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let p = pattern_value(vm, args)?;
-    regexp::string_match(vm, s, &p)
+    simple(vm, this, args, &[], |vm, c, s, args| {
+        let p = pattern_value(vm, c, args)?;
+        regexp::string_match(vm, s, &p)
+    })
 }
 
 fn s_match_all(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let p = pattern_value(vm, args)?;
-    regexp::string_match_all(vm, s, &p)
+    simple(vm, this, args, &[], |vm, c, s, args| {
+        let p = pattern_value(vm, c, args)?;
+        regexp::string_match_all(vm, s, &p)
+    })
 }
 
 fn s_search(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    let p = pattern_value(vm, args)?;
-    regexp::string_search(vm, s, &p)
+    simple(vm, this, args, &[], |vm, c, s, args| {
+        let p = pattern_value(vm, c, args)?;
+        regexp::string_search(vm, s, &p)
+    })
 }
 
 fn s_normalize(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    simple(vm, this, args, &[Hint::String], |vm, _, s, args| {
+        normalize(vm, s, args)
+    })
+}
+
+fn normalize(vm: &mut Vm, s: StrId, args: &[Value]) -> Res {
     use unicode_normalization::UnicodeNormalization;
-    let s = this_str(vm, &this)?;
     let form = match arg(args, 0) {
         Value::Undef => "NFC".to_owned(),
         v => {
@@ -961,23 +1107,26 @@ fn s_normalize(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(vm.string_val(out))
 }
 
-fn s_is_well_formed(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    Ok(Value::Bool(vm.atoms.sref(s).well_formed()))
+fn s_is_well_formed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    simple(vm, this, args, &[], |vm, _, s, _| {
+        Ok(Value::Bool(vm.atoms.sref(s).well_formed()))
+    })
 }
 
-fn s_to_well_formed(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    if vm.atoms.sref(s).well_formed() {
-        return Ok(Value::Str(s));
-    }
-    let fixed = String::from_utf16_lossy(&vm.atoms.sref(s).utf16());
-    Ok(vm.string_val(crate::strings::external_text(fixed)))
+fn s_to_well_formed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    simple(vm, this, args, &[], |vm, _, s, _| {
+        if vm.atoms.sref(s).well_formed() {
+            return Ok(Value::Str(s));
+        }
+        let fixed = String::from_utf16_lossy(&vm.atoms.sref(s).utf16());
+        Ok(vm.string_val(crate::strings::external_text(fixed)))
+    })
 }
 
-fn s_iterator(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let s = this_str(vm, &this)?;
-    vm.get_iterator(&Value::Str(s))
+fn s_iterator(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    simple(vm, this, args, &[], |vm, _, s, _| {
+        vm.get_iterator(&Value::Str(s))
+    })
 }
 
 // ---------- Number ----------
@@ -991,7 +1140,9 @@ fn number_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if args.is_empty() {
         return Ok(Value::Num(0.0));
     }
-    Ok(Value::Num(vm.number_of(&args[0])?))
+    fuel::with_primitives(vm, &[Hint::Number], [args[0]], false, |vm, [v]| {
+        Ok(Value::Num(vm.number_of(&v)?))
+    })
 }
 
 fn num_arg(args: &[Value]) -> Option<f64> {
@@ -1028,66 +1179,81 @@ fn this_num(vm: &mut Vm, this: &Value) -> Result<f64, Value> {
     }
 }
 
+/// The reference's `formatting`: after the receiver's check, the one argument is a list of conversions.
+fn formatting(vm: &mut Vm, args: &[Value], body: impl FnOnce(&mut Vm, &[Value]) -> Res) -> Res {
+    fuel::with_primitives(vm, &[Hint::Number], [arg(args, 0)], false, |vm, digits| {
+        body(vm, &digits)
+    })
+}
+
 fn n_to_fixed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let x = this_num(vm, &this)?;
-    let d = to_integer(vm.number_of(&arg(args, 0))?);
-    if !(0.0..=100.0).contains(&d) {
-        return Err(vm.range_error("toFixed() argument must be between 0 and 100"));
-    }
-    if x.abs() >= 1e21 {
-        return Ok(vm.string_val(num_to_string(x)));
-    }
-    // The sign stays even when the digits round to zero: `(-0.0001).toFixed(2)` is "-0.00".
-    let sign = if x < 0.0 { "-" } else { "" };
-    Ok(vm.string_val(format!("{sign}{}", num_to_fixed(x.abs(), d as usize))))
+    formatting(vm, args, |vm, args| {
+        let d = to_integer(vm.number_of(&arg(args, 0))?);
+        if !(0.0..=100.0).contains(&d) {
+            return Err(vm.range_error("toFixed() argument must be between 0 and 100"));
+        }
+        if x.abs() >= 1e21 {
+            return Ok(vm.string_val(num_to_string(x)));
+        }
+        // The sign stays even when the digits round to zero: `(-0.0001).toFixed(2)` is "-0.00".
+        let sign = if x < 0.0 { "-" } else { "" };
+        Ok(vm.string_val(format!("{sign}{}", num_to_fixed(x.abs(), d as usize))))
+    })
 }
 
 fn n_to_string(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let x = this_num(vm, &this)?;
-    let radix = match arg(args, 0) {
-        Value::Undef => 10.0,
-        v => to_integer(vm.number_of(&v)?),
-    };
-    if !(2.0..=36.0).contains(&radix) {
-        return Err(vm.range_error("toString() radix argument must be between 2 and 36"));
-    }
-    Ok(vm.string_val(if radix == 10.0 {
-        num_to_string(x)
-    } else {
-        super::numfmt::to_radix(x, radix as u32)
-    }))
+    formatting(vm, args, |vm, args| {
+        let radix = match arg(args, 0) {
+            Value::Undef => 10.0,
+            v => to_integer(vm.number_of(&v)?),
+        };
+        if !(2.0..=36.0).contains(&radix) {
+            return Err(vm.range_error("toString() radix argument must be between 2 and 36"));
+        }
+        Ok(vm.string_val(if radix == 10.0 {
+            num_to_string(x)
+        } else {
+            super::numfmt::to_radix(x, radix as u32)
+        }))
+    })
 }
 
 fn n_to_exponential(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let x = this_num(vm, &this)?;
-    let digits = match arg(args, 0) {
-        Value::Undef => None,
-        v => Some(to_integer(vm.number_of(&v)?)),
-    };
-    if !x.is_finite() {
-        return Ok(vm.string_val(num_to_string(x)));
-    }
-    if digits.is_some_and(|d| !(0.0..=100.0).contains(&d)) {
-        return Err(vm.range_error("toExponential() argument must be between 0 and 100"));
-    }
-    let out = super::numfmt::to_exponential(x, digits.map(|d| d as usize));
-    Ok(vm.string_val(out))
+    formatting(vm, args, |vm, args| {
+        let digits = match arg(args, 0) {
+            Value::Undef => None,
+            v => Some(to_integer(vm.number_of(&v)?)),
+        };
+        if !x.is_finite() {
+            return Ok(vm.string_val(num_to_string(x)));
+        }
+        if digits.is_some_and(|d| !(0.0..=100.0).contains(&d)) {
+            return Err(vm.range_error("toExponential() argument must be between 0 and 100"));
+        }
+        let out = super::numfmt::to_exponential(x, digits.map(|d| d as usize));
+        Ok(vm.string_val(out))
+    })
 }
 
 fn n_to_precision(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let x = this_num(vm, &this)?;
-    if let Value::Undef = arg(args, 0) {
-        return Ok(vm.string_val(num_to_string(x)));
-    }
-    let p = to_integer(vm.number_of(&arg(args, 0))?);
-    if !x.is_finite() {
-        return Ok(vm.string_val(num_to_string(x)));
-    }
-    if !(1.0..=100.0).contains(&p) {
-        return Err(vm.range_error("toPrecision() argument must be between 1 and 100"));
-    }
-    let out = super::numfmt::to_precision(x, p as usize);
-    Ok(vm.string_val(out))
+    formatting(vm, args, |vm, args| {
+        if let Value::Undef = arg(args, 0) {
+            return Ok(vm.string_val(num_to_string(x)));
+        }
+        let p = to_integer(vm.number_of(&arg(args, 0))?);
+        if !x.is_finite() {
+            return Ok(vm.string_val(num_to_string(x)));
+        }
+        if !(1.0..=100.0).contains(&p) {
+            return Err(vm.range_error("toPrecision() argument must be between 1 and 100"));
+        }
+        let out = super::numfmt::to_precision(x, p as usize);
+        Ok(vm.string_val(out))
+    })
 }
 
 fn n_value_of(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -1139,11 +1305,31 @@ fn n1(vm: &mut Vm, args: &[Value]) -> Result<f64, Value> {
 macro_rules! math1 {
     ($name:ident, $f:expr) => {
         fn $name(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-            let x = n0(vm, args)?;
             let f: fn(f64) -> f64 = $f;
+            if let Some(Value::Obj(_)) = args.first() {
+                return math(vm, &args[..1], |xs| f(xs[0]));
+            }
+            let x = n0(vm, args)?;
             Ok(Value::Num(f(x)))
         }
     };
+}
+
+/// The reference's Math methods: the arguments a method reads (`args`) are one list of conversions with the number
+/// hint, then `f` runs on their numbers.
+fn math(vm: &mut Vm, args: &[Value], f: impl FnOnce(&[f64]) -> f64) -> Res {
+    fuel::with_primitive_list(vm, &[Hint::Number], args, false, |vm, args| {
+        let mut xs = Vec::with_capacity(args.len());
+        for a in args {
+            xs.push(vm.number_of(a)?);
+        }
+        Ok(Value::Num(f(&xs)))
+    })
+}
+
+/// The first two arguments, which a two-argument Math method reads, padded with `undefined`.
+fn two(args: &[Value]) -> [Value; 2] {
+    [arg(args, 0), arg(args, 1)]
 }
 
 math1!(m_floor, f64::floor);
@@ -1207,55 +1393,66 @@ fn m_sum_precise(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn m_atan2(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    if args.iter().take(2).any(|v| matches!(v, Value::Obj(_))) {
+        return math(vm, &two(args), |xs| xs[0].atan2(xs[1]));
+    }
     let (y, x) = (n0(vm, args)?, n1(vm, args)?);
     Ok(Value::Num(y.atan2(x)))
 }
 
 fn m_pow(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    if args.iter().take(2).any(|v| matches!(v, Value::Obj(_))) {
+        return math(vm, &two(args), |xs| crate::vm::js_pow(xs[0], xs[1]));
+    }
     let (x, y) = (n0(vm, args)?, n1(vm, args)?);
     Ok(Value::Num(crate::vm::js_pow(x, y)))
 }
 
+fn imul(x: f64, y: f64) -> f64 {
+    (to_uint32(x) as i32).wrapping_mul(to_uint32(y) as i32) as f64
+}
+
 fn m_imul(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    if args.iter().take(2).any(|v| matches!(v, Value::Obj(_))) {
+        return math(vm, &two(args), |xs| imul(xs[0], xs[1]));
+    }
     let (x, y) = (n0(vm, args)?, n1(vm, args)?);
-    Ok(Value::Num(
-        (to_uint32(x) as i32).wrapping_mul(to_uint32(y) as i32) as f64,
-    ))
+    Ok(Value::Num(imul(x, y)))
 }
 
 fn m_max(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let mut r = f64::NEG_INFINITY;
-    for a in args {
-        let x = vm.number_of(a)?;
-        if x.is_nan() || r.is_nan() {
-            r = f64::NAN;
-        } else if x > r || (x == 0.0 && r == 0.0 && !x.is_sign_negative()) {
-            r = x;
+    fuel::with_primitive_list(vm, &[Hint::Number], args, false, |vm, args| {
+        let mut r = f64::NEG_INFINITY;
+        for a in args {
+            let x = vm.number_of(a)?;
+            if x.is_nan() || r.is_nan() {
+                r = f64::NAN;
+            } else if x > r || (x == 0.0 && r == 0.0 && !x.is_sign_negative()) {
+                r = x;
+            }
         }
-    }
-    Ok(Value::Num(r))
+        Ok(Value::Num(r))
+    })
 }
 
 fn m_min(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let mut r = f64::INFINITY;
-    for a in args {
-        let x = vm.number_of(a)?;
-        if x.is_nan() || r.is_nan() {
-            r = f64::NAN;
-        } else if x < r || (x == 0.0 && r == 0.0 && x.is_sign_negative()) {
-            r = x;
+    fuel::with_primitive_list(vm, &[Hint::Number], args, false, |vm, args| {
+        let mut r = f64::INFINITY;
+        for a in args {
+            let x = vm.number_of(a)?;
+            if x.is_nan() || r.is_nan() {
+                r = f64::NAN;
+            } else if x < r || (x == 0.0 && r == 0.0 && x.is_sign_negative()) {
+                r = x;
+            }
         }
-    }
-    Ok(Value::Num(r))
+        Ok(Value::Num(r))
+    })
 }
 
 fn m_hypot(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     // Every argument converts before any is examined, so a later conversion's throw is not skipped.
-    let mut xs = Vec::with_capacity(args.len());
-    for a in args {
-        xs.push(vm.number_of(a)?);
-    }
-    Ok(Value::Num(hypot(&xs)))
+    math(vm, args, hypot)
 }
 
 /// `Math.hypot` as JavaScriptCore computes it: libm for two values, a scaled sum for three, and a running scaled

@@ -624,6 +624,7 @@ impl<'rt> Vm<'rt> {
                         return Err(self.range_error("Maximum call stack size exceeded"));
                     }
                     self.native_depth += 1;
+                    self.host.meter.counted = true;
                     let r = f(self, this, args, id);
                     self.native_depth -= 1;
                     let r = r?;
@@ -889,6 +890,7 @@ impl<'rt> Vm<'rt> {
                     return Err(self.range_error("Maximum call stack size exceeded"));
                 }
                 self.native_depth += 1;
+                self.host.meter.counted = false;
                 let r = f(self, this, args, id);
                 self.native_depth -= 1;
                 // Only a call from bytecode stands for the reference's own call of the built-in.
@@ -1025,6 +1027,7 @@ impl<'rt> Vm<'rt> {
                 args.extend(self.stack.drain(fpos + 2..).map(Slot::get));
                 let this = self.pop();
                 self.stack.pop();
+                self.host.meter.counted = true;
                 let r = f(self, this, &args, id);
                 args.clear();
                 self.arg_pool.push(args);
@@ -1087,6 +1090,7 @@ impl<'rt> Vm<'rt> {
             && let Kind::Native { f, ctor: true, .. } = &self.heap[id as usize].kind
         {
             let f = *f;
+            self.host.meter.counted = false;
             let r = f(self, Value::Uninit, &args, id);
             self.host.meter.bytecode = false;
             self.push(r?);

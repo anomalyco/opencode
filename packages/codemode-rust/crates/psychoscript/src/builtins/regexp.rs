@@ -995,8 +995,15 @@ fn collect_matches(vm: &mut Vm, id: Id, subject: &Subject, all: bool) -> Result<
     Ok(found)
 }
 
-/// `replace`/`replaceAll` with a RegExp pattern.
-pub fn string_replace(vm: &mut Vm, s: StrId, re: Id, rep: &Value, all: bool) -> Res {
+/// `replace`/`replaceAll` with a RegExp pattern, after the conversions `c` of the call.
+pub fn string_replace(
+    vm: &mut Vm,
+    c: &super::fuel::Conversions,
+    s: StrId,
+    re: Id,
+    rep: &Value,
+    all: bool,
+) -> Res {
     let r = data(vm, re);
     if all && !r.global() {
         let msg = format!(
@@ -1016,7 +1023,7 @@ pub fn string_replace(vm: &mut Vm, s: StrId, re: Id, rep: &Value, all: bool) -> 
     let found = collect_matches(vm, re, &subject, true)?;
     // With a callback, the reference finds the matches, then hands them to its prelude's `replaceWith`.
     if callable {
-        super::fuel::handoff(vm);
+        c.handoff(vm);
     }
     if found.is_empty() {
         if callable {

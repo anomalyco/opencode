@@ -413,6 +413,24 @@ programs.push(
   during(gen, "const b = d.slice(0, 7); for (let j = 0; j < 3000; j++) { Promise.all(b); Promise.race([1]); Promise.any(g(3)); Promise.allSettled([]); see(j) }"),
 )
 
+// A built-in that needs primitives lists them; once one is an object, the reference converts the list in its internal
+// bytecode before the built-in runs again.
+const objects =
+  "const o = { valueOf: () => 1 }, s = { toString: () => 'b' }, n = {}, t = { toString: () => '[1]' }, dt = new Date(0)\n" +
+  "   const v = { valueOf: () => see(1) }"
+programs.push(
+  during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.slice(o, 2); 'abc'.padStart(o, s); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.includes('b', o); 'a-b'.split(s, o); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.replace(s, 'x'); 'ab'.concat(o, 1, s); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { String.prototype.trim.call(s); 'abc'.indexOf(n); 'ab'.match(s); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { Math.max(1, o, 2); Math.abs(o); Math.pow(o, 2); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { Number(o); String(s); parseInt(s, o); isNaN(o); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { (1.5).toFixed(o); JSON.parse(t); String.fromCharCode(o, 66); String.raw({ raw: ['a', 'b'] }, o); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { new Error(s); Error(s); new Date(o); new Date(o, o); Date.UTC(2000, o); dt.setMonth(o); [1, 2, 3].slice(o); [1, 2].includes(2, o); [3, 1].fill(0, o); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { [1, [2, o], s].join(s); String([o, [o]]); [n, 1].toString(); [1, 2].join(); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.slice(v); Math.min(v, v); new Error(v); [1, 2].at(v); see(j) }"),
+)
+
 // JSON.stringify with a replacer, a property list or a toJSON of the program's runs the reference's internal walk.
 const doc = "const doc = { a: d.slice(0, 50), b: { c: 1, d: [1, { e: 2 }], f: undefined, g: () => 1 }, h: 'x', i: null, j: new Date(0), k: new Map() }"
 programs.push(

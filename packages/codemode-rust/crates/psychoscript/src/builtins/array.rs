@@ -2,7 +2,7 @@
 
 use super::{arg, fuel, to_index};
 use crate::object::*;
-use crate::ops::{MAX_ARRAY_LEN, without_holes};
+use crate::ops::{Hint, MAX_ARRAY_LEN, without_holes};
 use crate::strings::StrId;
 use crate::value::{Id, Value, to_integer};
 use crate::vm::{Res, Vm};
@@ -382,17 +382,19 @@ fn a_unshift(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_slice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    let n = len(vm, id);
-    let s = to_index(vm, &arg(args, 0), n, 0)?;
-    let e = to_index(vm, &arg(args, 1), n, n)?;
-    if s >= e {
-        return Ok(vm.new_array(Vec::new()));
-    }
-    if is_sparse(vm, id) {
-        return slice_sparse(vm, id, s, e);
-    }
-    let out = items(vm, id)[s..e].to_vec();
-    Ok(vm.new_array(out))
+    integers(vm, args, &[0, 1], |vm, args| {
+        let n = len(vm, id);
+        let s = to_index(vm, &arg(args, 0), n, 0)?;
+        let e = to_index(vm, &arg(args, 1), n, n)?;
+        if s >= e {
+            return Ok(vm.new_array(Vec::new()));
+        }
+        if is_sparse(vm, id) {
+            return slice_sparse(vm, id, s, e);
+        }
+        let out = items(vm, id)[s..e].to_vec();
+        Ok(vm.new_array(out))
+    })
 }
 
 /// `slice` of a sparse array: the elements it holds in the range, with holes between them.
@@ -425,24 +427,28 @@ fn splice_args(vm: &mut Vm, args: &[Value], n: usize) -> Result<(usize, usize), 
 
 fn a_splice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = dense_id(vm, &this)?;
-    let n = len(vm, id);
-    let (start, count) = splice_args(vm, args, n)?;
-    let insert: Vec<Value> = args.iter().skip(2).cloned().collect();
-    for a in &insert {
-        vm.reject_circular(id, a, "Array.splice result")?;
-    }
-    let items = items_mut(vm, id, Some(insert.len() as i64 - count as i64))?;
-    let removed: Vec<Value> = items.splice(start..start + count, insert).collect();
-    Ok(vm.new_array(removed))
+    integers(vm, args, &[0, 1], |vm, args| {
+        let n = len(vm, id);
+        let (start, count) = splice_args(vm, args, n)?;
+        let insert: Vec<Value> = args.iter().skip(2).cloned().collect();
+        for a in &insert {
+            vm.reject_circular(id, a, "Array.splice result")?;
+        }
+        let items = items_mut(vm, id, Some(insert.len() as i64 - count as i64))?;
+        let removed: Vec<Value> = items.splice(start..start + count, insert).collect();
+        Ok(vm.new_array(removed))
+    })
 }
 
 fn a_to_spliced(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = dense_id(vm, &this)?;
-    let n = len(vm, id);
-    let (start, count) = splice_args(vm, args, n)?;
-    let mut out = without_holes(items(vm, id));
-    out.splice(start..start + count, args.iter().skip(2).cloned());
-    Ok(vm.new_array(out))
+    integers(vm, args, &[0, 1], |vm, args| {
+        let n = len(vm, id);
+        let (start, count) = splice_args(vm, args, n)?;
+        let mut out = without_holes(items(vm, id));
+        out.splice(start..start + count, args.iter().skip(2).cloned());
+        Ok(vm.new_array(out))
+    })
 }
 
 fn a_concat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -499,20 +505,90 @@ pub fn join(vm: &mut Vm, id: Id, sep: &str, seen: &mut Vec<Id>) -> Result<String
 fn a_join(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
     let sep = match arg(args, 0) {
-        Value::Undef => ",".to_owned(),
-        v => {
-            let t = vm.string_of(&v)?;
-            vm.text(t).to_owned()
-        }
+        Value::Undef => vm.static_str(","),
+        v => v,
     };
-    let s = join(vm, id, &sep, &mut Vec::new())?;
-    Ok(vm.string_val(s))
+    joined(vm, id, Some(sep))
 }
 
 fn a_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    let s = join(vm, id, ",", &mut Vec::new())?;
-    Ok(vm.string_val(s))
+    joined(vm, id, None)
+}
+
+/// The reference's `join` and `toString`: the separator (`join`'s) and the elements, holes and nullish ones as "",
+/// are one list of conversions with the string hint (see `fuel::Conversions`), then joined. An element that is an
+/// array converts through its own `toString`, as any object does.
+fn joined(vm: &mut Vm, id: Id, sep: Option<Value>) -> Res {
+    vm.densify(id)?;
+    let is_obj = |v: &Value| matches!(v, Value::Obj(_));
+    if !sep.as_ref().is_some_and(is_obj) && !items(vm, id).iter().any(is_obj) {
+        let sep = match sep {
+            Some(v) => {
+                let t = vm.string_of(&v)?;
+                vm.text(t).to_owned()
+            }
+            None => ",".to_owned(),
+        };
+        let s = join(vm, id, &sep, &mut Vec::new())?;
+        return Ok(vm.string_val(s));
+    }
+    let empty = vm.static_str("");
+    let mut list: Vec<Value> = sep.into_iter().collect();
+    let parts = list.len();
+    list.extend(items(vm, id).iter().map(|v| match v {
+        Value::Undef | Value::Null | Value::Uninit => empty,
+        v => *v,
+    }));
+    let mut c = fuel::Conversions::default();
+    c.convert(vm, &[Hint::String], &mut list, false)?;
+    let sep = match parts {
+        0 => ",".to_owned(),
+        _ => {
+            let t = vm.string_of(&list[0])?;
+            vm.text(t).to_owned()
+        }
+    };
+    let mut out = String::new();
+    for (i, v) in list[parts..].iter().enumerate() {
+        if i > 0 {
+            out.push_str(&sep);
+        }
+        let t = vm.string_of(v)?;
+        out.push_str(vm.text(t));
+        if out.len() > crate::ops::MAX_STRING_LEN {
+            return Err(vm.range_error("Invalid string length"));
+        }
+    }
+    let r = Ok(vm.string_val(out));
+    c.finish(vm, r)
+}
+
+/// The reference's `integers`: the arguments at `positions`, `undefined` where missing, are one list of conversions
+/// with the number hint (see `fuel::Conversions`) before `body` reads them.
+fn integers(
+    vm: &mut Vm,
+    args: &[Value],
+    positions: &[usize],
+    body: impl FnOnce(&mut Vm, &[Value]) -> Res,
+) -> Res {
+    if !positions
+        .iter()
+        .any(|&p| matches!(args.get(p), Some(Value::Obj(_))))
+    {
+        return body(vm, args);
+    }
+    let mut listed: Vec<Value> = positions.iter().map(|&p| arg(args, p)).collect();
+    let mut c = fuel::Conversions::default();
+    c.convert(vm, &[Hint::Number], &mut listed, false)?;
+    let mut converted = args.to_vec();
+    for (&p, v) in positions.iter().zip(listed) {
+        if p < args.len() {
+            converted[p] = v;
+        }
+    }
+    let r = body(vm, &converted);
+    c.finish(vm, r)
 }
 
 fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -568,21 +644,24 @@ fn a_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if n == 0 {
         return Ok(Value::Num(-1.0));
     }
-    let from = to_index(vm, &arg(args, 1), n, 0)?;
-    let r = items(vm, id)
-        .iter()
-        .enumerate()
-        .skip(from)
-        .find(|(_, v)| !matches!(v, Value::Uninit) && vm.strict_eq(v, &x))
-        .map(|(i, _)| i);
-    // A sparse array's far elements come after its items.
-    let r = r.or_else(|| {
-        vm.sparse_tail(id)
-            .into_iter()
-            .find(|(i, v)| *i >= from && *i < n && vm.strict_eq(v, &x))
-            .map(|(i, _)| i)
-    });
-    Ok(Value::Num(r.map_or(-1.0, |i| i as f64)))
+    integers(vm, args, &[1], |vm, args| {
+        let n = len(vm, id);
+        let from = to_index(vm, &arg(args, 1), n, 0)?;
+        let r = items(vm, id)
+            .iter()
+            .enumerate()
+            .skip(from)
+            .find(|(_, v)| !matches!(v, Value::Uninit) && vm.strict_eq(v, &x))
+            .map(|(i, _)| i);
+        // A sparse array's far elements come after its items.
+        let r = r.or_else(|| {
+            vm.sparse_tail(id)
+                .into_iter()
+                .find(|(i, v)| *i >= from && *i < n && vm.strict_eq(v, &x))
+                .map(|(i, _)| i)
+        });
+        Ok(Value::Num(r.map_or(-1.0, |i| i as f64)))
+    })
 }
 
 fn a_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -592,37 +671,40 @@ fn a_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if n == 0 {
         return Ok(Value::Num(-1.0));
     }
-    let from = if args.len() > 1 {
-        let k = to_integer(vm.number_of(&args[1])?);
-        if k < 0.0 {
-            n as f64 + k
+    integers(vm, args, &[1], |vm, args| {
+        let n = len(vm, id);
+        let from = if args.len() > 1 {
+            let k = to_integer(vm.number_of(&args[1])?);
+            if k < 0.0 {
+                n as f64 + k
+            } else {
+                k.min(n as f64 - 1.0)
+            }
         } else {
-            k.min(n as f64 - 1.0)
+            n as f64 - 1.0
+        };
+        if from < 0.0 {
+            return Ok(Value::Num(-1.0));
         }
-    } else {
-        n as f64 - 1.0
-    };
-    if from < 0.0 {
-        return Ok(Value::Num(-1.0));
-    }
-    let from = from as usize;
-    let tail = vm.sparse_tail(id);
-    let far = tail
-        .iter()
-        .rev()
-        .find(|(i, v)| *i <= from && vm.strict_eq(v, &x))
-        .map(|(i, _)| *i);
-    let items = items(vm, id);
-    let r = far.or_else(|| {
-        (0..=from.min(items.len().saturating_sub(1)))
+        let from = from as usize;
+        let tail = vm.sparse_tail(id);
+        let far = tail
+            .iter()
             .rev()
-            .find(|i| {
-                items
-                    .get(*i)
-                    .is_some_and(|v| !matches!(v, Value::Uninit) && vm.strict_eq(v, &x))
-            })
-    });
-    Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
+            .find(|(i, v)| *i <= from && vm.strict_eq(v, &x))
+            .map(|(i, _)| *i);
+        let items = items(vm, id);
+        let r = far.or_else(|| {
+            (0..=from.min(items.len().saturating_sub(1)))
+                .rev()
+                .find(|i| {
+                    items
+                        .get(*i)
+                        .is_some_and(|v| !matches!(v, Value::Uninit) && vm.strict_eq(v, &x))
+                })
+        });
+        Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
+    })
 }
 
 fn a_includes(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -632,16 +714,19 @@ fn a_includes(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if n == 0 {
         return Ok(Value::Bool(false));
     }
-    let from = to_index(vm, &arg(args, 1), n, 0)?;
-    if is_sparse(vm, id) {
-        return Ok(Value::Bool(includes_sparse(vm, id, &x, from, n)));
-    }
-    Ok(Value::Bool(
-        items(vm, id)
-            .iter()
-            .skip(from)
-            .any(|v| vm.same_value_zero(&undef(*v), &x)),
-    ))
+    integers(vm, args, &[1], |vm, args| {
+        let n = len(vm, id);
+        let from = to_index(vm, &arg(args, 1), n, 0)?;
+        if is_sparse(vm, id) {
+            return Ok(Value::Bool(includes_sparse(vm, id, &x, from, n)));
+        }
+        Ok(Value::Bool(
+            items(vm, id)
+                .iter()
+                .skip(from)
+                .any(|v| vm.same_value_zero(&undef(*v), &x)),
+        ))
+    })
 }
 
 /// `includes` on a sparse array: its elements from `from`, and its holes, which read as undefined.
@@ -1157,14 +1242,16 @@ fn flatten(vm: &Vm, out: &mut Vec<Value>, list: &[Value], depth: f64) {
 
 fn a_flat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = dense_id(vm, &this)?;
-    let depth = match arg(args, 0) {
-        Value::Undef => 1.0,
-        v => to_integer(vm.number_of(&v)?),
-    };
-    let list = items(vm, id).to_vec();
-    let mut out = Vec::new();
-    flatten(vm, &mut out, &list, depth.min(64.0));
-    Ok(vm.new_array(out))
+    integers(vm, args, &[0], |vm, args| {
+        let depth = match arg(args, 0) {
+            Value::Undef => 1.0,
+            v => to_integer(vm.number_of(&v)?),
+        };
+        let list = items(vm, id).to_vec();
+        let mut out = Vec::new();
+        flatten(vm, &mut out, &list, depth.min(64.0));
+        Ok(vm.new_array(out))
+    })
 }
 
 fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -1216,35 +1303,39 @@ fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    let n = len(vm, id);
-    let s = to_index(vm, &arg(args, 1), n, 0)?;
-    let e = to_index(vm, &arg(args, 2), n, n)?;
-    let v = arg(args, 0);
-    check_mutable(vm, id, None)?;
-    vm.reject_circular(id, &v, "Array.fill result")?;
-    if e > items(vm, id).len() {
-        vm.densify(id)?;
-    }
-    let items = array_items(vm, id)?;
-    for slot in items.iter_mut().take(e).skip(s) {
-        *slot = v;
-    }
-    Ok(this)
+    integers(vm, args, &[1, 2], |vm, args| {
+        let n = len(vm, id);
+        let s = to_index(vm, &arg(args, 1), n, 0)?;
+        let e = to_index(vm, &arg(args, 2), n, n)?;
+        let v = arg(args, 0);
+        check_mutable(vm, id, None)?;
+        vm.reject_circular(id, &v, "Array.fill result")?;
+        if e > items(vm, id).len() {
+            vm.densify(id)?;
+        }
+        let items = array_items(vm, id)?;
+        for slot in items.iter_mut().take(e).skip(s) {
+            *slot = v;
+        }
+        Ok(this)
+    })
 }
 
 fn a_copy_within(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = dense_id(vm, &this)?;
-    let n = len(vm, id);
-    let target = to_index(vm, &arg(args, 0), n, 0)?;
-    let start = to_index(vm, &arg(args, 1), n, 0)?;
-    let end = to_index(vm, &arg(args, 2), n, n)?;
-    let items = items_mut(vm, id, None)?;
-    if start < end && target < n {
-        let count = (end - start).min(n - target);
-        let copy: Vec<Value> = items[start..start + count].to_vec();
-        items[target..target + count].copy_from_slice(&copy);
-    }
-    Ok(this)
+    integers(vm, args, &[0, 1, 2], |vm, args| {
+        let n = len(vm, id);
+        let target = to_index(vm, &arg(args, 0), n, 0)?;
+        let start = to_index(vm, &arg(args, 1), n, 0)?;
+        let end = to_index(vm, &arg(args, 2), n, n)?;
+        let items = items_mut(vm, id, None)?;
+        if start < end && target < n {
+            let count = (end - start).min(n - target);
+            let copy: Vec<Value> = items[start..start + count].to_vec();
+            items[target..target + count].copy_from_slice(&copy);
+        }
+        Ok(this)
+    })
 }
 
 fn rel_index(vm: &mut Vm, v: &Value, n: usize) -> Result<Option<usize>, Value> {
@@ -1261,22 +1352,26 @@ fn rel_index(vm: &mut Vm, v: &Value, n: usize) -> Result<Option<usize>, Value> {
 
 fn a_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    let n = len(vm, id);
-    Ok(match rel_index(vm, &arg(args, 0), n)? {
-        Some(i) => item(vm, id, i),
-        None => Value::Undef,
+    integers(vm, args, &[0], |vm, args| {
+        let n = len(vm, id);
+        Ok(match rel_index(vm, &arg(args, 0), n)? {
+            Some(i) => item(vm, id, i),
+            None => Value::Undef,
+        })
     })
 }
 
 fn a_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = dense_id(vm, &this)?;
-    let n = len(vm, id);
-    let Some(i) = rel_index(vm, &arg(args, 0), n)? else {
-        return Err(vm.range_error("Invalid index"));
-    };
-    let mut out = without_holes(items(vm, id));
-    out[i] = arg(args, 1);
-    Ok(vm.new_array(out))
+    integers(vm, args, &[0], |vm, args| {
+        let n = len(vm, id);
+        let Some(i) = rel_index(vm, &arg(args, 0), n)? else {
+            return Err(vm.range_error("Invalid index"));
+        };
+        let mut out = without_holes(items(vm, id));
+        out[i] = arg(args, 1);
+        Ok(vm.new_array(out))
+    })
 }
 
 fn array_iter(vm: &mut Vm, this: &Value, kind: IterKind) -> Res {

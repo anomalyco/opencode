@@ -213,6 +213,9 @@ pub(crate) struct Meter {
     pub fuel: i32,
     /// Set by a built-in the reference writes in bytecode as it returns: see `Vm::bytecode_builtin`.
     pub bytecode: bool,
+    /// Whether the native called last stands for a call of the reference's bytecode, which spends fifty on it: see
+    /// `fuel::Conversions`.
+    pub counted: bool,
 }
 
 impl<'rt> RunHost<'rt> {
@@ -248,6 +251,7 @@ impl<'rt> RunHost<'rt> {
                 handover: crate::vm::HANDOVER_FUEL,
                 fuel: crate::vm::FUEL,
                 bytecode: false,
+                counted: false,
             },
         }
     }

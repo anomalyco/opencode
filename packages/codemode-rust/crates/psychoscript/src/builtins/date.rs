@@ -4,6 +4,7 @@
 use std::sync::OnceLock;
 
 use super::arg;
+use super::fuel::Conversions;
 use crate::object::*;
 use crate::ops::Hint;
 use crate::value::{Id, Value};
@@ -747,9 +748,11 @@ fn this_date(vm: &mut Vm, this: &Value, name: &str) -> Result<(Id, f64), Value> 
     ))
 }
 
-fn numbers(vm: &mut Vm, args: &[Value]) -> Result<Vec<f64>, Value> {
+/// The reference's `toNumbers` over at most seven components: one list of conversions, each made a number in turn.
+fn numbers(vm: &mut Vm, c: &mut Conversions, args: &[Value]) -> Result<Vec<f64>, Value> {
+    let args = c.converted(vm, &[Hint::Number], &args[..args.len().min(7)], true)?;
     let mut out = Vec::with_capacity(args.len());
-    for a in args.iter().take(7) {
+    for a in args.iter() {
         out.push(vm.number_of(a)?);
     }
     Ok(out)
@@ -777,25 +780,28 @@ fn date_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         let s = iso_string(now());
         return Ok(vm.string_val(s));
     }
+    let mut c = Conversions::default();
     let t = match args.len() {
         0 => now(),
         1 => {
             if let Some(t) = time_of(vm, &args[0]) {
                 t
             } else {
-                let p = vm.primitive_of(&args[0], Hint::Default)?;
-                match p {
+                let mut p = [args[0]];
+                c.convert(vm, &[Hint::Default], &mut p, false)?;
+                match p[0] {
                     Value::Str(s) => parse(vm.text(s)),
                     v => time_clip(vm.number_of(&v)?),
                 }
             }
         }
         _ => {
-            let n = numbers(vm, args)?;
+            let n = numbers(vm, &mut c, args)?;
             time_clip(utc(from_components(&n)))
         }
     };
-    Ok(new_date(vm, t))
+    let r = Ok(new_date(vm, t));
+    c.finish(vm, r)
 }
 
 fn date_now(_vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res {
@@ -808,8 +814,9 @@ fn date_parse(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn date_utc(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let n = numbers(vm, args)?;
-    Ok(Value::Num(time_clip(from_components(&n))))
+    let mut c = Conversions::default();
+    let n = numbers(vm, &mut c, args)?;
+    c.finish(vm, Ok(Value::Num(time_clip(from_components(&n)))))
 }
 
 fn get_time(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -944,6 +951,14 @@ const SETTERS: [(&str, u8); 15] = [
 ];
 
 fn setter(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let mut c = Conversions::default();
+    let r = set(vm, &mut c, this, args, callee);
+    c.finish(vm, r)
+}
+
+/// A setter after the receiver's check: its time, then the arguments it reads, are one list of conversions, each
+/// made a number in turn.
+fn set(vm: &mut Vm, c: &mut Conversions, this: Value, args: &[Value], callee: Id) -> Res {
     let which = match vm.native_data(callee) {
         Value::Num(n) => n as usize,
         _ => 0,
@@ -951,8 +966,12 @@ fn setter(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let (name, len) = SETTERS[which];
     let (id, time) = this_date(vm, &this, name)?;
     let given = &args[..args.len().min(len as usize)];
+    let mut listed = Vec::with_capacity(given.len() + 1);
+    listed.push(Value::Num(time));
+    listed.extend_from_slice(given);
+    c.convert(vm, &[Hint::Number], &mut listed, true)?;
     let mut v = Vec::with_capacity(given.len());
-    for a in given {
+    for a in &listed[1..] {
         v.push(vm.number_of(a)?);
     }
     let full_year = which >= 13;
