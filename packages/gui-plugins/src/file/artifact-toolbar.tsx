@@ -17,10 +17,10 @@ export function ArtifactToolbar(props: {
   screen: SessionScreen
   path: string
   text?: string
-  mode: "preview" | "source"
+  mode?: "preview" | "source"
   onModeChange?: (mode: "preview" | "source") => void
-  meta: string[]
-  html: boolean
+  meta?: string[]
+  html?: boolean
 }) {
   const ctx = usePlugin()
   const shared = useShared()
@@ -67,7 +67,7 @@ export function ArtifactToolbar(props: {
       </div>
       <div data-slot="artifact-toolbar-trailing">
         <div data-slot="artifact-metadata">
-          <For each={props.meta}>
+          <For each={props.meta ?? []}>
             {(item, index) => (
               <>
                 <Show when={index() > 0}>
