@@ -55,8 +55,6 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Yorum yapılıyor: ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Yorum ekle",
-  "ui.lineComment.add": "Yorum ekle",
-  "ui.lineComment.actions": "Seçim eylemleri",
   "ui.lineComment.contextPlaceholder": "Bu değişiklik için bağlam ekle",
   "ui.lineComment.submit": "Yorum yap",
   "ui.lineComment.cancel": "İptal",

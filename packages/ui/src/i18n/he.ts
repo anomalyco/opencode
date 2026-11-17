@@ -48,8 +48,6 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "תגובה על ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "הוסף תגובה",
-  "ui.lineComment.add": "הוסף תגובה",
-  "ui.lineComment.actions": "פעולות בחירה",
   "ui.lineComment.contextPlaceholder": "הוסף הקשר לשינוי זה",
   "ui.lineComment.submit": "שלח תגובה",
   "ui.lineComment.cancel": "בטל",

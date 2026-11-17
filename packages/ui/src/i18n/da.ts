@@ -86,8 +86,6 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Skriver en kommentar til ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Tilføj kommentar",
-  "ui.lineComment.add": "Tilføj kommentar",
-  "ui.lineComment.actions": "Markeringshandlinger",
   "ui.lineComment.submit": "Kommenter",
   "ui.lineComment.cancel": "Annuller",
   "ui.sessionTurn.steps.show": "Vis trin",

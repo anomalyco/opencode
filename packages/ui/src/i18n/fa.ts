@@ -48,8 +48,6 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "در حال اظهار نظر ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "نظر اضافه کنید",
-  "ui.lineComment.add": "نظر اضافه کنید",
-  "ui.lineComment.actions": "اقدامات انتخاب",
   "ui.lineComment.contextPlaceholder": "برای این تغییر زمینه اضافه کنید",
   "ui.lineComment.submit": "نظر دهید",
   "ui.lineComment.cancel": "لغو کنید",

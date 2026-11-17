@@ -48,8 +48,6 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Сэтгэгдэл бичиж байна",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Сэтгэгдэл нэмэх",
-  "ui.lineComment.add": "Сэтгэгдэл нэмэх",
-  "ui.lineComment.actions": "Сонголтын үйлдлүүд",
   "ui.lineComment.contextPlaceholder": "Энэ өөрчлөлтийн контекст нэмнэ үү",
   "ui.lineComment.submit": "Сэтгэгдэл",
   "ui.lineComment.cancel": "Цуцлах",

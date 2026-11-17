@@ -48,8 +48,6 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Komentē",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Pievieno komentāru",
-  "ui.lineComment.add": "Pievieno komentāru",
-  "ui.lineComment.actions": "Atlases darbības",
   "ui.lineComment.contextPlaceholder": "Pievieno kontekstu šai izmaiņai",
   "ui.lineComment.submit": "Komentēt",
   "ui.lineComment.cancel": "Atcelt",
