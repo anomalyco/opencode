@@ -152,6 +152,18 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const key = (files: Files, path: string) => `file:${fileTabId(files, path)}`
   const [unseen, setUnseen] = createStore<Record<string, boolean | undefined>>({})
 
+  // Drops the marks of sessions whose shell tab closed.
+  createKeyed(
+    () => [...sessions.list().map((session) => session.key), sessions.current()?.key].join("\u0000"),
+    () => {
+      const keep = [...sessions.list().map((session) => session.key), sessions.current()?.key]
+
+      Object.keys(unseen)
+        .filter((id) => !keep.some((session) => session !== undefined && id.startsWith(`${session}\n`)))
+        .forEach((id) => setUnseen(id, undefined))
+    },
+  )
+
   const active = (session: MountedSession, id: string) => {
     const state = layout.state(`file:${id}`, session)
 
@@ -440,7 +452,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       label: (state) => <>
         <FileVisual path={path()} temporary={state.preview} notFound={missing()} />
         <Show when={unseen[`${state.session.key}\n${id}`]}>
-          <span role="img" aria-label={ctx.t("tab.activity")} class="ms-1 size-1.5 shrink-0 rounded-full bg-v2-state-bg-info" />
+          <span role="img" aria-label={ctx.t("tab.activity")} class="ms-1 size-1.5 shrink-0 rounded-full bg-v2-state-fg-info" />
         </Show>
       </>,
       get missing() {

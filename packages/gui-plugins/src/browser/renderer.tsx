@@ -431,7 +431,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           <PageIcon icon={icon()} />
           <span class="max-w-40 truncate">{text()}</span>
           <Show when={model()?.asking({ key: session }, id) ? "prompt.tab" : model()?.unseen({ key: session }, id) && "tab.activity"}>
-            {(status) => <span role="img" aria-label={ctx.t(status())} class="size-1.5 shrink-0 rounded-full" classList={{ "bg-v2-state-bg-warning": status() === "prompt.tab", "bg-v2-state-bg-info": status() === "tab.activity" }} />}
+            {(status) => <span role="img" aria-label={ctx.t(status())} class="size-1.5 shrink-0 rounded-full" classList={{ "bg-v2-state-fg-warning": status() === "prompt.tab", "bg-v2-state-fg-info": status() === "tab.activity" }} />}
           </Show>
         </div>
       ),
