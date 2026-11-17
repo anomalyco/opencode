@@ -1,0 +1,32 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    {
+      "3": "three",
+      "dynKey": 2,
+      "quoted-key": 4,
+      "nested": {
+        "deep": [
+          1,
+          {
+            "z": true
+          }
+        ]
+      },
+      "added": 5
+    },
+    false,
+    true,
+    false,
+    [
+      "3",
+      "dynKey",
+      "quoted-key",
+      "m",
+      "nested",
+      "added"
+    ]
+  ],
+  "logs": []
+}

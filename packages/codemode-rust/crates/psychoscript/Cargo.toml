@@ -1,0 +1,19 @@
+[package]
+name = "psychoscript"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Embeddable Rust port of OpenCode's Code Mode language"
+
+[dependencies]
+oxc_allocator = "0.159"
+oxc_ast = "0.159"
+oxc_ast_visit = "0.159"
+oxc_diagnostics = "0.159"
+oxc_parser = { version = "0.159", default-features = false }
+oxc_semantic = "0.159"
+oxc_span = "0.159"
+oxc_str = "0.159"
+oxc_syntax = "0.159"
+rustc-hash = "2"
+serde_json = { version = "1", features = ["preserve_order"] }

@@ -1,0 +1,9 @@
+[package]
+name = "psychoscript-bench"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+psychoscript = { path = "../crates/psychoscript" }
+serde_json = { version = "1", features = ["float_roundtrip"] }

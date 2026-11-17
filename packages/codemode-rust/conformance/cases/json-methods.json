@@ -1,0 +1,29 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "{\"a\":[1,\"two\",null,true],\"b\":{\"c\":1.5}}",
+    "{\n  \"a\": [\n    1,\n    \"two\",\n    null,\n    true\n  ],\n  \"b\": {\n    \"c\": 1.5\n  }\n}",
+    {
+      "a": [
+        1,
+        "two",
+        null,
+        true
+      ],
+      "b": {
+        "c": 1.5
+      }
+    },
+    "[null,null]",
+    "\"q\\\"uote\\n\"",
+    [
+      1,
+      {
+        "x": "y"
+      }
+    ],
+    true
+  ],
+  "logs": []
+}

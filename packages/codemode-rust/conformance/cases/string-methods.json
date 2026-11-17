@@ -1,0 +1,44 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Hello, World",
+    12,
+    "HELLO, WORLD",
+    "hello, world",
+    "Hello",
+    "World",
+    "World",
+    4,
+    8,
+    true,
+    true,
+    false,
+    [
+      "Hello",
+      "World"
+    ],
+    [
+      "a",
+      "b",
+      "",
+      "c"
+    ],
+    [
+      "a",
+      "b",
+      "c"
+    ],
+    "007",
+    "x..",
+    "ababab",
+    "Hell0, World",
+    "Hell0, W0rld",
+    "e",
+    72,
+    "d",
+    "Hello, World  ",
+    "  Hello, World"
+  ],
+  "logs": []
+}

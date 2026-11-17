@@ -1,0 +1,1 @@
+return [Array.from({ length: 3 }, (_, i) => i * i), Array.from("abc"), Array.from(new Set([1, 1, 2])), Array.isArray([]), Array.isArray("a"), new Array(3).fill(0), [[1, [2]], [3]].flat(), [1, 2, 3].lastIndexOf(3), Array.of(7, 8)]

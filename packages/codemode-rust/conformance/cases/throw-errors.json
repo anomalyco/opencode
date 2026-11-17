@@ -1,0 +1,31 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "Error",
+      "e",
+      "Error: e",
+      true,
+      false,
+      false
+    ],
+    [
+      "TypeError",
+      "t",
+      "TypeError: t",
+      true,
+      true,
+      false
+    ],
+    [
+      "RangeError",
+      "r",
+      "RangeError: r",
+      true,
+      false,
+      true
+    ]
+  ],
+  "logs": []
+}

@@ -1,0 +1,23 @@
+{
+  "bindings": {
+    "n": 2,
+    "cfg": {
+      "name": "demo",
+      "tags": [
+        "a",
+        "b"
+      ]
+    },
+    "flag": false,
+    "nothing": null
+  },
+  "ok": true,
+  "value": {
+    "doubled": 4,
+    "name": "DEMO",
+    "tags": 2,
+    "flag": false,
+    "nothing": null
+  },
+  "logs": []
+}

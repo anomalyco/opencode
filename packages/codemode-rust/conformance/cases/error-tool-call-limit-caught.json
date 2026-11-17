@@ -1,0 +1,12 @@
+{
+  "bindings": {},
+  "limits": {
+    "max_tool_calls": 1
+  },
+  "ok": true,
+  "value": [
+    1,
+    "caught"
+  ],
+  "logs": []
+}

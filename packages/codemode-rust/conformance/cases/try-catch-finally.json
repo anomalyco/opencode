@@ -1,0 +1,15 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "from catch",
+    [
+      "try",
+      "catch x",
+      "finally",
+      "no throw",
+      "finally2"
+    ]
+  ],
+  "logs": []
+}

@@ -1,0 +1,13 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "one,two",
+    "two",
+    "default,four",
+    "string three",
+    "four",
+    "default,four"
+  ],
+  "logs": []
+}

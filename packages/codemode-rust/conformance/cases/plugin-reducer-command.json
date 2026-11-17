@@ -1,0 +1,23 @@
+{
+  "bindings": {
+    "event": {
+      "type": "command",
+      "name": "git.status"
+    },
+    "state": {
+      "runs": 2
+    }
+  },
+  "ok": true,
+  "value": {
+    "state": {
+      "runs": 3
+    },
+    "slots": {
+      "statusbar": {
+        "text": "main *"
+      }
+    }
+  },
+  "logs": []
+}

@@ -1,0 +1,1 @@
+throw "plain string"

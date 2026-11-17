@@ -1,0 +1,18 @@
+{
+  "bindings": {
+    "event": {
+      "type": "command",
+      "name": "git.log"
+    },
+    "state": {
+      "runs": 2
+    }
+  },
+  "ok": true,
+  "value": {
+    "state": {
+      "runs": 2
+    }
+  },
+  "logs": []
+}

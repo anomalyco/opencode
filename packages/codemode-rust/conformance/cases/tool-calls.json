@@ -1,0 +1,14 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    1,
+    2,
+    {
+      "branch": "main",
+      "dirty": true
+    },
+    "main"
+  ],
+  "logs": []
+}

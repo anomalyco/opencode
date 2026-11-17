@@ -1,0 +1,1 @@
+return [(3.14159).toFixed(2), (2).toFixed(1), Number("3.5"), Number("x"), Number(""), Number(true), parseInt("42px"), parseInt("ff", 16), parseFloat("2.5e1"), Number.isInteger(5), Number.isInteger(5.5), Number.isNaN(NaN), isNaN("x"), Number.isFinite(1 / 0), Number.MAX_SAFE_INTEGER]
