@@ -71,6 +71,7 @@ fn scenarios() {
     assert!(failed.is_empty(), "P-APP scenarios failed: {failed:?} (reports above)");
 }
 
+#[cfg(feature = "ts")]
 /// The ports trio (`ports_trio.rs`): the published packages of the P.8 recordings that have ports, by scenario, and
 /// the port each is swapped for.
 const PORTS: [(&str, &str); 7] = [
@@ -84,6 +85,7 @@ const PORTS: [(&str, &str); 7] = [
 ];
 
 /// What a recording's published package is swapped for: its native port's library, or its Luau port.
+#[cfg(feature = "ts")]
 #[derive(Clone, Copy, Debug)]
 enum Swap {
     Native(&'static str),
@@ -93,6 +95,7 @@ enum Swap {
 
 // Expected (ports trio): each port, native and in Luau, in place of the published package TS ran, draws the cells of
 // each of TS's checkpoints and sends TS's requests, as the package itself does on the JS host (`scenarios`).
+#[cfg(feature = "ts")]
 #[test]
 fn ports_replay_the_ts_recordings() {
     let mut failed = Vec::new();
@@ -104,7 +107,7 @@ fn ports_replay_the_ts_recordings() {
         #[cfg(feature = "luau")]
         swaps.push(Swap::Luau(port));
         for swap in swaps {
-            let (passed, report) = run(recording, false, Some(swap));
+            let (passed, report) = run(recording, false, Some(swapped(swap)));
             let name = format!("{scenario} as {swap:?}");
             eprintln!("{} {name}\n{report}", if passed { "ok  " } else { "FAIL" });
             if !passed {
@@ -116,12 +119,15 @@ fn ports_replay_the_ts_recordings() {
 }
 
 /// Runs one recording, with the built-ins on the C ABI's byte shims when `abi`, and its published package swapped for
-/// `swap`; returns whether it passed and its report.
-fn run(recording: &Recording, abi: bool, swap: Option<Swap>) -> (bool, String) {
+/// the port in `swapped` (a root and the port's directory); returns whether it passed and its report.
+fn run(
+    recording: &Recording,
+    abi: bool,
+    swapped: Option<(opencode_util::temp::TempDir, std::path::PathBuf)>,
+) -> (bool, String) {
     let memory = Memory::new(routes(recording));
     let app = TestApp::new(recording.width, recording.height);
-    let npm = swap.is_none() && recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "npm");
-    let swapped = swap.map(swapped);
+    let npm = swapped.is_none() && recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "npm");
     #[cfg(feature = "ts")]
     let config_text = match (&swapped, npm) {
         (Some((_, dir)), _) => swap_config(&recording.config, dir),
@@ -619,6 +625,7 @@ fn npm_config(config: &serde_json::Value) -> String {
     config.to_string()
 }
 
+#[cfg(feature = "ts")]
 /// A directory holding `swap`'s port, as a plugin directory a `plugins` entry names: a native library, or a Luau plugin
 /// with Luau plugins on; and the directory.
 fn swapped(swap: Swap) -> (opencode_util::temp::TempDir, std::path::PathBuf) {
