@@ -90,6 +90,9 @@ pub struct Helper {
     pub(crate) op: HelperOp,
     pub(crate) counter: f64,
     pub(crate) state: HelperState,
+    /// The name of the call that made the helper (`Iterator.from`), as a string, or undefined; the reference names it
+    /// when the iterator's `next` turns out not to be a function.
+    pub(crate) site: Value,
 }
 
 pub fn setup_helpers(vm: &mut Vm) {
@@ -142,7 +145,24 @@ fn direct(vm: &mut Vm, v: &Value) -> Result<(Value, Value), Value> {
     Ok((*v, next))
 }
 
-fn step(vm: &mut Vm, iter: &Value, next: &Value) -> Result<Option<Value>, Value> {
+/// Where an iterator record was made, for the error when its `next` is not a function: by a helper, with the name
+/// it kept, or by the running call.
+#[derive(Clone, Copy)]
+enum Site {
+    Kept(Value),
+    Running,
+}
+
+fn step(vm: &mut Vm, iter: &Value, next: &Value, site: Site) -> Result<Option<Value>, Value> {
+    if !vm.is_callable(next) {
+        let name = match site {
+            Site::Kept(Value::Str(s)) => Some(vm.text(s).to_owned()),
+            Site::Kept(_) => None,
+            Site::Running => vm.call_site().map(str::to_owned),
+        };
+        let name = name.as_deref().unwrap_or("The called value");
+        return Err(vm.type_error(&format!("{name} is not a function.")));
+    }
     let r = vm.call(next, *iter, &[])?;
     let Value::Obj(rid) = r else {
         return Err(vm.type_error("Iterator next() result must be an object."));
@@ -179,12 +199,17 @@ fn flattenable(vm: &mut Vm, v: &Value, strings: bool, name: &str) -> Result<(Val
 
 fn new_helper(vm: &mut Vm, iter: Value, next: Value, op: HelperOp) -> Value {
     let proto = vm.realm.std.iterator_helper;
+    let site = match vm.call_site().map(str::to_owned) {
+        Some(name) => vm.string_val(name),
+        None => Value::Undef,
+    };
     let h = Helper {
         iter,
         next,
         op,
         counter: 0.0,
         state: HelperState::Start,
+        site,
     };
     Value::Obj(vm.alloc(Obj::new(Some(proto), Kind::IterHelper(Box::new(h)))))
 }
@@ -283,7 +308,7 @@ fn this_helper(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
 /// One result of a helper: `Some(value)`, or `None` once it is done.
 fn helper_step(vm: &mut Vm, id: Id) -> Result<Option<Value>, Value> {
     let h = helper_mut(vm, id);
-    let (iter, next) = (h.iter, h.next);
+    let (iter, next, site) = (h.iter, h.next, h.site);
     if let HelperOp::Take(n) = h.op
         && n <= 0.0
     {
@@ -293,7 +318,7 @@ fn helper_step(vm: &mut Vm, id: Id) -> Result<Option<Value>, Value> {
     loop {
         let h = helper_mut(vm, id);
         if let HelperOp::FlatMap(_, Some((inner, inext))) = h.op {
-            match step(vm, &inner, &inext) {
+            match step(vm, &inner, &inext, Site::Kept(Value::Undef)) {
                 Ok(Some(v)) => return Ok(Some(v)),
                 Ok(None) => {
                     if let HelperOp::FlatMap(_, slot) = &mut helper_mut(vm, id).op {
@@ -307,7 +332,7 @@ fn helper_step(vm: &mut Vm, id: Id) -> Result<Option<Value>, Value> {
                 }
             }
         }
-        let Some(item) = step(vm, &iter, &next)? else {
+        let Some(item) = step(vm, &iter, &next, Site::Kept(site))? else {
             return Ok(None);
         };
         let h = helper_mut(vm, id);
@@ -428,7 +453,7 @@ fn consume(
     let (iter, next) = direct(vm, this)?;
     let f = super::require_callback(vm, &arg(args, 0), &format!("Iterator.prototype.{name}"))?;
     let mut index = 0.0;
-    while let Some(item) = step(vm, &iter, &next)? {
+    while let Some(item) = step(vm, &iter, &next, Site::Running)? {
         let r = match vm.call(&f, Value::Undef, &[item, Value::Num(index)]) {
             Ok(r) => r,
             Err(e) => {
@@ -474,7 +499,7 @@ fn it_find(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn it_to_array(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let (iter, next) = direct(vm, &this)?;
     let mut out = Vec::new();
-    while let Some(item) = step(vm, &iter, &next)? {
+    while let Some(item) = step(vm, &iter, &next, Site::Running)? {
         if out.len() >= crate::ops::MAX_ARRAY_LEN {
             return Err(vm.range_error("Invalid array length"));
         }
@@ -488,7 +513,7 @@ fn it_reduce(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let f = super::require_callback(vm, &arg(args, 0), "Iterator.prototype.reduce")?;
     let mut acc = args.get(1).copied();
     let mut index = 0.0;
-    while let Some(item) = step(vm, &iter, &next)? {
+    while let Some(item) = step(vm, &iter, &next, Site::Running)? {
         acc = Some(match acc {
             None => item,
             Some(a) => match vm.call(&f, Value::Undef, &[a, item, Value::Num(index)]) {

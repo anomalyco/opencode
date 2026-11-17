@@ -800,11 +800,14 @@ impl<'rt> Vm<'rt> {
     /// How the running call or `new` instruction names its callee, as the reference does: `o.f`, or "The called
     /// value" when it cannot be named.
     fn callee_name(&self) -> String {
-        let named = self
-            .frames
+        self.call_site().unwrap_or("The called value").to_owned()
+    }
+
+    /// The name of the callee of the call or `new` the running code is in, natives included, when it has one.
+    pub(crate) fn call_site(&self) -> Option<&str> {
+        self.frames
             .last()
-            .and_then(|f| f.func.callee(f.pc.wrapping_sub(1)));
-        named.unwrap_or("The called value").to_owned()
+            .and_then(|f| f.func.callee(f.pc.wrapping_sub(1)))
     }
 
     #[cold]

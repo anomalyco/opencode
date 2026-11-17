@@ -594,7 +594,15 @@ impl Enc<'_, '_> {
                     HelperState::Running => 2,
                     HelperState::Done => 3,
                 };
-                json!(["ih", val(&h.iter), val(&h.next), op, num(h.counter), state])
+                json!([
+                    "ih",
+                    val(&h.iter),
+                    val(&h.next),
+                    op,
+                    num(h.counter),
+                    state,
+                    val(&h.site)
+                ])
             }
             Kind::Url(u) => json!(["url", u.url.as_str(), u.params]),
             Kind::SearchParams(p) => json!(["sp", p.list, opt_id(p.url)]),
@@ -1545,6 +1553,7 @@ impl Dec<'_> {
                     op,
                     counter: unnum(f(4)?)?,
                     state,
+                    site: self.val(f(6)?)?,
                 }))
             }
             "url" => {
