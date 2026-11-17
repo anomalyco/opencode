@@ -107,28 +107,32 @@ local function goalFromMessages(read: plugin.Read, id: string): any
     for index = #messages, 1, -1 do
         local message = messages[index]
         if message.type == "assistant" then
-            local parts = message.content or {}
+            local parts = message.content
             for at = #parts, 1, -1 do
                 local part = parts[at]
+                if part.type ~= "tool" or not table.find(GOAL_TOOLS, part.name) then
+                    continue
+                end
                 local state = part.state
-                if part.type == "tool" and table.find(GOAL_TOOLS, part.name) and state and state.status == "completed" then
-                    if part.name == "clear_goal" then
+                if not state or state.status ~= "completed" then
+                    continue
+                end
+                if part.name == "clear_goal" then
+                    return null
+                end
+                local text
+                for _, entry in state.content do
+                    if entry.type == "text" then
+                        text = entry.text
+                        break
+                    end
+                end
+                local parsed = text and json.decode(text)
+                if type(parsed) == "table" and parsed ~= null then
+                    if parsed.goal == null then
                         return null
-                    end
-                    local text
-                    for _, entry in state.content or {} do
-                        if entry.type == "text" then
-                            text = entry.text
-                            break
-                        end
-                    end
-                    local parsed = text and json.decode(text)
-                    if type(parsed) == "table" and parsed ~= null then
-                        if parsed.goal == null then
-                            return null
-                        elseif isGoal(parsed.goal) then
-                            return parsed.goal
-                        end
+                    elseif isGoal(parsed.goal) then
+                        return parsed.goal
                     end
                 end
             end

@@ -134,18 +134,22 @@ export type ClaimTarget = ({
 
 --- A tool call as a claim's view gets it: the HTTP API's assistant tool part without what the call returned, which its `part-output` source names.
 export type ClaimTool = {
-    type: any,
-    id: any,
-    name: any,
-    executed: any,
-    native: any,
-    state: (any | {
+    type: "tool",
+    id: string,
+    name: string,
+    executed: boolean?,
+    native: SessionMessageNative?,
+    state: (SessionMessageToolStateStreaming | SessionMessageToolStateRunning | {
         status: "completed",
         input: { [string]: any },
         content: { any },
         metadata: { [string]: any }?,
-    }),
-    time: any,
+    } | SessionMessageToolStateError),
+    time: {
+        created: number,
+        ran: number?,
+        completed: number?,
+    },
 }
 
 --- What a click on a node runs.
@@ -1122,7 +1126,7 @@ export type Request = ({
     type: "render",
 } | {
     handler: number,
-    event: any,
+    event: V2Event,
     type: "event",
 } | {
     name: string,
@@ -1151,7 +1155,7 @@ export type Request = ({
     key: number,
     type: "fence-gone",
 } | {
-    events: { any },
+    events: { V2Event },
     type: "deltas",
 } | {
     surface: number,
@@ -1326,7 +1330,7 @@ export type SelectOption = {
 
 --- A session and its status.
 export type Session = {
-    info: any,
+    info: SessionInfo,
     status: SessionStatus,
 }
 
@@ -1540,6 +1544,2417 @@ export type Width = ({
 
 export type Wrap = ("word" | "char" | "none")
 
+-- The HTTP API's types (packages/protocol/openapi.json) ---------------------------------------------------------
+
+export type AbsolutePath = string
+
+export type AgentID = string
+
+export type AgentUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "agent.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type ApiLocationRef = {
+    directory: AbsolutePath,
+    workspaceID: WorkspaceID?,
+}
+
+export type ApiSessionStatus = ({
+    type: "idle",
+} | {
+    type: "retry",
+    attempt: number,
+    message: string,
+    action: {
+        reason: string,
+        provider: string,
+        title: string,
+        message: string,
+        label: string,
+        link: string?,
+    }?,
+    next: number,
+} | {
+    type: "busy",
+})
+
+export type ArtifactUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "artifact.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type CommandUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "command.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type ConfigUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "config.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type CredentialID = string
+
+export type CredentialSwitched = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "credential.switched",
+    location: ApiLocationRef?,
+    data: {
+        integrationID: IntegrationID,
+        credentialID: CredentialID?,
+    },
+}
+
+export type CredentialUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "credential.updated",
+    location: ApiLocationRef?,
+    data: {
+        integrationID: IntegrationID,
+        credentialID: CredentialID,
+    },
+}
+
+export type EventID = string
+
+export type EventSeq = number
+
+export type EventVersionEncodedC3ea984aceae = number
+
+export type EventVersionEncodedC77c5abcb68d = number
+
+export type ExperimentalMcpEvent = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "experimental.mcp.event",
+    location: ApiLocationRef?,
+    data: {
+        id: string,
+        server: string,
+        name: string,
+        eventId: string,
+        timestamp: string,
+        data: any,
+        cursor: string?,
+        truncated: boolean?,
+    },
+}
+
+export type FileDiffInfo = {
+    file: string,
+    patch: string,
+    additions: number,
+    deletions: number,
+    status: ("added" | "deleted" | "modified"),
+    more: true?,
+}
+
+export type FilesystemChanged = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "filesystem.changed",
+    location: ApiLocationRef?,
+    data: {
+        file: string,
+        event: ("add" | "change" | "unlink"),
+    },
+}
+
+export type FormAnswer1 = { [string]: FormValue1 }
+
+export type FormBooleanField1 = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen1 }?,
+    type: "boolean",
+    default: boolean?,
+}
+
+export type FormCancelled = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "form.cancelled",
+    location: ApiLocationRef?,
+    data: {
+        id: FormID,
+        sessionID: string,
+    },
+}
+
+export type FormCreated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "form.created",
+    location: ApiLocationRef?,
+    data: {
+        form: FormInfo1,
+    },
+}
+
+export type FormExternalField = {
+    key: string,
+    type: "external",
+    url: string,
+    title: string?,
+    description: string?,
+}
+
+export type FormField1 = (FormStringField1 | FormNumberField1 | FormIntegerField1 | FormBooleanField1 | FormMultiselectField1 | FormExternalField)
+
+export type FormFields1 = { FormField1 }
+
+export type FormID = string
+
+export type FormInfo1 = {
+    id: FormID,
+    sessionID: string,
+    title: string,
+    metadata: FormMetadata?,
+    fields: FormFields1,
+}
+
+export type FormIntegerField1 = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen1 }?,
+    type: "integer",
+    minimum: (number | ("NaN" | "Infinity" | "-Infinity"))?,
+    maximum: (number | ("NaN" | "Infinity" | "-Infinity"))?,
+    default: (number | ("NaN" | "Infinity" | "-Infinity"))?,
+}
+
+export type FormMetadata = { [string]: any }
+
+export type FormMultiselectField1 = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen1 }?,
+    type: "multiselect",
+    options: { FormOption },
+    minItems: number?,
+    maxItems: number?,
+    custom: boolean?,
+    default: { string }?,
+}
+
+export type FormNumberField1 = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen1 }?,
+    type: "number",
+    minimum: (number | ("NaN" | "Infinity" | "-Infinity"))?,
+    maximum: (number | ("NaN" | "Infinity" | "-Infinity"))?,
+    default: (number | ("NaN" | "Infinity" | "-Infinity"))?,
+}
+
+export type FormOption = {
+    value: string,
+    label: string,
+    description: string?,
+}
+
+export type FormReplied = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "form.replied",
+    location: ApiLocationRef?,
+    data: {
+        id: FormID,
+        sessionID: string,
+        answer: FormAnswer1,
+    },
+}
+
+export type FormStringField1 = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen1 }?,
+    type: "string",
+    format: ("email" | "uri" | "date" | "date-time")?,
+    minLength: number?,
+    maxLength: number?,
+    pattern: string?,
+    placeholder: string?,
+    default: string?,
+    options: { FormOption }?,
+    custom: boolean?,
+}
+
+export type FormValue1 = (string | number | ("NaN" | "Infinity" | "-Infinity") | boolean | { string })
+
+export type FormWhen1 = {
+    key: string,
+    op: ("eq" | "neq"),
+    value: (string | number | ("NaN" | "Infinity" | "-Infinity") | boolean),
+}
+
+export type InstallationUpdateAvailable = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "installation.update-available",
+    location: ApiLocationRef?,
+    data: {
+        version: string,
+    },
+}
+
+export type InstallationUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "installation.updated",
+    location: ApiLocationRef?,
+    data: {
+        version: string,
+    },
+}
+
+--- Instruction entry key (lowercase alphanumerics plus . _ -)
+export type InstructionEntryKey = string
+
+export type InstructionEntrySnapshot = { {
+    key: InstructionEntryKey,
+    value: any,
+    removed: boolean,
+} }
+
+export type InstructionHash = string
+
+export type IntegrationID = string
+
+export type IntegrationUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "integration.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type LocationPublicRef = {
+    directory: AbsolutePath,
+}
+
+export type LocationShutdown = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "location.shutdown",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type McpResourcesChanged = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "mcp.resources.changed",
+    location: ApiLocationRef?,
+    data: {
+        server: string,
+    },
+}
+
+export type McpStatusChanged = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "mcp.status.changed",
+    location: ApiLocationRef?,
+    data: {
+        server: string,
+    },
+}
+
+export type ModelCacheFormat = ("anthropic" | "alibaba")
+
+export type ModelCapabilities = {
+    tools: boolean,
+    freeform: { ToolFreeformFormat }?,
+    input: { string },
+    output: { string },
+    temperature: boolean?,
+}
+
+export type ModelCompatibility = {
+    reasoningField: ModelReasoningField?,
+    requireReasoning: boolean?,
+    maxTokensField: ModelMaxTokensField?,
+    requireFinishReason: boolean?,
+    requireAssistantAfterTool: boolean?,
+    supportsPromptCacheKey: boolean?,
+    streamUsage: boolean?,
+    cacheFormat: ModelCacheFormat?,
+    supportsThinkingBlockBinding: boolean?,
+    supportsEffortUpdates: boolean?,
+    mediaInput: ModelMediaInput?,
+}
+
+export type ModelCost = {
+    tier: {
+        type: "context",
+        size: number,
+    }?,
+    input: MoneyUSDPerMillionTokens,
+    output: MoneyUSDPerMillionTokens,
+    cache: {
+        read: MoneyUSDPerMillionTokens,
+        write: MoneyUSDPerMillionTokens,
+    },
+}
+
+export type ModelInfo = {
+    id: string,
+    modelID: string,
+    providerID: ProviderID,
+    canonical: ProviderID?,
+    type: ModelType?,
+    family: string?,
+    name: string,
+    compatibility: ModelCompatibility?,
+    package: string?,
+    settings: ModelSettings?,
+    headers: { [string]: string }?,
+    body: { [string]: any }?,
+    capabilities: ModelCapabilities,
+    variants: { ModelVariant },
+    time: {
+        released: number,
+    },
+    cost: { ModelCost },
+    status: ("alpha" | "beta" | "deprecated" | "active"),
+    enabled: boolean,
+    limit: {
+        context: number,
+        input: number?,
+        output: number,
+    },
+}
+
+export type ModelMaxTokensField = ("max_completion_tokens" | "max_tokens")
+
+export type ModelMediaInput = ("assets" | "state" | "root")
+
+export type ModelReasoningField = (("reasoning" | "reasoning_content" | "reasoning_text") | string)
+
+export type ModelRef = {
+    id: string,
+    providerID: ProviderID,
+    variant: string?,
+}
+
+export type ModelSettings = { [string]: any }
+
+export type ModelType = (("chat" | "decision" | "image" | "video") | string)
+
+export type ModelUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "model.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type ModelVariant = {
+    id: string,
+    settings: ModelVariantSettings?,
+    headers: { [string]: string }?,
+    body: { [string]: any }?,
+}
+
+export type ModelVariantSettings = { [string]: any }
+
+export type ModelsDevRefreshed = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "models-dev.refreshed",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type MoneyUSD = number
+
+export type MoneyUSDPerMillionTokens = number
+
+export type PermissionAsked = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "permission.asked",
+    location: ApiLocationRef?,
+    data: {
+        id: PermissionID,
+        sessionID: SessionID,
+        action: string,
+        resources: { string },
+        save: { string }?,
+        metadata: { [string]: any }?,
+        source: PermissionSource?,
+        message: string?,
+    },
+}
+
+export type PermissionEffect = ("allow" | "deny" | "ask")
+
+export type PermissionID = string
+
+export type PermissionReplied = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "permission.replied",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        requestID: PermissionID,
+        reply: PermissionReply,
+    },
+}
+
+export type PermissionReply = ("once" | "always" | "reject")
+
+export type PermissionRule = {
+    action: string,
+    resource: string,
+    effect: PermissionEffect,
+}
+
+export type PermissionRuleset = { PermissionRule }
+
+export type PermissionSource = {
+    type: "tool",
+    messageID: string,
+    id: string,
+}
+
+export type PersistentPtyAdded = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "persistent-pty.added",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        terminal: PersistentPtyInfo,
+    },
+}
+
+export type PersistentPtyInfo = {
+    id: PtyID,
+    title: string,
+    command: string,
+    args: { string },
+    cwd: string,
+    status: ("running" | "exited"),
+    pid: number,
+    exitCode: number?,
+    sessionID: SessionID,
+    userTitle: string?,
+    foregroundProcess: string?,
+    size: {
+        cols: number,
+        rows: number,
+    },
+    output: {
+        head: number,
+        tail: number,
+    },
+}
+
+export type PersistentPtyRemoved = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "persistent-pty.removed",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        ptyID: PtyID,
+    },
+}
+
+export type PersistentPtyUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "persistent-pty.updated",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        terminal: PersistentPtyInfo,
+    },
+}
+
+export type PluginUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "plugin.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type ProjectCommands = {
+    start: string?,
+}
+
+export type ProjectID = string
+
+export type ProjectIcon = {
+    url: string?,
+    override: string?,
+    color: string?,
+}
+
+export type ProjectTime = {
+    created: number,
+    updated: number,
+    active: number,
+    archived: number?,
+}
+
+export type ProjectUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "project.updated",
+    location: ApiLocationRef?,
+    data: {
+        id: ProjectID,
+        canonical: AbsolutePath,
+        vcs: ProjectVcs?,
+        name: string?,
+        icon: ProjectIcon?,
+        commands: ProjectCommands?,
+        time: ProjectTime,
+        sandboxes: { string },
+    },
+}
+
+export type ProjectVcs = string
+
+export type PromptAgentAttachment = {
+    name: string,
+    mention: PromptMention?,
+}
+
+export type PromptBase64 = string
+
+export type PromptFileAttachment = {
+    data: PromptBase64,
+    mime: string,
+    source: PromptFileSource,
+    name: string?,
+    description: string?,
+    mention: PromptMention?,
+}
+
+export type PromptFileSource = ({
+    type: "inline",
+} | {
+    type: "uri",
+    uri: string,
+})
+
+export type PromptMention = {
+    start: number,
+    ["end"]: number,
+    text: string,
+}
+
+export type PromptSkillAttachment = {
+    id: SkillID,
+    name: SkillName,
+    text: string?,
+    mention: PromptMention?,
+}
+
+export type ProviderCompatibility = {
+    reasoningField: ModelReasoningField?,
+    requireReasoning: boolean?,
+    maxTokensField: ModelMaxTokensField?,
+    requireFinishReason: boolean?,
+    requireAssistantAfterTool: boolean?,
+    supportsPromptCacheKey: boolean?,
+    streamUsage: boolean?,
+    cacheFormat: ModelCacheFormat?,
+    mediaInput: ModelMediaInput?,
+}
+
+export type ProviderID = string
+
+export type ProviderInfo = {
+    id: ProviderID,
+    canonical: ProviderID?,
+    integrationID: IntegrationID?,
+    name: string,
+    activation: ("auto" | "enabled" | "disabled"),
+    package: string,
+    compatibility: ProviderCompatibility?,
+    settings: ProviderSettings?,
+    headers: { [string]: string }?,
+    body: { [string]: any }?,
+}
+
+export type ProviderSettings = { [string]: any }
+
+export type ProviderUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "provider.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type Pty = {
+    id: PtyID,
+    title: string,
+    command: string,
+    args: { string },
+    cwd: string,
+    status: ("running" | "exited"),
+    pid: number,
+    exitCode: number?,
+}
+
+export type PtyCreated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "pty.created",
+    location: ApiLocationRef?,
+    data: {
+        info: Pty,
+    },
+}
+
+export type PtyDeleted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "pty.deleted",
+    location: ApiLocationRef?,
+    data: {
+        id: PtyID,
+    },
+}
+
+export type PtyExited = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "pty.exited",
+    location: ApiLocationRef?,
+    data: {
+        id: PtyID,
+        exitCode: number,
+    },
+}
+
+export type PtyID = string
+
+export type PtyUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "pty.updated",
+    location: ApiLocationRef?,
+    data: {
+        info: Pty,
+    },
+}
+
+export type ReferenceUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "reference.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type RelativePath = string
+
+export type SessionAgentSelected = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.agent.selected",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        agent: AgentID,
+        previous: AgentID?,
+    },
+}
+
+export type SessionArchived = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.archived",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+    },
+}
+
+export type SessionCompactionDelta = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.compaction.delta",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        text: string,
+    },
+}
+
+export type SessionCompactionEnded = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.compaction.ended",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        reason: ("auto" | "manual"),
+        model: ModelRef?,
+        native: SessionMessageNative?,
+        text: string,
+        cost: MoneyUSD?,
+        tokens: TokenUsageInfo?,
+    },
+}
+
+export type SessionCompactionFailed = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.compaction.failed",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        reason: ("auto" | "manual"),
+        error: SessionStructuredError,
+        inputID: SessionMessageID?,
+        cost: MoneyUSD?,
+        tokens: TokenUsageInfo?,
+    },
+}
+
+export type SessionCompactionStarted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.compaction.started",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        reason: ("auto" | "manual"),
+        inputID: SessionMessageID?,
+    },
+}
+
+export type SessionCreated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.created",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        projectID: ProjectID,
+        location: ApiLocationRef,
+        subpath: RelativePath?,
+        parentID: SessionID?,
+        slug: string,
+        title: string?,
+        agent: AgentID?,
+        model: ModelRef?,
+        metadata: SessionMetadata?,
+        permissions: PermissionRuleset?,
+        version: string,
+    },
+}
+
+export type SessionDeleted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.deleted",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC3ea984aceae,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+    },
+}
+
+export type SessionExecutionFailed = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.execution.failed",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        error: SessionStructuredError,
+    },
+}
+
+export type SessionExecutionInterrupted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.execution.interrupted",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        reason: ("user" | "shutdown" | "superseded" | "inactivity"),
+    },
+}
+
+export type SessionExecutionStarted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.execution.started",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+    },
+}
+
+export type SessionExecutionSucceeded = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.execution.succeeded",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+    },
+}
+
+export type SessionForkBoundary = ({
+    type: "before",
+    messageID: SessionMessageID,
+} | {
+    type: "through",
+    messageID: SessionMessageID,
+})
+
+export type SessionForked = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.forked",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC3ea984aceae,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        parentID: SessionID,
+        boundary: SessionForkBoundary,
+        instructions: { [string]: any }?,
+        instructionEntries: InstructionEntrySnapshot?,
+    },
+}
+
+export type SessionID = string
+
+export type SessionIdle = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.idle",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+    },
+}
+
+export type SessionInboxCancelled = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.inbox.cancelled",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        inboxID: SessionMessageID,
+    },
+}
+
+export type SessionInboxCompaction = {
+    id: SessionMessageID,
+    sessionID: SessionID,
+    time: {
+        created: number,
+    },
+    type: "compaction",
+    payload: SessionInboxCompactionPayload,
+    delivery: SessionInboxDelivery,
+}
+
+export type SessionInboxCompactionPayload = any
+
+export type SessionInboxDelivered = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.inbox.delivered",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        inboxID: SessionMessageID,
+    },
+}
+
+export type SessionInboxDelivery = ("steer" | "queue")
+
+export type SessionInboxDeliveryChanged = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.inbox.delivery.changed",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        inboxID: SessionMessageID,
+        delivery: SessionInboxDelivery,
+    },
+}
+
+export type SessionInboxEnqueued = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.inbox.enqueued",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        inboxID: SessionMessageID,
+        item: SessionInboxItem,
+    },
+}
+
+export type SessionInboxInfo = (SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove)
+
+export type SessionInboxItem = ({
+    type: "user",
+    payload: SessionInboxUserPayload,
+    delivery: SessionInboxDelivery,
+} | {
+    type: "synthetic",
+    payload: SessionInboxSyntheticPayload,
+    delivery: SessionInboxDelivery,
+} | {
+    type: "compaction",
+    payload: SessionInboxCompactionPayload,
+    delivery: SessionInboxDelivery,
+} | {
+    type: "move",
+    payload: SessionInboxMovePayload1,
+    delivery: SessionInboxDelivery,
+})
+
+export type SessionInboxMove = {
+    id: SessionMessageID,
+    sessionID: SessionID,
+    time: {
+        created: number,
+    },
+    type: "move",
+    delivery: SessionInboxDelivery,
+    payload: SessionInboxMovePayload,
+}
+
+export type SessionInboxMovePayload = {
+    projectID: ProjectID,
+    subpath: RelativePath?,
+    location: LocationPublicRef,
+}
+
+export type SessionInboxMovePayload1 = {
+    location: ApiLocationRef,
+    projectID: ProjectID,
+    subpath: RelativePath?,
+}
+
+export type SessionInboxSynthetic = {
+    id: SessionMessageID,
+    sessionID: SessionID,
+    time: {
+        created: number,
+    },
+    type: "synthetic",
+    payload: SessionInboxSyntheticPayload,
+    delivery: SessionInboxDelivery,
+}
+
+export type SessionInboxSyntheticPayload = {
+    text: string,
+    description: string?,
+    metadata: { [string]: any }?,
+}
+
+export type SessionInboxUser = {
+    id: SessionMessageID,
+    sessionID: SessionID,
+    time: {
+        created: number,
+    },
+    type: "user",
+    payload: SessionInboxUserPayload,
+    delivery: SessionInboxDelivery,
+}
+
+export type SessionInboxUserPayload = {
+    text: string,
+    files: { PromptFileAttachment }?,
+    agents: { PromptAgentAttachment }?,
+    skills: { PromptSkillAttachment }?,
+    metadata: { [string]: any }?,
+}
+
+export type SessionInfo = {
+    id: SessionID,
+    parentID: SessionID?,
+    fork: {
+        sessionID: SessionID,
+        boundary: SessionForkBoundary,
+    }?,
+    projectID: ProjectID,
+    agent: AgentID?,
+    model: ModelRef?,
+    cost: MoneyUSD,
+    tokens: TokenUsageInfo,
+    outcome: ("succeeded" | "failed" | "interrupted")?,
+    time: {
+        created: number,
+        updated: number,
+        busy: number?,
+        idle: number?,
+        viewed: number?,
+        archived: number?,
+    },
+    title: string?,
+    subpath: RelativePath?,
+    metadata: SessionMetadata?,
+    permissions: PermissionRuleset?,
+    revert: SessionRevert?,
+    location: LocationPublicRef,
+}
+
+export type SessionInstructionsUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.instructions.updated",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC3ea984aceae,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        delta: { [string]: (InstructionHash | "removed") },
+        text: string?,
+    },
+}
+
+export type SessionMessageAgentSelected = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    type: "agent-switched",
+    agent: AgentID,
+    previous: AgentID?,
+}
+
+export type SessionMessageAssistant = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+        firstToken: number?,
+        streamed: number?,
+        completed: number?,
+    },
+    type: "assistant",
+    agent: AgentID,
+    model: ModelRef,
+    content: { (SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool) },
+    snapshot: {
+        start: SnapshotID?,
+        ["end"]: SnapshotID?,
+        files: { RelativePath }?,
+    }?,
+    finish: ("stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown")?,
+    rawFinish: string?,
+    native: SessionMessageNative?,
+    cost: MoneyUSD?,
+    tokens: TokenUsageInfo?,
+    error: SessionStructuredError?,
+    retry: SessionMessageAssistantRetry?,
+}
+
+export type SessionMessageAssistantReasoning = {
+    type: "reasoning",
+    text: string,
+    native: SessionMessageNative?,
+    time: {
+        created: number,
+        completed: number?,
+    }?,
+}
+
+export type SessionMessageAssistantRetry = {
+    attempt: number,
+    at: number,
+    error: SessionStructuredError,
+}
+
+export type SessionMessageAssistantText = {
+    type: "text",
+    text: string,
+    native: SessionMessageNative?,
+}
+
+export type SessionMessageAssistantTool = {
+    type: "tool",
+    id: string,
+    name: string,
+    executed: boolean?,
+    native: SessionMessageNative?,
+    state: (SessionMessageToolStateStreaming | SessionMessageToolStateRunning | SessionMessageToolStateCompleted | SessionMessageToolStateError),
+    time: {
+        created: number,
+        ran: number?,
+        completed: number?,
+    },
+}
+
+export type SessionMessageCompaction = (SessionMessageCompactionRunning | SessionMessageCompactionCompleted | SessionMessageCompactionFailed)
+
+export type SessionMessageCompactionCompleted = {
+    type: "compaction",
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    status: "completed",
+    reason: ("auto" | "manual"),
+    model: ModelRef?,
+    native: SessionMessageNative?,
+    summary: string,
+    cost: MoneyUSD?,
+    tokens: TokenUsageInfo?,
+}
+
+export type SessionMessageCompactionFailed = {
+    type: "compaction",
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    status: "failed",
+    reason: ("auto" | "manual"),
+    error: SessionStructuredError,
+    cost: MoneyUSD?,
+    tokens: TokenUsageInfo?,
+}
+
+export type SessionMessageCompactionRunning = {
+    type: "compaction",
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    status: "running",
+    reason: ("auto" | "manual"),
+    summary: string,
+}
+
+export type SessionMessageID = string
+
+export type SessionMessageIdle = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    type: "idle",
+    outcome: ("succeeded" | "failed" | "interrupted"),
+    error: SessionStructuredError?,
+}
+
+export type SessionMessageInfo = (SessionMessageAgentSelected | SessionMessageModelSelected | SessionMessageLocationSwitched | SessionMessageUser | SessionMessageSynthetic | SessionMessageSystem | SessionMessageSkill | SessionMessageShell | SessionMessageAssistant | SessionMessageCompaction | SessionMessageIdle)
+
+export type SessionMessageLocationSwitched = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    type: "location-switched",
+    projectID: ProjectID?,
+    subpath: RelativePath?,
+    location: LocationPublicRef,
+    previous: {
+        location: LocationPublicRef,
+        projectID: ProjectID?,
+        subpath: RelativePath?,
+    }?,
+}
+
+export type SessionMessageModelSelected = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    type: "model-switched",
+    model: ModelRef,
+    previous: ModelRef?,
+}
+
+export type SessionMessageNative = { [string]: any }
+
+export type SessionMessageShell = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+        completed: number?,
+    },
+    type: "shell",
+    shellID: ShellID,
+    command: string,
+    status: ("running" | "exited" | "timeout" | "killed"),
+    exit: (number | ("Infinity" | "-Infinity" | "NaN"))?,
+    output: {
+        output: string,
+        cursor: number,
+        size: number,
+        truncated: boolean,
+    }?,
+}
+
+export type SessionMessageSkill = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    type: "skill",
+    skill: SkillID,
+    name: SkillName,
+    text: string,
+}
+
+export type SessionMessageSynthetic = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    text: string,
+    description: string?,
+    type: "synthetic",
+}
+
+export type SessionMessageSystem = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    type: "system",
+    text: string,
+    description: string?,
+}
+
+export type SessionMessageToolStateCompleted = {
+    status: "completed",
+    input: { [string]: any },
+    content: { ToolContent },
+    metadata: { [string]: any }?,
+}
+
+export type SessionMessageToolStateError = {
+    status: "error",
+    input: { [string]: any },
+    error: SessionStructuredError,
+    content: { ToolContent }?,
+    metadata: { [string]: any }?,
+}
+
+export type SessionMessageToolStateRunning = {
+    status: "running",
+    input: { [string]: any },
+    metadata: { [string]: any },
+}
+
+export type SessionMessageToolStateStreaming = {
+    status: "streaming",
+    input: string,
+}
+
+export type SessionMessageUser = {
+    id: SessionMessageID,
+    metadata: { [string]: any }?,
+    time: {
+        created: number,
+    },
+    text: string,
+    files: { PromptFileAttachment }?,
+    agents: { PromptAgentAttachment }?,
+    skills: { PromptSkillAttachment }?,
+    type: "user",
+}
+
+export type SessionMetadata = { [string]: any }
+
+export type SessionMetadataUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.metadata.updated",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        metadata: SessionMetadata,
+    },
+}
+
+export type SessionModelSelected = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.model.selected",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        model: ModelRef,
+        previous: ModelRef?,
+    },
+}
+
+export type SessionMoved = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.moved",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        location: ApiLocationRef,
+        projectID: ProjectID,
+        subpath: RelativePath?,
+    },
+}
+
+export type SessionPermissions = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.permissions",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        permissions: PermissionRuleset,
+    },
+}
+
+export type SessionReasoningDelta = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.reasoning.delta",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        ordinal: number,
+        delta: string,
+    },
+}
+
+export type SessionReasoningEnded = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.reasoning.ended",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        ordinal: number,
+        text: string,
+        native: SessionMessageNative?,
+    },
+}
+
+export type SessionReasoningStarted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.reasoning.started",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        ordinal: number,
+        native: SessionMessageNative?,
+    },
+}
+
+export type SessionRenamed = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.renamed",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        title: string,
+    },
+}
+
+export type SessionRetryScheduled = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.retry.scheduled",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        attempt: number,
+        at: number,
+        error: SessionStructuredError,
+    },
+}
+
+export type SessionRevert = {
+    messageID: SessionMessageID,
+    partID: string?,
+    snapshot: SnapshotID?,
+    files: { FileDiffInfo }?,
+}
+
+export type SessionRevertCleared = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.revert.cleared",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+    },
+}
+
+export type SessionRevertCommitted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.revert.committed",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        to: SessionMessageID,
+    },
+}
+
+export type SessionRevertStaged = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.revert.staged",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        revert: SessionRevert,
+    },
+}
+
+export type SessionShellEnded = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.shell.ended",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        shell: ShellInfo,
+        output: {
+            output: string,
+            cursor: number,
+            size: number,
+            truncated: boolean,
+        },
+    },
+}
+
+export type SessionShellStarted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.shell.started",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        shell: ShellInfo,
+    },
+}
+
+export type SessionSkillActivated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.skill.activated",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        id: SkillID,
+        name: SkillName,
+        text: string,
+    },
+}
+
+export type SessionStatusUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.status",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        status: ApiSessionStatus,
+    },
+}
+
+export type SessionStepEnded = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.step.ended",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        finish: ("stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"),
+        rawFinish: string?,
+        native: SessionMessageNative?,
+        cost: MoneyUSD,
+        tokens: TokenUsageInfo,
+        snapshot: SnapshotID?,
+        files: { RelativePath }?,
+    },
+}
+
+export type SessionStepFailed = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.step.failed",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        error: SessionStructuredError,
+        finish: "content-filter"?,
+        rawFinish: string?,
+        native: SessionMessageNative?,
+        cost: MoneyUSD?,
+        tokens: TokenUsageInfo?,
+        snapshot: SnapshotID?,
+        files: { RelativePath }?,
+    },
+}
+
+export type SessionStepFirstToken = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.step.first-token",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+    },
+}
+
+export type SessionStepStarted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.step.started",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        agent: AgentID,
+        model: ModelRef,
+        snapshot: SnapshotID?,
+        started: number,
+    },
+}
+
+export type SessionStepStreamed = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.step.streamed",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+    },
+}
+
+export type SessionStructuredError = {
+    type: string,
+    message: string,
+    status: number?,
+    response: {
+        body: string,
+    }?,
+    retryAfterMs: number?,
+}
+
+export type SessionSynthetic = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.synthetic",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        text: string,
+        description: string?,
+        metadata: { [string]: any }?,
+    },
+}
+
+export type SessionTextDelta = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.text.delta",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        ordinal: number,
+        delta: string,
+    },
+}
+
+export type SessionTextEnded = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.text.ended",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        ordinal: number,
+        text: string,
+        native: SessionMessageNative?,
+    },
+}
+
+export type SessionTextStarted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.text.started",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        ordinal: number,
+    },
+}
+
+export type SessionToolCalled = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.tool.called",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        id: string,
+        input: { [string]: any },
+        executed: boolean,
+        native: SessionMessageNative?,
+    },
+}
+
+export type SessionToolFailed = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.tool.failed",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC3ea984aceae,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        id: string,
+        error: SessionStructuredError,
+        content: { ToolContent }?,
+        metadata: { [string]: any }?,
+        executed: boolean,
+        native: SessionMessageNative?,
+    },
+}
+
+export type SessionToolInputDelta = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.tool.input.delta",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        id: string,
+        delta: string,
+    },
+}
+
+export type SessionToolInputEnded = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.tool.input.ended",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        id: string,
+        text: string,
+    },
+}
+
+export type SessionToolInputStarted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.tool.input.started",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        id: string,
+        name: string,
+    },
+}
+
+export type SessionToolProgress = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.tool.progress",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        id: string,
+        metadata: { [string]: any },
+    },
+}
+
+export type SessionToolSuccess = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.tool.success",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC3ea984aceae,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        assistantMessageID: SessionMessageID,
+        id: string,
+        content: { ToolContent },
+        metadata: { [string]: any }?,
+        executed: boolean,
+        native: SessionMessageNative?,
+    },
+}
+
+export type SessionUnarchived = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.unarchived",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+    },
+}
+
+export type SessionUsageUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.usage.updated",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        cost: MoneyUSD,
+        tokens: TokenUsageInfo,
+    },
+}
+
+export type SessionViewed = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "session.viewed",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        sessionID: SessionID,
+        idle: number,
+    },
+}
+
+export type ShellCreated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "shell.created",
+    location: ApiLocationRef?,
+    data: {
+        info: ShellInfo,
+    },
+}
+
+export type ShellDeleted = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "shell.deleted",
+    location: ApiLocationRef?,
+    data: {
+        id: ShellID,
+    },
+}
+
+export type ShellExited = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "shell.exited",
+    location: ApiLocationRef?,
+    data: {
+        id: ShellID,
+        exit: number?,
+        status: ("running" | "exited" | "timeout" | "killed"),
+    },
+}
+
+export type ShellID = string
+
+export type ShellInfo = {
+    id: ShellID,
+    status: ("running" | "exited" | "timeout" | "killed"),
+    command: string,
+    cwd: string,
+    shell: string,
+    file: string,
+    pid: number?,
+    exit: number?,
+    signal: string?,
+    metadata: { [string]: any },
+    time: {
+        started: number,
+        completed: number?,
+    },
+}
+
+export type SkillID = string
+
+export type SkillName = string
+
+export type SkillUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "skill.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type SnapshotID = string
+
+export type TokenUsageInfo = {
+    input: number,
+    output: number,
+    reasoning: number,
+    cache: {
+        read: number,
+        write: number,
+    },
+}
+
+export type ToolContent = (ToolTextContent | ToolFileContent)
+
+export type ToolFileContent = {
+    type: "file",
+    uri: string,
+    mime: string,
+    name: string?,
+}
+
+export type ToolFreeformFormat = ("text" | "regex" | "lark")
+
+export type ToolTextContent = {
+    type: "text",
+    text: string,
+}
+
+export type TuiCommandExecute = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "tui.command.execute",
+    location: ApiLocationRef?,
+    data: {
+        command: (("session.list" | "session.new" | "session.interrupt" | "session.background" | "session.compact" | "session.page.up" | "session.page.down" | "session.line.up" | "session.line.down" | "session.half.page.up" | "session.half.page.down" | "session.first" | "session.last" | "prompt.clear" | "prompt.submit" | "agent.cycle") | string),
+    },
+}
+
+export type TuiPromptAppend = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "tui.prompt.append",
+    location: ApiLocationRef?,
+    data: {
+        text: string,
+    },
+}
+
+export type TuiSessionSelect = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "tui.session.select",
+    location: ApiLocationRef?,
+    data: {
+        sessionID: (SessionID & any),
+    },
+}
+
+export type TuiToastShow = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "tui.toast.show",
+    location: ApiLocationRef?,
+    data: {
+        title: string?,
+        message: string,
+        variant: ("info" | "success" | "warning" | "error"),
+        duration: number?,
+    },
+}
+
+export type UsageLimitsBudget = {
+    id: string,
+    limit: MoneyUSD,
+    spent: MoneyUSD,
+    scope: ("each" | "combined"),
+    per: ("set" | "model"),
+    coverage: ("all" | "models"),
+    models: { UsageLimitsBudgetModel },
+    vendors: { string },
+    inputPriceAtLeast: MoneyUSDPerMillionTokens?,
+    picked: boolean,
+    shared: boolean,
+    resetsAt: number,
+}
+
+export type UsageLimitsBudgetModel = {
+    providerID: ProviderID,
+    modelID: string,
+    name: string,
+    spent: MoneyUSD?,
+}
+
+export type UsageLimitsGo = {
+    rolling: UsageLimitsMeter,
+    weekly: UsageLimitsMeter,
+    monthly: UsageLimitsMeter,
+}
+
+export type UsageLimitsInfo = {
+    workspace: {
+        id: string,
+        name: string?,
+        usageURL: string,
+    },
+    go: UsageLimitsGo?,
+    budgets: { UsageLimitsBudget },
+}
+
+export type UsageLimitsMeter = {
+    percent: number,
+    limited: boolean,
+    resetsAt: number,
+}
+
+export type V2Event = (LocationShutdown | ModelsDevRefreshed | CredentialUpdated | CredentialSwitched | IntegrationUpdated | ProviderUpdated | ModelUpdated | AgentUpdated | SessionCreated | SessionAgentSelected | SessionModelSelected | SessionMoved | SessionRenamed | SessionMetadataUpdated | SessionPermissions | SessionViewed | SessionArchived | SessionUnarchived | SessionUsageUpdated | SessionDeleted | SessionForked | SessionInboxDelivered | SessionInboxEnqueued | SessionInboxCancelled | SessionInboxDeliveryChanged | SessionExecutionStarted | SessionExecutionSucceeded | SessionExecutionFailed | SessionExecutionInterrupted | SessionInstructionsUpdated | SessionSynthetic | SessionSkillActivated | SessionShellStarted | SessionShellEnded | SessionStepStarted | SessionStepFirstToken | SessionStepStreamed | SessionStepEnded | SessionStepFailed | SessionTextStarted | SessionTextDelta | SessionTextEnded | SessionReasoningStarted | SessionReasoningDelta | SessionReasoningEnded | SessionToolInputStarted | SessionToolInputDelta | SessionToolInputEnded | SessionToolCalled | SessionToolProgress | SessionToolSuccess | SessionToolFailed | SessionRetryScheduled | SessionCompactionStarted | SessionCompactionDelta | SessionCompactionEnded | SessionCompactionFailed | SessionRevertStaged | SessionRevertCleared | SessionRevertCommitted | FilesystemChanged | ReferenceUpdated | PermissionAsked | PermissionReplied | PluginUpdated | ProjectUpdated | WorktreeUpdated | WorktreeResolved | CommandUpdated | ConfigUpdated | SkillUpdated | PtyCreated | PtyUpdated | PtyExited | PtyDeleted | PersistentPtyAdded | PersistentPtyRemoved | PersistentPtyUpdated | ShellCreated | ShellExited | ShellDeleted | FormCreated | FormReplied | FormCancelled | WebsearchUpdated | ArtifactUpdated | SessionStatusUpdated | SessionIdle | TuiPromptAppend | TuiCommandExecute | TuiToastShow | TuiSessionSelect | InstallationUpdated | InstallationUpdateAvailable | VcsBranchUpdated | McpStatusChanged | McpResourcesChanged | ExperimentalMcpEvent | V2EventRpc | V2EventServerConnected)
+
+export type V2EventRpc = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: string,
+    location: LocationPublicRef,
+    data: { [string]: any },
+}
+
+export type V2EventServerConnected = {
+    id: EventID,
+    metadata: { [string]: any }?,
+    location: LocationPublicRef?,
+    type: "server.connected",
+    data: any,
+}
+
+export type VcsBranchUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "vcs.branch.updated",
+    location: ApiLocationRef?,
+    data: {
+        branch: string?,
+    },
+}
+
+export type WebsearchUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "websearch.updated",
+    location: ApiLocationRef?,
+    data: any,
+}
+
+export type WorkspaceID = string
+
+export type WorktreeResolved = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "worktree.resolved",
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: {
+        projectID: ProjectID,
+        directory: AbsolutePath,
+        previous: ProjectID,
+        adopted: { ProjectID }?,
+    },
+}
+
+export type WorktreeUpdated = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: "worktree.updated",
+    location: ApiLocationRef?,
+    data: {
+        projectID: ProjectID,
+    },
+}
+
 -- The plugin's objects -------------------------------------------------------------------------------------------
 
 --- What a render or a view reads; every read of one call sees one store snapshot.
@@ -1550,16 +3965,16 @@ export type Read = {
     session: (self: Read, id: string) -> Session?,
     sessions: (self: Read) -> { Session },
     family: (self: Read, id: string) -> Family,
-    messages: (self: Read, id: string) -> { any },
+    messages: (self: Read, id: string) -> { SessionMessageInfo },
     --- The inbox items of session `id` the server has not delivered yet, oldest first; empty while its inbox is not loaded.
-    pending: (self: Read, id: string) -> { any },
+    pending: (self: Read, id: string) -> { SessionInboxInfo },
     --- The models of `location`, or where the TUI works; `nil` while they are not loaded.
-    models: (self: Read, location: LocationRef?) -> { any }?,
+    models: (self: Read, location: LocationRef?) -> { ModelInfo }?,
     --- The providers where the TUI works; `nil` while they are not loaded.
-    providers: (self: Read) -> { any }?,
+    providers: (self: Read) -> { ProviderInfo }?,
     --- The OpenCode Console workspace's usage limits; `nil` while they are not loaded.
-    limits: (self: Read) -> any,
-    model: (self: Read) -> any,
+    limits: (self: Read) -> UsageLimitsInfo?,
+    model: (self: Read) -> ModelRef?,
     info: (self: Read) -> Info,
     route: (self: Read) -> Route,
     interactive: (self: Read) -> boolean,
@@ -1596,16 +4011,16 @@ export type Host = {
     session: (self: Read, id: string) -> Session?,
     sessions: (self: Read) -> { Session },
     family: (self: Read, id: string) -> Family,
-    messages: (self: Read, id: string) -> { any },
+    messages: (self: Read, id: string) -> { SessionMessageInfo },
     --- The inbox items of session `id` the server has not delivered yet, oldest first; empty while its inbox is not loaded.
-    pending: (self: Read, id: string) -> { any },
+    pending: (self: Read, id: string) -> { SessionInboxInfo },
     --- The models of `location`, or where the TUI works; `nil` while they are not loaded.
-    models: (self: Read, location: LocationRef?) -> { any }?,
+    models: (self: Read, location: LocationRef?) -> { ModelInfo }?,
     --- The providers where the TUI works; `nil` while they are not loaded.
-    providers: (self: Read) -> { any }?,
+    providers: (self: Read) -> { ProviderInfo }?,
     --- The OpenCode Console workspace's usage limits; `nil` while they are not loaded.
-    limits: (self: Read) -> any,
-    model: (self: Read) -> any,
+    limits: (self: Read) -> UsageLimitsInfo?,
+    model: (self: Read) -> ModelRef?,
     info: (self: Read) -> Info,
     route: (self: Read) -> Route,
     interactive: (self: Read) -> boolean,
@@ -1690,7 +4105,8 @@ export type Setup = {
     route: (self: Setup, name: string, render: (read: Read, changed: Changed) -> Render?) -> (),
     onRouteMount: (self: Setup, name: string, run: (host: Host, mounted: boolean) -> ()) -> (),
     codeBlock: (self: Setup, language: string, render: (read: Read, fence: Fence) -> Fenced?) -> (),
-    onEvent: (self: Setup, types: { string }, run: (host: Host, event: any) -> ()) -> (),
+    --- `event` is one of the API's events, a union tagged by `type`: `if event.type == "…" then` narrows it.
+    onEvent: (self: Setup, types: { string }, run: (host: Host, event: V2Event) -> ()) -> (),
     onReply: (self: Setup, run: (host: Host, id: number, value: any, error: string?) -> ()) -> (),
     onDispose: (self: Setup, run: (host: Host) -> ()) -> (),
     layer: (self: Setup, layer: Layer, handler: (host: Host, event: InputEvent) -> Handled?) -> (),
