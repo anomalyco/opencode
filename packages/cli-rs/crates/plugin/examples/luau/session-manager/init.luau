@@ -519,7 +519,7 @@ local function searchKey(host: plugin.Host, name: string): plugin.Handled
     return "consume"
 end
 
-local function event(host: plugin.Host, event: any): plugin.Handled
+local function event(host: plugin.Host, event: plugin.InputEvent): plugin.Handled
     if event.type == "mount" then
         if event.mounted then
             mount(host)

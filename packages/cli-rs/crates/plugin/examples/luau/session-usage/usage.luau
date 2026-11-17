@@ -1,6 +1,8 @@
 --!strict
 -- TS `src/usage.ts` and `src/estimate.ts`: catalog prices, meter severity, reset countdowns, bars, and what a session
 -- tree cost.
+local plugin = require("@opencode/plugin")
+
 local usage = {}
 
 -- `Math.round`: halves go up.
@@ -9,7 +11,7 @@ function usage.round(value: number): number
 end
 
 -- TS `catalogCost`: what `tokens` cost at the most specific context tier the context exceeds, else the base price.
-function usage.catalogCost(costs: { any }, tokens: any): number
+function usage.catalogCost(costs: { plugin.ModelCost }, tokens: plugin.TokenUsageInfo?): number
     if not tokens then
         return 0
     end
@@ -39,7 +41,7 @@ function usage.catalogCost(costs: { any }, tokens: any): number
 end
 
 -- TS `sessionCost`: the costs the provider reported, when any is positive, else the catalog estimate.
-function usage.sessionCost(messages: { any }, models: { any }): number
+function usage.sessionCost(messages: { plugin.SessionMessageInfo }, models: { plugin.ModelInfo }): number
     local reported, catalog, hasReported = 0, 0, false
     for _, message in messages do
         if message.type == "assistant" then

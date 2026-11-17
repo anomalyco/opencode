@@ -466,7 +466,7 @@ local function failed(host: plugin.Host, want: Want, message: string)
 end
 
 local function replied(host: plugin.Host, want: Want, body: any)
-    local items: { any } = if type(body) == "table" then (body.data or body) else {}
+    local items: { plugin.SessionInboxInfo } = if type(body) == "table" then (body.data or body) else {}
     if want.kind == "menu" then
         showMenu(host, #items)
     elseif want.kind == "inbox" then
