@@ -1503,14 +1503,18 @@ function SiteInformation(props: {
                 {plugin.t(view().failed ? "common.retry" : "site.cookies.clear")}
               </Button>
             </SiteRow>
-            <Button
-              size="small"
-              variant="neutral"
-              disabled={view().actionDisabled || view().failed}
-              onClick={() => dispatch({ type: "clear-cache.clicked" })}
-            >
-              {plugin.t("site.clearCache")}
-            </Button>
+            {/* A row like its neighbours, with their inset and icon column, so the action starts under their text. */}
+            <div data-slot="browser-site-row">
+              <span data-slot="browser-site-icon" class="w-4" aria-hidden="true" />
+              <Button
+                size="small"
+                variant="neutral"
+                disabled={view().actionDisabled || view().failed}
+                onClick={() => dispatch({ type: "clear-cache.clicked" })}
+              >
+                {plugin.t("site.clearCache")}
+              </Button>
+            </div>
             <SiteRow
               icon="outline-eye-slash"
               title={plugin.t("site.permissions")}
