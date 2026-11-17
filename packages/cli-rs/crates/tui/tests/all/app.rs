@@ -74,7 +74,7 @@ fn scenarios() {
 #[cfg(feature = "ts")]
 /// The ports trio (`ports_trio.rs`): the published packages of the P.8 recordings that have ports, by scenario, and
 /// the port each is swapped for.
-const PORTS: [(&str, &str); 7] = [
+const PORTS: [(&str, &str); 8] = [
     ("P.8/sidebar-tokens", "sidebar-tokens"),
     ("P.8/sidebar-prompt", "sidebar-prompt"),
     ("P.8/session-usage", "session-usage"),
@@ -82,6 +82,7 @@ const PORTS: [(&str, &str); 7] = [
     ("P.8/force-input", "force-input"),
     ("P.8/context-grid", "context-grid"),
     ("P.8/command-hotkeys", "command-hotkeys"),
+    ("P.8/session-manager", "session-manager"),
 ];
 
 /// What a recording's published package is swapped for: its native port's library, or its Luau port.
