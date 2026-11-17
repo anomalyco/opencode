@@ -263,13 +263,8 @@ export const verifyCode = (c: Code): Array<string> => {
         next(-(a + 1))
         break
       case Op.NEW:
-        if (a === 255) {
-          if (d < 1) errors.push(`${label}: NEW.check at depth ${d} (pc ${pc})`)
-          next(0)
-        } else {
-          if (d < a + 1) errors.push(`${label}: NEW ${a} at depth ${d} (pc ${pc})`)
-          next(-a)
-        }
+        if (d < a + 1) errors.push(`${label}: NEW ${a} at depth ${d} (pc ${pc})`)
+        next(-a)
         break
       case Op.ITER_OPEN: {
         const jumpPc = pc + stride

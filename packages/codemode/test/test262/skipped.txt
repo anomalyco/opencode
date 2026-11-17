@@ -1448,18 +1448,6 @@ language/expressions/logical-assignment/lgcl-nullish-assignment-operator-lhs-bef
 language/expressions/logical-assignment/lgcl-or-assignment-operator-lhs-before-rhs.js  # Expected a DummyError but got a TypeError
 language/expressions/new/ctorExpr-fn-ref-before-args-eval-fn-wrapup.js  # TypeError: x cannot be constructed: user-defined constructors and classes are not supported. Call it
 language/expressions/new/ctorExpr-fn-ref-before-args-eval.js  # TypeError: x cannot be constructed: user-defined constructors and classes are not supported. Call it
-language/expressions/new/ctorExpr-isCtor-after-args-eval-fn-wrapup.js  # arguments evaluated before checking valid ctor Expected SameValue(«undefined», «39») to be true
-language/expressions/new/ctorExpr-isCtor-after-args-eval.js  # Expected SameValue(«object», «Array») to be true
-language/expressions/new/spread-err-mult-err-expr-throws.js  # Expected a Test262Error but got a TypeError
-language/expressions/new/spread-err-mult-err-itr-get-call.js  # Expected a Test262Error but got a TypeError
-language/expressions/new/spread-err-mult-err-itr-step.js  # Expected a Test262Error but got a TypeError
-language/expressions/new/spread-err-mult-err-obj-unresolvable.js  # Expected a ReferenceError but got a TypeError
-language/expressions/new/spread-err-mult-err-unresolvable.js  # Expected a ReferenceError but got a TypeError
-language/expressions/new/spread-err-sngl-err-expr-throws.js  # Expected a Test262Error but got a TypeError
-language/expressions/new/spread-err-sngl-err-itr-get-call.js  # Expected a Test262Error but got a TypeError
-language/expressions/new/spread-err-sngl-err-itr-step.js  # Expected a Test262Error but got a TypeError
-language/expressions/new/spread-err-sngl-err-obj-unresolvable.js  # Expected a ReferenceError but got a TypeError
-language/expressions/new/spread-err-sngl-err-unresolvable.js  # Expected a ReferenceError but got a TypeError
 language/expressions/new/spread-mult-empty.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
 language/expressions/new/spread-mult-expr.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
 language/expressions/new/spread-mult-iter.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup

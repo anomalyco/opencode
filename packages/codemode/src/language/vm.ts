@@ -1711,21 +1711,10 @@ export class Vm {
   }
 
   private execNew(frame: Frame, n: number, pc: number, sp: number): number {
-    const fcode = frame.code
     const regs = frame.regs
-    if (n === 255) {
-      const callee = regs[sp - 1] as Value
-      if (!(callee instanceof Builtin) || callee.construct === undefined) {
-        frame.pc = pc
-        frame.sp = sp
-        throw notConstructible(callee, fcode.siteAt(pc) as NewExpression)
-      }
-      frame.sp = sp
-      return 0
-    }
     frame.pc = pc
     const base = sp - n
-    const callee = regs[base - 1] as Builtin
+    const callee = this.constructible(frame, regs[base - 1] as Value, pc, sp)
     const args = regs.slice(base, sp) as Array<Value>
     frame.sp = base - 1
     return this.execConstruct(frame, callee, args, callSiteOf(frame, pc))
@@ -1733,11 +1722,18 @@ export class Vm {
 
   private execNewSpread(frame: Frame, pc: number, sp: number): number {
     const regs = frame.regs
-    const argsArr = regs[--sp] as Arr
-    const callee = regs[--sp] as Builtin
     frame.pc = pc
-    frame.sp = sp
+    const callee = this.constructible(frame, regs[sp - 2] as Value, pc, sp)
+    const argsArr = regs[--sp] as Arr
+    frame.sp = --sp
     return this.execConstruct(frame, callee, [...argsArr.items], callSiteOf(frame, pc))
+  }
+
+  // IsConstructor, checked once the arguments are evaluated.
+  private constructible(frame: Frame, callee: Value, pc: number, sp: number): Builtin {
+    if (callee instanceof Builtin && callee.construct !== undefined) return callee
+    frame.sp = sp
+    throw notConstructible(callee, frame.code.siteAt(pc) as NewExpression)
   }
 
   private execIterStepSlow(frame: Frame, custom: CustomIter, bx: number, pc: number, sp: number): boolean {

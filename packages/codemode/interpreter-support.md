@@ -328,7 +328,8 @@ reject }` object.
 - [x] Own-field reads and writes on plain data objects.
 - [x] `new` dispatches on the evaluated constructor value, so aliases (`const D = Date; new D()`), constructors held in
       objects, and constructors passed as arguments work, while a shadowed name (`const Date = 5; new Date()`) does
-      not construct.
+      not construct. The arguments are evaluated before the callee is checked, so `new x(x = Date)` with `x = 1`
+      throws its `TypeError` after the assignment.
 - [x] `Object()` and `new Object()` return `{}` for nullish arguments and pass objects through unchanged;
       primitive wrapper objects (`Object(1)`) are rejected explicitly.
 - [x] Computed property names and object spread. Any value works as a key (ToPropertyKey): strings, numbers, and the

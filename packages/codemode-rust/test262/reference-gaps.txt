@@ -47,18 +47,6 @@ built-ins/String/prototype/repeat/count-coerced-to-zero-returns-empty-string.js 
 language/expressions/assignment/target-member-identifier-reference-null.js  # real: assignment to a member of null or undefined evaluates the right side first
 language/expressions/assignment/target-member-identifier-reference-undefined.js  # real: assignment to a member of null or undefined evaluates the right side first
 language/expressions/delete/non-reference-return-true.js  # real: delete of a non-reference unary chain is true
-language/expressions/new/ctorExpr-isCtor-after-args-eval-fn-wrapup.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/ctorExpr-isCtor-after-args-eval.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-mult-err-expr-throws.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-mult-err-itr-get-call.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-mult-err-itr-step.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-mult-err-obj-unresolvable.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-mult-err-unresolvable.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-sngl-err-expr-throws.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-sngl-err-itr-get-call.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-sngl-err-itr-step.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-sngl-err-obj-unresolvable.js  # real: new evaluates its arguments before the constructor check
-language/expressions/new/spread-err-sngl-err-unresolvable.js  # real: new evaluates its arguments before the constructor check
 language/identifiers/part-unicode-17.0.0-escaped.js  # real: Unicode 17 identifiers (parser Unicode tables)
 language/identifiers/part-unicode-17.0.0.js  # real: Unicode 17 identifiers (parser Unicode tables)
 language/identifiers/start-unicode-17.0.0-escaped.js  # real: Unicode 17 identifiers (parser Unicode tables)
