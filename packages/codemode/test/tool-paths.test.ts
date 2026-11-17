@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { CodeMode, Namespace, Tool } from "../src/index.js"
 
 const echo = (description: string, result: string) =>
@@ -74,6 +74,75 @@ describe("dotted tool names", () => {
       "tools.slack.admin.invite",
       "tools.slack.admin.users.list",
     ])
+  })
+})
+
+describe("tool.missing", () => {
+  const tools = { issues: { list: echo("List issues", "listed") } }
+
+  test("answers a call to a path with no tool, inside the usual hooks and call count", async () => {
+    const seen: Array<unknown> = []
+    const events: Array<string> = []
+    const runtime = CodeMode.make({
+      tools,
+      hooks: {
+        "tool.before": (call) => Effect.sync(() => void events.push(`before ${call.name}`)),
+        "tool.after": (call, result) => Effect.sync(() => void events.push(`after ${call.name} ${result.status}`)),
+        "tool.missing": (call) =>
+          Effect.sync(() => {
+            seen.push([call.name, call.input])
+            return Option.some({ ran: "shell" })
+          }),
+      },
+    })
+    const result = await Effect.runPromise(runtime.execute(`return await tools.bash({ command: "pwd" })`))
+    expect(result).toEqual({ ok: true, value: { ran: "shell" }, toolCalls: [{ name: "bash" }] })
+    expect(seen).toEqual([["bash", { command: "pwd" }]])
+    expect(events).toEqual(["before bash", "after bash success"])
+  })
+
+  test("None keeps the unknown-tool error and its suggestions", async () => {
+    const runtime = CodeMode.make({ tools, hooks: { "tool.missing": () => Effect.succeed(Option.none()) } })
+    expect(await failure(runtime, `await tools.issues.get_list()`)).toMatchObject({
+      kind: "UnknownTool",
+      message: "Unknown tool 'issues.get_list'. Did you mean tools.issues.list?",
+    })
+    expect(await failure(runtime, `await tools.issues()`)).toMatchObject({
+      kind: "UnknownTool",
+      message: expect.stringContaining("it is a namespace"),
+    })
+  })
+
+  test("is not called for registered tools or the built-in search", async () => {
+    const missed: Array<string> = []
+    const runtime = CodeMode.make({
+      tools,
+      hooks: { "tool.missing": (call) => Effect.sync(() => (missed.push(call.name), Option.none())) },
+    })
+    expect(await value(runtime, `return await tools.issues.list()`)).toBe("listed")
+    expect(await value(runtime, `return (await tools.search({ query: "issues" })).items.length`)).toBe(1)
+    expect(missed).toEqual([])
+  })
+
+  test("a failure rejects the program's promise", async () => {
+    const runtime = CodeMode.make({
+      tools,
+      hooks: { "tool.missing": () => Effect.fail(new Error("not allowed here")) },
+    })
+    expect(await value(runtime, `return tools.bash({}).catch((e) => e.message)`)).toBe("not allowed here")
+  })
+
+  test("a call over the limit never reaches it", async () => {
+    const missed: Array<string> = []
+    const runtime = CodeMode.make({
+      tools,
+      limits: { maxToolCalls: 1 },
+      hooks: { "tool.missing": (call) => Effect.sync(() => (missed.push(call.name), Option.some(null))) },
+    })
+    expect(await failure(runtime, `await tools.first(); await tools.second()`)).toMatchObject({
+      kind: "ToolCallLimitExceeded",
+    })
+    expect(missed).toEqual(["first"])
   })
 })
 

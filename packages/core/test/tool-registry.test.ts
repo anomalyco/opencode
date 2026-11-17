@@ -1039,6 +1039,39 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("a call to a name with no tool reaches the hooks, which may rename it", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { echo: make() })
+      const seen: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          if (event.tool === "execute") return
+          seen.push(event.tool)
+          if (event.tool === "ehco") event.tool = "echo"
+        }),
+      )
+      const snapshot = yield* service.snapshot()
+      const program = (code: string) =>
+        snapshot.execute({
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-program", name: "execute", input: { code } },
+        })
+
+      const renamed = yield* program('return await tools.ehco({ text: "hi" })')
+      expect(renamed.output).toMatchObject({ output: JSON.stringify({ text: "hi" }) })
+      // The row shows the call as the program wrote it.
+      expect(renamed.metadata?.toolCalls).toMatchObject([{ tool: "ehco", status: "completed" }])
+
+      const unknown = yield* program("try { await tools.eco({}) } catch (e) { return e.message }")
+      expect(unknown.output).toMatchObject({ output: expect.stringContaining("Unknown tool 'eco'") })
+      expect(unknown.metadata?.toolCalls).toMatchObject([{ tool: "eco", status: "error" }])
+      expect(seen).toEqual(["ehco", "eco"])
+    }),
+  )
+
   it.effect("hooks see one ID per call inside a Code Mode program", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

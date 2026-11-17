@@ -124,6 +124,51 @@ it.effect("runs a call to another harness's tool name as the matching tool and s
   }),
 )
 
+for (const codemode of [true, false]) {
+  it.effect(
+    `tools.bash inside a program ${codemode ? "runs as shell when shell is one of its tools" : "fails when shell is direct-only"}`,
+    () =>
+      Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const registry = yield* Tool.Service
+        const executed: unknown[] = []
+        yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+        yield* registry.transform((draft) =>
+          draft.add({
+            name: "shell",
+            options: { codemode },
+            description: "Shell",
+            input: Schema.Struct({ command: Schema.String, timeout: Schema.optionalKey(Schema.Int) }),
+            execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "done" })),
+          }),
+        )
+        const snapshot = yield* registry.snapshot()
+        const result = yield* snapshot.execute({
+          ...identity,
+          call: {
+            type: "tool-call",
+            id: "call-program-bash",
+            name: "execute",
+            input: { code: 'return await tools.bash({ command: "ls", timeout: "5000" })' },
+          },
+        })
+        if (!codemode) {
+          expect(result.output).toMatchObject({
+            error: true,
+            output: expect.stringContaining("Tool is not available for this request: shell"),
+          })
+          expect(executed).toEqual([])
+          return
+        }
+        expect(executed).toEqual([{ command: "ls", timeout: 5000 }])
+        // The same note a direct call gets, in the value the program receives.
+        expect(result.output).toMatchObject({
+          output: 'done\nThere is no "bash" tool, so this ran as "shell". Call "shell" directly.',
+        })
+      }),
+  )
+}
+
 it.effect("repairs namespaced inner tool input called from Code Mode", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
