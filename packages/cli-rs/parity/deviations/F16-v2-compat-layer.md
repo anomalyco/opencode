@@ -152,6 +152,12 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `getTreeSitterClient().initialize().then(…)` runs on (CT-16, `P.8/shell-highlighting`): the grammar it registers is
   not the host's, which would need the contract to take a plugin's tree-sitter grammar. The `effect` package is not
   among the modules the layer serves (CT-13), where TS's runtime provides it.
+- **Border titles**: a box's `title` and `titleAlignment` are the contract border's; its `bottomTitle` and
+  `bottomTitleAlignment` are not drawn, which would need the contract's border to carry a bottom title
+  (CT-26: @juliuskb/opencode-voice's CPU and memory line, `P.8/voice-title`). An `onSizeChange` a plugin sets on the
+  renderable by its ref runs as one set as a prop does, so voice spreads its top title across the panel's width as
+  in TS. That row's requests differ: the plugin polls its status RPC on a timer, which runs in real time on the JS
+  host, so the replay sends more polls.
 - **Colors**: the context's `theme` leaves are colors that carry their token, so a node the plugin colors from the
   theme follows a theme change without a call, where an installed package's node keeps the color it read in TS. Its
   `hue` scales and `categorical` list are the page theme's, each step carrying the contract's token of it

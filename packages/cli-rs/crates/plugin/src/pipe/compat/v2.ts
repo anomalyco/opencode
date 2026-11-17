@@ -752,7 +752,9 @@ export function context(base: Base, carrier: Carrier) {
     if (!node) return
     if (!node.parent) return void measuring.delete(key)
     // As OpenTUI calls it: on the renderable, whose `width` it may read as `this.width`.
-    node.props.onSizeChange?.call(node)
+    // A plugin may set it on the renderable by its ref rather than as a prop (CT-26: opencode-voice's panel title).
+    const handler = node.props.onSizeChange ?? (node as Json).onSizeChange
+    if (typeof handler === "function") handler.call(node)
   })
   const surface = (name: string, place: Json, input: (cx: Json) => Json, render: (input: Json) => unknown, where: string) => {
     let removed = false
