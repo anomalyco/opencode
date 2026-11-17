@@ -34,6 +34,8 @@ typedef struct instance {
     int fenced;
     /* The host draws a fence node (`fence-node`); without it the fence claim lowers it. */
     int fence_node;
+    /* The host gives a field the focus (`focus-input`); without it `conf.field` says the field needs a click. */
+    int focus_input;
     /* The generation of the mount whose `fixed` subtree the host holds; 0 for none. */
     unsigned long long fixed;
     unsigned long long pads;
@@ -138,6 +140,149 @@ static void send(const opencode_host_api *host, const char *key, const char *mes
     }
 }
 
+/* Whether the host table has its whole `features` entry: a 2.x table whose size covers the full descriptor. */
+static int has_features(const opencode_host_api *host) {
+    return host->major >= 2 && host->size >= offsetof(opencode_host_api, features) + sizeof(host->features);
+}
+
+/* Appends code point `point` to `out` as UTF-8, while `room` lasts; 0 when it did not fit. */
+static int utf8(unsigned long point, char *out, size_t *len, size_t room) {
+    unsigned char bytes[4];
+    size_t count;
+    if (point < 0x80) {
+        bytes[0] = (unsigned char)point;
+        count = 1;
+    } else if (point < 0x800) {
+        bytes[0] = (unsigned char)(0xc0 | (point >> 6));
+        bytes[1] = (unsigned char)(0x80 | (point & 0x3f));
+        count = 2;
+    } else if (point < 0x10000) {
+        bytes[0] = (unsigned char)(0xe0 | (point >> 12));
+        bytes[1] = (unsigned char)(0x80 | ((point >> 6) & 0x3f));
+        bytes[2] = (unsigned char)(0x80 | (point & 0x3f));
+        count = 3;
+    } else {
+        bytes[0] = (unsigned char)(0xf0 | (point >> 18));
+        bytes[1] = (unsigned char)(0x80 | ((point >> 12) & 0x3f));
+        bytes[2] = (unsigned char)(0x80 | ((point >> 6) & 0x3f));
+        bytes[3] = (unsigned char)(0x80 | (point & 0x3f));
+        count = 4;
+    }
+    if (*len + count >= room) {
+        return 0;
+    }
+    memcpy(out + *len, bytes, count);
+    *len += count;
+    return 1;
+}
+
+/* The four hex digits at `at`, or -1. */
+static long hex4(const uint8_t *at, const uint8_t *end) {
+    long value = 0;
+    for (int index = 0; index < 4; index++, at++) {
+        if (at >= end) {
+            return -1;
+        }
+        int digit = *at >= '0' && *at <= '9'   ? *at - '0'
+                    : *at >= 'a' && *at <= 'f' ? *at - 'a' + 10
+                    : *at >= 'A' && *at <= 'F' ? *at - 'A' + 10
+                                               : -1;
+        if (digit < 0) {
+            return -1;
+        }
+        value = value * 16 + digit;
+    }
+    return value;
+}
+
+/* Decodes the JSON string that starts after its opening quote at `*at` into `out`, NUL-terminated, and moves `*at`
+ * past its closing quote; 0 when it is malformed or longer than `room`. */
+static int json_string(const uint8_t **at, const uint8_t *end, char *out, size_t room) {
+    size_t len = 0;
+    while (*at < end && **at != '"') {
+        unsigned long point = **at;
+        *at += 1;
+        if (point == '\\') {
+            if (*at >= end) {
+                return 0;
+            }
+            uint8_t escape = **at;
+            *at += 1;
+            switch (escape) {
+            case '"': case '\\': case '/': point = escape; break;
+            case 'b': point = '\b'; break;
+            case 'f': point = '\f'; break;
+            case 'n': point = '\n'; break;
+            case 'r': point = '\r'; break;
+            case 't': point = '\t'; break;
+            case 'u': {
+                long high = hex4(*at, end);
+                if (high < 0) {
+                    return 0;
+                }
+                *at += 4;
+                point = (unsigned long)high;
+                /* A surrogate pair is one code point. */
+                if (high >= 0xd800 && high < 0xdc00 && end - *at >= 6 && (*at)[0] == '\\' && (*at)[1] == 'u') {
+                    long low = hex4(*at + 2, end);
+                    if (low >= 0xdc00 && low < 0xe000) {
+                        point = 0x10000 + (((unsigned long)high - 0xd800) << 10) + ((unsigned long)low - 0xdc00);
+                        *at += 6;
+                    }
+                }
+                break;
+            }
+            default: return 0;
+            }
+            if (!utf8(point, out, &len, room)) {
+                return 0;
+            }
+        } else {
+            if (len + 1 >= room) {
+                return 0;
+            }
+            out[len++] = (char)point;
+        }
+    }
+    if (*at >= end) {
+        return 0;
+    }
+    *at += 1;
+    out[len] = '\0';
+    return 1;
+}
+
+/* Whether the host states feature `name`: an element of its `features` array, decoded, equals it exactly. */
+static int has_feature(const opencode_host_api *host, const char *name) {
+    if (!has_features(host) || host->features.ptr == NULL) {
+        return 0;
+    }
+    const uint8_t *at = host->features.ptr, *end = host->features.ptr + host->features.len;
+    while (at < end && (*at == ' ' || *at == '\t' || *at == '\n' || *at == '\r')) {
+        at++;
+    }
+    if (at >= end || *at != '[') {
+        return 0;
+    }
+    at++;
+    for (;;) {
+        while (at < end && (*at == ' ' || *at == '\t' || *at == '\n' || *at == '\r' || *at == ',')) {
+            at++;
+        }
+        if (at >= end || *at != '"') {
+            return 0;
+        }
+        at++;
+        char feature[128];
+        if (!json_string(&at, end, feature, sizeof feature)) {
+            return 0;
+        }
+        if (strcmp(feature, name) == 0) {
+            return 1;
+        }
+    }
+}
+
 static const char *const COMMANDS[] = {
     "conf.toast", "conf.store", "conf.send", "conf.wake",  "conf.panic", "conf.dup",  "conf.read",
     "conf.pad",   "conf.down",  "conf.step", "conf.where", "conf.ui",    "conf.bump", "conf.message",
@@ -167,8 +312,8 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
     }
     self->host = host;
     self->search_toast = find(options, "search-toast") != NULL;
-    /* A 1.x table has no features: its size ends before them. */
-    self->fence_node = OFFERS(host, features.ptr) && find(host->features, "\"fence-node\"") != NULL;
+    self->fence_node = has_feature(host, "fence-node");
+    self->focus_input = has_feature(host, "focus-input");
     /* As the Rust SDK's `storage_key` does: the host serves the key from here on, also during setup. */
     ask(host, "{\"type\":\"storage-key\",\"key\":\"count\"}", NULL, 0);
     *out_instance = self;
@@ -308,7 +453,11 @@ static int32_t command(instance *self, opencode_bytes request, opencode_owned *o
     } else if (names(request, "conf.dup")) {
         self->dup = 1;
     } else if (names(request, "conf.field")) {
-        ask(host, "{\"type\":\"focus\",\"node\":\"field\"}", NULL, 0);
+        if (self->focus_input) {
+            ask(host, "{\"type\":\"focus\",\"node\":\"field\"}", NULL, 0);
+        } else {
+            toast(host, "info", "field needs a click");
+        }
     } else if (names(request, "conf.fence")) {
         self->fenced = 1;
     } else if (names(request, "conf.dialogs")) {
