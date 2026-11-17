@@ -354,6 +354,7 @@ export default function SessionBrowserPane(props: {
 
     return {
       source: source(),
+      serverFile: serverFile(),
       open: externalPage(url, session.server.local) && (!tab?.loadError || externalAction(url, session.server.local) === "browser"),
       reveal: externalAction(url, session.server.local) === "reveal",
       openPage() {
@@ -780,21 +781,26 @@ export default function SessionBrowserPane(props: {
                     icon={<Icon name="outline-globe-plus" />}
                   />
                 </Tooltip>
-                <Show keyed when={!serverFile() && pageTarget()}>
-                  {(target) => (
-                    <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
-                      <IconButton
-                        type="button"
-                        variant="ghost-muted"
-                        size="small"
-                        aria-label={plugin.t(externalLabel())}
-                        disabled={!reachable()}
-                        onPointerDown={(event) => event.preventDefault()}
-                        onClick={target.reveal ? target.revealFile : target.openPage}
-                        icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
-                      />
-                    </Tooltip>
-                  )}
+                <Show when={!serverFile()}>
+                  <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
+                    <IconButton
+                      type="button"
+                      variant="ghost-muted"
+                      size="small"
+                      aria-label={plugin.t(externalLabel())}
+                      disabled={!reachable()}
+                      onPointerDown={(event) => event.preventDefault()}
+                      // The page as it is at the click; a target built while rendering would remount this button
+                      // on every title or loading change.
+                      onClick={() => {
+                        const target = pageTarget()
+
+                        if (target.reveal) return target.revealFile()
+                        target.openPage()
+                      }}
+                      icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
+                    />
+                  </Tooltip>
                 </Show>
               </div>
             </Show>
@@ -926,14 +932,31 @@ export default function SessionBrowserPane(props: {
                   </Menu.Item>
                 </Menu.Group>
                 <Menu.Separator />
-                <Menu.Item disabled={!address() || serverFile()} title={serverFile() ? plugin.t("menu.privateAddress") : undefined} onSelect={copyLink}>
-                  {plugin.t("link.copy")}
-                </Menu.Item>
+                {/* A disabled item takes no pointer events, so a tooltip never shows: its reason is a line below it. */}
+                <Menu.Group>
+                  <Menu.Item disabled={!address() || serverFile()} onSelect={copyLink}>
+                    {plugin.t("link.copy")}
+                  </Menu.Item>
+                  <Show when={menuPage()?.serverFile}>
+                    <Menu.GroupLabel class="!h-auto !py-1.5">
+                      <span dir="auto" class="break-words">{plugin.t("menu.privateAddress")}</span>
+                    </Menu.GroupLabel>
+                  </Show>
+                </Menu.Group>
                 <Menu.Item disabled={!inspectable()} onSelect={() => find({ type: "open" })}>{plugin.t("find.open")}</Menu.Item>
                 <Show when={menuPage()?.source}>
                   {(open) => <Menu.Item onSelect={() => open()()}>{plugin.t("preview.source")}</Menu.Item>}
                 </Show>
-                <Menu.Item disabled={!menuPage()?.open} title={!menuPage()?.open ? plugin.t("menu.pageUnavailable") : undefined} onSelect={() => menuPage()?.openPage()}>{plugin.t("menu.openPage")}</Menu.Item>
+                <Menu.Group>
+                  <Menu.Item disabled={!menuPage()?.open} onSelect={() => menuPage()?.openPage()}>
+                    {plugin.t("menu.openPage")}
+                  </Menu.Item>
+                  <Show when={!menuPage()?.open}>
+                    <Menu.GroupLabel class="!h-auto !py-1.5">
+                      <span dir="auto" class="break-words">{plugin.t("menu.pageUnavailable")}</span>
+                    </Menu.GroupLabel>
+                  </Show>
+                </Menu.Group>
                 <Show when={menuPage()?.reveal}>
                 <Menu.Item onSelect={() => menuPage()?.revealFile()}>
                   {plugin.t("external.reveal")}
