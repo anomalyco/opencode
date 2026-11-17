@@ -91,6 +91,45 @@ story("reviews the actual application target only after a trusted click", async 
   await expect(open).toHaveCount(0)
 })
 
+story("accepts an assistive activation of the focused link, not a synthetic or unfocused one", async ({ page }) => {
+  const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
+  // A mail link keeps its href, so Chromium activates it on Enter.
+  const url = "mailto:assistive@example.invalid"
+  await page.evaluate(async ({ sanitizer, url }) => {
+    const { enableMarkdownAppLinks, sanitizeMarkdown } = await import(sanitizer)
+    const row = document.createElement("div")
+    row.dataset.paneRow = ""
+    row.innerHTML = sanitizeMarkdown(`<a href="${url}">Assistive link</a> <a href="https://example.invalid/">Other</a>`)
+    enableMarkdownAppLinks(row)
+    document.querySelector('[data-testid="browser-pane-fixture"]')?.prepend(row)
+    // A screen reader's default action is a trusted click with no press. Chromium sends the same one for Enter on a
+    // live link when nothing handles the key, so keep the app's own Enter handling out of the way.
+    window.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key !== "Enter" || !("assistive" in window)) return
+        event.stopImmediatePropagation()
+
+        if (Reflect.get(window, "assistive") === "unfocused") row.querySelectorAll("a")[1]?.focus()
+      },
+      true,
+    )
+  }, { sanitizer, url })
+  const pane = page.locator("#browser-panel")
+  const link = page.getByRole("link", { name: "Assistive link" })
+  await link.focus()
+  await link.evaluate((node) => node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 0 })))
+  await page.evaluate(() => Object.assign(window, { assistive: "unfocused" }))
+  await link.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("link", { name: "Other" })).toBeFocused()
+  await expect(pane.getByText(url)).toHaveCount(0)
+  await page.evaluate(() => Object.assign(window, { assistive: "focused" }))
+  await link.focus()
+  await page.keyboard.press("Enter")
+  await expect(pane.getByRole("status").filter({ hasText: "From the conversation" })).toContainText(url)
+})
+
 story("moves the native page when a fixed-size pane changes position", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   const x = Number(await native.getAttribute("data-x"))
@@ -157,6 +196,48 @@ story("a spinner inside a persistent floating surface does not measure the pane 
 
   expect(reads).toBe(0)
   await expect(native).toHaveAttribute("data-visible", "true")
+})
+
+story("stops measuring the pane once a finite animation ends or is cancelled", async ({ page }) => {
+  const native = page.getByTestId("native-Alpha")
+  const x = Number(await native.getAttribute("data-x"))
+
+  const reads = await page.locator("#browser-panel").evaluate(async (panel) => {
+    const box = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!
+    const rect = box.getBoundingClientRect.bind(box)
+    const count = { reads: 0 }
+    box.getBoundingClientRect = () => {
+      count.reads++
+
+      return rect()
+    }
+    const frames = (n: number) =>
+      new Promise<void>((resolve) => {
+        const step = (left: number) => (left ? requestAnimationFrame(() => step(left - 1)) : resolve())
+        step(n)
+      })
+    const idle = async () => {
+      const before = count.reads
+      await frames(10)
+
+      return count.reads - before
+    }
+
+    const finished = panel.parentElement!.animate([{ translate: "0" }, { translate: "-20px" }], { duration: 120, fill: "forwards" })
+    await finished.finished
+    await frames(2)
+    const afterFinish = await idle()
+    const cancelled = panel.parentElement!.animate([{ translate: "-20px" }, { translate: "-60px" }], { duration: 5_000 })
+    await frames(3)
+    cancelled.cancel()
+    await frames(2)
+    const afterCancel = await idle()
+
+    return { afterFinish, afterCancel, measured: count.reads > 0 }
+  })
+
+  expect(reads).toEqual({ afterFinish: 0, afterCancel: 0, measured: true })
+  await expect(native).toHaveAttribute("data-x", String(x - 20))
 })
 
 story("does not measure when the pane's own still enters or leaves its box", async ({ page }) => {
