@@ -274,9 +274,8 @@ const layer = Layer.effect(
             tools: loaded.tools,
             toolEpoch: transcript.toolEpoch,
             system: transcript.system,
-            messages: stepLimitReached
-              ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
-              : transcript.messages,
+            messages: transcript.messages,
+            prefill: stepLimitReached ? Message.assistant(MAX_STEPS_PROMPT) : undefined,
             // Keep tool definitions on the final Step to preserve the provider's cached prefix.
             toolChoice: stepLimitReached ? "none" : undefined,
             webSocket: "session",

@@ -2693,6 +2693,34 @@ describe("SessionRunnerLLM", () => {
       expect((yield* s.context).filter((message) => message.type === "system")).toEqual(recorded)
     })
 
+    scenario("places a change after a step a crash cut short, where it replays", function* (s) {
+      s.currentModel = trackedModel()
+      yield* swapTools(s)
+      // A prior process died while streaming the next step: the input was promoted and partial text was stored.
+      yield* s.admit("Second")
+      yield* SessionInbox.promote(s.db, s.bus, sessionID, "steer")
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* s.bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model: { id: ID.make("claude-opus-5-5"), providerID: Provider.ID.make("fake") },
+        started: 0,
+      })
+      yield* s.bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 0 })
+      yield* s.bus.publish(SessionEvent.Text.Ended, { sessionID, assistantMessageID, ordinal: 0, text: "partial" })
+      yield* s.llm.push(TestLLM.text("Done", "text-resumed"))
+      yield* s.resume
+      yield* s.runPrompt("Third")
+
+      const [, resumed, next] = s.requests
+      // The change goes after the cut-short step in both requests, so the next one extends the one before it.
+      expect(resumed?.messages.at(-1)).toMatchObject({ role: "system", tools: expect.anything() })
+      expect(next?.messages.slice(0, resumed?.messages.length)).toEqual([...(resumed?.messages ?? [])])
+      expect(markers(next).map(names)).toEqual([{ add: ["fresh"], remove: ["lookup"] }])
+      expect(toolNames(next)).toEqual(toolNames(s.requests[0]))
+    })
+
     scenario("runs an added tool and refuses a removed one", function* (s) {
       s.currentModel = trackedModel()
       const executions: string[] = []

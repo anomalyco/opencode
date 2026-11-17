@@ -91,6 +91,8 @@ export interface Input {
   readonly toolEpoch?: SessionToolChanges.Epoch
   readonly system: Array<SystemPart>
   readonly messages: Array<SessionRequestMessage>
+  /** An assistant message appended after the history to steer the reply. Hooks see it last; a tool change goes before it. */
+  readonly prefill?: Message
   readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
@@ -304,7 +306,7 @@ export const layer = Layer.effect(
           sessionID: session.id,
           model: model.ref,
           system: input.system,
-          messages: input.messages,
+          messages: input.prefill ? [...input.messages, input.prefill] : input.messages,
           options:
             kind === "primary"
               ? { maxTokens: outputLimit(model.limit, input.inputTokens, WINDOW_HEADROOM) }
@@ -348,8 +350,9 @@ export const layer = Layer.effect(
           model.model.provider,
         ),
       )
-      // A change sits where the history ends, which is where it replays once recorded, before any assistant prefill.
-      const at = messages.findLastIndex((message) => message.role !== "assistant") + 1
+      // A change sits where the history ends, which is where it replays once recorded. A trailing assistant message is
+      // history too (a step a crash cut short), so only the prefill goes after the change.
+      const at = input.prefill && messages.at(-1)?.role === "assistant" ? messages.length - 1 : messages.length
       const affinity = SessionAffinity.get(session)
       const base = ai.request({
         model: model.model,
