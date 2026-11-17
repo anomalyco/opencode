@@ -46,12 +46,17 @@ test("a popup or options page is always a page of the extension's own package", 
   ])
 })
 
-test("a popup sits under its button within Chrome's size limits and the window", () => {
-  const anchor = { x: 900, y: 40, width: 32, height: 32 }
+test("a popup starts at the page area's top with its right edge on its button's, within Chrome's size limits and the window", () => {
+  // The button ends 6 px above the page area: the toolbar's own inset, which the popup does not copy.
+  const placement = { anchor: { x: 900, y: 40, width: 32, height: 32 }, top: 78 }
   const content = { width: 1000, height: 700 }
 
-  expect(popupBounds(anchor, { width: 300, height: 400 }, content)).toEqual({ x: 632, y: 76, width: 300, height: 400 })
-  expect(popupBounds(anchor, { width: 10, height: 10 }, content)).toEqual({ x: 907, y: 76, width: 25, height: 25 })
-  expect(popupBounds(anchor, { width: 2000, height: 2000 }, content)).toEqual({ x: 132, y: 76, width: 800, height: 600 })
-  expect(popupBounds({ x: 10, y: 40, width: 32, height: 32 }, { width: 300, height: 100 }, content).x).toBe(0)
+  expect(popupBounds(placement, { width: 300, height: 400 }, content)).toEqual({ x: 632, y: 78, width: 300, height: 400 })
+  expect(popupBounds(placement, { width: 10, height: 10 }, content)).toEqual({ x: 907, y: 78, width: 25, height: 25 })
+  expect(popupBounds(placement, { width: 2000, height: 2000 }, content)).toEqual({ x: 132, y: 78, width: 800, height: 600 })
+  // Under a notice or find bar the page area starts lower, and so does the popup.
+  expect(popupBounds({ ...placement, top: 122 }, { width: 300, height: 400 }, content).y).toBe(122)
+  // One that would not fit below moves up to stay inside the window.
+  expect(popupBounds({ ...placement, top: 400 }, { width: 300, height: 400 }, content).y).toBe(300)
+  expect(popupBounds({ anchor: { x: 10, y: 40, width: 32, height: 32 }, top: 78 }, { width: 300, height: 100 }, content).x).toBe(0)
 })

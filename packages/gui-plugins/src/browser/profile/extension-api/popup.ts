@@ -7,19 +7,24 @@ const POPUP_MIN = { width: 25, height: 25 }
 const POPUP_MAX = { width: 800, height: 600 }
 
 /**
- * Where a popup goes in its window's content: under its anchor, its right edge on the anchor's, at the size its page
- * asks for within Chrome's limits, moved left or up to stay inside the content.
+ * Where a popup belongs in its window's content, in device-independent pixels: `anchor` is the extensions button and
+ * `top` the top edge of the page area under the toolbar and its bars, both as the window reported them.
+ */
+export type PopupPlacement = { readonly anchor: Rectangle; readonly top: number }
+
+/**
+ * Where a popup goes in its window's content: its top edge on the page area's, its right edge on its button's, at the
+ * size its page asks for within Chrome's limits, moved left or up to stay inside the content.
  */
 export function popupBounds(
-  anchor: Rectangle,
+  placement: PopupPlacement,
   size: { width: number; height: number },
   content: { width: number; height: number },
 ) {
   const width = Math.min(Math.max(Math.round(size.width), POPUP_MIN.width), POPUP_MAX.width, content.width)
   const height = Math.min(Math.max(Math.round(size.height), POPUP_MIN.height), POPUP_MAX.height, content.height)
-  const x = Math.min(Math.max(anchor.x + anchor.width - width, 0), content.width - width)
-  const below = anchor.y + anchor.height + 4
-  const y = below + height <= content.height ? below : Math.max(content.height - height, 0)
+  const x = Math.min(Math.max(placement.anchor.x + placement.anchor.width - width, 0), content.width - width)
+  const y = placement.top + height <= content.height ? placement.top : Math.max(content.height - height, 0)
 
   return { x: Math.round(x), y: Math.round(y), width, height }
 }
@@ -35,26 +40,27 @@ type OpenPopup = { close?: () => void }
  * tabs of the pane.
  */
 export function createPopups(input: { partition: string; tabs: ExtensionTabs }) {
-  // Where each window's extensions button is, from the click that opens a popup.
-  const anchors = new Map<number, Rectangle>()
+  // Where each window's extensions button and page area are, from the click that opens a popup.
+  const anchors = new Map<number, PopupPlacement>()
   const current: OpenPopup = {}
 
   const close = () => current.close?.()
 
   return {
-    /** Remembers where `window`'s extensions button is, in the window's content coordinates. */
-    anchor(window: BrowserWindow, anchor: Rectangle) {
+    /** Remembers where `window`'s extensions button and page area are, in the window's content coordinates. */
+    anchor(window: BrowserWindow, placement: PopupPlacement) {
       const id = window.id
 
       if (!anchors.has(id)) window.once("closed", () => anchors.delete(id))
-      anchors.set(id, anchor)
+      anchors.set(id, placement)
     },
     /** Opens `url` over `window`; only a page of `extension`'s own package opens, as in Chrome. */
     open(window: BrowserWindow, extension: string, url: string) {
       if (!URL.canParse(url) || new URL(url).protocol !== "chrome-extension:" || new URL(url).host !== extension) return
       close()
       const content = window.getContentBounds()
-      const anchor = anchors.get(window.id) ?? { x: content.width - 40, y: 0, width: 32, height: 32 }
+      // A popup an extension opens before any click in this window has no reported place: the window's top end corner.
+      const placement = anchors.get(window.id) ?? { anchor: { x: content.width - 40, y: 0, width: 32, height: 32 }, top: 32 }
 
       const view = new electron.WebContentsView({
         webPreferences: {
@@ -76,7 +82,7 @@ export function createPopups(input: { partition: string; tabs: ExtensionTabs }) 
       const leave = input.tabs.watchPopupTab(window.id, about, () => dismiss())
 
       const place = (size: { width: number; height: number }) => {
-        if (!window.isDestroyed()) view.setBounds(popupBounds(anchor, size, window.getContentBounds()))
+        if (!window.isDestroyed()) view.setBounds(popupBounds(placement, size, window.getContentBounds()))
       }
 
       // The window's page, which has focus until the popup takes it, and gets it back when the popup closes.

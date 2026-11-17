@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises"
-import type { BrowserWindow, Rectangle, Session } from "electron"
+import type { BrowserWindow, Session } from "electron"
 import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { createActions } from "./action"
 import type { Emit } from "./api"
@@ -9,7 +9,7 @@ import { createExtensionHost } from "./host"
 import { createManifests } from "./manifest"
 import { createNotifications } from "./notifications"
 import { createPermissions } from "./permissions"
-import { createPopups } from "./popup"
+import { createPopups, type PopupPlacement } from "./popup"
 import { createStorageSync } from "./storage-sync"
 import { createStyles } from "./styles"
 import { createStubs } from "./stubs"
@@ -86,14 +86,14 @@ export async function createExtensionApis(input: {
     /** The toolbar button state the extensions menu shows, for extensions that have a button. */
     action: actions.view,
     /**
-     * The user chose an extension in `window`'s extensions menu, whose button is at `anchor`: its popup opens there,
-     * or the extension hears the click. Returns false when it has no button.
+     * The user chose an extension in `window`'s extensions menu: its popup opens at `placement`, or the extension
+     * hears the click. Returns false when it has no button.
      */
-    click(window: BrowserWindow, id: string, tabId: number, anchor: Rectangle) {
+    click(window: BrowserWindow, id: string, tabId: number, placement: PopupPlacement) {
       const extension = input.session.extensions.getExtension(id)
 
       if (!extension) return false
-      popups.anchor(window, anchor)
+      popups.anchor(window, placement)
 
       tabs.activated(tabId)
 

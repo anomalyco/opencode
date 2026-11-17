@@ -267,7 +267,8 @@ export const BrowserProfile = Ipc.define({
     remove: { input: Schema.Struct({ id: text(64) }) },
     /**
      * The user chose an extension in the pane's extensions menu, whose button sits at `anchor` in the window's
-     * content, in CSS pixels: its popup opens under it, or the extension hears the click. False when the extension
+     * content, in CSS pixels: its popup opens with its right edge on the button's and its top edge on `pageTop`, the
+     * top of the page area under the toolbar and its bars, or the extension hears the click. False when the extension
      * has no toolbar button, so the window opens its options page instead.
      */
     click: {
@@ -276,6 +277,7 @@ export const BrowserProfile = Ipc.define({
         tabID: Browser.TabID,
         id: text(64),
         anchor: Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number }),
+        pageTop: Schema.Number,
       }),
       output: Schema.Boolean,
     },

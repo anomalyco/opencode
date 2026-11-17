@@ -206,19 +206,25 @@ const setup: Plugin.MainSetup = (ctx) => {
       const win = ctx.windows.get(caller.window)
 
       if (!win || win.isDestroyed()) return false
-      // The window lays out in CSS pixels; its content is in device-independent ones.
+      // The window lays out in CSS pixels; its content is in device-independent ones. Each edge is rounded by itself,
+      // as the page view's edges are, so the popup's edges land on the same pixels as the button's and the page's.
       const zoom = win.webContents.getZoomFactor()
       const anchor = input.anchor
       const current = await profile()
       const tab = (await pane()).toolbarTab(caller.window, input.binding, input.tabID)
 
       if (tab === undefined) return false
+      const x = Math.round(anchor.x * zoom)
+      const y = Math.round(anchor.y * zoom)
 
       return current.clickExtension(win, input.id, tab, {
-        x: Math.round(anchor.x * zoom),
-        y: Math.round(anchor.y * zoom),
-        width: Math.round(anchor.width * zoom),
-        height: Math.round(anchor.height * zoom),
+        anchor: {
+          x,
+          y,
+          width: Math.round((anchor.x + anchor.width) * zoom) - x,
+          height: Math.round((anchor.y + anchor.height) * zoom) - y,
+        },
+        top: Math.round(input.pageTop * zoom),
       })
     },
     enable: (input) => serial(async () => (await profile()).enable(input.id, input.enabled)),

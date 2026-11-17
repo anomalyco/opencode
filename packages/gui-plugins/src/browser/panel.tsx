@@ -151,6 +151,8 @@ export default function SessionBrowserPane(props: {
     if (!visible()) return
     const current = profile()
     const rect = extensionsButton.element?.getBoundingClientRect()
+    // Where the page starts, under the toolbar and any bar below it: a popup starts there too, as in every browser.
+    const pageTop = box?.getBoundingClientRect().top
     const binding = props.model.binding(props.session)
     const tab = state()
 
@@ -160,9 +162,9 @@ export default function SessionBrowserPane(props: {
       if (page) props.model.openURL(props.session, page)
     }
 
-    if (current.status !== "active" || !rect || !binding || !tab) return fallback()
+    if (current.status !== "active" || !rect || pageTop === undefined || !binding || !tab) return fallback()
     const anchor = { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-    void current.value.click({ id: extension.id, binding, tabID: tab.id, anchor }).then((handled) => {
+    void current.value.click({ id: extension.id, binding, tabID: tab.id, anchor, pageTop }).then((handled) => {
       if (!handled) fallback()
     }, fallback)
   }
