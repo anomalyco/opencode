@@ -16,6 +16,7 @@ mod extension;
 mod hooks;
 mod host;
 mod object;
+pub mod openapi;
 mod ops;
 mod program;
 mod promise;

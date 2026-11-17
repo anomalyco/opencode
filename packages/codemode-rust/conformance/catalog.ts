@@ -15,7 +15,10 @@ import { join, resolve } from "node:path"
 const override = process.argv[2] ?? process.env.CODEMODE_REF
 const pkg = override === undefined ? resolve(import.meta.dir, "../../codemode") : resolve(override)
 const { Effect, Schema } = await import(Bun.resolveSync("effect", join(pkg, "src")))
-const { CodeMode, Namespace, Tool, searchSignature, toolExpression } = await import(join(pkg, "src/index.ts"))
+const { CodeMode, Namespace, OpenAPI, Tool, searchSignature, toolExpression } = await import(join(pkg, "src/index.ts"))
+const { Layer } = await import(Bun.resolveSync("effect", join(pkg, "src")))
+const { HttpClient, HttpClientRequest, HttpClientResponse } = await import(Bun.resolveSync("effect/http", join(pkg, "src")))
+const { cases } = await import("./openapi-specs.ts")
 
 type Spec = {
   path: string
@@ -286,6 +289,101 @@ const outcome = async (code: string) => {
     : { ok: false, error: result.error, toolCalls: result.toolCalls.length }
 }
 
+// OpenAPI: each case's generated tools under `api`, what was skipped, and its calls through a recording client.
+const sorted = (record: Record<string, string>) =>
+  Object.fromEntries(Object.entries(record).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+
+const openapi: Array<unknown> = []
+for (const item of cases(pkg)) {
+  openapi.push(await (async () => {
+    let resolutions: Array<unknown> = []
+    const api = OpenAPI.fromSpec({
+      spec: item.spec,
+      ...(item.baseUrl === undefined ? {} : { baseUrl: item.baseUrl }),
+      ...(item.headers === undefined ? {} : { headers: item.headers }),
+      auth: {
+        resolve: (context: { name: string }) => {
+          resolutions.push(JSON.parse(JSON.stringify(context)))
+          return Effect.succeed(item.auth?.[context.name])
+        },
+      },
+    })
+    const runtime = CodeMode.make({ tools: { api: api.tools } })
+    const schemas: Array<unknown> = []
+    const walk = (node: Record<string, unknown>, prefix: string) => {
+      for (const [name, value] of Object.entries(node)) {
+        const path = prefix === "" ? name : `${prefix}.${name}`
+        if (Tool.isTool(value)) schemas.push({ path, input: value.input, output: value.output ?? null })
+        else walk(value as Record<string, unknown>, path)
+      }
+    }
+    walk(api.tools, "")
+    schemas.sort((a: any, b: any) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    const calls = []
+    for (const call of item.calls ?? []) {
+      resolutions = []
+      const requests: Array<unknown> = []
+      const reply = call.reply ?? {}
+      const layer = Layer.succeed(HttpClient.HttpClient)(
+        HttpClient.make((request: any) =>
+          Effect.sync(() => {
+            const body =
+              request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : null
+            requests.push({
+              method: request.method,
+              url: HttpClientRequest.toUrl(request).pipe((o: any) => (o._tag === "Some" ? o.value.toString() : request.url)),
+              // Tracing and framing headers come from Effect's client, not from the OpenAPI tools.
+              headers: sorted(
+                Object.fromEntries(
+                  Object.entries(request.headers).filter(
+                    ([name]) => !["b3", "traceparent", "content-length"].includes(name),
+                  ),
+                ) as Record<string, string>,
+              ),
+              body,
+            })
+            const headers: Record<string, string> = {}
+            if (reply.contentType !== undefined) headers["content-type"] = reply.contentType
+            if (reply.contentLength !== undefined) headers["content-length"] = reply.contentLength
+            return HttpClientResponse.fromWeb(
+              request,
+              new Response(reply.body ?? null, { status: reply.status ?? 200, headers }),
+            )
+          }),
+        ),
+      )
+      const code = `return await ${toolExpression(`api.${call.tool}`)}(${JSON.stringify(call.input)})`
+      const result = await Effect.runPromise(runtime.execute(code).pipe(Effect.provide(layer)))
+      calls.push({
+        ...call,
+        outcome: result.ok
+          ? { ok: true, value: result.value }
+          : { ok: false, kind: result.error.kind, message: result.error.message },
+        requests,
+        resolutions,
+      })
+    }
+    return {
+      name: item.name,
+      spec: item.spec,
+      baseUrl: item.baseUrl ?? null,
+      auth: item.auth ?? {},
+      headers: item.headers ?? {},
+      catalog:
+        item.render === false
+          ? null
+          : runtime.catalog.map((tool: { path: string; description: string; signature: string }) => ({
+              path: tool.path,
+              description: tool.description,
+              signature: tool.signature,
+            })),
+      schemas,
+      skipped: api.skipped,
+      calls,
+    }
+  })())
+}
+
 const expected = {
   tools: specs,
   namespaces,
@@ -300,6 +398,9 @@ const expected = {
     toolExpression(path),
   ]),
   programs: await Promise.all(programs.map(async (code) => ({ code, ...(await outcome(code)) }))),
+  openapi,
 }
 writeFileSync(join(import.meta.dir, "catalog.json"), JSON.stringify(expected, null, 2) + "\n")
-console.log(`${expected.catalog.length} tools, ${expected.programs.length} programs`)
+console.log(
+  `${expected.catalog.length} tools, ${expected.programs.length} programs, ${openapi.length} OpenAPI documents`,
+)
