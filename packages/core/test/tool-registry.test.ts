@@ -962,6 +962,36 @@ describe("Tool", () => {
     )
   })
 
+  it.effect("hooks see one ID per call inside a Code Mode program", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { echo: make() })
+      const before: string[] = []
+      const after: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => void (event.tool === "echo" && before.push(event.id))),
+      )
+      yield* hooks.register("tool", "execute.after", (event) =>
+        Effect.sync(() => void (event.tool === "echo" && after.push(event.id))),
+      )
+      const snapshot = yield* service.snapshot()
+      yield* snapshot.execute({
+        sessionID,
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-program",
+          name: "execute",
+          input: { code: 'await Promise.all([tools.echo({ text: "a" }), tools.echo({ text: "b" })])' },
+        },
+      })
+      expect(new Set(before).size).toBe(2)
+      expect(before).not.toContain("call-program")
+      expect(after.toSorted()).toEqual(before.toSorted())
+    }),
+  )
+
   it.effect("normalizes image tool output once and drops unresizable images", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
