@@ -105,5 +105,6 @@ test("editor redirects without a person's input in the current page stay copy-on
     expect(navigationNotice(url, {}, "agent", true)).toMatchObject({ action: "copy" })
     expect(navigationNotice(url, {}, "conversation", true)).toMatchObject({ action: "copy" })
   }
+
   expect(navigationNotice("zoommtg:fixture", {}, "user")).toMatchObject({ action: "open" })
 })

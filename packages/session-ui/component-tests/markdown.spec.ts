@@ -216,6 +216,7 @@ story("bounds author-sized math to its own line box", async ({ page }) => {
   }, fixture)
   const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
   await expect(md.locator(".katex")).toHaveCount(1)
+
   const box = await md.evaluate((root) => ({
     widest: Math.max(...Array.from(root.querySelectorAll(".katex-html *"), (node) => node.getBoundingClientRect().width)),
     em: parseFloat(getComputedStyle(root.querySelector(".katex")!).fontSize),
@@ -223,6 +224,7 @@ story("bounds author-sized math to its own line box", async ({ page }) => {
   }))
   // KaTeX caps every authored size at maxSize (10em, plus the colour box's padding), and each line box clips the ink
   // that offsets and negative margins push out.
+
   expect(box.widest).toBeLessThan(box.em * 11)
   expect(box.overflow).toBe("clip")
 })
