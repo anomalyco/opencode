@@ -634,7 +634,7 @@ export default function SessionBrowserPane(props: {
         data-component="browser-bar"
         class="h-11 shrink-0 flex items-center gap-2 px-3 border-b-[0.5px] border-v2-border-border-muted"
       >
-        <div class="flex shrink-0 items-center">
+        <div class="flex shrink-0 items-center gap-1">
           <For each={["back", "forward"] as const}>
             {(direction) => (
               <Tooltip placement="top" value={plugin.t(direction === "back" ? "common.goBack" : "common.goForward")}>
@@ -931,8 +931,7 @@ export default function SessionBrowserPane(props: {
                 </Menu.Item>
                 {/* One row: out, the zoom itself (which resets it), in. Zooming closes the menu: the page stays a
                     still while the menu covers it, so a zoom would show only once it closed. */}
-                <div role="group" aria-label={plugin.t("zoom.label")} data-slot="browser-menu-zoom">
-                  <span class="min-w-0 flex-1 truncate">{plugin.t("zoom.label")}</span>
+                <Menu.ItemRow label={plugin.t("zoom.label")}>
                   <Menu.Item disabled={!address()} aria-label={plugin.t("zoom.out")} onSelect={() => zoomPage("out")}>
                     <Icon name="minus" size="small" />
                   </Menu.Item>
@@ -942,7 +941,7 @@ export default function SessionBrowserPane(props: {
                   <Menu.Item disabled={!address()} aria-label={plugin.t("zoom.in")} onSelect={() => zoomPage("in")}>
                     <Icon name="plus" size="small" />
                   </Menu.Item>
-                </div>
+                </Menu.ItemRow>
                 {/* A disabled item takes no pointer events, so a tooltip never shows: its reason is a line below it. */}
                 <Menu.Group>
                   <Menu.Item disabled={!address() || serverFile()} onSelect={copyLink}>
@@ -1547,20 +1546,25 @@ function SiteInformation(props: {
               </>
             }
           >
-            <div data-slot="browser-site-row" class="!items-center">
-              <IconButton
-                ref={views.back}
-                type="button"
-                variant="ghost-muted"
-                size="small"
-                class="rtl:-scale-x-100"
-                aria-label={plugin.t("site.back")}
-                onClick={() => showDetails(false)}
-                icon={<Icon name="outline-arrow-left" />}
-              />
-              <Popover.Title class="m-0 shrink-0" style={{ font: "inherit" }}>{plugin.t("site.settings")}</Popover.Title>
-              <span data-slot="browser-site-detail" dir="ltr" class="min-w-0 flex-1 truncate text-end">
-                {addressParts(props.url).host}
+            <div data-slot="browser-site-row">
+              {/* The back control stands in the icon column and the heading in the text column, as in every row. */}
+              <span data-slot="browser-site-icon">
+                <IconButton
+                  ref={views.back}
+                  type="button"
+                  variant="ghost-muted"
+                  size="small"
+                  class="rtl:-scale-x-100"
+                  aria-label={plugin.t("site.back")}
+                  onClick={() => showDetails(false)}
+                  icon={<Icon name="outline-arrow-left" />}
+                />
+              </span>
+              <span class="flex min-w-0 flex-1 items-baseline gap-2">
+                <Popover.Title class="m-0 shrink-0" style={{ font: "inherit" }}>{plugin.t("site.settings")}</Popover.Title>
+                <span data-slot="browser-site-detail" dir="ltr" class="min-w-0 flex-1 truncate text-end">
+                  {addressParts(props.url).host}
+                </span>
               </span>
             </div>
             <div data-slot="browser-site-separator" aria-hidden="true" />

@@ -303,6 +303,6 @@ story("keeps site names left to right in a right-to-left layout, the box at the 
   const count = await row.getByText("5 cookies").boundingBox()
 
   expect(box && name && count && box.x > name.x && name.x > count.x).toBe(true)
-  const long = view.dialog.locator('[data-site$="example.co.uk"]').first().locator("span").first()
+  const long = view.dialog.locator('[data-site$="example.co.uk"]').first().locator("span[title]")
   expect(await long.evaluate((element) => [getComputedStyle(element).direction, element.scrollWidth > element.clientWidth])).toEqual(["rtl", true])
 })

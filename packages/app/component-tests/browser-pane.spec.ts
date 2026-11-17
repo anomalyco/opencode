@@ -1426,6 +1426,56 @@ story("zooms the page from the browser options in view and keeps its zoom in the
   await expect(zoom).toBeHidden()
 })
 
+story("the zoom row sits on the lines the other rows use, and Left and Right move between its buttons", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Browser options", exact: true }).click()
+  await expect(page.getByRole("menuitem", { name: "Zoom in", exact: true })).toBeVisible()
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+  const edges = await page.evaluate(() => {
+    const menu = document.querySelector('[data-component="menu-v2-content"]')
+    const group = menu?.querySelector('[role="group"][aria-labelledby]')
+
+    const label = (text: string) => {
+      const node = [...(menu?.querySelectorAll('[data-slot="menu-v2-item-content"]') ?? [])].find((item) => item.textContent?.trim() === text)?.firstChild
+      const range = document.createRange()
+
+      if (node) range.selectNodeContents(node)
+
+      return range.getBoundingClientRect()
+    }
+
+    const right = (selector: string) => menu?.querySelector(selector)?.getBoundingClientRect().right
+
+    return {
+      labels: ["Zoom", "Copy link", "More tools"].map((text) => label(text).left),
+      tops: ["Zoom", "100%"].map((text) => label(text).top),
+      trailing: [right('[aria-label="Zoom in"]'), right('[data-component="keybind-v2"]'), right('[data-slot="menu-v2-item-chevron"]')],
+      heights: [group, group?.previousElementSibling].map((row) => row?.getBoundingClientRect().height),
+    }
+  })
+
+  expect(Math.abs(edges.labels[0]! - edges.labels[1]!)).toBeLessThan(0.5)
+  expect(Math.abs(edges.labels[0]! - edges.labels[2]!)).toBeLessThan(0.5)
+  expect(Math.abs(edges.tops[0]! - edges.tops[1]!)).toBeLessThan(0.5)
+  expect(Math.abs(edges.trailing[0]! - edges.trailing[1]!)).toBeLessThan(0.5)
+  expect(Math.abs(edges.trailing[0]! - edges.trailing[2]!)).toBeLessThan(0.5)
+  expect(edges.heights[0]).toBe(edges.heights[1])
+
+  // At 100% there is nothing to reset, so that button is skipped. Down walks the row's buttons in order, as it walks
+  // every item.
+  await page.getByRole("menuitem", { name: "Zoom out", exact: true }).focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(page.getByRole("menuitem", { name: "Zoom in", exact: true })).toBeFocused()
+  await page.keyboard.press("ArrowRight")
+  await expect(page.getByRole("menuitem", { name: "Zoom in", exact: true })).toBeFocused()
+  await page.keyboard.press("ArrowLeft")
+  await expect(page.getByRole("menuitem", { name: "Zoom out", exact: true })).toBeFocused()
+  await page.keyboard.press("ArrowDown")
+  await page.keyboard.press("ArrowDown")
+  await expect(page.getByRole("menuitem", { name: "Copy link", exact: true })).toBeFocused()
+})
+
 story("shows a page dialog in the pane instead of the page, and answers it with Escape", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const native = root.getByTestId("native-Alpha")

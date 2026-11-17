@@ -9,6 +9,7 @@ import { createProfileJobs, type JobMessage } from "./jobs"
 import type { ExtensionCompatibility, InstallResult, ProfileExtension, ProfileSource } from "./profile/ipc"
 import { displayHost } from "./host-display"
 import { BrowserSites } from "./site-permissions"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { showToast } from "@opencode/ui/toast"
 import type { Job } from "./jobs-machine"
 
@@ -509,7 +510,9 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
             {ctx.t("settings.extensions.add")}
           </ui.Button>
         </div>
-        <div data-scrollable class="flex max-h-[50vh] min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        {/* The scroller spans the dialog's own inset, so its thumb lies beside the rows and they keep their edges. */}
+        <MenuScroll class="-mx-4 max-h-[50vh] min-h-0 flex-1" viewportClass="min-h-0 flex-1 px-4">
+        <div class="flex flex-col gap-4">
         <Show when={jobs.describe(jobs.last())}>
           {(message) => (
             <div
@@ -620,12 +623,13 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
           )}
         </Show>
         </div>
+        </MenuScroll>
         <details class="group shrink-0 border-t-[0.5px] border-v2-border-border-muted pt-3 text-v2-text-text-muted">
           <summary class={DISCLOSURE}>
-            <span class="flex transition-transform group-open:rotate-90 rtl:-scale-x-100">
-              <ui.Icon name="outline-chevron-right" />
-            </span>
             {ctx.t("settings.developers")}
+            <span class="flex transition-transform group-open:rotate-180">
+              <ui.Icon name="outline-chevron-down" />
+            </span>
           </summary>
           <div class="mt-2 flex items-center gap-3">
             <p class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-base)]">

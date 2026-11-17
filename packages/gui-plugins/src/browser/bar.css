@@ -304,11 +304,14 @@
     }
   }
 
-  /* Centers the icon on the first line of the row's text. */
+  /* The icon column: centers the icon on the first line of the row's text. A control wider than the column, such as
+     the back button, is centered on it too, so its glyph stays in the column. */
   [data-slot="browser-site-icon"] {
     display: flex;
     flex: none;
     align-items: center;
+    justify-content: center;
+    width: 16px;
     height: 20px;
     color: var(--v2-icon-icon-muted);
   }
@@ -333,22 +336,5 @@
     line-height: var(--line-height-compact);
     letter-spacing: 0.05px;
     color: var(--v2-text-text-muted);
-  }
-}
-
-/* The options menu's zoom row: its name, then three small items side by side. */
-[data-slot="browser-menu-zoom"] {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding-inline-start: 8px;
-
-  > [role="menuitem"] {
-    flex: none;
-    justify-content: center;
-    width: auto;
-    min-width: 28px;
-    padding-inline: 6px;
-    font-variant-numeric: tabular-nums;
   }
 }

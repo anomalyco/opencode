@@ -314,7 +314,7 @@ export function SiteChooser(props: {
       footer={
         <>
           {/* Quiet, at the start of the footer: most people import everything and never open it. */}
-          <Button type="button" variant="ghost-muted" class="me-auto" aria-expanded={state.revealed} onClick={() => setState("revealed", (shown) => !shown)}>
+          <Button type="button" variant="ghost-muted" flush="start" class="me-auto" aria-expanded={state.revealed} onClick={() => setState("revealed", (shown) => !shown)}>
             {ctx.t("settings.import.choose")}
             <Icon name={state.revealed ? "outline-chevron-down" : "outline-chevron-right"} size="small" class="rtl:-scale-x-100" />
           </Button>
@@ -422,12 +422,13 @@ export function SiteChooser(props: {
               {(text) => <bdi dir="auto">{text()}</bdi>}
             </Show>
           </span>
-          <ui.Button size="small" variant="ghost" disabled={shownChosen() === shown().length} onClick={selectShown}>
+          <Button size="small" variant="ghost" disabled={shownChosen() === shown().length} onClick={selectShown}>
             {state.query ? ctx.t("sites.all.shown", { count: number(shown().length) }) : ctx.t("sites.all")}
-          </ui.Button>
-          <ui.Button size="small" variant="ghost" disabled={shownChosen() === 0} onClick={clearShown}>
+          </Button>
+          {/* The last label lies on the dialog's right edge, as the list and the field do. */}
+          <Button size="small" variant="ghost" flush="end" disabled={shownChosen() === 0} onClick={clearShown}>
             {state.query ? ctx.t("sites.none.shown", { count: number(shown().length) }) : ctx.t("sites.none")}
-          </ui.Button>
+          </Button>
         </div>
         <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] bg-v2-background-bg-layer-01 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]">
           <Show
@@ -476,16 +477,19 @@ export function SiteChooser(props: {
                               }}
                             >
                               <Checkbox appearance="compact" surface="layer-1" presentation checked={sites().has(site)} />
-                              {/* A long name loses its start, so the registrable domain at its end stays in view. */}
-                              <span
-                                class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base [direction:rtl] ltr:text-left rtl:text-right"
-                                title={site}
-                              >
-                                <bdi dir="ltr">{site}</bdi>
+                              {/* The name and the smaller count share a baseline. */}
+                              <span class="flex min-w-0 flex-1 items-baseline gap-2">
+                                {/* A long name loses its start, so the registrable domain at its end stays in view. */}
+                                <span
+                                  class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base [direction:rtl] ltr:text-left rtl:text-right"
+                                  title={site}
+                                >
+                                  <bdi dir="ltr">{site}</bdi>
+                                </span>
+                                <bdi dir="auto" class="shrink-0 text-[12px] leading-[var(--line-height-compact)] tabular-nums text-v2-text-text-muted">
+                                  {ctx.plural("sites.cookies", item()?.cookies ?? 0, { number: number(item()?.cookies ?? 0) })}
+                                </bdi>
                               </span>
-                              <bdi dir="auto" class="shrink-0 text-[12px] tabular-nums text-v2-text-text-muted">
-                                {ctx.plural("sites.cookies", item()?.cookies ?? 0, { number: number(item()?.cookies ?? 0) })}
-                              </bdi>
                             </div>
                           )
                         }}
