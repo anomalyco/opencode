@@ -1,8 +1,12 @@
 import { createSignal, Show } from "solid-js"
 import { render } from "solid-js/web"
+import type { SessionMessageAssistantText, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { activePermissionRequest, permissionPendingDocument } from "@opencode/session-ui/storybook"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
-import { StoryProviders } from "../../stories/src/providers"
+import { DialogProvider } from "@opencode/ui/context/dialog"
+import { ThemeProvider } from "@opencode/ui/theme"
+import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
+import { SettingsProvider } from "../src/settings/model"
 import { SessionPreview } from "../src/session/story-model"
 
 const [pending, setPending] = createSignal(true)
@@ -19,18 +23,18 @@ export function mountContainment(markup: string, delivery: "text" | "tool") {
 
   if (!user || assistant?.type !== "assistant") throw new Error("The permission document changed shape.")
   const created = assistant.time.created
-  const authored =
-    delivery === "text"
-      ? { type: "text" as const, text: markup }
-      : {
-          type: "tool" as const,
-          id: "tool_containment_list",
-          name: "list",
-          state: { status: "completed" as const, input: { path: "." }, content: [{ type: "text" as const, text: markup }] },
-          time: { created: created + 10, ran: created + 20, completed: created + 30 },
-        }
-
-  const history = { ...permissionPendingDocument, messages: [user, { ...assistant, content: [authored, ...assistant.content] }] }
+  const text: SessionMessageAssistantText = { type: "text", text: markup }
+  const tool: SessionMessageAssistantTool = {
+    type: "tool",
+    id: "tool_containment_list",
+    name: "list",
+    state: { status: "completed", input: { path: "." }, content: [{ type: "text", text: markup }] },
+    time: { created: created + 10, ran: created + 20, completed: created + 30 },
+  }
+  const history = {
+    ...permissionPendingDocument,
+    messages: [user, { ...assistant, content: [delivery === "text" ? text : tool, ...assistant.content] }],
+  }
 
   // Tools as their own rows, so the tool's Markdown output can be opened.
   const detail = timelinePresets[0].value
@@ -38,20 +42,30 @@ export function mountContainment(markup: string, delivery: "text" | "tool") {
   // The preview keeps its first request, so the answered state is a fresh workspace with the same history.
   render(
     () => (
-      <StoryProviders scheme="light">
-        <Show
-          when={pending()}
-          fallback={<SessionPreview title="Containment" description="opencode" document={history} timelineDetail={detail} />}
-        >
-          <SessionPreview
-            title="Containment"
-            description="opencode"
-            document={history}
-            timelineDetail={detail}
-            request={{ type: "permission", value: activePermissionRequest }}
-          />
-        </Show>
-      </StoryProviders>
+      <ThemeProvider>
+        <LanguageProvider locale="en">
+          <UiI18nBridge>
+            <SettingsProvider>
+              <DialogProvider>
+                <Show
+                  when={pending()}
+                  fallback={
+                    <SessionPreview title="Containment" description="opencode" document={history} timelineDetail={detail} />
+                  }
+                >
+                  <SessionPreview
+                    title="Containment"
+                    description="opencode"
+                    document={history}
+                    timelineDetail={detail}
+                    request={{ type: "permission", value: activePermissionRequest }}
+                  />
+                </Show>
+              </DialogProvider>
+            </SettingsProvider>
+          </UiI18nBridge>
+        </LanguageProvider>
+      </ThemeProvider>
     ),
     host,
   )
