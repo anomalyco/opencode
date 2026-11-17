@@ -88,9 +88,12 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   nothing, and the first use of each warns once in the JS host's log, not in a toast, as the module cannot tell which
   plugin used it. A renderable a plugin builds itself (`new BoxRenderable(…)`) draws nothing.
 - **Colors**: the context's `theme` leaves are colors that carry their token, so a node the plugin colors from the
-  theme follows a theme change without a call, where an installed package's node keeps the color it read in TS. The
-  `theme` object has no `hue` or `categorical`; its `surface(name)` answers the page's theme, not the raised surface's,
-  and says so once (CT-8); neither it nor `themeMode` is a signal.
+  theme follows a theme change without a call, where an installed package's node keeps the color it read in TS. Its
+  `hue` scales and `categorical` list are the page theme's, each step carrying the contract's token of it
+  (`accent.500`, `categorical.3.300`), and a stateful color has TS's `state` (CT-9, `P.8/context-hue`). `source`,
+  `increase` and `decrease` find a color's step by its token, else by its value among the named hues, where TS matches
+  the object a token was read from; a color that two steps share is the first hue's. Its `surface(name)` answers the
+  page's theme, not the raised surface's, and says so once (CT-8); neither it nor `themeMode` is a signal.
 - **Numbers** a render computes are rounded and clamped to the contract's ranges.
 - **Raw writes to standard output** (`fs.writeSync(1, …)`, as oc-bg-color-sync writes `OSC 11` and `OSC 111` to set
   and reset the terminal's background) reach the terminal in TS, where the plugin runs in the TUI's process. Here they

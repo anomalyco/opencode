@@ -56,6 +56,10 @@ const EMITTER = new Set<string | symbol>([
   "setMaxListeners",
 ])
 
+// A hue's steps, and an action's states in the order TS's `state` asks them (`@opencode/theme`'s `HueStep`, `ActionState`).
+const STEPS = [100, 200, 300, 400, 500, 600, 700, 800, 900]
+const STATES = ["disabled", "pressed", "focused", "selected", "hovered"]
+
 // The carrier the JS host gives each plugin (`host.ts`).
 export interface Carrier {
   surface(name: string, place: Json, view: (cx: Json) => Json, options?: Json): void
@@ -275,7 +279,8 @@ export function context(base: Base, carrier: Carrier) {
     },
   }
 
-  // The theme, from the host's palette: each leaf a color that carries its token, so the host restyles it.
+  // The theme, from the host's palette: each leaf a color that carries its token, so the host restyles it. A hue's step
+  // carries the contract's name of it (`accent.500`, `categorical.3.300`), as the palette's `hue.accent.500` is not one.
   const theme = (): Json => {
     const palette = carrier.palette()
     const tree: Json = {}
@@ -288,9 +293,48 @@ export function context(base: Base, carrier: Carrier) {
       }
       const last = parts[parts.length - 1]!
       const value = hexToRgb(hex)
-      const rgba = new RGBA(value.r, value.g, value.b, value.a, token)
+      const rgba = new RGBA(value.r, value.g, value.b, value.a, parts[0] === "hue" ? parts.slice(1).join(".") : token)
       at[last] = Object.assign(rgba, typeof at[last] === "object" ? at[last] : {})
     }
+    // CT-9: the raw scales and the state functions of TS's `ResolvedTheme`. The categorical scales are a list, and a
+    // stateful color (an action's or a field's) answers the first state set in TS's order.
+    tree.hue ??= {}
+    tree.categorical = Object.entries(tree.categorical ?? {})
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([, scale]) => scale)
+    const stateful = (color: Json) => {
+      if (!color || typeof color !== "object") return
+      if ("base" in color && "hovered" in color)
+        color.state = (states: Json) => color[STATES.find((state) => states?.[state]) ?? "base"]
+      else for (const value of Object.values(color)) if (!(value instanceof RGBA)) stateful(value)
+    }
+    for (const side of [tree.text, tree.background]) {
+      stateful(side?.action)
+      stateful(side?.formfield)
+    }
+    // Where a color sits on a hue: by its step's token, else by its value among the named hues, as TS's matches a
+    // token read from a step (the Rust theme's `source` does the same by value).
+    const scales = Object.entries(tree.hue as Record<string, Json>)
+    const source = (color: Json) => {
+      if (!(color instanceof RGBA)) return undefined
+      for (const [hue, scale] of scales)
+        for (const step of STEPS) {
+          const at = scale[step]
+          if (at && (at.token === color.token || (at.r === color.r && at.g === color.g && at.b === color.b && at.a === color.a)))
+            return { hue, step }
+        }
+      return undefined
+    }
+    const shift = (color: Json, amount: number) => {
+      const at = source(color)
+      if (!at) return color
+      const offset = Number.isFinite(amount) ? Math.trunc(amount) : 0
+      const position = Math.max(0, Math.min(STEPS.length - 1, STEPS.indexOf(at.step) + offset))
+      return tree.hue[at.hue][STEPS[position]!]
+    }
+    tree.source = source
+    tree.increase = (color: Json, amount = 1) => shift(color, amount)
+    tree.decrease = (color: Json, amount = 1) => shift(color, -amount)
     // A raised surface's theme (`ResolvedTheme.surface`, CT-8): the page's, as the host sends the page's colors alone.
     // It says so once, where it was undefined and the render crashed (snippets' library).
     tree.surface = () => {
