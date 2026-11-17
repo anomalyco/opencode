@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js"
 import { Tooltip } from "./tooltip"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
@@ -47,6 +48,26 @@ export const Simple = { render: () => <SimpleTip /> }
 export const Open = { render: () => <SimpleTip forceOpen /> }
 
 export const Inactive = { render: () => <SimpleTip inactive /> }
+
+export const WithButton = {
+  render: () => {
+    const [count, setCount] = createSignal(0)
+
+    return (
+      <div
+        style={{ padding: "80px", display: "flex", gap: "12px", "align-items": "center", "justify-content": "center" }}
+      >
+        <Tooltip value="Add one to the count">
+          <Button onClick={() => setCount((value) => value + 1)}>Add</Button>
+        </Tooltip>
+        <Tooltip value="Reset the count">
+          <Button onClick={() => setCount(0)}>Reset</Button>
+        </Tooltip>
+        <output>Count: {count()}</output>
+      </div>
+    )
+  },
+}
 
 export const Appearances = {
   render: () => (

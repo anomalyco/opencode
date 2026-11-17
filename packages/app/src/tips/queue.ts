@@ -2,6 +2,8 @@ import type { useLanguage } from "@/runtime/i18n/language"
 
 export const TIP_INTERVAL_MS = 24 * 60 * 60 * 1000
 
+export const FIRST_TIP_DELAY_MS = 60 * 60 * 1000
+
 type Text = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 
 export type Tip = {
@@ -19,6 +21,7 @@ export type TipHistory = {
   shownAt: number
   dismissed: readonly string[]
   dismissedAt: number
+  firstSeen: number
 }
 
 /** Array order is priority. Dates are epoch milliseconds; the end is exclusive. */
@@ -36,6 +39,8 @@ export function selectTip(tips: readonly Tip[], history: TipHistory, now: number
   const last = Math.max(history.shownAt, history.dismissedAt)
 
   if (last && now < last + TIP_INTERVAL_MS) return
+
+  if (!last && now < (history.firstSeen || now) + FIRST_TIP_DELAY_MS) return
 
   return tips.find(eligible)
 }

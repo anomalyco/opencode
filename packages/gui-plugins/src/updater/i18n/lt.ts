@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Kitas",
   "releaseNotes.action.hideFuture": "Nerodykite šių dalykų ateityje",
   "releaseNotes.media.alt": "Išleidimo peržiūra",
+  "action.reload": "Įkelti iš naujo ir atnaujinti",
+  "action.reloading": "Įkeliama iš naujo…",
+  "web.ready.title": "Atnaujinimas paruoštas",
+  "web.ready.message":
+    "Nauja OpenCode versija paruošta. Įkelkite iš naujo, kad ji būtų naudojama visuose atvertuose languose.",
+  "web.reload": "Įkelti iš naujo",
+  "web.reset.title": "Įkelti iš serverio",
+  "web.reset.description": "Išvalyti išsaugotą programos kopiją ir įkelti dabartinę serverio versiją",
+  "web.reset.action": "Įkelti iš serverio",
 }

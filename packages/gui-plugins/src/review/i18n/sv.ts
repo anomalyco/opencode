@@ -12,4 +12,12 @@ export default {
   noChanges: "Inga ändringar",
   "settings.wrapLines.title": "Radbryt rader",
   "settings.wrapLines.description": "Radbryt långa rader i mobila diffar i stället för att rulla vågrätt",
+  "menu.count.one": "{{count}} fil ändrad",
+  "menu.count.other": "{{count}} filer ändrade",
+  "folder.more": "{{count}} · fler visas inte",
+  "folder.failed": "Det gick inte att läsa in ändringar",
+  "command.open": "Öppna granskning",
+  "load.failed": "Det gick inte att läsa in ändringar",
+  "load.timeout": "Servern tog för lång tid att svara",
+  offline: "Det går inte att nå den här servern",
 }

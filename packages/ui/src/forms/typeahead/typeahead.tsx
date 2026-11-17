@@ -1,5 +1,5 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createEffect, createSignal, For, type JSX, on, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, For, type JSX, on, onCleanup, Show, untrack } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { abort } from "@opencode/util/abort"
 import { useI18n } from "../../context/i18n"
@@ -28,6 +28,8 @@ export function Typeahead<T>(props: {
   source: (query: string, signal: AbortSignal) => Promise<T[]>
   /** Preloaded opening results, including a failed request that the user can retry. */
   initial?: { items: T[]; failed?: boolean }
+  /** A local option placed before the remote results while the search is empty. */
+  emptyQueryItem?: T
   /** Narrows earlier results while the request for the current query is pending. */
   match: (item: T, query: string) => boolean
   key: (item: T) => string
@@ -99,7 +101,14 @@ export function Typeahead<T>(props: {
   const changeInput = (value: string) =>
     dispatch({ type: "input.changed", input: value, delayMs: props.delay, match: props.match })
 
-  const items = () => selectTypeaheadItems(machine())
+  const items = createMemo(() => {
+    const results = selectTypeaheadItems(machine())
+
+    return props.emptyQueryItem !== undefined && !selectTypeaheadInput(machine()).trim()
+      ? [props.emptyQueryItem, ...results]
+      : results
+  })
+
   const stale = () => selectTypeaheadStale(machine())
   const pending = () => selectTypeaheadPending(machine())
   const animateHeight = () => selectTypeaheadAnimateHeight(machine())
@@ -206,7 +215,7 @@ export function Typeahead<T>(props: {
             </For>
           </MenuScroll>
           {/* Stays mounted while a retry or a newer query is pending, so the list never collapses to nothing. */}
-          <Show when={items().length === 0}>
+          <Show when={items().length === 0 || selectTypeaheadFailed(machine())}>
             <div
               class="mx-1 flex h-9 items-center px-2 py-1 text-v2-text-text-faint"
               classList={{ invisible: !selectTypeaheadAnswered(machine()) }}

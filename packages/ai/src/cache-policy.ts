@@ -23,6 +23,7 @@ import {
   type ToolEntry,
 } from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
+import { toolsUpdate } from "./tool-updates.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,
@@ -212,12 +213,14 @@ const markMessages = (
   let remaining = strategy.tail
   while (remaining > 0 && start > 0) {
     start -= 1
-    if (effortUpdate(messages[start]!) === undefined) remaining -= 1
+    if (!isMarker(messages[start]!)) remaining -= 1
   }
   let next = messages
-  for (let i = start; i < end; i++) if (effortUpdate(messages[i]!) === undefined) next = mark(next, i)
+  for (let i = start; i < end; i++) if (!isMarker(messages[i]!)) next = mark(next, i)
   return next
 }
+
+const isMarker = (message: Message) => effortUpdate(message) !== undefined || toolsUpdate(message) !== undefined
 
 const countHints = (request: LLMRequest) =>
   countToolHints(request.tools) +
