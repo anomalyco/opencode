@@ -160,8 +160,8 @@ const layer = Layer.effect(
               registerAdapter(ctx.project.id, type, adapter as WorkspaceAdapter)
             },
           },
-          get serverUrl(): URL {
-            return Server.url ?? new URL("http://localhost:4096")
+          get serverUrl() {
+            return Server.url
           },
           // @ts-expect-error
           $: typeof Bun === "undefined" ? undefined : Bun.$,
