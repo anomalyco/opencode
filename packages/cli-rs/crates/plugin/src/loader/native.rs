@@ -129,7 +129,7 @@ impl Native {
     /// Opens `library` and checks its version without setting it up.
     pub fn inspect(&self, library: &[u8]) -> Result<Inspected, String> {
         let library = Library::open(library, None)?;
-        let metadata = library.compatible()?;
+        let (_, metadata) = library.compatible()?;
         Ok(Inspected { major: library.major, minor: library.minor, version: metadata.version })
     }
 }
@@ -161,20 +161,13 @@ impl Backend for Native {
 /// The definition of the plugin `library` holds; setup runs on each activation.
 fn define(library: Library, options: Option<&str>) -> Result<(Definition, ErrorFn), String> {
     let library = Rc::new(library);
-    let metadata = library.compatible()?;
+    let (id, metadata) = library.compatible()?;
     if let Some(version) = &metadata.version {
         log::info!("plugin library version {version}, ABI {}.{}", library.major, library.minor);
     }
     let options = options.map(str::to_owned);
     // Setup runs on each activation only, so a disabled plugin starts nothing: loading a library runs its native
     // initializers, never its setup. A library names its ID in `describe`, before any `create` (big-boi 6).
-    let Some(id) = metadata.id.filter(|id| !id.is_empty()) else {
-        return Err(format!(
-            "plugin of ABI {}.{} names no ID in `describe`: a plugin describes itself with a nonempty \"id\" before it \
-             is set up; rebuild it with `opencode_plugin_abi::plugin!`, or return the ID from `describe`",
-            library.major, library.minor
-        ));
-    };
     // The failure of the running instance, a panic, in a cell of each activation's own: a new activation leaves an old
     // one's failure as it was.
     let current: Rc<RefCell<Rc<RefCell<Option<String>>>>> = Rc::default();
@@ -355,9 +348,10 @@ impl Library {
         Ok(Self { major, minor, create, call, destroy: core.destroy, free, describe })
     }
 
-    /// What the plugin says about itself, checked against what this host offers: a library whose `describe` fails or
-    /// answers what the host cannot read, or that requires a feature the host lacks, is refused before any setup.
-    fn compatible(&self) -> Result<abi::Metadata, String> {
+    /// What the plugin says about itself, its ID and its metadata, checked against what this host offers: a library
+    /// whose `describe` fails, answers what the host cannot read or no nonempty ID, or requires a feature the host lacks,
+    /// is refused before any setup, at load and at inspection alike.
+    fn compatible(&self) -> Result<(String, abi::Metadata), String> {
         let mut out = Owned::EMPTY;
         conformance::tap(Event::Describe);
         let status = (self.describe)(&mut out);
@@ -370,13 +364,20 @@ impl Library {
                 _ => Err(String::from_utf8_lossy(&bytes).into_owned()),
             })
             .map_err(|error| format!("plugin describe failed: {error}"))?;
+        let Some(id) = metadata.id.clone().filter(|id| !id.is_empty()) else {
+            return Err(format!(
+                "plugin of ABI {}.{} names no ID in `describe`: a plugin describes itself with a nonempty \"id\" before \
+                 it is set up; rebuild it with `opencode_plugin_abi::plugin!`, or return the ID from `describe`",
+                self.major, self.minor
+            ));
+        };
         if let Some(feature) = metadata.requires.iter().find(|feature| !abi::FEATURES.contains(&feature.as_str())) {
             return Err(format!(
                 "plugin requires the feature {feature}, which this opencode-native (ABI {ABI_MAJOR}.{HOST_MINOR}) \
                  lacks; update opencode-native"
             ));
         }
-        Ok(metadata)
+        Ok((id, metadata))
     }
 }
 
@@ -2111,7 +2112,7 @@ pub(crate) fn from_api(
 /// gate).
 #[cfg(test)]
 pub(crate) fn gate(api: *const PluginApi) -> Result<abi::Metadata, String> {
-    Library::from_table(api)?.compatible()
+    Library::from_table(api)?.compatible().map(|(_, metadata)| metadata)
 }
 
 /// Plugin `plugin` through the byte shims of the C ABI, as a loaded library runs it: the SDK's own `create`, `call`,
