@@ -460,6 +460,13 @@ opencode stats
 | <nobr><code>{"--tools"}</code></nobr>   | Number of tools to show (all)                                               |
 | <nobr><code>{"--models"}</code></nobr>  | Show model usage breakdown (hidden by default). Pass a number to show top N |
 | <nobr><code>{"--project"}</code></nobr> | Filter by project (all projects, empty string: current project)             |
+| <nobr><code>{"--json"}</code></nobr>    | Emit a versioned JSON report (models and tools are not truncated)           |
+
+Use `--json` for scripts and dashboards. The report includes `schemaVersion: 1`; new fields are additive. `--models` and `--tools` only change the text report. In token data, `input` is non-cached input; `cache.miss` equals that value, `cache.totalInput` is `input + cache.read + cache.write`, and `cache.hitRate` is `cache.read / cache.totalInput`.
+
+```bash
+opencode stats --json
+```
 
 ---
 
