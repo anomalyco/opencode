@@ -31,4 +31,5 @@ Out of scope: classes (rejected, like the reference), `export`, snapshots and su
 - test262 parity runs both ways: `bash test262/run.sh` must pass, and `test262/rust-skipped.txt` and `test262/reference-gaps.txt` may only shrink.
 - `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` must pass.
 - Benchmark claims need the command, machine and numbers in `bench/RESULTS.md`.
+- CI: the `unit` job of `.github/workflows/check-test.yml` runs these checks, conformance freshness, test262 and the informational bench on Linux, whenever `packages/codemode`, `packages/codemode-rust` or that workflow changed.
 - Nothing in the repo mentions internal tooling, private chats, home paths, hostnames or secrets.
