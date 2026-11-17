@@ -59,10 +59,15 @@ const EMITTER = new Set<string | symbol>([
 // A hue's steps, and an action's states in the order TS's `state` asks them (`@opencode/theme`'s `HueStep`, `ActionState`).
 const STEPS = [100, 200, 300, 400, 500, 600, 700, 800, 900]
 const STATES = ["disabled", "pressed", "focused", "selected", "hovered"]
+// The fields whose events the layer maps, and the bytes OpenTUI's key event carries for a named key.
+const FIELDS = new Set(["input", "textarea"])
+const SEQUENCES: Record<string, string> = { return: "\r", escape: "\x1b", tab: "\t", backspace: "\x7f", space: " " }
 
 // The carrier the JS host gives each plugin (`host.ts`).
 export interface Carrier {
   surface(name: string, place: Json, view: (cx: Json) => Json, options?: Json): void
+  // A key layer of the activation, contract 2.0's `Setup::layer`, whose handler hears its events.
+  layer?(layer: Json, handler: (event: Json) => unknown): void
   command(command: Json, run: (input?: string) => unknown): void
   uncommand(name: string): void
   storage(keys: string[]): void
@@ -512,6 +517,9 @@ export function context(base: Base, carrier: Carrier) {
       if (focusedNode !== node) focusedNode?.focusChanged(false)
       focusedNode = node
       node.focusChanged(true)
+      // The contract's focus takes a node with `interact.focusable` alone, so the host refuses a field: the plugin's
+      // own focus of it holds, and its keys come as `onKeyDown`, but what the user types goes elsewhere.
+      if (FIELDS.has(node.tag)) unsupported(`focus() of an <${node.tag}>`)
       if (FOCUSABLE.has(node.tag)) void carrier.effect({ type: "focus", node: idOf(node) })
     },
     blur(node) {
@@ -521,6 +529,90 @@ export function context(base: Base, carrier: Carrier) {
       if (FOCUSABLE.has(node.tag)) void carrier.effect({ type: "blur" })
     },
   }
+  // A field's events (CT-11): its edits and its submit are the contract's `change` and `submit` of its node, which its
+  // `onInput`, `onChange` and `onSubmit` hear, and a key while the plugin's focused field is in the surface is its
+  // `onKeyDown`, which cannot take the key: the host's field and its keys have it too.
+  const fieldEvent = (surface: string, event: Json) => {
+    const roots = [...rendered.entries()].filter(([at]) => at.startsWith(`${surface}\u0000`)).map(([, at]) => at.root)
+    const find = (id: string) => {
+      const walk = (node: VNode): VNode | undefined =>
+        idOf(node) === id && FIELDS.has(node.tag) ? node : node.children.reduce<VNode | undefined>((found, child) => found ?? walk(child), undefined)
+      return roots.reduce<VNode | undefined>((found, root) => found ?? walk(root), undefined)
+    }
+    if (event.type === "key") {
+      const node = focusedNode && find(idOf(focusedNode))
+      if (node === focusedNode) node?.props.onKeyDown?.(keyEvent(event))
+      return
+    }
+    const node = (event.type === "change" || event.type === "submit") && find(event.node)
+    if (!node) return
+    // The user edits it in the host's field, which has the focus then.
+    if (focusedNode !== node) {
+      focusedNode?.focusChanged(false)
+      focusedNode = node
+      node.focusChanged(true)
+    }
+    node.typed = event.text
+    if (event.type === "change") return node.props.onInput?.(event.text)
+    node.props.onChange?.(event.text)
+    node.props.onSubmit?.(event.text)
+  }
+  // An OpenTUI key event of the host's key (`ctrl+shift+a`, `enter`, `space`): a listener's, so taking it does
+  // nothing, which the JS host's log says once.
+  const keyEvent = (event: Json) => {
+    let rest = String(event.key ?? "")
+    const held = { ctrl: false, shift: false, meta: false, super: false, hyper: false } as Record<string, boolean>
+    for (let at = /^(ctrl|shift|meta|super|hyper)\+(.+)$/.exec(rest); at; at = /^(ctrl|shift|meta|super|hyper)\+(.+)$/.exec(rest)) {
+      held[at[1]!] = true
+      rest = at[2]!
+    }
+    const name = rest === "enter" ? "return" : rest
+    const sequence = event.text ?? SEQUENCES[name] ?? ""
+    const taken = () => {
+      if (keysTaken) return
+      keysTaken = true
+      console.warn(`plugin ${id}: a key a listener takes still reaches opencode-native`)
+    }
+    let prevented = false
+    let stopped = false
+    return {
+      name,
+      ...held,
+      option: held.meta,
+      sequence,
+      raw: sequence,
+      number: /^[0-9]$/.test(name),
+      eventType: "press",
+      source: "raw",
+      get defaultPrevented() {
+        return prevented
+      },
+      get propagationStopped() {
+        return stopped
+      },
+      preventDefault() {
+        prevented = true
+        taken()
+      },
+      stopPropagation() {
+        stopped = true
+        taken()
+      },
+    }
+  }
+  let keysTaken = false
+  // OpenTUI's key handler (CT-11): an emitter whose `keypress` listeners hear each key, through a global listener layer
+  // the plugin registers with its first one, as most plugins never listen.
+  const keyInput = new EventEmitter()
+  let listening = false
+  keyInput.on("newListener", (name) => {
+    if (name !== "keypress" || listening || !carrier.layer) return
+    listening = true
+    carrier.layer({ scope: "global", any: true }, (event: Json) => {
+      if (event.type === "key") keyInput.emit("keypress", keyEvent(event))
+    })
+    carrier.changed()
+  })
   // A surface's scrolls (CT-2): a scroll box's state is the host's read of it, which follows it as it moves, and a move
   // is the contract's verb on the scroll of the surface's live mount, by its id.
   const scrollsOf = (surface: string): Scrolls => {
@@ -620,6 +712,10 @@ export function context(base: Base, carrier: Carrier) {
         rendered.delete(at)
         presses.delete(at)
       },
+      on: (event: Json) => fieldEvent(name, event),
+      // A route or a panel holds the focus, and a field in it: each key while it does comes to the field the plugin
+      // focused, as its `onKeyDown` (a listener: the key goes on).
+      ...(place.type === "route" || place.type === "panel" ? { layers: [{ scope: "surface", any: true }] } : {}),
     })
     return () => {
       removed = true
@@ -811,16 +907,10 @@ export function context(base: Base, carrier: Carrier) {
     ...(options.sessionID ? { session: options.sessionID } : {}),
   })
 
-  const keyInput = new EventEmitter()
   const renderer = new Proxy(
     {
       requestRender: () => invalidate(),
-      // OpenTUI's key handler, an event emitter: its listeners hear no key here, as the layer maps no `useKeyboard`.
-      // It says so once, where it was undefined and a listener crashed the render (snippets' prompt footer).
-      get keyInput() {
-        unsupported("renderer.keyInput")
-        return keyInput
-      },
+      keyInput,
       // The terminal's, as `useTerminalDimensions` (carbon-4): a surface's own box is not the renderer's.
       get width() {
         return info()?.size?.[0] || size[0]().width || 0

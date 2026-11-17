@@ -36,6 +36,10 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
     surface(name: string, place: Json, view: Json, options: Json) {
       fake.surfaces.push({ name, place, view, options })
     },
+    layers: [] as Json[],
+    layer(layer: Json, handler: (event: Json) => unknown) {
+      fake.layers.push({ layer, handler })
+    },
     command(command: Json, run: (input?: string) => unknown) {
       fake.commands.set(command.name, run)
       fake.meta.set(command.name, command)
@@ -267,8 +271,7 @@ test("client.rpc calls a plugin's own server RPC and hears its events", async ()
 
 // CT-2: an element is an event emitter, as an OpenTUI renderable is, so file-browser's `element.on("focus", …)` does
 // not crash its route; `focus()` of a field asks the host to focus it by its id and emits `focused`, another node's
-// focus blurs it (`blurred`), and `blur()` asks the host to blur. A box's focus is the layer's alone. The renderer's key
-// handler is an emitter too, which says once that it hears nothing.
+// focus blurs it (`blurred`), and `blur()` asks the host to blur. A box's focus is the layer's alone.
 test("an element's focus is the host's and it emits as OpenTUI's renderables", async () => {
   const fake = host()
   const ctx = plugin("t.focus", fake)
@@ -313,9 +316,76 @@ test("an element's focus is the host's and it emits as OpenTUI's renderables", a
     { type: "scroll", target, verb: { type: "offset", offset: 6 } },
   ])
   expect(fake.watches.has(`scroll:${surface}:list`)).toBe(true)
-  const keys = ctx.renderer.keyInput
-  expect(keys.prependListener("keypress", () => {})).toBe(keys)
-  expect(fake.toasts()).toContain("t.focus: renderer.keyInput is not supported by opencode-native yet")
+})
+
+// CT-11: the renderer's key handler hears each key through one global listener layer, registered with the first
+// `keypress` listener (opencode-navigator's `ctrl+,`), and `useKeyboard` listens on it while its component lives. A
+// route's field hears its edits, its submit and, while the plugin focused it, each key as `onKeyDown`.
+test("keys reach keyInput, useKeyboard and a focused field", () => {
+  const fake = host()
+  const ctx = plugin("t.keys", fake)
+  const heard: string[] = []
+  const describe = (event: Json) =>
+    `${["ctrl", "shift", "meta", "super", "hyper"].filter((held) => event[held]).join("+")} ${event.name} ${JSON.stringify(event.sequence)}`
+  expect(fake.layers).toEqual([])
+  ctx.renderer.keyInput.on("keypress", (event: Json) => heard.push(`input ${describe(event)}`))
+  expect(fake.layers.map((at: Json) => at.layer)).toEqual([{ scope: "global", any: true }])
+  const press = (key: string, text?: string) => fake.layers[0].handler({ type: "key", key, ...(text ? { text } : {}) })
+  const solidRuntime = modules["@opentui/solid"] as Json
+  ctx.ui.slot({
+    append: "home.footer",
+    render: () => (solidRuntime.useKeyboard((event: Json) => heard.push(`hook ${event.name}`)), h("text", { children: "k" })),
+  })
+  const footer = view(fake, 0, "a")
+  footer.draw()
+  press("ctrl+,")
+  press("shift+enter")
+  press("a", "a")
+  footer.unmount()
+  press("ctrl+shift+meta++")
+  expect(heard).toEqual([
+    'input ctrl , ""',
+    "hook ,",
+    'input shift return "\\r"',
+    "hook return",
+    'input  a "a"',
+    "hook a",
+    'input ctrl+shift+meta + ""',
+  ])
+  expect(fake.layers.length).toBe(1)
+
+  const field: Json = {}
+  const events: string[] = []
+  ctx.ui.router.register({
+    name: "files",
+    render: () =>
+      h("input", {
+        ref: (el: Json) => (field.ref = el),
+        onInput: (text: string) => events.push(`input ${text}`),
+        onSubmit: (text: string) => events.push(`submit ${text}`),
+        onKeyDown: (event: Json) => {
+          event.preventDefault()
+          events.push(`key ${event.name}`)
+        },
+      }),
+  })
+  const route = fake.surfaces.find((surface: Json) => surface.place.type === "route")
+  expect(route.options.layers).toEqual([{ scope: "surface", any: true }])
+  route.view({ mount: { surface: "files", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
+  const id = fake.effects.length
+  route.options.on({ type: "key", key: "down" })
+  field.ref.focus()
+  route.options.on({ type: "key", key: "down" })
+  const node = fake.effects.slice(id).find((effect: Json) => effect.type === "focus").node
+  // An edit in the host's field gives it the plugin's focus, as the field has the host's then.
+  field.ref.blur()
+  route.options.on({ type: "change", node, text: "ab" })
+  expect([field.ref.value, field.ref.focused]).toEqual(["ab", true])
+  route.options.on({ type: "submit", node, text: "ab" })
+  route.options.on({ type: "change", node: "elsewhere", text: "x" })
+  expect(events).toEqual(["key down", "input ab", "submit ab"])
+  // The contract's focus refuses a field.
+  expect(fake.toasts()).toEqual(["t.keys: focus() of an <input> is not supported by opencode-native yet"])
 })
 
 // CT-8: a raised surface's theme is the page's, which says so once; it was undefined, and snippets' library crashed.
@@ -524,11 +594,11 @@ test("an unmapped hook is reported for the plugin that used it", () => {
   const solidRuntime = modules["@opentui/solid"] as Json
   const loud = plugin("t.loud", fake)
   const quiet = plugin("t.quiet", fake)
-  loud.ui.slot({ append: "home.footer", render: () => (solidRuntime.useKeyboard(() => {}), h("text", { children: "x" })) })
+  loud.ui.slot({ append: "home.footer", render: () => (solidRuntime.usePaste(() => {}), h("text", { children: "x" })) })
   quiet.ui.slot({ append: "sidebar.content", render: () => h("text", { children: "y" }) })
   view(fake, 0, "a").draw()
   view(fake, 1, "b").draw()
-  expect(fake.toasts()).toEqual(["t.loud: useKeyboard is not supported by opencode-native yet"])
+  expect(fake.toasts()).toEqual(["t.loud: usePaste is not supported by opencode-native yet"])
 })
 
 // Carbon-4: a claim goes to the host as it is: a `replace` of a path the host does not publish is the host's to
