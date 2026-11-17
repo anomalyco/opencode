@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use rustc_hash::FxHashMap;
 
-use crate::bytecode::{Arith, Capture, FuncProto, Op, Program};
+use crate::bytecode::{Arith, Capture, FuncProto, Op, Program, TemplateSite};
 use crate::compiler::{DELEGATE_ASYNC, DELEGATE_NO_ARG};
 use crate::object::*;
 use crate::strings::{StrId, Strings};
@@ -211,6 +211,9 @@ pub struct Vm<'rt> {
     pub global_names: Vec<Atom>,
     pub global_map: FxHashMap<Atom, Value>,
     pub consts: Vec<Value>,
+    templates: Vec<TemplateSite>,
+    /// Each tagged template site's strings array, once made.
+    template_objs: Vec<Option<Id>>,
     pub protos: Vec<Rc<FuncProto>>,
     pub jobs: VecDeque<Job>,
     pub inbox: VecDeque<(Id, ToolOutcome)>,
@@ -277,6 +280,8 @@ impl<'rt> Vm<'rt> {
             global_names: Vec::new(),
             global_map: FxHashMap::default(),
             consts: Vec::new(),
+            templates: Vec::new(),
+            template_objs: Vec::new(),
             protos: Vec::new(),
             jobs: VecDeque::new(),
             inbox: VecDeque::new(),
@@ -301,6 +306,8 @@ impl<'rt> Vm<'rt> {
 
     pub fn load(&mut self, program: Program) {
         crate::builtins::ensure_globals(self, &program.globals);
+        self.template_objs = vec![None; program.templates.len()];
+        self.templates = program.templates;
         self.consts = program.consts;
         self.protos = program.protos;
         self.globals = program
@@ -1101,6 +1108,29 @@ impl<'rt> Vm<'rt> {
         self.stack.last().copied().unwrap_or_default().get()
     }
 
+    /// A template site's strings array, with its read-only `raw` array of the source text.
+    #[inline(never)]
+    fn template_object(&mut self, i: usize) -> Value {
+        if let Some(Some(id)) = self.template_objs.get(i) {
+            return Value::Obj(*id);
+        }
+        let Some(site) = self.templates.get(i) else {
+            return Value::Undef;
+        };
+        let cooked: Vec<Value> = site.cooked.iter().map(|c| c.unwrap_or_default()).collect();
+        let raw = site.raw.clone();
+        let raw = self.new_array(raw);
+        let strings = self.new_array(cooked);
+        if let Value::Obj(id) = strings {
+            let rk = self.atoms.intern_static("raw");
+            self.heap[id as usize].props.push_new(rk, raw, 0);
+            if let Some(slot) = self.template_objs.get_mut(i) {
+                *slot = Some(id);
+            }
+        }
+        strings
+    }
+
     #[inline(never)]
     fn make_closure(&mut self, idx: u32) -> Value {
         let proto = self.protos[idx as usize].clone();
@@ -1722,6 +1752,10 @@ impl<'rt> Vm<'rt> {
                         }
                         let v = self.concat_strs(&parts);
                         self.push(v);
+                    }
+                    Op::Template(i) => {
+                        let t = self.template_object(i as usize);
+                        self.push(t);
                     }
                     Op::AddLocal(i) => {
                         let b = self.pop();

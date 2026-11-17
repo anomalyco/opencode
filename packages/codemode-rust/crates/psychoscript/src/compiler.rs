@@ -16,7 +16,7 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::DiagnosticKind;
-use crate::bytecode::{Arith, Capture, FuncProto, Op, Program};
+use crate::bytecode::{Arith, Capture, FuncProto, Op, Program, TemplateSite};
 use crate::strings::{Atom, Strings};
 use crate::value::{Value, num_to_string};
 
@@ -95,6 +95,7 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
         protos: c.protos.into_iter().map(Rc::new).collect(),
         consts: c.consts,
         globals: c.globals,
+        templates: c.templates,
     })
 }
 
@@ -232,6 +233,7 @@ struct Compiler<'a, 's> {
     num_consts: FxHashMap<u64, u32>,
     globals: Vec<Atom>,
     global_of: FxHashMap<Atom, u32>,
+    templates: Vec<TemplateSite>,
     pos: u32,
     chains: Vec<Vec<usize>>,
     switch_scopes: FxHashSet<ScopeId>,
@@ -260,6 +262,7 @@ impl<'a, 's> Compiler<'a, 's> {
             num_consts: FxHashMap::default(),
             globals: Vec::new(),
             global_of: FxHashMap::default(),
+            templates: Vec::new(),
             pos: 0,
             chains: Vec::new(),
             switch_scopes: FxHashSet::default(),
@@ -2118,9 +2121,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 let msg = self.str_const("BigInt literals are not supported.");
                 self.emit(Op::ThrowType(msg));
             }
-            Expression::TaggedTemplateExpression(t) => {
-                return Err(unsupported("Tagged templates", t.span));
-            }
+            Expression::TaggedTemplateExpression(t) => self.tagged_template(t)?,
             Expression::Super(s) => return Err(unsupported("`super`", s.span)),
             Expression::ImportExpression(i) => {
                 if i.options.is_some() {
@@ -2183,6 +2184,52 @@ impl<'a, 's> Compiler<'a, 's> {
         if parts != 1 {
             self.emit(Op::Concat(parts));
         }
+        Ok(())
+    }
+
+    /// `tag\`...\``: calls the tag, read like a callee, with the site's strings array and the substitutions.
+    fn tagged_template(&mut self, t: &'a TaggedTemplateExpression<'a>) -> R<()> {
+        match &t.tag {
+            Expression::StaticMemberExpression(m) => {
+                self.expr(&m.object)?;
+                let a = self.atom(m.property.name.as_str());
+                self.emit(Op::GetMethod(a));
+            }
+            Expression::ComputedMemberExpression(m) => {
+                self.expr(&m.object)?;
+                self.emit(Op::Dup);
+                self.elem_key(&m.expression)?;
+                self.emit(Op::Swap);
+            }
+            tag => {
+                self.expr(tag)?;
+                self.emit(Op::Undef);
+            }
+        }
+        let quasis = &t.quasi.quasis;
+        let cooked = quasis
+            .iter()
+            .map(|q| {
+                q.value.cooked.as_ref().map(|c| {
+                    let i = self.str_const(&js_str(c));
+                    self.consts[i as usize]
+                })
+            })
+            .collect();
+        let raw = quasis
+            .iter()
+            .map(|q| {
+                let i = self.str_const(q.value.raw.as_str());
+                self.consts[i as usize]
+            })
+            .collect();
+        self.templates.push(TemplateSite { cooked, raw });
+        self.emit(Op::Template(self.templates.len() as u32 - 1));
+        for e in &t.quasi.expressions {
+            self.expr(e)?;
+        }
+        self.pos = t.span.start;
+        self.emit(Op::Call(1 + t.quasi.expressions.len() as u32));
         Ok(())
     }
 

@@ -342,9 +342,7 @@ impl<'rt> Vm<'rt> {
 
     fn read_only(&mut self, key: Atom) -> Value {
         let k = self.key_text(key);
-        self.type_error(&format!(
-            "Cannot assign to read only property '{k}' of object"
-        ))
+        self.type_error(&format!("Cannot assign to read only property '{k}'."))
     }
 
     fn not_extensible(&mut self, key: Atom) -> Value {

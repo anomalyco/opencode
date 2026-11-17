@@ -106,6 +106,8 @@ pub enum Op {
     Dec,
     ToStr,
     Concat(u32),
+    /// Pushes the strings array of a tagged template site, made once per run.
+    Template(u32),
     /// `local += pop()` in statement position, appending in place to a string only this local holds.
     AddLocal(u32),
     /// `local++` on a plain local in statement position.
@@ -242,4 +244,12 @@ pub struct Program {
     pub consts: Vec<crate::value::Value>,
     /// Global names referenced by `GetGlobal`, by slot.
     pub globals: Vec<Atom>,
+    /// The strings of each tagged template site, for `Template`.
+    pub templates: Vec<TemplateSite>,
+}
+
+/// A tagged template's text: each part cooked (`None` for an invalid escape) and raw, as string constants.
+pub struct TemplateSite {
+    pub cooked: Vec<Option<crate::value::Value>>,
+    pub raw: Vec<crate::value::Value>,
 }

@@ -247,34 +247,6 @@ language/expressions/prefix-decrement/11.4.5-2-3-s.js  # wrong result
 language/expressions/prefix-decrement/S11.4.5_A6_T3.js  # wrong result
 language/expressions/prefix-increment/11.4.4-2-3-s.js  # wrong result
 language/expressions/prefix-increment/S11.4.4_A6_T3.js  # wrong result
-language/expressions/tagged-template/cache-different-functions-same-site.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/cache-differing-expressions.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/cache-differing-raw-strings.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/cache-differing-string-count.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/cache-identical-source.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/cache-same-site-top-level.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/cache-same-site.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/call-expression-argument-list-evaluation.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/call-expression-context-strict.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/chained-application.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/invalid-escape-sequences.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/member-expression-argument-list-evaluation.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/member-expression-context.js  # unsupported syntax: tagged templates
-language/expressions/tagged-template/template-object-template-map.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/evaluation-order.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-character-escape-sequence.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-hex-escape-sequence.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-line-continuation.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-line-terminator-sequence.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-no-substitution.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-null-character-escape-sequence.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-template-character.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-template-characters.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-template-head.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-template-middle.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-template-tail.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-utf16-escape-sequence.js  # unsupported syntax: tagged templates
-language/expressions/template-literal/tv-zwnbsp.js  # unsupported syntax: tagged templates
 language/global-code/decl-func-dup.js  # spurious parse error: Identifier `…` has already been declared
 language/global-code/export.js  # unsupported syntax: `export`
 language/global-code/import.js  # missing global: %import
