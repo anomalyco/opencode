@@ -13,15 +13,15 @@ pub fn setup(vm: &mut Vm) {
         &[
             ("get", 1, map_get),
             ("set", 2, map_set),
-            ("has", 1, map_has),
-            ("delete", 1, map_delete),
-            ("clear", 0, map_clear),
-            ("forEach", 1, map_for_each),
+            ("has", 1, map_has::<false>),
+            ("delete", 1, map_delete::<false>),
+            ("clear", 0, map_clear::<false>),
+            ("forEach", 1, map_for_each::<false>),
             ("keys", 0, map_keys),
-            ("values", 0, map_values),
+            ("values", 0, map_values::<false>),
         ],
     );
-    let entries = vm.method(mp, "entries", 0, map_entries);
+    let entries = vm.method(mp, "entries", 0, map_entries::<false>);
     vm.define_hidden(mp, SYM_ITERATOR, entries);
 
     let sp = vm.realm.set_proto;
@@ -30,14 +30,14 @@ pub fn setup(vm: &mut Vm) {
         sp,
         &[
             ("add", 1, set_add),
-            ("has", 1, map_has),
-            ("delete", 1, map_delete),
-            ("clear", 0, map_clear),
-            ("forEach", 1, map_for_each),
-            ("entries", 0, map_entries),
+            ("has", 1, map_has::<true>),
+            ("delete", 1, map_delete::<true>),
+            ("clear", 0, map_clear::<true>),
+            ("forEach", 1, map_for_each::<true>),
+            ("entries", 0, map_entries::<true>),
         ],
     );
-    let values = vm.method(sp, "values", 0, map_values);
+    let values = vm.method(sp, "values", 0, map_values::<true>);
     let keys = vm.atoms.intern_static("keys");
     vm.define_hidden(sp, keys, values);
     vm.define_hidden(sp, SYM_ITERATOR, values);
@@ -82,13 +82,21 @@ pub fn setup(vm: &mut Vm) {
 
 // ---------- Map and Set ----------
 
-fn map_of(vm: &mut Vm, this: &Value, what: &str) -> Result<Id, Value> {
-    if let Value::Obj(id) = this
-        && let Kind::Map(_) | Kind::Set(_) = vm.heap[*id as usize].kind
-    {
-        return Ok(*id);
+/// The receiver of a Map method (`SET` false) or a Set method (`SET` true).
+fn map_of<const SET: bool>(vm: &mut Vm, this: &Value, what: &str) -> Result<Id, Value> {
+    if let Value::Obj(id) = this {
+        match vm.heap[*id as usize].kind {
+            Kind::Map(_) if !SET => return Ok(*id),
+            Kind::Set(_) if SET => return Ok(*id),
+            _ => {}
+        }
     }
-    Err(vm.type_error(&format!("Method {what} called on incompatible receiver")))
+    let ty = if SET { "Set" } else { "Map" };
+    Err(super::incompatible(
+        vm,
+        &format!("{ty}.prototype.{what}"),
+        this,
+    ))
 }
 
 fn table<'a>(vm: &'a mut Vm<'_>, id: Id) -> &'a mut OrderedMap {
@@ -137,45 +145,45 @@ fn set_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn map_get(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = map_of(vm, &this, "Map.prototype.get")?;
+    let id = map_of::<false>(vm, &this, "get")?;
     let key = vm.map_key(&arg(args, 0));
     Ok(table(vm, id).get(key).unwrap_or_default())
 }
 
 fn map_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = map_of(vm, &this, "Map.prototype.set")?;
+    let id = map_of::<false>(vm, &this, "set")?;
     let key = vm.map_key(&arg(args, 0));
     table(vm, id).set(key, arg(args, 0), arg(args, 1));
     Ok(this)
 }
 
 fn set_add(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = map_of(vm, &this, "Set.prototype.add")?;
+    let id = map_of::<true>(vm, &this, "add")?;
     let key = vm.map_key(&arg(args, 0));
     table(vm, id).set(key, arg(args, 0), Value::Undef);
     Ok(this)
 }
 
-fn map_has(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = map_of(vm, &this, "has")?;
+fn map_has<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let id = map_of::<SET>(vm, &this, "has")?;
     let key = vm.map_key(&arg(args, 0));
     Ok(Value::Bool(table(vm, id).has(key)))
 }
 
-fn map_delete(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = map_of(vm, &this, "delete")?;
+fn map_delete<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let id = map_of::<SET>(vm, &this, "delete")?;
     let key = vm.map_key(&arg(args, 0));
     Ok(Value::Bool(table(vm, id).delete(key)))
 }
 
-fn map_clear(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = map_of(vm, &this, "clear")?;
+fn map_clear<const SET: bool>(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    let id = map_of::<SET>(vm, &this, "clear")?;
     table(vm, id).clear();
     Ok(Value::Undef)
 }
 
-fn map_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = map_of(vm, &this, "forEach")?;
+fn map_for_each<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let id = map_of::<SET>(vm, &this, "forEach")?;
     let f = arg(args, 0);
     if !vm.is_callable(&f) {
         let d = vm.describe(&f);
@@ -201,8 +209,8 @@ fn map_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Undef)
 }
 
-fn map_iter(vm: &mut Vm, this: &Value, kind: IterKind) -> Res {
-    let id = map_of(vm, this, "iterator")?;
+fn map_iter<const SET: bool>(vm: &mut Vm, this: &Value, name: &str, kind: IterKind) -> Res {
+    let id = map_of::<SET>(vm, this, name)?;
     let proto = vm.realm.iter_proto;
     Ok(Value::Obj(vm.alloc(Obj::new(
         Some(proto),
@@ -215,15 +223,15 @@ fn map_iter(vm: &mut Vm, this: &Value, kind: IterKind) -> Res {
 }
 
 fn map_keys(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    map_iter(vm, &this, IterKind::Keys)
+    map_iter::<false>(vm, &this, "keys", IterKind::Keys)
 }
 
-fn map_values(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    map_iter(vm, &this, IterKind::Values)
+fn map_values<const SET: bool>(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    map_iter::<SET>(vm, &this, "values", IterKind::Values)
 }
 
-fn map_entries(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    map_iter(vm, &this, IterKind::Entries)
+fn map_entries<const SET: bool>(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    map_iter::<SET>(vm, &this, "entries", IterKind::Entries)
 }
 
 // ---------- iterators and generators ----------

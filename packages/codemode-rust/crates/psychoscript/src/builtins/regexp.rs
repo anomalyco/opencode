@@ -70,7 +70,14 @@ pub fn compile(pattern: &str, flags: &str) -> Result<(regress::Regex, String), C
         unicode_sets: seen[6],
         ..Default::default()
     };
-    match regress::Regex::with_flags(pattern, rflags) {
+    // Without the unicode flags a pattern is code units, like the text it matches.
+    let compiled = if rflags.unicode || rflags.unicode_sets {
+        regress::Regex::with_flags(pattern, rflags)
+    } else {
+        regress::Regex::from_unicode(pattern.encode_utf16().map(u32::from), rflags)
+            .or_else(|_| regress::Regex::with_flags(pattern, rflags))
+    };
+    match compiled {
         Ok(r) => Ok((r, ordered)),
         Err(e) => Err(CompileError::Pattern(e.to_string())),
     }
@@ -129,6 +136,27 @@ pub fn setup(vm: &mut Vm) {
     vm.realm.std.regexp = proto;
     let ctor = vm.ctor("RegExp", 2, regexp_ctor, proto, Value::Undef);
     vm.method(ctor, "escape", 1, regexp_escape);
+    // The accessors live on the prototype, as in JS; instances answer them through `get_prop`.
+    for name in [
+        "source",
+        "flags",
+        "hasIndices",
+        "global",
+        "ignoreCase",
+        "multiline",
+        "dotAll",
+        "unicode",
+        "unicodeSets",
+        "sticky",
+    ] {
+        let k = vm.atoms.intern_static(name);
+        let v = match name {
+            "source" => vm.static_str("(?:)"),
+            "flags" => vm.static_str(""),
+            _ => Value::Undef,
+        };
+        vm.define_hidden(proto, k, v);
+    }
     vm.methods(
         proto,
         &[

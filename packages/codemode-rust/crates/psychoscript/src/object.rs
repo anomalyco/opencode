@@ -248,6 +248,9 @@ pub enum Kind {
     Date(f64),
     Bytes(Box<crate::builtins::bytes::Bytes>),
     TextDecoder(Box<crate::builtins::bytes::Decoder>),
+    WeakMap(Box<OrderedMap>),
+    WeakSet(Box<OrderedMap>),
+    IterHelper(Box<crate::builtins::iterator::Helper>),
     /// A live iterator over a standard-library collection.
     ExoticIter {
         target: Id,

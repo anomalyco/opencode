@@ -9,6 +9,7 @@ pub mod exotic;
 pub mod iterator;
 mod object;
 pub mod regexp;
+mod sets;
 mod string;
 
 use crate::object::*;
@@ -24,6 +25,9 @@ pub struct StdProtos {
     pub buffer: Id,
     pub text_encoder: Id,
     pub text_decoder: Id,
+    pub weak_map: Id,
+    pub weak_set: Id,
+    pub iterator_helper: Id,
 }
 
 /// Global names a program cannot assign to.
@@ -52,6 +56,9 @@ pub const GLOBAL_NAMES: &[&str] = &[
     "Date",
     "Uint8Array",
     "Buffer",
+    "WeakMap",
+    "WeakSet",
+    "Iterator",
     "TextEncoder",
     "TextDecoder",
     "atob",
@@ -184,8 +191,10 @@ impl<'rt> Vm<'rt> {
         regexp::setup(self);
         date::setup(self);
         iterator::setup(self);
+        iterator::setup_helpers(self);
         bytes::setup(self);
         buffer::setup(self);
+        sets::setup(self);
 
         let tools = self.tool_ref("");
         self.realm.tools = tools.as_obj().unwrap_or(0);

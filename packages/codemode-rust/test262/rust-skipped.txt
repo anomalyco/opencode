@@ -27,7 +27,6 @@ built-ins/Array/prototype/copyWithin/non-negative-out-of-bounds-target-and-start
 built-ins/Array/prototype/copyWithin/non-negative-target-and-start.js  # call of a missing method
 built-ins/Array/prototype/copyWithin/non-negative-target-start-and-end.js  # call of a missing method
 built-ins/Array/prototype/copyWithin/undefined-end.js  # call of a missing method
-built-ins/Array/prototype/entries/iteration-mutable.js  # wrong result
 built-ins/Array/prototype/every/15.4.4.16-7-4.js  # wrong result
 built-ins/Array/prototype/every/15.4.4.16-7-5.js  # wrong result
 built-ins/Array/prototype/every/15.4.4.16-7-b-1.js  # wrong result
@@ -45,7 +44,6 @@ built-ins/Array/prototype/indexOf/15.4.4.14-5-16.js  # uncaught RangeError: Inva
 built-ins/Array/prototype/indexOf/15.4.4.14-9-9.js  # uncaught RangeError: Invalid array length
 built-ins/Array/prototype/indexOf/15.4.4.14-9-b-1.js  # wrong result
 built-ins/Array/prototype/indexOf/length-zero-returns-minus-one.js  # wrong result
-built-ins/Array/prototype/keys/iteration-mutable.js  # wrong result
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-12.js  # uncaught RangeError: Invalid array length
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-16.js  # uncaught RangeError: Invalid array length
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-9.js  # uncaught RangeError: Invalid array length
@@ -73,9 +71,6 @@ built-ins/Array/prototype/some/15.4.4.17-7-5.js  # wrong result
 built-ins/Array/prototype/some/15.4.4.17-7-b-1.js  # wrong result
 built-ins/Array/prototype/sort/bug_596_2.js  # wrong result
 built-ins/Array/prototype/splice/15.4.4.12-9-c-ii-1.js  # wrong result
-built-ins/Array/prototype/values/iteration-mutable.js  # wrong result
-built-ins/ArrayIteratorPrototype/next/iteration-mutable.js  # wrong result
-built-ins/ArrayIteratorPrototype/next/non-own-slots.js  # wrong error type: RangeError instead of TypeError
 built-ins/AsyncFromSyncIteratorPrototype/next/iterator-result-prototype.js  # unsupported syntax: async generator functions
 built-ins/AsyncFromSyncIteratorPrototype/next/iterator-result-rejected.js  # unsupported syntax: async generator functions
 built-ins/AsyncFromSyncIteratorPrototype/next/iterator-result-unwrap-promise.js  # unsupported syntax: async generator functions
@@ -118,168 +113,8 @@ built-ins/AsyncGeneratorPrototype/throw/throw-suspendedYield-try-finally-throw.j
 built-ins/AsyncGeneratorPrototype/throw/throw-suspendedYield-try-finally.js  # unsupported syntax: async generator functions
 built-ins/AsyncGeneratorPrototype/throw/throw-suspendedYield.js  # unsupported syntax: async generator functions
 built-ins/Function/prototype/bind/instance-length-remaining-args.js  # wrong result
-built-ins/Iterator/constructor.js  # wrong result
-built-ins/Iterator/from/callable.js  # missing global: Iterator
-built-ins/Iterator/from/is-function.js  # missing global: Iterator
-built-ins/Iterator/from/iterable-to-iterator-fallback.js  # missing global: Iterator
-built-ins/Iterator/from/supports-iterator.js  # missing global: Iterator
-built-ins/Iterator/newtarget-or-active-function-object.js  # missing global: Iterator
-built-ins/Iterator/prototype/drop/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/drop/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/drop/limit-equals-total.js  # call of a missing method
-built-ins/Iterator/prototype/drop/limit-greater-than-total.js  # call of a missing method
-built-ins/Iterator/prototype/drop/limit-less-than-total.js  # call of a missing method
-built-ins/Iterator/prototype/drop/limit-rangeerror.js  # call of a missing method
-built-ins/Iterator/prototype/drop/result-is-iterator.js  # call of a missing method
-built-ins/Iterator/prototype/drop/underlying-iterator-advanced-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/drop/underlying-iterator-closed-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/drop/underlying-iterator-closed.js  # call of a missing method
-built-ins/Iterator/prototype/every/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/every/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/every/iterator-already-exhausted.js  # call of a missing method
-built-ins/Iterator/prototype/every/iterator-has-no-return.js  # call of a missing method
-built-ins/Iterator/prototype/every/predicate-args.js  # call of a missing method
-built-ins/Iterator/prototype/every/predicate-returns-falsey.js  # call of a missing method
-built-ins/Iterator/prototype/every/predicate-returns-non-boolean.js  # call of a missing method
-built-ins/Iterator/prototype/every/predicate-returns-truthy-then-falsey.js  # call of a missing method
-built-ins/Iterator/prototype/every/predicate-returns-truthy.js  # call of a missing method
-built-ins/Iterator/prototype/every/predicate-this.js  # call of a missing method
-built-ins/Iterator/prototype/every/result-is-boolean.js  # call of a missing method
-built-ins/Iterator/prototype/every/this-non-callable-next.js  # missing global: Iterator
-built-ins/Iterator/prototype/filter/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/filter/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/filter/iterator-already-exhausted.js  # call of a missing method
-built-ins/Iterator/prototype/filter/predicate-args.js  # call of a missing method
-built-ins/Iterator/prototype/filter/predicate-filters.js  # call of a missing method
-built-ins/Iterator/prototype/filter/predicate-returns-non-boolean.js  # call of a missing method
-built-ins/Iterator/prototype/filter/predicate-this.js  # call of a missing method
-built-ins/Iterator/prototype/filter/result-is-iterator.js  # call of a missing method
-built-ins/Iterator/prototype/filter/throws-typeerror-when-generator-is-running.js  # call of a missing method
-built-ins/Iterator/prototype/filter/underlying-iterator-advanced-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/filter/underlying-iterator-closed-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/filter/underlying-iterator-closed.js  # call of a missing method
-built-ins/Iterator/prototype/find/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/find/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/find/iterator-already-exhausted.js  # call of a missing method
-built-ins/Iterator/prototype/find/iterator-has-no-return.js  # call of a missing method
-built-ins/Iterator/prototype/find/predicate-args.js  # call of a missing method
-built-ins/Iterator/prototype/find/predicate-returns-falsey-then-truthy.js  # call of a missing method
-built-ins/Iterator/prototype/find/predicate-returns-falsey.js  # call of a missing method
-built-ins/Iterator/prototype/find/predicate-returns-non-boolean.js  # call of a missing method
-built-ins/Iterator/prototype/find/predicate-returns-truthy.js  # call of a missing method
-built-ins/Iterator/prototype/find/predicate-this.js  # call of a missing method
-built-ins/Iterator/prototype/find/this-non-callable-next.js  # missing global: Iterator
-built-ins/Iterator/prototype/flatMap/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/flatMap/flattens-iterable.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/flattens-iterator.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/flattens-only-depth-1.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/flatMap/iterable-to-iterator-fallback.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/iterator-already-exhausted.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/mapper-args.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/mapper-returns-closed-iterator.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/mapper-returns-non-object.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/mapper-this.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/result-is-iterator.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/return-is-forwarded-to-mapper-result.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/throws-typeerror-when-generator-is-running.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/underlying-iterator-advanced-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/underlying-iterator-closed-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/flatMap/underlying-iterator-closed.js  # call of a missing method
-built-ins/Iterator/prototype/forEach/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/forEach/fn-args.js  # call of a missing method
-built-ins/Iterator/prototype/forEach/fn-called-for-each-yielded-value.js  # call of a missing method
-built-ins/Iterator/prototype/forEach/fn-this.js  # call of a missing method
-built-ins/Iterator/prototype/forEach/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/forEach/iterator-already-exhausted.js  # call of a missing method
-built-ins/Iterator/prototype/forEach/result-is-undefined.js  # call of a missing method
-built-ins/Iterator/prototype/forEach/this-non-callable-next.js  # missing global: Iterator
-built-ins/Iterator/prototype/map/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/map/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/map/iterator-already-exhausted.js  # call of a missing method
-built-ins/Iterator/prototype/map/mapper-args.js  # call of a missing method
-built-ins/Iterator/prototype/map/mapper-this.js  # call of a missing method
-built-ins/Iterator/prototype/map/result-is-iterator.js  # call of a missing method
-built-ins/Iterator/prototype/map/returned-iterator-yields-mapper-return-values.js  # call of a missing method
-built-ins/Iterator/prototype/map/throws-typeerror-when-generator-is-running.js  # call of a missing method
-built-ins/Iterator/prototype/map/underlying-iterator-advanced-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/map/underlying-iterator-closed-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/map/underlying-iterator-closed.js  # call of a missing method
-built-ins/Iterator/prototype/reduce/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/reduce/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/reduce/iterator-already-exhausted-initial-value.js  # call of a missing method
-built-ins/Iterator/prototype/reduce/iterator-already-exhausted-no-initial-value.js  # call of a missing method
-built-ins/Iterator/prototype/reduce/iterator-yields-once-initial-value.js  # call of a missing method
-built-ins/Iterator/prototype/reduce/iterator-yields-once-no-initial-value.js  # call of a missing method
-built-ins/Iterator/prototype/reduce/non-callable-reducer.js  # call of a missing method
-built-ins/Iterator/prototype/reduce/reducer-args-initial-value.js  # call of a missing method
-built-ins/Iterator/prototype/reduce/reducer-args-no-initial-value.js  # call of a missing method
-built-ins/Iterator/prototype/reduce/reducer-this.js  # call of a missing method
-built-ins/Iterator/prototype/reduce/this-non-callable-next.js  # missing global: Iterator
-built-ins/Iterator/prototype/some/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/some/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/some/iterator-already-exhausted.js  # call of a missing method
-built-ins/Iterator/prototype/some/iterator-has-no-return.js  # call of a missing method
-built-ins/Iterator/prototype/some/predicate-args.js  # call of a missing method
-built-ins/Iterator/prototype/some/predicate-returns-falsey-then-truthy.js  # call of a missing method
-built-ins/Iterator/prototype/some/predicate-returns-falsey.js  # call of a missing method
-built-ins/Iterator/prototype/some/predicate-returns-non-boolean.js  # call of a missing method
-built-ins/Iterator/prototype/some/predicate-returns-truthy.js  # call of a missing method
-built-ins/Iterator/prototype/some/predicate-this.js  # call of a missing method
-built-ins/Iterator/prototype/some/result-is-boolean.js  # call of a missing method
-built-ins/Iterator/prototype/some/this-non-callable-next.js  # missing global: Iterator
-built-ins/Iterator/prototype/take/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/take/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/take/limit-greater-than-or-equal-to-total.js  # call of a missing method
-built-ins/Iterator/prototype/take/limit-less-than-total.js  # call of a missing method
-built-ins/Iterator/prototype/take/limit-rangeerror.js  # call of a missing method
-built-ins/Iterator/prototype/take/result-is-iterator.js  # call of a missing method
-built-ins/Iterator/prototype/take/underlying-iterator-advanced-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/take/underlying-iterator-closed-in-parallel.js  # call of a missing method
-built-ins/Iterator/prototype/take/underlying-iterator-closed.js  # call of a missing method
-built-ins/Iterator/prototype/toArray/callable.js  # missing global: Iterator
-built-ins/Iterator/prototype/toArray/is-function.js  # missing global: Iterator
-built-ins/Iterator/prototype/toArray/iterator-already-exhausted.js  # call of a missing method
-built-ins/Iterator/prototype/toArray/this-non-callable-next.js  # missing global: Iterator
 built-ins/JSON/parse/reviver-array-get-prop-from-prototype.js  # wrong result
 built-ins/JSON/stringify/value-string-escape-unicode.js  # wrong result
-built-ins/Map/groupBy/callback-arg.js  # call of a missing method
-built-ins/Map/groupBy/callback-throws.js  # wrong error type: TypeError instead of Test262Error
-built-ins/Map/groupBy/emptyList.js  # call of a missing method
-built-ins/Map/groupBy/evenOdd.js  # call of a missing method
-built-ins/Map/groupBy/groupLength.js  # call of a missing method
-built-ins/Map/groupBy/iterator-next-throws.js  # wrong error type: TypeError instead of Test262Error
-built-ins/Map/groupBy/map-instance.js  # call of a missing method
-built-ins/Map/groupBy/negativeZero.js  # call of a missing method
-built-ins/Map/groupBy/string.js  # call of a missing method
-built-ins/Map/groupBy/toPropertyKey.js  # call of a missing method
-built-ins/Map/prototype/clear/context-is-set-object-throws.js  # error not thrown: TypeError
-built-ins/Map/prototype/clear/context-is-weakmap-object-throws.js  # missing global: WeakMap
-built-ins/Map/prototype/delete/context-is-set-object-throws.js  # error not thrown: TypeError
-built-ins/Map/prototype/delete/context-is-weakmap-object-throws.js  # missing global: WeakMap
-built-ins/Map/prototype/entries/does-not-have-mapdata-internal-slot-set.js  # error not thrown: TypeError
-built-ins/Map/prototype/entries/does-not-have-mapdata-internal-slot-weakmap.js  # missing global: WeakMap
-built-ins/Map/prototype/forEach/does-not-have-mapdata-internal-slot-set.js  # error not thrown: TypeError
-built-ins/Map/prototype/forEach/does-not-have-mapdata-internal-slot-weakmap.js  # missing global: WeakMap
-built-ins/Map/prototype/get/does-not-have-mapdata-internal-slot-set.js  # error not thrown: TypeError
-built-ins/Map/prototype/get/does-not-have-mapdata-internal-slot-weakmap.js  # missing global: WeakMap
-built-ins/Map/prototype/getOrInsert/returns-value-normalized-zero-key.js  # call of a missing method
-built-ins/Map/prototype/getOrInsertComputed/callbackfn-throws.js  # wrong error type: TypeError instead of Error
-built-ins/Map/prototype/getOrInsertComputed/canonical-key-passed-to-callback.js  # call of a missing method
-built-ins/Map/prototype/getOrInsertComputed/check-callback-fn-args.js  # call of a missing method
-built-ins/Map/prototype/getOrInsertComputed/check-state-after-callback-fn-throws.js  # wrong error type: TypeError instead of Error
-built-ins/Map/prototype/getOrInsertComputed/does-not-evaluate-callbackfn-if-key-present.js  # call of a missing method
-built-ins/Map/prototype/getOrInsertComputed/does-not-have-mapdata-internal-slot-weakmap.js  # missing global: WeakMap
-built-ins/Map/prototype/getOrInsertComputed/overwrites-mutation-from-callbackfn.js  # call of a missing method
-built-ins/Map/prototype/getOrInsertComputed/returns-value-normalized-zero-key.js  # call of a missing method
-built-ins/Map/prototype/has/does-not-have-mapdata-internal-slot-set.js  # error not thrown: TypeError
-built-ins/Map/prototype/has/does-not-have-mapdata-internal-slot-weakmap.js  # missing global: WeakMap
-built-ins/Map/prototype/keys/does-not-have-mapdata-internal-slot-set.js  # error not thrown: TypeError
-built-ins/Map/prototype/keys/does-not-have-mapdata-internal-slot-weakmap.js  # missing global: WeakMap
-built-ins/Map/prototype/set/does-not-have-mapdata-internal-slot-set.js  # error not thrown: TypeError
-built-ins/Map/prototype/set/does-not-have-mapdata-internal-slot-weakmap.js  # missing global: WeakMap
-built-ins/Map/prototype/values/does-not-have-mapdata-internal-slot-set.js  # error not thrown: TypeError
-built-ins/Map/prototype/values/does-not-have-mapdata-internal-slot-weakmap.js  # missing global: WeakMap
 built-ins/Math/hypot/Math.hypot_ToNumberErr.js  # error not thrown: Test262Error
 built-ins/Math/sumPrecise/sum-is-NaN.js  # call of a missing method
 built-ins/Math/sumPrecise/sum-is-infinite.js  # call of a missing method
@@ -300,16 +135,6 @@ built-ins/Number/prototype/toFixed/exactness.js  # wrong result
 built-ins/Object/fromEntries/iterator-closed-for-null-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/iterator-closed-for-string-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/string-entry-primitive-throws.js  # error not thrown: TypeError
-built-ins/Object/groupBy/callback-arg.js  # call of a missing method
-built-ins/Object/groupBy/callback-throws.js  # wrong error type: TypeError instead of Test262Error
-built-ins/Object/groupBy/emptyList.js  # call of a missing method
-built-ins/Object/groupBy/evenOdd.js  # call of a missing method
-built-ins/Object/groupBy/groupLength.js  # call of a missing method
-built-ins/Object/groupBy/invalid-property-key.js  # wrong error type: TypeError instead of Test262Error
-built-ins/Object/groupBy/iterator-next-throws.js  # wrong error type: TypeError instead of Test262Error
-built-ins/Object/groupBy/null-prototype.js  # call of a missing method
-built-ins/Object/groupBy/string.js  # call of a missing method
-built-ins/Object/groupBy/toPropertyKey.js  # call of a missing method
 built-ins/Object/isFrozen/15.2.3.12-2-a-11.js  # wrong result
 built-ins/Object/prototype/hasOwnProperty/S15.2.4.5_A12.js  # error not thrown: TypeError
 built-ins/Object/prototype/hasOwnProperty/S15.2.4.5_A13.js  # error not thrown: TypeError
@@ -323,8 +148,6 @@ built-ins/Object/prototype/valueOf/S15.2.4.4_A13.js  # error not thrown: TypeErr
 built-ins/Object/prototype/valueOf/S15.2.4.4_A14.js  # error not thrown: TypeError
 built-ins/Object/prototype/valueOf/S15.2.4.4_A15.js  # error not thrown: TypeError
 built-ins/Object/prototype/valueOf/S15.2.4.4_A9.js  # wrong result
-built-ins/Object/seal/seal-weakmap.js  # missing global: WeakMap
-built-ins/Object/seal/seal-weakset.js  # missing global: WeakSet
 built-ins/Promise/all/S25.4.4.1_A3.1_T1.js  # uncaught TypeError: N is not iterable
 built-ins/Promise/all/S25.4.4.1_A3.1_T2.js  # uncaught TypeError: object is not iterable
 built-ins/Promise/all/S25.4.4.1_A5.1_T1.js  # wrong result
@@ -401,97 +224,9 @@ built-ins/RegExp/named-groups/duplicate-names-match.js  # wrong result
 built-ins/RegExp/named-groups/duplicate-names-test.js  # wrong result
 built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T9.js  # spurious parse error: Identifier `…` has already been declared
 built-ins/RegExp/prototype/exec/S15.10.6.2_A9.js  # wrong result
-built-ins/RegExp/prototype/exec/regexp-builtin-exec-v-u-flag.js  # wrong result
-built-ins/RegExp/prototype/global/S15.10.7.2_A8.js  # wrong result
-built-ins/RegExp/prototype/global/S15.10.7.2_A9.js  # wrong result
-built-ins/RegExp/prototype/ignoreCase/S15.10.7.3_A8.js  # wrong result
-built-ins/RegExp/prototype/ignoreCase/S15.10.7.3_A9.js  # wrong result
-built-ins/RegExp/prototype/multiline/S15.10.7.4_A8.js  # wrong result
-built-ins/RegExp/prototype/multiline/S15.10.7.4_A9.js  # wrong result
 built-ins/RegExp/prototype/test/S15.10.6.3_A1_T9.js  # spurious parse error: Identifier `…` has already been declared
 built-ins/RegExp/prototype/test/S15.10.6.3_A9.js  # wrong result
 built-ins/RegExp/prototype/toString/S15.10.6.4_A9.js  # wrong result
-built-ins/Set/prototype/add/does-not-have-setdata-internal-slot-map.js  # error not thrown: TypeError
-built-ins/Set/prototype/add/does-not-have-setdata-internal-slot-weakset.js  # missing global: WeakSet
-built-ins/Set/prototype/clear/does-not-have-setdata-internal-slot-map.js  # error not thrown: TypeError
-built-ins/Set/prototype/clear/does-not-have-setdata-internal-slot-weakset.js  # missing global: WeakSet
-built-ins/Set/prototype/delete/does-not-have-setdata-internal-slot-map.js  # error not thrown: TypeError
-built-ins/Set/prototype/delete/does-not-have-setdata-internal-slot-weakset.js  # missing global: WeakSet
-built-ins/Set/prototype/difference/add-not-called.js  # call of a missing method
-built-ins/Set/prototype/difference/allows-set-like-object.js  # call of a missing method
-built-ins/Set/prototype/difference/combines-Map.js  # call of a missing method
-built-ins/Set/prototype/difference/combines-empty-sets.js  # call of a missing method
-built-ins/Set/prototype/difference/combines-itself.js  # call of a missing method
-built-ins/Set/prototype/difference/combines-same-sets.js  # call of a missing method
-built-ins/Set/prototype/difference/combines-sets.js  # call of a missing method
-built-ins/Set/prototype/difference/converts-negative-zero.js  # call of a missing method
-built-ins/Set/prototype/difference/result-order.js  # call of a missing method
-built-ins/Set/prototype/difference/set-like-array.js  # call of a missing method
-built-ins/Set/prototype/entries/does-not-have-setdata-internal-slot-map.js  # error not thrown: TypeError
-built-ins/Set/prototype/entries/does-not-have-setdata-internal-slot-weakset.js  # missing global: WeakSet
-built-ins/Set/prototype/forEach/does-not-have-setdata-internal-slot-map.js  # error not thrown: TypeError
-built-ins/Set/prototype/forEach/does-not-have-setdata-internal-slot-weakset.js  # missing global: WeakSet
-built-ins/Set/prototype/has/does-not-have-setdata-internal-slot-map.js  # error not thrown: TypeError
-built-ins/Set/prototype/has/does-not-have-setdata-internal-slot-weakset.js  # missing global: WeakSet
-built-ins/Set/prototype/intersection/add-not-called.js  # call of a missing method
-built-ins/Set/prototype/intersection/allows-set-like-object.js  # call of a missing method
-built-ins/Set/prototype/intersection/combines-Map.js  # call of a missing method
-built-ins/Set/prototype/intersection/combines-empty-sets.js  # call of a missing method
-built-ins/Set/prototype/intersection/combines-itself.js  # call of a missing method
-built-ins/Set/prototype/intersection/combines-same-sets.js  # call of a missing method
-built-ins/Set/prototype/intersection/combines-sets.js  # call of a missing method
-built-ins/Set/prototype/intersection/converts-negative-zero.js  # call of a missing method
-built-ins/Set/prototype/intersection/result-order.js  # call of a missing method
-built-ins/Set/prototype/intersection/set-like-array.js  # call of a missing method
-built-ins/Set/prototype/isDisjointFrom/allows-set-like-object.js  # call of a missing method
-built-ins/Set/prototype/isDisjointFrom/compares-Map.js  # call of a missing method
-built-ins/Set/prototype/isDisjointFrom/compares-empty-sets.js  # call of a missing method
-built-ins/Set/prototype/isDisjointFrom/compares-itself.js  # call of a missing method
-built-ins/Set/prototype/isDisjointFrom/compares-same-sets.js  # call of a missing method
-built-ins/Set/prototype/isDisjointFrom/compares-sets.js  # call of a missing method
-built-ins/Set/prototype/isDisjointFrom/converts-negative-zero.js  # call of a missing method
-built-ins/Set/prototype/isDisjointFrom/set-like-array.js  # call of a missing method
-built-ins/Set/prototype/isDisjointFrom/set-like-class-mutation.js  # call of a missing method
-built-ins/Set/prototype/isSubsetOf/allows-set-like-object.js  # call of a missing method
-built-ins/Set/prototype/isSubsetOf/compares-Map.js  # call of a missing method
-built-ins/Set/prototype/isSubsetOf/compares-empty-sets.js  # call of a missing method
-built-ins/Set/prototype/isSubsetOf/compares-itself.js  # call of a missing method
-built-ins/Set/prototype/isSubsetOf/compares-same-sets.js  # call of a missing method
-built-ins/Set/prototype/isSubsetOf/compares-sets.js  # call of a missing method
-built-ins/Set/prototype/isSubsetOf/set-like-array.js  # call of a missing method
-built-ins/Set/prototype/isSubsetOf/set-like-class-mutation.js  # call of a missing method
-built-ins/Set/prototype/isSupersetOf/allows-set-like-object.js  # call of a missing method
-built-ins/Set/prototype/isSupersetOf/compares-Map.js  # call of a missing method
-built-ins/Set/prototype/isSupersetOf/compares-empty-sets.js  # call of a missing method
-built-ins/Set/prototype/isSupersetOf/compares-itself.js  # call of a missing method
-built-ins/Set/prototype/isSupersetOf/compares-same-sets.js  # call of a missing method
-built-ins/Set/prototype/isSupersetOf/compares-sets.js  # call of a missing method
-built-ins/Set/prototype/isSupersetOf/converts-negative-zero.js  # call of a missing method
-built-ins/Set/prototype/isSupersetOf/set-like-array.js  # call of a missing method
-built-ins/Set/prototype/isSupersetOf/set-like-class-mutation.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/add-not-called.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/allows-set-like-object.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/combines-Map.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/combines-empty-sets.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/combines-itself.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/combines-same-sets.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/combines-sets.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/converts-negative-zero.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/result-order.js  # call of a missing method
-built-ins/Set/prototype/symmetricDifference/set-like-array.js  # call of a missing method
-built-ins/Set/prototype/union/add-not-called.js  # call of a missing method
-built-ins/Set/prototype/union/allows-set-like-object.js  # call of a missing method
-built-ins/Set/prototype/union/appends-new-values.js  # call of a missing method
-built-ins/Set/prototype/union/combines-Map.js  # call of a missing method
-built-ins/Set/prototype/union/combines-empty-sets.js  # call of a missing method
-built-ins/Set/prototype/union/combines-itself.js  # call of a missing method
-built-ins/Set/prototype/union/combines-same-sets.js  # call of a missing method
-built-ins/Set/prototype/union/combines-sets.js  # call of a missing method
-built-ins/Set/prototype/union/converts-negative-zero.js  # call of a missing method
-built-ins/Set/prototype/union/result-order.js  # call of a missing method
-built-ins/Set/prototype/union/set-like-array.js  # call of a missing method
-built-ins/Set/prototype/values/does-not-have-setdata-internal-slot-map.js  # error not thrown: TypeError
-built-ins/Set/prototype/values/does-not-have-setdata-internal-slot-weakset.js  # missing global: WeakSet
 built-ins/String/prototype/charAt/S15.5.4.4_A9.js  # wrong result
 built-ins/String/prototype/charCodeAt/S15.5.4.5_A9.js  # wrong result
 built-ins/String/prototype/codePointAt/return-first-code-unit.js  # wrong result
@@ -516,123 +251,6 @@ built-ins/String/raw/special-characters.js  # unsupported syntax: tagged templat
 built-ins/String/raw/template-substitutions-are-appended-on-same-index.js  # unsupported syntax: tagged templates
 built-ins/String/raw/zero-literal-segments.js  # unsupported syntax: tagged templates
 built-ins/StringIteratorPrototype/next/next-iteration-surrogate-pairs.js  # wrong result
-built-ins/StringIteratorPrototype/next/next-missing-internal-slots.js  # wrong error type: RangeError instead of TypeError
-built-ins/WeakMap/constructor.js  # wrong result
-built-ins/WeakMap/empty-iterable.js  # missing global: WeakMap
-built-ins/WeakMap/iterable-failure.js  # missing global: WeakMap
-built-ins/WeakMap/iterator-next-failure.js  # missing global: WeakMap
-built-ins/WeakMap/no-iterable.js  # missing global: WeakMap
-built-ins/WeakMap/properties-of-map-instances.js  # missing global: WeakMap
-built-ins/WeakMap/properties-of-the-weakmap-prototype-object.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/delete-entry-with-object-key-initial-iterable.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/delete-entry-with-object-key.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-array.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-map.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-object.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-set.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/does-not-have-weakmapdata-internal-slot-weakmap-prototype.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/returns-false-when-object-key-not-present.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/this-not-object-throw-boolean.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/this-not-object-throw-null.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/this-not-object-throw-number.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/this-not-object-throw-string.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/delete/this-not-object-throw-undefined.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/get/does-not-have-weakmapdata-internal-slot-map.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/get/does-not-have-weakmapdata-internal-slot-set.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/get/does-not-have-weakmapdata-internal-slot.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/get/returns-undefined-with-object-key.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/get/returns-value-with-object-key.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsert/adds-object-element.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsert/does-not-have-weakmapdata-internal-slot-array.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsert/does-not-have-weakmapdata-internal-slot-map.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsert/does-not-have-weakmapdata-internal-slot-object.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsert/does-not-have-weakmapdata-internal-slot-set.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsert/does-not-have-weakmapdata-internal-slot-weakmap-prototype.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsert/returns-value-if-key-is-not-present-object-key.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsert/returns-value-if-key-is-present-object-key.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/adds-object-element.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/callbackfn-throws.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/does-not-evaluate-callbackfn-if-key-present.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/does-not-have-weakmapdata-internal-slot-array.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/does-not-have-weakmapdata-internal-slot-map.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/does-not-have-weakmapdata-internal-slot-object.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/does-not-have-weakmapdata-internal-slot-set.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/does-not-have-weakmapdata-internal-slot-weakmap-prototype.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/overwrites-mutation-from-callbackfn.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/returns-value-if-key-is-not-present-object-key.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/getOrInsertComputed/returns-value-if-key-is-present-object-key.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-array.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-map.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-object.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-set.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/does-not-have-weakmapdata-internal-slot-weakmap-prototype.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/returns-false-when-object-key-not-present.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/returns-true-when-object-key-present.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/this-not-object-throw-boolean.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/this-not-object-throw-null.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/this-not-object-throw-number.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/this-not-object-throw-string.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/has/this-not-object-throw-undefined.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/adds-object-element.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-array.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-map.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-object.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-set.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/does-not-have-weakmapdata-internal-slot-weakmap-prototype.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/returns-this-when-ignoring-duplicate.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/returns-this.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/this-not-object-throw-boolean.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/this-not-object-throw-null.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/this-not-object-throw-number.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/this-not-object-throw-string.js  # missing global: WeakMap
-built-ins/WeakMap/prototype/set/this-not-object-throw-undefined.js  # missing global: WeakMap
-built-ins/WeakMap/undefined-newtarget.js  # missing global: WeakMap
-built-ins/WeakSet/constructor.js  # wrong result
-built-ins/WeakSet/empty-iterable.js  # missing global: WeakSet
-built-ins/WeakSet/iterable-failure.js  # missing global: WeakSet
-built-ins/WeakSet/iterator-next-failure.js  # missing global: WeakSet
-built-ins/WeakSet/no-iterable.js  # missing global: WeakSet
-built-ins/WeakSet/properties-of-the-weakset-prototype-object.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/adds-object-element.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-array.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-map.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-object.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-set.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/does-not-have-weaksetdata-internal-slot-weakset-prototype.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/returns-this-when-ignoring-duplicate.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/returns-this.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/this-not-object-throw-boolean.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/this-not-object-throw-null.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/this-not-object-throw-number.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/this-not-object-throw-string.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/add/this-not-object-throw-undefined.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/constructor/weakset-prototype-constructor-intrinsic.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/delete-entry-initial-iterable.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/delete-object-entry.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-array.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-map.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-object.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-set.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/does-not-have-weaksetdata-internal-slot-weakset-prototype.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/returns-false-when-delete-is-noop.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/this-not-object-throw-boolean.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/this-not-object-throw-null.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/this-not-object-throw-number.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/this-not-object-throw-string.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/delete/this-not-object-throw-undefined.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-array.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-map.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-object.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-set.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/does-not-have-weaksetdata-internal-slot-weakset-prototype.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/returns-false-when-object-value-not-present.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/returns-true-when-object-value-present.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/this-not-object-throw-boolean.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/this-not-object-throw-null.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/this-not-object-throw-number.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/this-not-object-throw-string.js  # missing global: WeakSet
-built-ins/WeakSet/prototype/has/this-not-object-throw-undefined.js  # missing global: WeakSet
-built-ins/WeakSet/undefined-newtarget.js  # missing global: WeakSet
 built-ins/decodeURI/S15.1.3.1_A1.10_T1.js  # wrong result
 built-ins/decodeURI/S15.1.3.1_A1.11_T1.js  # wrong result
 built-ins/decodeURI/S15.1.3.1_A1.11_T2.js  # wrong result

@@ -74,6 +74,8 @@ pub fn inspect(vm: &mut Vm, id: Id) -> Option<String> {
         Kind::RegExp(_) => Some(regexp::inspect(vm, id)),
         Kind::Date(t) => Some(super::date::display(*t)),
         Kind::Bytes(_) => Some(bytes::inspect(vm, id)),
+        Kind::WeakMap(_) => Some("WeakMap { <items unknown> }".into()),
+        Kind::WeakSet(_) => Some("WeakSet { <items unknown> }".into()),
         _ => None,
     }
 }

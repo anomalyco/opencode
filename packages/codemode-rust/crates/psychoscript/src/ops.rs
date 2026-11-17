@@ -1035,10 +1035,11 @@ impl<'rt> Vm<'rt> {
                     Kind::Array(items) | Kind::Arguments(items) => items.get(pos).cloned(),
                     _ => None,
                 };
-                let Some(v) = item else { return Ok(None) };
+                let step = if item.is_some() { 1 } else { u32::MAX };
                 if let Kind::ArrayIter { pos: p, .. } = &mut self.heap[id as usize].kind {
-                    *p += 1;
+                    *p = p.saturating_add(step);
                 }
+                let Some(v) = item else { return Ok(None) };
                 Ok(Some(match kind {
                     IterKind::Values => v,
                     IterKind::Keys => Value::Num(pos as f64),
@@ -1060,7 +1061,11 @@ impl<'rt> Vm<'rt> {
                     _ => (None, false),
                 };
                 if let Kind::MapIter { pos: p, .. } = &mut self.heap[id as usize].kind {
-                    *p = (pos + 1) as u32;
+                    *p = if entry.is_some() {
+                        (pos + 1) as u32
+                    } else {
+                        u32::MAX
+                    };
                 }
                 let Some((k, v)) = entry else { return Ok(None) };
                 let v = if is_set { k } else { v };

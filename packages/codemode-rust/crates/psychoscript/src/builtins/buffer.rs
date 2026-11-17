@@ -835,7 +835,7 @@ enum Num {
 }
 
 /// Name, write?, kind, byte width (0: from the byteLength argument), little-endian.
-const NUMERIC: [(&str, bool, Num, usize, bool); 48] = [
+const NUMERIC: [(&str, bool, Num, usize, bool); 46] = [
     ("readUInt8", false, Num::U, 1, true),
     ("readUint8", false, Num::U, 1, true),
     ("readInt8", false, Num::I, 1, true),
@@ -882,8 +882,6 @@ const NUMERIC: [(&str, bool, Num, usize, bool); 48] = [
     ("writeUIntBE", true, Num::U, 0, false),
     ("writeIntLE", true, Num::I, 0, true),
     ("writeIntBE", true, Num::I, 0, false),
-    ("readUintLE", false, Num::U, 0, true),
-    ("readUintBE", false, Num::U, 0, false),
 ];
 
 fn offset_arg(vm: &mut Vm, v: &Value, len: usize, width: usize) -> Result<usize, Value> {
