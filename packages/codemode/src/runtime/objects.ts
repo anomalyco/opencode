@@ -14,7 +14,7 @@ import { type Convert, type GeneratorRequest, Invoke, type Push, type Resume } f
 import type { Code } from "../code.js"
 import { type Cell, CodeFlags } from "../opcodes.js"
 import type { Reaction, Resolving } from "../scheduler.js"
-import type { Frame } from "../vm.js"
+import type { Frame } from "../frame.js"
 import { OrderedTable, type TableCursor } from "./table.js"
 
 /** Property attributes, as in a JS property descriptor. */

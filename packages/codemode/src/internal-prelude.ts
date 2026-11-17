@@ -28,7 +28,8 @@ import { Convert } from "./runtime/signals.js"
 import type { Code } from "./code.js"
 import { builtinCodes } from "./prelude/bytecode.js"
 import { UnaryOp } from "./opcodes.js"
-import { type Vm, VmInternalFn } from "./vm.js"
+import { VmInternalFn } from "./frame.js"
+import type { Vm } from "./vm.js"
 
 /**
  * Lightweight internal callable for VM-only `$` intrinsics. Does not extend `Obj` or `Native`,

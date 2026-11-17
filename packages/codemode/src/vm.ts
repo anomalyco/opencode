@@ -84,7 +84,6 @@ import { enumerableSource } from "./stdlib/object.js"
 import { ToolReference } from "./tool-runtime.js"
 import { registerAsyncIntrinsics, type SettlingTarget, VmScheduler } from "./async.js"
 import type { Code } from "./code.js"
-import { type CaptureOptions, captureVm, type RestoreOptions, restoreVm } from "./snapshot.js"
 import { compileSource } from "./compiler/compile.js"
 import {
   AsyncFromSyncIterator,
@@ -139,6 +138,7 @@ import {
   UnaryOp,
 } from "./opcodes.js"
 import { hidden } from "./runtime/objects.js"
+import { CustomIter, Frame, type FrameMode, Mode, VmInternalFn } from "./frame.js"
 
 const contiguous = <T>(): Array<T> => {
   const a: Array<unknown> = [""]
@@ -154,50 +154,6 @@ const INITIAL_FUEL = 10_000
 const NATIVE_FUEL = 50
 const SLICE_MS = 1
 
-export const Mode = {
-  CALLER: 0,
-  ASYNC: 1,
-  GENERATOR: 2,
-  SETTLE: 3,
-  REJECT_ONLY: 4,
-  PROGRAM: 5,
-  BOUNDARY_OUT: 6,
-} as const
-
-export type FrameMode = (typeof Mode)[keyof typeof Mode]
-
-/** Custom synchronous/async iterator state stored in a frame's hidden `%it` slot. */
-export class CustomIter {
-  done = false
-  rawGen = false
-  constructor(
-    readonly iterator: Obj,
-    readonly next: Value,
-  ) {}
-}
-
-/** Single uniform activation record for the bytecode VM. */
-export class Frame {
-  fn: Fn | null = null
-  cells: ReadonlyArray<Cell> = EMPTY_CELLS
-  code: Code
-  pc = 0
-  sp = 0
-  regs: Array<unknown>
-  thisValue: Value = undefined
-  args: Array<Value> | undefined = undefined
-  mode: FrameMode = Mode.CALLER
-  target: unknown = undefined
-  answer: unknown = undefined
-  origin: AstNode | undefined = undefined
-  counted = false
-
-  constructor(code: Code, regs: Array<unknown>) {
-    this.code = code
-    this.regs = regs
-  }
-}
-
 const EXEC_DONE = 0
 const EXEC_FUEL = 1
 
@@ -207,19 +163,11 @@ const allocRegs = (size: number): Array<unknown> => {
   return regs
 }
 
-/** Internal closure wrapper that does not touch `builtins.Function` or `nativeRule.sealed`. */
-export class VmInternalFn {
-  constructor(
-    readonly code: Code,
-    readonly boundArgs?: ReadonlyArray<Value>,
-  ) {}
-}
-
 /**
  * Runs a runtime's program code: the job stack, the job queue, promises, and host calls. `execute.ts` and the driver
  * use only its host surface:
  *
- * - **Starting.** Exactly one of `start(source)` (a new run) or `restore(saved, …)` (a saved one), once. Host call
+ * - **Starting.** Exactly one of `start(source)` (a new run) or `restoreVm(vm, saved, …)` (a saved one, `snapshot.ts`), once. Host call
  *   ids count up in program order.
  * - **Running.** `run()` is synchronous, runs no host work, and returns a `Stop`:
  *   - `host(calls)`: start these queued calls now (they are `queued`; the driver marks them `running`),
@@ -233,7 +181,7 @@ export class VmInternalFn {
  *   blocking call's outcome continues the job that made it; a concurrent call's waits in the inbox and settles its
  *   promise in a later job, in completion order. Unknown or completed ids are ignored. `call(id)`/`calls()` list the
  *   calls handed over and not completed, in the order they were made.
- * - **Snapshots.** `capture` and `restore` run only between `run()`s, synchronously. A capture changes nothing a
+ * - **Snapshots.** `captureVm` and `restoreVm` (`snapshot.ts`) run only between `run()`s, synchronously. A capture changes nothing a
  *   later `run()` sees; it fails (throws) only on a codec gap. A state holding live host values (`calls()` with an
  *   extension call, or `activeExtension`) can't be restored faithfully.
  */
@@ -271,7 +219,9 @@ export class Vm {
     }
   }
 
-  private initIntrinsics(): void {
+  /** Registers the VM's internal callables, once: running, capturing and restoring all need them. */
+  ensureIntrinsics(): void {
+    if (this.intrinsics.size > 0) return
     registerVmIntrinsics(this.intrinsics, this)
     registerAsyncIntrinsics(this.intrinsics, this)
     registerGeneratorIntrinsics(this.intrinsics, this)
@@ -281,7 +231,7 @@ export class Vm {
   private getIntrinsic(name: string): unknown {
     const p = this.ctx.prelude.scope.get(name)
     if (p !== undefined) return p
-    if (this.intrinsics.size === 0) this.initIntrinsics()
+    this.ensureIntrinsics()
     return this.intrinsics.get(name)
   }
 
@@ -432,18 +382,6 @@ export class Vm {
    */
   get activeExtension(): { readonly key: string; readonly path: string } | undefined {
     return this.hosts.extension
-  }
-
-  /** Saves the run's state as it is now. */
-  capture(options: CaptureOptions) {
-    if (this.intrinsics.size === 0) this.initIntrinsics()
-    return captureVm(this, options)
-  }
-
-  /** Restores a saved state into this fresh VM, after checking it belongs to this build and runtime. */
-  restore(saved: unknown, options: RestoreOptions) {
-    if (this.intrinsics.size === 0) this.initIntrinsics()
-    return restoreVm(this, saved, options)
   }
 
   deliverAnswer(frame: Frame): void {

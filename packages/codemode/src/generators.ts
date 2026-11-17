@@ -12,12 +12,12 @@ import {
   type Value,
 } from "./runtime/objects.js"
 import { readProperty, requireIteratorMethod, requireIteratorObject } from "./runtime/operations.js"
-import { capability } from "./runtime/promises.js"
 import { abrupt, type Completion, type GeneratorRequest, Interruption, normal, Resume } from "./runtime/signals.js"
 import type { Reaction, Resolving } from "./scheduler.js"
 import { internalCode, VmIntrinsic } from "./internal-prelude.js"
 import { CodeFlags, Op } from "./opcodes.js"
-import { CustomIter, type Frame, Mode, type Vm } from "./vm.js"
+import { CustomIter, type Frame, Mode } from "./frame.js"
+import type { Vm } from "./vm.js"
 
 /**
  * CreateAsyncFromSyncIterator's object: an async iterator over a synchronous one, for `for await` and an async
@@ -413,7 +413,7 @@ export const handleAdapterPush = (vm: Vm, callerFrame: Frame, slots: Array<unkno
   const kind = slots[1] as GeneratorRequestKind
   const args = slots[2] as Array<Value>
   const site = adapter.site
-  const made = capability(vm.ctx, site)
+  const made = vm.scheduler.resolving(vm.scheduler.newPromise(), site)
   const sync = adapter.sync
   if (sync instanceof Position) {
     if (kind === "next") {

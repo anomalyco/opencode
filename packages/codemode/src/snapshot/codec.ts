@@ -1,4 +1,3 @@
-import { Interpreter } from "../runtime/interpreter.js"
 import {
   type AstNode,
   AsyncIteratorSymbol,
@@ -36,7 +35,6 @@ import {
 } from "../runtime/objects.js"
 import { Convert, Interruption, Invoke } from "../runtime/signals.js"
 import { deleted, OrderedTable } from "../runtime/table.js"
-import { AsyncFromSyncIterator } from "../generators.js"
 import { HostCall, Resolving } from "../scheduler.js"
 import { BufferObj } from "../stdlib/buffer.js"
 import { TextDecoderObj } from "../stdlib/bytes.js"
@@ -111,7 +109,7 @@ export type EncodeEnv = {
   readonly lost: Array<string>
   readonly strict: boolean
   readonly hosts?: HostBridge | undefined
-  /** More classes to save (the VM's frames and closures), after the built-in ones. */
+  /** More classes to save (the VM's own state, its frames and closures, the interpreter), after the built-in ones. */
   readonly specs?: ReadonlyArray<ClassSpec> | undefined
   /** The data the VM names an object or symbol by, saved as `["x", data]`, instead of copying it. */
   readonly external?: ((value: object | symbol) => Json | undefined) | undefined
@@ -163,7 +161,6 @@ export type ClassSpec = {
 const objFields = ["props", "extensible", "proto", "intrinsic"]
 const callable = { tag: "Function" }
 
-// Built on first use: the VM's modules and this one import each other, so the classes aren't there at load time.
 const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   { name: "Obj", ctor: Obj, fields: [], obj: true, constants: { tag: "Object" } },
   { name: "Arr", ctor: Arr, fields: ["items", "elements"], obj: true, constants: { tag: "Array" } },
@@ -234,13 +231,6 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
     obj: true,
     constants: { tag: "Object" },
   },
-  {
-    name: "AsyncFromSyncIterator",
-    ctor: AsyncFromSyncIterator,
-    fields: ["sync", "site"],
-    obj: true,
-    constants: { tag: "AsyncFromSyncIterator" },
-  },
   { name: "Position", ctor: Position, fields: ["index", "done", "source", "kind", "arrays"] },
   {
     name: "OrderedTable",
@@ -267,13 +257,6 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   { name: "Invoke", ctor: Invoke, fields: ["callable", "thisValue", "args", "site"] },
   { name: "ToolReference", ctor: ToolReference, fields: ["path"] },
   { name: "Lost", ctor: Lost, fields: ["description"] },
-  {
-    name: "Interpreter",
-    ctor: Interpreter,
-    anchor: "ctx",
-    fields: ["logs", "globalScope", "modules", "namespaces"],
-    skip: ["tools", "builtins", "vm", "intrinsics", "extensionWork", "hosts", "sources", "prelude"],
-  },
 ]
 
 let builtins: { readonly byCtor: Map<Function, ClassSpec>; readonly byName: Map<string, ClassSpec> } | undefined
