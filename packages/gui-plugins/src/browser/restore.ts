@@ -10,6 +10,9 @@ const Stored = Schema.Struct({
 
 type Stored = typeof Stored.Type
 
+/** One saved tab while it is built; who drives it is written only when known. */
+type SavedTab = { -readonly [Key in keyof Stored["tabs"][number]]: Stored["tabs"][number][Key] }
+
 const empty: Stored = { tabs: [], focusedTabID: null }
 
 /** Tab URLs and focus per `${server}\n${session}`, imported once from the desktop's own `opencode.browser.dat` rows. */
@@ -34,11 +37,18 @@ export function createBrowserRestoreStore(storage: BuiltinMainStorage) {
     save(key: string, state: Stored, activity: ReadonlyMap<Browser.TabID, TabActivity>) {
       const target = store(key)
 
-      const value = { tabs: state.tabs.map(tab => {
+      const tabs = state.tabs.map((tab) => {
         const provenance = activity.get(tab.id)
+        const saved: SavedTab = { id: tab.id, url: tab.url }
 
-        return { id: tab.id, url: tab.url, ...(provenance?.control ? { control: provenance.control } : {}), ...(provenance?.agent ? { agent: provenance.agent } : {}) }
-      }), focusedTabID: state.focusedTabID }
+        if (provenance?.control) saved.control = provenance.control
+
+        if (provenance?.agent) saved.agent = provenance.agent
+
+        return saved
+      })
+
+      const value = { tabs, focusedTabID: state.focusedTabID }
 
       if (JSON.stringify(target.value) !== JSON.stringify(value)) target.set(value)
     },

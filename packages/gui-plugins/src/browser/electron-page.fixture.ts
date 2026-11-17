@@ -21,7 +21,9 @@ const fail = (error: Error) => {
 }
 
 electron.dialog.showErrorBox = () => undefined
+
 process.on("uncaughtException", fail)
+
 process.on("unhandledRejection", (reason) => fail(reason instanceof Error ? reason : new Error(String(reason))))
 
 const frame = `<!doctype html><title>frame</title><p>frame</p>`
@@ -212,7 +214,7 @@ void electron.app.whenReady().then(async () => {
 
   void pane.register(win.id, "binding", { server: "fixture", session: "ses_fixture" }).catch(() => undefined)
 
-  const outcome = (call: () => unknown) =>
+  const outcome = (call: () => Promise<string | boolean | void> | void) =>
     Promise.resolve()
       .then(call)
       .then(
