@@ -85,7 +85,7 @@ test("the saved-tab record after stopping a deferred restore is the original add
   const value = documentTab(stopped, { id: tabA, canGoBack: false, canGoForward: false })
   const opened = play(start, on({ type: "tab.opened", tabID: tabA, attempt, tab: prior }))
   const next = play(opened.state, on({ type: "tab.published", tabID: tabA, attempt, tab: value }))
-  expect(next.effects).toContainEqual({ type: "save-restore", storageKey: "server\nb1", snapshot: { tabs: [{ id: tabA, url: dashboard }], focusedTabID: tabA } })
+  expect(next.effects).toContainEqual({ type: "save-restore", binding: "b1", storageKey: "server\nb1", snapshot: { tabs: [{ id: tabA, url: dashboard }], focusedTabID: tabA } })
 })
 
 test("a refused restore keeps its saved address, reports the reason once and consumes no page attempt", () => {
@@ -338,6 +338,7 @@ describe("tabs", () => {
     expect(crashed.effects).toContainEqual({ type: "release-pages", binding: "b1", attempts: [1] })
     expect(crashed.effects).toContainEqual({
       type: "save-restore",
+      binding: "b1",
       storageKey: "server\nb1",
       snapshot: { tabs: [{ id: tabA, url: dashboard }], focusedTabID: tabA },
     })

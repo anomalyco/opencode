@@ -2,7 +2,7 @@ import { createServer } from "node:http"
 import electron from "electron"
 import { createCdp } from "./cdp"
 import { guardFileChoosers } from "./file-choosers"
-import type { TabActivity } from "./policy"
+import { recordPageInput, type TabActivity } from "./policy"
 import { RESTORE_PROMPT, takeDialogs } from "./page-prompts"
 
 // The Electron main process of `electron-dialogs.test.ts`, bundled and run by the pinned Electron. It opens a sandboxed
@@ -93,10 +93,10 @@ void electron.app.whenReady().then(async () => {
     picks.push(await choose(expression))
 
   activity.agentRuns--
-  activity.agentEndedAt = Date.now()
+  recordPageInput(activity, "agent")
   await guard.update()
   const delayed = await choose(file)
-  activity.userInputAt = Date.now()
+  recordPageInput(activity, "user")
   await guard.update()
   const returned = await choose(file)
   guard.dispose()

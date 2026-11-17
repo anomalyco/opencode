@@ -11,7 +11,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure, CodedError, missingArtifact } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { agentDriven, agentRefusal, childActivity, destinationOrigin, normalizeURL, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
+import { activityOwner, agentDriven, agentRefusal, childActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { FindAction, PaneEvent, PromptAnswer } from "./ipc"
@@ -166,6 +166,8 @@ export function createBrowserPane(input: {
       scopes.set(storageKey, rights)
       owners.set(win, scopes)
 
+      const saved = restore.load(storageKey)
+
       const handle: Handle = {
         previewFailure: previews.failure,
         window,
@@ -182,7 +184,7 @@ export function createBrowserPane(input: {
           win.webContents.off("did-start-navigation", navigate)
         },
         pages: new Map(),
-        activity: new Map(),
+        activity: new Map(saved.tabs.map(tab => [tab.id, { agentRuns: 0, control: tab.control, agent: tab.agent }])),
         ...rights,
         requests: new Map(),
       }
@@ -194,7 +196,7 @@ export function createBrowserPane(input: {
         window,
         storageKey,
         restore: target.restore,
-        saved: restore.load(storageKey),
+        saved,
       })
       void runtime
         .runPromise(
@@ -463,6 +465,8 @@ export function createBrowserPane(input: {
           : refusal(url, pagePolicy(binding))
 
       if (reason) throw new Error(reason)
+
+      if ("tabID" in command && command.type !== "tabs.focus") page(binding, command.tabID)?.personCommand()
       const closing = command.type === "tabs.close" ? page(binding, command.tabID) : undefined
 
       // A page that asks to confirm keeps its tab; its "Leave site?" closes it.
@@ -489,6 +493,7 @@ export function createBrowserPane(input: {
       const grant = handle.pluginTabs.reserve(owner)
       // Never adopt an existing file tab, even when this plugin opens the same URL as the user.
       await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", undefined, grant.created)
+      grant.settled()
 
       return grant.id
     },
@@ -550,7 +555,13 @@ export function createBrowserPane(input: {
   }
 
   function perform(effect: PaneEffect) {
-    if (effect.type === "save-restore") return restore.save(effect.storageKey, effect.snapshot)
+    if (effect.type === "save-restore") {
+      const handle = handles.get(effect.binding)
+
+      if (handle) restore.save(effect.storageKey, effect.snapshot, handle.activity)
+
+      return
+    }
 
     if (effect.type === "remove-restore") return restore.remove(effect.storageKey)
 
@@ -724,6 +735,7 @@ export function createBrowserPane(input: {
     const page = createBrowserPage(win, {
       id,
       activity,
+      userInput: () => { if (current()) handle.pluginTabs.forget(id) },
       partition: handle.partition,
       network: handle.network,
       initialize: options.initialize,
@@ -800,7 +812,7 @@ export function createBrowserPane(input: {
       popup: (popupOptions, background, activity) => {
         const popup = create(binding, { initialize: false, popupOptions, activity })
 
-        if (agentDriven(activity, Date.now())) {
+        if (activityOwner(activity) === "agent") {
           announce(binding, popup.state().id, false, !background)
 
           return popup.contents
@@ -826,9 +838,6 @@ export function createBrowserPane(input: {
     }
 
     handle.pages.set(attempt, page)
-    // Renderer-initiated main-frame navigation (including a clicked link) never goes through execute.
-    page.contents.on("will-navigate", () => { if (current()) handle.pluginTabs.forget(id) })
-    page.contents.on("did-navigate-in-page", (_event, _url, mainFrame) => { if (mainFrame && current()) handle.pluginTabs.forget(id) })
     searches.set(page, createPageFind(page.contents, (view) => {
       if (current()) emit(binding, { type: "find", tabID: id, view })
     }, () => {
@@ -923,7 +932,7 @@ export function createBrowserPane(input: {
 
   async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity, created?: (id: Browser.TabID) => void): Promise<Browser.Result> {
     const action = command.action
-    const driven = { agentRuns: 0, agentEndedAt: Date.now(), agent: command.agent }
+    const driven: TabActivity = { agentRuns: 0, control: "agent", agent: command.agent }
 
     const present = (tabID: Browser.TabID, reveal = false, active = true) => {
       if (origin === "user") return dispatchBinding(binding, { type: "tab.focused", tabID })
@@ -939,7 +948,8 @@ export function createBrowserPane(input: {
       const changed = !agentDriven(activity) || activity.agent !== command.agent
       const current = page(binding, id)
       const identity = current?.previewIdentity()
-      activity.agentEndedAt = Date.now()
+      handle?.pluginTabs.forget(id)
+      recordPageInput(activity, "agent")
       activity.agent = command.agent
       handle?.activity.set(id, activity)
 

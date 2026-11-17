@@ -63,7 +63,6 @@ test("selecting a revealed agent tab grants neither app-link activation nor a us
   const activity: TabActivity = { agentRuns: 0 }
   recordTabFocus(activity, "agent")
   recordTabFocus(activity, "user")
-  const event = { ...activity, agentRunning: false, now: Date.now() + 800 }
-  expect(navigationNotice("mailto:test@example.invalid", {}, activityOwner(event))).toMatchObject({ action: "copy" })
-  expect(downloadOwner({ ...event, page: ["https://test.invalid"], chain: [] })).toBe("agent")
+  expect(navigationNotice("mailto:test@example.invalid", {}, activityOwner(activity))).toMatchObject({ action: "copy" })
+  expect(downloadOwner({ ...activity, page: ["https://test.invalid"], chain: [] })).toBe("agent")
 })

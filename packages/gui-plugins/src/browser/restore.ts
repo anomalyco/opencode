@@ -1,9 +1,10 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
 import type { BuiltinMainStorage, MainStoreFrom } from "@opencode/plugin/gui/builtin"
+import type { TabActivity } from "./policy"
 
 const Stored = Schema.Struct({
-  tabs: Schema.Array(Schema.Struct({ id: Browser.TabID, url: Browser.Tab.fields.url })),
+  tabs: Schema.Array(Schema.Struct({ id: Browser.TabID, url: Browser.Tab.fields.url, control: Schema.optionalKey(Schema.Literals(["agent", "reclaimed"])), agent: Schema.optionalKey(Schema.String) })),
   focusedTabID: Schema.NullOr(Browser.TabID),
 })
 
@@ -30,9 +31,14 @@ export function createBrowserRestoreStore(storage: BuiltinMainStorage) {
 
   return {
     load: (key: string) => store(key).value,
-    save(key: string, state: Stored) {
+    save(key: string, state: Stored, activity: ReadonlyMap<Browser.TabID, TabActivity>) {
       const target = store(key)
-      const value = { tabs: state.tabs.map((tab) => ({ id: tab.id, url: tab.url })), focusedTabID: state.focusedTabID }
+
+      const value = { tabs: state.tabs.map(tab => {
+        const provenance = activity.get(tab.id)
+
+        return { id: tab.id, url: tab.url, ...(provenance?.control ? { control: provenance.control } : {}), ...(provenance?.agent ? { agent: provenance.agent } : {}) }
+      }), focusedTabID: state.focusedTabID }
 
       if (JSON.stringify(target.value) !== JSON.stringify(value)) target.set(value)
     },

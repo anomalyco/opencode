@@ -63,6 +63,20 @@ test("a gated history traversal settles the spinner when Chromium has no load to
   expect(events).toEqual(["busy", "back", "idle"])
 })
 
+test("a person's new address replaces a held restore without issuing it", async () => {
+  const issued: string[] = []
+  const stopped: (string | undefined)[] = []
+  const gate = Promise.withResolvers<void>()
+  const turn = navigationTurn(() => gate.promise, () => {}, () => {}, url => stopped.push(url))
+  const url = "https://saved.invalid"
+  const restore = turn.begin(new AbortController().signal)(url, () => { issued.push(url) })
+  turn.interrupt("navigate", url, "user")
+  gate.resolve()
+  await restore
+  expect(issued).toEqual([])
+  expect(stopped).toEqual([url])
+})
+
 test("reload during a gated restore joins the saved load rather than bootstrapping a blank page", async () => {
   const url = "https://app.test/#report"
   let doc = createDocumentState({ url, title: "Report", generation: 1 })

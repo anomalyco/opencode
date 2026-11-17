@@ -26,6 +26,7 @@ export function attachPageMenu(
     failed: () => void
     canOpenPage: () => boolean
     openPage: () => Promise<void>
+    personCommand: () => void
   },
 ) {
   const session = contents.session
@@ -56,6 +57,7 @@ export function attachPageMenu(
 
     const run = async (action: MenuAction) => {
       if (!current()) return
+      input.personCommand()
 
       switch (action.type) {
         case "openPage":

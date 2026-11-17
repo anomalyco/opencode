@@ -58,6 +58,7 @@ import {
   childActivity,
   agentRefusal,
   activityOwner,
+  recordPageInput,
   allowedDestination,
   committedLoad,
   destinationOrigin,
@@ -242,6 +243,7 @@ export function createBrowserPage(
     /** Adopts a page the document opened; a background one leaves the current tab selected. */
     popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean, activity: TabActivity) => WebContents
     activity: TabActivity
+    userInput: () => void
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
@@ -334,7 +336,8 @@ export function createBrowserPage(
     // Unlike keyboard events, Electron 44 does not expose the Blink modifiers on mouse events.
     if (mouse.type === "mouseDown" && activity.agentRuns === 0) {
       nativeMenu = true
-      activity.userInputAt = Date.now()
+      recordPageInput(activity, "user")
+      options.userInput()
       void choosers.update().catch(() => undefined)
     }
   })
@@ -345,7 +348,8 @@ export function createBrowserPage(
     if (!hardware || input.type !== "keyDown") return
 
     nativeMenu = true
-    activity.userInputAt = Date.now()
+    recordPageInput(activity, "user")
+    options.userInput()
     void choosers.update().catch(() => undefined)
 
     if (pageReload(input, process.platform === "darwin")) {
@@ -455,7 +459,7 @@ export function createBrowserPage(
   const activity = options.activity
   const notices = noticeActions(options.refused, options.menu.open)
   const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
-  const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 })))
+  const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner(activity)))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
   let dialogGate = createDialogGateState()
@@ -790,15 +794,14 @@ export function createBrowserPage(
   // started is left to the system's save flow, so it goes where they save it and the agent never reads it.
   const download = (item: Electron.DownloadItem) => {
     const owner = downloadOwner({
-      now: Date.now(),
-      agentRunning: activity.agentRuns > 0,
-      agentEndedAt: activity.agentEndedAt,
-      userInputAt: activity.userInputAt,
+      ...activity,
       page: [contents.mainFrame.url, contents.mainFrame.origin],
       chain: item.getURLChain(),
     })
 
     if (owner === "user") return
+
+    if (owner === "block") return item.cancel()
 
     try {
       const file = files.add(item.getFilename(), item.getMimeType() || "application/octet-stream", [
@@ -949,8 +952,15 @@ export function createBrowserPage(
     if (!opened) throw new Error("browser.menu.failed")
   }
 
+  const personCommand = () => {
+    recordPageInput(activity, "user")
+    options.userInput()
+    void choosers.update().catch(() => undefined)
+  }
+
   const menu = attachPageMenu(win, contents, {
     ...options.menu,
+    personCommand,
     canOpenPage: () => !!handoff(),
     openPage: () => openPage(state().url),
     open: (url) => {
@@ -1104,6 +1114,7 @@ export function createBrowserPage(
     previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
     previewIdentity: () => options.workspace?.identity(),
     answerNotice: notices.answer,
+    personCommand,
     openPage,
     ready,
     /** The host embed the renderer lays this page out with. */
@@ -1167,7 +1178,7 @@ export function createBrowserPage(
      * would run with that extension's privileges; every agent operation reaches the page through here.
      */
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
-      const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined)
+      const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined, origin)
       await ready
       const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
 
@@ -1187,12 +1198,12 @@ export function createBrowserPage(
       const cancel = () => dispatchDialog({ type: "run.cancelled", runID })
       signal.addEventListener("abort", cancel, { once: true })
 
-      if (origin === "user") activity.userInputAt = Date.now()
-
       if (origin === "agent") {
         if (!agentDriven(activity)) contents.setBackgroundThrottling(false)
         activity.agentRuns++
       }
+
+      if (origin === "agent") recordPageInput(activity, origin)
 
       // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
       if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
@@ -1218,7 +1229,6 @@ export function createBrowserPage(
 
         if (origin === "agent") {
           activity.agentRuns--
-          activity.agentEndedAt = Date.now()
           void choosers.update().catch(() => undefined)
         }
       }

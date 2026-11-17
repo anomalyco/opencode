@@ -25,7 +25,7 @@ export function navigationTurn(
     nativeStart(event: { isMainFrame: boolean; isSameDocument: boolean }) {
       if (event.isMainFrame && !event.isSameDocument) cancel()
     },
-    interrupt(method: Browser.Method, restoring?: string) {
+    interrupt(method: Browser.Method, restoring?: string, origin?: "agent" | "user") {
       if (!["stop", "back", "forward", "reload", "navigate"].includes(method)) return
 
       // This load hasn't been issued yet. Let it satisfy Reload: cancelling would both lose its URL and leave
@@ -35,7 +35,15 @@ export function navigationTurn(
 
         // Navigate still gets its own destination after ready. Do not cancel the load that creates the renderer
         // while a preview is resolving its grant, before it has even entered the network gate.
-        if (method === "navigate") return
+        if (method === "navigate") {
+          if (origin !== "user" || held === undefined || !heldStop) return
+          const address = held
+          spinning = false
+          cancel()
+          heldStop(address || restoring)
+
+          return
+        }
       }
 
       // A not-yet-issued initial restore has no committed history entry to traverse.

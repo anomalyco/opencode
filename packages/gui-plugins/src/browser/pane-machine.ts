@@ -132,7 +132,7 @@ type StateEvent = Extract<PaneEvent, { readonly type: "state" }>
 export type PaneEffect =
   | { readonly type: "start-timer"; readonly binding: string; readonly ms: number }
   | { readonly type: "resolve-register"; readonly binding: string }
-  | { readonly type: "save-restore"; readonly storageKey: string; readonly snapshot: StoredRestore }
+  | { readonly type: "save-restore"; readonly binding: string; readonly storageKey: string; readonly snapshot: StoredRestore }
   | { readonly type: "remove-restore"; readonly storageKey: string }
   /** To the window and, as the server's copy of the inventory, to the server. */
   | {
@@ -475,6 +475,7 @@ function publish(state: AttachedBinding, error?: string): AttachedTransition {
 
   const save: PaneEffect = {
     type: "save-restore",
+    binding: state.binding,
     storageKey: state.storageKey,
     snapshot: {
       tabs: Array.from(state.tabs.values(), (slot) => ({
