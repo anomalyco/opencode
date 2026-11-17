@@ -229,7 +229,7 @@ pub fn define(sources: &Sources, options: Option<&str>) -> Result<(Definition, E
 /// [`define`] with a heap cap of `memory` bytes a VM.
 pub fn define_with(sources: &Sources, options: Option<&str>, memory: usize) -> Result<(Definition, ErrorFn), String> {
     let manifest = Manifest::parse(sources.text(MANIFEST)?)?;
-    let compiled = Rc::new(vm::Compiled::new(sources, &manifest.entry)?);
+    let compiled = Rc::new(vm::Compiled::new(sources, &manifest.id, &manifest.entry)?);
     let options = options.map(str::to_owned);
     let run: crate::LinkedSetup = Rc::new(move |setup, limits| {
         bind::setup(&compiled, setup, limits.overrun, memory, options.as_deref()).map(drop)
@@ -242,7 +242,7 @@ pub fn define_with(sources: &Sources, options: Option<&str>, memory: usize) -> R
 /// The heap an idle VM of `sources` holds once its setup ran: what a plugin costs at rest (the spike's measure).
 pub fn idle_memory(sources: &Sources) -> Result<usize, String> {
     let manifest = Manifest::parse(sources.text(MANIFEST)?)?;
-    let compiled = Rc::new(vm::Compiled::new(sources, &manifest.entry)?);
+    let compiled = Rc::new(vm::Compiled::new(sources, &manifest.id, &manifest.entry)?);
     let mut registered = opencode_plugin_abi::Registered::new(&manifest.id, None);
     let limit = crate::contain::Limits::default().overrun;
     let plugin = bind::setup(&compiled, &mut registered.setup(), limit, MEMORY, None)?;
