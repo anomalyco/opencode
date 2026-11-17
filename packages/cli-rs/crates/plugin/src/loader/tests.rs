@@ -2003,7 +2003,9 @@ fn a_project_typescript_plugin_named_through_a_link_is_listed_once() {
 #[test]
 fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
     let project = Project::new();
-    let cache = project.root.path().join("cache");
+    // A package resolves to its real path: the temporary directory's may be an 8.3 name (GitHub's Windows runner).
+    fs::create_dir_all(project.root.path().join("cache")).unwrap();
+    let cache = real(&project.root.path().join("cache")).unwrap();
     let install = |key: &str, generation: &str, name: &str| {
         let dir = cache.join("npm").join(key).join(generation).join("node_modules").join(name);
         write(

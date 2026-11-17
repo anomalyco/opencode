@@ -653,9 +653,11 @@ mod tests {
     // name is the generation's first dependency; nothing in the cache, or only a key without the package, is not found.
     #[test]
     fn a_package_resolves_in_the_newest_generation() {
-        let cache = opencode_util::temp::tempdir().unwrap();
+        let temp = opencode_util::temp::tempdir().unwrap();
+        // A package resolves to its real path: the temporary directory's may be an 8.3 name (GitHub's Windows runner).
+        let cache = super::super::real(temp.path()).unwrap();
         let install = |key: &str, generation: &str, name: &str| {
-            let root = cache.path().join("npm").join(key).join(generation);
+            let root = cache.join("npm").join(key).join(generation);
             std::fs::create_dir_all(root.join("node_modules").join(name)).unwrap();
             let manifest = serde_json::json!({ "dependencies": { name: "x" } });
             std::fs::write(root.join("package.json"), manifest.to_string()).unwrap();
@@ -664,17 +666,17 @@ mod tests {
         install("foo@latest", "100", "foo");
         let newest = install("foo@latest", "1200", "foo");
         install("foo@latest", "999", "foo");
-        assert_eq!(resolve("foo", cache.path()), Some(Package { directory: newest, name: "foo".into() }));
+        assert_eq!(resolve("foo", &cache), Some(Package { directory: newest, name: "foo".into() }));
         let scoped = install("@s/foo@^2", "5", "@s/foo");
-        assert_eq!(resolve("@s/foo@^2", cache.path()).map(|package| package.directory), Some(scoped));
+        assert_eq!(resolve("@s/foo@^2", &cache).map(|package| package.directory), Some(scoped));
         // `foo@1` is another key than `foo`: it is not installed.
-        assert_eq!(resolve("foo@1", cache.path()), None);
+        assert_eq!(resolve("foo@1", &cache), None);
         let git = key("github:u/r", parse("github:u/r").as_ref());
         let named = install(&git, "7", "real-name");
-        assert_eq!(resolve("github:u/r", cache.path()), Some(Package { directory: named, name: "real-name".into() }));
-        std::fs::create_dir_all(cache.path().join("npm").join("bar@latest").join("3")).unwrap();
-        assert_eq!(resolve("bar", cache.path()), None);
-        assert_eq!(resolve("baz", cache.path()), None);
+        assert_eq!(resolve("github:u/r", &cache), Some(Package { directory: named, name: "real-name".into() }));
+        std::fs::create_dir_all(cache.join("npm").join("bar@latest").join("3")).unwrap();
+        assert_eq!(resolve("bar", &cache), None);
+        assert_eq!(resolve("baz", &cache), None);
     }
 
     // Expected (carbon jsnpm-4): nothing outside `<cache>/npm` is found. A spec TS's `parse` does not classify (one

@@ -2262,6 +2262,7 @@ mod tests {
     fn the_reload_limit_counts_a_plugin_across_its_builds() {
         let host: Rc<dyn Host> = crate::tests::host();
         let scripts = Scripts::new(Config::new("bun".into()), &host);
+        silent(&scripts, &host);
         let dir = opencode_util::temp::tempdir().unwrap();
         let _ = scripts.trees.light(dir.path());
         while scripts.walking() {
@@ -2434,6 +2435,19 @@ mod tests {
         let charged = 512 + expected[1..].iter().map(bytes).sum::<usize>();
         assert_eq!(kept, expected);
         assert_eq!(scripts.overflow_bytes(), charged, "a message kept past the bound is charged its bytes");
+    }
+
+    /// A JS host that reads all it gets and says nothing, for `scripts`: a row that sends loads but needs no Bun runs
+    /// where none is installed (GitHub's Windows runner), as no JS host is spawned while one runs.
+    fn silent(scripts: &Rc<Scripts>, host: &Rc<dyn Host>) {
+        let mut command = std::process::Command::new(if cfg!(windows) { "cmd" } else { "sh" });
+        match cfg!(windows) {
+            true => command.args(["/d", "/c", "more > nul"]),
+            false => command.args(["-c", "cat > /dev/null"]),
+        };
+        let proxy = host.app().proxy();
+        let id = scripts.id;
+        scripts.adopt(Child::spawn(command, scripts.config.limits, move || post(&proxy, id)).unwrap());
     }
 
     /// A JS host that says hello and reads all it gets, answering nothing, for `scripts`; and its file.
