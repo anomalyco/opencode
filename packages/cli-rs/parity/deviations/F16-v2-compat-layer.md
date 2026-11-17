@@ -196,6 +196,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `github-copilot/gemini-3.8-flash` after the `/`, the host's after `gemini-`, which is OpenTUI's Rust wrap, not the
   layer's. A panel sized by its box's width (CT-28: opencode-tui-context's gauges and legend, `P.8/context-gauge`)
   draws as TS once the host's layout reaches it (above).
+- **Dialog size**: `dialog.set({ size, centered })` sizes a `ui.dialog.show` dialog; after an `alert` or a `confirm`
+  it is not carried, and the JS host's log says so once (CT-35: the joe-broadhead status alerts are `large` in TS,
+  about 88 columns, and medium here, so their long lines wrap earlier). It would need `size` and `centered` on the
+  contract's `Alert` and `Confirm` (contract 2.x proposal, addition 4, the recommended fields).
 - **Border titles**: a box's `title` and `titleAlignment` are the contract border's; its `bottomTitle` and
   `bottomTitleAlignment` are not drawn, which would need the contract's border to carry a bottom title
   (CT-26: @juliuskb/opencode-voice's CPU and memory line, `P.8/voice-title`). An `onSizeChange` a plugin sets on the
