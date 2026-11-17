@@ -239,6 +239,26 @@ describe("tab-groups", () => {
     const colorMapForward = Object.fromEntries(forward.map((group) => [group.key, group.color]))
     const colorMapReversed = Object.fromEntries(reversed.map((group) => [group.key, group.color]))
     expect(colorMapReversed).toEqual(colorMapForward)
+
+    // Explicitly recoloring one server group (e.g. blade -> blue, then pink) never changes another server's hue.
+    for (const bladeColor of ["blue", "green", "orange", "purple", "cyan", "pink"] as const) {
+      const recolored = buildComputedTabGroups({
+        items: [a, b, c],
+        state: {
+          ...DEFAULT_TAB_GROUPS_STATE,
+          overrides: { [`server:${SERVER_B}`]: { color: bladeColor } },
+        },
+        mode: "server",
+        serverCount: 3,
+        query: "",
+        labels,
+      })!
+
+      const byKey = Object.fromEntries(recolored.map((group) => [group.key, group.color]))
+      expect(byKey[`server:${SERVER_B}`]).toBe(bladeColor)
+      expect(byKey[`server:${SERVER_A}`]).toBe(colorMapForward[`server:${SERVER_A}`])
+      expect(byKey[`server:${SERVER_C}`]).toBe(colorMapForward[`server:${SERVER_C}`])
+    }
   })
 
   test("renders manual groups inline alongside ungrouped tabs when automatic grouping is none", () => {
@@ -322,6 +342,11 @@ describe("tab-groups", () => {
     // t1 occupies y = 0..28: top edge (< 7.5) places before t1; center (14) combines into a folder; bottom (> 20.5) places after t1.
     const above = hitTestVerticalDrag(source, geometry, 60, 4, undefined)
     expect(above.indicator?.kind).toBe("line")
+    expect(above.shifts.tabShiftY).toEqual({
+      [tabKey(t1)]: 31,
+      [tabKey(t2)]: 31,
+    })
+    expect(above.shifts.tucked).toBe(false)
     expect(above.intent).toEqual({
       type: "place-tab",
       tabKey: tabKey(t3),
@@ -332,6 +357,8 @@ describe("tab-groups", () => {
 
     const center = hitTestVerticalDrag(source, geometry, 60, 14, above.intent)
     expect(center.indicator).toEqual({ kind: "combine-tab", tabKey: tabKey(t1), color: "blue" })
+    expect(center.shifts.tabShiftY).toEqual({})
+    expect(center.shifts.tucked).toBe(true)
     expect(center.intent).toEqual({
       type: "combine-tabs",
       sourceTabKey: tabKey(t3),

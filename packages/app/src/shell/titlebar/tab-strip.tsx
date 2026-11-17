@@ -94,6 +94,9 @@ function SessionTabSlot(
     fallbackDirectory?: string
     customDrag?: boolean
     dragSource?: boolean
+    offsetY?: number
+    laneShift?: "in" | "out"
+    dragTucked?: boolean
     combineColor?: string
     combineBadgeLabel?: string
     contextMenuExtra?: () => JSX.Element
@@ -132,9 +135,12 @@ function SessionTabSlot(
       data-tab-key={props.id}
       data-active={props.active}
       data-drag-source={props.dragSource ? "true" : undefined}
+      data-lane-shift={props.laneShift}
+      data-drag-tucked={props.dragTucked ? "true" : undefined}
       data-combine-target={props.combineColor ? "true" : undefined}
       data-group-color={props.combineColor}
       data-orientation={props.orientation}
+      style={props.offsetY ? { transform: `translate3d(0, ${props.offsetY}px, 0)` } : undefined}
       class="relative flex"
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
@@ -196,6 +202,9 @@ function SessionTabEntry(
     shortcut?: number
     customDrag?: boolean
     dragSource?: boolean
+    offsetY?: number
+    laneShift?: "in" | "out"
+    dragTucked?: boolean
     combineColor?: string
     combineBadgeLabel?: string
     contextMenuExtra?: () => JSX.Element
@@ -345,6 +354,9 @@ function SessionTabEntry(
         fallbackDirectory={props.view.fallbackDirectory}
         customDrag={props.customDrag}
         dragSource={props.dragSource}
+        offsetY={props.offsetY}
+        laneShift={props.laneShift}
+        dragTucked={props.dragTucked}
         combineColor={props.combineColor}
         combineBadgeLabel={props.combineBadgeLabel}
         contextMenuExtra={props.contextMenuExtra}
@@ -527,6 +539,9 @@ function DraftTabSlot(
     shortcut?: number
     customDrag?: boolean
     dragSource?: boolean
+    offsetY?: number
+    laneShift?: "in" | "out"
+    dragTucked?: boolean
     combineColor?: string
     combineBadgeLabel?: string
     contextMenuExtra?: () => JSX.Element
@@ -564,9 +579,12 @@ function DraftTabSlot(
       data-tab-key={props.id}
       data-active={props.active}
       data-drag-source={props.dragSource ? "true" : undefined}
+      data-lane-shift={props.laneShift}
+      data-drag-tucked={props.dragTucked ? "true" : undefined}
       data-combine-target={props.combineColor ? "true" : undefined}
       data-group-color={props.combineColor}
       data-orientation={props.orientation}
+      style={props.offsetY ? { transform: `translate3d(0, ${props.offsetY}px, 0)` } : undefined}
       class="relative flex"
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
@@ -622,6 +640,11 @@ export type CustomVerticalDragBinding = {
   isDraggingTab: (key: string) => boolean
   isDraggingGroup: (groupKey: string) => boolean
   isDropInsideGroup: (groupKey: string) => boolean
+  tabTransformY: (key: string) => number
+  tabLaneShift: (key: string) => "in" | "out" | undefined
+  isTabTucked: (key: string) => boolean
+  groupTransformY: (groupKey: string) => number
+  groupRailAdjustment: (groupKey: string) => { top: number; bottom: number; empty: boolean } | undefined
   combineColorOfTab: (key: string) => string | undefined
   combineBadgeLabel: string
   onPointerDown: (event: PointerEvent, listEl: HTMLDivElement, scrollEl: HTMLDivElement) => void
@@ -865,6 +888,9 @@ export function TitlebarTabStrip(props: {
           shortcut={shortcut(visibleIndex())}
           customDrag={!!customDrag()}
           dragSource={customDrag()?.isDraggingTab(id)}
+          offsetY={customDrag()?.tabTransformY(id)}
+          laneShift={customDrag()?.tabLaneShift(id)}
+          dragTucked={customDrag()?.isTabTucked(id)}
           combineColor={customDrag()?.combineColorOfTab(id)}
           combineBadgeLabel={customDrag()?.combineBadgeLabel}
           contextMenuExtra={menuExtra}
@@ -894,6 +920,9 @@ export function TitlebarTabStrip(props: {
         shortcut={shortcut(visibleIndex())}
         customDrag={!!customDrag()}
         dragSource={customDrag()?.isDraggingTab(id)}
+        offsetY={customDrag()?.tabTransformY(id)}
+        laneShift={customDrag()?.tabLaneShift(id)}
+        dragTucked={customDrag()?.isTabTucked(id)}
         combineColor={customDrag()?.combineColorOfTab(id)}
         combineBadgeLabel={customDrag()?.combineBadgeLabel}
         contextMenuExtra={menuExtra}
@@ -934,25 +963,49 @@ export function TitlebarTabStrip(props: {
                   </>
                 }
               >
-                {(meta) => (
-                  <div
-                    data-tab-group
-                    data-group-key={section().key}
-                    data-group-color={meta().color}
-                    data-collapsed={meta().collapsed ? "" : undefined}
-                    data-dragging={customDrag()?.isDraggingGroup(section().key) ? "true" : undefined}
-                    data-drop-inside={customDrag()?.isDropInsideGroup(section().key) ? "true" : undefined}
-                    data-orientation={vertical() ? "vertical" : "horizontal"}
-                  >
-                    {section().header}
-                    <Show when={section().tabs.length > 0}>
-                      <div data-tab-group-items data-orientation={vertical() ? "vertical" : "horizontal"}>
-                        <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
-                      </div>
-                    </Show>
-                    {section().footer}
-                  </div>
-                )}
+                {(meta) => {
+                  const groupKey = () => section().key
+                  const railAdj = () => customDrag()?.groupRailAdjustment(groupKey())
+
+                  const groupStyle = (): JSX.CSSProperties | undefined => {
+                    const dy = customDrag()?.groupTransformY(groupKey()) ?? 0
+                    const rail = railAdj()
+
+                    if (!dy && !rail) return undefined
+                    const style: JSX.CSSProperties = {}
+
+                    if (dy) style.transform = `translate3d(0, ${dy}px, 0)`
+
+                    if (rail) {
+                      style["--group-rail-top"] = `${rail.top}px`
+                      style["--group-rail-bottom"] = `${rail.bottom}px`
+                    }
+
+                    return style
+                  }
+
+                  return (
+                    <div
+                      data-tab-group
+                      data-group-key={groupKey()}
+                      data-group-color={meta().color}
+                      data-collapsed={meta().collapsed ? "" : undefined}
+                      data-dragging={customDrag()?.isDraggingGroup(groupKey()) ? "true" : undefined}
+                      data-drop-inside={customDrag()?.isDropInsideGroup(groupKey()) ? "true" : undefined}
+                      data-rail-empty={railAdj()?.empty ? "true" : undefined}
+                      data-orientation={vertical() ? "vertical" : "horizontal"}
+                      style={groupStyle()}
+                    >
+                      {section().header}
+                      <Show when={section().tabs.length > 0}>
+                        <div data-tab-group-items data-orientation={vertical() ? "vertical" : "horizontal"}>
+                          <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
+                        </div>
+                      </Show>
+                      {section().footer}
+                    </div>
+                  )
+                }}
               </Show>
             )}
           </Key>

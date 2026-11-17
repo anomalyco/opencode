@@ -79,6 +79,7 @@ export type VerticalDragIndicator =
   | {
       readonly kind: "line"
       readonly y: number
+      readonly visualY: number
       readonly indented: boolean
       readonly groupKey: string | undefined
       readonly color: TabGroupColor | undefined
@@ -120,6 +121,21 @@ export type VerticalDragIntent =
       readonly targetTabKey: string
     }
 
+export type VerticalDragRailAdjustment = {
+  readonly top: number
+  readonly bottom: number
+  readonly empty: boolean
+}
+
+export type VerticalDragShifts = {
+  readonly tabShiftY: Readonly<Record<string, number>>
+  readonly groupShiftY: Readonly<Record<string, number>>
+  readonly headerShiftY: Readonly<Record<string, number>>
+  readonly railByGroup: Readonly<Record<string, VerticalDragRailAdjustment>>
+  readonly laneShift: "in" | "out" | undefined
+  readonly tucked: boolean
+}
+
 export type VerticalDragState =
   | { readonly status: "idle" }
   | {
@@ -137,10 +153,12 @@ export type VerticalDragState =
       readonly startY: number
       readonly currentX: number
       readonly currentY: number
+      readonly dragOffsetY: number
       readonly source: VerticalDragSource
       readonly geometry: VerticalDragGeometry
       readonly indicator: VerticalDragIndicator | undefined
       readonly intent: VerticalDragIntent | undefined
+      readonly shifts: VerticalDragShifts
     }
 
 export type VerticalDragEvent =
@@ -182,7 +200,31 @@ export type VerticalDragTransition = {
   readonly effects: readonly VerticalDragEffect[]
 }
 
+export type VerticalDragHit = {
+  readonly indicator: VerticalDragIndicator | undefined
+  readonly intent: VerticalDragIntent | undefined
+  readonly shifts: VerticalDragShifts
+}
+
+export type VerticalDragCommitResult = {
+  readonly tabKeys: string[]
+  readonly mode: TabGroupsState["mode"]
+  readonly groupOrder: string[]
+  readonly collapsed: Record<string, boolean>
+  readonly manualGroups: ManualTabGroup[]
+  readonly manualAssignments: Record<string, string>
+}
+
 export const INITIAL_VERTICAL_DRAG_STATE: VerticalDragState = Object.freeze({ status: "idle" })
+
+const EMPTY_SHIFTS: VerticalDragShifts = Object.freeze({
+  tabShiftY: Object.freeze({}),
+  groupShiftY: Object.freeze({}),
+  headerShiftY: Object.freeze({}),
+  railByGroup: Object.freeze({}),
+  laneShift: undefined,
+  tucked: false,
+})
 
 const NONE: readonly never[] = Object.freeze([])
 
@@ -198,7 +240,13 @@ function sameIndicator(a: VerticalDragIndicator | undefined, b: VerticalDragIndi
   if (!a || !b || a.kind !== b.kind) return false
 
   if (a.kind === "line" && b.kind === "line") {
-    return a.y === b.y && a.indented === b.indented && a.groupKey === b.groupKey && a.color === b.color
+    return (
+      a.y === b.y &&
+      a.visualY === b.visualY &&
+      a.indented === b.indented &&
+      a.groupKey === b.groupKey &&
+      a.color === b.color
+    )
   }
 
   if (a.kind === "combine-tab" && b.kind === "combine-tab") {
@@ -246,6 +294,34 @@ function sameIntent(a: VerticalDragIntent | undefined, b: VerticalDragIntent | u
   return false
 }
 
+function computeClampedDragOffsetY(
+  source: VerticalDragSource,
+  geometry: VerticalDragGeometry,
+  rawDeltaY: number,
+) {
+  if (source.kind === "group") {
+    const block = geometry.blocks.find((item) => item.kind === "group" && item.groupKey === source.groupKey)
+
+    if (!block) return rawDeltaY
+    const firstTop = geometry.blocks[0]?.top ?? 0
+    const lastBottom = geometry.blocks[geometry.blocks.length - 1]?.bottom ?? 0
+    const minDelta = firstTop - block.top - 4
+    const maxDelta = Math.max(0, lastBottom - block.bottom + 14)
+
+    return Math.round(Math.max(minDelta, Math.min(maxDelta, rawDeltaY)))
+  }
+
+  const row = geometry.rows.find((item) => item.kind === "tab" && item.tabKey === source.tabKey)
+
+  if (!row) return rawDeltaY
+  const firstTop = geometry.rows[0]?.top ?? 0
+  const lastBottom = geometry.rows[geometry.rows.length - 1]?.bottom ?? 0
+  const minDelta = firstTop - row.top - 6
+  const maxDelta = Math.max(0, lastBottom - row.bottom + 26)
+
+  return Math.round(Math.max(minDelta, Math.min(maxDelta, rawDeltaY)))
+}
+
 export function selectNeedsDragMeasurement(
   state: VerticalDragState,
   pointerId: number,
@@ -284,6 +360,7 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
       }
 
       const hit = hitTestVerticalDrag(state.source, event.geometry, event.x, event.contentY, undefined)
+      const dragOffsetY = computeClampedDragOffsetY(state.source, event.geometry, event.y - state.startY)
 
       return {
         state: {
@@ -293,10 +370,12 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
           startY: state.startY,
           currentX: event.x,
           currentY: event.y,
+          dragOffsetY,
           source: state.source,
           geometry: event.geometry,
           indicator: hit.indicator,
           intent: hit.intent,
+          shifts: hit.shifts,
         },
         effects: [{ type: "capture-pointer", pointerId: state.pointerId }],
       }
@@ -304,13 +383,10 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
 
     if (state.status === "dragging" && state.pointerId === event.pointerId) {
       const hit = hitTestVerticalDrag(state.source, state.geometry, event.x, event.contentY, state.intent)
+      const dragOffsetY = computeClampedDragOffsetY(state.source, state.geometry, event.y - state.startY)
+      const unchangedHit = sameIndicator(state.indicator, hit.indicator) && sameIntent(state.intent, hit.intent)
 
-      if (
-        state.currentX === event.x &&
-        state.currentY === event.y &&
-        sameIndicator(state.indicator, hit.indicator) &&
-        sameIntent(state.intent, hit.intent)
-      ) {
+      if (state.currentX === event.x && state.currentY === event.y && state.dragOffsetY === dragOffsetY && unchangedHit) {
         return unchanged(state)
       }
 
@@ -319,8 +395,10 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
           ...state,
           currentX: event.x,
           currentY: event.y,
-          indicator: hit.indicator,
-          intent: hit.intent,
+          dragOffsetY,
+          indicator: unchangedHit ? state.indicator : hit.indicator,
+          intent: unchangedHit ? state.intent : hit.intent,
+          shifts: unchangedHit ? state.shifts : hit.shifts,
         },
         effects: NONE,
       }
@@ -342,6 +420,7 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
         ...state,
         indicator: hit.indicator,
         intent: hit.intent,
+        shifts: hit.shifts,
       },
       effects: NONE,
     }
@@ -377,6 +456,34 @@ export function selectDraggingGroupKey(state: VerticalDragState) {
   return state.status === "dragging" && state.source.kind === "group" ? state.source.groupKey : undefined
 }
 
+export function selectDraggedOffsetY(state: VerticalDragState) {
+  return state.status === "dragging" ? state.dragOffsetY : 0
+}
+
+export function selectDraggedLaneShift(state: VerticalDragState) {
+  return state.status === "dragging" ? state.shifts.laneShift : undefined
+}
+
+export function selectDraggedTucked(state: VerticalDragState) {
+  return state.status === "dragging" && state.shifts.tucked
+}
+
+export function selectTabShiftY(state: VerticalDragState, tabKey: string) {
+  return state.status === "dragging" ? (state.shifts.tabShiftY[tabKey] ?? 0) : 0
+}
+
+export function selectGroupShiftY(state: VerticalDragState, groupKey: string) {
+  return state.status === "dragging" ? (state.shifts.groupShiftY[groupKey] ?? 0) : 0
+}
+
+export function selectHeaderShiftY(state: VerticalDragState, groupKey: string) {
+  return state.status === "dragging" ? (state.shifts.headerShiftY[groupKey] ?? 0) : 0
+}
+
+export function selectGroupRailAdjustment(state: VerticalDragState, groupKey: string) {
+  return state.status === "dragging" ? state.shifts.railByGroup[groupKey] : undefined
+}
+
 export function selectCombineColorOfTab(state: VerticalDragState, tabKey: string) {
   if (state.status !== "dragging" || state.indicator?.kind !== "combine-tab") return undefined
 
@@ -401,44 +508,6 @@ export function selectDropLine(state: VerticalDragState) {
   return state.indicator
 }
 
-export function selectDragGhost(state: VerticalDragState) {
-  return state.status === "dragging" ? state : undefined
-}
-
-export function selectDragGhostGroupCount(state: VerticalDragState) {
-  return state.status === "dragging" && state.source.kind === "group" ? state.source.count : undefined
-}
-
-export function selectGhostTargetColor(state: VerticalDragState): TabGroupColor | undefined {
-  if (state.status !== "dragging") return undefined
-
-  if (state.source.kind === "group") return state.source.color
-
-  if (state.indicator?.kind === "combine-tab" || state.indicator?.kind === "join-group") {
-    return state.indicator.color
-  }
-
-  if (state.indicator?.kind === "line" && state.indicator.indented) {
-    return state.indicator.color
-  }
-
-  return undefined
-}
-
-export type VerticalDragHit = {
-  readonly indicator: VerticalDragIndicator | undefined
-  readonly intent: VerticalDragIntent | undefined
-}
-
-export type VerticalDragCommitResult = {
-  readonly tabKeys: string[]
-  readonly mode: TabGroupsState["mode"]
-  readonly groupOrder: string[]
-  readonly collapsed: Record<string, boolean>
-  readonly manualGroups: ManualTabGroup[]
-  readonly manualAssignments: Record<string, string>
-}
-
 export function hitTestVerticalDrag(
   source: VerticalDragSource,
   geometry: VerticalDragGeometry,
@@ -450,11 +519,11 @@ export function hitTestVerticalDrag(
     return hitTestGroupMove(source.groupKey, geometry.blocks, contentY)
   }
 
-  if (!geometry.freeform) {
-    return hitTestIntraGroupTabMove(source, geometry.rows, contentY)
-  }
+  const raw = geometry.freeform
+    ? hitTestFreeformTabMove(source, geometry, x, contentY, previousIntent)
+    : hitTestIntraGroupTabMove(source, geometry.rows, contentY)
 
-  return hitTestFreeformTabMove(source, geometry, x, contentY, previousIntent)
+  return attachTabSlideShifts(source, geometry, raw.indicator, raw.intent)
 }
 
 function hitTestGroupMove(
@@ -462,11 +531,11 @@ function hitTestGroupMove(
   blocks: readonly MeasuredTopBlock[],
   y: number,
 ): VerticalDragHit {
-  if (blocks.length <= 1) return { indicator: undefined, intent: undefined }
+  if (blocks.length <= 1) return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS }
 
   const selfIndex = blocks.findIndex((block) => block.kind === "group" && block.groupKey === groupKey)
 
-  if (selfIndex === -1) return { indicator: undefined, intent: undefined }
+  if (selfIndex === -1) return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS }
 
   let beforeIndex = blocks.length
 
@@ -484,7 +553,39 @@ function hitTestGroupMove(
   }
 
   if (beforeIndex === selfIndex || beforeIndex === selfIndex + 1) {
-    return { indicator: undefined, intent: undefined }
+    return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS }
+  }
+
+  const selfBlock = blocks[selfIndex]!
+
+  const groupStride =
+    selfIndex < blocks.length - 1
+      ? blocks[selfIndex + 1]!.top - selfBlock.top
+      : selfIndex > 0
+        ? selfBlock.bottom - blocks[selfIndex - 1]!.bottom
+        : selfBlock.bottom - selfBlock.top + 5
+
+  const groupShiftY: Record<string, number> = {}
+  const tabShiftY: Record<string, number> = {}
+
+  if (beforeIndex < selfIndex) {
+    for (let i = beforeIndex; i < selfIndex; i++) {
+      const b = blocks[i]!
+
+      if (b.kind === "group") groupShiftY[b.groupKey] = groupStride
+
+      if (b.kind === "tab") tabShiftY[b.tabKey] = groupStride
+    }
+  }
+
+  if (beforeIndex > selfIndex + 1) {
+    for (let i = selfIndex + 1; i < beforeIndex; i++) {
+      const b = blocks[i]!
+
+      if (b.kind === "group") groupShiftY[b.groupKey] = -groupStride
+
+      if (b.kind === "tab") tabShiftY[b.tabKey] = -groupStride
+    }
   }
 
   const lineY =
@@ -494,9 +595,185 @@ function hitTestGroupMove(
         ? blocks[blocks.length - 1]!.bottom + 3
         : (blocks[beforeIndex - 1]!.bottom + blocks[beforeIndex]!.top) / 2
 
+  const visualY =
+    beforeIndex < selfIndex
+      ? lineY
+      : Math.max(3, blocks[beforeIndex - 1]!.bottom - groupStride + 2.5)
+
   return {
-    indicator: { kind: "line", y: lineY, indented: false, groupKey: undefined, color: undefined },
+    indicator: { kind: "line", y: lineY, visualY, indented: false, groupKey: undefined, color: undefined },
     intent: { type: "move-group", groupKey, beforeBlockIndex: beforeIndex },
+    shifts: {
+      tabShiftY,
+      groupShiftY,
+      headerShiftY: EMPTY_SHIFTS.headerShiftY,
+      railByGroup: EMPTY_SHIFTS.railByGroup,
+      laneShift: undefined,
+      tucked: false,
+    },
+  }
+}
+
+type RawTabHit = {
+  readonly indicator: VerticalDragIndicator | undefined
+  readonly intent: VerticalDragIntent | undefined
+}
+
+function attachTabSlideShifts(
+  source: Extract<VerticalDragSource, { kind: "tab" }>,
+  geometry: VerticalDragGeometry,
+  indicator: VerticalDragIndicator | undefined,
+  intent: VerticalDragIntent | undefined,
+): VerticalDragHit {
+  if (!indicator || !intent) {
+    return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS }
+  }
+
+  const rows = geometry.rows
+  const selfRowIdx = rows.findIndex((row) => row.kind === "tab" && row.tabKey === source.tabKey)
+
+  if (selfRowIdx === -1) {
+    return { indicator, intent, shifts: EMPTY_SHIFTS }
+  }
+
+  const sourceRow = rows[selfRowIdx]!
+  const prevRow = rows[selfRowIdx - 1]
+  const nextRow = rows[selfRowIdx + 1]
+
+  const tabStride =
+    nextRow?.kind === "tab" && sourceRow.kind === "tab" && nextRow.groupKey === sourceRow.groupKey
+      ? nextRow.top - sourceRow.top
+      : prevRow?.kind === "tab" && sourceRow.kind === "tab" && prevRow.groupKey === sourceRow.groupKey
+        ? sourceRow.bottom - prevRow.bottom
+        : sourceRow.bottom - sourceRow.top + (source.groupKey ? 2 : 3)
+
+  const sourceIndented = source.groupKey !== undefined
+
+  if (indicator.kind === "combine-tab" || indicator.kind === "join-group") {
+    const targetIndented = indicator.kind === "join-group"
+    const laneShift = targetIndented === sourceIndented ? undefined : targetIndented ? "in" : "out"
+    const tabShiftY: Record<string, number> = {}
+    const headerShiftY: Record<string, number> = {}
+
+    const targetRow =
+      indicator.kind === "combine-tab"
+        ? rows.find((r) => r.kind === "tab" && r.tabKey === indicator.tabKey)
+        : rows.find((r) => r.kind === "header" && r.groupKey === indicator.groupKey)
+
+    if (targetRow && targetRow.top < sourceRow.top) {
+      rows.forEach((row) => {
+        if (row.top <= sourceRow.bottom) return
+
+        if (row.kind === "header") headerShiftY[row.groupKey] = -tabStride
+
+        if (row.kind === "tab") tabShiftY[row.tabKey] = -tabStride
+      })
+    }
+
+    return {
+      indicator,
+      intent,
+      shifts: {
+        tabShiftY,
+        groupShiftY: EMPTY_SHIFTS.groupShiftY,
+        headerShiftY,
+        railByGroup: EMPTY_SHIFTS.railByGroup,
+        laneShift,
+        tucked: true,
+      },
+    }
+  }
+
+  const sCenter = (sourceRow.top + sourceRow.bottom) / 2
+  const rawY = indicator.y
+  const tabShiftY: Record<string, number> = {}
+  const headerShiftY: Record<string, number> = {}
+
+  rows.forEach((row) => {
+    if (row.kind === "tab" && row.tabKey === source.tabKey) return
+    const rCenter = (row.top + row.bottom) / 2
+
+    const shift =
+      rawY < sCenter
+        ? rawY < rCenter && rCenter < sCenter
+          ? tabStride
+          : 0
+        : sCenter < rCenter && rCenter < rawY
+          ? -tabStride
+          : 0
+
+    if (shift === 0) return
+
+    if (row.kind === "header") headerShiftY[row.groupKey] = shift
+
+    if (row.kind === "tab") tabShiftY[row.tabKey] = shift
+  })
+
+  const visualY = Math.max(3, rawY < sCenter ? rawY + tabStride * 0.5 : rawY - tabStride * 0.5)
+
+  const railByGroup: Record<string, VerticalDragRailAdjustment> = {}
+  const groupOrigBounds = new Map<string, { top: number; bottom: number }>()
+  const groupShiftedBounds = new Map<string, { top: number; bottom: number }>()
+
+  rows.forEach((row) => {
+    if (row.kind !== "tab" || !row.groupKey) return
+    const gk = row.groupKey
+    const orig = groupOrigBounds.get(gk)
+    groupOrigBounds.set(gk, {
+      top: orig ? Math.min(orig.top, row.top) : row.top,
+      bottom: orig ? Math.max(orig.bottom, row.bottom) : row.bottom,
+    })
+
+    if (row.tabKey === source.tabKey) return
+    const dy = tabShiftY[row.tabKey] ?? 0
+    const cur = groupShiftedBounds.get(gk)
+    groupShiftedBounds.set(gk, {
+      top: cur ? Math.min(cur.top, row.top + dy) : row.top + dy,
+      bottom: cur ? Math.max(cur.bottom, row.bottom + dy) : row.bottom + dy,
+    })
+  })
+
+  if (indicator.indented && indicator.groupKey) {
+    const gk = indicator.groupKey
+    const cur = groupShiftedBounds.get(gk)
+    const slotTop = visualY - 14
+    const slotBottom = visualY + 14
+    groupShiftedBounds.set(gk, {
+      top: cur ? Math.min(cur.top, slotTop) : slotTop,
+      bottom: cur ? Math.max(cur.bottom, slotBottom) : slotBottom,
+    })
+  }
+
+  groupOrigBounds.forEach((orig, gk) => {
+    const shifted = groupShiftedBounds.get(gk)
+
+    if (!shifted) {
+      railByGroup[gk] = { top: 0, bottom: 0, empty: true }
+
+      return
+    }
+
+    const dTop = Math.round(shifted.top - orig.top)
+    const dBottom = Math.round(shifted.bottom - orig.bottom)
+
+    if (dTop !== 0 || dBottom !== 0) {
+      railByGroup[gk] = { top: dTop, bottom: dBottom, empty: false }
+    }
+  })
+
+  const laneShift = indicator.indented === sourceIndented ? undefined : indicator.indented ? "in" : "out"
+
+  return {
+    indicator: { ...indicator, visualY },
+    intent,
+    shifts: {
+      tabShiftY,
+      groupShiftY: EMPTY_SHIFTS.groupShiftY,
+      headerShiftY,
+      railByGroup,
+      laneShift,
+      tucked: false,
+    },
   }
 }
 
@@ -504,7 +781,7 @@ function hitTestIntraGroupTabMove(
   source: Extract<VerticalDragSource, { kind: "tab" }>,
   rows: readonly MeasuredStripRow[],
   y: number,
-): VerticalDragHit {
+): RawTabHit {
   const peers = rows.flatMap((row) =>
     row.kind === "tab" && row.groupKey === source.groupKey ? [row] : [],
   )
@@ -534,10 +811,13 @@ function hitTestIntraGroupTabMove(
   const indented = !!source.groupKey
 
   if (insertIdx === 0) {
+    const rawY = Math.max(3, peers[0]!.top - 1.5)
+
     return {
       indicator: {
         kind: "line",
-        y: Math.max(3, peers[0]!.top - 1.5),
+        y: rawY,
+        visualY: rawY,
         indented,
         groupKey: source.groupKey,
         color,
@@ -554,11 +834,13 @@ function hitTestIntraGroupTabMove(
 
   if (insertIdx >= peers.length) {
     const last = peers[peers.length - 1]!
+    const rawY = last.bottom + 1.5
 
     return {
       indicator: {
         kind: "line",
-        y: last.bottom + 1.5,
+        y: rawY,
+        visualY: rawY,
         indented,
         groupKey: source.groupKey,
         color,
@@ -575,11 +857,13 @@ function hitTestIntraGroupTabMove(
 
   const prev = peers[insertIdx - 1]!
   const next = peers[insertIdx]!
+  const rawY = (prev.bottom + next.top) / 2
 
   return {
     indicator: {
       kind: "line",
-      y: (prev.bottom + next.top) / 2,
+      y: rawY,
+      visualY: rawY,
       indented,
       groupKey: source.groupKey,
       color,
@@ -612,7 +896,7 @@ function hitTestFreeformTabMove(
   x: number,
   y: number,
   previousIntent: VerticalDragIntent | undefined,
-): VerticalDragHit {
+): RawTabHit {
   const rows = geometry.rows
 
   if (rows.length === 0) return { indicator: undefined, intent: undefined }
@@ -626,17 +910,19 @@ function hitTestFreeformTabMove(
     color: TabGroupColor | undefined,
     anchorTabKey: string | undefined,
     position: "before" | "after",
-  ): VerticalDragHit => {
+  ): RawTabHit => {
     if (isNoOpTabPlacement(source, rows, targetManualId, anchorTabKey, position)) {
       return { indicator: undefined, intent: undefined }
     }
 
     const indented = targetManualId !== undefined
+    const clampedY = Math.max(3, lineY)
 
     return {
       indicator: {
         kind: "line",
-        y: Math.max(3, lineY),
+        y: clampedY,
+        visualY: clampedY,
         indented,
         groupKey: indented ? groupKey : undefined,
         color: indented ? color : undefined,

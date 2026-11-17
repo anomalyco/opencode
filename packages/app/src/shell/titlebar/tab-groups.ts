@@ -111,8 +111,8 @@ export function nextManualGroupNumber(
 }
 
 /**
- * Assigns colors in lexicographically sorted seed order rather than tab-list order, so reordering tabs,
- * dragging groups above/below each other, or filtering never changes any group's color.
+ * Assigns default colors in lexicographically sorted seed order first, and applies explicit user overrides afterwards,
+ * so recoloring one group, reordering groups/tabs, or filtering never mutates another group's color.
  */
 export function assignStableGroupColors(
   seeds: readonly string[],
@@ -124,17 +124,6 @@ export function assignStableGroupColors(
   const out = new Map<string, TabGroupColor>()
 
   unique.forEach((seed) => {
-    const explicit = overrides[`${prefix}${seed}`]?.color
-
-    if (explicit) {
-      out.set(seed, explicit)
-      used.add(explicit)
-    }
-  })
-
-  unique.forEach((seed) => {
-    if (out.has(seed)) return
-
     if (prefix === "project:" && seed === "other") {
       out.set(seed, "gray")
 
@@ -144,6 +133,14 @@ export function assignStableGroupColors(
     const picked = hashGroupColor(seed, used)
     used.add(picked)
     out.set(seed, picked)
+  })
+
+  unique.forEach((seed) => {
+    const explicit = overrides[`${prefix}${seed}`]?.color
+
+    if (explicit) {
+      out.set(seed, explicit)
+    }
   })
 
   return out
@@ -282,6 +279,7 @@ export function buildComputedTabGroups(input: {
   state: TabGroupsState
   mode: TabGroupMode
   serverCount: number
+  knownServers?: readonly ServerConnection.Key[]
   query: string
   labels: {
     other: string
@@ -316,7 +314,7 @@ export function buildComputedTabGroups(input: {
 
   if (effectiveMode === "server") {
     const colorMap = assignStableGroupColors(
-      input.items.map((item) => item.server),
+      [...(input.knownServers ?? []), ...input.items.map((item) => item.server)],
       "server:",
       input.state.overrides,
     )

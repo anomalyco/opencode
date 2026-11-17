@@ -2749,6 +2749,15 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
   await expect(localHeader).toHaveAttribute("data-group-color", initialLocalColor!)
   await expect(remoteHeader).toHaveAttribute("data-group-color", initialRemoteColor!)
 
+  // Recoloring blade's swatch changes only blade and never shifts local's hue.
+  await remoteHeader.click({ button: "right" })
+  const nextRemoteHue = initialRemoteColor === "pink" ? "blue" : "pink"
+  const nextHueLabel = nextRemoteHue === "pink" ? "Rose" : "Steel"
+  await page.getByRole("radio", { name: nextHueLabel, exact: true }).click()
+  await page.keyboard.press("Escape")
+  await expect(remoteHeader).toHaveAttribute("data-group-color", nextRemoteHue)
+  await expect(localHeader).toHaveAttribute("data-group-color", initialLocalColor!)
+
   // Collapsing the remote group hides its tab; navigating into that session auto-expands the group.
   await remoteHeader.locator("button").first().click()
   await expect(remoteTab).toHaveCount(0)
@@ -2770,6 +2779,7 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
   await sidebar.locator('[data-action="tab-groups-menu"]').click()
   await expect(page.getByRole("menuitemradio")).toHaveText(["None", "Server", "Project"])
   await page.getByRole("menuitemradio", { name: "None", exact: true }).click()
+  await expect(page.getByRole("menu")).toHaveCount(0)
   await expect(sidebar.locator("[data-tab-group]")).toHaveCount(0)
 
   const slotOne = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)

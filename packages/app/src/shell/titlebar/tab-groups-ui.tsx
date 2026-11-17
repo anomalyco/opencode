@@ -1,5 +1,4 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack, type JSX } from "solid-js"
-import { Portal } from "solid-js/web"
 import { createStore, produce } from "solid-js/store"
 import { useQueries } from "@tanstack/solid-query"
 import { createSimpleContext } from "@opencode/ui/context"
@@ -26,16 +25,20 @@ import {
   applyVerticalDragCommit,
   INITIAL_VERTICAL_DRAG_STATE,
   selectCombineColorOfTab,
-  selectDragGhost,
-  selectDragGhostGroupCount,
+  selectDraggedLaneShift,
+  selectDraggedOffsetY,
+  selectDraggedTucked,
   selectDraggingGroupKey,
   selectDraggingTabKey,
   selectDropInsideGroupKey,
   selectDropLine,
-  selectGhostTargetColor,
+  selectGroupRailAdjustment,
+  selectGroupShiftY,
+  selectHeaderShiftY,
   selectIsDraggingStrip,
   selectJoinGroupKey,
   selectNeedsDragMeasurement,
+  selectTabShiftY,
   transitionVerticalDrag,
   type MeasuredStripRow,
   type MeasuredTopBlock,
@@ -210,6 +213,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
         state,
         mode: mode(),
         serverCount: serverCount(),
+        knownServers: global.servers.list().map(ServerConnection.key),
         query: local.query,
         labels: {
           other: language.t("sidebar.view.other"),
@@ -820,6 +824,31 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       isDraggingTab: (key: string) => selectDraggingTabKey(drag()) === key,
       isDraggingGroup: (groupKey: string) => selectDraggingGroupKey(drag()) === groupKey,
       isDropInsideGroup: (groupKey: string) => selectDropInsideGroupKey(drag()) === groupKey,
+      tabTransformY: (key: string) => {
+        const current = drag()
+
+        return selectDraggingTabKey(current) === key
+          ? selectDraggedOffsetY(current)
+          : selectTabShiftY(current, key)
+      },
+      tabLaneShift: (key: string) => {
+        const current = drag()
+
+        return selectDraggingTabKey(current) === key ? selectDraggedLaneShift(current) : undefined
+      },
+      isTabTucked: (key: string) => {
+        const current = drag()
+
+        return selectDraggingTabKey(current) === key && selectDraggedTucked(current)
+      },
+      groupTransformY: (groupKey: string) => {
+        const current = drag()
+
+        return selectDraggingGroupKey(current) === groupKey
+          ? selectDraggedOffsetY(current)
+          : selectGroupShiftY(current, groupKey)
+      },
+      groupRailAdjustment: (groupKey: string) => selectGroupRailAdjustment(drag(), groupKey),
       combineColorOfTab: (key: string) => selectCombineColorOfTab(drag(), key),
       get combineBadgeLabel() {
         return language.t("tabs.groups.combineBadge")
@@ -827,44 +856,17 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       onPointerDown,
       onScroll,
       overlay: () => (
-        <>
-          <Show when={selectDropLine(drag())}>
-            {(line) => (
-              <div
-                data-slot="tab-group-drop-line"
-                data-indented={line().indented ? "true" : undefined}
-                data-group-color={line().color}
-                style={{ top: `${line().y}px` }}
-                aria-hidden="true"
-              />
-            )}
-          </Show>
-          <Show when={selectDragGhost(drag())}>
-            {(active) => (
-              <Portal>
-                <div
-                  data-slot="tab-group-drag-ghost"
-                  data-kind={active().source.kind}
-                  data-group-color={selectGhostTargetColor(drag())}
-                  style={{
-                    transform: `translate3d(${Math.round(active().currentX + 14)}px, ${Math.round(active().currentY + 12)}px, 0)`,
-                  }}
-                  aria-hidden="true"
-                >
-                  <Show when={active().source.kind === "tab" && selectGhostTargetColor(drag())}>
-                    <span data-group-swatch class="size-2 shrink-0 rounded-full" />
-                  </Show>
-                  <span class="min-w-0 truncate" dir="auto">
-                    {active().source.label}
-                  </span>
-                  <Show when={selectDragGhostGroupCount(drag())}>
-                    {(count) => <span class="shrink-0 text-[11px] opacity-75">{count()}</span>}
-                  </Show>
-                </div>
-              </Portal>
-            )}
-          </Show>
-        </>
+        <Show when={selectDropLine(drag())}>
+          {(line) => (
+            <div
+              data-slot="tab-group-drop-line"
+              data-indented={line().indented ? "true" : undefined}
+              data-group-color={line().color}
+              style={{ top: `${line().visualY}px` }}
+              aria-hidden="true"
+            />
+          )}
+        </Show>
       ),
     }
 
@@ -875,6 +877,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       plans,
       dragBinding,
       isJoinTarget: (groupKey: string) => selectJoinGroupKey(drag()) === groupKey,
+      headerShiftY: (groupKey: string) => selectHeaderShiftY(drag(), groupKey),
       query: () => local.query,
       setQuery: (value: string) => setLocal("query", value),
       setMode: (next: TabGroupMode) => setState("mode", next),
@@ -990,6 +993,7 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
   const language = useLanguage()
   const [menu, setMenu] = createStore({ open: false })
   const count = () => props.group.allTabs.length
+  const shiftY = () => tabGroups.headerShiftY(props.group.key)
 
   return (
     <div
@@ -998,6 +1002,7 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
       data-group-key={props.group.key}
       data-group-color={props.group.color}
       data-drop-over={tabGroups.isJoinTarget(props.group.key) ? "true" : undefined}
+      style={shiftY() ? { transform: `translate3d(0, ${shiftY()}px, 0)` } : undefined}
       class="group/group-row relative flex w-full min-w-0 shrink-0 select-none items-center gap-1.5 rounded-[6px]"
       onContextMenu={(event) => {
         event.preventDefault()
@@ -1079,6 +1084,7 @@ export function TabAddToGroupMenuItems(props: { tab: Tab }) {
             <For each={tabGroups.manualGroups()}>
               {(group) => (
                 <Menu.CheckboxItem
+                  closeOnSelect
                   checked={assigned() === group.id}
                   onChange={(checked) => tabGroups.assignTabToManualGroup(props.tab, checked ? group.id : undefined)}
                 >
@@ -1135,7 +1141,9 @@ export function TabGroupingMenu() {
             >
               <For each={TAB_GROUP_MODES}>
                 {(modeOption) => (
-                  <Menu.RadioItem value={modeOption}>{language.t(`tabs.groups.mode.${modeOption}`)}</Menu.RadioItem>
+                  <Menu.RadioItem closeOnSelect value={modeOption}>
+                    {language.t(`tabs.groups.mode.${modeOption}`)}
+                  </Menu.RadioItem>
                 )}
               </For>
             </Menu.RadioGroup>
