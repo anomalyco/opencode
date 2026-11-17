@@ -194,12 +194,7 @@ export const layer = Layer.effectDiscard(
     // Make accepted work visible to awaitActivation before coalescing the burst.
     const notify = Effect.gen(function* () {
       observed++
-      // Another source can take the hold while this one waits on it; keep one and give the extra back.
-      if (!release) {
-        const held = yield* registry.hold()
-        if (release) yield* held
-        else release = held
-      }
+      if (!release) release = yield* registry.hold()
       yield* Queue.offer(triggers, observed)
     })
     const watch = <A>(stream: Stream.Stream<A>) =>
