@@ -127,6 +127,7 @@ pub fn setup(vm: &mut Vm) {
             ("warn", 0, console_warn),
             ("error", 0, console_error),
             ("dir", 0, console_dir),
+            ("table", 0, console_table),
         ],
     );
     vm.global("console", Value::Obj(console));
@@ -698,7 +699,180 @@ fn console_error(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     log_line(vm, "[error] ", args)
 }
 fn console_dir(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    log_line(vm, "", &args[..args.len().min(1)])
+    if args.is_empty() {
+        vm.logs.push("undefined".into());
+        return Ok(Value::Undef);
+    }
+    log_line(vm, "", &args[..1])
+}
+
+/// Whether a value holds an opaque reference (a function, promise, iterator or tool reference) anywhere in the
+/// data objects and arrays it contains, as the reference's `containsOpaqueReference` walks it.
+fn contains_opaque(vm: &Vm, v: &Value, seen: &mut Vec<Id>) -> bool {
+    let Value::Obj(id) = v else { return false };
+    let o = &vm.heap[*id as usize];
+    match &o.kind {
+        Kind::Ordinary | Kind::Error(_) | Kind::Arguments(_) | Kind::Array(_) => {}
+        Kind::Map(_)
+        | Kind::Set(_)
+        | Kind::WeakMap(_)
+        | Kind::WeakSet(_)
+        | Kind::Date(_)
+        | Kind::RegExp(_)
+        | Kind::Bytes(_)
+        | Kind::Url(_)
+        | Kind::SearchParams(_)
+        | Kind::Headers(_)
+        | Kind::TextDecoder(_) => return false,
+        _ => return true,
+    }
+    if seen.contains(id) {
+        return false;
+    }
+    seen.push(*id);
+    let mut children: Vec<Value> = o.props.items.iter().map(|p| p.value).collect();
+    if let Kind::Array(items) | Kind::Arguments(items) = &o.kind {
+        children.extend(items.iter().copied());
+    }
+    children.iter().any(|c| contains_opaque(vm, c, seen))
+}
+
+/// A row's cells: an object's own entries (or the chosen columns), or the value itself under `Value`.
+fn table_values(vm: &mut Vm, v: &Value, columns: &Option<Vec<String>>) -> Vec<(String, Value)> {
+    if let Value::Obj(id) = v
+        && !matches!(vm.heap[*id as usize].kind, Kind::Array(_))
+    {
+        return match columns {
+            Some(cols) => cols
+                .iter()
+                .map(|c| {
+                    let k = vm.atoms.intern(c);
+                    (c.clone(), vm.get_obj(*id, k))
+                })
+                .collect(),
+            None => vm
+                .own_entries(*id)
+                .into_iter()
+                .map(|(k, v)| (vm.atoms.text(k).to_owned(), v))
+                .collect(),
+        };
+    }
+    vec![("Value".to_owned(), *v)]
+}
+
+/// Orders record keys as a JavaScript object would: array indexes ascending, then the rest as first seen.
+fn record_keys(keys: Vec<String>) -> Vec<String> {
+    let mut ints: Vec<(u32, String)> = Vec::new();
+    let mut rest: Vec<String> = Vec::new();
+    for k in keys {
+        if ints.iter().any(|(_, x)| x == &k) || rest.contains(&k) {
+            continue;
+        }
+        match crate::value::index_of_key(&k) {
+            Some(i) => ints.push((i, k)),
+            None => rest.push(k),
+        }
+    }
+    ints.sort_by_key(|(i, _)| *i);
+    ints.into_iter().map(|(_, k)| k).chain(rest).collect()
+}
+
+fn console_table(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    let data = arg(args, 0);
+    if let Value::Undef = data {
+        vm.logs.push("undefined".into());
+        return Ok(Value::Undef);
+    }
+    if contains_opaque(vm, &data, &mut Vec::new()) {
+        vm.logs.push("[opaque reference]".into());
+        return Ok(Value::Undef);
+    }
+    let columns = match arg(args, 1) {
+        Value::Obj(id) => match &vm.heap[id as usize].kind {
+            Kind::Array(items) => {
+                let items = items.clone();
+                let mut cols = Vec::with_capacity(items.len());
+                for i in items {
+                    cols.push(super::builtin_string(vm, &i)?);
+                }
+                Some(cols)
+            }
+            _ => None,
+        },
+        _ => None,
+    };
+    let rows: Vec<(String, Vec<(String, Value)>)> = match data {
+        Value::Obj(id) => match &vm.heap[id as usize].kind {
+            Kind::Array(items) => {
+                let items = items.clone();
+                items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, item)| (i.to_string(), table_values(vm, item, &columns)))
+                    .collect()
+            }
+            _ => {
+                let entries = vm.own_entries(id);
+                entries
+                    .into_iter()
+                    .map(|(k, item)| {
+                        let k = vm.atoms.text(k).to_owned();
+                        (k, table_values(vm, &item, &columns))
+                    })
+                    .collect()
+            }
+        },
+        v => vec![("0".to_owned(), vec![("Value".to_owned(), v)])],
+    };
+    // Each row's cells read like an object record: later duplicates win, indexes sort first.
+    let rows: Vec<(String, Vec<(String, Value)>)> = rows
+        .into_iter()
+        .map(|(index, cells)| {
+            let keys = record_keys(cells.iter().map(|(k, _)| k.clone()).collect());
+            let cells = keys
+                .into_iter()
+                .map(|k| {
+                    let v = cells.iter().rev().find(|(c, _)| c == &k).map(|(_, v)| *v);
+                    (k, v.unwrap_or_default())
+                })
+                .collect();
+            (index, cells)
+        })
+        .collect();
+    let keys = match &columns {
+        Some(c) => c.clone(),
+        None => {
+            let mut keys: Vec<String> = Vec::new();
+            for (_, cells) in &rows {
+                for (k, _) in cells {
+                    if !keys.contains(k) {
+                        keys.push(k.clone());
+                    }
+                }
+            }
+            keys
+        }
+    };
+    let mut lines = vec![
+        std::iter::once("(index)".to_owned())
+            .chain(keys.iter().cloned())
+            .collect::<Vec<_>>()
+            .join("\t"),
+    ];
+    for (index, cells) in &rows {
+        let mut line = vec![index.clone()];
+        for k in &keys {
+            let cell = match cells.iter().find(|(c, _)| c == k) {
+                None | Some((_, Value::Undef)) => String::new(),
+                Some((_, Value::Str(s))) => vm.text(*s).to_owned(),
+                Some((_, v)) => convert::format_value(vm, v),
+            };
+            line.push(cell);
+        }
+        lines.push(line.join("\t"));
+    }
+    vm.logs.push(lines.join("\n"));
+    Ok(Value::Undef)
 }
 
 // ---------- global functions ----------
