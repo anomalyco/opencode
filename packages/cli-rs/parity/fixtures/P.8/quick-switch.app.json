@@ -21,7 +21,7 @@
   {"path":"/api/session/ses_q/inbox","json":{"data":[]}}
  ],
  "steps": [
-  {"checkpoint":"sidebar","until":"Requires OpenCode 2.2.5","masks":[{"x":59,"y":32,"width":22,"height":1,"reason":"TS plugin loading notice"}],"deviation":[{"file":"F16-v2-compat-layer","cells":382}],"fixture":"P.8/quick-switch/sidebar"}
+  {"checkpoint":"sidebar","until":"Requires OpenCode 2.2.5","masks":[{"x":59,"y":32,"width":22,"height":1,"reason":"TS plugin loading notice"}],"fixture":"P.8/quick-switch/sidebar"}
  ],
  "requests": {
   "writes": [],

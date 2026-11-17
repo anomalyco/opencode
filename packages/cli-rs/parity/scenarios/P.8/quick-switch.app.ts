@@ -1,5 +1,5 @@
 // FT-6: `opencode-model-quick-switch@0.1.0`, unmodified from npm. Its setup calls `renderer.prependInputHandler`, which
-// the layer does not implement: it warns and does nothing, and the setup goes on to draw the sidebar's "Recent models"
+// the layer does not implement: it warns in the client's log and does nothing, and the setup goes on to draw the sidebar's "Recent models"
 // block, as TS draws it (here "Requires OpenCode 2.2.5", as the fixture's version is not the one it checks for). TS
 // loads the package from node_modules; the Rust client runs the same files on the JS host.
 import { assistant, defineApp, session, user } from "../../lib/app"
@@ -32,9 +32,6 @@ export default defineApp({
       checkpoint: "sidebar",
       until: "Requires OpenCode 2.2.5",
       masks: [startup],
-      // The layer's one warning toast for what it does not map ("recent-models: renderer.prependInputHandler is not
-      // supported by opencode-native yet"), where TS calls the method.
-      deviation: [{ file: "F16-v2-compat-layer", cells: 382 }],
     },
   ],
 })

@@ -9,7 +9,8 @@
 //
 // What does not map is reported as TS reports what is unavailable: an API that answers whether it did returns false,
 // an intrinsic or a hook the contract has no place for throws in the render and the plugin's boundary reports it, and
-// the rest warns once in a toast and does nothing. Each is listed by `reported`.
+// the rest warns once in the client's log, by the plugin's name, and does nothing. Each is listed by `reported`. A
+// warning is no toast: one covered the plugin's own surface for as long as it showed (`P.8/file-browser`'s field focus).
 import {
   batch,
   createComponent,
@@ -127,8 +128,7 @@ export function context(base: Base, carrier: Carrier) {
     reported.set(id, seen)
     if (seen.has(feature)) return
     seen.add(feature)
-    console.warn(`plugin ${message}`)
-    void carrier.effect({ type: "toast", variant: "warning", title: "Plugin", message })
+    void carrier.effect({ type: "log", level: "warn", message })
   }
 
   // Reads: a watch per key, a signal per key that a snapshot bumps, and whether the render that runs read one the host
