@@ -5,7 +5,7 @@ import type { ActiveKey } from "@opentui/keymap"
 import { Keybind } from "@opencode/ui/keybind"
 import { useCommand } from "@/shell/commands/command"
 
-/** While a chord is in progress, lists the keys that continue it and what each runs. */
+/** While a key sequence such as a leader is in progress, lists the keys that continue it and what each runs. */
 export function KeySequenceHint() {
   const command = useCommand()
 

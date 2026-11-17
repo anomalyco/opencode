@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   INITIAL_KEYBIND_CAPTURE_STATE,
+  LEADER_SLOT,
   selectCapturePrefix,
   selectCapturingKeybind,
   selectExtendableKeybind,
@@ -108,6 +109,26 @@ describe("keybind capture machine", () => {
       { type: "binding.set", id: "session.beta", value: "none" },
       { type: "keybinds.resume" },
     ])
+    expect(replay([capture(LEADER_SLOT), backspace]).effects).toEqual([
+      { type: "leader.set", value: undefined },
+      { type: "keybinds.resume" },
+    ])
+  })
+
+  test("the leader starts only a command's chord, and the leader slot saves one stroke", () => {
+    const leader = replay([capture("session.beta"), { type: "leader.inserted" }])
+    expect(selectCapturePrefix(leader.state)).toBe("<leader>")
+    expect(selectCapturePrefix(replay([{ type: "leader.inserted" }], leader.state).state)).toBe("<leader>")
+    expect(replay([press("n")], leader.state).effects[0]).toEqual({
+      type: "binding.set",
+      id: "session.beta",
+      value: "<leader> n",
+    })
+    expect(selectCapturePrefix(replay([capture(LEADER_SLOT), { type: "leader.inserted" }]).state)).toBe("")
+
+    const set = replay([capture(LEADER_SLOT), press("ctrl+x")])
+    expect(set.effects).toEqual([{ type: "leader.set", value: "ctrl+x" }, { type: "keybinds.resume" }])
+    expect(selectExtendableKeybind(set.state)).toBeUndefined()
   })
 
   test("modifier-only keys are ignored and Escape stops recording", () => {

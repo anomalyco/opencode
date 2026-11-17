@@ -2,8 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createKeybindSettingsController } from "../src/settings/keybinds/keybinds"
 
-function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<string>, active?: () => boolean) {
+function setup(
+  overrides: Record<string, string> = {},
+  plugins?: ReadonlySet<string>,
+  active?: () => boolean,
+  initialLeader?: string,
+) {
   const changes: [string, string][] = []
+  const [leader, setLeader] = createSignal(initialLeader)
   const suppression: boolean[] = []
   const notifications: { title: string; description?: string }[] = []
   let resets = 0
@@ -17,6 +23,7 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
             { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
             { id: "session.beta", title: "Beta", keybind: "mod+b" },
             { id: "session.chord", title: "Chord", keybind: "mod+k mod+c" },
+            { id: "session.next", title: "Next", keybind: "<leader> n" },
             { id: "acme.open", plugin: "acme", title: "Open Acme", section: "session" },
           ],
           options: [],
@@ -28,6 +35,7 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
         },
         plugins: plugins && (() => plugins),
         settings: {
+          keymap: { leader, setLeader },
           keybinds: {
             all: () => overrides,
             get: (id) => overrides[id],
@@ -64,6 +72,7 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
     suppression,
     notifications,
     resets: () => resets,
+    leader,
     dispose,
   }
 }
@@ -141,6 +150,37 @@ describe("keybind settings controller", () => {
       ["session.beta", "mod+j"],
       ["session.beta", "mod+j mod+c"],
     ])
+
+    state.dispose()
+  })
+
+  test("records the leader key, and rejects one that starts another shortcut", () => {
+    const state = setup()
+
+    state.controller.capture.toggle("keymap.leader")
+    document.dispatchEvent(modKey("a"))
+    expect(state.leader()).toBeUndefined()
+    expect(state.notifications.map((toast) => toast.description)).toEqual([expect.stringContaining("Alpha")])
+
+    document.dispatchEvent(key("x", { ctrlKey: true }))
+    expect(state.leader()).toBe(/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "ctrl+x" : "mod+x")
+    expect(state.controller.capture.active()).toBeNull()
+
+    state.dispose()
+  })
+
+  test("a leader chord starts with the leader, and clashes with shortcuts on the leader's key", () => {
+    const state = setup({}, undefined, undefined, "alt+x")
+
+    expect(state.controller.catalog.keybind("session.next")).toBe("common.key.leader N")
+
+    state.controller.capture.toggle("session.beta")
+    state.controller.capture.insertLeader()
+    document.dispatchEvent(key("n"))
+    expect(state.notifications.map((toast) => toast.description)).toEqual([expect.stringContaining("Next")])
+
+    document.dispatchEvent(key("m"))
+    expect(state.changes).toEqual([["session.beta", "<leader> m"]])
 
     state.dispose()
   })

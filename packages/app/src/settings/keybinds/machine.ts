@@ -1,3 +1,6 @@
+/** The recording slot of the leader key, which records one stroke instead of a command's chord. */
+export const LEADER_SLOT = "keymap.leader"
+
 /** A command chord takes at most this many strokes; its row offers no + past that. */
 export const MAX_CHORD_STROKES = 4
 
@@ -10,7 +13,7 @@ export type RecordedKeyInput =
 
 /**
  * Recording a shortcut. Global shortcuts stay suspended exactly while `capturing`. Each pressed key saves the chord
- * at once: `prefix` holds the strokes it extends, from +. `idle.recent` is the row just saved,
+ * at once: `prefix` holds the strokes it extends, from + or the Leader button. `idle.recent` is the row just saved,
  * which offers + to add a key.
  */
 export type KeybindCaptureState =
@@ -28,6 +31,8 @@ export type KeybindCaptureEvent =
   | { readonly type: "unbind.clicked"; readonly id: string }
   | { readonly type: "reset.clicked" }
   | { readonly type: "key.pressed"; readonly input: RecordedKeyInput }
+  /** Starts the chord with the leader key; only a command's recording with nothing before it takes it. */
+  | { readonly type: "leader.inserted" }
   | { readonly type: "page.synced"; readonly active: boolean }
   | { readonly type: "catalog.synced"; readonly ids: ReadonlySet<string> }
   | { readonly type: "disposed" }
@@ -36,6 +41,7 @@ export type KeybindCaptureEffect =
   | { readonly type: "keybinds.suspend" }
   | { readonly type: "keybinds.resume" }
   | { readonly type: "binding.set"; readonly id: string; readonly value: string }
+  | { readonly type: "leader.set"; readonly value: string | undefined }
   | { readonly type: "bindings.reset" }
   | { readonly type: "notify.conflict"; readonly keybind: string; readonly conflictTitles: readonly string[] }
   | { readonly type: "notify.reset" }
@@ -102,7 +108,15 @@ export function transitionKeybindCapture(
 
   // A plugin removed while its command was recording.
   if (event.type === "catalog.synced")
-    return event.ids.has(state.id) ? { state, effects: NONE } : { state: INITIAL_KEYBIND_CAPTURE_STATE, effects: stop }
+    return event.ids.has(state.id) || state.id === LEADER_SLOT
+      ? { state, effects: NONE }
+      : { state: INITIAL_KEYBIND_CAPTURE_STATE, effects: stop }
+
+  if (event.type === "leader.inserted") {
+    if (state.id === LEADER_SLOT || state.prefix.length > 0) return { state, effects: NONE }
+
+    return { state: { ...state, prefix: ["<leader>"] }, effects: NONE }
+  }
 
   const input = event.input
 
@@ -125,8 +139,13 @@ export function transitionKeybindCapture(
     return { state, effects: [{ type: "notify.conflict", keybind, conflictTitles: input.conflictTitles }] }
 
   return {
-    state: { status: "idle", recent: state.id },
-    effects: [{ type: "binding.set", id: state.id, value: keybind }, RESUME],
+    state: state.id === LEADER_SLOT ? INITIAL_KEYBIND_CAPTURE_STATE : { status: "idle", recent: state.id },
+    effects: [
+      state.id === LEADER_SLOT
+        ? { type: "leader.set", value: input.stroke }
+        : { type: "binding.set", id: state.id, value: keybind },
+      RESUME,
+    ],
   }
 }
 
@@ -145,5 +164,5 @@ export function selectExtendableKeybind(state: KeybindCaptureState) {
 }
 
 function unbind(id: string): readonly KeybindCaptureEffect[] {
-  return [{ type: "binding.set", id, value: "none" }]
+  return [id === LEADER_SLOT ? { type: "leader.set", value: undefined } : { type: "binding.set", id, value: "none" }]
 }

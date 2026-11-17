@@ -206,6 +206,11 @@ describe("settings schema", () => {
     },
   )
 
+  test("keeps a valid leader key and drops an invalid one", () => {
+    expect(decode({ keymap: { leader: "ctrl+x" } }).keymap).toEqual({ leader: "ctrl+x" })
+    expect(decode({ keymap: { leader: 7 } }).keymap).toEqual({})
+  })
+
   test("does not silently repair invalid values during encoding", () => {
     expect(() =>
       Schema.encodeUnknownSync(settingsSchema)({ ...decode({}), appearance: { fontSize: "large" } }),

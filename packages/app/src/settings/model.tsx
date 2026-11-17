@@ -191,6 +191,11 @@ const soundsSchema = Persistence.struct({
   interfaceEnabled: Schema.optional(Schema.Boolean),
 })
 
+const keymapSchema = Persistence.struct({
+  // The key that starts `<leader>` chords. Unset by default.
+  leader: Persistence.optional(Schema.String),
+})
+
 export const settingsSchema = Persistence.struct({
   general: generalSchema,
   // Owned by the details plugin, which copies it out once; kept so settings rewrites cannot drop it first.
@@ -199,6 +204,7 @@ export const settingsSchema = Persistence.struct({
   ),
   appearance: appearanceSchema,
   keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
+  keymap: Persistence.optional(keymapSchema),
   permissions: permissionsSchema,
   workspaces: workspacesSchema,
   notifications: notificationsSchema,
@@ -518,6 +524,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
         resetAll() {
           setStore("keybinds", reconcile({}))
+        },
+      },
+      keymap: {
+        /** The leader key, if one is set. */
+        leader: () => store.keymap?.leader,
+        setLeader(leader: string | undefined) {
+          setStore("keymap", { leader })
         },
       },
       permissions: {
