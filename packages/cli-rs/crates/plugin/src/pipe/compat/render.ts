@@ -253,10 +253,12 @@ for (const name of [
   "truncate",
 ]) {
   Object.defineProperty(VNode.prototype, name, {
-    // A renderable's `width` and `height` are its layout, as the host laid it out, once the host said (CT-24).
+    // A renderable's `width` and `height` are its layout, as the host laid it out, once the host said (CT-24): a
+    // number, 0 before then as OpenTUI's, never the prop it was given (opencode-novaspace built an array from
+    // `node.width` on mount, and "100%" made its length NaN).
     get(this: VNode) {
       if (name !== "width" && name !== "height") return this.props[name]
-      return this.measure()?.[name] ?? this.props[name]
+      return this.measure()?.[name] ?? 0
     },
     set(this: VNode, value: unknown) {
       if (this.props[name] === value) return
