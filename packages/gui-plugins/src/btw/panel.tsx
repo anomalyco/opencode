@@ -7,6 +7,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { showToast } from "@opencode/ui/toast"
 import { createCopyFeedback } from "@opencode/session-ui/copy"
+import { formatDuration } from "@opencode/session-ui/duration"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import type { BtwFailure } from "./machine"
@@ -50,7 +51,6 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
   }
 
   const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
-  const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
 
   const agentLabel = createMemo(() => {
     const agent = chat()?.agent
@@ -91,14 +91,8 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
     const ms = answered()?.duration
 
     if (ms === undefined || !(ms >= 0)) return ""
-    const total = Math.round(ms / 1000)
 
-    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt().format(total) })
-
-    return i18n.t("ui.message.duration.minutesSeconds", {
-      minutes: numfmt().format(Math.floor(total / 60)),
-      seconds: numfmt().format(total % 60),
-    })
+    return formatDuration(Math.round(ms / 1000), i18n)
   })
 
   const answerMeta = createMemo(() => [agentLabel(), modelLabel(), durationLabel()].filter(Boolean).join(" \u00B7 "))

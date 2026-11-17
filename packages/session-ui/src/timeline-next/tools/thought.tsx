@@ -4,6 +4,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, Show } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
 import { PacedMarkdown } from "../../message/message-content"
+import { formatDuration } from "../../message/duration"
 
 /** A thought on its own row reads like a row of activity: Thought, then how long it took. Opening it shows the thought. */
 export function ThoughtRow(props: {
@@ -21,15 +22,8 @@ export function ThoughtRow(props: {
     const time = props.content.time
 
     if (time?.completed === undefined) return undefined
-    const total = Math.max(0, Math.round((time.completed - time.created) / 1000))
-    const numfmt = new Intl.NumberFormat(i18n.locale())
 
-    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
-
-    return i18n.t("ui.message.duration.minutesSeconds", {
-      minutes: numfmt.format(Math.floor(total / 60)),
-      seconds: numfmt.format(total % 60),
-    })
+    return formatDuration(Math.round((time.completed - time.created) / 1000), i18n)
   })
 
   return (

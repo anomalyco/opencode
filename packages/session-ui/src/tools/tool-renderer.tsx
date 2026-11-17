@@ -84,6 +84,7 @@ import {
   type SubagentRunState,
 } from "./run-machine"
 import { LinkedText } from "../components/linked-text"
+import { formatDuration } from "../message/duration"
 
 export function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -471,21 +472,8 @@ export function CurrentContextToolGroup(props: {
     const started = reasoning()[0]?.time?.created
 
     if (!thinking() || started === undefined) return ""
-    const total = Math.max(0, Math.floor((now() - started) / 1000))
-    const numfmt = new Intl.NumberFormat(i18n.locale())
 
-    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
-
-    if (total < 3600)
-      return i18n.t("ui.message.duration.minutesSeconds", {
-        minutes: numfmt.format(Math.floor(total / 60)),
-        seconds: numfmt.format(total % 60),
-      })
-
-    return i18n.t("ui.message.duration.hoursMinutes", {
-      hours: numfmt.format(Math.floor(total / 3600)),
-      minutes: numfmt.format(Math.floor(total / 60) % 60),
-    })
+    return formatDuration((now() - started) / 1000, i18n)
   })
 
   const label = createMemo(() => {
