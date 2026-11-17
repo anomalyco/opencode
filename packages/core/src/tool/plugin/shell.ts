@@ -71,7 +71,18 @@ export const Input = Schema.Struct({
   }),
 })
 
-const CodeModeInput = Schema.Struct({ ...Input.fields, timeout: timeoutInput(CODE_MODE_TIMEOUT_MS) })
+// The Code Mode catalog shows only the first 120 characters of a description, but every field annotation in full.
+const CODE_MODE_DESCRIPTION =
+  "Run a shell command and wait for it to exit (up to timeout). Read the result fields below."
+
+const CodeModeInput = Schema.Struct({
+  ...Input.fields,
+  command: Schema.String.annotate({
+    description:
+      "Shell command to run. tools.shell is the only way to run commands in Code Mode: there is no require, child_process or process.",
+  }),
+  timeout: timeoutInput(CODE_MODE_TIMEOUT_MS),
+})
 
 const StructuredOutput = Schema.Struct({
   output: Schema.String,
@@ -83,7 +94,28 @@ const StructuredOutput = Schema.Struct({
   pid: Schema.optionalKey(NonNegativeInt),
 })
 
-const CodeModeOutput = Schema.Struct({ ...StructuredOutput.fields, status: Schema.Literals(["completed", "running"]) })
+const CodeModeOutput = Schema.Struct({
+  status: Schema.Literals(["completed", "running"]).annotate({
+    description:
+      "completed: the command exited. running: it outlived timeout and moved to the background; output is partial and you will be notified when it exits.",
+  }),
+  exitCode: Schema.NullOr(Schema.Number).annotate({
+    description:
+      "The exit code once completed: 0 means success. null while running, or when a signal killed the command.",
+  }),
+  output: Schema.String.annotate({
+    description:
+      "Combined stdout and stderr as one string; there are no separate stdout or stderr fields. Parse it in your script and return only what the task needs.",
+  }),
+  outputPath: Schema.optionalKey(Schema.String).annotate({
+    description: "File with the full output when output was truncated",
+  }),
+  signal: Schema.optionalKey(Schema.String).annotate({ description: "The signal that killed the command, if any" }),
+  shellID: Schema.optionalKey(Schema.String).annotate({
+    description: "Set while the command is running in the background",
+  }),
+  wallTimeSeconds: Schema.Number,
+})
 
 type Output = ReturnType<typeof ShellResult.output> & {
   status: "completed" | "running"
@@ -101,7 +133,12 @@ const resultMessages = (output: Output, timeout?: number) => {
 const toolResult = (output: Output, timeout: number, codeMode: boolean) => {
   return {
     output: {
-      ...Struct.omit(output, ["exit", "status", "truncated", "timeout", "killed"]),
+      ...Struct.omit(
+        output,
+        codeMode
+          ? ["exit", "status", "truncated", "timeout", "killed", "pid"]
+          : ["exit", "status", "truncated", "timeout", "killed"],
+      ),
       exitCode: output.exit ?? null,
       ...(codeMode ? { status: output.status } : {}),
     },
@@ -363,9 +400,10 @@ export const Plugin = {
         const codeMode = flags.resolve(loaded.entries).full_codemode.enabled
         editor.add({
           name,
-          // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool.
-          options: { codemode: codeMode },
-          description: description(),
+          // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool, and is
+          // pinned so the Code Mode catalog always lists it, however many other tools there are.
+          options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
+          description: codeMode ? CODE_MODE_DESCRIPTION : description(),
           input: codeMode ? CodeModeInput : Input,
           output: codeMode ? CodeModeOutput : StructuredOutput,
           execute: (input, context) => {
