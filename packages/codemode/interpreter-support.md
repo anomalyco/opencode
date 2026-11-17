@@ -632,6 +632,9 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       `code`, `errno`, `syscall`, and `path` reach the program and `err.code === "ENOENT"` works. `stack` stays on its
       own side, no field may shadow an Error method, and a field that cannot cross (a class instance, a function) is
       left behind rather than replacing the error.
+- [x] A synchronous global that returns an Effect blocks the program until the Effect completes and returns its
+      value or throws its error, as `fs.readFileSync` does. An `async` global (or one marked `Extension.async`) hands
+      the program a promise instead.
 - [ ] Program functions as arguments to extension code (callbacks such as `forEach`).
 - [ ] Host classes. Stateful host objects are expressed as closures; a declared method table would be the next
       step if `new X()` in a program is ever needed.
