@@ -54,7 +54,7 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
         preserve_parens: false,
         ..ParseOptions::default()
     };
-    let parsed = Parser::new(&allocator, source, SourceType::mjs())
+    let mut parsed = Parser::new(&allocator, source, SourceType::mjs())
         .with_options(options)
         .parse();
     if let Some(d) = parsed.diagnostics.errors().next() {
@@ -67,6 +67,9 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
             offset: None,
         });
     }
+    // Parsed as a module for top-level `await`, but bound as a script, like the reference: top-level functions and
+    // `var`s share one scope, so redeclaring one as the other is allowed.
+    parsed.program.source_type = SourceType::script();
     let program = &parsed.program;
     let mut depth = DepthCheck {
         depth: 0,
@@ -237,6 +240,10 @@ struct Compiler<'a, 's> {
     pos: u32,
     chains: Vec<Vec<usize>>,
     switch_scopes: FxHashSet<ScopeId>,
+    /// Bindings that assignment cannot change: a named function expression's own name.
+    readonly: FxHashSet<SymbolId>,
+    /// Parameters of a function with parameter expressions, which are in their TDZ until bound in order.
+    param_tdz: FxHashSet<SymbolId>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -266,6 +273,8 @@ impl<'a, 's> Compiler<'a, 's> {
             pos: 0,
             chains: Vec::new(),
             switch_scopes: FxHashSet::default(),
+            readonly: FxHashSet::default(),
+            param_tdz: FxHashSet::default(),
         }
     }
 
@@ -382,6 +391,7 @@ impl<'a, 's> Compiler<'a, 's> {
             Op::YieldStar(_) => Op::YieldStar(target),
             Op::DelegateCall(s, k, _) => Op::DelegateCall(s, k, target),
             Op::DelegateResult(_) => Op::DelegateResult(target),
+            Op::AsyncClose(s, _) => Op::AsyncClose(s, target),
             other => other,
         };
     }
@@ -473,8 +483,9 @@ impl<'a, 's> Compiler<'a, 's> {
         } else {
             Store::Local(param_slot.unwrap_or_else(|| self.new_local()))
         };
-        let tdz = flags.intersects(SymbolFlags::BlockScopedVariable | SymbolFlags::ConstVariable)
-            && !flags.contains(SymbolFlags::Function);
+        let tdz = (flags.intersects(SymbolFlags::BlockScopedVariable | SymbolFlags::ConstVariable)
+            && !flags.contains(SymbolFlags::Function))
+            || self.param_tdz.contains(&s);
         let decl_end = self.decl_end(s);
         let name = self.atoms.intern(self.scoping.symbol_name(s));
         self.syms.insert(
@@ -706,7 +717,7 @@ impl<'a, 's> Compiler<'a, 's> {
     fn store_symbol(&mut self, s: SymbolId, mode: BindMode, ref_pos: u32) -> R<()> {
         let info = self.symbol_info(s)?;
         if mode == BindMode::Assign {
-            if info.is_const {
+            if info.is_const || self.readonly.contains(&s) {
                 self.emit(Op::Pop);
                 self.emit(Op::ThrowConst(info.name));
                 return Ok(());
@@ -916,13 +927,21 @@ impl<'a, 's> Compiler<'a, 's> {
         if params.rest.is_some() {
             self.f().needs_extra = true;
         }
-        // Simple parameters bind straight to their argument slot.
+        // Simple parameters bind straight to their argument slot. With parameter expressions, every parameter is
+        // bound in order instead, so one read before its turn is in its TDZ.
+        let simple = params.rest.is_none()
+            && params.items.iter().all(|p| {
+                p.initializer.is_none() && matches!(p.pattern, BindingPattern::BindingIdentifier(_))
+            });
         for (i, p) in params.items.iter().enumerate() {
-            if p.initializer.is_none()
-                && let BindingPattern::BindingIdentifier(id) = &p.pattern
+            if let BindingPattern::BindingIdentifier(id) = &p.pattern
                 && let Some(s) = id.symbol_id.get()
             {
-                self.declare_symbol(s, Some(i as u32), false);
+                if simple {
+                    self.declare_symbol(s, Some(i as u32), false);
+                } else {
+                    self.param_tdz.insert(s);
+                }
             }
         }
         let syms = match spec.scope {
@@ -931,7 +950,7 @@ impl<'a, 's> Compiler<'a, 's> {
         };
         self.init_scope(&syms);
         for (i, p) in params.items.iter().enumerate() {
-            if p.initializer.is_none()
+            if simple
                 && let BindingPattern::BindingIdentifier(id) = &p.pattern
                 && let Some(s) = id.symbol_id.get()
             {
@@ -959,6 +978,7 @@ impl<'a, 's> Compiler<'a, 's> {
         if let Some(s) = spec.self_sym
             && self.syms.get(&s).is_some_and(|i| i.depth == self.depth())
         {
+            self.readonly.insert(s);
             self.emit(Op::Callee);
             self.store_symbol(s, BindMode::Init, 0)?;
         }
@@ -1439,6 +1459,12 @@ impl<'a, 's> Compiler<'a, 's> {
                 _ => None,
             })
             .collect();
+        // The first iteration gets its own copy too, so closures made by the initializer keep the initial binding.
+        for c in &per_iteration {
+            self.emit(Op::GetCell(*c));
+            self.emit(Op::NewCell(*c));
+            self.emit(Op::SetCell(*c));
+        }
         let top = self.here();
         let exit = match &f.test {
             Some(t) => {
@@ -1494,7 +1520,8 @@ impl<'a, 's> Compiler<'a, 's> {
             Some(scope) => self.declare_scope(scope),
             None => Vec::new(),
         };
-        self.expr(&f.right)?;
+        self.init_scope(&syms);
+        self.loop_head_expr(&f.right, &syms)?;
         let slot = self.new_local();
         self.emit(Op::GetIter(slot));
         let handler = self.emit(Op::PushFinally(0));
@@ -1528,7 +1555,8 @@ impl<'a, 's> Compiler<'a, 's> {
             Some(scope) => self.declare_scope(scope),
             None => Vec::new(),
         };
-        self.expr(&f.right)?;
+        self.init_scope(&syms);
+        self.loop_head_expr(&f.right, &syms)?;
         let slot = self.new_local();
         self.emit(Op::GetAsyncIter(slot));
         let top = self.here();
@@ -1567,12 +1595,35 @@ impl<'a, 's> Compiler<'a, 's> {
         Ok(())
     }
 
+    /// The iterated expression of a `for...of`/`for...in` head, which sees the loop's own bindings in their TDZ
+    /// although it comes after them in the source.
+    fn loop_head_expr(&mut self, e: &'a Expression<'a>, syms: &[SymbolId]) -> R<()> {
+        let mut forced = Vec::new();
+        for s in syms {
+            if let Some(info) = self.syms.get_mut(s)
+                && info.tdz
+                && !info.switch_scoped
+            {
+                info.switch_scoped = true;
+                forced.push(*s);
+            }
+        }
+        let r = self.expr(e);
+        for s in forced {
+            if let Some(info) = self.syms.get_mut(&s) {
+                info.switch_scoped = false;
+            }
+        }
+        r
+    }
+
     fn for_in(&mut self, f: &'a ForInStatement<'a>, labels: Vec<&'a str>) -> R<()> {
         let syms = match f.scope_id.get() {
             Some(scope) => self.declare_scope(scope),
             None => Vec::new(),
         };
-        self.expr(&f.right)?;
+        self.init_scope(&syms);
+        self.loop_head_expr(&f.right, &syms)?;
         let slot = self.new_local();
         self.emit(Op::ForIn(slot));
         let top = self.here();
