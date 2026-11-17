@@ -1,7 +1,8 @@
 //! The VM's side of host work: tool calls, the `search` built-in, extension globals and modules, and the host
 //! futures a run has in flight. Arguments cross out and results cross in as copies.
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::task::Poll;
 
 use rustc_hash::FxHashMap;
@@ -82,8 +83,9 @@ pub enum Settlement {
     Json(Json),
     Undefined,
     Failure(Box<Failed>),
-    /// An extension call's value, or what it threw, with the label that names it in conversion errors.
-    Host(Box<(HostResult, String)>),
+    /// An extension call's value, or what it threw, with the label that names it in conversion errors and the
+    /// extension it came from.
+    Host(Box<(HostResult, String, String)>),
     /// The call interrupts the whole run.
     Interrupted,
 }
@@ -102,6 +104,22 @@ impl Settlement {
 }
 
 impl Failed {
+    pub fn parts(&self) -> (DiagnosticKind, &str, &[String]) {
+        (self.kind, &self.message, &self.suggestions)
+    }
+
+    pub fn from_parts(
+        kind: DiagnosticKind,
+        message: String,
+        suggestions: Vec<String>,
+    ) -> Box<Self> {
+        Box::new(Failed {
+            kind,
+            message,
+            suggestions,
+        })
+    }
+
     #[cold]
     fn new(kind: DiagnosticKind, message: String) -> Box<Self> {
         Box::new(Failed {
@@ -115,31 +133,70 @@ impl Failed {
 /// A host function the program holds: what it calls, the path that names it, and whether it is an entry point,
 /// whose calls fire the extension hooks.
 pub struct FnEntry {
-    f: HostFunction,
-    label: String,
-    extension: String,
-    entry: bool,
+    pub(crate) f: HostFunction,
+    pub(crate) label: String,
+    pub(crate) extension: String,
+    pub(crate) entry: bool,
+}
+
+/// A host call in flight, as a suspend sees it.
+pub struct Call {
+    pub promise: Id,
+    pub call: u64,
+    /// How a suspend names it: `tools.x.y`, `search`, `fetch`.
+    pub path: String,
+    /// The tool's canonical path, for a tool call.
+    pub tool: String,
+    pub input: Json,
+    pub kind: CallKind,
+    /// Set when a suspend detaches the call, so its `tool.after` does not fire and its work is not cancelled.
+    pub detached: Arc<AtomicBool>,
+}
+
+pub enum CallKind {
+    /// A suspend is refused while it runs.
+    Blocking,
+    /// Interrupted on suspend and run again on resume.
+    Idempotent,
+    /// A durable call: its data once `start` returned it; a suspend is refused before that.
+    Durable(Arc<Mutex<Option<Json>>>),
+}
+
+/// A host result whose functions an extension's `snapshot` hooks can bring back: the value as the host returned it,
+/// and the range of `functions` made from it, in the order `from_host` visits them.
+pub struct ResultRoot {
+    pub extension: String,
+    pub value: HostValue,
+    pub functions: std::ops::Range<usize>,
 }
 
 /// The host state of one run.
 pub struct RunHost<'rt> {
     pub setup: &'rt Setup,
     /// Names the run's host calls; made on first use when the host gave none.
-    run_id: crate::tool::RunId,
-    next_call: u64,
+    pub(crate) run_id: crate::tool::RunId,
+    pub(crate) next_call: u64,
     /// The context handed to synchronous tools, its call id set for each call.
     ctx: Option<ToolContext>,
     pub tasks: Tasks<'rt, Settlement>,
-    functions: Vec<FnEntry>,
+    pub(crate) functions: Vec<FnEntry>,
+    /// Host calls in flight.
+    pub calls: Vec<Call>,
+    /// Results whose functions survive a suspend through their extension's hooks.
+    pub results: Vec<ResultRoot>,
+    /// Calls a resumed run starts again when it begins.
+    pub restarts: Vec<(Id, String, Json, u64, Start)>,
+    /// What a suspend asks of the run, shared with its [`Suspender`](crate::Suspender)s.
+    pub shared: Arc<crate::program::Shared>,
     /// Suggestions attached to failure values, by error object.
     pub suggestions: FxHashMap<Id, Vec<String>>,
-    promise_like: Option<Id>,
+    pub(crate) promise_like: Option<Id>,
     /// Whether a call interrupted the run.
     pub interrupted: bool,
     /// Rejected promises nothing handled yet, with their reasons, for the run's warnings.
     pub unhandled: Vec<(Id, Value)>,
-    modules: FxHashMap<String, Value>,
-    namespaces: FxHashMap<String, Value>,
+    pub(crate) modules: FxHashMap<String, Value>,
+    pub(crate) namespaces: FxHashMap<String, Value>,
 }
 
 impl<'rt> RunHost<'rt> {
@@ -151,6 +208,10 @@ impl<'rt> RunHost<'rt> {
             next_call: 0,
             tasks: Tasks::default(),
             functions: Vec::new(),
+            calls: Vec::new(),
+            results: Vec::new(),
+            restarts: Vec::new(),
+            shared: Arc::default(),
             suggestions: FxHashMap::default(),
             promise_like: None,
             interrupted: false,
@@ -180,6 +241,37 @@ impl<'rt> RunHost<'rt> {
         ToolContext::new(self.run_id(), id)
     }
 
+    /// The key of the call with this id.
+    pub fn key(&self, call: u64) -> String {
+        ToolContext::new(self.run_id.clone(), call).key()
+    }
+
+    /// A call settled: it is no longer in flight.
+    pub fn settled(&mut self, promise: Id) {
+        if let Some(i) = self.calls.iter().position(|c| c.promise == promise) {
+            self.calls.swap_remove(i);
+        }
+    }
+
+    /// Stops durable work still running when the run ends or is interrupted for real; a suspend detaches it first.
+    pub fn cancel_durable(&mut self) {
+        let setup = self.setup;
+        for call in std::mem::take(&mut self.calls) {
+            let CallKind::Durable(data) = &call.kind else {
+                continue;
+            };
+            if call.detached.load(Ordering::Relaxed) {
+                continue;
+            }
+            let data = data.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            if let (Some(data), Some(tool)) = (data, setup.registry.get(&call.tool))
+                && let Execute::Durable(d) = &tool.execute
+            {
+                block_on((d.cancel)(data));
+            }
+        }
+    }
+
     /// The shared context for a synchronous call, without a reference count change per call.
     fn sync_context(&mut self, call: u64) -> &ToolContext {
         if self.ctx.is_none() {
@@ -188,6 +280,12 @@ impl<'rt> RunHost<'rt> {
         let ctx = self.ctx.as_mut().expect("context");
         ctx.call = call;
         ctx
+    }
+}
+
+impl Drop for RunHost<'_> {
+    fn drop(&mut self) {
+        self.cancel_durable();
     }
 }
 
@@ -287,7 +385,10 @@ fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: &[Value]) {
         && hooks.tool_after.is_none()
         && let Execute::Sync(f) = &admitted.tool.execute
     {
+        let shared = vm.host.shared.clone();
+        shared.enter_sync(&vm.host, admitted.call, tool_expression(path));
         let raw = f(admitted.input, vm.host.sync_context(admitted.call));
+        shared.leave_sync();
         let s = finish(path, admitted.tool, raw);
         if let Settlement::Interrupted = s {
             interrupt(vm);
@@ -295,10 +396,76 @@ fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: &[Value]) {
         vm.inbox.push_back((p, s));
         return;
     }
-    let ctx = ToolContext::new(vm.host.run_id(), admitted.call);
-    let future = Box::pin(hooked_tool(hooks, path.to_owned(), admitted, ctx));
-    if let Poll::Ready(s) = vm.host.tasks.spawn(p, future) {
-        vm.inbox.push_back((p, s));
+    spawn_tool(
+        vm,
+        p,
+        path,
+        admitted.tool,
+        admitted.input,
+        admitted.call,
+        Start::Call,
+    );
+}
+
+/// How a tool call's future begins: a new call, an idempotent call run again on resume, or a started durable call
+/// reconnected to its work through its data.
+pub enum Start {
+    Call,
+    Again,
+    Wait(Json),
+}
+
+/// Runs a tool call as a host future, recorded as in flight while it runs.
+pub fn spawn_tool<'rt>(
+    vm: &mut Vm<'rt>,
+    p: Id,
+    path: &str,
+    tool: &'rt Tool,
+    input: Json,
+    call: u64,
+    start: Start,
+) {
+    let setup = vm.host.setup;
+    let hooks = &setup.hooks;
+    let detached = Arc::new(AtomicBool::new(false));
+    let kind = match &tool.execute {
+        Execute::Idempotent(_) => CallKind::Idempotent,
+        Execute::Durable(_) => CallKind::Durable(Arc::new(Mutex::new(match &start {
+            Start::Wait(data) => Some(data.clone()),
+            _ => None,
+        }))),
+        _ => CallKind::Blocking,
+    };
+    let phase = match &kind {
+        CallKind::Durable(data) => Some(data.clone()),
+        _ => None,
+    };
+    let ctx = ToolContext::new(vm.host.run_id(), call);
+    let a = Admitted {
+        tool,
+        input: input.clone(),
+        call,
+    };
+    let future = Box::pin(hooked_tool(
+        hooks,
+        path.to_owned(),
+        a,
+        ctx,
+        detached.clone(),
+        phase,
+        start,
+    ));
+    match vm.host.tasks.spawn(p, future) {
+        Poll::Ready(s) => vm.inbox.push_back((p, s)),
+        Poll::Pending => vm.host.calls.push(Call {
+            promise: p,
+            call,
+            path: tool_expression(path),
+            tool: path.to_owned(),
+            input,
+            kind,
+            detached,
+        }),
     }
 }
 
@@ -407,10 +574,11 @@ fn finish(name: &str, tool: &Tool, raw: Result<Json, crate::ToolError>) -> Settl
     }
 }
 
-/// Runs `tool.after` as interrupted if the call is dropped while its tool runs.
+/// Runs `tool.after` as interrupted if the call is dropped while its tool runs, unless a suspend detached it.
 struct AfterGuard<'h> {
     hooks: &'h Hooks,
     call: Option<ToolInvocation>,
+    detached: Arc<AtomicBool>,
 }
 
 impl AfterGuard<'_> {
@@ -431,19 +599,32 @@ impl AfterGuard<'_> {
 
 impl Drop for AfterGuard<'_> {
     fn drop(&mut self) {
+        if self.detached.load(Ordering::Relaxed) {
+            return;
+        }
         if let (Some(after), Some(call)) = (&self.hooks.tool_after, self.call.take()) {
             after(&call, CallResult::Interrupted);
         }
     }
 }
 
-async fn hooked_tool(hooks: &Hooks, name: String, a: Admitted<'_>, ctx: ToolContext) -> Settlement {
+async fn hooked_tool(
+    hooks: &Hooks,
+    name: String,
+    a: Admitted<'_>,
+    ctx: ToolContext,
+    detached: Arc<AtomicBool>,
+    phase: Option<Arc<Mutex<Option<Json>>>>,
+    start: Start,
+) -> Settlement {
     let call = ToolInvocation {
         name: name.clone(),
         input: a.input.clone(),
         key: ctx.key(),
     };
-    if let Some(before) = &hooks.tool_before
+    // A durable call reconnecting on resume already passed its hook.
+    if !matches!(start, Start::Wait(_))
+        && let Some(before) = &hooks.tool_before
         && let Err(e) = before(&call).await
     {
         return Settlement::failure(DiagnosticKind::ToolFailure, e.message);
@@ -451,10 +632,31 @@ async fn hooked_tool(hooks: &Hooks, name: String, a: Admitted<'_>, ctx: ToolCont
     let guard = AfterGuard {
         hooks,
         call: Some(call),
+        detached,
     };
     let raw = match &a.tool.execute {
         Execute::Sync(f) => f(a.input, &ctx),
-        Execute::Async(f) => f(a.input, ctx).await,
+        Execute::Async(f) | Execute::Idempotent(f) => f(a.input, ctx).await,
+        Execute::Durable(d) => {
+            let data = match start {
+                Start::Wait(data) => Ok(data),
+                _ => (d.start)(a.input, ctx.clone()).await,
+            };
+            match data {
+                Ok(data) => {
+                    if let Some(phase) = &phase {
+                        *phase.lock().unwrap_or_else(|e| e.into_inner()) = Some(data.clone());
+                    }
+                    let r = (d.wait)(data, ctx).await;
+                    // Finished: there is nothing left to cancel.
+                    if let Some(phase) = &phase {
+                        *phase.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    }
+                    r
+                }
+                Err(e) => Err(e),
+            }
+        }
     };
     let s = finish(&name, a.tool, raw);
     guard.end(&s);
@@ -593,11 +795,11 @@ pub fn settle(vm: &mut Vm, p: Id, s: Settlement) {
             vm.reject(p, e);
         }
         Settlement::Host(host) => match *host {
-            (Ok(v), label) => match from_host(vm, &v, &label, None, 0) {
+            (Ok(v), label, extension) => match result_from_host(vm, v, &label, &extension) {
                 Ok(v) => vm.fulfill(p, v),
                 Err(e) => vm.reject(p, e),
             },
-            (Err(thrown), label) => {
+            (Err(thrown), label, _) => {
                 let e = from_host(vm, &thrown, &label, None, 0).unwrap_or_else(|e| e);
                 vm.reject(p, e);
             }
@@ -654,7 +856,10 @@ fn run_search(vm: &mut Vm, args: &[Value]) -> Result<Json, Box<Failed>> {
     };
     let input = decode(vm, "search", &search::input_schema(), None, &args, true)?;
     admit_call(vm, "search", &input)?;
-    let key = vm.host.context().key();
+    let ctx = vm.host.context();
+    let key = ctx.key();
+    let shared = vm.host.shared.clone();
+    shared.enter_sync(&vm.host, ctx.call, "search".into());
     let hooks = &setup.hooks;
     let call = ToolInvocation {
         name: "search".into(),
@@ -664,10 +869,12 @@ fn run_search(vm: &mut Vm, args: &[Value]) -> Result<Json, Box<Failed>> {
     if let Some(before) = &hooks.tool_before
         && let Err(e) = block_on(before(&call))
     {
+        shared.leave_sync();
         return Err(Failed::new(DiagnosticKind::ToolFailure, e.message));
     }
     let registry = &setup.registry;
     let result = search::search(registry.entries(), registry.word_index(), &input);
+    shared.leave_sync();
     if let Some(after) = &hooks.tool_after {
         after(&call, CallResult::Success(&result));
     }
@@ -1028,6 +1235,58 @@ fn from_host(
     })
 }
 
+/// A host call's result copied in. When its extension has `snapshot` hooks and the value holds functions, the value
+/// is kept so a suspend can save them.
+fn result_from_host(
+    vm: &mut Vm,
+    v: HostValue,
+    label: &str,
+    extension: &str,
+) -> Result<Value, Value> {
+    let start = vm.host.functions.len();
+    let out = from_host(vm, &v, label, None, 0);
+    let end = vm.host.functions.len();
+    let hooked = vm
+        .host
+        .setup
+        .extensions
+        .iter()
+        .any(|e| e.name() == extension && e.snapshot_hooks().is_some());
+    if end > start && hooked {
+        vm.host.results.push(ResultRoot {
+            extension: extension.to_owned(),
+            value: v,
+            functions: start..end,
+        });
+    }
+    out
+}
+
+/// Natives the host makes, which a snapshot names like the built-ins'.
+pub fn snapshot_natives() -> [crate::vm::NativeFn; 4] {
+    [
+        search_native,
+        require_native,
+        import_native,
+        extension_native,
+    ]
+}
+
+/// A function the run lost on resume: calling it throws.
+pub fn lost_function(name: &str) -> HostFunction {
+    let message = format!(
+        "The function {name} came from the host and was lost when the run was suspended; get it again after resuming."
+    );
+    HostFunction::new(name, 0, move |_| {
+        Err(HostValue::Error(Box::new(HostError {
+            name: "TypeError".into(),
+            message: message.clone(),
+            cause: None,
+            fields: Vec::new(),
+        })))
+    })
+}
+
 /// A host function as a program function, at `label`. Inside a global object, it is an entry point.
 fn wrap(vm: &mut Vm, f: &HostFunction, label: &str, entry: Option<(&str, bool)>) -> Value {
     let index = vm.host.functions.len();
@@ -1057,6 +1316,7 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
         entry.extension.clone(),
         entry.entry,
     );
+    let extension_name = extension.clone();
     let mut host_args = Vec::with_capacity(args.len());
     for (i, a) in args.iter().enumerate() {
         let mut seen = Vec::new();
@@ -1077,29 +1337,40 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
     });
     match &f.body {
         Body::Sync(body) => {
+            let shared = vm.host.shared.clone();
+            let call_id = vm.host.next_call();
+            shared.enter_sync(&vm.host, call_id, label.clone());
             if let (Some(call), Some(before)) = (&invocation, &hooks.extension_before)
                 && let Err(e) = block_on(before(call))
             {
+                shared.leave_sync();
                 let thrown = HostValue::Error(Box::new(e));
                 return Err(from_host(vm, &thrown, &label, None, 0).unwrap_or_else(|e| e));
             }
             let result = body(host_args);
+            shared.leave_sync();
             if let (Some(call), Some(after)) = (&invocation, &hooks.extension_after) {
                 report(after.as_ref(), call, &result);
             }
             match result {
-                Ok(v) => from_host(vm, &v, &label, None, 0),
+                Ok(v) => result_from_host(vm, v, &label, &extension_name),
                 Err(thrown) => Err(from_host(vm, &thrown, &label, None, 0).unwrap_or_else(|e| e)),
             }
         }
         Body::Async(body) => {
             let p = vm.new_promise();
             let body = body.clone();
+            let call_id = vm.host.next_call();
+            let path = label.clone();
             let future: BoxFuture<'_, Settlement> = Box::pin(async move {
                 if let (Some(call), Some(before)) = (&invocation, &hooks.extension_before)
                     && let Err(e) = before(call).await
                 {
-                    return Settlement::Host(Box::new((Err(HostValue::Error(Box::new(e))), label)));
+                    return Settlement::Host(Box::new((
+                        Err(HostValue::Error(Box::new(e))),
+                        label,
+                        extension_name,
+                    )));
                 }
                 let guard = ExtensionGuard {
                     hooks,
@@ -1107,10 +1378,19 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
                 };
                 let result = body(host_args).await;
                 guard.end(&result);
-                Settlement::Host(Box::new((result, label)))
+                Settlement::Host(Box::new((result, label, extension_name)))
             });
-            if let Poll::Ready(s) = vm.host.tasks.spawn(p, future) {
-                vm.inbox.push_back((p, s));
+            match vm.host.tasks.spawn(p, future) {
+                Poll::Ready(s) => vm.inbox.push_back((p, s)),
+                Poll::Pending => vm.host.calls.push(Call {
+                    promise: p,
+                    call: call_id,
+                    path,
+                    tool: String::new(),
+                    input: Json::Null,
+                    kind: CallKind::Blocking,
+                    detached: Arc::new(AtomicBool::new(false)),
+                }),
             }
             Ok(Value::Obj(p))
         }

@@ -904,8 +904,8 @@ fn u_reduce_right(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 pub struct Decoder {
     pub fatal: bool,
     pub ignore_bom: bool,
-    queued: Vec<u8>,
-    seen: bool,
+    pub(crate) queued: Vec<u8>,
+    pub(crate) seen: bool,
 }
 
 fn encoder_ctor(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {

@@ -209,7 +209,12 @@ impl<'rt> Vm<'rt> {
                 }
                 Ok(())
             }
-            Reaction::Await(c) => self.resume_coroutine(c, outcome),
+            Reaction::Await(c) => {
+                self.resumable_run = true;
+                let r = self.resume_coroutine(c, outcome);
+                self.resumable_run = false;
+                r
+            }
             Reaction::Resolve(target) => {
                 self.settle(target, outcome);
                 Ok(())
@@ -243,7 +248,12 @@ impl<'rt> Vm<'rt> {
                 }
                 Ok(())
             }
-            Reaction::AwaitGen(g) => self.run_async_generator(g, REQ_NEXT, outcome, true),
+            Reaction::AwaitGen(g) => {
+                self.resumable_run = true;
+                let r = self.run_async_generator(g, REQ_NEXT, outcome, true);
+                self.resumable_run = false;
+                r
+            }
             Reaction::GenReturn(g) => {
                 self.async_generator_finish(g, outcome);
                 Ok(())
@@ -345,6 +355,11 @@ impl<'rt> Vm<'rt> {
             self.resolve_promise(promise, arr);
         }
     }
+}
+
+/// Natives promises make at run time, which a snapshot names like the built-ins'.
+pub fn snapshot_natives() -> [crate::vm::NativeFn; 2] {
+    [resolver_resolve, resolver_reject]
 }
 
 fn resolver_resolve(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Result<Value, Value> {

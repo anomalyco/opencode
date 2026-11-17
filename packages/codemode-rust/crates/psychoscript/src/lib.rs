@@ -23,6 +23,7 @@ mod promise;
 mod run;
 mod schema;
 mod search;
+mod snapshot;
 mod strings;
 #[cfg(feature = "test262")]
 #[doc(hidden)]
@@ -31,11 +32,12 @@ mod tool;
 mod value;
 mod vm;
 
-pub use extension::{Extension, HostError, HostFunction, HostValue};
+pub use extension::{Extension, HostError, HostFunction, HostValue, SnapshotHooks};
 pub use hooks::{CallResult, ExtensionInvocation, Hooks, ToolInvocation};
-pub use program::Program;
+pub use program::{Program, RunOutcome, RunningCall, SuspendError, Suspended, Suspender};
 pub use schema::Schema;
 pub use serde_json::Value as Json;
+pub use snapshot::{Snapshot, SnapshotError, from_bytes, to_bytes};
 pub use tool::{
     BoxFuture, ConfigError, Execute, Interrupted, Tool, ToolContext, ToolDescription, ToolError,
     tool_expression,
@@ -268,6 +270,19 @@ impl Runtime {
         run_id: Option<&str>,
     ) -> Program<'a> {
         Program::new(self, code, bindings, run_id)
+    }
+
+    /// A program continuing a suspended run, from its state or from [`to_bytes`]. It keeps the limits it was saved
+    /// with. Fails with a [`SnapshotError`] when the state was saved by another build, with other extensions, from a
+    /// source that no longer compiles the same, or is malformed.
+    pub fn resume(&self, state: &Snapshot) -> Result<Program<'_>, SnapshotError> {
+        Program::resume(self, state)
+    }
+
+    /// [`Runtime::resume`] from bytes.
+    pub fn resume_bytes(&self, bytes: &[u8]) -> Result<Program<'_>, SnapshotError> {
+        let state = from_bytes(bytes)?;
+        Program::resume(self, &state)
     }
 
     pub(crate) fn setup(&self) -> &Setup {

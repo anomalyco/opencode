@@ -26,8 +26,8 @@ const FUEL: u32 = 20_000;
 
 #[derive(Clone, Copy)]
 pub struct Handler {
-    pc: u32,
-    sp: u32,
+    pub(crate) pc: u32,
+    pub(crate) sp: u32,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -88,6 +88,9 @@ pub struct SavedFrame {
 pub enum Exit {
     Return(Slot),
     Yield(Slot),
+    /// A suspend stopped the run at a loop back-edge; its frames stay on the job stack, so it can be saved there and
+    /// continued later.
+    Suspend,
 }
 
 pub struct Coroutine {
@@ -234,6 +237,20 @@ pub struct Vm<'rt> {
     arg_pool: Vec<Vec<Value>>,
     pub char_strs: Vec<StrId>,
     pub rng: u64,
+    /// A suspend (or a round trip) asks the run to stop at its next safe point.
+    pub suspend_wanted: bool,
+    /// The run stopped for a suspend: at a job boundary, or with frames on the job stack.
+    pub suspended: bool,
+    /// For the round-trip test mode: back-edges between checkpoints, 0 when off.
+    pub roundtrip_every: u32,
+    run_depth: u32,
+    /// Set by a driver entry point before it runs bytecode that may stop at a back-edge and continue from its
+    /// frames later: the program's body, a resumed `await`.
+    pub resumable_run: bool,
+    /// What a fresh runtime makes before the program runs, which a snapshot saves only the changes to.
+    pub snapshot_base: crate::snapshot::Base,
+    /// Restored from a snapshot: the program's body already started.
+    pub resumed: bool,
 }
 
 impl<'rt> Vm<'rt> {
@@ -301,6 +318,13 @@ impl<'rt> Vm<'rt> {
             arg_pool: Vec::new(),
             char_strs,
             rng: seed | 1,
+            suspend_wanted: false,
+            suspended: false,
+            roundtrip_every: 0,
+            run_depth: 0,
+            resumable_run: false,
+            snapshot_base: crate::snapshot::Base::default(),
+            resumed: false,
         }
     }
 
@@ -473,9 +497,49 @@ impl<'rt> Vm<'rt> {
         self.fuel = self.fuel.saturating_sub(1);
         if self.fuel == 0 {
             self.fuel = FUEL;
+            self.checkpoint();
             return self.check_time();
         }
         Ok(())
+    }
+
+    pub fn handlers_ref(&self) -> &Vec<Handler> {
+        &self.handlers
+    }
+
+    pub fn handlers_mut(&mut self) -> &mut Vec<Handler> {
+        &mut self.handlers
+    }
+
+    pub fn template_objs_ref(&self) -> &Vec<Option<Id>> {
+        &self.template_objs
+    }
+
+    pub fn template_objs_mut(&mut self) -> &mut Vec<Option<Id>> {
+        &mut self.template_objs
+    }
+
+    /// Notes a suspend request, or a round trip that is due, every few steps.
+    #[cold]
+    fn checkpoint(&mut self) {
+        if self.roundtrip_every > 0 {
+            self.fuel = self.roundtrip_every;
+            self.suspend_wanted = true;
+        }
+        if self
+            .host
+            .shared
+            .requested
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            self.suspend_wanted = true;
+        }
+    }
+
+    /// Starts counting steps for the round-trip test mode.
+    pub fn start_roundtrip(&mut self, every: u32) {
+        self.roundtrip_every = every;
+        self.fuel = every;
     }
 
     pub fn check_time(&mut self) -> Result<(), Value> {
@@ -526,6 +590,7 @@ impl<'rt> Vm<'rt> {
             self.native_depth -= 1;
             return match r {
                 Ok(Exit::Return(v)) | Ok(Exit::Yield(v)) => Ok(v),
+                Ok(Exit::Suspend) => Ok(Slot::UNDEF),
                 Err(e) => Err(Slot::pack(e)),
             };
         }
@@ -559,6 +624,7 @@ impl<'rt> Vm<'rt> {
                 self.native_depth -= 1;
                 match r {
                     Ok(Exit::Return(v)) | Ok(Exit::Yield(v)) => Ok(v.get()),
+                    Ok(Exit::Suspend) => Ok(Value::Undef),
                     Err(e) => Err(e),
                 }
             }
@@ -1077,6 +1143,7 @@ impl<'rt> Vm<'rt> {
         };
         match r {
             Ok(Exit::Yield(y)) => Ok((y.get(), false)),
+            Ok(Exit::Suspend) => Ok((Value::Undef, false)),
             Ok(Exit::Return(v)) => Ok((v.get(), true)),
             Err(e) => Err(e),
         }
@@ -1223,6 +1290,26 @@ impl<'rt> Vm<'rt> {
     }
 
     pub fn run(&mut self) -> Result<Exit, Value> {
+        let resumable = std::mem::take(&mut self.resumable_run) && self.run_depth == 0;
+        self.run_depth += 1;
+        let r = self.run_frames(resumable);
+        self.run_depth -= 1;
+        r
+    }
+
+    /// Continues frames a suspend left on the job stack, as the entry point that started them would have.
+    pub fn continue_frames(&mut self) -> Result<(), Value> {
+        if self.frames.is_empty() {
+            return Ok(());
+        }
+        self.resumable_run = true;
+        let r = self.run();
+        self.resumable_run = false;
+        r.map(|_| ())
+    }
+
+    /// The dispatch loop. `resumable` lets a suspend stop it at a back-edge, leaving its frames for later.
+    fn run_frames(&mut self, resumable: bool) -> Result<Exit, Value> {
         'outer: loop {
             let fi = self.frames.len() - 1;
             let func = self.frames[fi].func.clone();
@@ -1883,6 +1970,11 @@ impl<'rt> Vm<'rt> {
                     Op::Jump(t) => {
                         if (t as usize) < pc {
                             tri!(self.tick());
+                            if self.suspend_wanted && resumable {
+                                self.frames[fi].pc = t as usize;
+                                self.suspended = true;
+                                return Ok(Exit::Suspend);
+                            }
                         }
                         pc = t as usize;
                     }
@@ -1927,6 +2019,11 @@ impl<'rt> Vm<'rt> {
                         if self.truthy(&v) {
                             if (t as usize) < pc {
                                 tri!(self.tick());
+                                if self.suspend_wanted && resumable {
+                                    self.frames[fi].pc = t as usize;
+                                    self.suspended = true;
+                                    return Ok(Exit::Suspend);
+                                }
                             }
                             pc = t as usize;
                         }
@@ -2445,6 +2542,19 @@ impl<'rt> Vm<'rt> {
     pub fn drive(&mut self) -> Result<(), Value> {
         loop {
             if self.outcome.is_some() {
+                return Ok(());
+            }
+            if self.suspended {
+                return Ok(());
+            }
+            if self.suspend_wanted
+                || self
+                    .host
+                    .shared
+                    .requested
+                    .load(std::sync::atomic::Ordering::Relaxed)
+            {
+                self.suspended = true;
                 return Ok(());
             }
             if self.fatal.is_some() {

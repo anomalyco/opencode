@@ -32,6 +32,14 @@ pub struct Props {
 const INDEX_THRESHOLD: usize = 12;
 
 impl Props {
+    pub fn from_items(items: Vec<Prop>) -> Self {
+        let mut props = Props::default();
+        for p in items {
+            props.push_new(p.key, p.value, p.flags);
+        }
+        props
+    }
+
     #[inline]
     pub fn find(&self, key: Atom) -> Option<usize> {
         if let Some(idx) = &self.index {
@@ -139,6 +147,23 @@ pub struct OrderedMap {
 }
 
 impl OrderedMap {
+    /// A map with these entries, tombstones (`None`) included, as a snapshot saved it.
+    pub fn restore(entries: Vec<Option<(Value, Value)>>, keys: Vec<Option<MapKey>>) -> Self {
+        let mut index = FxHashMap::default();
+        let mut live = 0;
+        for (i, k) in keys.into_iter().enumerate() {
+            if let Some(k) = k {
+                index.insert(k, i as u32);
+                live += 1;
+            }
+        }
+        OrderedMap {
+            entries,
+            index,
+            live,
+        }
+    }
+
     pub fn get(&self, key: MapKey) -> Option<Value> {
         let i = *self.index.get(&key)?;
         self.entries[i as usize].as_ref().map(|e| e.1)

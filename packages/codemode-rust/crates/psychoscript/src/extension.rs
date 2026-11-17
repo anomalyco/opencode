@@ -310,6 +310,25 @@ impl fmt::Debug for HostFunction {
 pub struct Extension {
     name: String,
     globals: Vec<(String, HostValue)>,
+    snapshot: Option<SnapshotHooks>,
+}
+
+/// An extension's `snapshot` hooks, which keep the functions inside its results across a suspend: `encode` turns a
+/// value one of its functions returned into plain data (JSON values), and `decode` turns that data back into a host
+/// value of the same shape.
+#[derive(Clone)]
+pub struct SnapshotHooks {
+    pub(crate) encode: Arc<SnapshotEncode>,
+    pub(crate) decode: Arc<SnapshotDecode>,
+}
+
+pub type SnapshotEncode = dyn Fn(&HostValue) -> Result<HostValue, HostError> + Send + Sync;
+pub type SnapshotDecode = dyn Fn(HostValue) -> HostValue + Send + Sync;
+
+impl fmt::Debug for SnapshotHooks {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SnapshotHooks")
+    }
 }
 
 impl Extension {
@@ -317,7 +336,26 @@ impl Extension {
         Self {
             name: name.into(),
             globals: Vec::new(),
+            snapshot: None,
         }
+    }
+
+    /// The `snapshot` hooks: without them, functions inside this extension's results are lost on resume, and calling
+    /// one throws a `TypeError`. A state saved with them resumes only where this extension has hooks too.
+    pub fn snapshot(
+        mut self,
+        encode: impl Fn(&HostValue) -> Result<HostValue, HostError> + Send + Sync + 'static,
+        decode: impl Fn(HostValue) -> HostValue + Send + Sync + 'static,
+    ) -> Self {
+        self.snapshot = Some(SnapshotHooks {
+            encode: Arc::new(encode),
+            decode: Arc::new(decode),
+        });
+        self
+    }
+
+    pub(crate) fn snapshot_hooks(&self) -> Option<&SnapshotHooks> {
+        self.snapshot.as_ref()
     }
 
     /// A global function.

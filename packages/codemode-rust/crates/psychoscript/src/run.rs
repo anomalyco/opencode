@@ -1,5 +1,6 @@
 //! Compiling a program, setting up its heap, built-ins and host globals, and copying its outcome out.
 
+use std::borrow::Cow;
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
 
@@ -111,15 +112,15 @@ pub fn random_run_id() -> String {
 /// Compiles a program and sets up its run, or the outcome when it does not compile.
 pub fn start<'a>(
     rt: &'a Runtime,
-    code: &'a str,
+    code: Cow<'a, str>,
     bindings: &serde_json::Map<String, Json>,
     run_id: Option<String>,
 ) -> Result<Box<Running<'a>>, Box<Outcome>> {
     let mut atoms = Strings::new();
-    let program = match compiler::compile(code, &mut atoms) {
+    let program = match compiler::compile(&code, &mut atoms) {
         Ok(p) => p,
         Err(e) => {
-            let location = e.offset.map(|o| line_col(code, o));
+            let location = e.offset.map(|o| line_col(&code, o));
             let message = format!("{}{}", e.message, suffix(location));
             return Err(Box::new(failed(Diagnostic {
                 kind: e.kind,
@@ -133,6 +134,8 @@ pub fn start<'a>(
     let mut vm = Vm::new(RunHost::new(setup, run_id), setup.limits, atoms);
     vm.setup();
     host::install(&mut vm, &program.globals);
+    crate::builtins::ensure_globals(&mut vm, &program.globals);
+    vm.snapshot_base = crate::snapshot::Base::of(&vm);
     for (k, v) in bindings {
         let val = convert::from_json(&mut vm, v);
         let a = vm.atoms.intern(k);
@@ -140,6 +143,54 @@ pub fn start<'a>(
     }
     vm.load(program);
     Ok(Box::new(Running::new(vm, code)))
+}
+
+/// A fresh run for a saved program: compiled and set up with the saved limits and no bindings, ready to be filled in.
+pub struct Resumed<'a> {
+    pub running: Box<Running<'a>>,
+    pub bytecode: String,
+}
+
+pub fn start_for_resume<'a>(
+    rt: &'a Runtime,
+    code: String,
+    run_id: Option<String>,
+    limits: crate::Limits,
+) -> Result<Resumed<'a>, crate::snapshot::SnapshotError> {
+    let mut atoms = Strings::new();
+    let program = compiler::compile(&code, &mut atoms).map_err(|_| {
+        crate::snapshot::SnapshotError::new(
+            "Source main does not compile in this build, so it can't resume.",
+        )
+    })?;
+    let bytecode = crate::snapshot::bytecode_hash(&program);
+    let setup = rt.setup();
+    let mut vm = Vm::new(RunHost::new(setup, run_id), limits, atoms);
+    vm.setup();
+    host::install(&mut vm, &program.globals);
+    crate::builtins::ensure_globals(&mut vm, &program.globals);
+    vm.snapshot_base = crate::snapshot::Base::of(&vm);
+    vm.load(program);
+    Ok(Resumed {
+        running: Box::new(Running::new(vm, Cow::Owned(code))),
+        bytecode,
+    })
+}
+
+/// The outcome reported for an interrupted run, to a suspend that asks after it.
+pub fn failed_interrupted() -> Outcome {
+    failed(diagnostic(
+        DiagnosticKind::ExecutionFailure,
+        crate::Interrupted.to_string(),
+    ))
+}
+
+/// What `Program::run` reports for a run a suspender stopped.
+pub fn failed_suspended() -> Outcome {
+    failed(diagnostic(
+        DiagnosticKind::ExecutionFailure,
+        "The run was suspended; run it with run_resumable to get its state.".into(),
+    ))
 }
 
 /// Runs the program's body to its first suspension.
@@ -154,7 +205,10 @@ pub fn call_main(vm: &mut Vm) {
             this: Value::Undef,
         })),
     )));
-    if let Err(e) = vm.call(&main, Value::Undef, &[])
+    vm.resumable_run = true;
+    let r = vm.call(&main, Value::Undef, &[]);
+    vm.resumable_run = false;
+    if let Err(e) = r
         && vm.outcome.is_none()
     {
         vm.outcome = Some(Err(e));
@@ -164,6 +218,7 @@ pub fn call_main(vm: &mut Vm) {
 /// The outcome of a run that ended: host work it left running is interrupted, then the result is copied out.
 pub fn finish(r: Running<'_>) -> Outcome {
     let Running { mut vm, code, .. } = r;
+    let code: &str = &code;
     vm.host.tasks.clear();
     let vm = &mut vm;
     let result = match (vm.fatal.clone(), vm.outcome.take()) {

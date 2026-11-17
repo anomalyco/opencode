@@ -102,12 +102,30 @@ pub type SyncExecute = dyn Fn(Json, &ToolContext) -> Result<Json, ToolError> + S
 pub type AsyncExecute =
     dyn Fn(Json, ToolContext) -> BoxFuture<'static, Result<Json, ToolError>> + Send + Sync;
 
+pub type CancelExecute = dyn Fn(Json) -> BoxFuture<'static, ()> + Send + Sync;
+
 #[derive(Clone)]
 pub enum Execute {
-    /// Runs to completion when the program calls it.
+    /// Runs to completion when the program calls it. A suspend is refused while it runs.
     Sync(Arc<SyncExecute>),
-    /// Starts when the program calls it; the program holds a promise until the future completes.
+    /// Starts when the program calls it; the program holds a promise until the future completes. A suspend is
+    /// refused while it runs.
     Async(Arc<AsyncExecute>),
+    /// Safe to run again: a suspend interrupts it without firing `tool.after`, and resume reruns it with the same key.
+    Idempotent(Arc<AsyncExecute>),
+    /// Work that outlives a suspended run, reconnected through its JSON data on resume.
+    Durable(Arc<Durable>),
+}
+
+/// The three parts of a durable tool, the counterpart of the reference's `Tool.durable({ start, wait, cancel })`.
+pub struct Durable {
+    /// Begins the work and returns its JSON data. A suspend is refused while it runs.
+    pub start: Arc<AsyncExecute>,
+    /// Connects to the running work through its data and waits for its output: right after `start`, and again
+    /// right when a resumed run starts.
+    pub wait: Arc<AsyncExecute>,
+    /// Stops the work when the run is interrupted for real or ends with it still running, never on a suspend.
+    pub cancel: Arc<CancelExecute>,
 }
 
 /// One schema-described tool, the counterpart of the reference's `Tool.make`.
@@ -143,6 +161,45 @@ impl Tool {
         Self::with(
             description,
             Execute::Async(Arc::new(move |input, ctx| Box::pin(execute(input, ctx)))),
+        )
+    }
+
+    /// A tool safe to run again, the reference's `Tool.idempotent`: a suspend that lands while it runs interrupts it
+    /// without firing `tool.after`, saves the call as queued, and reruns it on resume with the same key, without
+    /// counting it again against `max_tool_calls`.
+    pub fn idempotent<F>(
+        description: impl Into<String>,
+        execute: impl Fn(Json, ToolContext) -> F + Send + Sync + 'static,
+    ) -> Self
+    where
+        F: Future<Output = Result<Json, ToolError>> + Send + 'static,
+    {
+        Self::with(
+            description,
+            Execute::Idempotent(Arc::new(move |input, ctx| Box::pin(execute(input, ctx)))),
+        )
+    }
+
+    /// A durable tool, the reference's `Tool.durable`: `start(input)` returns JSON data, then `wait(data)` gives the
+    /// output; `cancel(data)` stops the work when the run is interrupted or ends without it, never on a suspend.
+    pub fn durable<S, W, C>(
+        description: impl Into<String>,
+        start: impl Fn(Json, ToolContext) -> S + Send + Sync + 'static,
+        wait: impl Fn(Json, ToolContext) -> W + Send + Sync + 'static,
+        cancel: impl Fn(Json) -> C + Send + Sync + 'static,
+    ) -> Self
+    where
+        S: Future<Output = Result<Json, ToolError>> + Send + 'static,
+        W: Future<Output = Result<Json, ToolError>> + Send + 'static,
+        C: Future<Output = ()> + Send + 'static,
+    {
+        Self::with(
+            description,
+            Execute::Durable(Arc::new(Durable {
+                start: Arc::new(move |input, ctx| Box::pin(start(input, ctx))),
+                wait: Arc::new(move |data, ctx| Box::pin(wait(data, ctx))),
+                cancel: Arc::new(move |data| Box::pin(cancel(data))),
+            })),
         )
     }
 

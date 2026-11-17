@@ -214,6 +214,43 @@ impl Strings {
         self.insert_atom(text, id)
     }
 
+    /// How many strings and atoms there are, for a snapshot's base.
+    pub(crate) fn counts(&self) -> (usize, usize) {
+        (self.bufs.len(), self.atom_str.len())
+    }
+
+    /// The strings and atoms made after the given counts: each string's text and builder flag, and each atom's
+    /// string.
+    pub(crate) fn save_from(&self, bufs: usize, atoms: usize) -> (Vec<(String, bool)>, Vec<StrId>) {
+        let texts = (bufs..self.bufs.len())
+            .map(|i| (self.get(i as StrId).to_owned(), self.bufs[i].builder))
+            .collect();
+        (texts, self.atom_str[atoms..].to_vec())
+    }
+
+    /// Appends saved strings and atoms after the base this table has.
+    pub(crate) fn restore(
+        &mut self,
+        texts: Vec<(String, bool)>,
+        atoms: Vec<StrId>,
+    ) -> Result<(), String> {
+        for (text, builder) in texts {
+            let id = self.alloc(text);
+            self.bufs[id as usize].builder = builder;
+        }
+        for id in atoms {
+            if id as usize >= self.bufs.len() {
+                return Err(format!("atom string {id} does not exist"));
+            }
+            let text = self.get(id).to_owned();
+            if self.map.contains_key(text.as_str()) {
+                return Err(format!("atom {text:?} is saved twice"));
+            }
+            self.insert_atom(Cow::Owned(text), id);
+        }
+        Ok(())
+    }
+
     fn insert_atom(&mut self, s: Cow<'static, str>, id: StrId) -> Atom {
         let a = self.atom_str.len() as Atom;
         self.atom_str.push(id);

@@ -76,7 +76,7 @@ pub enum HelperOp {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum HelperState {
+pub(crate) enum HelperState {
     Start,
     Suspended,
     Running,
@@ -85,11 +85,11 @@ enum HelperState {
 
 /// An iterator helper: a lazy step over an iterator record, as the reference's prelude generators behave.
 pub struct Helper {
-    iter: Value,
-    next: Value,
-    op: HelperOp,
-    counter: f64,
-    state: HelperState,
+    pub(crate) iter: Value,
+    pub(crate) next: Value,
+    pub(crate) op: HelperOp,
+    pub(crate) counter: f64,
+    pub(crate) state: HelperState,
 }
 
 pub fn setup_helpers(vm: &mut Vm) {
