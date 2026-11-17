@@ -33,6 +33,7 @@ const types = (effects: DocumentTransition["effects"]) => effects.map((effect) =
 
 test("Back, Forward and Stop on a restore stopped before it was issued are not a site change", () => {
   const site = "https://ledger.test"
+
   // The startup gate held the saved address and Stop (or the agent's Back) ended the wait: nothing committed, the
   // renderer shows its inert blank document, and the saved address stays.
   const held = replay(
