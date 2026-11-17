@@ -294,7 +294,10 @@ fn write_json(
                             out.push_str(&inner);
                         }
                         let item = match &vm.heap[id as usize].kind {
-                            Kind::Array(items) => items.get(i).cloned().unwrap_or_default(),
+                            Kind::Array(items) => match items.get(i) {
+                                Some(Value::Uninit) | None => Value::Undef,
+                                Some(v) => *v,
+                            },
                             _ => Value::Undef,
                         };
                         if !write_json(
@@ -710,7 +713,10 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
                         if i > 0 {
                             out.push(',');
                         }
-                        format_inner(vm, out, item, seen);
+                        // A hole prints as nothing, as in an array literal.
+                        if !matches!(item, Value::Uninit) {
+                            format_inner(vm, out, item, seen);
+                        }
                     }
                     out.push(']');
                 }

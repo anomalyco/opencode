@@ -450,7 +450,11 @@ fn proto_property_is_enumerable(vm: &mut Vm, this: Value, args: &[Value], _: Id)
     if let Kind::Array(items) = &o.kind
         && let Some(i) = vm.atoms.index(k)
     {
-        return Ok(Value::Bool((i as usize) < items.len()));
+        return Ok(Value::Bool(
+            items
+                .get(i as usize)
+                .is_some_and(|v| !matches!(v, Value::Uninit)),
+        ));
     }
     Ok(Value::Bool(
         o.props
@@ -484,7 +488,7 @@ pub fn array_like(vm: &mut Vm, v: &Value) -> Result<Vec<Value>, Value> {
         return Ok(Vec::new());
     };
     if let Kind::Array(items) | Kind::Arguments(items) = &vm.heap[*id as usize].kind {
-        return Ok(items.clone());
+        return Ok(crate::ops::without_holes(items));
     }
     let lk = vm.names.length;
     let len = vm.get_obj(*id, lk);

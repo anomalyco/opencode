@@ -2,7 +2,6 @@
 # `bash test262/run.sh --write`; CI fails when an unlisted file fails or a listed file passes.
 # Fix gaps to shrink it; do not add entries.
 built-ins/Array/15.4.5.1-5-1.js  # wrong result
-built-ins/Array/S15.4.5.1_A1.2_T2.js  # wrong result
 built-ins/Array/S15.4.5.1_A2.1_T1.js  # wrong result
 built-ins/Array/S15.4.5.2_A1_T1.js  # uncaught RangeError: Invalid array length
 built-ins/Array/S15.4_A1.1_T10.js  # uncaught RangeError: Invalid array length
@@ -10,55 +9,16 @@ built-ins/Array/from/elements-updated-after.js  # wrong result
 built-ins/Array/from/iter-map-fn-err.js  # uncaught Execution exceeded its memory limit
 built-ins/Array/isArray/15.4.3.2-0-5.js  # wrong result
 built-ins/Array/length/S15.4.4_A1.3_T1.js  # wrong result
-built-ins/Array/length/S15.4.5.1_A1.2_T3.js  # wrong result
 built-ins/Array/length/S15.4.5.2_A3_T4.js  # uncaught RangeError: Invalid array length
-built-ins/Array/prototype/copyWithin/fill-holes.js  # wrong result
-built-ins/Array/prototype/every/15.4.4.16-7-4.js  # wrong result
-built-ins/Array/prototype/every/15.4.4.16-7-5.js  # wrong result
-built-ins/Array/prototype/every/15.4.4.16-7-b-1.js  # wrong result
 built-ins/Array/prototype/exotic-array.js  # wrong result
-built-ins/Array/prototype/filter/15.4.4.20-9-4.js  # wrong result
-built-ins/Array/prototype/filter/15.4.4.20-9-5.js  # wrong result
-built-ins/Array/prototype/filter/15.4.4.20-9-b-1.js  # wrong result
-built-ins/Array/prototype/forEach/15.4.4.18-7-2.js  # wrong result
-built-ins/Array/prototype/forEach/15.4.4.18-7-3.js  # wrong result
-built-ins/Array/prototype/forEach/15.4.4.18-7-4.js  # wrong result
-built-ins/Array/prototype/forEach/15.4.4.18-7-b-1.js  # wrong result
-built-ins/Array/prototype/includes/length-zero-returns-false.js  # wrong result
 built-ins/Array/prototype/indexOf/15.4.4.14-5-12.js  # uncaught RangeError: Invalid array length
 built-ins/Array/prototype/indexOf/15.4.4.14-5-16.js  # uncaught RangeError: Invalid array length
 built-ins/Array/prototype/indexOf/15.4.4.14-9-9.js  # uncaught RangeError: Invalid array length
-built-ins/Array/prototype/indexOf/15.4.4.14-9-b-1.js  # wrong result
-built-ins/Array/prototype/indexOf/length-zero-returns-minus-one.js  # wrong result
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-12.js  # uncaught RangeError: Invalid array length
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-16.js  # uncaught RangeError: Invalid array length
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-9.js  # uncaught RangeError: Invalid array length
-built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-1.js  # wrong result
-built-ins/Array/prototype/map/15.4.4.19-8-3.js  # wrong result
-built-ins/Array/prototype/map/15.4.4.19-8-4.js  # wrong result
-built-ins/Array/prototype/map/15.4.4.19-8-5.js  # wrong result
-built-ins/Array/prototype/map/15.4.4.19-8-b-1.js  # wrong result
-built-ins/Array/prototype/reduce/15.4.4.21-8-c-1.js  # error not thrown: TypeError
-built-ins/Array/prototype/reduce/15.4.4.21-8-c-2.js  # error not thrown: TypeError
-built-ins/Array/prototype/reduce/15.4.4.21-8-c-3.js  # error not thrown: TypeError
-built-ins/Array/prototype/reduce/15.4.4.21-9-3.js  # wrong result
-built-ins/Array/prototype/reduce/15.4.4.21-9-b-1.js  # wrong result
-built-ins/Array/prototype/reduce/15.4.4.21-9-c-1.js  # wrong result
-built-ins/Array/prototype/reduceRight/15.4.4.22-8-c-1.js  # error not thrown: TypeError
-built-ins/Array/prototype/reduceRight/15.4.4.22-8-c-2.js  # error not thrown: TypeError
-built-ins/Array/prototype/reduceRight/15.4.4.22-8-c-3.js  # error not thrown: TypeError
-built-ins/Array/prototype/reduceRight/15.4.4.22-9-3.js  # wrong result
-built-ins/Array/prototype/reduceRight/15.4.4.22-9-4.js  # wrong result
-built-ins/Array/prototype/reduceRight/15.4.4.22-9-b-1.js  # wrong result
-built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-1.js  # wrong result
 built-ins/Array/prototype/reverse/array-has-one-entry.js  # uncaught TypeError: Cannot modify a frozen or non-extensible array
-built-ins/Array/prototype/some/15.4.4.17-7-4.js  # wrong result
-built-ins/Array/prototype/some/15.4.4.17-7-5.js  # wrong result
-built-ins/Array/prototype/some/15.4.4.17-7-b-1.js  # wrong result
-built-ins/Array/prototype/sort/bug_596_2.js  # wrong result
-built-ins/Array/prototype/splice/15.4.4.12-9-c-ii-1.js  # wrong result
 built-ins/Function/prototype/bind/instance-length-remaining-args.js  # wrong result
-built-ins/JSON/parse/reviver-array-get-prop-from-prototype.js  # wrong result
 built-ins/JSON/stringify/value-string-escape-unicode.js  # wrong result
 built-ins/Object/fromEntries/iterator-closed-for-null-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/iterator-closed-for-string-entry.js  # wrong error type: Test262Error instead of TypeError

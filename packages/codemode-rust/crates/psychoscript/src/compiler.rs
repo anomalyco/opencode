@@ -2408,7 +2408,8 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.emit(Op::ArraySpread);
                 }
                 ArrayExpressionElement::Elision(_) => {
-                    self.emit(Op::Undef);
+                    // The TDZ marker is how an array holds a hole.
+                    self.emit(Op::Uninit);
                     self.emit(Op::ArrayPush);
                 }
                 other => {

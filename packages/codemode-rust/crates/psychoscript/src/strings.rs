@@ -193,6 +193,11 @@ impl Strings {
         self.insert_atom(Cow::Owned(s.to_owned()), id)
     }
 
+    /// The atom for `s` if one was ever made; no object can have a key that has no atom.
+    pub fn lookup(&self, s: &str) -> Option<Atom> {
+        self.map.get(s).copied()
+    }
+
     pub fn intern_static(&mut self, s: &'static str) -> Atom {
         if let Some(a) = self.map.get(s) {
             return *a;

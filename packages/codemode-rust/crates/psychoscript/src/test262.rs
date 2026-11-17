@@ -239,8 +239,22 @@ fn arrays_equal(vm: &Vm, a: &Value, b: &Value) -> bool {
         return false;
     };
     match (&vm.heap[*a as usize].kind, &vm.heap[*b as usize].kind) {
+        // Like the reference's host `every`: holes in the actual array are not compared, and a hole in the
+        // expected one reads as undefined.
         (Kind::Array(x), Kind::Array(y)) => {
-            x.len() == y.len() && x.iter().zip(y).all(|(x, y)| same_value(vm, x, y))
+            x.len() == y.len()
+                && x.iter().zip(y).all(|(x, y)| {
+                    matches!(x, Value::Uninit)
+                        || same_value(
+                            vm,
+                            x,
+                            if let Value::Uninit = y {
+                                &Value::Undef
+                            } else {
+                                y
+                            },
+                        )
+                })
         }
         _ => false,
     }
@@ -390,7 +404,13 @@ fn show(vm: &mut Vm, v: &Value) -> String {
             match &vm.heap[id as usize].kind {
                 Kind::Array(items) => {
                     let items = items.clone();
-                    let parts: Vec<String> = items.iter().map(|item| show(vm, item)).collect();
+                    let parts: Vec<String> = items
+                        .iter()
+                        .map(|item| match item {
+                            Value::Uninit => String::new(),
+                            item => show(vm, item),
+                        })
+                        .collect();
                     format!("[{}]", parts.join(", "))
                 }
                 Kind::Closure(_) => "program function".into(),

@@ -1025,7 +1025,10 @@ fn to_host(
             let items = items.clone();
             let mut out = Vec::with_capacity(items.len());
             for item in &items {
-                out.push(Some(to_host(vm, item, label, depth + 1, seen)?));
+                out.push(match item {
+                    Value::Uninit => None,
+                    item => Some(to_host(vm, item, label, depth + 1, seen)?),
+                });
             }
             HostValue::Array(out)
         }
@@ -1131,7 +1134,7 @@ fn from_host(
             for (i, item) in items.iter().enumerate() {
                 out.push(match item {
                     Some(item) => from_host(vm, item, &format!("{label}[{i}]"), entry, depth + 1)?,
-                    None => Value::Undef,
+                    None => Value::Uninit,
                 });
             }
             vm.new_array(out)

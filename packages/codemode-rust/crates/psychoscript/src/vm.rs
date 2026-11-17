@@ -2087,7 +2087,7 @@ impl<'rt> Vm<'rt> {
                         let arr = self.pop();
                         let args = match &arr {
                             Value::Obj(id) => match &self.heap[*id as usize].kind {
-                                Kind::Array(items) => items.clone(),
+                                Kind::Array(items) => crate::ops::without_holes(items),
                                 _ => Vec::new(),
                             },
                             _ => Vec::new(),
@@ -2107,7 +2107,7 @@ impl<'rt> Vm<'rt> {
                         let arr = self.pop();
                         let args = match &arr {
                             Value::Obj(id) => match &self.heap[*id as usize].kind {
-                                Kind::Array(items) => items.clone(),
+                                Kind::Array(items) => crate::ops::without_holes(items),
                                 _ => Vec::new(),
                             },
                             _ => Vec::new(),

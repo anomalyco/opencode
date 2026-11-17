@@ -350,7 +350,7 @@ pub fn builtin_string(vm: &mut Vm, v: &Value) -> Result<String, Value> {
                 if i > 0 {
                     out.push(',');
                 }
-                if !item.is_nullish() {
+                if !matches!(item, Value::Undef | Value::Null | Value::Uninit) {
                     out.push_str(&builtin_string(vm, item)?);
                 }
                 if out.len() > crate::ops::MAX_STRING_LEN {

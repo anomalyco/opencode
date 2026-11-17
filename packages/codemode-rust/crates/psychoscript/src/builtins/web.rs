@@ -1088,7 +1088,7 @@ fn clone_value(vm: &mut Vm, v: &Value, memo: &mut Vec<(Id, Id)>) -> Res {
             Ok(Value::Obj(copy))
         }
         Plan::Array(len) => {
-            let copy = vm.new_array(vec![Value::Undef; len]);
+            let copy = vm.new_array(vec![Value::Uninit; len]);
             let cid = copy.as_obj().unwrap_or(0);
             remember(vm, memo, cid);
             for (k, val) in vm.own_entries(id) {

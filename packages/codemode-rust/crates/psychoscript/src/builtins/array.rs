@@ -2,7 +2,7 @@
 
 use super::{arg, to_index};
 use crate::object::*;
-use crate::ops::MAX_ARRAY_LEN;
+use crate::ops::{MAX_ARRAY_LEN, without_holes};
 use crate::strings::StrId;
 use crate::value::{Id, Value, to_integer};
 use crate::vm::{Res, Vm};
@@ -84,8 +84,40 @@ fn len(vm: &Vm, id: Id) -> usize {
     items(vm, id).len()
 }
 
+/// Element `i` as the array holds it, with a hole read as `undefined` and not looked up on the prototypes.
 fn item(vm: &Vm, id: Id, i: usize) -> Value {
-    items(vm, id).get(i).cloned().unwrap_or_default()
+    undef(items(vm, id).get(i).cloned().unwrap_or_default())
+}
+
+fn undef(v: Value) -> Value {
+    match v {
+        Value::Uninit => Value::Undef,
+        v => v,
+    }
+}
+
+/// Element `i` as `array[i]` reads it: a hole or an index past the end may be inherited.
+#[inline]
+fn read(vm: &mut Vm, id: Id, i: usize) -> Value {
+    match items(vm, id).get(i) {
+        Some(v) if !matches!(v, Value::Uninit) => *v,
+        _ => vm.missing_elem(id, i),
+    }
+}
+
+/// Element `i` when `i in array`, which a hole or an index past the end may still be through the prototypes.
+#[inline]
+fn present(vm: &mut Vm, id: Id, i: usize) -> Option<Value> {
+    match items(vm, id).get(i) {
+        Some(v) if !matches!(v, Value::Uninit) => Some(*v),
+        _ => inherited(vm, id, i),
+    }
+}
+
+#[cold]
+fn inherited(vm: &mut Vm, id: Id, i: usize) -> Option<Value> {
+    let key = vm.atoms.lookup(&i.to_string())?;
+    vm.has_key(id, key).then(|| vm.get_obj(id, key))
 }
 
 fn items_mut<'a>(vm: &'a mut Vm, id: Id, growing: bool) -> Result<&'a mut Vec<Value>, Value> {
@@ -118,7 +150,7 @@ fn array_ctor(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         if n < 0.0 || n.fract() != 0.0 || n > MAX_ARRAY_LEN as f64 {
             return Err(vm.range_error("Invalid array length."));
         }
-        return Ok(vm.new_array(vec![Value::Undef; n as usize]));
+        return Ok(vm.new_array(vec![Value::Uninit; n as usize]));
     }
     Ok(vm.new_array(args.to_vec()))
 }
@@ -201,7 +233,7 @@ fn a_push(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_pop(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    Ok(items_mut(vm, id, false)?.pop().unwrap_or_default())
+    Ok(undef(items_mut(vm, id, false)?.pop().unwrap_or_default()))
 }
 
 fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -210,7 +242,7 @@ fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     if items.is_empty() {
         return Ok(Value::Undef);
     }
-    Ok(items.remove(0))
+    Ok(undef(items.remove(0)))
 }
 
 fn a_unshift(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -263,7 +295,7 @@ fn a_to_spliced(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
     let n = len(vm, id);
     let (start, count) = splice_args(vm, args, n)?;
-    let mut out = items(vm, id).to_vec();
+    let mut out = without_holes(items(vm, id));
     out.splice(start..start + count, args.iter().skip(2).cloned());
     Ok(vm.new_array(out))
 }
@@ -296,8 +328,8 @@ pub fn join(vm: &mut Vm, id: Id, sep: &str, seen: &mut Vec<Id>) -> Result<String
         if i > 0 {
             out.push_str(sep);
         }
-        match item(vm, id, i) {
-            Value::Undef | Value::Null => {}
+        match items(vm, id).get(i).cloned().unwrap_or_default() {
+            Value::Undef | Value::Null | Value::Uninit => {}
             Value::Str(s) => out.push_str(vm.text(s)),
             Value::Num(x) => crate::value::write_num(&mut out, x),
             Value::Obj(o) if matches!(vm.heap[o as usize].kind, Kind::Array(_)) => {
@@ -345,7 +377,7 @@ fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
         if i > 0 {
             out.push(',');
         }
-        let item = item(vm, id, i);
+        let item = read(vm, id, i);
         if !item.is_nullish() {
             let f = vm.get(&item, key)?;
             let r = vm.call(&f, item, &[])?;
@@ -368,7 +400,7 @@ fn a_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 
 fn a_to_reversed(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    let mut out = items(vm, id).to_vec();
+    let mut out = without_holes(items(vm, id));
     out.reverse();
     Ok(vm.new_array(out))
 }
@@ -377,12 +409,16 @@ fn a_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
     let x = arg(args, 0);
     let n = len(vm, id);
+    // An empty array answers before fromIndex converts.
+    if n == 0 {
+        return Ok(Value::Num(-1.0));
+    }
     let from = to_index(vm, &arg(args, 1), n, 0)?;
     let r = items(vm, id)
         .iter()
         .enumerate()
         .skip(from)
-        .find(|(_, v)| vm.strict_eq(v, &x))
+        .find(|(_, v)| !matches!(v, Value::Uninit) && vm.strict_eq(v, &x))
         .map(|(i, _)| i as f64);
     Ok(Value::Num(r.unwrap_or(-1.0)))
 }
@@ -410,7 +446,7 @@ fn a_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let items = items(vm, id);
     let r = (0..=from as usize)
         .rev()
-        .find(|i| vm.strict_eq(&items[*i], &x));
+        .find(|i| !matches!(items[*i], Value::Uninit) && vm.strict_eq(&items[*i], &x));
     Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
 }
 
@@ -418,16 +454,20 @@ fn a_includes(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
     let x = arg(args, 0);
     let n = len(vm, id);
+    if n == 0 {
+        return Ok(Value::Bool(false));
+    }
     let from = to_index(vm, &arg(args, 1), n, 0)?;
     Ok(Value::Bool(
         items(vm, id)
             .iter()
             .skip(from)
-            .any(|v| vm.same_value_zero(v, &x)),
+            .any(|v| vm.same_value_zero(&undef(*v), &x)),
     ))
 }
 
-/// Calls `f(value, index, array)` for each index while `visit` returns `None`; returns what stopped it.
+/// Calls `f(value, index, array)` for each index below the starting length while `visit` returns `None`, reading
+/// each element live, holes included; returns what stopped it. The find methods visit this way.
 fn each<T>(
     vm: &mut Vm,
     this: &Value,
@@ -441,7 +481,30 @@ fn each<T>(
     let n = len(vm, id);
     for k in 0..n {
         let i = if reverse { n - 1 - k } else { k };
-        let v = item(vm, id, i);
+        let v = read(vm, id, i);
+        let r = vm.call(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
+        if let Some(t) = visit(vm, i, v, r) {
+            return Ok(Some(t));
+        }
+    }
+    Ok(None)
+}
+
+/// Like `each`, but skips the indexes not in the array when they come up, as the other callback methods do.
+fn each_present<T>(
+    vm: &mut Vm,
+    this: &Value,
+    args: &[Value],
+    mut visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
+) -> Result<Option<T>, Value> {
+    let id = arr_id(vm, this)?;
+    let f = callback(vm, args)?;
+    let this_arg = arg(args, 1);
+    let n = len(vm, id);
+    for i in 0..n {
+        let Some(v) = present(vm, id, i) else {
+            continue;
+        };
         let r = vm.call(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
         if let Some(t) = visit(vm, i, v, r) {
             return Ok(Some(t));
@@ -480,16 +543,13 @@ fn a_find_last_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_some(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Bool(
-        each(vm, &this, args, false, |vm, _, _, r| {
-            vm.truthy(&r).then_some(())
-        })?
-        .is_some(),
+        each_present(vm, &this, args, |vm, _, _, r| vm.truthy(&r).then_some(()))?.is_some(),
     ))
 }
 
 fn a_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Bool(
-        each(vm, &this, args, false, |vm, _, _, r| {
+        each_present(vm, &this, args, |vm, _, _, r| {
             (!vm.truthy(&r)).then_some(())
         })?
         .is_none(),
@@ -497,13 +557,13 @@ fn a_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    each(vm, &this, args, false, |_, _, _, _| None::<()>)?;
+    each_present(vm, &this, args, |_, _, _, _| None::<()>)?;
     Ok(Value::Undef)
 }
 
 fn a_filter(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let mut out = Vec::new();
-    each(vm, &this, args, false, |vm, _, v, r| {
+    each_present(vm, &this, args, |vm, _, v, r| {
         if vm.truthy(&r) {
             out.push(v);
         }
@@ -514,9 +574,10 @@ fn a_filter(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    let mut out = Vec::with_capacity(len(vm, id));
-    each(vm, &this, args, false, |_, _, _, r| {
-        out.push(r);
+    // Skipped indexes stay holes.
+    let mut out = vec![Value::Uninit; len(vm, id)];
+    each_present(vm, &this, args, |_, i, _, r| {
+        out[i] = r;
         None::<()>
     })?;
     Ok(vm.new_array(out))
@@ -526,24 +587,30 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
     let id = arr_id(vm, &this)?;
     let f = callback(vm, args)?;
     let n = len(vm, id);
+    let index = |k: usize| if reverse { n - 1 - k } else { k };
     let mut k = 0;
     let mut acc = if args.len() >= 2 {
         args[1]
     } else {
-        if n == 0 {
-            return Err(vm.type_error("Array.reduce of an empty array with no initial value."));
+        loop {
+            if k >= n {
+                let label = if reverse { "reduceRight" } else { "reduce" };
+                return Err(vm.type_error(&format!(
+                    "Array.{label} of an empty array with no initial value."
+                )));
+            }
+            k += 1;
+            if let Some(v) = present(vm, id, index(k - 1)) {
+                break v;
+            }
         }
-        k = 1;
-        item(vm, id, if reverse { n - 1 } else { 0 })
     };
     while k < n {
-        let i = if reverse { n - 1 - k } else { k };
-        if i >= len(vm, id) {
-            break;
-        }
-        let v = item(vm, id, i);
-        acc = vm.call(&f, Value::Undef, &[acc, v, Value::Num(i as f64), this])?;
+        let i = index(k);
         k += 1;
+        if let Some(v) = present(vm, id, i) {
+            acc = vm.call(&f, Value::Undef, &[acc, v, Value::Num(i as f64), this])?;
+        }
     }
     Ok(acc)
 }
@@ -644,28 +711,34 @@ fn merge_sort<T: Clone>(
 
 fn a_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    let list = std::mem::take(items_mut(vm, id, false)?);
-    let sorted = sort_values(vm, list, &arg(args, 0));
-    match sorted {
-        Ok(s) => {
-            if let Kind::Array(items) = &mut vm.heap[id as usize].kind {
-                *items = s;
-            }
-            Ok(this)
-        }
-        Err(e) => Err(e),
+    // Holes sort last, after undefined, and stay holes; a comparator that throws leaves the array as it was.
+    let list = items_mut(vm, id, false)?.clone();
+    let holes = list.iter().filter(|v| matches!(v, Value::Uninit)).count();
+    let list = list
+        .into_iter()
+        .filter(|v| !matches!(v, Value::Uninit))
+        .collect();
+    let mut sorted = sort_values(vm, list, &arg(args, 0))?;
+    sorted.resize(sorted.len() + holes, Value::Uninit);
+    if let Kind::Array(items) = &mut vm.heap[id as usize].kind {
+        *items = sorted;
     }
+    Ok(this)
 }
 
 fn a_to_sorted(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    let list = items(vm, id).to_vec();
+    let list = without_holes(items(vm, id));
     let sorted = sort_values(vm, list, &arg(args, 0))?;
     Ok(vm.new_array(sorted))
 }
 
+/// Flattens `list` into `out`, dropping holes at every level.
 fn flatten(vm: &Vm, out: &mut Vec<Value>, list: &[Value], depth: f64) {
     for v in list {
+        if let Value::Uninit = v {
+            continue;
+        }
         if depth >= 1.0
             && let Value::Obj(o) = v
             && let Kind::Array(inner) = &vm.heap[*o as usize].kind
@@ -690,13 +763,23 @@ fn a_flat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let mut mapped = Vec::new();
-    each(vm, &this, args, false, |_, _, _, r| {
-        mapped.push(r);
+    // A returned array is read like the callback methods read theirs: live, skipping indexes not in it.
+    let mut out = Vec::new();
+    each_present(vm, &this, args, |vm, _, _, r| {
+        match r {
+            Value::Obj(inner) if matches!(vm.heap[inner as usize].kind, Kind::Array(_)) => {
+                let mut at = 0;
+                while at < len(vm, inner) {
+                    if let Some(v) = present(vm, inner, at) {
+                        out.push(v);
+                    }
+                    at += 1;
+                }
+            }
+            r => out.push(r),
+        }
         None::<()>
     })?;
-    let mut out = Vec::new();
-    flatten(vm, &mut out, &mapped, 1.0);
     Ok(vm.new_array(out))
 }
 
@@ -756,7 +839,7 @@ fn a_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let Some(i) = rel_index(vm, &arg(args, 0), n)? else {
         return Err(vm.range_error("Invalid index"));
     };
-    let mut out = items(vm, id).to_vec();
+    let mut out = without_holes(items(vm, id));
     out[i] = arg(args, 1);
     Ok(vm.new_array(out))
 }

@@ -83,9 +83,13 @@ impl<'rt> Vm<'rt> {
             match &o.kind {
                 Kind::Array(items) => {
                     if let Some(i) = self.atoms.index(key) {
-                        return items.get(i as usize).cloned().unwrap_or_default();
-                    }
-                    if key == self.names.length {
+                        // A hole or an index past the end may still be inherited.
+                        if let Some(v) = items.get(i as usize)
+                            && !matches!(v, Value::Uninit)
+                        {
+                            return *v;
+                        }
+                    } else if key == self.names.length {
                         return Value::Num(items.len() as f64);
                     }
                 }
@@ -149,6 +153,18 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    /// An array's element that is a hole or past its end, which its prototypes may still have.
+    #[cold]
+    pub(crate) fn missing_elem(&mut self, id: Id, i: usize) -> Value {
+        let Some(proto) = self.heap[id as usize].proto else {
+            return Value::Undef;
+        };
+        match self.atoms.lookup(&i.to_string()) {
+            Some(key) => self.get_obj(proto, key),
+            None => Value::Undef,
+        }
+    }
+
     #[inline(never)]
     pub fn get_elem(&mut self, v: &Value, k: &Value) -> Res {
         match (v, k) {
@@ -156,7 +172,10 @@ impl<'rt> Vm<'rt> {
                 if let Kind::Array(items) = &self.heap[*id as usize].kind {
                     let i = *n as usize;
                     if i as f64 == *n {
-                        return Ok(items.get(i).cloned().unwrap_or_default());
+                        return Ok(match items.get(i) {
+                            Some(v) if !matches!(v, Value::Uninit) => *v,
+                            _ => self.missing_elem(*id, i),
+                        });
                     }
                 }
             }
@@ -328,17 +347,21 @@ impl<'rt> Vm<'rt> {
                     if flags & FROZEN != 0 {
                         return Err(self.read_only(key));
                     }
-                    if i < items.len() {
+                    if i < items.len() && !matches!(items[i], Value::Uninit) {
                         items[i] = val;
                         return Ok(());
                     }
                     if flags & NON_EXTENSIBLE != 0 {
                         return Err(self.not_extensible(key));
                     }
+                    if i < items.len() {
+                        items[i] = val;
+                        return Ok(());
+                    }
                     if i >= MAX_ARRAY_LEN {
                         return Err(self.range_error("Invalid array length."));
                     }
-                    items.resize(i, Value::Undef);
+                    items.resize(i, Value::Uninit);
                     items.push(val);
                     return Ok(());
                 }
@@ -354,7 +377,7 @@ impl<'rt> Vm<'rt> {
                         return Err(self.range_error("Invalid array length."));
                     }
                     if let Kind::Array(items) = &mut self.heap[id as usize].kind {
-                        items.resize(n as usize, Value::Undef);
+                        items.resize(n as usize, Value::Uninit);
                     }
                     return Ok(());
                 }
@@ -404,7 +427,7 @@ impl<'rt> Vm<'rt> {
     fn not_extensible(&mut self, key: Atom) -> Value {
         let k = self.key_text(key);
         self.type_error(&format!(
-            "Cannot add property {k}, object is not extensible"
+            "Cannot add property {k}, object is not extensible."
         ))
     }
 
@@ -452,7 +475,7 @@ impl<'rt> Vm<'rt> {
             if i < items.len() {
                 items[i] = val;
             } else if i < MAX_ARRAY_LEN {
-                items.resize(i, Value::Undef);
+                items.resize(i, Value::Uninit);
                 items.push(val);
             }
             return;
@@ -499,7 +522,7 @@ impl<'rt> Vm<'rt> {
                     return Err(self.type_error(&format!("Cannot delete property '{k}'")));
                 }
                 if let Some(slot) = items.get_mut(i as usize) {
-                    *slot = Value::Undef;
+                    *slot = Value::Uninit;
                 }
                 return Ok(true);
             }
@@ -533,7 +556,10 @@ impl<'rt> Vm<'rt> {
             match &o.kind {
                 Kind::Array(items) | Kind::Arguments(items) => {
                     if let Some(i) = self.atoms.index(key) {
-                        if (i as usize) < items.len() {
+                        if items
+                            .get(i as usize)
+                            .is_some_and(|v| !matches!(v, Value::Uninit))
+                        {
                             return true;
                         }
                     } else if key == self.names.length {
@@ -563,7 +589,9 @@ impl<'rt> Vm<'rt> {
         match &o.kind {
             Kind::Array(items) | Kind::Arguments(items) => {
                 if let Some(i) = self.atoms.index(key) {
-                    return (i as usize) < items.len();
+                    return items
+                        .get(i as usize)
+                        .is_some_and(|v| !matches!(v, Value::Uninit));
                 }
                 if key == self.names.length {
                     return true;
@@ -608,13 +636,20 @@ impl<'rt> Vm<'rt> {
             return children.iter().map(|c| self.atoms.intern(c)).collect();
         }
         let mut out = Vec::new();
-        let len = match &self.heap[id as usize].kind {
-            Kind::Array(items) | Kind::Arguments(items) => items.len(),
-            k if exotic::is_exotic(k) => exotic::index_len(self, id),
-            _ => 0,
-        };
-        for i in 0..len {
-            out.push(self.atoms.intern(&i.to_string()));
+        match &self.heap[id as usize].kind {
+            Kind::Array(items) | Kind::Arguments(items) => {
+                for (i, v) in items.iter().enumerate() {
+                    if !matches!(v, Value::Uninit) {
+                        out.push(self.atoms.intern(&i.to_string()));
+                    }
+                }
+            }
+            k if exotic::is_exotic(k) => {
+                for i in 0..exotic::index_len(self, id) {
+                    out.push(self.atoms.intern(&i.to_string()));
+                }
+            }
+            _ => {}
         }
         let props = &self.heap[id as usize].props;
         let mut ints = Vec::new();
@@ -1026,7 +1061,7 @@ impl<'rt> Vm<'rt> {
     pub fn iterate_to_vec(&mut self, v: &Value) -> Result<Vec<Value>, Value> {
         if let Value::Obj(id) = v {
             match &self.heap[*id as usize].kind {
-                Kind::Array(items) => return Ok(items.clone()),
+                Kind::Array(items) => return Ok(without_holes(items)),
                 Kind::Set(m) => {
                     return Ok(m.entries.iter().flatten().map(|(k, _)| *k).collect());
                 }
@@ -1400,7 +1435,12 @@ impl<'rt> Vm<'rt> {
             Kind::ArrayIter { target, pos, kind } => {
                 let (target, pos, kind) = (*target, *pos as usize, *kind);
                 let item = match &self.heap[target as usize].kind {
-                    Kind::Array(items) | Kind::Arguments(items) => items.get(pos).cloned(),
+                    Kind::Array(items) | Kind::Arguments(items) => {
+                        items.get(pos).map(|v| match v {
+                            Value::Uninit => Value::Undef,
+                            v => *v,
+                        })
+                    }
                     _ => None,
                 };
                 let step = if item.is_some() { 1 } else { u32::MAX };
@@ -1521,4 +1561,15 @@ impl<'rt> Vm<'rt> {
             }
         }
     }
+}
+
+/// An array's items with each hole read as `undefined`, as spreading and iterating read them.
+pub fn without_holes(items: &[Value]) -> Vec<Value> {
+    let mut out = items.to_vec();
+    for v in &mut out {
+        if let Value::Uninit = v {
+            *v = Value::Undef;
+        }
+    }
+    out
 }
