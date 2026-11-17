@@ -1567,3 +1567,30 @@ fn a_kept_fence_node_restyles() {
     assert_ne!(theme(0).background.raised.base, theme(1).background.raised.base, "the themes share the color");
     assert!(restyled.cells == built.cells, "the kept fence kept its old color:\n{}", restyled.text());
 }
+
+// Expected (bigboi's recheck of contract 2.x): a keep of a parent carries the fence its subtree holds, so after a
+// revision that keeps the whole page, a keep of the card under it or of the fence itself, with a new fence beside it,
+// is refused as before that revision; and so after two such revisions.
+#[test]
+fn a_fence_under_a_kept_parent_still_counts() {
+    let fresh = || v2::Node::fence().with_id("fresh");
+    let first = || {
+        let card = v2::Node::column(vec![v2::Node::fence().with_id("old")]).with_id("card");
+        [v2::Node::column(vec![card]).with_id("page")]
+    };
+    for kept in ["card", "old"] {
+        for keeps in 0..3 {
+            let host = host(0);
+            let parent = root(&host);
+            let mut tree = Tree::default();
+            apply_fenced(&host, &mut tree, &parent, &first()).unwrap();
+            for _ in 0..keeps {
+                apply_fenced(&host, &mut tree, &parent, &[v2::Node::keep("page")]).unwrap();
+            }
+            let second = [v2::Node::keep(kept), fresh()];
+            assert_eq!(apply_fenced(&host, &mut tree, &parent, &second), Err(Refused::Fence), "{kept} after {keeps}");
+            let alone = [v2::Node::keep(kept)];
+            assert_eq!(apply_fenced(&host, &mut tree, &parent, &alone), Ok(()), "{kept} after {keeps}");
+        }
+    }
+}

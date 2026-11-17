@@ -263,9 +263,11 @@ struct Admitted {
     opened: HashMap<String, (u64, u64)>,
     /// The rows the subtree under each id built.
     rows: HashMap<String, u64>,
-    /// The fence nodes the subtree under each id holds, kept subtrees and list items' data included: a keep of the id
-    /// counts them as its spelled-out subtree would (bigboi's review of contract 2.x).
-    fences: HashMap<String, u32>,
+    /// The ids whose subtree holds a fence node, kept subtrees and list items' data included: how many, and the
+    /// nearest id above that holds them too. A keep of an id counts them as its spelled-out subtree would, and carries
+    /// the entries under it, so a later keep of one of them counts it still (bigboi's reviews of contract 2.x). Only
+    /// a tree's one fence node and the ids above it have an entry.
+    fences: HashMap<String, (u32, Option<String>)>,
 }
 
 /// What the tree holds under an id: the nearest ancestor with an id, the layout levels its subtree takes, the nodes
@@ -750,6 +752,8 @@ impl Tree {
             at: usize,
             /// The fence nodes seen: one at most, in a fence claim's tree only.
             fences: u32,
+            /// The ids of the nodes the walk is inside, the nearest last.
+            parents: Vec<&'a str>,
             limits: limits::Limits,
             /// The nodes and rows the tree may take, and has taken so far.
             room: (u64, u64),
@@ -795,9 +799,11 @@ impl Tree {
                             return Err(Refused::Duplicate(key.clone()));
                         }
                         // The fence nodes it stands for count as written out: one a tree, in a fence claim's only.
-                        let kept = self.tree.admitted.fences.get(key.as_str()).copied().unwrap_or(0);
+                        let kept = self.tree.admitted.fences.get(key.as_str()).map_or(0, |(count, _)| *count);
                         self.fence(kept)?;
-                        self.admitted.fences.insert(key.clone(), kept);
+                        if kept > 0 {
+                            self.keep_fences(key);
+                        }
                         // A keep inside a placeholder's subtree is checked and not held again.
                         if mode == Mode::Dropped {
                             self.keeps.insert(key);
@@ -941,6 +947,7 @@ impl Tree {
                     {
                         self.moves.insert(id);
                     }
+                    self.parents.extend(node.id());
                     self.nodes(node.children(), depth, item, inner, &mut false)?;
                     if let (Node::List { items, .. }, Some(list)) = (node, node.id()) {
                         let mut absorbing = false;
@@ -951,7 +958,11 @@ impl Tree {
                         }
                     }
                     if let Some(id) = node.id() {
-                        self.admitted.fences.insert(id.to_owned(), self.fences - fences);
+                        self.parents.pop();
+                        if self.fences > fences {
+                            let above = self.parents.last().map(|above| (*above).to_owned());
+                            self.admitted.fences.insert(id.to_owned(), (self.fences - fences, above));
+                        }
                     }
                     // What a keep of the id stands for: a node opened stands for its whole subtree, and the subtree
                     // under an id built the rows its nodes took.
@@ -964,6 +975,29 @@ impl Tree {
                     }
                 }
                 Ok(())
+            }
+
+            /// Carries the fence entries of kept id `key` and of the ids under it from the last tree, `key`'s now
+            /// under the node the walk is inside.
+            fn keep_fences(&mut self, key: &str) {
+                let last = &self.tree.admitted.fences;
+                // Whether `id` is `key` or under it: its chain of entries above reaches `key`.
+                let under = |id: &str| {
+                    let mut at = Some(id);
+                    for _ in 0..=last.len() {
+                        match at {
+                            Some(id) if id == key => return true,
+                            Some(id) => at = last.get(id).and_then(|(_, above)| above.as_deref()),
+                            None => return false,
+                        }
+                    }
+                    false
+                };
+                let above = self.parents.last().map(|above| (*above).to_owned());
+                for (id, (count, was)) in last.iter().filter(|(id, _)| under(id)) {
+                    let parent = if id == key { above.clone() } else { was.clone() };
+                    self.admitted.fences.insert(id.clone(), (*count, parent));
+                }
             }
 
             /// Counts `count` more fence nodes: a tree holds one at most, and only a fence claim's.
@@ -1059,6 +1093,7 @@ impl Tree {
             costs,
             at: 0,
             fences: 0,
+            parents: Vec::new(),
             limits,
             room: (nodes_room, limits.rows),
             used: (0, 0),

@@ -605,25 +605,42 @@ fn fenced_with(load: &Load<'_>, features: &'static [u8]) -> String {
     host.app.text()
 }
 
-// Expected (bigboi's review of contract 2.x): a library reads the host's features as a JSON array of strings, element
-// by element: a name spelled with an escape is the name, and a name that only holds the feature's quoted spelling, or
-// one longer, is not. The Rust SDK and the C plugin each draw the fence node exactly when `fence-node` is stated, and
-// lower it to text otherwise.
+// Expected (bigboi's review and recheck of contract 2.x): a library reads the host's features as a JSON array of
+// strings, element by element, each decoded whole and compared by its bytes and its length: a name spelled with escapes
+// is the name; a name that only holds the feature's quoted spelling, is longer, or goes on after an escaped NUL is not;
+// and a name of any length before it does not hide it. The Rust SDK and the C plugin each draw the fence node exactly
+// when `fence-node` is stated, and lower it to text otherwise.
 #[test]
 fn a_library_reads_the_features_it_is_offered_as_json() {
-    let cases: [(&'static [u8], bool); 6] = [
-        (br#"["fence-node"]"#, true),
-        (br#"["fence-node"]"#, true),
-        (br#"[ "image-bounds" , "fence-node" ]"#, true),
-        (br#"["prefix\"fence-node"]"#, false),
-        (br#"["fence-nodes"]"#, false),
-        (br#"["FENCE-NODE"]"#, false),
-    ];
+    // `%` stands for a backslash: the escapes are the test data, written so no tool decodes them on the way.
+    let json = |text: &str| text.replace('%', &char::from(92).to_string()).into_bytes();
+    let long = |len: usize| json(&format!(r#"["{}", "fence-node"]"#, "x".repeat(len)));
+    let mut cases: Vec<(Vec<u8>, bool)> = [
+        (r#"["fence-node"]"#, true),
+        (r#"["%u0066ence-node"]"#, true),
+        (r#"[ "image-bounds" , "fence%u002dnode" ]"#, true),
+        (r#"["%u0066%u0065%u006E%u0063%u0065%u002D%u006E%u006F%u0064%u0065"]"#, true),
+        (r#"["fence%/node", "fence-node"]"#, true),
+        (r#"["prefix%"fence-node"]"#, false),
+        (r#"["fence-nodes"]"#, false),
+        (r#"["FENCE-NODE"]"#, false),
+        (r#"["fence-node%u0000suffix"]"#, false),
+        (r#"["fence-node%u0000"]"#, false),
+        (r#"["fence%u0000-node"]"#, false),
+    ]
+    .into_iter()
+    .map(|(features, drawn)| (json(features), drawn))
+    .collect();
+    cases.extend([127, 128, 4096].map(|len| (long(len), true)));
+    let escape = [92, b'u', b'0', b'0', b'6', b'6'];
+    assert!(cases[1].0.windows(6).any(|window| window == escape), "the test data lost its escape");
     #[cfg(unix)]
     let c = c_library(2);
     #[cfg(not(unix))]
     let c: Option<Vec<u8>> = None;
     for (features, drawn) in cases {
+        // A host table's features live as long as the instance: the test's, for the test.
+        let features: &'static [u8] = Vec::leak(features);
         let mut loads = vec![("the Rust SDK", Load::Reference)];
         if let Some(library) = &c {
             loads.push(("the C plugin", Load::Library(library)));
