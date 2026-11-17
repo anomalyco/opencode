@@ -252,12 +252,14 @@ export function make<
         throw new TypeError(`Extension "${extension.name}" isn't one this runtime was made with.`)
       }
     }
+    // In the runtime's order, so the same extensions picked in any order give the same globals, and resume alike.
+    const picked = extensions.filter((extension) => selected.includes(extension))
     return {
       prepared,
       limits,
       hooks: options.hooks ?? {},
-      globals: selected.length === 0 ? undefined : (ctx) => extensionGlobals(ctx, selected),
-      lossy: selected.some((extension) => extension.snapshot === undefined),
+      globals: picked.length === 0 ? undefined : (ctx) => extensionGlobals(ctx, picked),
+      lossy: picked.some((extension) => extension.snapshot === undefined),
     }
   }
   const setup = setupFor()

@@ -534,26 +534,29 @@ describe("resume", () => {
     expect(timedOut).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" }, toolCalls: [{ name: "step" }] })
   })
 
-  test("a run started with some of the runtime's extensions resumes with the same ones", async () => {
+  test("a run started with some of the runtime's extensions resumes with the same ones, in any order", async () => {
     const now = Extension.make({ name: "now", globals: { now: () => 7 } })
+    const later = Extension.make({ name: "later", globals: { later: () => 8 } })
     const unused = Extension.make({ name: "unused", globals: { unused: () => 1 } })
     const step = stepTool()
-    const runtime = CodeMode.make({ tools: { step: step.tool }, extensions: [now, unused] })
+    const runtime = CodeMode.make({ tools: { step: step.tool }, extensions: [now, later, unused] })
     const run = background(
       runtime.program(
-        `await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 300) {} return [now(), typeof unused]`,
+        `await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 300) {} return [now(), later(), typeof unused]`,
         undefined,
-        { extensions: [now] },
+        { extensions: [later, now] },
       ),
     )
     await step.called()
     await Bun.sleep(10)
     const state = suspendedOf(await Effect.runPromise(run.suspend)).state
     expect((await refusal(runtime.resume(state))).message).toMatch("saved by a runtime with other host globals")
-    expect(await Effect.runPromise(background(runtime.resume(state, { extensions: [now] })).result)).toMatchObject({
-      ok: true,
-      value: [7, "undefined"],
-    })
+    expect((await refusal(runtime.resume(state, { extensions: [now] }))).message).toMatch(
+      "saved by a runtime with other host globals",
+    )
+    expect(
+      await Effect.runPromise(background(runtime.resume(state, { extensions: [now, later, now] })).result),
+    ).toMatchObject({ ok: true, value: [7, 8, "undefined"] })
   })
 
   test("a state is refused by another build, other extensions, or a changed source", async () => {
