@@ -24,16 +24,19 @@ export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: 
   return input.fallback ?? "main"
 }
 
+function checkoutDirectory(worktree: string, root: string) {
+  return worktree === "main" || worktree === "create" ? root : worktree
+}
+
 export function resolveNewSessionBranch(input: {
   worktree: string
-  directory: string
+  root: string
   createBranch?: string
   worktreeBranch: (worktree: string) => string | undefined
 }) {
   if (input.worktree === "create" && input.createBranch) return input.createBranch
-  const directory = input.worktree === "main" || input.worktree === "create" ? input.directory : input.worktree
 
-  return input.worktreeBranch(directory)
+  return input.worktreeBranch(checkoutDirectory(input.worktree, input.root))
 }
 
 export function resolveNewSessionGit(input: { projectVcs?: string; branch?: string }) {
@@ -167,8 +170,13 @@ export function createNewSessionWorkspaceController(input: {
     }),
   )
 
-  const projectRoot = createMemo(() => currentProject()?.worktree ?? sdk().directory)
-  const branchDirectory = () => (value() === "create" ? projectRoot() : sdk().directory)
+  // A draft opened from a worktree session keeps that worktree as its directory; Local still runs in the main checkout.
+  const projectRoot = createMemo(
+    () =>
+      data.location.info({ directory: sdk().directory })?.project.canonical ??
+      currentProject()?.worktree ??
+      sdk().directory,
+  )
 
   createEffect(() => {
     void Promise.all([
@@ -178,7 +186,7 @@ export function createNewSessionWorkspaceController(input: {
     ]).catch(() => undefined)
   })
   createEffect(() => {
-    if (value() !== "create" || sameDirectory(projectRoot(), sdk().directory)) return
+    if ((value() !== "main" && value() !== "create") || sameDirectory(projectRoot(), sdk().directory)) return
     void data.location.vcs.sync({ directory: projectRoot() }).catch(() => undefined)
   })
   // Only the selected worktree feeds the branch label. Syncing every worktree in the inventory boots
@@ -197,11 +205,18 @@ export function createNewSessionWorkspaceController(input: {
   const branch = createMemo(() =>
     resolveNewSessionBranch({
       worktree: value(),
-      directory: branchDirectory(),
+      root: projectRoot(),
       createBranch: input.selectedBranch(),
       worktreeBranch: (worktree) => data.location.vcs.info({ directory: worktree })?.branch.current,
     }),
   )
+
+  // A missing checkout is loading; a loaded checkout may have a detached HEAD.
+  const checkout = createMemo(() => {
+    const info = data.location.vcs.info({ directory: checkoutDirectory(value(), projectRoot()) })
+
+    return info ? { branch: info.branch.current } : undefined
+  })
 
   const remember = (worktree = value()) => {
     const project = currentProject()
@@ -213,7 +228,7 @@ export function createNewSessionWorkspaceController(input: {
   }
 
   const select = (worktree: string) => {
-    input.setSelectedBranch(undefined)
+    if (worktree !== "create" || value() !== "create") input.setSelectedBranch(undefined)
     input.setSelectedWorktree(worktree)
     remember(worktree)
   }
@@ -264,6 +279,7 @@ export function createNewSessionWorkspaceController(input: {
     bar: {
       visible,
       branch,
+      checkout,
     },
     branches: (search: string, signal?: AbortSignal) =>
       serverSDK.api.vcs.branch

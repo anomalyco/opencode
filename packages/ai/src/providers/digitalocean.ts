@@ -1,15 +1,16 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 import { bearerRouteDefaults } from "./settings.js"
@@ -17,7 +18,7 @@ import { bearerRouteDefaults } from "./settings.js"
 export const id = ProviderID.make("digitalocean")
 const baseURL = "https://inference.do-ai.run/v1"
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput | OpenResponsesProviderOptionsInput
@@ -51,7 +52,7 @@ const responsesRoute = Route.make({
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path("/responses", { baseURL }),
   transport: OpenResponses.httpTransport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export const routes = [route, responsesRoute]
@@ -78,12 +79,19 @@ export const configure = (input: Config = {}) => {
   const media = MediaRoute.deployment({ ...input, baseURL: options.endpoint.baseURL }, options.auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    provider: id,
+    endpoint: options.endpoint,
+    auth: options.auth,
+    headers: input.headers,
+    http: input.http,
+  })
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    embeddingRoute.model({ id: modelID, providerOptions })
   const chat = (modelID: string | ModelID) =>
     configured.model<OpenAIProviderOptionsInput>({
       id: modelID,
-      compatibility: {
-        supportsPromptCacheKey: true,
-      },
+      capabilities: { promptCacheKey: true },
     })
   return {
     id,
@@ -93,12 +101,14 @@ export const configure = (input: Config = {}) => {
       configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     image,
     decision,
+    embedding,
     configure,
   }
 }
 
 export const provider = configure()
 export const decision = provider.decision
+export const embedding = provider.embedding
 export const image = provider.image
 export const chat = provider.chat
 export const responses = provider.responses
@@ -116,6 +126,11 @@ export const imageModel = (modelID: string, settings?: Settings) => {
 export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).decision(modelID, input.providerOptions)
+}
+
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
 }
 
 function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<Config["providerOptions"]> = {}) {

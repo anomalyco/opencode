@@ -56,6 +56,24 @@ describe("dictionaries", () => {
     expect(values[key].replace("{{count}}", String(count))).toBe(expected)
   })
 
+  test.each([
+    [0, "0 провайдеров из Console станут недоступны."],
+    [1, "1 провайдер из Console станет недоступен."],
+    [2, "2 провайдера из Console станут недоступны."],
+    [5, "5 провайдеров из Console станут недоступны."],
+    [11, "11 провайдеров из Console станут недоступны."],
+    [21, "21 провайдер из Console станет недоступен."],
+    [22, "22 провайдера из Console станут недоступны."],
+    [25, "25 провайдеров из Console станут недоступны."],
+    [1.5, "1.5 провайдера из Console станут недоступны."],
+  ])("Russian disconnect warning for %s providers", (count, expected) => {
+    const key = `settings.providers.disconnect.consoleDescription.${pluralCategory("ru-RU", count)}`
+    const values: Record<string, string> = russian
+    expect(values[key].replace("{{count}}", String(count)).replace("{{workspace}}", "Console")).toBe(
+      `Ваш вход будет удалён, а ${expected}`,
+    )
+  })
+
   test("are flat string maps in every locale", async () => {
     const modules = await Promise.all(
       DESKTOP_NATIVE_LOCALES.flatMap((locale) => [import(`./${locale}`), import(`../../../../ui/src/i18n/${locale}`)]),

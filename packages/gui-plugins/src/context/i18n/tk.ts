@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Sessiýa {{filename}}-de saklandy",
   "export.failed.title": "Sessiýa eksport edip bilmedi",
   "export.failed.description": "Sessiýa eksport edilende säwlik ýüze çykdy",
+  "usage.toggle": "Sessiýa kontekstini aç/ýap",
 }

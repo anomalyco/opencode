@@ -20,7 +20,8 @@ export function SessionContextUsage(props: {
   const ctx = usePlugin()
   const layout = ctx.layout
   const i18n = useI18n()
-  syncCatalog(
+
+  const catalog = syncCatalog(
     () => props.session,
     () => props.active !== false,
   )
@@ -74,10 +75,11 @@ export function SessionContextUsage(props: {
 
   const cost = createMemo(() => usd().format(spent()))
 
-  // Spend anywhere in the family keeps the cost visible, even when this session's model is free.
   const showCost = createMemo(() => {
     if (spent() > 0) return true
     const ref = info()?.model ?? messages().findLast((item) => item.type === "assistant")?.model
+
+    if (ref?.providerID === "opencode-go") return false
     const model = ref ? catalogModel(props.session, ref)?.model : undefined
 
     if (!model) return true
@@ -87,11 +89,13 @@ export function SessionContextUsage(props: {
 
   const openContext = () => {
     if (!props.session.id) return
+    catalog.retry()
     layout.toggle(`${ctx.id}:main`, props.session)
   }
 
   const viewContext = () => {
     if (!props.session.id) return
+    catalog.retry()
     layout.open(`${ctx.id}:main`, props.session)
   }
 
@@ -125,7 +129,14 @@ export function SessionContextUsage(props: {
   )
 
   const usageMenu = () => (
-    <Menu placement="bottom-end" gutter={4} modal={false}>
+    <Menu
+      placement="bottom-end"
+      gutter={4}
+      modal={false}
+      onOpenChange={(open) => {
+        if (open) catalog.retry()
+      }}
+    >
       <Tooltip value={ctx.t("usage.view")} placement={props.placement ?? "top"}>
         <Menu.Trigger
           as={Button}

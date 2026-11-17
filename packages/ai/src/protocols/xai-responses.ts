@@ -71,7 +71,7 @@ const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LL
     ...body,
     presence_penalty: undefined,
     frequency_penalty: undefined,
-    top_k: request.generation?.topK,
+    top_k: request.topK,
     min_p: options.minP,
   }
 })

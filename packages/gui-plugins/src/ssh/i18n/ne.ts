@@ -35,4 +35,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "सर्भर थप्नुहोस्",
   "menu.delete": "मेट्नुहोस्",
+  "error.unavailable": "SSH उपलब्ध छैन",
 }

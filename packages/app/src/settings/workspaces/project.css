@@ -62,6 +62,14 @@
   white-space: nowrap;
 }
 
+/* The name, then where Console manages a server the user's config replaces, on one line. */
+.project-settings-extension-row-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
 .project-settings-extension-row-copy {
   display: flex;
   min-width: 0;
@@ -243,8 +251,56 @@
   transition: opacity 120ms ease;
 }
 
-.project-settings-icon-overlay.visible {
+.project-settings-icon:focus-visible .project-settings-icon-overlay {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .project-settings-icon:hover .project-settings-icon-overlay {
+    opacity: 1;
+  }
+}
+
+.project-settings-icon[aria-invalid="true"] {
+  outline-color: var(--v2-state-fg-danger);
+}
+
+.project-settings-icon-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.project-settings-save-failed {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--v2-state-fg-danger);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+}
+
+.project-settings-icon-field .project-settings-save-failed {
+  margin-top: 0;
+}
+
+.project-settings-save-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--v2-text-text-base);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.project-settings-save-retry:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
 }
 
 .project-settings-colors {

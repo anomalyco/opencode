@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LanguageModel, LLMEvent, LLMResponse } from "../../src/effect.js"
+import { ai, LLMEvent, LLMResponse } from "../../src/effect.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import * as OpenRouter from "../../src/providers/openrouter.js"
 import { LLMClient } from "../../src/route.js"
@@ -11,28 +11,22 @@ import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop
 const cases = [
   {
     name: "OpenRouter",
-    model: LanguageModel.update(
-      OpenRouter.configure({
-        apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
-        providerOptions: { reasoning: { max_tokens: 1024 } },
-      }).model("anthropic/claude-sonnet-4.6"),
-      { compatibility: { reasoningField: "reasoning" } },
-    ),
+    model: OpenRouter.configure({
+      apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
+      providerOptions: { reasoning: { max_tokens: 1024 } },
+    }).model("anthropic/claude-sonnet-4.6"),
     requires: ["OPENROUTER_API_KEY"],
     cassette: "openrouter-reasoning",
     structured: true,
   },
   {
     name: "Vercel AI Gateway",
-    model: LanguageModel.update(
-      OpenAICompatible.configure({
-        provider: "vercel-ai-gateway",
-        baseURL: "https://ai-gateway.vercel.sh/v1",
-        apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture",
-        http: { body: { reasoning: { enabled: true, max_tokens: 1024 } } },
-      }).model("anthropic/claude-sonnet-4.6"),
-      { compatibility: { reasoningField: "reasoning" } },
-    ),
+    model: OpenAICompatible.configure({
+      provider: "vercel-ai-gateway",
+      baseURL: "https://ai-gateway.vercel.sh/v1",
+      apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture",
+      http: { body: { reasoning: { enabled: true, max_tokens: 1024 } } },
+    }).model("anthropic/claude-sonnet-4.6"),
     requires: ["AI_GATEWAY_API_KEY"],
     cassette: "vercel-ai-gateway-reasoning",
     structured: true,
@@ -60,7 +54,8 @@ for (const item of cases) {
               model: item.model,
               system: "Think through the arithmetic, then reply with only the final integer.",
               prompt: "What is 173 multiplied by 219?",
-              generation: { maxTokens: 1536, temperature: 0 },
+              maxTokens: 1536,
+              temperature: 0,
             }),
           )
 

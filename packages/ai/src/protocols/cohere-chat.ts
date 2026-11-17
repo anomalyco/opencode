@@ -233,16 +233,16 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
       token_budget:
         options.thinking.tokenBudget === undefined
           ? undefined
-          : ProviderShared.fitThinkingBudget(options.thinking.tokenBudget, request.generation?.maxTokens),
+          : ProviderShared.fitThinkingBudget(options.thinking.tokenBudget, request.maxTokens),
     },
-    max_tokens: request.generation?.maxTokens,
-    temperature: request.generation?.temperature,
-    p: request.generation?.topP,
-    k: request.generation?.topK,
-    seed: request.generation?.seed,
-    stop_sequences: request.generation?.stop,
-    frequency_penalty: request.generation?.frequencyPenalty,
-    presence_penalty: request.generation?.presencePenalty,
+    max_tokens: request.maxTokens,
+    temperature: request.temperature,
+    p: request.topP,
+    k: request.topK,
+    seed: request.seed,
+    stop_sequences: request.stop,
+    frequency_penalty: request.frequencyPenalty,
+    presence_penalty: request.presencePenalty,
   }
 })
 

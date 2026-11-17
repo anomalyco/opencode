@@ -6,7 +6,7 @@ type TimeKey =
 
 type Translate = (key: TimeKey, params?: Record<string, string | number>) => string
 
-export function getRelativeTime(dateString: string, t: Translate): string {
+export function getRelativeTime(dateString: string, t: Translate, locale: string): string {
   const date = new Date(dateString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -21,5 +21,11 @@ export function getRelativeTime(dateString: string, t: Translate): string {
 
   if (diffHours < 24) return t("common.time.hoursAgo.short", { count: diffHours })
 
-  return t("common.time.daysAgo.short", { count: diffDays })
+  if (diffDays < 7) return t("common.time.daysAgo.short", { count: diffDays })
+
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
+  }).format(date)
 }

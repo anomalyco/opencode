@@ -2,10 +2,33 @@ export * as DesktopLogging from "./logging"
 
 import log from "electron-log/main.js"
 import { app, crashReporter, netLog, shell } from "electron"
-import { Context, Effect, FileSystem, Layer, Logger, Option, Path, References, Stream } from "effect"
+import {
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  FiberSet,
+  FileSystem,
+  Layer,
+  Logger,
+  Option,
+  Path,
+  Predicate,
+  References,
+  Stream,
+} from "effect"
 import { homedir } from "node:os"
 import { VERSION } from "../constants"
 import { marks } from "../lifecycle/marks"
+import {
+  EXPORT_ARCHIVE_TIMEOUT_MS,
+  initialLoggingState,
+  NETLOG_TIMEOUT_MS,
+  transitionLogging,
+  type ExportReply,
+  type LoggingCommand,
+  type LoggingEvent,
+} from "./logging-machine"
 
 const MAX_LOG_AGE_DAYS = 7
 
@@ -18,8 +41,6 @@ const NET_LOG_SIZE = 20 * 1024 * 1024
 let root = ""
 
 let run = ""
-
-let netLogPath: string | undefined
 
 export interface Interface {
   readonly startNetwork: Effect.Effect<void>
@@ -44,19 +65,131 @@ const serviceLayer = Layer.effect(
       onboardingTest: process.env.OPENCODE_TEST_ONBOARDING === "1",
       marks,
     })
-    const exportDebug = exportDebugLogsEffect(fs, path).pipe(Effect.orDie)
+    const fibers = yield* FiberSet.make()
+    const runFiber = yield* FiberSet.runtime(fibers)()
+    const current = { state: initialLoggingState() }
+
+    const dispatch = (event: LoggingEvent) => {
+      const next = transitionLogging(current.state, event)
+      current.state = next.state
+      next.commands.forEach(perform)
+    }
+
+    // Every exit, defects included, reports back as an event. An interrupt only happens on disposal, which the
+    // machine already left.
+    const report = (
+      effect: Effect.Effect<LoggingEvent, unknown>,
+      failed: (error: Error) => Effect.Effect<LoggingEvent>,
+    ) =>
+      void runFiber(
+        effect.pipe(
+          Effect.exit,
+          Effect.flatMap((exit) => {
+            if (Exit.isSuccess(exit)) return Effect.sync(() => dispatch(exit.value))
+
+            if (Cause.hasInterruptsOnly(exit.cause)) return Effect.void
+
+            const error = Cause.squash(exit.cause)
+
+            return failed(error instanceof Error ? error : new Error(String(error))).pipe(
+              Effect.flatMap((event) => Effect.sync(() => dispatch(event))),
+            )
+          }),
+        ),
+      )
+
+    const perform = (command: LoggingCommand) => {
+      if (command.type === "start-netlog") {
+        const attempt = command.attempt
+
+        return report(
+          Effect.suspend(() => {
+            const target = path.join(run, "network.netlog")
+
+            if (netLog.currentlyLogging) return Effect.succeed(target)
+
+            return Effect.tryPromise(() =>
+              netLog.startLogging(target, { captureMode: "default", maxFileSize: NET_LOG_SIZE }),
+            ).pipe(Effect.as(target))
+          }).pipe(
+            Effect.timeoutOrElse({
+              duration: NETLOG_TIMEOUT_MS,
+              orElse: () => Effect.fail(new Error("net log timed out")),
+            }),
+            Effect.tap((target) => scoped("network", Effect.logInfo("net log started", { path: target }))),
+            Effect.map((target): LoggingEvent => ({ type: "netlog.started", attempt, path: target })),
+          ),
+          (error) =>
+            scoped("network", Effect.logWarning(`failed to ${command.mode} net log`, { error })).pipe(
+              Effect.map((): LoggingEvent => ({ type: "netlog.start-failed", attempt })),
+            ),
+        )
+      }
+
+      if (command.type === "stop-netlog") {
+        const attempt = command.attempt
+
+        return report(
+          Effect.suspend(() =>
+            netLog.currentlyLogging ? Effect.tryPromise(() => netLog.stopLogging()) : Effect.void,
+          ).pipe(
+            Effect.timeoutOrElse({
+              duration: NETLOG_TIMEOUT_MS,
+              orElse: () => Effect.fail(new Error("net log timed out")),
+            }),
+            Effect.map((): LoggingEvent => ({ type: "netlog.stopped", attempt })),
+          ),
+          (error) =>
+            scoped("network", Effect.logWarning("failed to stop net log", { error })).pipe(
+              Effect.map((): LoggingEvent => ({ type: "netlog.stopped", attempt })),
+            ),
+        )
+      }
+
+      if (command.type === "write-archive") {
+        const attempt = command.attempt
+
+        return report(
+          writeDebugArchive(fs, path, command.netLogPath).pipe(
+            Effect.timeoutOrElse({
+              duration: EXPORT_ARCHIVE_TIMEOUT_MS,
+              orElse: () => Effect.fail(new Error("Debug log export timed out")),
+            }),
+            Effect.map((output): LoggingEvent => ({ type: "archive.succeeded", attempt, output })),
+          ),
+          (error) =>
+            Effect.logError("failed to export debug logs", { error }).pipe(
+              Effect.map((): LoggingEvent => ({ type: "archive.failed", attempt, error })),
+            ),
+        )
+      }
+
+      if (command.type === "resolve-export") return command.replies.forEach((reply) => reply.resolve(command.output))
+
+      command.replies.forEach((reply) => reply.reject(command.error))
+    }
+
+    yield* Effect.addFinalizer(() => Effect.sync(() => dispatch({ type: "disposed" })))
 
     return Service.of({
-      startNetwork: startNetLog(path).pipe(
-        Effect.catch((error) => Effect.logWarning("failed to start net log", { error })),
-      ),
+      startNetwork: Effect.sync(() => dispatch({ type: "network.requested" })),
       // Starting crashpad spawns its handler process, ~60 ms on the main thread, so the first window
       // and its IPC port come first.
       startCrashReporter: initCrashReporter(fs, path).pipe(
         Effect.tap(() => Effect.sync(() => (marks.crash = Date.now()))),
         Effect.catch((error) => Effect.logWarning("failed to start crash reporter", { error })),
       ),
-      exportDebug,
+      // A second export while one runs (another window, a retry after the error page gave up) joins it.
+      exportDebug: Effect.callback<string>((resume) => {
+        const reply: ExportReply = {
+          resolve: (output) => resume(Effect.succeed(output)),
+          reject: (error) => resume(Effect.die(error)),
+        }
+
+        dispatch({ type: "export.requested", reply })
+
+        return Effect.sync(() => dispatch({ type: "export.cancelled", reply }))
+      }),
     })
   }),
 )
@@ -65,14 +198,16 @@ const nativeLogger = Logger.make((options) => {
   try {
     if (!run) return
     const entry = Logger.formatStructured.log(options)
-    const scope = typeof entry.annotations.scope === "string" ? entry.annotations.scope : "main"
+    const scope = Predicate.isString(entry.annotations.scope) ? entry.annotations.scope : "main"
     const annotations = Object.fromEntries(Object.entries(entry.annotations).filter(([key]) => key !== "scope"))
 
-    const context = {
-      ...(Object.keys(annotations).length === 0 ? {} : { annotations }),
-      ...(Object.keys(entry.spans).length === 0 ? {} : { spans: entry.spans }),
-      ...(entry.cause === undefined ? {} : { cause: entry.cause }),
-    }
+    const context = Object.fromEntries(
+      Object.entries({
+        annotations: Object.keys(annotations).length === 0 ? undefined : annotations,
+        spans: Object.keys(entry.spans).length === 0 ? undefined : entry.spans,
+        cause: entry.cause,
+      }).filter(([, value]) => value !== undefined),
+    )
 
     const messages = Array.isArray(options.message) ? options.message : [options.message]
     log
@@ -129,54 +264,28 @@ function initCrashReporter(fs: FileSystem.FileSystem, path: Path.Path) {
   })
 }
 
-function startNetLog(path: Path.Path) {
-  if (netLog.currentlyLogging) return Effect.void
-  const target = path.join(run, "network.netlog")
-  netLogPath = target
-
-  return Effect.tryPromise(() =>
-    netLog.startLogging(target, { captureMode: "default", maxFileSize: NET_LOG_SIZE }),
-  ).pipe(Effect.tap(() => scoped("network", Effect.logInfo("net log started", { path: target }))))
-}
-
-function exportDebugLogsEffect(fs: FileSystem.FileSystem, path: Path.Path) {
+function writeDebugArchive(fs: FileSystem.FileSystem, path: Path.Path, netLogPath: string | undefined) {
   return Effect.gen(function* () {
-    const restartNetLog = netLog.currentlyLogging
-
-    if (restartNetLog) {
-      yield* Effect.tryPromise(() => netLog.stopLogging()).pipe(
-        Effect.catch((error) => scoped("network", Effect.logWarning("failed to stop net log", { error }))),
-      )
-    }
-
     const output = path.join(app.getPath("downloads"), `opencode-debug-${stamp()}.zip`)
+    yield* Effect.logInfo("exporting debug logs", { output })
 
-    return yield* Effect.gen(function* () {
-      yield* Effect.logInfo("exporting debug logs", { output })
+    const files = [
+      ...(yield* collect(fs, path, root, "desktop")),
+      ...(yield* Effect.forEach(serverLogRoots(path), (dir, i) => collect(fs, path, dir, `server-${i + 1}`))).flat(),
+      ...(yield* collect(fs, path, app.getPath("crashDumps"), "crashpad")),
+    ]
 
-      const files = [
-        ...(yield* collect(fs, path, root, "desktop")),
-        ...(yield* Effect.forEach(serverLogRoots(path), (dir, i) => collect(fs, path, dir, `server-${i + 1}`))).flat(),
-        ...(yield* collect(fs, path, app.getPath("crashDumps"), "crashpad")),
-      ]
+    const truncated = files.flatMap((file) => (file.offset > 0 ? [file.name] : []))
+    yield* writeZip(fs, output, [
+      {
+        name: "manifest.json",
+        data: Buffer.from(JSON.stringify({ ...manifest(path, netLogPath), truncated }, null, 2)),
+      },
+      ...files,
+    ])
+    yield* Effect.sync(() => shell.showItemInFolder(output))
 
-      const truncated = files.filter((file) => file.offset > 0).map((file) => file.name)
-      yield* writeZip(fs, output, [
-        { name: "manifest.json", data: Buffer.from(JSON.stringify({ ...manifest(path), truncated }, null, 2)) },
-        ...files,
-      ])
-      yield* Effect.sync(() => shell.showItemInFolder(output))
-
-      return output
-    }).pipe(
-      Effect.ensuring(
-        restartNetLog
-          ? startNetLog(path).pipe(
-              Effect.catch((error) => scoped("network", Effect.logWarning("failed to restart net log", { error }))),
-            )
-          : Effect.void,
-      ),
-    )
+    return output
   })
 }
 
@@ -219,7 +328,7 @@ function cleanup(fs: FileSystem.FileSystem, path: Path.Path) {
   })
 }
 
-function manifest(path: Path.Path) {
+function manifest(path: Path.Path, netLogPath: string | undefined) {
   return {
     generated: new Date().toISOString(),
     version: VERSION,
@@ -315,8 +424,8 @@ function initConsoleTransport() {
   }
 }
 
-function isBrokenPipe(err: unknown) {
-  return typeof err === "object" && err !== null && "code" in err && err.code === "EPIPE"
+function isBrokenPipe(cause: unknown) {
+  return Predicate.hasProperty(cause, "code") && cause.code === "EPIPE"
 }
 
 export function scoped(name: string, effect: Effect.Effect<void>) {

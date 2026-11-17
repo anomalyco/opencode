@@ -13,6 +13,12 @@ describe("ConfigMarkdown.parse", () => {
     expect(parsed.content.trim()).toBe("body")
   })
 
+  test("recovers a frontmatter value that starts with a bracketed tag", () => {
+    const parsed = ConfigMarkdown.parse("---\ndescription: [Team] Does a thing\ntools: [read, edit]\n---\nbody")
+    expect(parsed.data.description).toBe("[Team] Does a thing")
+    expect(parsed.data.tools).toEqual(["read", "edit"])
+  })
+
   test("recovers the same content again after a previous failed parse", () => {
     // gray-matter caches by content before parsing; a poisoned entry used to
     // make every later parse of the same text return silently without data.

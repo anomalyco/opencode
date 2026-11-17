@@ -1,13 +1,12 @@
-import type { RouteDefaultsInput } from "../route/client.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import * as BedrockConverse from "../protocols/bedrock-converse.js"
 import type { BedrockCredentials } from "../protocols/bedrock-converse.js"
 import { BedrockAuth } from "../protocols/utils/bedrock-auth.js"
 
 export const id = ProviderID.make("amazon-bedrock")
 
-export type Config = RouteDefaultsInput & {
+export type Config = RequestOptions & {
   /** Bedrock API key. Falls back to `AWS_BEARER_TOKEN_BEDROCK`; bearer auth takes precedence over SigV4. */
   readonly apiKey?: string
   /** `sigv4` ignores `apiKey` fallbacks from the environment; `bearer` requires a token. */
@@ -73,7 +72,7 @@ export const model: ProviderPackage.Model<Settings, BedrockConverse.OptionsInput
     auth,
     baseURL,
     credentials,
-    generation: topP === undefined ? undefined : { topP },
+    topP,
     headers: headers === undefined ? undefined : { ...headers },
     http: body === undefined ? undefined : { body: { ...body } },
     providerOptions,

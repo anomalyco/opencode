@@ -1,7 +1,21 @@
 import type { UpdaterState } from "@opencode/plugin/gui/updater"
+import type { WindowUpdaterState } from "./window-machine"
 
-/** The one update action the settings row and the titlebar pill offer for a state. */
-export function updaterAction(state: UpdaterState | undefined) {
+/**
+ * The one update action the settings row and the titlebar pill offer for a state. The window's own check or install
+ * shows as running at once, before main reports it, so a second click has nothing to start.
+ */
+export function updaterAction(state: UpdaterState | undefined, windowState?: WindowUpdaterState) {
+  const action = mainAction(state)
+
+  if (windowState?.status === "checking" && action.run === "check") return { label: "action.checking" as const }
+
+  if (windowState?.status === "installing" && action.run === "install") return { label: "action.installing" as const }
+
+  return action
+}
+
+function mainAction(state: UpdaterState | undefined) {
   if (!state) return { label: "action.checkNow" as const }
 
   switch (state.status) {

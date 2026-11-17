@@ -38,11 +38,13 @@
   flex-shrink: 0;
   min-height: 0;
   overflow: hidden;
+  width: var(--session-review-v2-sidebar-width);
   border-inline-end: 1px solid var(--v2-border-border-base);
   background: var(--v2-background-bg-base);
 }
 
-[data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar"][aria-hidden="true"] {
+[data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar"][data-presence="closing"] {
+  width: 0;
   border-inline-end-width: 0;
 }
 
@@ -51,6 +53,19 @@
   transition:
     width 200ms cubic-bezier(0.22, 1, 0.36, 1),
     border-inline-end-width 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* A toggle slides the sidebar in from zero width; mounting it open, as a tab or session switch does, doesn't. */
+[data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar"][data-presence="opening"] {
+  @starting-style {
+    width: 0;
+    border-inline-end-width: 0;
+  }
+}
+
+/* The contents keep their open width while the sidebar slides, so rows don't rewrap or re-truncate on every frame. */
+[data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar"][data-transition] > * {
+  min-width: calc(var(--session-review-v2-sidebar-width) - 1px);
 }
 
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-resize"] {

@@ -400,6 +400,98 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("keeps one item when GitHub Copilot sends a new item id on every event", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://api.githubcopilot.test" }).model("gpt-5")
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item: { type: "reasoning", id: "rs-added" } },
+              { type: "response.reasoning_summary_part.added", output_index: 0, item_id: "rs-part", summary_index: 0 },
+              {
+                type: "response.reasoning_summary_text.delta",
+                output_index: 0,
+                item_id: "rs-delta",
+                summary_index: 0,
+                delta: "Thinking",
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: { type: "reasoning", id: "rs-done", encrypted_content: "opaque", summary: [] },
+              },
+              { type: "response.output_item.added", output_index: 1, item: { type: "message", id: "msg-added" } },
+              { type: "response.output_text.delta", output_index: 1, item_id: "msg-delta", delta: "Hello" },
+              { type: "response.output_item.done", output_index: 1, item: { type: "message", id: "msg-done" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
+      expect(response.message.content).toMatchObject([
+        {
+          type: "reasoning",
+          text: "Thinking",
+          providerMetadata: {
+            "openai-compatible": { itemId: "rs-added", reasoningEncryptedContent: "opaque" },
+          },
+        },
+        { type: "text", text: "Hello" },
+      ])
+    }),
+  )
+
+  it.effect("names the GitHub Copilot content filter that blocked a response", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://api.githubcopilot.test" }).model("gpt-5")
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.incomplete",
+              response: {
+                id: "resp_1",
+                incomplete_details: { reason: "content_filter" },
+                content_filters: [
+                  { source_type: "prompt", blocked: false },
+                  {
+                    source_type: "completion",
+                    blocked: true,
+                    content_filter_raw: [{ action: "BLOCK", label: "TextCopyright", result: true }],
+                  },
+                ],
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.finishReason).toMatchObject({ normalized: "content-filter", category: "TextCopyright" })
+    }),
+  )
+
+  it.effect("converts the GitHub Copilot billing on the completed event to USD", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://api.githubcopilot.test" }).model("gpt-5")
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.completed",
+              response: { id: "resp_1", usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 } },
+              copilot_usage: { total_nano_aiu: 4_473_525_000 },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0.04473525 })
+    }),
+  )
+
   it.effect("ignores bare null frames between events", () =>
     Effect.gen(function* () {
       const model = configure({
@@ -986,7 +1078,8 @@ describe("Open Responses-compatible route", () => {
         ai.request({
           model,
           prompt: "Think.",
-          generation: { presencePenalty: 0.2, frequencyPenalty: -0.1 },
+          presencePenalty: 0.2,
+          frequencyPenalty: -0.1,
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }),
       )

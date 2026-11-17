@@ -388,8 +388,9 @@ export interface BuiltinMainStorage extends MainStorage {
 export interface Lifecycle {
   /**
    * Marks the app as quitting and disposes every plugin but the caller, then runs handoff (e.g. quitAndInstall) or
-   * relaunches. The caller outlives shutdown until the handoff settles, and keeps running when it fails (the promise
-   * rejects).
+   * relaunches. The caller outlives shutdown until the handoff settles, and keeps running when it fails: the other
+   * plugins start again, then the promise rejects, so the caller can retry at once. It also rejects when a restart is
+   * already in progress or the app is quitting.
    *
    * @param handoff - Runs once the others are disposed; omit it to relaunch.
    *
