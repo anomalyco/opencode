@@ -1,0 +1,13 @@
+{
+  "name": "opencode-v1-webapprouterscript",
+  "compatibilityDate": "2025-05-05",
+  "domains": ["app.opencode.ai"],
+  "workersDev": false,
+  "previewUrls": false,
+  "assets": { "htmlHandling": "none", "runWorkerFirst": true },
+  "env": {
+    "ASSETS": { "type": "assets" },
+    "LEGACY": { "type": "kv", "id": "33afbba643a2403992173df6c0be1c18" }
+  },
+  "manifest": { "type": "complete", "mainModule": "index.mjs", "modules": { "index.mjs": { "type": "esm" } } }
+}

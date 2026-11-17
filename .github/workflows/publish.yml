@@ -1,9 +1,7 @@
 name: publish
 run-name: "${{ format('release {0}', inputs.bump) }}"
 
-# Versioned releases read their secrets from AWS Secrets Manager: every job that needs one assumes
-# arn:aws:iam::604439173067:role/github/opencode-release over GitHub OIDC in the release environment. The Azure trusted
-# signing ids are repository variables. A run without the release environment (a push preview) fetches nothing.
+# Signing and publishing use the v1-release environment for both previews and versioned releases.
 
 on:
   push:
@@ -23,6 +21,10 @@ on:
         description: "Override version (optional)"
         required: false
         type: string
+      release_notes:
+        description: "Reviewed v1 release notes (required for a versioned release)"
+        required: false
+        type: string
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
 
@@ -40,8 +42,9 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     # Only v1 publishes. Every other job needs this one, so a dispatch on another ref publishes nothing.
     if: github.repository == 'anomalyco/opencode' && github.ref == 'refs/heads/v1'
-    # Versioned releases wait for approval in the release environment.
-    environment: ${{ (inputs.bump || inputs.version) && 'release' || '' }}
+    environment: ${{ (inputs.bump || inputs.version) && 'v1-release' || '' }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
@@ -49,32 +52,13 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install OpenCode
-        if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai
-
-      # A preview (push to v1) has no release environment and never runs the changelog, so it needs no API key.
-      - name: Configure AWS credentials
-        if: inputs.bump || inputs.version
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
-          role-session-name: opencode-${{ github.run_id }}
-          aws-region: us-east-1
-
-      - name: Read version secrets
-        if: inputs.bump || inputs.version
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: OPENCODE_API_KEY,opencode/release/OPENCODE_API_KEY
-          parse-json-secrets: false
-
       - id: version
         run: |
           ./script/version.ts
         env:
           GH_TOKEN: ${{ github.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
+          OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
           OPENCODE_VERSION: ${{ inputs.version }}
           GH_REPO: ${{ github.repository }}
     outputs:
@@ -131,37 +115,38 @@ jobs:
       - version
     runs-on: macos-26
     if: github.repository == 'anomalyco/opencode'
-    environment: release
+    environment: v1-release
+    permissions:
+      contents: write
+      id-token: write
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+      - &checkout-release
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: /.github/release/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
 
-      - name: Configure AWS credentials
+      - &release-role
+        name: Configure AWS credentials
+        id: aws
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-v1-release
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
-
-      - name: Read signing secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: APPLE_SIGNING_CERTIFICATE,shared/APPLE_SIGNING_CERTIFICATE
-          parse-json-secrets: false
+          output-env-credentials: false
+          output-credentials: true
 
       # The certificate has no password, which apple-actions/import-codesign-certs rejects. The signing step looks up
       # the identity in build.keychain, and codesign finds the key through the user search list.
       - name: Import certificate
-        run: |
-          cert="$RUNNER_TEMP/cert.p12"
-          keychain_password=$(openssl rand -base64 32)
-          printf '%s' "$APPLE_SIGNING_CERTIFICATE" | base64 --decode > "$cert"
-          security create-keychain -p "$keychain_password" build.keychain
-          security set-keychain-settings -lut 21600 build.keychain
-          security unlock-keychain -p "$keychain_password" build.keychain
-          security import "$cert" -k build.keychain -P "" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" build.keychain > /dev/null
-          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
-          rm -f "$cert"
+        env: &aws-step
+          AWS_ACCESS_KEY_ID: ${{ steps.aws.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.aws.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.aws.outputs.aws-session-token }}
+        run: bash .github/release/with-secrets.sh APPLE_SIGNING_CERTIFICATE=shared/APPLE_SIGNING_CERTIFICATE -- bash .github/release/import-certificate.sh
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -183,15 +168,12 @@ jobs:
               --force \
               --timestamp \
               --options runtime \
-              --entitlements packages/opencode/script/entitlements.plist \
+              --entitlements .github/release/entitlements/cli.plist \
               --sign "$identity" \
               "$file"
             codesign --verify --deep --strict --verbose=4 "$file"
             codesign --display --requirements - "$file"
           done
-
-      - name: Smoke test signed binary
-        run: ./packages/opencode/dist/opencode-darwin-arm64/bin/opencode --version
 
       - name: Repack macOS CLI archives
         working-directory: packages/opencode/dist
@@ -235,7 +217,10 @@ jobs:
       - version
     runs-on: blacksmith-4vcpu-windows-2025
     if: github.repository == 'anomalyco/opencode'
-    environment: release
+    environment: v1-release
+    permissions:
+      contents: write
+      id-token: write
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -244,7 +229,7 @@ jobs:
       AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ vars.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
       AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+      - *checkout-release
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -260,6 +245,7 @@ jobs:
 
       - uses: azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1.2.0
         with:
+          cache-dependencies: false
           endpoint: ${{ env.AZURE_TRUSTED_SIGNING_ENDPOINT }}
           signing-account-name: ${{ env.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
@@ -361,14 +347,14 @@ jobs:
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux --arm64
     runs-on: ${{ matrix.settings.host }}
-    environment: release
+    environment: v1-release
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-v1-release
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
 
@@ -378,7 +364,6 @@ jobs:
           secret-ids: |
             APPLE_SIGNING_CERTIFICATE,shared/APPLE_SIGNING_CERTIFICATE
             APPLE_NOTARY_KEY,shared/APPLE_NOTARY_KEY
-            SENTRY_AUTH_TOKEN,opencode/release/SENTRY_AUTH_TOKEN
           parse-json-secrets: false
 
       # The certificate has no password, which apple-actions/import-codesign-certs rejects. electron-builder reads
@@ -450,9 +435,6 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: prod
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
-          SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: production
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
@@ -541,14 +523,14 @@ jobs:
       - build-electron
     if: always() && !failure() && !cancelled() && needs.version.result == 'success'
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    # npm trusted publishing (previews included) only accepts the release environment.
-    environment: release
+    # The npm trusted publisher for publish.yml must use this environment for previews too.
+    environment: v1-release
     steps:
       # These come before the checkout: the release deploy key is what makes the tag checkout pushable.
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-v1-release
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
 

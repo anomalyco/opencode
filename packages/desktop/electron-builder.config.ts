@@ -92,7 +92,7 @@ const getBase = (appId: string): Configuration => ({
   win: {
     icon: `resources/icons/icon.ico`,
     signtoolOptions: {
-      sign: signWindows,
+      sign: process.env.OPENCODE_UNSIGNED === "true" ? undefined : signWindows,
     },
     target: ["nsis"],
     verifyUpdateCodeSignature: false,
