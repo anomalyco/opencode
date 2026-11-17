@@ -5,7 +5,7 @@ use std::rc::Rc;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{Visit, walk};
-use oxc_parser::{ParseOptions, Parser};
+use oxc_parser::{ParseOptions, Parser, ParserReturn};
 use oxc_semantic::{AstNodes, Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, SourceType};
 use oxc_syntax::operator::{
@@ -52,33 +52,30 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
             offset: None,
         });
     }
+    let renamed: String;
+    let mut await_alias = None;
     let allocator = Allocator::default();
-    let options = ParseOptions {
-        allow_return_outside_function: true,
-        preserve_parens: false,
-        ..ParseOptions::default()
-    };
-    let parse = |source_type| {
-        Parser::new(&allocator, source, source_type)
-            .with_options(options)
-            .parse()
-    };
-    let mut parsed = parse(SourceType::mjs());
+    let mut parsed = parse(&allocator, source, SourceType::mjs());
     // The reference parses a script that allows top-level `await`: `await` is a plain name there, read as the
     // operator only where an expression starts with it. A program whose first error is naming something `await` is
-    // parsed again as a script, unless it also uses `await` as an expression at the top level.
+    // parsed again as a script, unless it also uses `await` as an expression at the top level; then the names are
+    // renamed for the parse instead, keeping the expressions.
     if parsed
         .diagnostics
         .errors()
         .next()
         .is_some_and(|d| names_await(source, d))
     {
-        let script = parse(SourceType::script());
+        let script = parse(&allocator, source, SourceType::script());
         if script.diagnostics.errors().next().is_none()
             && !script.fatal_error
             && !TopLevelAwait::uses(&script.program)
         {
             parsed = script;
+        } else if let Some((text, alias)) = rename_await_names(source) {
+            renamed = text;
+            parsed = parse(&allocator, &renamed, SourceType::mjs());
+            await_alias = Some(alias);
         }
     }
     if let Some(d) = parsed.diagnostics.errors().next() {
@@ -127,6 +124,7 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
     }
     let scoping = semantic.semantic.scoping();
     let mut c = Compiler::new(scoping, semantic.semantic.nodes(), atoms);
+    c.await_alias = await_alias;
     c.compute_captured();
     c.compile_program(program)?;
     Ok(Program {
@@ -135,6 +133,161 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
         globals: c.globals,
         templates: c.templates,
     })
+}
+
+fn parse<'a>(allocator: &'a Allocator, text: &'a str, source_type: SourceType) -> ParserReturn<'a> {
+    let options = ParseOptions {
+        allow_return_outside_function: true,
+        preserve_parens: false,
+        ..ParseOptions::default()
+    };
+    Parser::new(allocator, text, source_type)
+        .with_options(options)
+        .parse()
+}
+
+/// The source with each `await` the reference reads as a name replaced by the returned five-letter identifier, which
+/// the source does not contain, padded with spaces to keep every offset (an escaped `await` is longer); `await`
+/// expressions stay. `None` when the module parse fails for another reason.
+fn rename_await_names(source: &str) -> Option<(String, String)> {
+    let alias = (0..100)
+        .map(|i| format!("$aw{i:02}"))
+        .find(|p| !source.contains(p.as_str()))?;
+    let mut text = source.to_owned();
+    for _ in 0..256 {
+        let allocator = Allocator::default();
+        let parsed = parse(&allocator, &text, SourceType::mjs());
+        let first = parsed.diagnostics.errors().next();
+        // After an escaped `await` label, its `break` reports a plain unexpected token.
+        let escaped_await = |d: &oxc_diagnostics::OxcDiagnostic| {
+            d.labels.first().is_some_and(|l| {
+                text.get(l.offset() as usize..(l.offset() + l.len()) as usize)
+                    .is_some_and(|w| w != "await" && unescape_identifier(w) == "await")
+            })
+        };
+        if first
+            .is_some_and(|d| !names_await(&text, d) && !(parsed.fatal_error && escaped_await(d)))
+        {
+            return None;
+        }
+        let spans: Vec<(usize, usize)> = match first {
+            // An escaped `await` stops the parse where it is: rename it and parse again.
+            Some(d) if parsed.fatal_error => d
+                .labels
+                .first()
+                .map(|l| (l.offset() as usize, l.offset() as usize + l.len() as usize))
+                .into_iter()
+                .collect(),
+            _ => {
+                let mut names = AwaitNames {
+                    source: &text,
+                    alias: &alias,
+                    asyncs: Vec::new(),
+                    arrow_params: false,
+                    spans: Vec::new(),
+                    invalid: false,
+                };
+                names.visit_program(&parsed.program);
+                if names.invalid {
+                    return None;
+                }
+                names.spans
+            }
+        };
+        if spans.is_empty() {
+            return first.is_none().then_some((text, alias));
+        }
+        for (start, end) in spans {
+            let word = text.get(start..end)?;
+            if word.len() < alias.len() || !word.is_ascii() || word.starts_with(alias.as_str()) {
+                return None;
+            }
+            let name = format!("{alias}{}", " ".repeat(word.len() - alias.len()));
+            text.replace_range(start..end, &name);
+        }
+    }
+    None
+}
+
+/// The `await`s the reference reads as names. Outside every function, a plain `await` starts an `await` expression
+/// unless it declares something; inside a function, every `await` is a name; inside an async function's parameters
+/// or body, none is. An arrow's parameters belong to the code around it, read as an expression first, and a function
+/// declaration's name too.
+struct AwaitNames<'s> {
+    source: &'s str,
+    alias: &'s str,
+    /// Whether each enclosing function, innermost last, is async.
+    asyncs: Vec<bool>,
+    /// In an arrow's parameters, where declarations are read like references.
+    arrow_params: bool,
+    spans: Vec<(usize, usize)>,
+    /// An escaped `await` renamed earlier turned out to be in an async function, where the reference rejects it.
+    invalid: bool,
+}
+
+impl AwaitNames<'_> {
+    fn note(&mut self, name: &str, span: oxc_span::Span, declares: bool) {
+        let in_async = self.asyncs.last() == Some(&true);
+        if name == self.alias {
+            self.invalid |= in_async;
+            return;
+        }
+        if name != "await" || in_async {
+            return;
+        }
+        let escaped = self.source.get(span.start as usize..span.end as usize) != Some("await");
+        if !self.asyncs.is_empty() || (declares && !self.arrow_params) || escaped {
+            self.spans.push((span.start as usize, span.end as usize));
+        }
+    }
+}
+
+impl<'a> Visit<'a> for AwaitNames<'_> {
+    fn visit_function(&mut self, it: &Function<'a>, _flags: oxc_syntax::scope::ScopeFlags) {
+        let declared = it.is_declaration();
+        if declared && let Some(id) = &it.id {
+            self.visit_binding_identifier(id);
+        }
+        let arrow_params = std::mem::replace(&mut self.arrow_params, false);
+        self.asyncs.push(it.r#async);
+        if !declared && let Some(id) = &it.id {
+            self.visit_binding_identifier(id);
+        }
+        self.visit_formal_parameters(&it.params);
+        if let Some(body) = &it.body {
+            self.visit_function_body(body);
+        }
+        self.asyncs.pop();
+        self.arrow_params = arrow_params;
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        let arrow_params = std::mem::replace(&mut self.arrow_params, true);
+        if it.r#async {
+            self.asyncs.push(true);
+        }
+        self.visit_formal_parameters(&it.params);
+        if it.r#async {
+            self.asyncs.pop();
+        }
+        self.arrow_params = false;
+        self.asyncs.push(it.r#async);
+        self.visit_arrow_function_body(&it.body);
+        self.asyncs.pop();
+        self.arrow_params = arrow_params;
+    }
+
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.note(it.name.as_str(), it.span, true);
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.note(it.name.as_str(), it.span, false);
+    }
+
+    fn visit_label_identifier(&mut self, it: &LabelIdentifier<'a>) {
+        self.note(it.name.as_str(), it.span, false);
+    }
 }
 
 /// Whether a parse error is only about `await` used as a name, which a module rejects and a script allows.
@@ -179,6 +332,8 @@ fn unescape_identifier(word: &str) -> String {
 /// Finds `await` read as a name outside every function, where the reference reads it as the operator.
 struct TopLevelAwait {
     functions: u32,
+    /// In the parameters of an arrow outside every function.
+    arrow_params: bool,
     found: bool,
 }
 
@@ -186,6 +341,7 @@ impl TopLevelAwait {
     fn uses(program: &oxc_ast::ast::Program) -> bool {
         let mut v = TopLevelAwait {
             functions: 0,
+            arrow_params: false,
             found: false,
         };
         v.visit_program(program);
@@ -201,13 +357,31 @@ impl<'a> Visit<'a> for TopLevelAwait {
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        // The parameters are read as an expression around the arrow first, where a plain `await` awaits.
+        if self.functions == 0 {
+            self.arrow_params = true;
+            self.visit_formal_parameters(&it.params);
+            self.arrow_params = false;
+        }
         self.functions += 1;
         walk::walk_arrow_function_expression(self, it);
         self.functions -= 1;
     }
 
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        if self.functions == 0 && self.arrow_params && it.name == "await" && it.span.size() == 5 {
+            self.found = true;
+        }
+    }
+
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         if self.functions == 0 && it.name == "await" {
+            self.found = true;
+        }
+    }
+
+    fn visit_label_identifier(&mut self, it: &LabelIdentifier<'a>) {
+        if self.functions == 0 && it.name == "await" && it.span.size() == 5 {
             self.found = true;
         }
     }
@@ -358,6 +532,8 @@ struct Compiler<'a, 's> {
     switch_scopes: FxHashSet<ScopeId>,
     /// Bindings that assignment cannot change: a named function expression's own name.
     readonly: FxHashSet<SymbolId>,
+    /// The name `await` names were renamed to for parsing (see `rename_await_names`), which compiles as `await`.
+    await_alias: Option<String>,
     /// Parameters of a function with parameter expressions, which are in their TDZ until bound in order.
     param_tdz: FxHashSet<SymbolId>,
     /// Function scopes whose `arguments` is read, and whether an arrow inside reads it.
@@ -392,6 +568,7 @@ impl<'a, 's> Compiler<'a, 's> {
             chains: Vec::new(),
             switch_scopes: FxHashSet::default(),
             readonly: FxHashSet::default(),
+            await_alias: None,
             param_tdz: FxHashSet::default(),
             args_owner: FxHashMap::default(),
         }
@@ -558,7 +735,16 @@ impl<'a, 's> Compiler<'a, 's> {
     }
 
     fn atom(&mut self, s: &str) -> Atom {
+        let s = self.real_name(s);
         self.atoms.intern(s)
+    }
+
+    /// A name as the program wrote it: `await` for a name renamed for parsing.
+    fn real_name<'n>(&self, s: &'n str) -> &'n str {
+        match &self.await_alias {
+            Some(alias) if s == alias => "await",
+            _ => s,
+        }
     }
 
     fn str_const(&mut self, s: &str) -> u32 {
@@ -637,7 +823,7 @@ impl<'a, 's> Compiler<'a, 's> {
             && !flags.contains(SymbolFlags::Function))
             || self.param_tdz.contains(&s);
         let decl_end = self.decl_end(s);
-        let name = self.atoms.intern(self.scoping.symbol_name(s));
+        let name = self.atom(self.scoping.symbol_name(s));
         self.syms.insert(
             s,
             SymInfo {
@@ -2724,7 +2910,7 @@ impl<'a, 's> Compiler<'a, 's> {
 
     /// Notes how the call or `new` at `at` names its callee in errors, when it can be named.
     fn name_callee(&mut self, at: usize, callee: &Expression) {
-        if let Some(name) = callee_name(callee) {
+        if let Some(name) = callee_name(callee, &|n| self.real_name(n)) {
             self.f().callees.push((at as u32, name.into()));
         }
     }
@@ -2984,17 +3170,21 @@ impl<'a> FnState<'a> {
 
 /// How the reference names a callee, like native engines: identifiers, member chains with plain keys, and calls of
 /// those (`search(...).catch`). A chain with any other link has no name.
-fn callee_name(e: &Expression) -> Option<String> {
+fn callee_name(e: &Expression, real: &dyn Fn(&str) -> &str) -> Option<String> {
     match e {
-        Expression::Identifier(id) => Some(id.name.to_string()),
-        Expression::CallExpression(c) => Some(format!("{}(...)", callee_name(&c.callee)?)),
-        Expression::StaticMemberExpression(m) => {
-            Some(format!("{}.{}", callee_name(&m.object)?, m.property.name))
-        }
+        Expression::Identifier(id) => Some(real(id.name.as_str()).to_owned()),
+        Expression::CallExpression(c) => Some(format!("{}(...)", callee_name(&c.callee, real)?)),
+        Expression::StaticMemberExpression(m) => Some(format!(
+            "{}.{}",
+            callee_name(&m.object, real)?,
+            m.property.name
+        )),
         Expression::ComputedMemberExpression(m) => match &m.expression {
-            Expression::StringLiteral(s) => {
-                Some(format!("{}.{}", callee_name(&m.object)?, js_str(&s.value)))
-            }
+            Expression::StringLiteral(s) => Some(format!(
+                "{}.{}",
+                callee_name(&m.object, real)?,
+                js_str(&s.value)
+            )),
             _ => None,
         },
         _ => None,
