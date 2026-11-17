@@ -5,8 +5,10 @@
 use std::any::Any;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
+use std::sync::OnceLock;
 use std::time::Duration;
 
+use mlua::chunk::{ChunkMode, Compiler};
 use mlua::{Function, Lua, MultiValue, Table, Value};
 use opencode_plugin_abi::interact::{self, Handled};
 use opencode_plugin_abi::{self as abi, v2};
@@ -33,6 +35,14 @@ pub(crate) struct Plugin {
 /// The module `@opencode/plugin`: `plugin.define` and the node helpers, in Luau.
 const MODULE: &str = include_str!("plugin.luau");
 
+/// [`MODULE`] compiled once a process, as `Lua::load` compiles a source (optimization and debug level 1): each VM
+/// loads the host's own bytecode.
+fn prelude() -> Result<&'static [u8], String> {
+    static PRELUDE: OnceLock<Result<Vec<u8>, String>> = OnceLock::new();
+    let compiled = PRELUDE.get_or_init(|| Compiler::new().compile(MODULE).map_err(|error| error.to_string()));
+    compiled.as_deref().map_err(Clone::clone)
+}
+
 /// Runs a Luau plugin's setup on `setup`: a new VM whose entry module returns `plugin.define(fn)`, then `fn(setup)`.
 /// The returned plugin lives as long as its registrations hold it.
 pub(crate) fn setup(
@@ -46,7 +56,8 @@ pub(crate) fn setup(
     let vm = Vm::new(compiled, limit, memory).map_err(error)?;
     let current = Rc::new(Slot::default());
     let (read, host, memo) = objects(&vm.lua, &current).map_err(error)?;
-    let module: Table = vm.lua.load(MODULE).set_name("=@opencode/plugin").call(()).map_err(error)?;
+    let prelude = vm.lua.load(prelude()?).set_name("=@opencode/plugin").set_mode(ChunkMode::Binary);
+    let module: Table = prelude.call(()).map_err(error)?;
     vm.lua.register_module("@opencode/plugin", &module).map_err(error)?;
     let lua = vm.lua.clone();
     let inputs = Inputs::new(&lua).map_err(error)?;
