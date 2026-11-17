@@ -209,7 +209,7 @@ describe("ReadTool", () => {
     }),
   )
 
-  codeModeIt.effect("moves read into Code Mode and adds only attachment guidance with full_codemode", () =>
+  codeModeIt.effect("moves read into Code Mode with structured-result and attachment guidance", () =>
     Effect.gen(function* () {
       const registry = yield* Tool.Service
       const snapshot = yield* registry.snapshot()
@@ -219,12 +219,12 @@ describe("ReadTool", () => {
       expect(read?.line).toContain("Reading an image or PDF automatically attaches it to the execute result")
       expect(read?.line).toContain("even if the program doesn't return or print the media reference")
       const registered = (yield* registry.list()).find((tool) => tool.id === "read")
-      expect(
-        registered?.description.replace(
-          "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference. ",
-          "",
-        ),
-      ).toBe(nativeDescription)
+      expect(registered?.description).toContain("content (lines without line-number prefixes)")
+      expect(registered?.description).toContain("offset, lineCount, and optional next")
+      expect(registered?.description).toContain("Directory results have entries (entry names) and optional next")
+      expect(registered?.description).toContain("If next is missing, you've reached the end")
+      expect(registered?.description).not.toContain("Each text line is prefixed")
+      expect(registered?.description).not.toContain("Directory entries are returned one per line")
 
       const result = yield* executeTool(registry, {
         sessionID,
