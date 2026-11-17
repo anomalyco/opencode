@@ -61,16 +61,30 @@ describe("Flag.resolve", () => {
   })
 
   test("config overrides the default and OPENCODE_FLAGS overrides config", () => {
-    const entries = [document({ todo: true, schedules: false })]
+    const entries = [document({ todo: true, automations: false })]
     const flags = Flag.resolve({ entries, channel: "dev", overrides: " media_blob , -todo,unknown_flag" })
     expect(
-      [flags.todo, flags.schedules, flags.media_blob, flags.artifacts].map((flag) => [flag.enabled, flag.source]),
+      [flags.todo, flags.automations, flags.media_blob, flags.artifacts].map((flag) => [flag.enabled, flag.source]),
     ).toEqual([
       [false, "env"],
       [false, "config"],
       [true, "env"],
       [true, "default"],
     ])
+  })
+
+  test("reads the old schedules key for automations, below the new key", () => {
+    expect(Flag.resolve({ entries: [document({ schedules: true })], channel: "latest" }).automations).toEqual({
+      enabled: true,
+      source: "config",
+    })
+    expect(
+      Flag.resolve({ entries: [document({ schedules: true, automations: false })], channel: "latest" }).automations,
+    ).toEqual({ enabled: false, source: "config" })
+    expect(Flag.resolve({ entries: [], channel: "latest", overrides: "schedules" }).automations).toEqual({
+      enabled: true,
+      source: "env",
+    })
   })
 
   test("reads experimental from the highest-priority document that sets it, as before", () => {
@@ -127,7 +141,7 @@ describe("Flag.resolve", () => {
 const it = testEffect(
   Flag.testLayer([document({ artifacts: true })], {
     app: { channel: "latest" },
-    overrides: "schedules",
+    overrides: "automations",
   }),
 )
 
@@ -136,9 +150,9 @@ describe("Flag.enabled", () => {
     Effect.gen(function* () {
       const config = yield* Config.Test
       expect(yield* Flag.enabled("artifacts")).toBe(true)
-      expect(yield* Flag.enabled("schedules")).toBe(true)
+      expect(yield* Flag.enabled("automations")).toBe(true)
       expect(yield* Flag.enabled("todo")).toBe(false)
-      expect((yield* Flag.all).schedules).toEqual({ enabled: true, source: "env" })
+      expect((yield* Flag.all).automations).toEqual({ enabled: true, source: "env" })
 
       yield* config.setEntries([document({ artifacts: false, todo: true })])
       expect(yield* Flag.enabled("artifacts")).toBe(false)

@@ -24,6 +24,9 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
         : `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
+  schedules: Schema.Boolean.pipe(optional).annotate({
+    description: "Deprecated: use experimental.automations.",
+  }),
   part_rows: Schema.Boolean.pipe(optional).annotate({
     description:
       "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",

@@ -616,11 +616,11 @@ describe("ConfigNormalize", () => {
 
   test("normalizes every registered flag as a boolean", () => {
     const result = normalized({
-      experimental: { todo: true, media_blob: false, schedules: "yes", full_codemode: true },
+      experimental: { todo: true, media_blob: false, automations: "yes", full_codemode: true },
     })
     expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false, full_codemode: true })
     expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
-      ["invalid", ["experimental", "schedules"]],
+      ["invalid", ["experimental", "automations"]],
     ])
   })
 
