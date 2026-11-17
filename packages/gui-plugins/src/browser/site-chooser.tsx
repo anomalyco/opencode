@@ -60,6 +60,7 @@ export function SiteChooser(props: {
     onMount(() => setViewport(element))
     onCleanup(() => setViewport(undefined))
   }
+
   const numbers = createMemo(() => new Intl.NumberFormat(ctx.locale.locale()))
   const number = (value: number) => numbers().format(value)
 
