@@ -1,0 +1,6 @@
+# The port of `opencode-sidebar-prompt` (`examples/sidebar-prompt`) in Luau.
+id = "sidebar.prompt.luau"
+name = "Last prompt"
+version = "0.1.6"
+contract = "2.0"
+description = "the session's last prompt in the sidebar, and /lastprompt to read it whole"
