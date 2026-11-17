@@ -59,13 +59,6 @@ export const make = <const Globals extends Readonly<Record<string, unknown>>>(
       throw new TypeError(`Extension "${options.name}" global "${name}" must be a function or an object.`)
     }
   }
-  for (const [module, global] of Object.entries(options.modules ?? {})) {
-    if (!Object.hasOwn(options.globals, global)) {
-      throw new TypeError(
-        `Extension "${options.name}" module "${module}" names "${global}", which isn't one of its globals.`,
-      )
-    }
-  }
   return {
     name: options.name,
     globals: { ...options.globals },

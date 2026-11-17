@@ -621,10 +621,7 @@ describe("imports", () => {
     expect((await failure(`import { file } from "bun"`)).message).toStartWith(`Error: Cannot import "bun"`)
   })
 
-  test("a module name must load one of the extension's globals, and a later extension's name wins", async () => {
-    expect(() => Extension.make({ name: "bad", globals: { Bun: {} }, modules: { bun: "Nope" as never } })).toThrow(
-      'Extension "bad" module "bun" names "Nope", which isn\'t one of its globals.',
-    )
+  test("a later extension's module name wins", async () => {
     const one = Extension.make({ name: "one", globals: { A: { id: () => "a" } }, modules: { shared: "A" } })
     const two = Extension.make({ name: "two", globals: { B: { id: () => "b" } }, modules: { shared: "B" } })
     expect(await value(`return require("shared").id()`, CodeMode.make({ extensions: [one, two] }))).toBe("b")
