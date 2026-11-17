@@ -19,7 +19,8 @@ use std::time::{Duration, Instant};
 use opencode_plugin::abi;
 use opencode_plugin::pipe::{self, Config, Scripts};
 use opencode_tui::plugins::host::{External, external_with};
-use opencode_tui::{Deps, Route};
+use opencode_tui::{Deps, Route, Tui};
+use opentui::testing::TestApp;
 
 use crate::plugin_surface::{Carrier, builtin};
 use crate::support::{self, Harness};
@@ -141,12 +142,17 @@ pub fn config() -> Option<Config> {
 
 /// Waits until the JS host handled everything sent before, and no tree waits for the host; then three frames.
 pub fn settle(harness: &Harness, scripts: &Scripts) {
+    settle_app(&harness.app, &harness.tui, scripts);
+}
+
+/// [`settle`] for an app and its TUI outside a [`Harness`] (the P-APP replay).
+pub(crate) fn settle_app(app: &TestApp, tui: &Tui, scripts: &Scripts) {
     let begun = Instant::now();
-    walked(harness, scripts);
+    walked_app(app, scripts);
     // A ping would start a JS host that nothing asked for.
     if scripts.pid().is_none() {
         for _ in 0..3 {
-            turn(harness);
+            turn_app(app);
         }
         if scripts.pid().is_none() {
             return;
@@ -155,28 +161,23 @@ pub fn settle(harness: &Harness, scripts: &Scripts) {
     loop {
         // What the UI sends in its next frames (a route's first view is deferred) goes before the ping.
         for _ in 0..3 {
-            turn(harness);
+            turn_app(app);
         }
         let seq = scripts.ping();
         let mut pong = None;
         while pong.is_none() {
             if begun.elapsed() > Duration::from_secs(20) {
-                let entries =
-                    harness.tui.plugins.entries().into_iter().map(|entry| format!("{} {:?}", entry.id, entry.status));
-                panic!(
-                    "the JS host never settled:\n{}\n{}",
-                    entries.collect::<Vec<_>>().join("\n"),
-                    harness.app.text()
-                );
+                let entries = tui.plugins.entries().into_iter().map(|entry| format!("{} {:?}", entry.id, entry.status));
+                panic!("the JS host never settled:\n{}\n{}", entries.collect::<Vec<_>>().join("\n"), app.text());
             }
-            turn(harness);
+            turn_app(app);
             pong = scripts.ponged(seq);
             if pong.is_none() {
                 std::thread::sleep(Duration::from_micros(200));
             }
         }
         for _ in 0..3 {
-            turn(harness);
+            turn_app(app);
         }
         if pong == Some(false) && scripts.idle() {
             return;
@@ -186,14 +187,18 @@ pub fn settle(harness: &Harness, scripts: &Scripts) {
 
 /// Waits until no walk of a plugin's tree runs (FT-2), and the loader took the last: then a few turns.
 pub fn walked(harness: &Harness, scripts: &Scripts) {
+    walked_app(&harness.app, scripts);
+}
+
+fn walked_app(app: &TestApp, scripts: &Scripts) {
     let begun = Instant::now();
     while scripts.walking() {
         assert!(begun.elapsed() < Duration::from_secs(20), "a walk of a plugin's tree never ended");
-        turn(harness);
+        turn_app(app);
         std::thread::sleep(Duration::from_micros(200));
     }
     for _ in 0..3 {
-        turn(harness);
+        turn_app(app);
     }
 }
 
@@ -220,9 +225,13 @@ pub fn decide(
 /// One turn of the UI thread, and its frame when it wants one, as the run loop paints: a revision past a frame's rows
 /// waits for the next paint (Pl).
 pub(crate) fn turn(harness: &Harness) {
-    harness.app.advance(Duration::from_millis(1));
-    if harness.app.needs_frame() {
-        harness.app.render();
+    turn_app(&harness.app);
+}
+
+fn turn_app(app: &TestApp) {
+    app.advance(Duration::from_millis(1));
+    if app.needs_frame() {
+        app.render();
     }
 }
 

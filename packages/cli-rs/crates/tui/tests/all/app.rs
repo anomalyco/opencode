@@ -261,6 +261,27 @@ fn run(
     let sockets = Arc::new(Sockets::new(recording));
     tui.terminals.set_connector(sockets.clone());
 
+    // TS draws no route until its plugins' setups have run (`app.tsx`, `<Show when={plugins.ready()}>`), so its first
+    // checkpoint already has every plugin's commands and slots. The Rust route mounts first and the plugins load after
+    // it, a V2 plugin's commands in a reload after its first mount: under load a step could come before them, an Enter
+    // on a completion that has not listed `/files` yet (file-browser-flake). The replay starts once they have loaded.
+    let starting = || {
+        tui.plugins.entries().iter().any(|entry| match &entry.status {
+            opencode_plugin::Status::Skipped(reason) => {
+                #[cfg(feature = "luau")]
+                let luau = reason == opencode_plugin::luau::STARTING;
+                #[cfg(not(feature = "luau"))]
+                let luau = false;
+                luau || reason == opencode_plugin::loader::STARTING
+            }
+            _ => false,
+        })
+    };
+    app.wait_until(Duration::from_secs(20), || !starting());
+    #[cfg(feature = "ts")]
+    if let Some(scripts) = tui.plugins.scripts.borrow().clone() {
+        crate::plugin_pipe::settle_app(&app, &tui, &scripts);
+    }
     let mut passed = true;
     let mut report = String::new();
     for (index, step) in recording.steps.iter().enumerate() {
