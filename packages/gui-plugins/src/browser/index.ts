@@ -8,9 +8,15 @@ import en from "./i18n/en"
  * The browser's preferences on this device.
  * - `links`: web links in a session open in the browser pane.
  * - `agentPages`: previews and explicit show requests can reveal a closed pane; defaults to true. Activity marks are independent.
+ * - `advanced`: Settings › Browser shows its Advanced section open; closed until the person opens it.
  * - `welcomed`: the user imported sign-ins or declined the pane's offer, so the pane stops offering.
  */
-const Preferences = Schema.Struct({ links: Schema.Boolean, welcomed: Schema.Boolean, agentPages: Schema.optionalKey(Schema.Boolean) })
+const Preferences = Schema.Struct({
+  links: Schema.Boolean,
+  welcomed: Schema.Boolean,
+  agentPages: Schema.optionalKey(Schema.Boolean),
+  advanced: Schema.optionalKey(Schema.Boolean),
+})
 
 export default Plugin.define({
   stores: {

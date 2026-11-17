@@ -74,7 +74,7 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
 
   const chooseSites = (choice: Choice) =>
     runWithOwner(owner, () =>
-      ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} jobs={jobs} close={() => dialog.close()} />),
+      ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} jobs={jobs} reveal close={() => dialog.close()} />),
     )
 
   return (

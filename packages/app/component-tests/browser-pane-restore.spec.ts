@@ -261,31 +261,31 @@ story("toggles the element picker from the shortcut only inside the browser pane
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
 
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
-  const inspect = root.getByRole("button", { name: "Comment on part of the page", exact: true })
+  // The comment tool has no button in the bar; while it waits for a pick, the pane says so in a status line.
+  const picking = root.getByText("Click part of the page to comment on it. Press Escape to cancel.", { exact: true })
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
-  await expect(inspect).toBeDisabled()
   await address.click()
   await address.press("ControlOrMeta+Shift+c")
   await expect(root.getByTestId("browser-inspects")).toHaveText("[]")
 
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
-  await expect(inspect).toBeEnabled()
+  await expect(address).not.toHaveValue("")
 
   await outside.focus()
   await outside.press("ControlOrMeta+Shift+c")
-  await expect(inspect).toHaveAttribute("aria-pressed", "false")
+  await expect(picking).toHaveCount(0)
   await expect(root.getByTestId("browser-inspects")).toHaveText("[]")
 
   await address.click()
   await expect(address).toBeFocused()
   await address.press("ControlOrMeta+Shift+c")
-  await expect(inspect).toHaveAttribute("aria-pressed", "true")
+  await expect(picking).toBeAttached()
   await expect(root.getByTestId("browser-inspects")).toHaveText(
     '[{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":true}]',
   )
 
   await address.press("ControlOrMeta+Shift+c")
-  await expect(inspect).toHaveAttribute("aria-pressed", "false")
+  await expect(picking).toHaveCount(0)
   await expect(root.getByTestId("browser-inspects")).toHaveText(
     '[{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":true},{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":false}]',
   )

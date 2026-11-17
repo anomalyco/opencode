@@ -14,6 +14,8 @@ import { SiteChooserDialog } from "./site-chooser"
  * listing waits for the test, whether an import brings everything or (`partial`) leaves a cookie behind, and the page's site it opens for (`site`).
  */
 export type SiteScenario = {
+  /** The dialog opens with its site list shown, as where the person asked to choose sites. */
+  reveal?: boolean
   readonly sites: number | "locked"
   readonly hold?: boolean
   readonly partial?: boolean
@@ -92,7 +94,8 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     },
     importBrowser: async (request: { source: string; profile: string; sites?: readonly string[] }): Promise<ImportResult> => {
       setStore("imports", (items) => [...items, request])
-      const count = (request.sites?.length ?? 0) * 2
+      // Without a list of sites, main imports the whole profile.
+      const count = (request.sites?.length ?? 5) * 2
 
       return { type: "imported", imported: count, skipped: 0, protected: 0, failed: input.scenario.partial ? 1 : 0 }
     },
@@ -130,6 +133,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
           <PluginContext.Provider value={plugin}>
             <SiteChooserDialog
               site={input.scenario.site}
+          reveal={input.scenario.reveal}
               imported={() => setStore("imported", (count) => count + 1)}
               close={() => dialog.close()}
             />

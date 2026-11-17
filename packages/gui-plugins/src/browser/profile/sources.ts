@@ -164,11 +164,11 @@ export async function listSources(): Promise<Source[]> {
 
   if (process.platform !== "win32") return sources
   // A browser installed outside the usual folders still has its icon: Windows knows where its program is.
-  const unknown = sources.flatMap((source) => (source.application ? [] : (APP_PATH_NAMES.get(source.id) ?? [])))
+  const unknown = sources.flatMap((source) => (source.application ? [] : (appPathName(source.id) ?? [])))
   const paths = await windowsAppPaths(unknown)
 
   return sources.map((source) => {
-    const file = source.application ? undefined : paths.get(APP_PATH_NAMES.get(source.id) ?? "")
+    const file = source.application ? undefined : paths.get(appPathName(source.id) ?? "")
 
     return file ? { ...source, application: file } : source
   })
@@ -537,7 +537,7 @@ export async function windowsIcons(files: readonly string[]) {
 }
 
 /** The program names Windows registers an install path under, for a browser installed outside the usual folders. */
-const APP_PATH_NAMES = new Map([
+const APP_PATH_NAMES = [
   ["chrome", "chrome.exe"],
   ["edge", "msedge.exe"],
   ["brave", "brave.exe"],
@@ -547,7 +547,11 @@ const APP_PATH_NAMES = new Map([
   ["zen", "zen.exe"],
   ["librewolf", "librewolf.exe"],
   ["floorp", "floorp.exe"],
-])
+] as const
+
+function appPathName(id: string) {
+  return APP_PATH_NAMES.find((entry) => entry[0] === id)?.[1]
+}
 
 /**
  * Where Windows says each program is installed (its "App Paths" entry, for the user first, then the machine), by

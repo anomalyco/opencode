@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, getOwner, runWithOwner, Show, untrack, t
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
+import { accessSummary, advancedOpen, verdict } from "./settings-view"
 import { SiteChooser } from "./site-chooser"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
@@ -12,19 +13,21 @@ import { showToast } from "@opencode/ui/toast"
 import type { Job } from "./jobs-machine"
 
 /**
- * Settings › Browser: whether links open in the pane, importing sign-ins, the extensions the profile runs, and its
- * stored data. Every action goes through the jobs machine, so one runs at a time and each says how it ended beside
+ * Settings › Browser: importing sign-ins, the extensions the profile runs and whether links open in the pane; then,
+ * under Advanced, sharing with remote servers, the agent's pages, the cookie-file import, site permissions and stored
+ * data. Every action goes through the jobs machine, so one runs at a time and each says how it ended beside
  * the control that started it.
  */
-export default function BrowserSettings() {
+export default function BrowserSettings(props: { target?: string }) {
   const ctx = usePlugin<typeof definition>()
   const ui = ctx.ui
   const desktop = ctx.desktop
   const preferences = ctx.stores.preferences
   // How each browser's import ended, by choice, kept while the page is open so every row keeps its own answer.
   const [results, setResults] = createSignal<ReadonlyMap<string, JobMessage>>(new Map())
-  // The cookie-file import is for developers: it waits behind a disclosure, closed until the person opens it.
-  const [developers, setDevelopers] = createSignal(false)
+  // Advanced is closed until the person opens it, which this device remembers; a settings search that lands on one of
+  // its rows shows it open for that visit.
+  const advanced = () => advancedOpen(preferences.value.advanced, props.target)
 
   const jobs = createProfileJobs({
     cookies: true,
@@ -74,43 +77,10 @@ export default function BrowserSettings() {
       </ui.SettingsLayout>
     )
 
+  // What most people come for is first: bring sign-ins, add extensions, and where links open. The rest waits in
+  // one closed "Advanced" section.
   return (
-    <ui.SettingsLayout title={ctx.t("settings.title")} description={ctx.t("settings.description")}>
-      <ui.SettingsSection>
-        <ui.SettingsRow
-          id="settings-browser-links"
-          title={ctx.t("settings.links.title")}
-          description={ctx.t("settings.links.description")}
-        >
-          <ui.Switch
-            label={ctx.t("settings.links.title")}
-            hideLabel
-            checked={preferences.value.links}
-            onChange={(links) => preferences.set({ ...preferences.value, links })}
-          />
-        </ui.SettingsRow>
-        <ui.SettingsRow
-          id="settings-browser-agent-pages"
-          title={ctx.t("settings.agentPages.title")}
-          description={ctx.t("settings.agentPages.description")}
-        >
-          <ui.Switch label={ctx.t("settings.agentPages.title")} hideLabel checked={preferences.value.agentPages !== false}
-            onChange={agentPages => preferences.update(draft => { draft.agentPages = agentPages })} />
-        </ui.SettingsRow>
-        <ui.SettingsRow
-          id="settings-browser-remote"
-          title={ctx.t("settings.remote.title")}
-          description={ctx.t("settings.remote.description")}
-        >
-          <ui.Switch
-            label={ctx.t("settings.remote.title")}
-            hideLabel
-            checked={jobs.remoteSignIns() ?? false}
-            disabled={jobs.remoteSignIns() === undefined}
-            onChange={jobs.shareSignIns}
-          />
-        </ui.SettingsRow>
-      </ui.SettingsSection>
+    <ui.SettingsLayout title={ctx.t("settings.title")}>
       <ui.SettingsSection title={ctx.t("settings.import.title")} footer={<Note>{ctx.t("settings.import.note")}</Note>}>
         <Show when={jobs.unsaved()}>
           {(message) => (
@@ -143,62 +113,15 @@ export default function BrowserSettings() {
                 />
               }
             >
-              <div class="flex items-center gap-2">
-                <ui.Button size="small" variant="ghost-muted" disabled={blocked() || unsaved()} onClick={() => chooseSites(choice)}>
-                  {ctx.t("settings.import.choose")}
-                </ui.Button>
-                <ui.Button
-                  size="small"
-                  disabled={blocked() || unsaved()}
-                  busy={jobs.importing(choice)}
-                  onClick={() =>
-                    jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
-                  }
-                >
-                  {ctx.t("settings.import.action")}
-                </ui.Button>
-              </div>
+              {/* One action: its dialog brings everything, or lets the person choose sites. */}
+              <ui.Button size="small" disabled={blocked() || unsaved()} busy={jobs.importing(choice)} onClick={() => chooseSites(choice)}>
+                {ctx.t("settings.import.open")}
+              </ui.Button>
             </ui.SettingsRow>
           )}
         </For>
         <Show when={jobs.sourcesLoaded() && choices().length === 0}>
           <ui.SettingsRow id="settings-browser-import" title={<Muted>{ctx.t("settings.import.none")}</Muted>} />
-        </Show>
-        <ui.SettingsRow
-          // Settings search reaches the import section before main lists the browsers.
-          id={jobs.sourcesLoaded() ? undefined : "settings-browser-import"}
-          title={
-            <button
-              type="button"
-              aria-expanded={developers()}
-              class="flex items-center gap-1 text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted"
-              onClick={() => setDevelopers((open) => !open)}
-            >
-              <ui.Icon name={developers() ? "outline-chevron-down" : "outline-chevron-right"} />
-              {ctx.t("settings.developers")}
-            </button>
-          }
-        />
-        <Show when={developers()}>
-          <ui.SettingsRow
-            title={
-              <Identity
-                fallback="file-document"
-                name={ctx.t("settings.import.file.title")}
-                detail={ctx.t("settings.import.file.description")}
-                message={fileMessage()}
-              />
-            }
-          >
-            <ui.Button
-              size="small"
-              disabled={blocked() || unsaved() || !desktop}
-              busy={jobs.running()?.type === "import-file"}
-              onClick={() => void pickFile()}
-            >
-              {ctx.t("settings.import.file.action")}
-            </ui.Button>
-          </ui.SettingsRow>
         </Show>
       </ui.SettingsSection>
       <ui.SettingsSection
@@ -225,38 +148,134 @@ export default function BrowserSettings() {
           </ui.Button>
         </ui.SettingsRow>
       </ui.SettingsSection>
-      <SitePermissionsSection />
-      <ui.SettingsSection title={ctx.t("settings.data.title")}>
+      <ui.SettingsSection>
         <ui.SettingsRow
-          id="settings-browser-cookies"
-          title={ctx.t("settings.cookies.title")}
-          description={
-            <Show
-              when={clearMessage()}
-              fallback={
-                // Show runs its children once; the count lives in an expression so a new summary updates it.
-                <Show when={jobs.summary()}>{(value) => <>{ctx.plural("settings.cookies.count", value().cookies)}</>}</Show>
-              }
-            >
-              {(message) => message().text}
-            </Show>
-          }
+          id="settings-browser-links"
+          title={ctx.t("settings.links.title")}
+          description={ctx.t("settings.links.description")}
         >
-          <ui.Button
-            size="small"
-            variant="danger"
-            // HTTP sign-ins have no count to show, so signing out stays possible with no cookies.
-            disabled={blocked()}
-            busy={jobs.running()?.type === "clear"}
-            onClick={() => jobs.start({ type: "clear" })}
-          >
-            {ctx.t("settings.cookies.clear")}
-          </ui.Button>
+          <ui.Switch
+            label={ctx.t("settings.links.title")}
+            hideLabel
+            checked={preferences.value.links}
+            onChange={(links) => preferences.set({ ...preferences.value, links })}
+          />
         </ui.SettingsRow>
       </ui.SettingsSection>
+      {/* A section heading like the others, with no card, that is a button: the whole row opens and closes it. */}
+      <section class="settings-section">
+        <h3 class="settings-section-title">
+          <button
+            type="button"
+            data-action="settings-browser-advanced"
+            aria-expanded={advanced()}
+            class="group flex w-full items-center gap-1 rounded-[4px] text-start outline-none focus-visible:shadow-[0_0_0_1px_var(--v2-border-border-focus)]"
+            style={{ font: "inherit", color: "inherit", "letter-spacing": "inherit" }}
+            onClick={() =>
+              preferences.update((draft) => {
+                draft.advanced = !advanced()
+              })
+            }
+          >
+            {ctx.t("settings.advanced")}
+            <span class={ADVANCED_CHEVRON}>
+              <ui.Icon name={advanced() ? "outline-chevron-down" : "outline-chevron-right"} />
+            </span>
+            <Show when={!advanced()}>
+              <span class="ms-2 min-w-0 truncate font-[440] text-v2-text-text-muted">{ctx.t("settings.advanced.summary")}</span>
+            </Show>
+          </button>
+        </h3>
+      </section>
+      <Show when={advanced()}>
+        <ui.SettingsSection>
+          <ui.SettingsRow
+            id="settings-browser-remote"
+            title={ctx.t("settings.remote.title")}
+            description={ctx.t("settings.remote.description")}
+          >
+            <ui.Switch
+              label={ctx.t("settings.remote.title")}
+              hideLabel
+              checked={jobs.remoteSignIns() ?? false}
+              disabled={jobs.remoteSignIns() === undefined}
+              onChange={jobs.shareSignIns}
+            />
+          </ui.SettingsRow>
+          <ui.SettingsRow
+            id="settings-browser-agent-pages"
+            title={ctx.t("settings.agentPages.title")}
+            description={ctx.t("settings.agentPages.description")}
+          >
+            <ui.Switch
+              label={ctx.t("settings.agentPages.title")}
+              hideLabel
+              checked={preferences.value.agentPages !== false}
+              onChange={(agentPages) =>
+                preferences.update((draft) => {
+                  draft.agentPages = agentPages
+                })
+              }
+            />
+          </ui.SettingsRow>
+        </ui.SettingsSection>
+        <ui.SettingsSection>
+          <ui.SettingsRow
+            title={
+              <Identity
+                fallback="file-document"
+                name={ctx.t("settings.import.file.title")}
+                detail={ctx.t("settings.import.file.description")}
+                message={fileMessage()}
+              />
+            }
+          >
+            <ui.Button
+              size="small"
+              disabled={blocked() || unsaved() || !desktop}
+              busy={jobs.running()?.type === "import-file"}
+              onClick={() => void pickFile()}
+            >
+              {ctx.t("settings.import.file.action")}
+            </ui.Button>
+          </ui.SettingsRow>
+        </ui.SettingsSection>
+        <SitePermissionsSection />
+        <ui.SettingsSection title={ctx.t("settings.data.title")}>
+          <ui.SettingsRow
+            id="settings-browser-cookies"
+            title={ctx.t("settings.cookies.title")}
+            description={
+              <Show
+                when={clearMessage()}
+                fallback={
+                  // Show runs its children once; the count lives in an expression so a new summary updates it.
+                  <Show when={jobs.summary()}>{(value) => <>{ctx.plural("settings.cookies.count", value().cookies)}</>}</Show>
+                }
+              >
+                {(message) => message().text}
+              </Show>
+            }
+          >
+            <ui.Button
+              size="small"
+              variant="danger"
+              // HTTP sign-ins have no count to show, so signing out stays possible with no cookies.
+              disabled={blocked()}
+              busy={jobs.running()?.type === "clear"}
+              onClick={() => jobs.start({ type: "clear" })}
+            >
+              {ctx.t("settings.cookies.clear")}
+            </ui.Button>
+          </ui.SettingsRow>
+        </ui.SettingsSection>
+      </Show>
     </ui.SettingsLayout>
   )
 }
+
+/** The Advanced heading's chevron: faint at rest, full strength under the pointer and on keyboard focus. */
+const ADVANCED_CHEVRON = "flex opacity-40 group-hover:opacity-100 group-focus-visible:opacity-100 rtl:-scale-x-100"
 
 /**
  * The decisions the user kept for sites, one row per site and feature: the site, the feature under it, and its setting
@@ -459,7 +478,8 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
     <ui.Dialog
       title={ctx.t("settings.extensions.add.title")}
       description={ctx.t("settings.extensions.dialog.description")}
-      size={choices().length > 0 ? "normal" : "fit"}
+      // As tall as what it holds: a review and its details need room, and the list between scrolls when it is long.
+      size="fit"
       footer={
         <ui.Button variant="contrast" onClick={props.close}>
           {ctx.t("settings.extensions.done")}
@@ -489,7 +509,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
             {ctx.t("settings.extensions.add")}
           </ui.Button>
         </div>
-        <div data-scrollable class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        <div data-scrollable class="flex max-h-[50vh] min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
         <Show when={jobs.describe(jobs.last())}>
           {(message) => (
             <div
@@ -526,7 +546,6 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
               >
                 {(confirm) => (
                   <ChoiceRow image={confirm().result.icon} name={confirm().result.name}>
-                    <CompatibilityNote compatibility={confirm().result.compatibility} />
                     <ui.Button
                       size="small"
                       class={ACTION_COLUMN}
@@ -601,8 +620,13 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
           )}
         </Show>
         </div>
-        <details class="shrink-0 text-v2-text-text-muted">
-          <summary class="w-fit cursor-pointer text-[13px] leading-[var(--line-height-base)]">{ctx.t("settings.developers")}</summary>
+        <details class="group shrink-0 border-t-[0.5px] border-v2-border-border-muted pt-3 text-v2-text-text-muted">
+          <summary class={DISCLOSURE}>
+            <span class="flex transition-transform group-open:rotate-90 rtl:-scale-x-100">
+              <ui.Icon name="outline-chevron-right" />
+            </span>
+            {ctx.t("settings.developers")}
+          </summary>
           <div class="mt-2 flex items-center gap-3">
             <p class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-base)]">
               {ctx.t("settings.extensions.folder.description")}
@@ -622,6 +646,10 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
     </ui.Dialog>
   )
 }
+
+/** A disclosure's summary: the app's own chevron in place of the browser's marker. */
+const DISCLOSURE =
+  "flex w-fit cursor-pointer list-none items-center gap-1 text-[13px] leading-[var(--line-height-base)] [&::-webkit-details-marker]:hidden"
 
 /**
  * Buttons beside a verdict share one width whatever they say, so the verdicts' right edges line up in a column.
@@ -664,40 +692,84 @@ function InstallReview(props: {
   ].filter((row) => row[1])
 
   return (
-    <div class="flex min-w-0 flex-col gap-3 text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base">
-      <Show when={grants().access.length || props.review.added}>
+    <div class="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base">
+      <Verdict level={props.review.compatibility.level} />
+      <p class="text-v2-text-text-muted">
+        {ctx.t(accessSummary(props.review.access))}
+        <Show when={props.review.access.length > 1}> {ctx.t("review.summary.more")}</Show>
+      </p>
+      {/* An update that asks for more stays in sight: the person agreed to less. */}
+      <Show when={props.review.added}>
         <div>
-          <p class="font-[530]" classList={{ "text-v2-state-fg-warning": !!props.review.added }}>{ctx.t(props.review.added ? "review.new" : "extensions.access.title")}</p>
+          <p class="font-[530] text-v2-state-fg-warning">{ctx.t("review.new")}</p>
           <ul class="list-disc ps-4">
             <For each={grants().access}>{(item) => <li>{ctx.t(item === "someSites" || item === "allSites" ? "review.changeSites" : `extensions.access.${item}`)}</li>}</For>
             <Show when={props.review.added?.hosts.length && !grants().access.some((item) => item === "someSites" || item === "allSites")}><li>{ctx.t("review.moreSites")}</li></Show>
-            <Show when={props.review.added && !grants().access.length && !grants().hosts.length}><li>{ctx.t("review.morePermissions")}</li></Show>
+            <Show when={!grants().access.length && !grants().hosts.length}><li>{ctx.t("review.morePermissions")}</li></Show>
           </ul>
         </div>
       </Show>
-      <div class="flex flex-col gap-1 text-v2-text-text-muted">
-        <p>{ctx.t(`review.source.${source()}`)}</p>
-        <Show when={props.review.replaces}>{(name) => <p>{ctx.t("settings.extensions.replaces", { name: name() })}</p>}</Show>
-        <Show when={props.review.access.includes("allSites")} fallback={
-          <Show when={props.review.sites.length} fallback={<p>{ctx.t(props.review.hosts.length ? "review.otherSites" : "review.noSites")}</p>}>
-            <p class="break-words">{ctx.t("review.sites")} <bdi dir="ltr">{(expanded() ? props.review.sites : props.review.sites.slice(0, 3)).join(", ")}</bdi>{" "}
-              <Show when={more() > 0}><button type="button" aria-expanded={expanded()} class="underline" onClick={() => setExpanded(!expanded())}>
-                {expanded() ? ctx.t("review.less") : ctx.plural("review.more", more())}
-              </button></Show>
-            </p>
+      <details class="group text-v2-text-text-muted">
+        <summary class={DISCLOSURE}>
+          {ctx.t("review.details")}
+          <span class="flex transition-transform group-open:rotate-180">
+            <ctx.ui.Icon name="outline-chevron-down" />
+          </span>
+        </summary>
+        <div data-scrollable tabIndex={0} role="region" aria-label={ctx.t("review.details")} class="mt-2 flex max-h-56 flex-col gap-2 overflow-y-auto rounded-[6px] bg-v2-background-bg-layer-01 p-3 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]">
+          <Show when={props.review.access.length}>
+            <div class="text-v2-text-text-base">
+              <p class="font-[530]">{ctx.t("extensions.access.title")}</p>
+              <ul class="list-disc ps-4">
+                <For each={props.review.access}>{(item) => <li>{ctx.t(`extensions.access.${item}`)}</li>}</For>
+              </ul>
+            </div>
           </Show>
-        }><p>{ctx.t("review.allSites")}</p></Show>
-      </div>
-      <details class="text-v2-text-text-muted">
-        <summary class="w-fit cursor-pointer text-[13px]">{ctx.t("review.details")}</summary>
-        <div data-scrollable tabIndex={0} role="region" aria-label={ctx.t("review.details")} class="mt-2 flex max-h-36 flex-col gap-2 overflow-y-auto">
-          <Show when={props.review.added}><p>{props.review.access.map((item) => ctx.t(`extensions.access.${item}`)).join(" · ")}</p></Show>
+          <Show when={props.review.compatibility.level !== "supported"}>
+            <div class="text-v2-text-text-base">
+              <CompatibilityDetails compatibility={props.review.compatibility} />
+            </div>
+          </Show>
+          <p>{ctx.t(`review.source.${source()}`)}</p>
+          <Show when={props.review.replaces}>{(name) => <p>{ctx.t("settings.extensions.replaces", { name: name() })}</p>}</Show>
+          <Show when={props.review.access.includes("allSites")} fallback={
+            <Show when={props.review.sites.length} fallback={<p>{ctx.t(props.review.hosts.length ? "review.otherSites" : "review.noSites")}</p>}>
+              <p class="break-words">{ctx.t("review.sites")} <bdi dir="ltr">{(expanded() ? props.review.sites : props.review.sites.slice(0, 3)).join(", ")}</bdi>{" "}
+                <Show when={more() > 0}><button type="button" aria-expanded={expanded()} class="underline" onClick={() => setExpanded(!expanded())}>
+                  {expanded() ? ctx.t("review.less") : ctx.plural("review.more", more())}
+                </button></Show>
+              </p>
+            </Show>
+          }><p>{ctx.t("review.allSites")}</p></Show>
           <dl class="grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[12px]">
             <For each={technical()}>{(row) => <><dt>{row[0]}</dt><dd dir="ltr" class="whitespace-pre-wrap break-all text-v2-text-text-base" style={{ "font-family": "var(--font-family-mono)" }}>{row[1]}</dd></>}</For>
           </dl>
         </div>
       </details>
     </div>
+  )
+}
+
+/**
+ * Whether an extension works in this browser, in one plain line with a status dot: it works, it may not fully work,
+ * or it probably will not.
+ */
+function Verdict(props: { level: ExtensionCompatibility["level"] }) {
+  const ctx = usePlugin<typeof definition>()
+
+  return (
+    <p data-verdict={props.level} class="flex items-center gap-2 font-[530]">
+      <span
+        aria-hidden="true"
+        class="size-1.5 shrink-0 rounded-full"
+        classList={{
+          "bg-v2-state-fg-success": props.level === "supported",
+          "bg-v2-state-fg-warning": props.level === "partial",
+          "bg-v2-state-fg-danger": props.level === "unsupported",
+        }}
+      />
+      {ctx.t(verdict(props.level))}
+    </p>
   )
 }
 

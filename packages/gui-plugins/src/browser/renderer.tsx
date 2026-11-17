@@ -445,9 +445,10 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
         },
       ]
     },
-    render: () => (
+    // A search that lands on a row inside Advanced opens it; the page reads the entry being revealed.
+    render: (input) => (
       <Suspense>
-        <SettingsView />
+        <SettingsView target={input.target} />
       </Suspense>
     ),
   })

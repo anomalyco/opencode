@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 // What the fixture's faked browser profile answers; see `SiteScenario` in the fixture.
-type SiteScenario = { sites: number | "locked"; hold?: boolean; partial?: boolean; site?: { name: string; choose: boolean } }
+type SiteScenario = { sites: number | "locked"; hold?: boolean; partial?: boolean; site?: { name: string; choose: boolean }; reveal?: boolean }
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
@@ -11,8 +11,11 @@ const modules = {
   ui: source("../src/runtime/plugin/ui.tsx"),
 }
 
-// Any story loads the app styles; the fixture opens the real import dialog in the real dialog host beside it.
-async function open(page: Page, scenario: SiteScenario, direction: "ltr" | "rtl" = "ltr") {
+// Any story loads the app styles; the fixture opens the real import dialog in the real dialog host beside it. Most
+// cases here are about the site list, so the dialog opens with it shown unless the case says otherwise.
+async function open(page: Page, given: SiteScenario, direction: "ltr" | "rtl" = "ltr") {
+  const scenario = { reveal: true, ...given }
+
   await page.evaluate(
     async (input) => {
       const [{ mountSiteChooser }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
@@ -22,14 +25,16 @@ async function open(page: Page, scenario: SiteScenario, direction: "ltr" | "rtl"
     { modules, scenario, direction },
   )
 
-  const dialog = page.getByRole("dialog", { name: "Choose sites to import" })
+  const dialog = page.getByRole("dialog", { name: /^Import from Google Chrome/ })
 
   return {
     dialog,
     list: dialog.getByRole("listbox", { name: "Sites" }),
     options: dialog.getByRole("option"),
     search: dialog.getByRole("searchbox", { name: "Search sites" }),
-    importButton: dialog.getByRole("button", { name: "Import", exact: true }),
+    // "Import all" until the person changes the choice, then how many sites it brings.
+    importButton: dialog.getByRole("button", { name: /^Import (all|[\d,]+ sites?)$/ }),
+    selectNone: dialog.getByRole("button", { name: "Select none", exact: true }),
     // The dialog is modal, so the record beside it is hidden from the accessibility tree.
     record: page.getByTestId("site-chooser-imports"),
   }
@@ -45,23 +50,30 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   await expect(view.options.first()).toHaveAttribute("data-site", "github.com")
   await expect(view.list).toHaveAttribute("aria-multiselectable", "true")
   await expect(view.options.first()).toHaveAttribute("aria-setsize", "5000")
-  await expect(view.dialog.getByText("0 of 5,000 selected")).toBeVisible()
-  await expect(view.dialog.getByText("Brings the sign-ins of only the sites you select. The sites used most recently come first.")).toBeVisible()
+  // Every site comes over until the person changes that.
+  await expect(view.dialog.getByText("5,000 of 5,000 selected")).toBeVisible()
+  await expect(
+    view.dialog.getByText("Brings your sign-ins for all 5,000 sites. Copies cookies only. The other browser keeps its own. The sites used most recently come first."),
+  ).toBeVisible()
   expect(await view.options.count()).toBeLessThan(45)
-  await expect(view.importButton).toBeDisabled()
+  await expect(view.importButton).toHaveText("Import all")
 
   // Tab goes from the search, past the profile and the selection's one enabled action, to the list, then out of it.
   await expect(view.search).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(view.dialog.getByRole("button", { name: /Browser profile/ })).toBeFocused()
   await page.keyboard.press("Tab")
-  await expect(view.dialog.getByRole("button", { name: "Select all" })).toBeFocused()
+  await expect(view.selectNone).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(view.list).toBeFocused()
   await page.keyboard.press("Tab")
-  await expect(view.dialog.getByRole("button", { name: "Cancel" })).toBeFocused()
+  await expect(view.dialog.getByRole("button", { name: "Choose sites" })).toBeFocused()
   await page.keyboard.press("Shift+Tab")
   await expect(view.list).toBeFocused()
+  await view.selectNone.click()
+  await expect(view.dialog.getByText("0 of 5,000 selected")).toBeVisible()
+  await expect(view.importButton).toBeDisabled()
+  await view.list.focus()
 
   // Down moves, Space toggles, End goes to the last site, and type-ahead jumps to the next site that starts so.
   await page.keyboard.press("ArrowDown")
@@ -76,6 +88,7 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   await expect(view.list).toHaveAttribute("aria-activedescendant", /figma\.com$/)
   await page.keyboard.press("Space")
   await expect(view.dialog.getByText("2 of 5,000 selected")).toBeVisible()
+  await expect(view.importButton).toHaveText("Import 2 sites")
 
   // Enter imports what is selected; a clean import closes the dialog.
   await page.keyboard.press("Enter")
@@ -87,6 +100,7 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
 story("says what Select acts on while a search is active, and only offers what would change something", async ({ page }) => {
   const view = await open(page, { sites: 5_000 })
 
+  await view.selectNone.click()
   await view.search.fill("site-01")
   await expect(view.dialog.getByText("100 shown, 0 selected")).toBeVisible()
   await view.dialog.getByRole("button", { name: "Select 100 shown", exact: true }).click()
@@ -130,7 +144,7 @@ story("leaves Escape and ArrowDown to an input method while it composes", async 
   await expect(view.record).toHaveAttribute("data-closed", "true")
 })
 
-story("switches profiles from none chosen, at the top, and reads a profile only once while open", async ({ page }) => {
+story("switches profiles back to every site chosen, at the top, and reads a profile only once while open", async ({ page }) => {
   const view = await open(page, { sites: 5_000 })
 
   await view.options.first().click()
@@ -139,7 +153,7 @@ story("switches profiles from none chosen, at the top, and reads a profile only 
   await view.dialog.getByRole("button", { name: /Browser profile/ }).click()
   await page.getByRole("option", { name: "Google Chrome · Home" }).click()
   await expect(view.options).toHaveCount(4)
-  await expect(view.dialog.getByText("0 of 4 selected")).toBeVisible()
+  await expect(view.dialog.getByText("4 of 4 selected")).toBeVisible()
   await view.dialog.getByRole("button", { name: /Browser profile/ }).click()
   await page.getByRole("option", { name: "Google Chrome · Work" }).click()
   await expect(view.options.first()).toHaveAttribute("data-site", "github.com")
@@ -219,7 +233,7 @@ story("keeps the active row off the list's edges, and brings it into view from t
 
   // The count alone is a live region, so a selection is announced.
   await page.keyboard.press("Space")
-  await expect(view.dialog.locator('[aria-live="polite"]')).toHaveText("1 of 5,000 selected")
+  await expect(view.dialog.locator('[aria-live="polite"]')).toHaveText("4,999 of 5,000 selected")
 })
 
 story("shows what the list is doing in its place, with a way to try again", async ({ page }) => {
@@ -237,7 +251,6 @@ story("says why a profile has no list, and reads it again on Try again", async (
   const view = await open(page, { sites: "locked" })
 
   await expect(view.dialog.getByRole("alert")).toHaveText("Google Chrome keeps its cookies locked while it runs. Quit Google Chrome, then import again.")
-  await expect(view.importButton).toBeDisabled()
   await view.dialog.getByRole("button", { name: "Try again" }).click()
   await expect(view.record).toHaveAttribute("data-reads", "Default,Default")
 })
@@ -246,6 +259,40 @@ story("an empty profile says so", async ({ page }) => {
   const view = await open(page, { sites: 0 })
 
   await expect(view.dialog.getByRole("status")).toHaveText("This profile has no sites to import.")
+  await expect(view.importButton).toBeDisabled()
+})
+
+story("opens on one sentence and Import all, which brings every site without the list", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false })
+
+  await expect(view.dialog.getByText("Brings your sign-ins for all 5 sites. Copies cookies only. The other browser keeps its own.")).toBeVisible()
+  await expect(view.list).toHaveCount(0)
+  await expect(view.dialog.getByRole("button", { name: "Choose sites" })).toHaveAttribute("aria-expanded", "false")
+  await view.importButton.click()
+  // No list of sites: main imports the whole profile.
+  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default" })])
+  await expect(view.record).toHaveAttribute("data-closed", "true")
+})
+
+story("Choose sites shows the list in place, every site ticked, and the button then names how many it brings", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false })
+  const choose = view.dialog.getByRole("button", { name: "Choose sites" })
+
+  await choose.click()
+  await expect(choose).toHaveAttribute("aria-expanded", "true")
+  await expect(view.options).toHaveCount(5)
+  await expect(view.dialog.getByText("5 of 5 selected")).toBeVisible()
+  await expect(view.importButton).toHaveText("Import all")
+  await view.dialog.locator('[data-site="github.com"]').click()
+  await expect(view.importButton).toHaveText("Import 4 sites")
+  // Ticking it again is everything again.
+  await view.dialog.locator('[data-site="github.com"]').click()
+  await expect(view.importButton).toHaveText("Import all")
+  await view.dialog.locator('[data-site="github.com"]').click()
+  await view.importButton.click()
+  const sent = JSON.parse((await view.record.locator("li").textContent()) ?? "{}")
+  expect(sent.sites).toHaveLength(4)
+  expect(sent.sites).not.toContain("github.com")
 })
 
 story("keeps site names left to right in a right-to-left layout, the box at the start and long names cut at their start", async ({ page }) => {

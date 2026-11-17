@@ -3,7 +3,8 @@ import { FileVerificationError } from "@opencode/util/file-verification"
 import { commandFailure, loadFailure } from "./failure"
 import en from "./i18n/en"
 
-const messages = new Map<string, string>(Object.entries(en))
+// The plugin's English copy, by key.
+const message = (key: string) => Object.entries(en).find((entry) => entry[0] === key)?.[1]
 
 // Every command the window sends for the person, and a failure main reports with no command.
 const attempts = ["navigate", "tabs.open", "reload", "back", "forward", "stop", "tabs.close", "tabs.focus", undefined] as const
@@ -31,9 +32,9 @@ describe("a page that did not load", () => {
     const view = loadFailure(error)
     expect(view.kind).toBe(kind)
     // The headline and the sentence are the plugin's own copy; Chromium's code is only the small line under them.
-    expect(messages.get(view.title)).toBeTruthy()
-    expect(messages.get(view.description)).toBeTruthy()
-    expect(messages.get(view.title)).not.toContain("ERR_")
+    expect(message(view.title)).toBeTruthy()
+    expect(message(view.description)).toBeTruthy()
+    expect(message(view.title)).not.toContain("ERR_")
     expect(view.code).toBe(error.startsWith("ERR_") || error.startsWith("502") ? error : undefined)
   })
 
@@ -68,8 +69,8 @@ describe("a command that failed", () => {
       if (view.surface === "none") return
       // A sentence of the browser's own, which says what was tried or why not: never `common.requestFailed`.
       expect(view.text.startsWith("common.")).toBe(false)
-      expect(messages.get(view.text)).toBeTruthy()
-      expect(messages.get(view.text)).not.toBe("Request failed")
+      expect(message(view.text)).toBeTruthy()
+      expect(message(view.text)).not.toBe("Request failed")
     })
   })
 

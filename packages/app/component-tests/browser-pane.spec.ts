@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
@@ -754,9 +754,9 @@ story("hides the native page under a dialog even when its still never arrives", 
 story("comments on a picked element over a still of the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("zoomed")
-  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
+  const picker = commentTool(page, root)
   await picker.click()
-  await expect(picker).toHaveAttribute("aria-pressed", "true")
+  await expect(picker.picking).toBeAttached()
   await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
   await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
   await expect(root.getByRole("status")).toHaveText(
@@ -764,7 +764,7 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   )
 
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
-  await expect(picker).toHaveAttribute("aria-pressed", "false")
+  await expect(picker.picking).toHaveCount(0)
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await expect(editor).toBeFocused()
   await expect(editor).toHaveAttribute("placeholder", "Add an optional comment...")
@@ -803,11 +803,11 @@ story("comments on a picked element over a still of the page", async ({ page }) 
 
 story("cancels the picker and a comment with Escape", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
+  const picker = commentTool(page, root)
   await picker.click()
-  await expect(picker).toHaveAttribute("aria-pressed", "true")
+  await expect(picker.picking).toBeAttached()
   await page.keyboard.press("Escape")
-  await expect(picker).toHaveAttribute("aria-pressed", "false")
+  await expect(picker.picking).toHaveCount(0)
   await expect(root.getByText("Picker: off", { exact: true })).toBeVisible()
 
   await picker.click()
@@ -822,10 +822,10 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
 
 story("leaves the picker off and Escape to the app when main never answers", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
+  const picker = commentTool(page, root)
   await root.getByRole("button", { name: "Drop picker requests", exact: true }).click()
   await picker.click()
-  await expect(picker).toHaveAttribute("aria-pressed", "false")
+  await expect(picker.picking).toHaveCount(0)
 
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
@@ -836,8 +836,7 @@ story("leaves the picker off and Escape to the app when main never answers", asy
 
 story("replaces an open page note with the comment for an element picked meanwhile", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  await root.locator('[data-component="browser-address"]').hover()
-  await root.getByRole("button", { name: "Add page to session", exact: true }).click()
+  await addPage(page, root)
   await expect(root.locator('[data-slot="browser-comment-editor"] textarea')).toBeFocused()
 
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
@@ -847,13 +846,13 @@ story("replaces an open page note with the comment for an element picked meanwhi
 
 story("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
+  const picker = commentTool(page, root)
   await picker.click()
   await expect(root.getByText("Picker Alpha: on", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await expect(root.getByTestId("native-Beta")).toHaveAttribute("data-visible", "true")
   await expect(root.getByText("Picker Alpha: off", { exact: true })).toBeVisible()
-  await expect(picker).toHaveAttribute("aria-pressed", "false")
+  await expect(picker.picking).toHaveCount(0)
 
   await root.getByRole("button", { name: "Alpha", exact: true }).click()
   await picker.click()
@@ -867,7 +866,7 @@ story("cleans up the originating session's picker and comment after a session sw
 
 story("ends the native picker and highlight when the pane unmounts", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
+  const picker = commentTool(page, root)
   await picker.click()
   await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Unmount pane", exact: true }).click()
@@ -885,7 +884,7 @@ story("ends the native picker and highlight when the pane unmounts", async ({ pa
 
 story("keeps a comment draft but drops its ref when the page navigates", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  await root.getByRole("button", { name: "Comment on part of the page", exact: true }).click()
+  await commentTool(page, root).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await editor.fill("Still misaligned after the reload")
@@ -900,7 +899,7 @@ story("keeps a comment draft but drops its ref when the page navigates", async (
 story("grows the compact comment upward without flipping and keeps its actions inside the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("low")
-  await root.getByRole("button", { name: "Comment on part of the page", exact: true }).click()
+  await commentTool(page, root).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   const editor = root.locator('[data-slot="browser-comment-editor"]')
   const field = editor.locator("textarea")
@@ -937,7 +936,7 @@ story("grows the compact comment upward without flipping and keeps its actions i
   // Near the surface's top, growth stops at the opening bottom rather than pushing the card down.
   await field.press("Escape")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("default")
-  await root.getByRole("button", { name: "Comment on part of the page", exact: true }).click()
+  await commentTool(page, root).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   await expect(field).toBeFocused()
   const nearTop = await editor.boundingBox()
@@ -979,7 +978,7 @@ story(
   async ({ page }) => {
     const root = page.getByTestId("browser-pane-fixture")
     const scenario = root.getByRole("combobox", { name: "Picked element scenario" })
-    const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
+    const picker = commentTool(page, root)
     const editor = root.locator('[data-slot="browser-comment-editor"]')
     const overlay = root.locator('[data-component="browser-comment"]')
     await scenario.selectOption("long")
@@ -1332,14 +1331,10 @@ story("lists recent pages on a blank tab and opens one", async ({ page }) => {
 
 story("adds the whole page to the session and keeps the draft when the button is pressed again", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const field = root.locator('[data-component="browser-address"]')
-  const add = root.getByRole("button", { name: "Add page to session", exact: true })
-  await field.hover()
-  await add.click()
+  await addPage(page, root)
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await editor.fill("Check the header layout")
-  await field.hover()
-  await add.click()
+  await addPage(page, root)
   await expect(editor).toHaveValue("Check the header layout")
   await editor.press("Enter")
   await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([/: Check the header layout$/])
@@ -1349,9 +1344,34 @@ story("shows the page's cookies in the site information and clears them", async 
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Site information", exact: true }).click()
   const site = page.getByRole("dialog")
+  await site.getByRole("button", { name: "Site settings", exact: true }).click()
   await expect(site).toContainText("3 cookies in use")
   await site.getByRole("button", { name: "Clear", exact: true }).click()
   await expect(site).toContainText("0 cookies in use")
+})
+
+story("site information opens on the site and its connection, with the rest one step away", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Site information", exact: true }).click()
+  const site = page.getByRole("dialog")
+  // First: where the person is and whether the connection is private. Nothing about cookies or agents yet.
+  await expect(site).toContainText("alpha.example")
+  await expect(site).toContainText("Connection is secure")
+  await expect(site).not.toContainText("cookies in use")
+  const settings = site.getByRole("button", { name: "Site settings", exact: true })
+  await settings.click()
+  // Second: everything else, with the way back holding the keyboard.
+  await expect(site.getByRole("button", { name: "Back", exact: true })).toBeFocused()
+  await expect(site).toContainText("3 cookies in use")
+  await expect(site).toContainText("You stay signed in.")
+  await expect(site.getByRole("button", { name: "Clear saved files for this site", exact: true })).toBeEnabled()
+  await expect(site).toContainText("Agents you allow can use this page")
+  // Escape steps back one view, then closes.
+  await page.keyboard.press("Escape")
+  await expect(settings).toBeFocused()
+  await expect(site).not.toContainText("cookies in use")
+  await page.keyboard.press("Escape")
+  await expect(site).toBeHidden()
 })
 
 story("says a failed cookie read failed and reads again on retry", async ({ page }) => {
@@ -1359,6 +1379,7 @@ story("says a failed cookie read failed and reads again on retry", async ({ page
   await root.getByRole("button", { name: "Fail next site read", exact: true }).click()
   await root.getByRole("button", { name: "Site information", exact: true }).click()
   const site = page.getByRole("dialog")
+  await site.getByRole("button", { name: "Site settings", exact: true }).click()
   await expect(site).toContainText("Couldn't read this site's cookies.")
   const retry = site.getByRole("button", { name: "Try again", exact: true })
   await expect(retry).toBeEnabled()
@@ -1370,6 +1391,7 @@ story("says a failed cookie read failed and reads again on retry", async ({ page
 story("Browser options keeps its original hand-off target until dismissed", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Browser options" }).click()
+  await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
   const handoff = page.getByRole("menuitem", { name: "Open in default browser" })
   await expect(handoff).toBeVisible()
   await root.getByRole("button", { name: "Blank page", includeHidden: true }).dispatchEvent("click")
@@ -1382,6 +1404,7 @@ story("Browser options says why a disabled hand-off is unavailable", async ({ pa
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", includeHidden: true }).dispatchEvent("click")
   await root.getByRole("button", { name: "Browser options" }).click()
+  await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
   await expect(page.getByRole("menuitem", { name: "Open in default browser" })).toBeDisabled()
   await expect(page.getByRole("menu").getByText("This page can't open in your default browser", { exact: true })).toBeVisible()
 })
@@ -1592,3 +1615,52 @@ story("asks for a site's sign-in with its realm, says the last one failed, and k
   await expect(dialog).toBeHidden()
   await expect(root.getByText('Answers: [{"kind":"dismiss"}]', { exact: true })).toBeVisible()
 })
+
+story("the options menu lists everyday actions first and the rest under More tools, where each still runs", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Seed history", exact: true }).click()
+  await expect(root.getByText(/^Visits: \S/)).toBeVisible()
+  await root.getByRole("button", { name: "Browser options", exact: true }).click()
+  // Find, the zoom row (out, the zoom itself, in), Copy link and Add page; then More tools; then settings.
+  await expect(page.getByRole("menu").first().getByRole("menuitem")).toHaveText([
+    /^Find in page/,
+    "",
+    "100%",
+    "",
+    "Copy link",
+    "Add page to session",
+    "More tools",
+    "Browser settings",
+  ])
+  await expect(page.getByRole("group", { name: "Zoom", exact: true }).getByRole("menuitem")).toHaveCount(3)
+  await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
+  await expect(page.getByRole("menu", { name: "More tools", exact: true }).getByRole("menuitem")).toHaveText([
+    /^Comment on part of the page/,
+    "Open in default browser",
+    /^Reload without saved files/,
+    "Clear history",
+  ])
+  await page.getByRole("menuitem", { name: "Clear history", exact: true }).click()
+  await expect(root.getByText("Visits:", { exact: true })).toBeVisible()
+  // The bar keeps only what every browser has there.
+  await expect(root.getByRole("button", { name: "Add page to session", exact: true })).toHaveCount(0)
+  await expect(root.getByRole("button", { name: "Comment on part of the page", exact: true })).toHaveCount(0)
+})
+
+// The comment tool lives under Browser options > More tools. While it waits for a pick, the pane says so in a status
+// line for assistive technology, which these cases read where the old toolbar button had a pressed state.
+function commentTool(page: Page, root: Locator) {
+  return {
+    click: async () => {
+      await root.getByRole("button", { name: "Browser options", exact: true }).click()
+      await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
+      await page.getByRole("menuitem", { name: /^Comment on part of the page/ }).click()
+    },
+    picking: root.getByText("Click part of the page to comment on it. Press Escape to cancel.", { exact: true }),
+  }
+}
+
+async function addPage(page: Page, root: Locator) {
+  await root.getByRole("button", { name: "Browser options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Add page to session", exact: true }).click()
+}

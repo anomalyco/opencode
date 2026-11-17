@@ -1,6 +1,6 @@
 import { Popover } from "@kobalte/core/popover"
 import { Button } from "@opencode/ui/button"
-import { Icon, newIcons } from "@opencode/ui/icon"
+import { Icon } from "@opencode/ui/icon"
 import type { IconName } from "@opencode/ui/icons/catalog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
@@ -78,6 +78,9 @@ const FAILURE_NOTICE_MS = 8_000
 
 /** An element a component reads after render, such as a button a native view anchors to. */
 type ElementRef = { element?: HTMLElement }
+
+/** The site information's two controls that lead to its other view; each takes the keyboard when the view changes. */
+type SiteViews = { open?: HTMLButtonElement; back?: HTMLButtonElement }
 
 export default function SessionBrowserPane(props: {
   tab: Accessor<PanelTab>
@@ -358,12 +361,6 @@ export default function SessionBrowserPane(props: {
   const parts = () => webParts() ?? addressParts(addressBar().field)
   const site = () => !!addressBar().field && !addressBar().editing && !page()?.retryOnly
   const recent = () => props.model.visits().slice(0, RECENT)
-
-  // A loopback address opens on the machine that runs the server; the system browser here reaches it only when the
-  // server runs here too.
-  const reachable = () => externalAction(address(), props.session.server.local)
-
-  const externalLabel = () => address().startsWith("file:") ? "external.reveal" : "external.open"
 
   const pageTarget = () => {
     const tab = state()
@@ -830,43 +827,6 @@ export default function SessionBrowserPane(props: {
                 </button>
               </Tooltip>
             </Show>
-            <Show when={address()}>
-              <div data-slot="browser-address-actions">
-                <Tooltip placement="top" value={plugin.t("page.add")}>
-                  <IconButton
-                    type="button"
-                    variant="ghost-muted"
-                    size="small"
-                    aria-label={plugin.t("page.add")}
-                    disabled={suspended() || failed()}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={openNote}
-                    icon={<Icon name="outline-globe-plus" />}
-                  />
-                </Tooltip>
-                <Show when={!serverFile()}>
-                  <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
-                    <IconButton
-                      type="button"
-                      variant="ghost-muted"
-                      size="small"
-                      aria-label={plugin.t(externalLabel())}
-                      disabled={!reachable()}
-                      onPointerDown={(event) => event.preventDefault()}
-                      // The page as it is at the click; a target built while rendering would remount this button
-                      // on every title or loading change.
-                      onClick={() => {
-                        const target = pageTarget()
-
-                        if (target.reveal) return target.revealFile()
-                        target.openPage()
-                      }}
-                      icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
-                    />
-                  </Tooltip>
-                </Show>
-              </div>
-            </Show>
           </form>
           <Popover.Portal>
             <Popover.Content
@@ -890,21 +850,6 @@ export default function SessionBrowserPane(props: {
           </Popover.Portal>
         </Popover>
         <div class="flex shrink-0 items-center gap-1">
-          <Tooltip placement="top" value={tip(plugin.t("inspect"), keybinds.keybind("browser.inspect"))}>
-            {/* The ghost variant sets the button color, so the active accent needs precedence over it. */}
-            <IconButton
-              variant="ghost-muted"
-              size="large"
-              data-action="browser-inspect"
-              disabled={!inspectable()}
-              state={picking() ? "pressed" : undefined}
-              classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
-              aria-pressed={picking()}
-              aria-label={plugin.t("inspect")}
-              onClick={toggleInspect}
-              icon={<Icon name="outline-browser-annotate" />}
-            />
-          </Tooltip>
           {/* Extensions load into the profile, where pages of a server on this computer browse. */}
           <Show when={props.session.server.local && extensions().length > 0}>
             <Menu gutter={4} modal={false} placement="bottom-end">
@@ -962,39 +907,41 @@ export default function SessionBrowserPane(props: {
           </Show>
           <Menu gutter={4} modal={false} placement="bottom-end" onOpenChange={open => setMenuPage(open ? pageTarget() : undefined)}>
             <Tooltip placement="top" value={plugin.t("options")}>
+              {/* The comment tool lives in this menu, so the button shows it while it waits for a pick. */}
               <Menu.Trigger
                 as={IconButton}
                 variant="ghost-muted"
                 size="large"
                 disabled={!state()}
+                classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
                 icon={<Icon name="outline-dots" />}
                 aria-label={plugin.t("options")}
               />
             </Tooltip>
             <Menu.Portal>
-              <Menu.Content class="w-[172px]">
-                {/* Zooming closes the menu: the page stays a still while the menu covers it, so a zoom would show
-                    only once it closed. The address field shows any zoom but 100% afterwards. */}
-                <Menu.Group>
-                  <Menu.Item
-                    disabled={!address()}
-                    onSelect={() => zoomPage("in")}
-                    shortcut={<Keybind keys={keybinds.keys("mod+plus").map(fullWidth)} variant="neutral" />}
-                  >
-                    {plugin.t("zoom.in")}
+              <Menu.Content class="w-[220px]">
+                {/* What most people reach for comes first; the rest is one step away under "More tools". */}
+                <Menu.Item
+                  disabled={!inspectable()}
+                  onSelect={() => find({ type: "open" })}
+                  shortcut={<Keybind keys={[...keybinds.keybind("browser.find")]} variant="neutral" />}
+                >
+                  {plugin.t("find.open")}
+                </Menu.Item>
+                {/* One row: out, the zoom itself (which resets it), in. Zooming closes the menu: the page stays a
+                    still while the menu covers it, so a zoom would show only once it closed. */}
+                <div role="group" aria-label={plugin.t("zoom.label")} data-slot="browser-menu-zoom">
+                  <span class="min-w-0 flex-1 truncate">{plugin.t("zoom.label")}</span>
+                  <Menu.Item disabled={!address()} aria-label={plugin.t("zoom.out")} onSelect={() => zoomPage("out")}>
+                    <Icon name="minus" size="small" />
                   </Menu.Item>
-                  <Menu.Item
-                    disabled={!address()}
-                    onSelect={() => zoomPage("out")}
-                    shortcut={<Keybind keys={keybinds.keys("mod+-").map(fullWidth)} variant="neutral" />}
-                  >
-                    {plugin.t("zoom.out")}
+                  <Menu.Item disabled={!zoomed()} aria-label={plugin.t("zoom.reset")} onSelect={() => zoomPage("reset")}>
+                    {plugin.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
                   </Menu.Item>
-                  <Menu.Item disabled={!zoomed()} onSelect={() => zoomPage("reset")}>
-                    {plugin.t("zoom.reset")}
+                  <Menu.Item disabled={!address()} aria-label={plugin.t("zoom.in")} onSelect={() => zoomPage("in")}>
+                    <Icon name="plus" size="small" />
                   </Menu.Item>
-                </Menu.Group>
-                <Menu.Separator />
+                </div>
                 {/* A disabled item takes no pointer events, so a tooltip never shows: its reason is a line below it. */}
                 <Menu.Group>
                   <Menu.Item disabled={!address() || serverFile()} onSelect={copyLink}>
@@ -1006,31 +953,56 @@ export default function SessionBrowserPane(props: {
                     </Menu.GroupLabel>
                   </Show>
                 </Menu.Group>
-                <Menu.Item disabled={!inspectable()} onSelect={() => find({ type: "open" })}>{plugin.t("find.open")}</Menu.Item>
+                <Menu.Item disabled={!address() || suspended() || failed()} onSelect={openNote}>
+                  {plugin.t("page.add")}
+                </Menu.Item>
                 <Show when={menuPage()?.source}>
                   {(open) => <Menu.Item onSelect={() => open()()}>{plugin.t("preview.source")}</Menu.Item>}
                 </Show>
-                <Menu.Group>
-                  <Menu.Item disabled={!menuPage()?.open} onSelect={() => menuPage()?.openPage()}>
-                    {plugin.t("menu.openPage")}
-                  </Menu.Item>
-                  <Show when={!menuPage()?.open}>
-                    <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
-                      <span dir="auto" class="break-words leading-4">{plugin.t("menu.pageUnavailable")}</span>
-                    </Menu.GroupLabel>
-                  </Show>
-                </Menu.Group>
-                <Show when={menuPage()?.reveal}>
-                <Menu.Item onSelect={() => menuPage()?.revealFile()}>
-                  {plugin.t("external.reveal")}
-                </Menu.Item>
-                </Show>
+                <Menu.Separator />
+                <Menu.Sub gutter={4} overflowPadding={16} overlap>
+                  <Menu.SubTrigger>{plugin.t("menu.more")}</Menu.SubTrigger>
+                  <Menu.Portal>
+                    <Menu.SubContent class="w-max min-w-[220px] max-w-[calc(100vw-32px)]" aria-label={plugin.t("menu.more")}>
+                      <Menu.Item
+                        disabled={!inspectable()}
+                        onSelect={toggleInspect}
+                        shortcut={<Keybind keys={[...keybinds.keybind("browser.inspect")]} variant="neutral" />}
+                      >
+                        {plugin.t("inspect")}
+                      </Menu.Item>
+                      <Menu.Group>
+                        <Menu.Item disabled={!menuPage()?.open} onSelect={() => menuPage()?.openPage()}>
+                          {plugin.t("menu.openPage")}
+                        </Menu.Item>
+                        <Show when={!menuPage()?.open}>
+                          <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
+                            <span dir="auto" class="break-words leading-4">{plugin.t("menu.pageUnavailable")}</span>
+                          </Menu.GroupLabel>
+                        </Show>
+                      </Menu.Group>
+                      <Show when={menuPage()?.reveal}>
+                        <Menu.Item onSelect={() => menuPage()?.revealFile()}>{plugin.t("external.reveal")}</Menu.Item>
+                      </Show>
+                      <Menu.Item
+                        disabled={!address()}
+                        onSelect={() => {
+                          const tab = state()
+
+                          if (tab) command({ type: "reload", tabID: tab.id, ignoreCache: true })
+                        }}
+                        shortcut={<Keybind keys={[...keybinds.keybind("browser.hardReload")]} variant="neutral" />}
+                      >
+                        {plugin.t("menu.hardReload")}
+                      </Menu.Item>
+                      <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
+                        {plugin.t("history.clear")}
+                      </Menu.Item>
+                    </Menu.SubContent>
+                  </Menu.Portal>
+                </Menu.Sub>
                 <Menu.Separator />
                 <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("settings.open")}</Menu.Item>
-                <Menu.Separator />
-                <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
-                  {plugin.t("history.clear")}
-                </Menu.Item>
               </Menu.Content>
             </Menu.Portal>
           </Menu>
@@ -1389,7 +1361,7 @@ function Marked(props: { text: string; query: string }) {
 }
 
 const connections = {
-  secure: { icon: "lock", title: "site.secure", description: undefined },
+  secure: { icon: "lock", title: "site.secure", description: "site.secure.description" },
   insecure: { icon: "outline-hexagonal-warning", title: "site.insecure", description: "site.insecure.description" },
   local: { icon: "monitor", title: "site.local", description: "site.local.description" },
   file: { icon: "folder", title: "site.file", description: "site.file.description" },
@@ -1413,8 +1385,17 @@ function SiteInformation(props: {
   // Whether a pointer opened the popover, so closing it returns focus without a focus ring.
   const [pointer, setPointer] = createSignal(false)
   const view = createMemo(() => siteView(siteState()))
+  // The second view, "Site settings"; the popover opens on the first.
+  const [detailed, setDetailed] = createSignal(false)
+  // The control that leads to the other view, which takes the keyboard when the view changes.
+  const views: SiteViews = {}
   let timer: ReturnType<typeof setTimeout> | undefined
   let trigger: HTMLButtonElement | undefined
+
+  const showDetails = (shown: boolean) => {
+    setDetailed(shown)
+    queueMicrotask(() => (shown ? views.back : views.open)?.focus({ preventScroll: true }))
+  }
 
   const dispatch = (event: SiteEvent) => {
     const next = transitionSite(siteState(), event)
@@ -1486,7 +1467,10 @@ function SiteInformation(props: {
       gutter={8}
       shift={-10}
       modal={false}
-      onOpenChange={(open) => dispatch({ type: "open.changed", open })}
+      onOpenChange={(open) => {
+        if (!open) setDetailed(false)
+        dispatch({ type: "open.changed", open })
+      }}
     >
       <Tooltip placement="top" value={plugin.t("site.info")}>
         <Popover.Trigger
@@ -1504,6 +1488,12 @@ function SiteInformation(props: {
       <Popover.Portal>
         <Popover.Content
           data-component="browser-site"
+          // Escape leaves "Site settings" for the first view before it closes the popover.
+          onEscapeKeyDown={(event: KeyboardEvent) => {
+            if (!detailed()) return
+            event.preventDefault()
+            showDetails(false)
+          }}
           // The panel takes focus itself rather than its close button, so a pointer opening shows no focus ring there.
           onOpenAutoFocus={(event: Event) => {
             event.preventDefault()
@@ -1521,74 +1511,96 @@ function SiteInformation(props: {
             trigger?.focus({ preventScroll: true, focusVisible: false })
           }}
         >
-          <div data-slot="browser-site-row">
-            <span data-slot="browser-site-icon">
-              <Icon name="outline-globe" />
-            </span>
-            <Popover.Title data-slot="browser-site-host" dir="ltr">
-              {addressParts(props.url).host || props.url}
-            </Popover.Title>
-          </div>
-          <div data-slot="browser-site-separator" aria-hidden="true" />
-          <Show when={kind()}>
-            {(value) => (
-              <SiteRow
-                icon={value().icon}
-                title={plugin.t(value().title)}
-                detail={value().description ? plugin.t(value().description ?? "") : undefined}
-              />
-            )}
-          </Show>
-          <Show when={web()}>
-            <SiteRow icon="outline-cookie" title={plugin.t("site.cookies")} detail={cookieDetail()}>
-              <Button
+          {/* Two views in one popover: what a person wants to know first, then everything else one step away. */}
+          <Show
+            when={detailed()}
+            fallback={
+              <>
+                <div data-slot="browser-site-row">
+                  <span data-slot="browser-site-icon">
+                    <Icon name="outline-globe" />
+                  </span>
+                  <Popover.Title data-slot="browser-site-host" dir="ltr">
+                    {addressParts(props.url).host || props.url}
+                  </Popover.Title>
+                </div>
+                <div data-slot="browser-site-separator" aria-hidden="true" />
+                <Show when={kind()}>
+                  {(value) => <SiteRow icon={value().icon} title={plugin.t(value().title)} detail={plugin.t(value().description)} />}
+                </Show>
+                <button
+                  ref={views.open}
+                  type="button"
+                  data-slot="browser-site-row"
+                  data-action="browser-site-settings"
+                  onClick={() => showDetails(true)}
+                >
+                  <span data-slot="browser-site-icon">
+                    <Icon name="outline-sliders" />
+                  </span>
+                  <span class="min-w-0 flex-1 text-start">{plugin.t("site.settings")}</span>
+                  <span data-slot="browser-site-icon" class="rtl:-scale-x-100">
+                    <Icon name="outline-chevron-right" />
+                  </span>
+                </button>
+              </>
+            }
+          >
+            <div data-slot="browser-site-row" class="!items-center">
+              <IconButton
+                ref={views.back}
+                type="button"
+                variant="ghost-muted"
                 size="small"
-                variant="neutral"
-                disabled={view().actionDisabled}
-                onClick={() => dispatch(view().failed ? { type: "retry" } : { type: "clear.clicked" })}
-              >
-                {plugin.t(view().failed ? "common.retry" : "site.cookies.clear")}
-              </Button>
-            </SiteRow>
-            {/* A row like its neighbours, with their inset and icon column, so the action starts under their text. */}
-            <div data-slot="browser-site-row">
-              <span data-slot="browser-site-icon" class="w-4" aria-hidden="true" />
-              <div class="flex min-w-0 flex-1 flex-col items-start gap-1">
+                class="rtl:-scale-x-100"
+                aria-label={plugin.t("site.back")}
+                onClick={() => showDetails(false)}
+                icon={<Icon name="outline-arrow-left" />}
+              />
+              <Popover.Title class="m-0 shrink-0" style={{ font: "inherit" }}>{plugin.t("site.settings")}</Popover.Title>
+              <span data-slot="browser-site-detail" dir="ltr" class="min-w-0 flex-1 truncate text-end">
+                {addressParts(props.url).host}
+              </span>
+            </div>
+            <div data-slot="browser-site-separator" aria-hidden="true" />
+            <Show when={web()}>
+              <SiteRow icon="outline-cookie" title={plugin.t("site.cookies")} detail={cookieDetail()}>
                 <Button
                   size="small"
                   variant="neutral"
+                  disabled={view().actionDisabled}
+                  onClick={() => dispatch(view().failed ? { type: "retry" } : { type: "clear.clicked" })}
+                >
+                  {plugin.t(view().failed ? "common.retry" : "site.cookies.clear")}
+                </Button>
+              </SiteRow>
+              {/* What it does not do stands under it, so nobody fears losing a sign-in. */}
+              <SiteRow icon="file-document" title={plugin.t("site.cache")} detail={plugin.t("site.clearCache.description")}>
+                <Button
+                  size="small"
+                  variant="neutral"
+                  aria-label={plugin.t("site.clearCache")}
                   disabled={view().actionDisabled || view().failed}
                   onClick={() => dispatch({ type: "clear-cache.clicked" })}
                 >
-                  {plugin.t("site.clearCache")}
+                  {plugin.t("site.cookies.clear")}
                 </Button>
-                {/* What it does not do, so nobody fears losing a sign-in. */}
-                <span data-slot="browser-site-detail">{plugin.t("site.clearCache.description")}</span>
-              </div>
-            </div>
-            <SiteRow
-              icon="outline-eye-slash"
-              title={plugin.t("site.permissions")}
-              detail={plugin.t("site.permissions.description")}
-            />
-          </Show>
-          <SiteRow icon="select-element" title={plugin.t("site.agent")} detail={plugin.t("site.agent.description")} />
-          <Show when={props.server}>
-            {(server) => <SiteRow icon="server" title={plugin.t("site.network", { server: server() })} />}
+              </SiteRow>
+              <SiteRow
+                icon="outline-eye-slash"
+                title={plugin.t("site.permissions")}
+                detail={plugin.t("site.permissions.description")}
+              />
+            </Show>
+            <SiteRow icon="select-element" title={plugin.t("site.agent")} detail={plugin.t("site.agent.description")} />
+            <Show when={props.server}>
+              {(server) => <SiteRow icon="server" title={plugin.t("site.network", { server: server() })} />}
+            </Show>
           </Show>
         </Popover.Content>
       </Popover.Portal>
     </Popover>
   )
-}
-
-// The zoom shortcuts draw their plus and minus at the width of a letter key.
-function fullWidth(key: string) {
-  if (key === "+") return "＋"
-
-  if (key === "-") return "－"
-
-  return key
 }
 
 function SiteRow(props: { icon: IconName; title: string; detail?: string; children?: JSX.Element }) {

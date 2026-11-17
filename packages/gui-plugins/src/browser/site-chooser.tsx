@@ -1,3 +1,4 @@
+import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { Icon } from "@opencode/ui/icon"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
@@ -22,16 +23,17 @@ const ROW_HEIGHT = 32
 const TYPE_AHEAD_MS = 700
 
 /**
- * The import dialog: the sites a browser profile has cookies for, one row per registrable domain with its cookie count,
- * to bring the sign-ins of only the chosen ones. Nothing is chosen at first, because the person came here to choose;
- * the one-click import elsewhere still brings every site. Main reads the list from the cookies' hosts alone. Lists stay
- * only while the dialog is open, so switching back to a profile does not read it again; neither the lists nor the
- * choice is stored.
+ * The import dialog, "Import from <browser>": one sentence of what comes over, and "Import all". A quiet "Choose
+ * sites" reveals, in place, the sites the browser profile has cookies for, one row per registrable domain with its
+ * cookie count, every one ticked until the person changes that; the button then names how many sites it brings. Main
+ * reads the list from the cookies' hosts alone. Lists stay only while the dialog is open, so switching back to a
+ * profile does not read it again; neither the lists nor the choice is stored.
  *
  * The import runs as a job of `jobs`, the surface that opened the dialog, which reports how it ended in its own place
  * (a Settings row, the pane's offer). A clean import closes the dialog; a partial or failed one keeps it open and says
- * why. `site` opens it searched for a page's registrable domain, as a passkey request's, on the first browser profile
- * that lists exactly that site; with `choose`, the site is chosen there too. A site that only contains it, such as
+ * why. `reveal` opens it with the list shown. `site` opens it with the list shown and searched for a page's
+ * registrable domain, as a passkey request's, on the first browser profile that lists exactly that site; with
+ * `choose`, that site alone is chosen there, and without it nothing is. A site that only contains it, such as
  * `github.com` for `hub.com`, is shown but never chosen.
  */
 export function SiteChooser(props: {
@@ -39,6 +41,7 @@ export function SiteChooser(props: {
   initial: Choice
   jobs: ProfileJobs
   site?: { name: string; choose: boolean }
+  reveal?: boolean
   close: () => void
 }) {
   const ctx = usePlugin<typeof definition>()
@@ -59,6 +62,8 @@ export function SiteChooser(props: {
     attempt: 0,
     typed: { text: "", at: 0 },
     seeking: !!props.site,
+    revealed: !!props.site || !!props.reveal,
+    custom: !!props.site,
   })
 
   // The import this dialog started, compared by identity with the jobs' own, which a store would wrap in a proxy.
@@ -66,7 +71,15 @@ export function SiteChooser(props: {
   const [composing, setComposing] = createSignal(false)
 
   const choice = createMemo(() => props.choices.find((item) => choiceValue(item) === state.profile) ?? props.initial)
-  const sites = () => (state.chosen.profile === state.profile ? state.chosen.sites : new Set<string>())
+
+  const sites = () => {
+    if (!state.custom) return everySite()
+
+    return state.chosen.profile === state.profile ? state.chosen.sites : new Set<string>()
+  }
+
+  // The import brings every site: nothing was changed, or everything is ticked again.
+  const everything = () => !state.custom || (all().length > 0 && sites().size === all().length)
 
   const listed = createLatest(
     () => `${state.profile}\n${state.attempt}`,
@@ -92,6 +105,8 @@ export function SiteChooser(props: {
     return current?.type === "listed" ? current.sites : []
   })
 
+  // Every site of the profile, which is what comes over until the person changes the choice.
+  const everySite = createMemo(() => new Set(all().map((item) => item.site)))
   const shown = createMemo(() => matchSites(all(), state.query))
   const ready = () => result()?.type === "listed" && all().length > 0
   const browser = () => choice().source.name
@@ -164,7 +179,7 @@ export function SiteChooser(props: {
   }
 
   const switchProfile = (profile: string) => {
-    setState({ profile, seeking: false })
+    setState({ profile, seeking: false, custom: false })
     toTop()
   }
 
@@ -175,7 +190,7 @@ export function SiteChooser(props: {
 
     // The site the page belongs to is chosen already where the person asked, so importing it is one click.
     if (site && list.type === "listed" && exactSite(list.sites, site.name))
-      return setState({ seeking: false, chosen: { profile: choiceValue(current), sites: new Set(site.choose ? [site.name] : []) } })
+      return setState({ seeking: false, custom: true, chosen: { profile: choiceValue(current), sites: new Set(site.choose ? [site.name] : []) } })
     const index = props.choices.findIndex((item) => choiceValue(item) === choiceValue(current))
     const next = props.choices[index + 1]
 
@@ -185,25 +200,33 @@ export function SiteChooser(props: {
   const choose = (change: (next: Set<string>) => void) => {
     const next = new Set(sites())
     change(next)
-    setState("chosen", { profile: state.profile, sites: next })
+    setState({ custom: true, chosen: { profile: state.profile, sites: next } })
   }
 
   const toggle = (site: string) => choose((next) => (next.has(site) ? next.delete(site) : next.add(site)))
   // Both act on the sites the search shows, which is every site without a search.
   const selectShown = () => choose((next) => shown().forEach((item) => next.add(item.site)))
   const clearShown = () => choose((next) => shown().forEach((item) => next.delete(item.site)))
-  const canImport = () => sites().size > 0 && props.jobs.available() && !busy() && props.jobs.unsaved() === undefined
+
+  // "Import all" needs no list: it works while the list is still being read, as the one-click import does.
+  const canImport = () =>
+    (state.custom ? sites().size > 0 : result()?.type !== "listed" || all().length > 0) &&
+    props.jobs.available() &&
+    !busy() &&
+    props.jobs.unsaved() === undefined
 
   const start = () => {
     if (!canImport()) return
     const current = choice()
 
-    const next: Job = {
-      type: "import-browser",
-      source: current.source.id,
-      profile: current.profile.id,
-      sites: all().flatMap((item) => (sites().has(item.site) ? [item.site] : [])),
-    }
+    const next: Job = everything()
+      ? { type: "import-browser", source: current.source.id, profile: current.profile.id }
+      : {
+          type: "import-browser",
+          source: current.source.id,
+          profile: current.profile.id,
+          sites: all().flatMap((item) => (sites().has(item.site) ? [item.site] : [])),
+        }
 
     setJob(next)
     props.jobs.start(next)
@@ -283,20 +306,23 @@ export function SiteChooser(props: {
 
   return (
     <ui.Dialog
-      title={ctx.t("sites.title")}
-      description={
-        listedOrder(result())
-          ? `${ctx.t("sites.description")} ${ctx.t(listedOrder(result()) === "name" ? "sites.order.name" : "sites.order.recent")}`
-          : ctx.t("sites.description")
-      }
-      size="large"
+      title={ctx.t("signins.import", { browser: choiceLabel(choice()) })}
+      description={`${result()?.type === "listed" ? ctx.plural("import.description", all().length, { number: number(all().length) }) : ctx.t("import.description.loading")}${
+        state.revealed && listedOrder(result()) ? ` ${ctx.t(listedOrder(result()) === "name" ? "sites.order.name" : "sites.order.recent")}` : ""
+      }`}
+      size={state.revealed ? "large" : "fit"}
       footer={
         <>
+          {/* Quiet, at the start of the footer: most people import everything and never open it. */}
+          <Button type="button" variant="ghost-muted" class="me-auto" aria-expanded={state.revealed} onClick={() => setState("revealed", (shown) => !shown)}>
+            {ctx.t("settings.import.choose")}
+            <Icon name={state.revealed ? "outline-chevron-down" : "outline-chevron-right"} size="small" class="rtl:-scale-x-100" />
+          </Button>
           <Show when={message()}>
             {(current) => (
               <p
                 role={current().error ? "alert" : "status"}
-                class="me-auto min-w-0 self-center text-[13px] leading-[var(--line-height-base)]"
+                class="min-w-0 flex-1 self-center text-[13px] leading-[var(--line-height-base)]"
                 classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
               >
                 {current().text}
@@ -307,12 +333,15 @@ export function SiteChooser(props: {
             {ctx.t("common.cancel")}
           </ui.Button>
           <ui.Button variant="contrast" disabled={!canImport()} busy={!!job() && props.jobs.running() === job()} onClick={start}>
-            {ctx.t("settings.import.action")}
+            {everything() ? ctx.t("import.all") : ctx.plural("import.some", sites().size, { number: number(sites().size) })}
           </ui.Button>
         </>
       }
     >
-      <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col gap-3 pb-1">
+      <Show when={state.revealed}>
+      {/* The dialog's body scrolls, so it clips at its edges. The search field and the profile select draw their edge and
+          their focus ring just outside their box: the top padding keeps both inside the clip. */}
+      <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col gap-3 pb-1 pt-0.5">
         <div class="flex items-center gap-2">
           <TextInput
             appearance="large"
@@ -491,6 +520,7 @@ export function SiteChooser(props: {
           </Show>
         </div>
       </div>
+      </Show>
     </ui.Dialog>
   )
 }
@@ -509,6 +539,10 @@ type ChooserState = {
   attempt: number
   typed: { text: string; at: number }
   seeking: boolean
+  /** The site list shows; the dialog opens without it. */
+  revealed: boolean
+  /** The person changed which sites come over, or the dialog opened for one site; before that, every site does. */
+  custom: boolean
 }
 
 /** The list's scrolling viewport and the listbox in it, once they mount. */
@@ -524,6 +558,8 @@ function listedOrder(list: SiteList | undefined) {
  */
 export function SiteChooserDialog(props: {
   site?: { name: string; choose: boolean }
+  /** Opens with the site list shown, for a surface where the person asked to choose. */
+  reveal?: boolean
   imported: () => void
   close: () => void
 }) {
@@ -542,7 +578,7 @@ export function SiteChooserDialog(props: {
       when={choices()[0]}
       fallback={
         <ctx.ui.Dialog
-          title={ctx.t("sites.title")}
+          title={ctx.t("settings.import.title")}
           description={ctx.t("sites.description")}
           size="large"
           footer={
@@ -557,7 +593,7 @@ export function SiteChooserDialog(props: {
         </ctx.ui.Dialog>
       }
     >
-      {(first) => <SiteChooser choices={choices()} initial={first()} jobs={jobs} site={props.site} close={props.close} />}
+      {(first) => <SiteChooser choices={choices()} initial={first()} jobs={jobs} site={props.site} reveal={props.reveal} close={props.close} />}
     </Show>
   )
 }
