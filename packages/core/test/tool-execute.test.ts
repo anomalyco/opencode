@@ -570,6 +570,60 @@ describe("fs", () => {
       "ENOENT: no such file or directory, open 'missing.txt'",
     ])
   })
+
+  test("readFile without an encoding gives text for UTF-8 files and bytes otherwise", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "data.json"), '{"a":1}')
+    await Bun.write(path.join(tmp.path, "image.bin"), new Uint8Array([0xff, 0xfe, 0x00]))
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, fileServices(tmp.path)).execute(
+        {
+          code: `const bin = fs.readFileSync("image.bin")
+            return [JSON.parse(fs.readFileSync("data.json")).a, fs.readFileSync("data.json").toString(), bin instanceof Uint8Array, [...bin]]`,
+        },
+        context,
+      ),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual([1, '{"a":1}', true, [255, 254, 0]])
+  })
+
+  test("a path outside the project is approved before anything checks it on disk", async () => {
+    await using tmp = await tmpdir()
+    await using outside = await tmpdir()
+    await Bun.write(path.join(outside.path, "here.txt"), "x")
+    await Bun.write(path.join(outside.path, "full", "file.txt"), "x")
+    const denyOutside = {
+      assert: (input: Permission.AssertInput) =>
+        input.action === "external_directory"
+          ? Effect.fail(
+              new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
+            )
+          : Effect.void,
+    }
+    const at = (name: string) => JSON.stringify(path.join(outside.path, name))
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), permissionService(denyOutside), fileServices(tmp.path, denyOutside)).execute(
+        {
+          code: `fs.writeFileSync("a.txt", "a")
+            const code = (run) => { try { run(); return "ok" } catch (e) { return e.code } }
+            return [
+              code(() => fs.rmSync(${at("here.txt")})),
+              code(() => fs.rmSync(${at("missing.txt")}, { force: true })),
+              code(() => fs.rmSync(${at("missing.txt")})),
+              code(() => fs.renameSync("a.txt", ${at("full")})),
+              code(() => fs.copyFileSync("a.txt", ${at("here.txt")}, fs.constants.COPYFILE_EXCL)),
+              code(() => fs.appendFileSync(${at("here.txt")}, "y")),
+            ]`,
+        },
+        context,
+      ),
+    )
+
+    // Every call fails the same way whether or not the outside path exists, and nothing outside changed.
+    expect(JSON.parse(result.output.output)).toEqual(["EACCES", "EACCES", "EACCES", "EACCES", "EACCES", "EACCES"])
+    expect(await Bun.file(path.join(outside.path, "here.txt")).text()).toBe("x")
+  })
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {

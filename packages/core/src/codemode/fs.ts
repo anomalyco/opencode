@@ -32,10 +32,15 @@ const ops = {
   readFile: op("open", function* (host, file, options?: Encoding) {
     const bytes = (yield* host.files.read(yield* read(host, file))).bytes
     const encoding = typeof options === "string" ? options : options?.encoding
-    return encoding ? Buffer.from(bytes).toString(encoding) : bytes
+    if (encoding) return Buffer.from(bytes).toString(encoding)
+    // Node returns a Buffer, whose toString() is UTF-8, so `JSON.parse(fs.readFileSync(p))` works. Programs have no
+    // Buffer, so text comes back as text and only other bytes as a Uint8Array.
+    const text = Buffer.from(bytes).toString("utf8")
+    return Buffer.from(text).equals(bytes) ? text : bytes
   }),
   writeFile: op("open", (host, file, data: Data, options?: Encoding) => write(host, file, toBytes(data, options))),
   appendFile: op("open", function* (host, file, data: Data, options?: Encoding) {
+    yield* outside(host, [file])
     const current = yield* host.files.read((yield* host.access.resolve({ path: file })).absolute).pipe(
       Effect.map((result) => result.bytes),
       Effect.catchTag("Environment.NotFound", () => Effect.succeed(new Uint8Array())),
@@ -65,8 +70,7 @@ const ops = {
   rm: op("rm", remove),
   unlink: op("unlink", (host, file) => remove(host, file)),
   rename: op("rename", function* (host, file, to: PathLike) {
-    const source = (yield* host.access.resolve({ path: file })).absolute
-    const target = (yield* host.access.resolve({ path: toPath(to) })).absolute
+    const [source, target] = yield* outside(host, [file, toPath(to)])
     // As in Node: a directory may replace an empty directory; anything else onto a directory fails.
     if ((yield* typeOf(host, target)) === "directory") {
       if ((yield* typeOf(host, source)) !== "directory") return yield* Effect.fail("EISDIR" as const)
@@ -82,8 +86,8 @@ const ops = {
     const bytes = (yield* host.files.read(yield* read(host, file))).bytes
     const destination = toPath(to)
     if ((mode ?? 0) & constants.COPYFILE_EXCL) {
-      const absolute = (yield* host.access.resolve({ path: destination })).absolute
-      if ((yield* typeOf(host, absolute)) !== undefined) return yield* Effect.fail("EEXIST" as const)
+      const [absolute] = yield* outside(host, [destination])
+      if ((yield* typeOf(host, absolute!)) !== undefined) return yield* Effect.fail("EEXIST" as const)
     }
     yield* write(host, destination, bytes)
   }),
@@ -139,6 +143,14 @@ function* read(host: Host, file: string) {
   return (yield* host.access.authorizeRead(file, host.context)).absolute
 }
 
+// Approves paths outside the project before anything looks at them on disk, so a program can't learn what exists
+// there without approval.
+function* outside(host: Host, files: ReadonlyArray<string>) {
+  const targets = yield* Effect.forEach(files, (file) => host.access.resolve({ path: file }))
+  yield* host.access.authorizeExternal(targets, host.context)
+  return targets.map((target) => target.absolute)
+}
+
 // One edit request covering every path, after any external-directory approval.
 function* edit(host: Host, files: ReadonlyArray<string>) {
   const targets = yield* Effect.forEach(files, (file) => host.access.resolve({ path: file, kind: "file" }))
@@ -158,7 +170,7 @@ function* write(host: Host, file: string, content: Uint8Array) {
 
 // Every path inside a removed directory is authorized, so an edit rule for one of them still applies.
 function* remove(host: Host, file: string, options?: { recursive?: boolean; force?: boolean }) {
-  const absolute = (yield* host.access.resolve({ path: file })).absolute
+  const [absolute] = yield* outside(host, [file])
   const type = yield* typeOf(host, absolute)
   if (type === undefined && options?.force === true) return
   if (type === undefined) return yield* new Environment.NotFound({ path: absolute })
