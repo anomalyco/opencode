@@ -23,14 +23,21 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { AppProcess } from "@opencode-ai/core/process"
 
 const DOOM_LOOP_THRESHOLD = 3
+const DOOM_LOOP_MESSAGES = 16
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
   readonly message: SessionV1.Assistant
+  readonly beforeToolCall: (input: {
+    tool: string
+    args: unknown
+    callID: string
+    abort?: AbortSignal
+  }) => Effect.Effect<boolean>
   readonly updateToolCall: (
     toolCallID: string,
     update: (part: SessionV1.ToolPart) => SessionV1.ToolPart,
@@ -93,7 +100,6 @@ const layer = Layer.effect(
     const status = yield* SessionStatus.Service
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
-    const database = yield* Database.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -113,6 +119,7 @@ const layer = Layer.effect(
         reasoningMap: {},
       }
       let aborted = false
+      const deniedToolCalls = new Set<string>()
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -123,6 +130,7 @@ const layer = Layer.effect(
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
         delete ctx.toolcalls[toolCallID]
+        deniedToolCalls.delete(toolCallID)
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
       })
 
@@ -197,7 +205,14 @@ const layer = Layer.effect(
             time: { start: match.part.state.time.start, end: Date.now() },
           },
         })
-        if (error instanceof PermissionV1.RejectedError || error instanceof Question.RejectedError) {
+        if (
+          error instanceof PermissionV1.RejectedError ||
+          error instanceof Question.RejectedError ||
+          (error instanceof PermissionV1.DeniedError &&
+            (deniedToolCalls.has(toolCallID) ||
+              // Read publishes this marker only after an invalid range, before asking doom_loop.
+              (match.part.tool === "read" && match.part.state.metadata?.readRange)))
+        ) {
           ctx.blocked = ctx.shouldBreak
         }
         yield* settleToolCall(toolCallID)
@@ -250,6 +265,72 @@ const layer = Layer.effect(
           sessionID: part.sessionID,
         }
         return { call: ctx.toolcalls[input.id], part }
+      })
+
+      const gateToolCall = Effect.fn("SessionProcessor.gateToolCall")(function* (
+        name: string,
+        args: unknown,
+        toolCallID: string,
+      ) {
+        const input = isRecord(args) ? args : { value: args }
+        const call = yield* ensureToolCall({ id: toolCallID, name })
+        yield* updateToolCall(toolCallID, (part) => ({
+          ...part,
+          state:
+            part.state.status === "running"
+              ? { ...part.state, input }
+              : { status: "running", input, time: { start: Date.now() } },
+        }))
+        const messages = yield* session.messages({ sessionID: ctx.sessionID, limit: DOOM_LOOP_MESSAGES })
+        const parts = messages
+          .slice(messages.findLastIndex((message) => message.info.role === "user") + 1)
+          .flatMap((message) => message.parts)
+          .filter((part): part is SessionV1.ToolPart => part.type === "tool")
+        // Anchor on this call so concurrent calls cannot count later siblings.
+        const index = parts.findIndex((part) => part.id === call.part.id)
+        const recentParts = parts.slice(Math.max(0, index - DOOM_LOOP_THRESHOLD + 1), index + 1)
+        if (
+          recentParts.length !== DOOM_LOOP_THRESHOLD ||
+          !recentParts.every(
+            (part) =>
+              part.tool === name &&
+              part.state.status !== "pending" &&
+              JSON.stringify(part.state.input) === JSON.stringify(input),
+          )
+        )
+          return false
+
+        const agent = yield* agents.get(ctx.assistantMessage.agent)
+        const current = yield* session.get(ctx.sessionID)
+        yield* permission
+          .ask({
+            permission: "doom_loop",
+            patterns: [name],
+            sessionID: ctx.sessionID,
+            metadata: { tool: name, input },
+            always: [name],
+            ruleset: Permission.merge(agent.permission, current.permission ?? []),
+          })
+          .pipe(
+            Effect.tapError((error) =>
+              Effect.sync(() => {
+                if (error instanceof PermissionV1.DeniedError) deniedToolCalls.add(toolCallID)
+              }),
+            ),
+          )
+        return true
+      })
+
+      const beforeToolCall = Effect.fn("SessionProcessor.beforeToolCall")(function* (
+        input: Parameters<Handle["beforeToolCall"]>[0],
+      ) {
+        const gate = gateToolCall(input.tool, input.args, input.callID)
+        const signal = input.abort
+        if (!signal) return yield* gate.pipe(Effect.orDie)
+        signal.throwIfAborted()
+        const checked = yield* Effect.raceFirst(gate, AppProcess.waitForAbort(signal)).pipe(Effect.orDie)
+        signal.throwIfAborted()
+        return checked
       })
 
       const isFilePart = (value: unknown): value is SessionV1.FilePart => Schema.is(SessionV1.FilePart)(value)
@@ -334,7 +415,7 @@ const layer = Layer.effect(
             }
             yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
-            yield* updateToolCall(value.id, (match) => ({
+            const call = yield* updateToolCall(value.id, (match) => ({
               ...match,
               tool: value.name,
               state:
@@ -350,33 +431,8 @@ const layer = Layer.effect(
                 : value.providerMetadata,
             }))
 
-            const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
-              Effect.provideService(Database.Service, database),
-            )
-            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
-
-            if (
-              recentParts.length !== DOOM_LOOP_THRESHOLD ||
-              !recentParts.every(
-                (part) =>
-                  part.type === "tool" &&
-                  part.tool === value.name &&
-                  part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(input),
-              )
-            ) {
-              return
-            }
-
-            const agent = yield* agents.get(ctx.assistantMessage.agent)
-            yield* permission.ask({
-              permission: "doom_loop",
-              patterns: [value.name],
-              sessionID: ctx.assistantMessage.sessionID,
-              metadata: { tool: value.name, input },
-              always: [value.name],
-              ruleset: agent.permission,
-            })
+            // Remote execution has already occurred; retain its event-time policy gate.
+            if (call?.metadata?.providerExecuted) yield* gateToolCall(value.name, value.input, value.id)
             return
           }
 
@@ -700,6 +756,7 @@ const layer = Layer.effect(
         get message() {
           return ctx.assistantMessage
         },
+        beforeToolCall,
         updateToolCall,
         completeToolCall,
         process,
@@ -725,7 +782,6 @@ export const node = LayerNode.make({
     SessionStatus.node,
     Image.node,
     EventV2Bridge.node,
-    Database.node,
   ],
 })
 
