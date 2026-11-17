@@ -57,7 +57,12 @@ const patterns = [
   /request_too_large/i,
 ]
 
-const payloadPatterns = [/request entity too large/i, /payload too large/i, /request too large/i]
+const payloadPatterns = [
+  /request entity too large/i,
+  /payload too large/i,
+  /request too large/i,
+  /inlined media exceeds/i,
+]
 
 const exclusions = [
   /^(throttling error|service unavailable):/i,
