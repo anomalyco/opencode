@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import type { CustomScheme } from "electron"
 
 // Runs an Electron main-process fixture of a real-Electron test (`*.fixture.ts`) in the pinned Electron, for every such
 // test in this package. The binary is installed on first use, by whichever process asks first: other suites that run
@@ -12,7 +13,7 @@ import path from "node:path"
 // opens its error box on the desktop.
 const loader = `"use strict"
 const { appendFileSync } = require("node:fs")
-const { app, dialog } = require("electron")
+const { app, dialog, protocol } = require("electron")
 const fail = (reason) => {
   try {
     appendFileSync(process.env.ELECTRON_FIXTURE_LOG, String((reason && reason.stack) || reason) + "\\n")
@@ -23,6 +24,8 @@ dialog.showErrorBox = () => {}
 process.on("uncaughtException", fail)
 process.on("unhandledRejection", fail)
 try {
+  // Scheme privileges exist only when granted before the app is ready, which a fixture loaded here may miss.
+  if (process.env.ELECTRON_FIXTURE_SCHEMES) protocol.registerSchemesAsPrivileged(JSON.parse(process.env.ELECTRON_FIXTURE_SCHEMES))
   import("file:///" + process.env.ELECTRON_FIXTURE_ENTRY.replace(/\\\\/g, "/").replace(/^\\//, "")).catch(fail)
 } catch (error) {
   fail(error)
@@ -34,6 +37,8 @@ export async function runElectronFixture(input: {
   /** Absolute path to the fixture's source. */
   readonly fixture: string
   readonly env?: Readonly<Record<string, string>>
+  /** Schemes the product registers as privileged before the app is ready (`src/schemes.ts`). */
+  readonly schemes?: readonly CustomScheme[]
 }) {
   const out = await mkdtemp(path.join(tmpdir(), `${path.basename(input.fixture, ".fixture.ts")}-`))
 
@@ -74,6 +79,7 @@ export async function runElectronFixture(input: {
           ELECTRON_ENABLE_LOGGING: undefined,
           ELECTRON_FIXTURE_LOG: log,
           ELECTRON_FIXTURE_ENTRY: path.join(out, "fixture.mjs"),
+        ELECTRON_FIXTURE_SCHEMES: input.schemes ? JSON.stringify(input.schemes) : undefined,
         },
       )
 
