@@ -85,10 +85,17 @@ describe("resolveOpenTarget", () => {
     expect(resolveOpenTarget("\\\\server\\share\\report.md")).toBeUndefined()
     expect(resolveOpenTarget("//server/share/report.md", base)).toBeUndefined()
     expect(resolveOpenTarget("\\\\server\\share\\report.md", base)).toBeUndefined()
+    // Windows also treats mixed leading separators as a UNC root.
+    expect(resolveOpenTarget("/\\server/share/report.md", base)).toBeUndefined()
+    expect(resolveOpenTarget("\\/server/share/report.md", base)).toBeUndefined()
+    expect(resolveOpenTarget("/%5Cserver/share/report.md", base)).toBeUndefined()
+    expect(resolveOpenTarget("%2F%5Cserver/share/report.md", base)).toBeUndefined()
+    expect(resolveOpenTarget("%5C%2Fserver/share/report.md", base)).toBeUndefined()
     // Percent-escaped spellings must not bypass the policy after decoding.
     expect(resolveOpenTarget("%2F%2Fserver/share/report.md", base)).toBeUndefined()
     expect(resolveOpenTarget("%5C%5Cserver%5Cshare%5Creport.md", base)).toBeUndefined()
     // A file URL whose path is itself a UNC target is still remote.
     expect(resolveOpenTarget("file:////server/share/report.md")).toBeUndefined()
+    expect(resolveOpenTarget("file:///%5Cserver/share/report.md")).toBeUndefined()
   })
 })

@@ -25,9 +25,9 @@ export function resolveOpenTarget(input: string, base?: string) {
   // Href spelling is URI-like: decode percent-escapes and drop #fragment / ?query so
   // plan%20notes.md#section → plan notes.md while literal % / # use %25 / %23.
   const decoded = decodeHrefPath(input)
-  // Remote shares are not local files. Both "//server/share" and "\\server\share" reach
-  // SMB/UNC paths on Windows, so reject them before any absolute-path shortcut and again
-  // after decoding, where %2F%2F... / %5C%5C... would otherwise slip through.
+  // Remote shares are not local files. "//server/share" and "\\server\share" (including mixed
+  // separator pairs) reach SMB/UNC paths on Windows, so reject them before any absolute-path
+  // shortcut and again after decoding, where %2F%5C... style spellings would otherwise slip through.
   if (isRemotePath(decoded)) return undefined
   // Absolute paths before URL parsing: URL.canParse treats "C:\..." / "C:/..." as scheme "c:".
   if (path.isAbsolute(input) || /^[A-Za-z]:[\\/]/.test(input)) return decoded
@@ -53,7 +53,9 @@ export function resolveOpenTarget(input: string, base?: string) {
 
 /** Paths that reach a remote SMB share or a Windows device namespace instead of a local file. */
 function isRemotePath(value: string) {
-  return value.startsWith("//") || value.startsWith("\\\\")
+  // Windows treats either slash as a separator, so mixed pairs like "/\server" and "\/server"
+  // are UNC roots too. A single leading "\" is only drive-rooted, not remote.
+  return /^[\\/]{2}/.test(value)
 }
 
 function decodeHrefPath(input: string) {
