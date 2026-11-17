@@ -54,12 +54,14 @@ export function DialogSessionList() {
       query: search().trim(),
       allProjects: allProjects(),
       location: pickerLocation(),
+      pinned: !search().trim() && !sessionTabs.enabled() ? local.session.pinned() : [],
     }),
-    async ({ query, allProjects, location }) => {
+    async ({ query, allProjects, location, pinned }) => {
       try {
         if (!data.location.info(location)) await data.location.sync(location)
         const current = data.location.info(location)
         if (!current) throw new Error("Location unavailable")
+        const subpath = path.relative(current.project.directory, current.directory).replaceAll("\\", "/")
         const response = await client.api.session.list({
           ...(allProjects
             ? {}
@@ -67,7 +69,7 @@ export function DialogSessionList() {
               ? { directory: current.directory }
               : {
                   project: current.project.id,
-                  subpath: path.relative(current.project.directory, current.directory).replaceAll("\\", "/"),
+                  subpath,
                 }),
           ...(query ? { search: query } : {}),
           limit: 50,
@@ -75,7 +77,23 @@ export function DialogSessionList() {
           parentID: null,
           archived: false,
         })
-        return { query, allProjects, sessions: response.data, error: undefined }
+        const listed = new Set(response.data.map((session) => session.id))
+        const missing = await Promise.all(
+          [...new Set(pinned)]
+            .filter((id) => !listed.has(id))
+            .map((sessionID) => client.api.session.get({ sessionID }).catch(() => undefined)),
+        )
+        const extra = missing.filter(
+          (session): session is SessionInfo =>
+            session !== undefined &&
+            !session.parentID &&
+            session.time.archived === undefined &&
+            (allProjects ||
+              (current.project.id === Project.ID.global
+                ? session.location.directory === current.directory
+                : session.projectID === current.project.id && (session.subpath ?? "") === subpath)),
+        )
+        return { query, allProjects, sessions: [...response.data, ...extra], error: undefined }
       } catch (error) {
         // A transient transport failure must degrade search, not crash the TUI
         // through the root ErrorBoundary when the errored resource is read.
