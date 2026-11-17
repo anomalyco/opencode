@@ -5312,7 +5312,7 @@
           }
         },
         "body": {
-          "$ref": "#/$defs/V1Node"
+          "$ref": "#/$defs/RenderNode"
         },
         "size": {
           "$ref": "#/$defs/PanelSize"
@@ -5372,7 +5372,7 @@
         }
       },
       "required": ["key", "title", "body"],
-      "description": "A panel dialog, whose body is a `V1Node`."
+      "description": "A panel dialog, whose body is a `RenderNode`."
     },
     "PanelSize": {
       "type": "string",
@@ -6079,7 +6079,7 @@
           "type": "object",
           "properties": {
             "node": {
-              "$ref": "#/$defs/V1Node"
+              "$ref": "#/$defs/RenderNode"
             },
             "type": {
               "const": "show"
@@ -6090,7 +6090,7 @@
       ],
       "description": "What a `render` and a `render-route` request answer."
     },
-    "V1Node": {
+    "RenderNode": {
       "oneOf": [
         {
           "type": "object",
@@ -6152,7 +6152,7 @@
             "children": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/V1Node"
+                "$ref": "#/$defs/RenderNode"
               }
             },
             "border": {

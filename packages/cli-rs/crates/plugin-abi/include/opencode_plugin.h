@@ -208,7 +208,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *
  * Tree nodes (`Node`, by "type"): "box", "text", "slot", "markdown", "spinner", "scroll", "diff", "input", "list",
  * "code", "image", "keep", "canvas" and "fence". A source (`Source`) is {"text": text}, {"content": handle} or
- * {"part-output": {"session", "part"}}. A dialog's body and a render's node are the older tree, `V1Node`. A tree the
+ * {"part-output": {"session", "part"}}. A dialog's body and a render's node are a `RenderNode`. A tree the
  * host cannot decode, such as one with a kind it does not know, fails the plugin and leaves no effect: a library
  * lowers a kind of a later minor, or of a feature the host does not list, for that host before it answers (the Rust
  * SDK's `View::or`). A "fence" is the host's own code view of the fence a claim draws, current with each revision of
