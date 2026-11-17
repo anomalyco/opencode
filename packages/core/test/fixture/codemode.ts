@@ -2,6 +2,7 @@ import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
+import { FileMutation } from "@opencode/core/file-mutation"
 import { FileWrite } from "@opencode/core/file-write"
 import { Formatter } from "@opencode/core/formatter"
 import { Location } from "@opencode/core/location"
@@ -22,14 +23,20 @@ export const codeModeServices = (
   Effect.runSync(
     CodeModeTool.services.pipe(
       Effect.provide(
-        AppNodeBuilder.build(LayerNode.group([Environment.node, FileAccess.node, FileWrite.node, Location.node]), [
-          Environment.node.replace(hostEnvironmentLayer),
-          Location.node.replace(
-            Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-          ),
-          Formatter.node.replace(Layer.mock(Formatter.Service, { file: formatter })),
-          Permission.node.replace(permissionLayer(permission)),
-        ]),
+        AppNodeBuilder.build(
+          LayerNode.group([Environment.node, FileAccess.node, FileMutation.node, FileWrite.node, Location.node]),
+          [
+            Environment.node.replace(hostEnvironmentLayer),
+            Location.node.replace(
+              Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
+              ),
+            ),
+            Formatter.node.replace(Layer.mock(Formatter.Service, { file: formatter })),
+            Permission.node.replace(permissionLayer(permission)),
+          ],
+        ),
       ),
     ),
   )

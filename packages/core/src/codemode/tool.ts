@@ -18,6 +18,7 @@ import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
+import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
@@ -80,7 +81,7 @@ export type Services = Location.Service | CodeModeBun.Services
 /** Those services alone, so a run they are given to keeps its own scope and the rest of its context. */
 export const services = Effect.map(
   Effect.context<Services>(),
-  Context.pick(Location.Service, Environment.Service, FileAccess.Service, FileWrite.Service),
+  Context.pick(Location.Service, Environment.Service, FileAccess.Service, FileMutation.Service, FileWrite.Service),
 )
 
 export type Inventory = {

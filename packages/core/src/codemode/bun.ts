@@ -9,17 +9,19 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
+import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
 import { fileDiff } from "../tool/plugin/file-diff.js"
 import { CodeModeExecution } from "./execution.js"
 
 /** The session's file services, which the `Bun` global reads and writes through. */
-export type Services = FileAccess.Service | FileWrite.Service | Environment.Service
+export type Services = FileAccess.Service | FileWrite.Service | FileMutation.Service | Environment.Service
 
 type Host = {
   readonly context: FileAccess.Invocation
   readonly access: FileAccess.Interface
   readonly fileWrite: FileWrite.Interface
+  readonly fileMutation: FileMutation.Interface
   readonly files: Environment.Files
 }
 type Range = { readonly offset: number; readonly length: number }
@@ -46,6 +48,7 @@ const call = <A, E>(syscall: string, name: string, body: (host: Host) => Effect.
       context: yield* CodeModeExecution.Service,
       access: yield* service(FileAccess.Service),
       fileWrite: yield* service(FileWrite.Service),
+      fileMutation: yield* service(FileMutation.Service),
       files: (yield* service(Environment.Service)).files,
     })
   }).pipe(Effect.mapError((error) => nodeError(error, syscall, name)))
@@ -169,7 +172,8 @@ const followed = (host: Host, absolute: string) =>
         ),
   )
 
-// As in Bun, `delete` removes a file, never a directory.
+// As in Bun, `delete` removes a file, never a directory. It holds the file's mutation lock, as a patch that deletes
+// a file does.
 const remove = (handle: Handle) =>
   call("unlink", handle.name, (host) =>
     Effect.gen(function* () {
@@ -178,7 +182,7 @@ const remove = (handle: Handle) =>
         return yield* new Environment.WrongKind({ path: handle.target.absolute, actual: info.type })
       yield* host.fileWrite.authorize(handle.target, host.context)
       yield* host.files.remove(handle.target.absolute)
-    }),
+    }).pipe(host.fileMutation.withLock([handle.target.absolute])),
   )
 
 // `Bun.write`: the bytes written. The destination is a path or a BunFile; the data is text, bytes, a BunFile to copy,
@@ -199,7 +203,8 @@ const write = (to: string | Handle, data: unknown) => {
 
 // Writes exactly these bytes, with no formatting and no BOM handling, after asking edit permission. The request shows
 // the change as a diff when both sides are text, like the write tool's. An append never reads the file: its diff
-// shows only what it adds.
+// shows only what it adds. Like an edit, it holds the file's mutation lock from reading the file to writing it, and
+// writes through `FileMutation`.
 const put = (
   to: string | Handle,
   bytes: Uint8Array,
@@ -208,24 +213,32 @@ const put = (
   call("open", typeof to === "string" ? to : to.name, (host) =>
     Effect.gen(function* () {
       const target = typeof to === "string" ? yield* host.fileWrite.target(to, host.context) : to.target
-      const type = yield* typeOf(host, target.absolute)
-      if (type === "directory") return yield* new Environment.WrongKind({ path: target.absolute, actual: type })
-      if (type === undefined && !options.parents && (yield* typeOf(host, path.dirname(target.absolute))) === undefined)
-        return yield* new Environment.NotFound({ path: target.absolute })
-      const after = options.diff ? text(bytes) : undefined
-      const before =
-        after === undefined || options.append || type === undefined
-          ? ""
-          : text((yield* host.files.read(target.absolute)).bytes)
-      yield* host.fileWrite.authorize(
-        target,
-        host.context,
-        after !== undefined && before !== undefined
-          ? fileDiff(target.resource, before, after, type === undefined ? "added" : "modified")
-          : undefined,
-      )
-      yield* options.append ? host.files.append(target.absolute, bytes) : host.files.write(target.absolute, bytes)
-      return bytes.byteLength
+      return yield* Effect.gen(function* () {
+        const type = yield* typeOf(host, target.absolute)
+        if (type === "directory") return yield* new Environment.WrongKind({ path: target.absolute, actual: type })
+        if (
+          type === undefined &&
+          !options.parents &&
+          (yield* typeOf(host, path.dirname(target.absolute))) === undefined
+        )
+          return yield* new Environment.NotFound({ path: target.absolute })
+        const after = options.diff ? text(bytes) : undefined
+        const before =
+          after === undefined || options.append || type === undefined
+            ? ""
+            : text((yield* host.files.read(target.absolute)).bytes)
+        yield* host.fileWrite.authorize(
+          target,
+          host.context,
+          after !== undefined && before !== undefined
+            ? fileDiff(target.resource, before, after, type === undefined ? "added" : "modified")
+            : undefined,
+        )
+        yield* options.append
+          ? host.fileMutation.append({ target, content: bytes })
+          : host.fileMutation.write({ target, content: bytes })
+        return bytes.byteLength
+      }).pipe(host.fileMutation.withLock([target.absolute]))
     }),
   )
 
@@ -321,7 +334,8 @@ type ScanOptions = {
 }
 
 // `scan` and `scanSync` both give an array, which `for` and `for await` both take. A scan asks read permission for
-// the directory it lists from.
+// the directory it lists from. As in Bun without `followSymlinks`, a symlink is neither a file nor a directory to
+// look inside: only `onlyFiles: false` lists one.
 const scan = (pattern: string, input?: string | ScanOptions) => {
   const options = typeof input === "string" ? { cwd: input } : input
   supports("A Bun.Glob scan", options, ["cwd", "dot", "absolute", "onlyFiles"])
@@ -483,6 +497,7 @@ export const extension = Extension.make({
         return {
           scan: (options?: string | ScanOptions) => scan(pattern, options),
           scanSync: (options?: string | ScanOptions) => scan(pattern, options),
+          // As in Bun, `match` takes a dot file that a scan without `dot` leaves out.
           match: (name: string) => Glob.match(pattern, name),
         }
       }),

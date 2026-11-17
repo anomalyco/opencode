@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { existsSync } from "fs"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Environment } from "@opencode/core/environment/index"
+import { FileMutation } from "@opencode/core/file-mutation"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
@@ -214,10 +216,12 @@ describe("Bun", () => {
     return { asked, assert: (input: Permission.AssertInput) => Effect.sync(() => void asked.push(input)) }
   }
 
-  // The session's services, recording each call the program's file operations make to the environment's files.
+  // The session's services, recording each read and listing a program's file operations make of the environment's
+  // files, and each write and append they make through FileMutation.
   const spied = (directory: string) => {
     const services = codeModeServices(directory)
     const environment = Context.get(services, Environment.Service)
+    const mutation = Context.get(services, FileMutation.Service)
     const calls: Array<ReadonlyArray<unknown>> = []
     const spy = <Args extends ReadonlyArray<unknown>, A>(name: string, run: (...args: Args) => A) => {
       return (...args: Args) => {
@@ -225,21 +229,32 @@ describe("Bun", () => {
         return run(...args)
       }
     }
+    const stored = (name: string, run: FileMutation.Interface["write"]) => (input: FileMutation.WriteInput) => {
+      calls.push([name, path.relative(directory, input.target.absolute), input.content])
+      return run(input)
+    }
     return {
       calls,
-      services: Context.add(
-        services,
-        Environment.Service,
-        Environment.Service.of({
-          ...environment,
-          files: {
-            ...environment.files,
-            read: spy("read", environment.files.read),
-            list: spy("list", environment.files.list),
-            write: spy("write", (file: string, _: Uint8Array) => environment.files.write(file, _)),
-            append: spy("append", (file: string, _: Uint8Array) => environment.files.append(file, _)),
-          },
-        }),
+      services: services.pipe(
+        Context.add(
+          Environment.Service,
+          Environment.Service.of({
+            ...environment,
+            files: {
+              ...environment.files,
+              read: spy("read", environment.files.read),
+              list: spy("list", environment.files.list),
+            },
+          }),
+        ),
+        Context.add(
+          FileMutation.Service,
+          FileMutation.Service.of({
+            ...mutation,
+            write: stored("write", mutation.write),
+            append: stored("append", mutation.append),
+          }),
+        ),
       ),
     }
   }
@@ -497,7 +512,8 @@ describe("Bun", () => {
         scan("src/a.ts"), scan("src/missing.ts"), scan("missing/*.ts"), scan("src/a.ts/*"), missing,
         [...new Bun.Glob("src/*.ts").scan()],
         scan("**/.hidden/*.ts", "src"), scan("{.hidden,nested}/*.ts", "src"),
-        [glob.match("a.ts"), glob.match("nested/a.ts"), glob.match("a.md")], unsupported,
+        [glob.match("a.ts"), glob.match("nested/a.ts"), glob.match("a.md")],
+        [glob.match(".a.ts"), new Bun.Glob("**/*.ts").match(".hidden/d.ts")], unsupported,
       ]`,
     )
     const nested = path.join("nested", "b.ts")
@@ -521,12 +537,39 @@ describe("Bun", () => {
       [hidden],
       [hidden, nested],
       [true, false, false],
+      // As in Bun, `match` takes a dot file that a scan without `dot` leaves out.
+      [true, true],
       [
         "TypeError",
         'A Bun.Glob scan does not support the "followSymlinks" option in Code Mode. Supported options: cwd, dot, absolute, onlyFiles.',
       ],
     ])
   })
+
+  // Checked against Bun 1.4.4, whose scan doesn't follow symlinks unless `followSymlinks` is set.
+  test.skipIf(process.platform === "win32")(
+    "a scan for files leaves out symlinks, lists them when folders are asked for, and reads through one it names",
+    async () => {
+      await using tmp = await tmpdir()
+      await Bun.write(path.join(tmp.path, "src", "a.ts"), "a")
+      await fs.symlink(path.join("src", "a.ts"), path.join(tmp.path, "link.ts"))
+      await fs.symlink("src", path.join(tmp.path, "linked"))
+      await fs.symlink("missing.ts", path.join(tmp.path, "broken.ts"))
+      expect(
+        await run(
+          tmp.path,
+          `const scan = (pattern, options) => new Bun.Glob(pattern).scanSync(options).sort()
+          return [scan("**/*.ts"), scan("**/*.ts", { onlyFiles: false }), scan("*", { onlyFiles: false }),
+            scan("linked/*.ts")]`,
+        ),
+      ).toEqual([
+        ["src/a.ts"],
+        ["broken.ts", "link.ts", "src/a.ts"],
+        ["broken.ts", "link.ts", "linked", "src"],
+        ["linked/a.ts"],
+      ])
+    },
+  )
 
   test("a scan lists only under the pattern's fixed part, as deep as the pattern reaches, skipping hidden folders", async () => {
     await using tmp = await tmpdir()
@@ -618,6 +661,41 @@ describe("Bun", () => {
     // An append shows only the lines it adds.
     expect(diffs[6]).toMatchObject([{ file: "notes.txt", status: "modified", additions: 1, deletions: 0 }])
     expect(diffs[7]).toBeUndefined()
+  })
+
+  test("writes to one file wait for each other, and hold the lock an edit takes", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "notes.txt")
+    const record = recorded()
+    const edits: Array<Fiber.Fiber<boolean>> = []
+    // While a write asks edit, something else asks for the file's lock, as an edit would, and reports whether the
+    // write had landed by the time it got it.
+    const permission = {
+      assert: (input: Permission.AssertInput) =>
+        Effect.gen(function* () {
+          yield* record.assert(input)
+          edits.push(
+            yield* Effect.sync(() => existsSync(file)).pipe(
+              Context.get(services, FileMutation.Service).withLock([file]),
+              Effect.forkDetach({ startImmediately: true }),
+            ),
+          )
+        }),
+    }
+    const services = codeModeServices(tmp.path, permission)
+    await run(
+      tmp.path,
+      `await Promise.all([Bun.write("notes.txt", "one\\n"), Bun.write("notes.txt", "two\\n")])
+      return []`,
+      allowAll,
+      services,
+    )
+    // The second write read the file after the first wrote it.
+    expect(record.asked.map((input) => input.metadata?.files)).toMatchObject([
+      [{ status: "added" }],
+      [{ status: "modified" }],
+    ])
+    expect(await Effect.runPromise(Effect.forEach(edits, Fiber.join))).toEqual([true, true])
   })
 
   test("a file outside the project asks for its directory once, when Bun.file names it", async () => {
