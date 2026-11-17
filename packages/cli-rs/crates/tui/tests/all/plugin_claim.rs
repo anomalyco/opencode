@@ -2576,6 +2576,126 @@ fn a_fence_claim_draws_its_code_in_p3s_code_view() {
     }
 }
 
+thread_local! {
+    /// What `claim.fenced` returns for a fence: the fence node alone, a card around it, the code in P3's `Code`, nothing
+    /// (the host's row), two fence nodes; and the views it ran.
+    static FENCED: Cell<Fenced> = const { Cell::new(Fenced::Card) };
+    static FENCED_VIEWS: Cell<u32> = const { Cell::new(0) };
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Fenced {
+    Alone,
+    Card,
+    Code,
+    Declined,
+    Twice,
+}
+
+/// Claims `probe` fences and the calls of the `probe` tool as [`FENCED`] says; a call's tree is a fence node, which only
+/// a fence claim's tree may hold. The card is memoized on the fence's info, so its views after the first keep it.
+fn plugin_fenced(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.claim(Claim::fence("probe", |cx, part| {
+        let Part::Fence(fence) = part else { return None };
+        FENCED_VIEWS.set(FENCED_VIEWS.get() + 1);
+        match FENCED.get() {
+            Fenced::Alone => Some(v2::Node::fence()),
+            Fenced::Card => Some(cx.memo("card", fence.info.clone(), |_| {
+                let label = v2::Node::text(vec![abi::Span::new(format!("| {}", fence.info))]);
+                v2::Node::column(vec![label, v2::Node::fence().bg("background.raised.base")])
+            })),
+            Fenced::Code => Some(v2::Node::code(v2::Source::Text(fence.code.clone()))),
+            Fenced::Declined => None,
+            Fenced::Twice => Some(v2::Node::column(vec![v2::Node::fence(), v2::Node::fence()])),
+        }
+    }));
+    setup.claim(Claim::tool("probe", |_, _| Some(v2::Node::fence())));
+    Ok(())
+}
+
+/// A world of `claim.fenced` on `carrier` that shows the Markdown `text` as an answer, and its frame.
+fn fenced(carrier: Carrier, how: Fenced, text: &str) -> (World, Capture) {
+    FENCED.set(how);
+    FENCED_VIEWS.set(0);
+    let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.fenced", setup: plugin_fenced })]);
+    world.emit("session.text.started", json!({ "ordinal": 0 }));
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
+    world.settle();
+    let frame = world.frame();
+    (world, frame)
+}
+
+// Expected (contract 2.x additions, `fence-node`): a fence claim's tree that is the fence node alone draws as the host's
+// own code view of the fence, cell for cell, on both carriers.
+#[test]
+fn a_fence_node_alone_draws_as_the_host_code_view() {
+    let text = "```probe\nlet a = 1;\nlet b = 2;\n```\n\nAfter.\n";
+    for carrier in CARRIERS {
+        let (_world, declined) = fenced(carrier, Fenced::Declined, text);
+        let (_world, alone) = fenced(carrier, Fenced::Alone, text);
+        assert!(alone.text().contains("let b = 2;"), "{carrier:?}:\n{}", alone.text());
+        assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{carrier:?}: {:?}", mounted());
+        assert!(alone.cells == declined.cells, "{carrier:?}: the fence node is not the host's view:\n{}", alone.text());
+    }
+}
+
+// Expected (contract 2.x additions, `fence-node`): the fence node follows the fence as it streams, while the claim's
+// card stays the tree it kept; the host's row never shows.
+#[test]
+fn a_fence_node_follows_the_stream() {
+    for carrier in CARRIERS {
+        let (world, frame) = fenced(carrier, Fenced::Card, "```probe\nalpha\n");
+        assert!(frame.text().contains("| probe") && frame.text().contains("alpha"), "{carrier:?}:\n{}", frame.text());
+        for delta in ["beta\n", "gamma\n", "```\n\nAfter.\n"] {
+            world.emit("session.text.delta", json!({ "ordinal": 0, "delta": delta }));
+            world.settle();
+            let screen = world.frame().text();
+            assert!(screen.contains("| probe"), "{carrier:?}: the card went:\n{screen}");
+            assert!(!screen.contains("```"), "{carrier:?}: the host's row shows:\n{screen}");
+        }
+        let screen = world.frame().text();
+        assert!(
+            screen.contains("beta") && screen.contains("gamma") && screen.contains("After."),
+            "{carrier:?}:\n{screen}"
+        );
+        assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{carrier:?}: {:?}", mounted());
+    }
+}
+
+// Expected (contract 2.x additions, `fence-node`): a fence node costs one node and one row, whatever its code: a fence of
+// 2,000 lines in a card draws whole, where P3's `Code` of the same lines is past the tree's rows and a placeholder.
+#[test]
+fn a_long_fence_in_a_card_draws_whole() {
+    let code: String = (0..2_000).map(|line| format!("line {line}\n")).collect();
+    let text = format!("```probe\n{code}```\n");
+    for carrier in CARRIERS {
+        let (_world, frame) = fenced(carrier, Fenced::Card, &text);
+        // The transcript follows the answer's end: the fence's last line shows, under the claim's card.
+        let screen = frame.text();
+        assert!(screen.contains("line 1999") && !screen.contains("⋯"), "{carrier:?}:\n{screen}");
+        assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{carrier:?}: {:?}", mounted());
+        let (_world, frame) = fenced(carrier, Fenced::Code, &text);
+        assert!(frame.text().contains("⋯"), "{carrier:?}: the control drew whole:\n{}", frame.text());
+    }
+}
+
+// Expected (contract 2.x additions, `fence-node`): a tree with two fence nodes, and a tool call's tree with one, are
+// refused, and the part shows the host's row; the plugin stays active.
+#[test]
+fn a_fence_node_where_it_may_not_be_shows_the_host_row() {
+    for carrier in CARRIERS {
+        let (world, frame) = fenced(carrier, Fenced::Twice, "```probe\nonce\n```\n");
+        assert_eq!(frame.text().matches("once").count(), 1, "{carrier:?}:\n{}", frame.text());
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "probe" }));
+        world.settle();
+        let screen = world.frame().text();
+        assert!(screen.contains("⋯ probe"), "{carrier:?}: no host row for the call:\n{screen}");
+        assert!(mounted().iter().all(|shown| !shown.shows), "{carrier:?}: {:?}", mounted());
+        let status = world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.fenced");
+        assert_eq!(status.map(|entry| entry.status), Some(opencode_plugin::Status::Active), "{carrier:?}");
+    }
+}
+
 // What a claimed part holds is its plugin's (review bigboi 1, carbon-3).
 
 const SHARE: &str = "claim.share";

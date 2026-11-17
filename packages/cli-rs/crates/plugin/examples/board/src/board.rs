@@ -7,14 +7,16 @@
 //! a card, pass a key on to the plugin's own global layer, set a mode in which the same key bumps another card, and
 //! panic; the header lists the keys the handlers heard, each with the mode the handler read. A panel beside a session,
 //! `notes`, focuses its pad, reads where the focus is and the pad's place, holds a key and releases it, opens an
-//! overlay under its pad, and gives the focus back; a select lists the cards a search finds.
+//! overlay under its pad, gives its field the focus (`focus-input`), and gives the focus back; a centered select lists
+//! the cards a search finds.
 //!
 //! Its `files` route is P3's: a windowed list of files whose estimates are not their heights, each an anchor of group
 //! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
 //! `Nearest`; `layout` paints the header from the top file, and the header shows where the last step landed and how
 //! many `layout` calls ran.
 //! It also claims the calls of a `board` tool and the `board` fences of the transcript (Pr): each part is a card
-//! of its own.
+//! of its own, and a fence's card holds the host's own code view of it (`fence-node`), which follows the fence as it
+//! streams.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -157,7 +159,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.surface(surface);
     files(setup);
     setup.claim(Claim::tool("board", claimed));
-    setup.claim(Claim::fence("board", claimed));
+    setup.claim(Claim::fence("board", fenced));
     Ok(())
 }
 
@@ -241,13 +243,16 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
         host.open_panel(OpenPanel::new("notes"));
     });
     setup.command(command("board.unnotes"), |host, _| host.close_panel("notes"));
+    // The panel's field takes the focus from the plugin, as from a click (`focus-input`).
+    setup.command(command("board.say"), |host, _| host.focus("say"));
     setup.search("cards", |_, query, options| {
         options.iter().filter(|option| option.title.contains(query)).map(|option| option.value.clone()).collect()
     });
     setup.command(command("board.pick"), |host, _| {
         let options = (0..CARDS).map(|card| SelectOption::new(format!("card {card}"), card.to_string())).collect();
         let action = Action::Command { name: "board.bump".into(), input: None };
-        host.dialog(Dialog::Select(Select::new("Cards", options, action).with_search(Some("cards".into()))));
+        let select = Select::new("Cards", options, action).with_search(Some("cards".into())).with_centered(true);
+        host.dialog(Dialog::Select(select));
     });
     let keys = vec![
         Bind::new("f", "focus"),
@@ -316,24 +321,35 @@ fn notes(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
     setup.surface(menu);
 }
 
-/// A claimed part as a card: a title, and what the part holds as content, memoized on both. A finished call shows its
+/// A claimed fence as a card: its info over the host's own code view of it, memoized on the info alone, as the host
+/// keeps the code current; for a host without `fence-node`, the code as Markdown content, memoized on it too.
+fn fenced(cx: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
+    let Part::Fence(fence) = part else { return None };
+    let title = format!("fence {}", fence.info);
+    let lowered = !cx.read.abi().has_feature(opencode_plugin_abi::FENCE_NODE);
+    let code = if lowered { fence.code.clone() } else { String::new() };
+    Some(cx.memo("part", (title.clone(), code.clone()), |cx| {
+        let shown = cx.or(v2::Node::fence().bg("background.raised.base"), |cx| {
+            v2::Node::markdown(v2::Source::Content(cx.content(code)))
+        });
+        v2::Node::column(vec![v2::Node::text(vec![Span::new(title)]).fg("text.muted"), shown])
+            .bg("background.raised.base")
+    }))
+}
+
+/// A claimed call as a card: a title, and what the call holds as content, memoized on both. A finished call shows its
 /// output by reference; a call that failed is left to the host's row.
 fn claimed(cx: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
     // A kind of part a later host claims is left to the host's row.
-    let (title, body, output) = if let Part::Tool(tool) = part {
-        let input = match &tool.tool.state {
-            SessionMessageAssistantToolState::Streaming(state) => state.input.clone(),
-            SessionMessageAssistantToolState::Running(state) => format!("{:?}", state.input),
-            SessionMessageAssistantToolState::Completed(state) => format!("{:?}", state.input),
-            _ => return None,
-        };
-        let output = (tool.state == State::Completed).then(|| tool.output());
-        (format!("{} {} {:?}", tool.tool.name, tool.tool.id, tool.state), input, output)
-    } else if let Part::Fence(fence) = part {
-        (format!("fence {}", fence.info), fence.code.clone(), None)
-    } else {
-        return None;
+    let Part::Tool(tool) = part else { return None };
+    let body = match &tool.tool.state {
+        SessionMessageAssistantToolState::Streaming(state) => state.input.clone(),
+        SessionMessageAssistantToolState::Running(state) => format!("{:?}", state.input),
+        SessionMessageAssistantToolState::Completed(state) => format!("{:?}", state.input),
+        _ => return None,
     };
+    let output = (tool.state == State::Completed).then(|| tool.output());
+    let title = format!("{} {} {:?}", tool.tool.name, tool.tool.id, tool.state);
     Some(cx.memo("part", (title.clone(), body.clone(), output.clone()), |cx| {
         let mut children = vec![
             v2::Node::text(vec![Span::new(title)]).fg("text.muted"),

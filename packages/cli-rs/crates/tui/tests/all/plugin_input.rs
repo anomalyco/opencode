@@ -72,6 +72,10 @@ pub struct Probe {
     pub a_bg: Option<&'static str>,
     /// Node `a` is in a hidden box.
     pub a_in_hidden: bool,
+    /// The panel holds a field `f` under `b`; in a hidden box; or left out (contract 2.x additions, `focus-input`).
+    pub field: bool,
+    pub field_hidden: bool,
+    pub field_gone: bool,
     /// Node `a` is the item of a list.
     pub a_in_list: bool,
     /// Each view of the panel: how it showed, and its mount's generation.
@@ -627,7 +631,13 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
         true => text("----"),
         false => b,
     };
-    v2::Node::column(vec![
+    let field = v2::Node::input("").with_id("f").placeholder("FIELD");
+    let field = match probe(|probe| (probe.field && !probe.field_gone, probe.field_hidden)) {
+        (true, true) => Some(v2::Node::column(vec![field]).with_id("fh").visible(false)),
+        (true, false) => Some(field),
+        (false, _) => None,
+    };
+    let mut nodes = vec![
         text(&label),
         a,
         b,
@@ -635,9 +645,9 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
             true => text("TTTT").with_id("t").hover_events(),
             false => text("TTTT").with_id("t"),
         },
-    ])
-    .with_id("side")
-    .interact(interact(true, false, None))
+    ];
+    nodes.extend(field);
+    v2::Node::column(nodes).with_id("side").interact(interact(true, false, None))
 }
 
 /// `node`, a text the mouse cannot select: a double click would select a word, and escape would clear it before any
@@ -1846,6 +1856,46 @@ fn a_focus_the_new_tree_takes_away_comes_back() {
     harness.app.press("x");
     settle(&harness);
     assert_eq!(taken(), ["side: key x [-]"], "the panel lost the focus with its node");
+}
+
+// Expected (contract 2.x additions, `focus-input`): a plugin gives its field the focus as a click does, and what the user
+// types is the field's; a tree that builds the field again keeps the focus; one that leaves it out gives it to the
+// panel, whose layers hold; a field in a hidden box takes no focus; nor does any field while a host dialog is open.
+#[test]
+fn a_plugin_focuses_its_field() {
+    let harness = open_with(|probe| probe.field = true);
+    let changes = || taken().into_iter().filter(|line| line.contains(": change ")).collect::<Vec<_>>();
+    run(&harness, "input.panel", None);
+    run(&harness, "input.focus", Some("f"));
+    taken();
+    harness.app.type_text("q");
+    settle(&harness);
+    assert_eq!(changes(), ["side: change f q [-]"], "the field did not take the focus");
+    run(&harness, "input.redraw", None);
+    harness.app.type_text("w");
+    settle(&harness);
+    assert_eq!(changes(), ["side: change f qw [-]"], "the field built again lost the focus");
+    probe(|probe| probe.field_gone = true);
+    run(&harness, "input.redraw", None);
+    taken();
+    harness.app.press("x");
+    settle(&harness);
+    assert_eq!(taken(), ["side: key x [-]"], "the panel lost the focus with its field");
+    probe(|probe| (probe.field_gone, probe.field_hidden) = (false, true));
+    run(&harness, "input.redraw", None);
+    run(&harness, "input.focus", Some("f"));
+    taken();
+    harness.app.type_text("q");
+    settle(&harness);
+    assert!(changes().is_empty(), "a hidden field took the focus");
+    probe(|probe| probe.field_hidden = false);
+    run(&harness, "input.redraw", None);
+    run(&harness, "input.select", None);
+    run(&harness, "input.focus", Some("f"));
+    taken();
+    harness.app.type_text("q");
+    settle(&harness);
+    assert!(changes().is_empty(), "the field took the focus from a host dialog");
 }
 
 // Expected (review carbon-5): a focused node that the new tree puts in a hidden box can take no focus, so the focus
