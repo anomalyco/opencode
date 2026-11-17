@@ -51,9 +51,8 @@ Versions only grow by appending:
   refuses the plugin at load and names it. A 2.0 host has three (`HostApi::features`, `Read::abi`): `image-bounds`
   (the bounds of the images it decodes), `focus-input` (`Host::focus` of a field) and `fence-node` (the host's code
   view of a claimed fence in a claim's tree, `Node::Fence`). The last two came after 2.0's first release candidate,
-  with no new minor (O-168): what they add is optional on the wire, a plugin built before them loads and behaves as it
-  did, and one built after them lowers a `fence` node for a host without `fence-node` with `View::or` (Contract 2.0
-  surfaces, below).
+  with no new minor (O-168): what they add is optional on the wire, and a plugin lowers a `fence` node for a host
+  without `fence-node` with `View::or` (Contract 2.0 surfaces, below).
 - What the host takes from a plugin is decoded before anything of the call applies. An answer it cannot decode (cut
   short, not JSON, a node kind it does not know) fails the plugin and leaves no effect, as a panic does.
 - The host opens a copy of each build. On macOS the copy keeps the file's quarantine, so the system checks it as it
@@ -458,7 +457,7 @@ to the contract, for any plugin:
   `image-size`, with the bytes in base64.
 - A sticky box paints over the siblings it is pinned above, as CSS's sticky does.
 
-These are additive on the wire: a plugin built before them sends and reads what it did. In Rust source they are a
+These are additive on the wire. In Rust source they are a
 deliberate break of the unreleased 2.0 SDK, which closes the requests a plugin builds: `Command`, `Fetch`, `Select`,
 `SelectOption`, `Panel`, `Images`, `Image`, `interact::Bind`, `interact::Layer`, the read-back `interact::PanelInput`
 and the variant `Node::Diff` are `#[non_exhaustive]`, so a field a later 2.x adds breaks no plugin's source. A literal
@@ -801,8 +800,7 @@ to it): a project cannot write them.
 `crates/plugin/examples/sample` is a small `cdylib` with its own workspace and `Cargo.lock`, so it is not a member of
 the client's workspace and the other crates build as before. Its features select variants: `v2` draws differently
 and `setup-fails` fails (the reload tests); `minor-newer`, `major-3`, `requires-future` and `requires-feature`
-pretend to target other ABI versions or features; `abi-2-0`, without the default `current`, builds this source on a
-frozen copy of the 2.0 SDK of before the contract 2.x additions (`sample/abi-2-0`). `p0a` adds the P0a probe
+pretend to target other ABI versions or features. `p0a` adds the P0a probe
 (`src/p0a.rs`): a confirm, an alert, the composer's read and edits, and a styled box. A library of ABI 1.x is
 `examples/c` built with `-DOPENCODE_AS_V1`, which the host refuses. The tests build each variant once per test run into
 `target/sample-plugin`: the loader's unit tests in `crates/plugin/src/loader/native/tests.rs`, and the TUI tests in

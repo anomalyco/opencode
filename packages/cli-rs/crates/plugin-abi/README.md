@@ -130,7 +130,7 @@ A plugin binary carries its ABI version. The host is ABI 2.0:
 
 | Built with | Loads | What the host sends it |
 | --- | --- | --- |
-| The 2.0 SDK, this crate | yes; a binary built before the features `focus-input` and `fence-node` loads and behaves as it did | Renders (`RenderFence`, `Render`, `RenderRoute`), handlers (`Command`, `Event`, `Reply`, `Mount`, `RouteMount`, `Wake`, `FenceGone`, `Deltas`), surfaces (`View`, `Draw`, `Layout`, `Input`, `Unmount`), claims (`Claim`), messages (`Message`), searches (`Search`) and the plugin list (`Plugins`); `schema/v2.json` has each |
+| The 2.0 SDK, this crate | yes | Renders (`RenderFence`, `Render`, `RenderRoute`), handlers (`Command`, `Event`, `Reply`, `Mount`, `RouteMount`, `Wake`, `FenceGone`, `Deltas`), surfaces (`View`, `Draw`, `Layout`, `Input`, `Unmount`), claims (`Claim`), messages (`Message`), searches (`Search`) and the plugin list (`Plugins`); `schema/v2.json` has each |
 | A 1.x SDK, from this branch's development | no: "plugin ABI 1.x is not supported: … rebuild the plugin against opencode-plugin-abi 2" (decision O-169) | — |
 | A 3.x SDK | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" | — |
 
@@ -176,8 +176,8 @@ tests.
 
 ### What 2.0 added after its first release candidate
 
-These are additive on the wire, with no new minor (O-168): a plugin built on the SDK of before them loads and
-behaves as it did, and a plugin built on this one meets an older 2.0 host by the rules below.
+These are optional on the wire, with no new minor (O-168): a plugin that uses one meets a host without it by the rules
+below.
 
 - **Named features.** `Read::abi().features` lists the host's optional features, and `Abi::has_feature` asks for one:
   `image-bounds` (`IMAGE_BOUNDS`), `focus-input` (`FOCUS_INPUT`) and `fence-node` (`FENCE_NODE`). A plugin that cannot
