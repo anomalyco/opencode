@@ -7,6 +7,11 @@
 [env]
 OPENTUI_LIB_DIR = { value = ".opentui/v0.9.2/host", relative = true, force = false }
 OPENTUI_LIB_HINT = { value = "run `bun run opentui:native` in packages/cli-rs, or build through `bun run cargo`, which runs it first", force = false }
+# Luau's C++ (the luau feature) with line tables only, as Rust gets from `debug = "line-tables-only"`: cargo's DEBUG
+# makes cc-rs pass full `-g`, and luau0-src appends these flags after it. In a cold -j3 release build (luau-dx) Luau's
+# unit took 51 s instead of 64 s, and its objects 14 MB instead of 47 MB. MSVC's cl.exe does not know the flag and
+# warns that it ignores it.
+LUAU_CXXFLAGS = { value = "-g1", force = false }
 
 # musl links its C library dynamically (O-164): a static musl executable cannot dlopen, and the client loads native
 # plugin libraries. Rust's musl targets default to crt-static. The Linux builds link with Zig (cargo zigbuild), which
