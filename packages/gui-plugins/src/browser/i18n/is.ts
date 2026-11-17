@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Hreinsa",
   "site.permissions": "Heimildir eru lokaðar",
   "site.permissions.description": "Myndavél, hljóðnemi, staðsetning og tilkynningar virka ekki í þessum vafra.",
-  "site.agent": "Fulltrúinn getur notað þessa síðu",
-  "site.agent.description": "Hann getur lesið síðuna, keyrt skriftur og fyllt út eyðublöð.",
   "page.add": "Bæta síðu við setu",
   "page.placeholder": "Bættu við samhengi um þessa síðu",
   "external.open": "Opna í kerfisvafra",

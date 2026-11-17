@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Xóa",
   "site.permissions": "Các quyền bị chặn",
   "site.permissions.description": "Camera, micrô, vị trí và thông báo không hoạt động trong trình duyệt này.",
-  "site.agent": "Tác nhân có thể dùng trang này",
-  "site.agent.description": "Tác nhân có thể đọc trang, chạy script và điền biểu mẫu.",
   "page.add": "Thêm trang vào phiên",
   "page.placeholder": "Thêm ngữ cảnh về trang này",
   "external.open": "Mở trong trình duyệt hệ thống",

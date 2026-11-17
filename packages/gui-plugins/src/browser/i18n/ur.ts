@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "صاف کریں",
   "site.permissions": "اجازتیں مسدود ہیں",
   "site.permissions.description": "اس براؤزر میں کیمرہ، مائیکروفون، مقام اور اطلاعات کام نہیں کرتے۔",
-  "site.agent": "ایجنٹ یہ صفحہ استعمال کر سکتا ہے",
-  "site.agent.description": "یہ صفحہ پڑھ سکتا ہے، اسکرپٹس چلا سکتا ہے اور فارم بھر سکتا ہے۔",
   "page.add": "صفحہ سیشن میں شامل کریں",
   "page.placeholder": "اس صفحے کے بارے میں سیاق و سباق شامل کریں",
   "external.open": "سسٹم براؤزر میں کھولیں",

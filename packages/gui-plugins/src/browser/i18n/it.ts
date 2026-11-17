@@ -48,8 +48,6 @@ export default {
   "site.cookies.clear": "Cancella",
   "site.permissions": "Le autorizzazioni sono bloccate",
   "site.permissions.description": "Fotocamera, microfono, posizione e notifiche non funzionano in questo browser.",
-  "site.agent": "L'agente può usare questa pagina",
-  "site.agent.description": "Può leggere la pagina, eseguire script e compilare moduli.",
   "page.add": "Aggiungi pagina alla sessione",
   "page.placeholder": "Aggiungi contesto su questa pagina",
   "external.open": "Apri nel browser di sistema",

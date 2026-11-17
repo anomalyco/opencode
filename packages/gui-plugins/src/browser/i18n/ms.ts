@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Kosongkan",
   "site.permissions": "Kebenaran disekat",
   "site.permissions.description": "Kamera, mikrofon, lokasi dan pemberitahuan tidak berfungsi dalam pelayar ini.",
-  "site.agent": "Ejen boleh menggunakan halaman ini",
-  "site.agent.description": "Ia boleh membaca halaman, menjalankan skrip dan mengisi borang.",
   "page.add": "Tambah halaman ke sesi",
   "page.placeholder": "Tambah konteks tentang halaman ini",
   "external.open": "Buka dalam pelayar sistem",

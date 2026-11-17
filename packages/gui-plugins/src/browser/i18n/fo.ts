@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Rudda",
   "site.permissions": "Loyvi eru forðað",
   "site.permissions.description": "Myndatól, mikrofon, staðseting og fráboðanir virka ikki í hesum kaganum.",
-  "site.agent": "Agenturin kann brúka hesa síðuna",
-  "site.agent.description": "Hann kann lesa síðuna, koyra skript og fylla út formularar.",
   "page.add": "Legg síðu afturat setuni",
   "page.placeholder": "Legg samanhang um hesa síðuna afturat",
   "external.open": "Lat upp í skipanarkaganum",

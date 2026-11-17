@@ -49,8 +49,6 @@ export default {
   "site.cookies.clear": "Počisti",
   "site.permissions": "Dovoljenja so blokirana",
   "site.permissions.description": "Kamera, mikrofon, lokacija in obvestila v tem brskalniku ne delujejo.",
-  "site.agent": "Agent lahko uporablja to stran",
-  "site.agent.description": "Lahko bere stran, izvaja skripte in izpolnjuje obrazce.",
   "page.add": "Dodaj stran v sejo",
   "page.placeholder": "Dodajte kontekst o tej strani",
   "external.open": "Odpri v sistemskem brskalniku",

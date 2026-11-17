@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "صاف کرو",
   "site.permissions": "اجازتاں بلاک نیں",
   "site.permissions.description": "ایس براؤزر وچ کیمرہ، مائیکروفون، مقام تے نوٹیفکیشن کم نئیں کردے۔",
-  "site.agent": "ایجنٹ ایہہ صفحہ ورت سکدا اے",
-  "site.agent.description": "ایہہ صفحہ پڑھ سکدا اے، سکرپٹ چلا سکدا اے تے فارم بھر سکدا اے۔",
   "page.add": "صفحہ سیشن وچ شامل کرو",
   "page.placeholder": "ایس صفحے بارے تناظر شامل کرو",
   "external.open": "سسٹم براؤزر وچ کھولو",

@@ -49,8 +49,6 @@ export default {
   "site.cookies.clear": "Limpar",
   "site.permissions": "As permissões estão bloqueadas",
   "site.permissions.description": "Câmera, microfone, localização e notificações não funcionam neste navegador.",
-  "site.agent": "O agente pode usar esta página",
-  "site.agent.description": "Ele pode ler a página, executar scripts e preencher formulários.",
   "page.add": "Adicionar página à sessão",
   "page.placeholder": "Adicione contexto sobre esta página",
   "external.open": "Abrir no navegador do sistema",

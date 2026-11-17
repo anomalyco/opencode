@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Tyhjennä",
   "site.permissions": "Käyttöoikeudet on estetty",
   "site.permissions.description": "Kamera, mikrofoni, sijainti ja ilmoitukset eivät toimi tässä selaimessa.",
-  "site.agent": "Agentti voi käyttää tätä sivua",
-  "site.agent.description": "Se voi lukea sivua, suorittaa skriptejä ja täyttää lomakkeita.",
   "page.add": "Lisää sivu istuntoon",
   "page.placeholder": "Lisää kontekstia tästä sivusta",
   "external.open": "Avaa järjestelmän selaimessa",
