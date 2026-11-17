@@ -99,11 +99,7 @@ export interface AgentApi<E = never> {
 }
 
 export type PluginListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
-export type PluginListOutput = {
-  readonly location: Location.PublicRef
-  readonly ready?: boolean | undefined
-  readonly data: ReadonlyArray<Plugin.Info>
-}
+export type PluginListOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<Plugin.Info> }
 export type PluginListOperation<E = never> = (input?: PluginListInput) => Effect.Effect<PluginListOutput, E>
 
 export type PluginGuiInput = {

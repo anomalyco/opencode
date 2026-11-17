@@ -1,6 +1,5 @@
 import { Location } from "@opencode/schema/location"
 import { Plugin } from "@opencode/schema/plugin"
-import { optional } from "@opencode/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { InvalidRequestError, PluginNotFoundError, ServiceUnavailableError } from "../errors.js"
@@ -10,23 +9,14 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
   .add(
     HttpApiEndpoint.get("plugin.list", "/api/plugin", {
       query: LocationQuery,
-      success: Schema.Struct({
-        location: Location.PublicRef,
-        /**
-         * False while the location's plugins are still loading; lists such as models and agents may be partial. Servers
-         * from before this field omit it.
-         */
-        ready: optional(Schema.Boolean),
-        data: Schema.Array(Plugin.Info),
-      }),
+      success: Location.response(Schema.Array(Plugin.Info)),
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
           identifier: "plugin.list",
           summary: "List plugins",
-          description:
-            "Retrieve enabled server plugins and their current status. `ready` is false while the location's plugins are still loading, so lists such as models, agents and skills may be partial; `plugin.updated` is published whenever it flips.",
+          description: "Retrieve enabled server plugins and their current status.",
         }),
       ),
   )

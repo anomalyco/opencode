@@ -493,9 +493,6 @@
                     "location": {
                       "$ref": "#/components/schemas/Location.PublicRef"
                     },
-                    "ready": {
-                      "type": "boolean"
-                    },
                     "data": {
                       "type": "array",
                       "items": {
@@ -540,7 +537,7 @@
             }
           }
         },
-        "description": "Retrieve enabled server plugins and their current status. `ready` is false while the location's plugins are still loading, so lists such as models, agents and skills may be partial; `plugin.updated` is published whenever it flips.",
+        "description": "Retrieve enabled server plugins and their current status.",
         "summary": "List plugins"
       }
     },
