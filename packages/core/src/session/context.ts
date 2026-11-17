@@ -176,7 +176,7 @@ const layer = Layer.effect(
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
-          mcp: mcpInstructions.load(permissions, { codemode: tools.codeModeCatalog !== undefined }),
+          mcp: mcpInstructions.load(permissions, tools.codeModeCatalog !== undefined),
           entries: entries.load(sessionID),
         },
         { concurrency: "unbounded" },

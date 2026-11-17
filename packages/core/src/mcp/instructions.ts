@@ -43,11 +43,11 @@ const update = Instructions.listUpdate<Summary>({
 })
 
 export interface Interface {
-  /** Lists server instructions reachable under the given ruleset; callers pass the merged agent and Session permissions. */
-  readonly load: (
-    permissions: Permission.Ruleset,
-    options?: { readonly codemode?: boolean },
-  ) => Effect.Effect<Instructions.List>
+  /**
+   * Lists server instructions reachable under the given ruleset; callers pass the merged agent and Session permissions.
+   * `codeMode` says whether the Session's tool snapshot has Code Mode, which decides whether servers are reached through `execute`.
+   */
+  readonly load: (permissions: Permission.Ruleset, codeMode: boolean) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpInstructions") {}
@@ -58,7 +58,7 @@ export const layer = Layer.effect(
     const mcp = yield* Mcp.Service
 
     return Service.of({
-      load: Effect.fn("McpInstructions.load")(function* (permissions, options) {
+      load: Effect.fn("McpInstructions.load")(function* (permissions, codeMode) {
         const source = (value: ReadonlyArray<Summary> | Instructions.Removed) =>
           Instructions.make<ReadonlyArray<Summary>>({
             key: Instructions.Key.make("core/mcp-guidance"),
@@ -73,14 +73,12 @@ export const layer = Layer.effect(
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
-        const canExecute =
-          options?.codemode !== false && Permission.evaluate("execute", "*", permissions).effect !== "deny"
         // Instructions are useful only when this Session can reach at least one server tool.
         const visible = instructions
           .flatMap((item) => {
             const owned = tools.filter((tool) => tool.server === item.server)
             // Without execute, Code Mode server tools are exposed directly.
-            const codemode = canExecute && owned[0]?.codemode !== false
+            const codemode = codeMode && owned[0]?.codemode !== false
             if (
               !owned.some(
                 (tool) =>
