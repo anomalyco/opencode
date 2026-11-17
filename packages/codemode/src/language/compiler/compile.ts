@@ -1257,6 +1257,12 @@ const compileFunctionBody = (
     if (left.computed) {
       compileExpression(left.property as Expression)
       emitWritableKey(left)
+    } else if (op === "=") {
+      // PutValue checks the base, so the right side is evaluated first: `null.x = f()` calls `f`.
+      compileExpression(node.right)
+      builder.emit(Op.CHECK_BASE, CheckBaseKind.ASSIGN_PROP, k, idx(left), 0)
+      put()
+      return
     } else builder.emit(Op.CHECK_BASE, CheckBaseKind.WRITE_PROP, k, idx(left), 0)
     if (op === "=") {
       compileExpression(node.right)

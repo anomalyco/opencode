@@ -162,13 +162,12 @@ describe("scopes, TDZ, hoisting, and closures", () => {
 })
 
 describe("expressions, evaluation order, and destructuring", () => {
-  test("member evaluation order: nullish base before key conversion, base check before rhs", () => {
+  test("member evaluation order: nullish base before key conversion, rhs before the base check", () => {
     expect(err(`const base = null; base[{ toString() { throw new RangeError("boom") } }]`).message).toContain(
       "Cannot read properties of null",
     )
-    expect(err(`(1).x = (() => { throw new RangeError("rhs ran") })()`).message).toContain(
-      "Cannot create property 'x' on number '1'",
-    )
+    expect(err(`(1).x = (() => { throw new RangeError("rhs ran") })()`).message).toContain("rhs ran")
+    expect(err(`(1).x = 2`).message).toContain("Cannot create property 'x' on number '1'")
     expect(
       val(`
         const log = []

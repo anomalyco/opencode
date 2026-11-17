@@ -78,7 +78,7 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
 - [x] Object and array destructuring in declarations, parameters, assignment expressions, and `for...of` bindings.
 - [x] Nested patterns, defaults, elisions, and rest elements.
 - [x] Assignment to identifiers, plain-object fields, non-negative integer array indexes, and writable URL
-      fields.
+      fields. `o.x = v` evaluates `v` before checking `o`, so `null.x = f()` calls `f` and then throws.
 - [x] Direct function declarations are hoisted in program and block statement lists.
 - [x] Parameter defaults observe a temporal dead zone for later parameters.
 - [x] `var` is function-scoped and hoisted: names declared anywhere in a function or program body, including loop

@@ -1836,6 +1836,17 @@ describe("computed property keys convert through the object's own toString", () 
     )
   })
 
+  test("a nullish base in o.x = v throws once the right side is evaluated, as PutValue checks it", async () => {
+    expect(
+      await value(`
+        let count = 0
+        let failure
+        try { const base = null; base.prop = count += 1 } catch (error) { failure = error.name }
+        return [count, failure]
+      `),
+    ).toEqual([1, "TypeError"])
+  })
+
   test("a nullish base throws before the key converts, as ToObject precedes ToPropertyKey", async () => {
     const failure = await error(`const base = null; base[{ toString() { throw new RangeError("key evaluated") } }]`)
     expect(failure.message).toContain("Cannot read properties of null")

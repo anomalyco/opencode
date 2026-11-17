@@ -1378,8 +1378,6 @@ language/expressions/assignment/dstr/array-rest-lref-err.js  # Expected SameValu
 language/expressions/assignment/target-member-computed-reference-null.js  # Expected a DummyError but got a TypeError
 language/expressions/assignment/target-member-computed-reference-undefined.js  # Expected a DummyError but got a TypeError
 language/expressions/assignment/target-member-computed-reference.js  # Expected a DummyError but got a TypeError
-language/expressions/assignment/target-member-identifier-reference-null.js  # Expected SameValue(«0», «1») to be true
-language/expressions/assignment/target-member-identifier-reference-undefined.js  # Expected SameValue(«0», «1») to be true
 language/expressions/assignmenttargettype/simple-basic-identifierreference-await.js  # Unexpected token (12:6)
 language/expressions/async-generator/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/async-generator/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true

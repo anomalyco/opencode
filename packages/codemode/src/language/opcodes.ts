@@ -218,6 +218,8 @@ export const CheckBaseKind = {
   WRITE_ELEM: 2,
   /** Destructuring target check: throws if top is null or undefined (`[v] -> [v]`). */
   DESTRUCTURE: 3,
+  /** `o.x = v`: the `WRITE_PROP` check, made once the right side is evaluated (`[o, v] -> [o, v]`, `bx = k`). */
+  ASSIGN_PROP: 4,
 } as const
 
 /** Sub-ops for `Op.ITER_OPEN` and `Op.ITER_INIT` (`a` operand). */

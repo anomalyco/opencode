@@ -192,7 +192,9 @@ const formatOperand = (c: Code, op: number, a: number, bx: number, sbx: number):
           ? `.writeProp ${JSON.stringify(c.consts[bx])}`
           : a === CheckBaseKind.WRITE_ELEM
             ? ".writeElem"
-            : ".destructure"
+            : a === CheckBaseKind.ASSIGN_PROP
+              ? `.assignProp ${JSON.stringify(c.consts[bx])}`
+              : ".destructure"
     case Op.BINOP:
       return BinOpSymbols[a] ?? String(a)
     case Op.UNARY:
