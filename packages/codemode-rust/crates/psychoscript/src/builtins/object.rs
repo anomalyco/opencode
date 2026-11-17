@@ -254,8 +254,7 @@ fn from_entry(vm: &mut Vm, id: Id, item: &Value) -> Result<(), Value> {
     }
     let k = vm.get_elem(item, &Value::Num(0.0))?;
     let v = vm.get_elem(item, &Value::Num(1.0))?;
-    let k = vm.string_of(&k)?;
-    let a = vm.atoms.intern_id(k);
+    let a = vm.key_of(&k)?;
     vm.define(id, a, v);
     Ok(())
 }

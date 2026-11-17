@@ -116,16 +116,18 @@ fn map_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = vm.alloc(Obj::new(Some(proto), Kind::Map(Box::default())));
     let src = arg(args, 0);
     if !src.is_nullish() {
-        for entry in vm.iterate_to_vec(&src)? {
+        vm.for_each_value(&src, |vm, entry| {
             if !matches!(entry, Value::Obj(_)) {
-                let d = vm.describe(&entry);
-                return Err(vm.type_error(&format!("Iterator value {d} is not an entry object")));
+                return Err(
+                    vm.type_error("new Map(...) expects [key, value] pairs as entry objects.")
+                );
             }
             let k = vm.get_elem(&entry, &Value::Num(0.0))?;
             let v = vm.get_elem(&entry, &Value::Num(1.0))?;
             let key = vm.map_key(&k);
             table(vm, id).set(key, k, v);
-        }
+            Ok(())
+        })?;
     }
     Ok(Value::Obj(id))
 }
