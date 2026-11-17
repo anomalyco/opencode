@@ -22,8 +22,9 @@ use std::hash::{DefaultHasher, Hasher};
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
+#[cfg(feature = "ts")]
 use crate::pipe::{Scripts, Step};
-use crate::{Definition, ErrorFn, Host, NO_TUI_MODULE, Registry, SKIPPED, SKIPPED_JS_OFF, SKIPPED_NO_BUN, Status};
+use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, SKIPPED_OFF, Status};
 use approval::{Approvals, Artifact, Decision};
 
 /// The file name of a plugin directory's native build: `plugin.so`, `plugin.dylib`, or `plugin.dll`.
@@ -171,6 +172,7 @@ pub struct Loader {
     /// The last answer the user gave on each target, counted ([`Loader::deciding`]).
     answers: RefCell<HashMap<String, u64>>,
     /// The JS host, which runs the targets that have no native build.
+    #[cfg(feature = "ts")]
     scripts: Option<Rc<Scripts>>,
     /// The global cache directory TS installs packages into (`~/.cache/opencode`), where a target named by npm
     /// package is found ([`npm::resolve`]), and nothing installed.
@@ -236,6 +238,7 @@ impl Loader {
             approvals: Approvals::default(),
             held: RefCell::default(),
             answers: RefCell::default(),
+            #[cfg(feature = "ts")]
             scripts: None,
             npm: None,
             server: RefCell::default(),
@@ -320,7 +323,7 @@ impl Loader {
         if let Some(pinned) = self.packages.borrow().get(spec) {
             return Some(pinned.directory.clone());
         }
-        let cache = self.npm.as_deref().filter(|_| self.scripts.is_some())?;
+        let cache = self.npm.as_deref().filter(|_| self.js())?;
         let npm::Package { directory, name } = npm::resolve(spec, cache)?;
         self.packages.borrow_mut().insert(spec.to_owned(), npm::Package { directory: directory.clone(), name });
         Some(directory)
@@ -367,13 +370,22 @@ impl Loader {
     }
 
     /// Runs the targets without a native build on `scripts`.
+    #[cfg(feature = "ts")]
     pub fn with_scripts(self, scripts: Rc<Scripts>) -> Self {
         Self { scripts: Some(scripts), ..self }
     }
 
+    /// Whether a JS host runs the TypeScript plugins: never in a build without the `ts` feature (ts-feature).
+    fn js(&self) -> bool {
+        #[cfg(feature = "ts")]
+        return self.scripts.is_some();
+        #[cfg(not(feature = "ts"))]
+        return false;
+    }
+
     /// Whether `target` runs on the JS host: it has no native build, and it is a directory.
     fn scripted(&self, target: &Target) -> bool {
-        self.scripts.is_some()
+        self.js()
             && target.library().is_none()
             && target.local.as_ref().is_some_and(|dir| dir.is_dir())
             && !self.luau_target(target)
@@ -399,10 +411,7 @@ impl Loader {
             })
         });
         // TS's order: the discovered directories, the server plugins' TUI parts, then `cli.json` (`context.tsx:290-309`).
-        let (parts, user) = match self.scripts {
-            Some(_) => self.server.borrow().clone(),
-            None => Default::default(),
-        };
+        let (parts, user) = if self.js() { self.server.borrow().clone() } else { Default::default() };
         // A part that does not resolve is left out, as TS leaves out an optional target it cannot load
         // (`context.tsx:362-363`). It loads without approval only when the user's own configuration names it: its spec
         // in `cli.json` or the global opencode config, or its path there or under a global plugin directory. Any other
@@ -573,6 +582,7 @@ impl Loader {
             .cloned()
             .collect::<Vec<_>>();
         for target in stale.into_iter().chain(removed) {
+            #[cfg(feature = "ts")]
             if let Some(scripts) = &self.scripts {
                 scripts.forget(&target);
             }
@@ -640,12 +650,13 @@ impl Loader {
         {
             return self.luau(host, registry, target, dir, &listed);
         }
+        #[cfg(feature = "ts")]
         if self.scripted(target)
             && let (Some(scripts), Some(dir)) = (&self.scripts, &target.local)
         {
             // Bun is looked for only now, for the first TypeScript plugin (O-166); without it the plugin is skipped.
             if !scripts.runtime() {
-                return skip(SKIPPED_NO_BUN);
+                return skip(crate::SKIPPED_NO_BUN);
             }
             return self.script(host, registry, target, scripts, dir, &listed);
         }
@@ -661,10 +672,10 @@ impl Loader {
                 return false;
             }
             // Why, with the way to load it where there is one (FT-10).
-            return skip(&match (&target.local, &self.scripts) {
-                (None, Some(_)) => npm::missing(name),
-                (None, None) => SKIPPED_JS_OFF.to_owned(),
-                (Some(local), None) if local.is_dir() => SKIPPED_JS_OFF.to_owned(),
+            return skip(&match (&target.local, self.js()) {
+                (None, true) => npm::missing(name),
+                (None, false) => SKIPPED_OFF.to_owned(),
+                (Some(local), false) if local.is_dir() => SKIPPED_OFF.to_owned(),
                 _ => SKIPPED.to_owned(),
             });
         };
@@ -749,6 +760,7 @@ impl Loader {
 
     /// Brings the TypeScript plugin of `target`, the directory `dir`, in line with the JS host: its load is sent when it
     /// is new or changed, and registered once it is answered. A running build keeps running while the next loads.
+    #[cfg(feature = "ts")]
     fn script(
         &self,
         host: &Rc<dyn Host>,
@@ -823,7 +835,7 @@ impl Loader {
             Step::Unsupported(reason) => {
                 registry.unload(host, name);
                 self.seen.borrow_mut().remove(name);
-                let reason = format!("{NO_TUI_MODULE}: {reason}");
+                let reason = format!("{}: {reason}", crate::NO_TUI_MODULE);
                 let status = Status::Skipped(reason.clone());
                 let changed = listed.as_ref() != Some(&status);
                 if changed {
@@ -1194,6 +1206,7 @@ fn luau_starting(registry: &Registry, name: &str, listed: &Option<Status>) -> bo
 }
 
 /// Lists the TypeScript plugin `name` as starting on the JS host: whether the manager's list changed.
+#[cfg(feature = "ts")]
 fn starting(registry: &Registry, name: &str, listed: &Option<Status>) -> bool {
     let status = Status::Skipped(STARTING.to_owned());
     let changed = listed.as_ref() != Some(&status);

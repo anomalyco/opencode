@@ -123,6 +123,24 @@ echo "TUI plugin \"$3\" installed and added to $OPENCODE_CONFIG_DIR/cli.json"
         command.output().unwrap()
     };
     let installed = "TUI plugin \"opencode-pulse-ticker@0.2.1\" installed";
+    // A build without the `ts` feature never loads it, whatever the variable says (ts-feature).
+    #[cfg(not(feature = "ts"))]
+    for js in [None, Some("1"), Some("0")] {
+        let output = run("opencode-pulse-ticker@0.2.1", js);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut lines = stdout.lines();
+        assert!(output.status.success() && lines.next().is_some_and(|line| line.starts_with(installed)), "{stdout}");
+        let warning = lines.next().unwrap_or_default();
+        assert!(
+            warning.starts_with(
+                "opencode-native will not load TUI plugin \"opencode-pulse-ticker@0.2.1\": this build has no \
+                 TypeScript plugin support"
+            ),
+            "{stdout}"
+        );
+        assert_eq!(lines.next(), None);
+    }
+    #[cfg(feature = "ts")]
     for off in ["0", "false", "off"] {
         let output = run("opencode-pulse-ticker@0.2.1", Some(off));
         assert!(output.status.success(), "{output:?}");
@@ -140,6 +158,7 @@ echo "TUI plugin \"$3\" installed and added to $OPENCODE_CONFIG_DIR/cli.json"
         assert_eq!(lines.next(), None);
     }
     // On by default (O-166), and with any other value: nothing more, as TS.
+    #[cfg(feature = "ts")]
     for on in [None, Some("1")] {
         let output = run("opencode-pulse-ticker@0.2.1", on);
         let stdout = String::from_utf8_lossy(&output.stdout);

@@ -30,11 +30,13 @@ opencode-local = { path = "crates/local" }
 opencode-mermaid = { path = "crates/mermaid" }
 opencode-mini = { path = "crates/mini" }
 opencode-parity = { path = "crates/parity" }
-opencode-plugin = { path = "crates/plugin" }
+# Without their default features: `ts` (TypeScript TUI plugins on the JS host) is chosen by opencode-cli, so a build
+# without it has no JS host anywhere (ts-feature).
+opencode-plugin = { path = "crates/plugin", default-features = false }
 opencode-plugin-abi = { path = "crates/plugin-abi", features = ["host"] }
 opencode-service = { path = "crates/service" }
 opencode-store = { path = "crates/store" }
-opencode-tui = { path = "crates/tui" }
+opencode-tui = { path = "crates/tui", default-features = false }
 opencode-ui = { path = "crates/ui" }
 opencode-util = { path = "crates/util" }
 

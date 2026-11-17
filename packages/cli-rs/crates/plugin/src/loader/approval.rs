@@ -172,6 +172,7 @@ thread_local! {
 
 /// Forgets this thread's last hash of the tree `target`: the next [`Artifact::tree`] of it reads every file, however
 /// its entries' metadata stayed.
+#[cfg(any(feature = "ts", feature = "luau"))]
 pub(crate) fn forget(target: &Path) {
     if let Ok(path) = std::fs::canonicalize(target) {
         TREES.with(|trees| trees.borrow_mut().remove(&path));
@@ -327,6 +328,7 @@ thread_local! {
 }
 
 /// The SHA-256 in hex of the file at `path`, counted in [`hashed`].
+#[cfg(any(feature = "ts", feature = "luau"))]
 pub(crate) fn digest_file(path: &Path) -> Result<String, String> {
     let mut file = File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
     sha256(&mut file).map_err(|error| format!("{}: {error}", path.display()))

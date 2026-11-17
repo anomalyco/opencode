@@ -38,6 +38,7 @@ pub struct Plugins {
     /// The snapshot last published in the run record.
     pub(crate) published: RefCell<Option<opencode_plugin::contain::Snapshot>>,
     /// The JS host of the TypeScript plugins, when it runs (P7).
+    #[cfg(feature = "ts")]
     pub scripts: RefCell<Option<Rc<opencode_plugin::pipe::Scripts>>>,
     /// The plugins as the plugins that read them last heard of them (P6b), and whether a tell is queued.
     told: RefCell<Vec<opencode_plugin::Entry>>,
@@ -1214,6 +1215,7 @@ pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>,
         registry: Registry::new(builtins(external, abi), targets),
         loader: RefCell::default(),
         published: RefCell::default(),
+        #[cfg(feature = "ts")]
         scripts: RefCell::default(),
         told: RefCell::default(),
         telling: Cell::new(false),
@@ -1336,7 +1338,7 @@ fn set_server_parts(tui: &Rc<Tui>, plugins: &[PluginInfo]) {
             ServerPart::Package { spec: target, .. } | ServerPart::Local { path: target, .. } => target.clone(),
         })
         .collect();
-    if tui.plugins.scripts.borrow().is_some() {
+    if js_host(tui) {
         tui.plugins.server_parts.replace(parts);
         if loader.set_server(typed, user_plugins(tui, loader.config_dir())) {
             loader.reconcile(&host(tui), &tui.plugins);
@@ -1344,7 +1346,7 @@ fn set_server_parts(tui: &Rc<Tui>, plugins: &[PluginInfo]) {
         }
         return;
     }
-    let skipped = Status::Skipped(opencode_plugin::SKIPPED_JS_OFF.to_owned());
+    let skipped = Status::Skipped(opencode_plugin::SKIPPED_OFF.to_owned());
     let before = tui.plugins.server_parts.replace(parts.clone());
     let entries = tui.plugins.entries();
     let status = |target: &str| entries.iter().find(|entry| entry.target.as_deref() == Some(target)).map(|e| &e.status);
@@ -1356,7 +1358,7 @@ fn set_server_parts(tui: &Rc<Tui>, plugins: &[PluginInfo]) {
         }
     }
     for part in parts.iter().filter(|target| status(target).is_none()) {
-        log::warn!("plugin {part} skipped: {}", opencode_plugin::SKIPPED_JS_OFF);
+        log::warn!("plugin {part} skipped: {}", opencode_plugin::SKIPPED_OFF);
         tui.plugins.set_unloaded(part, Some(skipped.clone()));
         changed = true;
     }
@@ -1486,8 +1488,35 @@ pub struct External {
 /// Posted when a watched plugin directory changed.
 struct PluginsChanged;
 
+/// How the JS host runs ([`external_with`]): `opencode_plugin::pipe::Config` in a build with the `ts` feature; in one
+/// without it, nothing can be made, so only `None` is passed (ts-feature).
+#[cfg(feature = "ts")]
+pub type JsHost = opencode_plugin::pipe::Config;
+/// How the JS host runs ([`external_with`]): in a build without the `ts` feature there is none (ts-feature).
+#[cfg(not(feature = "ts"))]
+pub enum JsHost {}
+
+/// Whether a JS host runs the TypeScript plugins: never in a build without the `ts` feature.
+fn js_host(tui: &Tui) -> bool {
+    #[cfg(feature = "ts")]
+    return tui.plugins.scripts.borrow().is_some();
+    #[cfg(not(feature = "ts"))]
+    return {
+        let _ = tui;
+        false
+    };
+}
+
 /// Loads the external native plugins (P.4): the discovered `plugins` directories and the `cli.json` entries that name no
 /// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
+#[cfg(not(feature = "ts"))]
+pub fn external(tui: &Rc<Tui>, external: External) {
+    external_with(tui, external, None);
+}
+
+/// Loads the external native plugins (P.4): the discovered `plugins` directories and the `cli.json` entries that name no
+/// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
+#[cfg(feature = "ts")]
 pub fn external(tui: &Rc<Tui>, external: External) {
     let args = &tui.startup.args;
     let server = match args.local {
@@ -1504,7 +1533,7 @@ pub fn external(tui: &Rc<Tui>, external: External) {
 
 /// [`external`], with the TypeScript plugins on a JS host that runs as `scripts` says (P7); without one they are listed
 /// as skipped.
-pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode_plugin::pipe::Config>) {
+pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>) {
     let builds: Vec<Build> =
         external.dev.iter().map(|library| Build::new(Path::new(library).with_file_name("build.log"))).collect();
     let dev = external.dev;
@@ -1540,19 +1569,28 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<opencode
         Some(state) => loader.with_approvals(Approvals::open(state.join(approval::FILE), &project)),
         None => loader,
     };
-    let scripts = scripts.map(|config| opencode_plugin::pipe::Scripts::new(config, &host(tui)));
-    let loader = Rc::new(match &scripts {
-        Some(scripts) => loader.with_scripts(scripts.clone()),
-        None => loader,
-    });
-    if let Some(scripts) = &scripts {
-        // An answer of the JS host is taken as a change of the plugin directories is.
-        let proxy = tui.app.proxy();
-        scripts.on_reconcile(Rc::new(move || {
-            let _ = proxy.send(PluginsChanged);
-        }));
-        *tui.plugins.scripts.borrow_mut() = Some(scripts.clone());
-    }
+    #[cfg(feature = "ts")]
+    let loader = {
+        let scripts = scripts.map(|config| opencode_plugin::pipe::Scripts::new(config, &host(tui)));
+        let loader = Rc::new(match &scripts {
+            Some(scripts) => loader.with_scripts(scripts.clone()),
+            None => loader,
+        });
+        if let Some(scripts) = &scripts {
+            // An answer of the JS host is taken as a change of the plugin directories is.
+            let proxy = tui.app.proxy();
+            scripts.on_reconcile(Rc::new(move || {
+                let _ = proxy.send(PluginsChanged);
+            }));
+            *tui.plugins.scripts.borrow_mut() = Some(scripts.clone());
+        }
+        loader
+    };
+    #[cfg(not(feature = "ts"))]
+    let loader = match scripts {
+        None => Rc::new(loader),
+        Some(none) => match none {},
+    };
     tui.plugins.set_loader(loader.clone());
     loader.reconcile(&host(tui), &tui.plugins);
     let watches: Rc<RefCell<Vec<Watched>>> = Rc::default();

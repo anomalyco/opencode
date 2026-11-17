@@ -144,6 +144,7 @@ pub(crate) struct Viewing<'a> {
     pub held: usize,
     /// The height a solve laid the mount's root out at, 0 included; `None` before the first, when the input's size is
     /// the screen's stand-in.
+    #[cfg_attr(not(feature = "ts"), allow(dead_code))]
     pub laid: Option<u16>,
 }
 

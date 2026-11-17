@@ -35,6 +35,8 @@ mod plugin_builtins;
 mod plugin_canvas;
 mod plugin_carriers;
 mod plugin_claim;
+// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
+#[cfg(feature = "ts")]
 mod plugin_compat;
 mod plugin_contain;
 mod plugin_fetch;
@@ -48,15 +50,23 @@ mod plugin_machines;
 mod plugin_mail;
 mod plugin_manager;
 mod plugin_model;
+// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
+#[cfg(feature = "ts")]
 mod plugin_npm;
+// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
+#[cfg(feature = "ts")]
 mod plugin_ownership;
 mod plugin_p0a;
+// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
+#[cfg(feature = "ts")]
 mod plugin_pipe;
 mod plugin_reads;
 mod plugin_reconcile;
 mod plugin_routing;
 mod plugin_surface;
 mod plugins;
+// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
+#[cfg(feature = "ts")]
 mod ports;
 mod prompt;
 mod prompt_footer;

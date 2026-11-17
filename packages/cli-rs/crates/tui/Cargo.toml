@@ -32,6 +32,10 @@ url.workspace = true
 rand.workspace = true
 
 [features]
+# TypeScript TUI plugins on the JS host: the pipe carrier, the JS host and its embedded `host.ts`, `compat.js` and
+# `effect.js` (ts-feature). On by default; `OPENCODE_PLUGIN_JS=0` still turns the host off at run time.
+default = ["ts"]
+ts = ["opencode-plugin/ts"]
 # Luau plugins (spike `luau-spike`), off by default; `OPENCODE_PLUGIN_LUAU=1` turns them on in a build that has them.
 luau = ["opencode-plugin/luau"]
 

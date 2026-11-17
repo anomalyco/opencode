@@ -16,6 +16,8 @@ local server's opencode binary run as its own Bun, the opencode bundled beside t
 it. Otherwise the registry lists it with status `Skipped`, its slot claims, commands and routes absent:
 - `OPENCODE_PLUGIN_JS` set to `0`, `false` or `off` (any case) turns the JS host off: "TypeScript TUI plugins run on
   the JS host, which OPENCODE_PLUGIN_JS turns off: unset it to turn the JS host back on";
+- a build without the cargo feature `ts` (on by default, ts-feature) has no JS host: "this build of opencode-native has
+  no TypeScript plugin support (built without the ts feature)";
 - with no Bun found: "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun
   on the path runs it; install Bun or set OPENCODE_BUN".
 
