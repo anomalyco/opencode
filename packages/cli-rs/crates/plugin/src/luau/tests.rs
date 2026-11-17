@@ -656,6 +656,42 @@ fn a_value_past_the_conversion_bounds_is_refused_at_once() {
     assert!(host.toasts.borrow().iter().all(|toast| toast.message != "after the refusal"));
 }
 
+// Expected (luau-safety 6, safety-audit #16): a table of one item whose length is 100,000 is refused on its parts,
+// before the walk makes a `null` of each empty slot; a sequence of exactly as many parts as the limit crosses.
+#[test]
+fn a_sparse_table_is_counted_before_its_gaps_are_filled() {
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:storageKey("items")
+            setup:command({ name = "sparse" }, function(host)
+                local sparse = table.create(100000)
+                sparse[100000] = "x"
+                host:storageSet("items", sparse)
+            end)
+            setup:command({ name = "sequence" }, function(host)
+                local sequence = {}
+                for slot = 15, 1, -1 do sequence[slot] = "x" end
+                host:storageSet("items", sequence)
+            end)
+        end)
+    "#;
+    // 16 parts a node: the sequence and its 15 items are exactly 16 parts.
+    let limits = crate::limits::Limits { nodes: 1, ..crate::limits::Limits::default() };
+    let _restore = crate::limits::set(limits);
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    keymap(&host).dispatch("sequence", None);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(failure(&registry, "test.luau"), None);
+    let stored = host.storage.borrow().values().next().cloned().unwrap();
+    assert_eq!(stored, serde_json::to_string(&["x"; 15]).unwrap());
+    keymap(&host).dispatch("sparse", None);
+    host.app.advance(Duration::from_millis(1));
+    let error = failure(&registry, "test.luau").expect("refused");
+    assert!(error.contains("more than 16 parts"), "{error}");
+}
+
 // Expected (review luau-4): a cycle of `require` is an error naming it; a module is one however it is reached
 // (`@self/x` from the root, `../x` from `lib`), loaded once; and a link out of the plugin directory is refused, where
 // one inside it is read.
