@@ -74,7 +74,10 @@ export function connection(url: string) {
 
 /** Whether a host names this machine; for a remote server that is the server's machine, not the user's. */
 export function loopback(hostname: string) {
-  return /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\]|::1)$/i.test(hostname) || hostname.endsWith(".localhost")
+  const host = hostname.toLowerCase().replace(/\.$/, "")
+
+  // URL.hostname canonicalizes IPv4-mapped IPv6 into hex groups, including mapped 0.0.0.0.
+  return /^(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1?\]|::1|\[::ffff:(?:7f[\da-f]{2}:[\da-f]{1,4}|0:0)\])$/.test(host) || host.endsWith(".localhost")
 }
 
 /** A file never goes to the default application. Main resolves the tab's workspace again before revealing it. */
@@ -85,4 +88,19 @@ export function externalAction(url: string, local: boolean) {
   if (parsed.protocol === "file:") return local && !parsed.hostname ? "reveal" : undefined
 
   if (destinationOrigin(url) && (local || !loopback(parsed.hostname))) return "browser"
+}
+
+/** Eligibility of the displayed page; only main can turn a preview grant into a launchable file. */
+export function externalPage(url: string, local: boolean) {
+  const action = externalAction(url, local)
+
+  return action === "browser" || (action === "reveal" && /\.html?$/i.test(new URL(url).pathname))
+}
+
+/** `shown` is main's committed address or the URL Chromium reported failing, never a renderer-supplied target. */
+export function pageHandoff(actual: string, display: string, shown: string, failed: boolean, local: boolean) {
+  if (externalAction(shown, local) === "browser" && (failed || actual === shown)) return { kind: "web" as const, url: shown }
+
+  if (!failed && actual.startsWith("oc-preview://") && display === shown && shown.startsWith("file:") && externalPage(shown, local))
+    return { kind: "preview" as const, url: shown }
 }

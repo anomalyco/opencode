@@ -8,6 +8,8 @@ const detail = (maximum: number) => Schema.String.check(Schema.isMaxLength(maxim
 
 const binding = text(128)
 
+export const PluginTabHandle = text(128).pipe(Schema.brand("ExperimentalBrowserTab"))
+
 /** The longest page icon data URL main reports: a 32px PNG is a few kilobytes; larger icons are dropped. */
 export const MAX_ICON_URL = 24_576
 
@@ -152,6 +154,7 @@ export const PaneEvent = Schema.Union([
   // What the tab waits on the user for; null once nothing waits.
   Schema.Struct({ type: Schema.Literal("prompt"), tabID: Browser.TabID, prompt: Schema.NullOr(PromptView) }),
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
+  Schema.Struct({ type: Schema.Literal("activity"), tabID: Browser.TabID, reveal: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
   Schema.Struct({
     type: Schema.Literal("state"),
@@ -233,6 +236,8 @@ export const BrowserPane = Ipc.define({
     // Creates the page of a restored tab the first time the pane shows it.
     load: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     command: { input: Schema.Struct({ binding, command: Browser.Action }) },
+    createTab: { input: Schema.Struct({ binding, owner: text(128), url: text(16_384) }), output: PluginTabHandle },
+    closeTab: { input: Schema.Struct({ binding, owner: text(128), id: PluginTabHandle }), output: Schema.Boolean },
     find: { input: Schema.Struct({ binding, tabID: Browser.TabID, action: FindAction }) },
     notice: { input: Schema.Struct({ binding, tabID: Browser.TabID, token: text(128), dismiss: Schema.Boolean, copy: Schema.optional(Schema.Boolean) }) },
     reviewLink: { input: Schema.Struct({ binding, url: text(2048) }), output: Browser.TabID },
@@ -256,6 +261,7 @@ export const BrowserPane = Ipc.define({
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     clearCache: { input: Schema.Struct({ binding, tabID: Browser.TabID, address: text(16_384) }) },
     reveal: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
+    openPage: { input: Schema.Struct({ binding, tabID: Browser.TabID, expected: text(16_384) }) },
     close: { input: Schema.Struct({ binding }) },
     forget: { input: Schema.Struct({server:text(16_384),session:text(256).check(Schema.isStartingWith("ses"))}) },
   },

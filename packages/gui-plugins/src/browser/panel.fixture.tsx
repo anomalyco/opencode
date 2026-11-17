@@ -52,7 +52,7 @@ import browserEn from "./i18n/en"
 import type definition from "./index"
 import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
-import { BrowserPane, type PaneEvent, type PromptAnswer, type PromptView } from "./ipc"
+import { BrowserPane, PluginTabHandle, type PaneEvent, type PromptAnswer, type PromptView } from "./ipc"
 import { pageShortcut } from "./keys"
 import { normalizeURL, refusal } from "./policy"
 import { navigationNotice } from "./refusal-notice"
@@ -330,7 +330,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       name: "Local",
       local: true,
       compatible: true,
-      data: { on: () => () => undefined },
+      data: { on: () => () => undefined, session: { status: () => "idle" } },
     }
 
     const [reads, setReads] = createStore({ directory: 0 })
@@ -506,6 +506,9 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         emit(store.session, { type: "prompt", tabID: value.tabID, prompt: null })
       },
       reveal: async () => undefined,
+      openPage: async ({ expected }) => { setStore("external", (items) => [...items, expected]) },
+      createTab: async () => PluginTabHandle.make("handle"),
+      closeTab: async () => true,
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
         setStore({ cookies: 0, generation: store.generation + 1 })
@@ -536,6 +539,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       screen: { current: () => screen },
       layout: {
         narrow: () => false,
+        fitsSide: () => true,
         stored: () => [],
         state: () => "visible",
         open() {},
@@ -733,8 +737,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           <p>Highlights: {store.highlights.map((item) => item.ref ?? "clear").join(",")}</p>
           <p>Highlight owners: {store.highlights.map((item) => item.sessionKey).join(",")}</p>
           <div style={{ position: "relative", width: `${store.width}px`, height: "360px", border: "1px solid #555" }}>
-            <Show when={store.mounted && session()}>
-              {(view) => <SessionBrowserPane tab={() => current()} session={view()} screen={screen} model={model} />}
+            <Show when={store.mounted}>
+              <SessionBrowserPane tab={current} session={session()!} screen={screen} model={model} />
             </Show>
             <ResizeHandle
               data-testid="pane-resize-handle"
@@ -1112,7 +1116,7 @@ export function mountBrowserRegion(input: RegionHost) {
       id: "browser-test",
       name: "Browser test",
       url: "http://127.0.0.1:4096",
-      data: { on: () => () => undefined },
+      data: { on: () => () => undefined, session: { status: () => "idle" } },
       local: true,
       builtin: true,
       compatible: true,
@@ -1176,11 +1180,15 @@ export function mountBrowserRegion(input: RegionHost) {
 
     const layout = (plugin: string): BuiltinLayout => ({
       narrow: () => false,
+      fitsSide: () => true,
       ready: () => true,
       open(key, session, options) {
         if (!strip(session.key).all.includes(key)) setAll(session.key, [...strip(session.key).all, key])
 
         if (options?.tab !== "append") setStore("strips", session.key, "active", key)
+
+        // As the host does for a selected tab, without the toggle's move of keyboard focus.
+        if (options?.tab === "select") setStore("opened", true)
       },
       // As the host does, the routed session's strip closes it.
       close: (key, session) => (session.key === view().key ? sideRegion()?.close(key) : close(session.key, key)),
@@ -1193,7 +1201,7 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       stored: (session) =>
         strip(session.key).all.flatMap((key) => (key.startsWith(`${plugin}:`) ? [key.slice(plugin.length + 1)] : [])),
-      side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
+      side: { opened: () => store.opened, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       sidebar: { opened: () => true },
       scroll: { get: () => undefined, set() {} },
       settings() {},
@@ -1303,6 +1311,9 @@ export function mountBrowserRegion(input: RegionHost) {
       answer: async () => ask(null),
       reveal: async () => undefined,
       close: async () => undefined,
+      openPage: async () => undefined,
+      createTab: async () => PluginTabHandle.make("handle"),
+      closeTab: async () => true,
       forget: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {
@@ -1346,6 +1357,24 @@ export function mountBrowserRegion(input: RegionHost) {
     }
 
     const latest = () => store.registrations.filter((item) => item.session === "ses_beta").at(-1)
+
+    const probe = { open: async (): Promise<void> => { throw new Error("Fixture consumer not active") } }
+    const [apiResult, setApiResult] = createSignal("")
+
+    const consumer: Entry = { id: "fixture-tabs", windowEntry: async () => {
+      const contract = await import("@opencode/plugin/gui/browser")
+
+      return { default(ctx: Context) {
+        const read = ctx.use(contract.Browser)
+        probe.open = async () => {
+          const pane = read()
+
+          if (pane.status !== "active") throw new Error("missing pane")
+          const id = await pane.value.experimental.open(view(), "https://fixture.invalid")
+          setApiResult(String(await pane.value.experimental.close(id)))
+        }
+      } }
+    } }
 
     // The desktop answers Beta's latest registration with the tab it restored.
     const inventory = () => {
@@ -1449,9 +1478,9 @@ export function mountBrowserRegion(input: RegionHost) {
           <div role="tablist" aria-label="Side panel" style={{ display: "flex", gap: "8px", margin: "16px 0" }}>
             <For each={region.keys()}>
               {(key) => (
-                <span role="tab" aria-selected={region.active() === key} style={{ padding: "4px 8px" }}>
-                  {region.entry(key)?.tab.title}
-                </span>
+                <button type="button" role="tab" aria-selected={region.active() === key} onClick={() => region.select(key)} style={{ padding: "4px 8px" }}>
+                  {region.entry(key)?.tab.label?.({ active: region.active() === key, preview: false, session: view() }) ?? region.entry(key)?.tab.title}
+                </button>
               )}
             </For>
           </div>
@@ -1505,7 +1534,7 @@ export function mountBrowserRegion(input: RegionHost) {
       <DialogProvider>
         <input.Shell>
           <input.PluginHostProvider
-            definitions={() => input.definitions}
+              definitions={() => [...input.definitions, consumer]}
             disabled={() => new Set<string>()}
             apis={apis}
             whenMounted={(run) => {
@@ -1538,7 +1567,27 @@ export function mountBrowserRegion(input: RegionHost) {
                 }}
               >
                 First inventory
-              </button>
+                </button>
+                <button onClick={() => {
+                  const binding = latest()?.binding
+
+                  if (binding) listeners.forEach(listener => listener({ binding, event: { type: "state", state: { tabs: [tab(tabID)], focusedTabID: tabID }, error: "browser.pane.suspended" } }))
+                }}>Suspend binding</button>
+                <button onClick={() => void probe.open?.()}>Plugin open and close</button>
+                <button onClick={() => {
+                  const binding = latest()?.binding
+
+                  if (binding) listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID, reveal: true } }))
+                }}>Agent show request</button>
+                <button onClick={() => {
+                  const binding = latest()?.binding
+
+                  if (binding) listeners.forEach(listener => listener({ binding, event: { type: "prompt", tabID, prompt: {
+                    id: 1, waiting: 1, focus: false, asked: 1, page: false,
+                    ask: { kind: "dialog", dialog: "confirm", site: { kind: "web", host: "beta.example", embedded: false }, message: "Leave?", value: "", stop: true },
+                  } } }))
+                }}>Page prompt</button>
+                <output>Plugin closed: {apiResult()}</output>
               <button
                 onClick={() => {
                   setStore("blank", true)

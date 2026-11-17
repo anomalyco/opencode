@@ -1,4 +1,5 @@
 export default {
+  "tab.activity": "Agent activity",
   "tree.all": "All files",
   "tab.notFound": "File not found: {{name}}",
   "load.failed": "Failed to load file",

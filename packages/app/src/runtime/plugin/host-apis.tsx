@@ -53,6 +53,7 @@ import { useCurrentRoute, useLayout } from "@/shell/state/layout"
 import { sessionPaneTab, sessionTabPane, type SessionPane } from "@/shell/state/session-tabs"
 import { terminalFontFamily, useSettings } from "@/settings/model"
 import { useSettingsSurface } from "@/settings/surface"
+import { fitsSidePane } from "@/session/session-panel-width"
 import { formatKeybindParts, useCommand } from "@/shell/commands/command"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useIsRouting, useLocation } from "@solidjs/router"
@@ -458,6 +459,7 @@ export function createHostApis() {
     // Before the interface mounts, reads return what an empty layout holds and writes wait for it.
     layout: (plugin) => ({
       narrow,
+      fitsSide: () => fitsSidePane(document.querySelector("[data-pane-row]")?.getBoundingClientRect().width ?? 0),
       ready: () => current()?.layout.ready() ?? false,
       open: (key, session, options) => write((value) => value.layout.open(key, session, options)),
       close: (key, session) => write((value) => value.layout.close(key, session)),

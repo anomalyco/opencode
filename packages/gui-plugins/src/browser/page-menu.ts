@@ -40,6 +40,7 @@ export type MenuAction =
         | "forward"
         | "reload"
         | "hardReload"
+        | "openPage"
         | "copyImage"
         | "cut"
         | "copy"
@@ -55,6 +56,7 @@ export function pageMenu(
   params: Params,
   options: {
     policy: MenuPolicy
+    openPage: boolean
     back: boolean
     forward: boolean
     spellcheck: boolean
@@ -148,7 +150,9 @@ export function pageMenu(
       ]
     : []
 
-  return [navigation, links, images, spelling, edit, spell, options.extensions]
+  const handoff = [options.openPage ? item("openPage", { type: "openPage" }) : { label: options.t("menu.pageUnavailable"), enabled: false }]
+
+  return [navigation, handoff, links, images, spelling, edit, spell, options.extensions]
     .filter((group) => group.length)
     .flatMap((group, index) => (index ? [{ type: "separator" }, ...group] : group))
 }

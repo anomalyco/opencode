@@ -66,6 +66,7 @@ import {
   childActivity,
   agentRefusal,
   activityOwner,
+  recordPageInput,
   allowedDestination,
   committedLoad,
   destinationOrigin,
@@ -82,6 +83,8 @@ import { navigationNotice, popupActivated } from "./refusal-notice"
 import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { reloadAddress } from "./preview"
+import { pageHandoff } from "./address"
+import { defaultBrowser } from "./default-browser"
 import { FileVerificationError } from "@opencode/util/file-verification"
 import type { workspacePages } from "./workspace-pages"
 import { artifactLinks } from "./artifact-links"
@@ -257,6 +260,7 @@ export function createBrowserPage(
     /** Adopts a page the document opened; a background one leaves the current tab selected. */
     popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean, activity: TabActivity) => WebContents
     activity: TabActivity
+    userInput: () => void
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
@@ -360,7 +364,8 @@ export function createBrowserPage(
     if (mouse.type === "mouseDown" && activity.agentRuns === 0) {
       documentInput = true
       nativeMenu = true
-      activity.userInputAt = Date.now()
+      recordPageInput(activity, "user")
+      options.userInput()
       void choosers.update().catch(() => undefined)
     }
   })
@@ -372,7 +377,8 @@ export function createBrowserPage(
 
     documentInput = true
     nativeMenu = true
-    activity.userInputAt = Date.now()
+    recordPageInput(activity, "user")
+    options.userInput()
     void choosers.update().catch(() => undefined)
 
     if (pageReload(input, process.platform === "darwin")) {
@@ -491,7 +497,7 @@ export function createBrowserPage(
 
   constructing.defer(notices.clear)
   const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
-  const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner({ ...activity, now: Date.now(), agentRunning: activity.agentRuns > 0 }), documentInput))
+  const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner(activity), documentInput))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
   let dialogGate = createDialogGateState()
@@ -874,15 +880,14 @@ export function createBrowserPage(
   // started is left to the system's save flow, so it goes where they save it and the agent never reads it.
   const download = (item: Electron.DownloadItem) => {
     const owner = downloadOwner({
-      now: Date.now(),
-      agentRunning: activity.agentRuns > 0,
-      agentEndedAt: activity.agentEndedAt,
-      userInputAt: activity.userInputAt,
+      ...activity,
       page: [contents.mainFrame.url, contents.mainFrame.origin],
       chain: item.getURLChain(),
     })
 
     if (owner === "user") return
+
+    if (owner === "block") return item.cancel()
 
     try {
       const file = files.add(item.getFilename(), item.getMimeType() || "application/octet-stream", [
@@ -1007,8 +1012,43 @@ export function createBrowserPage(
   const embed = options.embeds.create(view, win)
   constructing.defer(() => embed.dispose())
 
+  const handoff = () => {
+    if (closed() || contents.isDestroyed()) return
+    const tab = state()
+    const actual = contents.getURL()
+
+    return pageHandoff(actual, displayURL(actual), tab.url, !!tab.loadError, options.local)
+  }
+
+  const openPage = async (expected: string) => {
+    const target = handoff()
+
+    if (!target || target.url !== expected) throw new Error("browser.menu.failed")
+
+    if (target.kind === "web") return electron.shell.openExternal(target.url)
+
+    const actual = contents.getURL()
+    const launch = await defaultBrowser()
+
+    const opened = await options.workspace?.external(actual, async (file) => {
+      if (handoff()?.url !== expected || contents.getURL() !== actual) throw new Error("browser.menu.failed")
+      await launch(file)
+    })
+
+    if (!opened) throw new Error("browser.menu.failed")
+  }
+
+  const personCommand = () => {
+    recordPageInput(activity, "user")
+    options.userInput()
+    void choosers.update().catch(() => undefined)
+  }
+
   const menu = attachPageMenu(win, contents, {
     ...options.menu,
+    personCommand,
+    canOpenPage: () => !!handoff(),
+    openPage: () => openPage(state().url),
     open: (url) => {
       const current = contents.getURL()
 
@@ -1174,6 +1214,8 @@ export function createBrowserPage(
     previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
     previewIdentity: () => options.workspace?.identity(),
     answerNotice: notices.answer,
+    personCommand,
+    openPage,
     reviewLink: (url: string) => notices.show(navigationNotice(url, policy, "conversation")),
     /** Refuses passkeys in the browser process from now on, for a tab the agent drives or a tab that can script one. */
     restrictPasskeys,
@@ -1258,7 +1300,7 @@ export function createBrowserPage(
         })
       } : undefined)) : undefined
 
-      const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined)
+      const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined, origin)
       await Promise.all([ready, hold?.painted])
       const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
 
@@ -1278,9 +1320,10 @@ export function createBrowserPage(
       const cancel = () => dispatchDialog({ type: "run.cancelled", runID })
       signal.addEventListener("abort", cancel, { once: true })
 
-      if (origin === "user") activity.userInputAt = Date.now()
-
-      if (origin === "agent") activity.agentRuns++
+      if (origin === "agent") {
+        activity.agentRuns++
+        recordPageInput(activity, origin)
+      }
 
       // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
       if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
@@ -1314,7 +1357,6 @@ export function createBrowserPage(
 
         if (origin === "agent") {
           activity.agentRuns--
-          activity.agentEndedAt = Date.now()
           void choosers.update().catch(() => undefined)
         }
       }

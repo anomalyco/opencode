@@ -4,21 +4,36 @@ import type { BuiltinMainStorage, MainStoreFrom } from "@opencode/plugin/gui/bui
 import type { TabActivity } from "./policy"
 
 const Stored = Schema.Struct({
-  // `agent`: the agent drove the tab, which keeps every agent-driven limit when it comes back.
-  tabs: Schema.Array(Schema.Struct({ id: Browser.TabID, url: Browser.Tab.fields.url, agent: Schema.optional(Schema.Literal(true)) })),
+  // Who drove the tab, which keeps every agent-driven limit when it comes back: `control` says whether the person took
+  // it over since, `agent` names the agent. `agent: true` is the earlier form of an agent-driven tab.
+  tabs: Schema.Array(Schema.Struct({
+    id: Browser.TabID,
+    url: Browser.Tab.fields.url,
+    control: Schema.optionalKey(Schema.Literals(["agent", "reclaimed"])),
+    agent: Schema.optionalKey(Schema.Union([Schema.Literal(true), Schema.String])),
+  })),
   focusedTabID: Schema.NullOr(Browser.TabID),
 })
 
 type Stored = typeof Stored.Type
 
+/** One saved tab while it is built; who drives it is written only when known. */
+type SavedTab = { -readonly [Key in keyof Stored["tabs"][number]]: Stored["tabs"][number][Key] }
+
 const empty: Stored = { tabs: [], focusedTabID: null }
 
 /**
  * What the pane seeds its tabs' activity with from a saved state: a tab the agent drove stays agent-driven for good,
- * though no command runs in it now and none ended recently.
+ * and stays the agent's until the person takes it over, though no command runs in it now.
  */
 export function restoredActivity(saved: Stored) {
-  return new Map<Browser.TabID, TabActivity>(saved.tabs.flatMap((tab) => (tab.agent ? [[tab.id, { agentRuns: 0, agentEndedAt: 0 }]] : [])))
+  return new Map<Browser.TabID, TabActivity>(
+    saved.tabs.flatMap((tab) =>
+      tab.control || tab.agent
+        ? [[tab.id, { agentRuns: 0, control: tab.control ?? "agent", agent: tab.agent === true ? undefined : tab.agent }]]
+        : [],
+    ),
+  )
 }
 
 /** Tab URLs and focus per `${server}\n${session}`, imported once from the desktop's own `opencode.browser.dat` rows. */
@@ -40,13 +55,21 @@ export function createBrowserRestoreStore(storage: BuiltinMainStorage) {
 
   return {
     load: (key: string) => store(key).value,
-    save(key: string, state: Stored, agent: (tabID: Browser.TabID) => boolean) {
+    save(key: string, state: Stored, provenance: (tabID: Browser.TabID) => TabActivity | undefined) {
       const target = store(key)
 
-      const value = {
-        tabs: state.tabs.map((tab) => (agent(tab.id) ? { id: tab.id, url: tab.url, agent: true as const } : { id: tab.id, url: tab.url })),
-        focusedTabID: state.focusedTabID,
-      }
+      const tabs = state.tabs.map((tab) => {
+        const driven = provenance(tab.id)
+        const saved: SavedTab = { id: tab.id, url: tab.url }
+
+        if (driven?.control) saved.control = driven.control
+
+        if (driven?.agent) saved.agent = driven.agent
+
+        return saved
+      })
+
+      const value = { tabs, focusedTabID: state.focusedTabID }
 
       if (JSON.stringify(target.value) !== JSON.stringify(value)) target.set(value)
     },

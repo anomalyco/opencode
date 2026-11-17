@@ -1316,6 +1316,25 @@ story("says a failed cookie read failed and reads again on retry", async ({ page
   await expect(site.getByRole("button", { name: "Clear", exact: true })).toBeEnabled()
 })
 
+story("Browser options keeps its original hand-off target until dismissed", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Browser options" }).click()
+  const handoff = page.getByRole("menuitem", { name: "Open in default browser" })
+  await expect(handoff).toBeVisible()
+  await root.getByRole("button", { name: "Blank page", includeHidden: true }).dispatchEvent("click")
+  await expect(handoff).toBeVisible()
+  await handoff.click()
+  await expect(root.getByText("External:", { exact: true })).toBeAttached()
+})
+
+story("Browser options says why a disabled hand-off is unavailable", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Blank page", includeHidden: true }).dispatchEvent("click")
+  await root.getByRole("button", { name: "Browser options" }).click()
+  await expect(page.getByRole("menuitem", { name: "Open in default browser" })).toBeDisabled()
+  await expect(page.getByRole("menu").getByText("Not available in the default browser", { exact: true })).toBeVisible()
+})
+
 story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const options = root.getByRole("button", { name: "Browser options", exact: true })

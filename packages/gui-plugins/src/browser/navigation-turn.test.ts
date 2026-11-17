@@ -2,6 +2,16 @@ import { expect, test } from "bun:test"
 import { navigationTurn, replacementNavigation } from "./navigation-turn"
 import { createDocumentState, transitionDocument } from "./page-machine"
 
+test.each(["navigate", "reload"] as const)("%s joins the unissued preview restore that bootstraps CDP", async method => {
+  const issued: string[] = []
+  const turn = navigationTurn(undefined, () => {}, () => {})
+  const restore = turn.begin(new AbortController().signal)
+  const saved = "file:///work/report.html"
+  expect(turn.interrupt(method, saved)).toBe(method === "reload" ? saved : undefined)
+  await restore("oc-preview://test/report.html", () => { issued.push(saved) })
+  expect(issued).toEqual([saved])
+})
+
 test.each([true, false])("an abort waits for the replacement document, not the original commit: committed=%s", async committed => {
   const next = replacementNavigation()
   const start = { isMainFrame: true, isSameDocument: false }
@@ -69,6 +79,20 @@ test("a gated history traversal settles the spinner when Chromium has no load to
   gate.resolve()
   await back
   expect(events).toEqual(["busy", "back", "idle"])
+})
+
+test("a person's new address replaces a held restore without issuing it", async () => {
+  const issued: string[] = []
+  const stopped: (string | undefined)[] = []
+  const gate = Promise.withResolvers<void>()
+  const turn = navigationTurn(() => gate.promise, () => {}, () => {}, url => stopped.push(url))
+  const url = "https://saved.invalid"
+  const restore = turn.begin(new AbortController().signal)(url, () => { issued.push(url) })
+  turn.interrupt("navigate", url, "user")
+  gate.resolve()
+  await restore
+  expect(issued).toEqual([])
+  expect(stopped).toEqual([url])
 })
 
 test("reload during a gated restore joins the saved load rather than bootstrapping a blank page", async () => {

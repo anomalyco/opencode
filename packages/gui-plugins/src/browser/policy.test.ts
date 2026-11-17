@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, setSystemTime, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import {
   agentFrame,
@@ -12,7 +12,9 @@ import {
   destinationOrigin,
   downloadOwner,
   excludedFrames,
-  DOWNLOAD_GRACE_MS,
+  activityOwner,
+  recordPageInput,
+  recordTabFocus,
   fileURLWithin,
   localFileURL,
   normalizeURL,
@@ -353,44 +355,44 @@ test("only a download the agent's command caused is the agent's", () => {
   const web = ["https://example.com/", "https://example.com"]
 
   const download = (input: Partial<Parameters<typeof downloadOwner>[0]>) =>
-    downloadOwner({ now: 100_000, agentRunning: false, page: web, chain: ["https://example.com/a.csv"], ...input })
+    downloadOwner({ agentRuns: 0, page: web, chain: ["https://example.com/a.csv"], ...input })
 
-  expect(download({ agentRunning: true })).toBe("agent")
-  // A click the agent made, whose response became a download after the command returned.
-  expect(download({ agentEndedAt: 99_000 })).toBe("agent")
-  // The user clicked or typed in the tab since: their download.
-  expect(download({ agentEndedAt: 99_000, userInputAt: 99_500 })).toBe("user")
-  expect(download({ agentEndedAt: 100_000 - DOWNLOAD_GRACE_MS - 1 })).toBe("user")
+  expect(download({ agentRuns: 1 })).toBe("agent")
+  expect(download({ control: "agent" })).toBe("agent")
+  expect(download({ control: "reclaimed" })).toBe("user")
   expect(download({})).toBe("user")
   // An extension's page or download is never the agent's, even while it acts in the tab.
-  expect(download({ agentRunning: true, page: ["chrome-extension://pw/vault.html", "chrome-extension://pw"] })).toBe(
-    "user",
-  )
-  expect(download({ agentRunning: true, chain: ["blob:chrome-extension://pw/0b6f7c2e"] })).toBe("user")
+  expect(download({ agentRuns: 1, page: ["chrome-extension://pw/vault.html", "chrome-extension://pw"] })).toBe("block")
+  expect(download({ agentRuns: 1, chain: ["blob:chrome-extension://pw/0b6f7c2e"] })).toBe("block")
 })
 
 test("sticky agent provenance is inherited without inheriting a running command", () => {
   expect(agentDriven(childActivity({ agentRuns: 0 }))).toBe(false)
-  const child = childActivity({ agentRuns: 1, userInputAt: 10 })
+  const child = childActivity({ agentRuns: 1, control: "reclaimed" })
   expect(agentDriven(child)).toBe(true)
   expect(child.agentRuns).toBe(0)
-  expect(child.agentEndedAt).toBeDefined()
-  const later = { agentRuns: 0, agentEndedAt: 20, userInputAt: 40 }
+  expect(activityOwner(child)).toBe("agent")
+  const later: TabActivity = { agentRuns: 0, control: "reclaimed" }
   expect(childActivity(later)).toEqual(later)
   expect(agentDriven(later)).toBe(true)
 })
 
-test("what happens in a tab is the agent's while its command runs and for a grace period after, until the user acts", () => {
-  const at = (input: Partial<TabActivity>) => agentDriven({ agentRuns: 0, ...input }, 100_000)
+test.each([
+  ["user", false, 31, "user"], ["agent", false, 0, "agent"], ["agent", false, 31, "agent"],
+  ["agent", false, 86400, "agent"], ["agent", true, 0, "user"], ["agent", true, 31, "user"],
+] as const)("%s opened, person input %s, %s idle seconds: %s owns a page action", (origin, input, seconds, owner) => {
+  const activity: TabActivity = { agentRuns: 0 }
+  using clock = new DisposableStack()
+  clock.defer(() => setSystemTime())
+  setSystemTime(100_000)
+  recordPageInput(activity, origin)
+  setSystemTime(100_000 + seconds * 1000)
+  recordTabFocus(activity, "user")
 
-  expect(at({ agentRuns: 1 })).toBe(true)
-  // A script the command started, such as a timer that writes the clipboard a moment after it returned.
-  expect(at({ agentEndedAt: 99_950 })).toBe(true)
-  expect(at({ agentEndedAt: 100_000 - DOWNLOAD_GRACE_MS })).toBe(true)
-  expect(at({ agentEndedAt: 100_000 - DOWNLOAD_GRACE_MS - 1 })).toBe(false)
-  expect(at({ agentEndedAt: 99_000, userInputAt: 99_000 })).toBe(false)
-  expect(at({ agentEndedAt: 99_000, userInputAt: 98_000 })).toBe(true)
-  expect(at({})).toBe(false)
+  if (input) recordPageInput(activity, "user")
+  expect(activityOwner(activity)).toBe(owner)
+  recordPageInput(activity, "agent")
+  expect(activityOwner(activity)).toBe("agent")
 })
 
 test("the user still opens extension pages the agent may not", () => {

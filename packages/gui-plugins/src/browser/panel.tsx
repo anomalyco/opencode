@@ -23,7 +23,7 @@ import {
   type MountedSession,
   type SessionScreen,
 } from "@opencode/plugin/gui"
-import { addressParts, connection, externalAction } from "./address"
+import { addressParts, connection, externalAction, externalPage } from "./address"
 import { hostDisplay } from "./host-display"
 import { FileSource } from "../file/contract"
 import { remotePath, workspacePrefix } from "./remote-address"
@@ -257,6 +257,11 @@ export default function SessionBrowserPane(props: {
   }
 
   const drawn = () => shown() && prompt()?.ask.kind !== "dialog"
+  createKeyed(() => visible() && state()?.id, id => props.model.seen(props.session, id))
+  const revealGuard = () => props.model.revealGuard(props.session, props.tab().id)
+
+  // The guard's delay starts when this panel would show the native view, not while its chunk is still loading.
+  createKeyed(() => drawn() && revealGuard(), (token) => props.model.revealDrawn(props.session, token))
 
   // Focus moves to a prompt only when the user was in the pane or its page, never from the composer.
   const promptFocus = () => !!prompt()?.focus || !!root?.contains(document.activeElement)
@@ -339,15 +344,32 @@ export default function SessionBrowserPane(props: {
 
   const externalLabel = () => address().startsWith("file:") ? "external.reveal" : "external.open"
 
-  const openExternal = () => {
+  const pageTarget = () => {
     const tab = state()
+    const session = props.session
+    const url = tab?.url ?? ""
+    const id = tab?.id
+    const generation = tab?.generation
+    const failed = () => plugin.toast.show({ variant: "error", title: plugin.t("menu.failed") })
+    const current = () => props.session.key === session.key && state()?.id === id && state()?.generation === generation && state()?.url === url
 
-    if (!tab || !reachable()) return
-
-    if (externalAction(tab.url, props.session.server.local) === "reveal") return props.model.revealFile(props.session, tab.id)
-
-    if (externalAction(tab.url, props.session.server.local) === "browser") system.openExternal(tab.url)
+    return {
+      source: source(),
+      serverFile: serverFile(),
+      open: externalPage(url, session.server.local) && (!tab?.loadError || externalAction(url, session.server.local) === "browser"),
+      reveal: externalAction(url, session.server.local) === "reveal",
+      openPage() {
+        if (!id || !current()) return failed()
+        void props.model.openPage(session, id, url).catch(failed)
+      },
+      revealFile() {
+        if (!id || !current()) return failed()
+        void props.model.revealFile(session, id)?.catch(failed)
+      },
+    }
   }
+
+  const [menuPage, setMenuPage] = createSignal<ReturnType<typeof pageTarget>>()
 
   const closeOverlay = () => dispatchOverlay({ type: "overlay.cancelled" })
   const toggleInspect = () => dispatchOverlay({ type: "picker.toggled", context: context() })
@@ -403,7 +425,7 @@ export default function SessionBrowserPane(props: {
   const copyLink = () => {
     const url = address()
 
-    if (!url) return
+    if (!url || serverFile()) return
     void system.copy(url).then(
       () => showToast({ title: plugin.t("common.copied") }),
       () => showToast({ title: plugin.t("common.requestFailed") }),
@@ -786,18 +808,25 @@ export default function SessionBrowserPane(props: {
                   />
                 </Tooltip>
                 <Show when={!serverFile()}>
-                <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
-                  <IconButton
-                    type="button"
-                    variant="ghost-muted"
-                    size="small"
-                    aria-label={plugin.t(externalLabel())}
-                    disabled={!reachable()}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={openExternal}
-                    icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
-                  />
-                </Tooltip>
+                  <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
+                    <IconButton
+                      type="button"
+                      variant="ghost-muted"
+                      size="small"
+                      aria-label={plugin.t(externalLabel())}
+                      disabled={!reachable()}
+                      onPointerDown={(event) => event.preventDefault()}
+                      // The page as it is at the click; a target built while rendering would remount this button
+                      // on every title or loading change.
+                      onClick={() => {
+                        const target = pageTarget()
+
+                        if (target.reveal) return target.revealFile()
+                        target.openPage()
+                      }}
+                      icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
+                    />
+                  </Tooltip>
                 </Show>
               </div>
             </Show>
@@ -894,7 +923,7 @@ export default function SessionBrowserPane(props: {
               </Menu.Portal>
             </Menu>
           </Show>
-          <Menu gutter={4} modal={false} placement="bottom-end">
+          <Menu gutter={4} modal={false} placement="bottom-end" onOpenChange={open => setMenuPage(open ? pageTarget() : undefined)}>
             <Tooltip placement="top" value={plugin.t("options")}>
               <Menu.Trigger
                 as={IconButton}
@@ -929,16 +958,34 @@ export default function SessionBrowserPane(props: {
                   </Menu.Item>
                 </Menu.Group>
                 <Menu.Separator />
-                <Menu.Item disabled={!address()} onSelect={copyLink}>
-                  {plugin.t("link.copy")}
-                </Menu.Item>
+                {/* A disabled item takes no pointer events, so a tooltip never shows: its reason is a line below it. */}
+                <Menu.Group>
+                  <Menu.Item disabled={!address() || serverFile()} onSelect={copyLink}>
+                    {plugin.t("link.copy")}
+                  </Menu.Item>
+                  <Show when={menuPage()?.serverFile}>
+                    <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
+                      <span dir="auto" class="break-words leading-4">{plugin.t("menu.privateAddress")}</span>
+                    </Menu.GroupLabel>
+                  </Show>
+                </Menu.Group>
                 <Menu.Item disabled={!inspectable()} onSelect={() => find({ type: "open" })}>{plugin.t("find.open")}</Menu.Item>
-                <Show when={source()}>
+                <Show when={menuPage()?.source}>
                   {(open) => <Menu.Item onSelect={() => open()()}>{plugin.t("preview.source")}</Menu.Item>}
                 </Show>
-                <Show when={!serverFile()}>
-                <Menu.Item disabled={!reachable()} onSelect={openExternal}>
-                  {plugin.t(address().startsWith("file:") ? "external.reveal" : "external.menu")}
+                <Menu.Group>
+                  <Menu.Item disabled={!menuPage()?.open} onSelect={() => menuPage()?.openPage()}>
+                    {plugin.t("menu.openPage")}
+                  </Menu.Item>
+                  <Show when={!menuPage()?.open}>
+                    <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
+                      <span dir="auto" class="break-words leading-4">{plugin.t("menu.pageUnavailable")}</span>
+                    </Menu.GroupLabel>
+                  </Show>
+                </Menu.Group>
+                <Show when={menuPage()?.reveal}>
+                <Menu.Item onSelect={() => menuPage()?.revealFile()}>
+                  {plugin.t("external.reveal")}
                 </Menu.Item>
                 </Show>
                 <Menu.Separator />
@@ -1012,7 +1059,7 @@ export default function SessionBrowserPane(props: {
         id={embed()}
         // A page blocked in a JavaScript dialog draws no frame, so Chromium cannot capture a still of it: its dialog
         // sits over the dimmed, empty page area at once. "Leave site?" and a sign-in leave the page drawing.
-        visible={drawn()}
+        visible={drawn() && revealGuard() === undefined}
         frozen={overlayed().frozen || !!promptKey(true)}
         // A navigation, in-page or not, or a reload starting is another page.
         page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}

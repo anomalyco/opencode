@@ -11,7 +11,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure, CodedError, missingArtifact } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { agentDriven, agentRefusal, childActivity, destinationOrigin, normalizeURL, refusal, restoreRefusal, type TabActivity } from "./policy"
+import { activityOwner, agentDriven, agentRefusal, childActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { FindAction, PaneEvent, PromptAnswer } from "./ipc"
@@ -50,6 +50,7 @@ import { FileVerificationError } from "@opencode/util/file-verification"
 import { artifactKind } from "@opencode/util/artifact"
 import { reusableFile, workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
+import { pluginTabs } from "./plugin-tabs"
 import { remotePreview } from "./remote-preview"
 import { artifactPages } from "./artifact-preview"
 import { invalidReply, wireOutcome, wireState } from "./wire"
@@ -80,6 +81,8 @@ type Handle = {
    * such, so it comes back agent-driven after a restart or a window reload.
    */
   activity: Map<Browser.TabID, TabActivity>
+  background: Set<Browser.TabID>
+  pluginTabs: ReturnType<typeof pluginTabs>
   /** Which tabs refuse passkeys together, by pop-up group; see `createPasskeyGroups`. */
   passkeys: ReturnType<typeof createPasskeyGroups>
   readonly storageKey: string
@@ -110,6 +113,8 @@ export function createBrowserPane(input: {
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
+  // Rebind may restore the same tabs. Close rights stay in memory and never move to another window or session.
+  const owners = new WeakMap<BrowserWindow, Map<string, Pick<Handle, "pluginTabs" | "background">>>()
   // Release each tab's registration with the profile's extensions.
   const grants = new WeakMap<BrowserPage, () => void>()
   const searches = new WeakMap<BrowserPage, ReturnType<typeof createPageFind>>()
@@ -173,6 +178,11 @@ export function createBrowserPane(input: {
       win.webContents.once("destroyed", closed)
       win.webContents.on("did-start-navigation", navigate)
 
+      const scopes = owners.get(win) ?? new Map<string, Pick<Handle, "pluginTabs" | "background">>()
+      const rights = scopes.get(storageKey) ?? { pluginTabs: pluginTabs(), background: new Set<Browser.TabID>() }
+      scopes.set(storageKey, rights)
+      owners.set(win, scopes)
+
       const handle: Handle = {
         previewFailure: previews.failure,
         window,
@@ -190,6 +200,7 @@ export function createBrowserPane(input: {
         },
         pages: new Map(),
         activity: restoredActivity(saved),
+        ...rights,
         passkeys: createPasskeyGroups(),
         storageKey,
         requests: new Map(),
@@ -479,6 +490,13 @@ export function createBrowserPane(input: {
       // Reveal a regular file in its folder; never hand even a validated file to its executable association.
       electron.shell.showItemInFolder(file.path)
     },
+    async openPage(window: number, binding: string, tabID: Browser.TabID, expected: string) {
+      owned(window, binding)
+      const tab = page(binding, tabID)
+
+      if (!tab) throw new Error("browser.pane.unavailable")
+      await tab.openPage(expected)
+    },
     async command(window: number, binding: string, command: Browser.Action) {
       owned(window, binding)
       const url = command.type === "navigate" || command.type === "tabs.open" ? command.url : undefined
@@ -490,6 +508,8 @@ export function createBrowserPane(input: {
           : refusal(url, pagePolicy(binding))
 
       if (reason) throw new Error(reason)
+
+      if ("tabID" in command && command.type !== "tabs.focus") page(binding, command.tabID)?.personCommand()
       const closing = command.type === "tabs.close" ? page(binding, command.tabID) : undefined
 
       // A page that asks to confirm keeps its tab; its "Leave site?" closes it.
@@ -507,6 +527,32 @@ export function createBrowserPane(input: {
     async close(window: number, binding: string) {
       owned(window, binding)
       dispatchBinding(binding, { type: "owner.closed" })
+    },
+    async createTab(window: number, binding: string, owner: string, url: string) {
+      owned(window, binding)
+      const handle = handles.get(binding)
+
+      if (!handle) throw new Error("browser.pane.unavailable")
+      const grant = handle.pluginTabs.reserve(owner)
+      // Never adopt an existing file tab, even when this plugin opens the same URL as the user.
+      await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", undefined, grant.created)
+      grant.settled()
+
+      return grant.id
+    },
+    async closeTab(window: number, binding: string, owner: string, id: string) {
+      owned(window, binding)
+      const tabID = handles.get(binding)?.pluginTabs.resolve(owner, id)
+
+      if (!tabID || !selectTabSlot(machine.state, binding, tabID)) return false
+      const closing = page(binding, tabID)
+
+      if (closing && !(await closing.leave())) return false
+
+      if (handles.get(binding)?.pluginTabs.resolve(owner, id) !== tabID) return false
+      dispatchBinding(binding, { type: "tab.closed", tabID })
+
+      return true
     },
     forget(server: string, session: string) {
       const storageKey = `${server}\n${session}`
@@ -537,6 +583,8 @@ export function createBrowserPane(input: {
   function dispatchBinding(binding: string, event: BindingEvent) {
     if (event.type === "tab.closed") {
       handles.get(binding)?.activity.delete(event.tabID)
+      handles.get(binding)?.background.delete(event.tabID)
+      handles.get(binding)?.pluginTabs.forget(event.tabID)
       handles.get(binding)?.passkeys.remove(event.tabID)
     }
 
@@ -555,11 +603,7 @@ export function createBrowserPane(input: {
       const activities = Array.from(handles.values()).flatMap((handle) => (handle.storageKey === effect.storageKey ? [handle.activity] : []))
 
       return restore.save(effect.storageKey, effect.snapshot, (tabID) =>
-        activities.some((activity) => {
-          const tab = activity.get(tabID)
-
-          return !!tab && agentDriven(tab)
-        }),
+        activities.map((activity) => activity.get(tabID)).find((tab) => !!tab && agentDriven(tab)),
       )
     }
 
@@ -587,7 +631,7 @@ export function createBrowserPane(input: {
     if (effect.type === "report") {
       emit(effect.binding, effect.event)
 
-      return handle.sendState?.(effect.event.state)
+      return handle.sendState?.(inventory(effect.binding, "agent"))
     }
 
     if (effect.type === "abort-requests")
@@ -639,10 +683,10 @@ export function createBrowserPane(input: {
     }
   }
 
-  function inventory(binding: string): Browser.State {
+  function inventory(binding: string, audience: "window" | "agent" = "window"): Browser.State {
     const entry = selectBinding(machine.state, binding)
 
-    return entry ? selectInventory(entry) : { tabs: [], focusedTabID: null }
+    return entry ? selectInventory(entry, audience) : { tabs: [], focusedTabID: null }
   }
 
   function remoteSource(binding: string) {
@@ -738,6 +782,7 @@ export function createBrowserPane(input: {
     const page = createBrowserPage(win, {
       id,
       activity,
+      userInput: () => { if (current()) handle.pluginTabs.forget(id) },
       passkeysRestricted: () => handle.passkeys.restricted(id),
       // Every page of the group refuses from now on, or fails where it cannot; one created later refuses from its first
       // document.
@@ -826,6 +871,12 @@ export function createBrowserPane(input: {
       },
       popup: (popupOptions, background, activity) => {
         const popup = create(binding, { initialize: false, popupOptions, activity, opener: id })
+
+        if (activityOwner(activity) === "agent") {
+          announce(binding, popup.state().id, false, !background)
+
+          return popup.contents
+        }
 
         if (!background) dispatchBinding(binding, { type: "tab.focused", tabID: popup.state().id })
 
@@ -924,6 +975,14 @@ export function createBrowserPane(input: {
   }
 
   /** Reports the page's state after a command, which may have changed it without a page event yet. */
+  function announce(binding: string, tabID: Browser.TabID, reveal: boolean, active: boolean) {
+    if (active) dispatchBinding(binding, { type: "tab.active", tabID })
+    const handle = handles.get(binding)
+
+    if (handle && !handle.win.isDestroyed() && handle.win.isVisible() && !handle.win.isMinimized())
+      emit(binding, { type: "activity", tabID, reveal: reveal && !handle.background.has(tabID) })
+  }
+
   function refresh(binding: string, tabID: Browser.TabID, page: BrowserPage) {
     const attempt = selectPageAttempt(machine.state, binding, tabID)
 
@@ -931,9 +990,14 @@ export function createBrowserPane(input: {
     dispatchBinding(binding, { type: "tab.published", tabID, attempt, tab: page.state() })
   }
 
-  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity): Promise<Browser.Result> {
+  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity, created?: (id: Browser.TabID) => void): Promise<Browser.Result> {
     const action = command.action
-    const driven = { agentRuns: 0, agentEndedAt: Date.now(), agent: command.agent }
+    const driven: TabActivity = { agentRuns: 0, control: "agent", agent: command.agent }
+
+    const present = (tabID: Browser.TabID, reveal = false, active = true) => {
+      if (origin === "user") return dispatchBinding(binding, { type: "tab.focused", tabID })
+      announce(binding, tabID, reveal, active)
+    }
 
     // A user preview may already have consumed files that the agent may not read. Revoke its origins and
     // discard the complete WebContents before handing the agent a target; rechecking only future fetches is too late.
@@ -944,7 +1008,8 @@ export function createBrowserPane(input: {
       const changed = !agentDriven(activity) || activity.agent !== command.agent
       const current = page(binding, id)
       const identity = current?.previewIdentity()
-      activity.agentEndedAt = Date.now()
+      handle?.pluginTabs.forget(id)
+      recordPageInput(activity, "agent")
       activity.agent = command.agent
       handle?.activity.set(id, activity)
 
@@ -962,7 +1027,7 @@ export function createBrowserPane(input: {
         "Browser request was cancelled. Do not repeat a mutating action until you have inspected its outcome.",
       )
 
-    if (action.type === "tabs.list") return { value: inventory(binding), files: [] }
+    if (action.type === "tabs.list") return { value: inventory(binding, origin === "agent" ? "agent" : "window"), files: [] }
 
     if (action.type === "preview") {
       if (artifactKind(action.path) === "html") {
@@ -975,6 +1040,8 @@ export function createBrowserPane(input: {
         signal.throwIfAborted()
         normalizeURL(url, pagePolicy(binding))
         const existing = inventory(binding).tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === url)
+
+        if (existing) handles.get(binding)?.pluginTabs.forget(existing.id)
         const tab = existing ? acquire(existing.id) : create(binding, {activity: origin === "agent" ? driven : undefined})
 
         if (!tab) throw new Error("Workspace preview tab is unavailable.")
@@ -982,16 +1049,18 @@ export function createBrowserPane(input: {
         const tabID = tab.state().id
 
         if (!existing) opening.defer(() => { if (page(binding, tabID) === tab) dispatchBinding(binding, { type: "tab.closed", tabID }) })
-        dispatchBinding(binding, { type: "tab.focused", tabID })
         await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
         refresh(binding, tabID, tab)
+        present(tabID, true)
         opening.move()
 
         return { value: { path: action.path, tabID, url: tab.state().url }, files: [] }
       }
 
       // The window owns file tabs; an off-screen session processes this request when its file panel mounts.
-      emit(binding, { type: "preview", path: action.path })
+      const win = handles.get(binding)?.win
+
+      if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) emit(binding, { type: "preview", path: action.path })
 
       return { value: { path: action.path }, files: [] }
     }
@@ -1029,12 +1098,15 @@ export function createBrowserPane(input: {
 
       const opened = create(binding, { activity: origin === "agent" ? driven : inherited })
       const tabID = opened.state().id
+
+      if (origin === "agent" && action.focus === false) handles.get(binding)?.background.add(tabID)
+      created?.(tabID)
       using opening = new DisposableStack()
       opening.defer(() => { if (page(binding, tabID) === opened) dispatchBinding(binding, { type: "tab.closed", tabID }) })
 
       if (file) openingFiles.set(opened, file)
 
-      if (action.focus !== false) dispatchBinding(binding, { type: "tab.focused", tabID })
+      if (origin === "user" && action.focus !== false) present(tabID)
 
       try {
         await opened.ready
@@ -1043,6 +1115,8 @@ export function createBrowserPane(input: {
         if (action.url !== undefined)
           await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
         refresh(binding, tabID, opened)
+
+        if (origin === "agent") present(tabID, action.focus === true, action.focus !== false)
         opening.move()
 
         return { value: opened.state(), files: [] }
@@ -1064,11 +1138,15 @@ export function createBrowserPane(input: {
       const activities = handles.get(binding)?.activity
       const activity = activities?.get(action.tabID) ?? { agentRuns: 0 }
 
-      if (origin === "agent") activity.agentEndedAt = Date.now()
-
-      if (origin === "user") activity.userInputAt = Date.now()
+      recordTabFocus(activity, origin)
       activities?.set(action.tabID, activity)
-      dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID })
+
+      if (origin === "user") {
+        handles.get(binding)?.background.delete(action.tabID)
+        dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID, fromStrip: true })
+      }
+
+      if (origin === "agent") present(action.tabID)
 
       return { value: restricted?.state() ?? slot.tab, files: [] }
     }
@@ -1079,14 +1157,18 @@ export function createBrowserPane(input: {
 
       if (closing) await disposals.get(closing)
 
-      return { value: inventory(binding), files: [] }
+      return { value: inventory(binding, origin === "agent" ? "agent" : "window"), files: [] }
     }
 
+    if (action.type === "navigate" || action.type === "back" || action.type === "forward" || action.type === "reload")
+      handles.get(binding)?.pluginTabs.forget(action.tabID)
     const target = acquire(action.tabID)
 
     if (!target) throw new Error("Browser tab is unavailable. Call browser.tabs.list({}) and use an existing tabID.")
     const result = await target.execute(command, signal, origin)
     refresh(binding, action.tabID, target)
+
+    if (origin === "agent" && action.type === "navigate") present(action.tabID, false, false)
 
     return result
   }

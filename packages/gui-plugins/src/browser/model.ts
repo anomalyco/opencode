@@ -1,8 +1,12 @@
 import { FileVerificationError } from "@opencode/util/file-verification"
+import { builtinContext } from "@opencode/plugin/gui/builtin"
+import { FileSource } from "../file/contract"
+import { ACTIVATION_DELAY_MS } from "./activation-delay"
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import { createKeyed, type SessionRef, type SetupContext } from "@opencode/plugin/gui"
 import { readHref } from "./comment"
 import {
@@ -40,6 +44,8 @@ import {
   sessionSuspended,
   sessionTab,
   sessionTabs,
+  unseenActivity,
+  revealGuard,
   transition,
   type Event,
   type Ipc,
@@ -53,7 +59,6 @@ type Session = Pick<SessionRef, "key">
 type Drive = {
   ref: SessionRef
   /** The agent's previews waiting for the session's screen, which resolves their paths. */
-  previews: string[]
   dispose: () => void
 }
 
@@ -97,7 +102,7 @@ export type Model = ReturnType<typeof createModel>
 export function createModel(ctx: SetupContext<typeof definition>) {
   const sessions = ctx.sessions
   const layout = ctx.layout
-  const links = ctx.links
+  const filesPanel = ctx.use(FileSource)
   // The plugin's own main entry provides the pane. `uses` declares it by reference; its full token, which this chunk
   // loads with the protocol schemas, resolves it.
   const pane = ctx.use(BrowserPane)
@@ -126,6 +131,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const registrations = new Map<string, { attempt: number; registration: Registration }>()
   const registerTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const revealTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const listeners = new Map<string, (event: PaneEvent) => void>()
   const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
   // Each tab's last recorded page, so a state that repeats it does not write the history again.
@@ -134,6 +140,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // Main names why it moved control elsewhere or refused an address; any other failure is a failed request.
   const describe = (error: string) => {
+    if (error === "browser.menu.failed") return ctx.t("menu.failed")
+
     if (error === "browser.pane.replaced") return ctx.t("replaced")
 
     if (error === "browser.address.credentials") return ctx.t("refused.credentials")
@@ -167,6 +175,20 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   const run = (effect: MachineEffect) => {
+    if (effect.type === "expire-reveal")
+      return schedule(revealTimers, effect.sessionKey, ACTIVATION_DELAY_MS, () =>
+        dispatch({ type: "reveal.elapsed", sessionKey: effect.sessionKey, token: effect.token }),
+      )
+
+    if (effect.type === "present-file") {
+      const view = sessions.current()
+      const files = filesPanel()
+
+      if (view?.key === effect.sessionKey && files.status === "active") files.value.open(view, effect.path, effect.select ? "select" : "append")
+
+      return
+    }
+
     if (effect.type === "open-registration") return open(effect)
 
     if (effect.type === "close-registration") {
@@ -328,7 +350,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (event.type === "focus") return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
 
-    if (event.type === "preview") return preview(drive, event.path)
+    if (event.type === "activity" || event.type === "preview") {
+      const presentation = { sessionKey, attempt, enabled: ctx.stores.preferences.value.agentPages !== false,
+        onScreen: sessions.current()?.key === sessionKey, room: !layout.narrow() && builtinContext(ctx).layout.fitsSide(), opened: layout.side.opened(drive.ref) }
+
+      if (event.type === "preview") return dispatch({ ...presentation, type: "pane.file", path: event.path })
+
+      return dispatch({ ...presentation, type: "pane.activity", tabID: event.tabID, reveal: event.reveal, visible: layout.state(key(event.tabID), drive.ref) === "visible" })
+    }
 
     if (event.type === "inspect") return inspectors.get(sessionKey)?.forEach((listener) => listener(event))
 
@@ -430,6 +459,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   const detach = (sessionKey: string) => {
+    cancel(revealTimers, sessionKey)
     const drive = drives.get(sessionKey)
     drives.delete(sessionKey)
     drive?.dispose()
@@ -464,7 +494,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     const sessionKey = ref.key
 
     if (drives.has(sessionKey)) return
-    const drive: Drive = { ref, previews: [], dispose: () => undefined }
+    const drive: Drive = { ref, dispose: () => undefined }
     drives.set(sessionKey, drive)
     dispatch({ type: "session.attached", sessionKey, serverID: ref.server.id, located: !!ref.location })
 
@@ -481,6 +511,21 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           const changed = () => dispatch({type:"session.capability.changed", sessionKey})
           onCleanup(data.on("plugin.updated", changed))
           onCleanup(data.on("server.connected", changed))
+          // The server reports every inbox item. Only the person's prompts are tracked, from the moment they enter.
+          onCleanup(data.on("session.inbox.enqueued", (event) => {
+            if (event.data.sessionID === ref.id && event.data.item.type === "user")
+              dispatch({ type: "prompt.enqueued", sessionKey, id: event.data.inboxID, delivery: event.data.item.delivery })
+          }))
+          onCleanup(data.on("session.inbox.delivery.changed", (event) => {
+            if (event.data.sessionID === ref.id)
+              dispatch({ type: "inbox.delivery.changed", sessionKey, id: event.data.inboxID, delivery: event.data.delivery })
+          }))
+          onCleanup(data.on("session.inbox.delivered", (event) => {
+            if (event.data.sessionID === ref.id) dispatch({ type: "inbox.delivered", sessionKey, id: event.data.inboxID })
+          }))
+          onCleanup(data.on("session.inbox.cancelled", (event) => {
+            if (event.data.sessionID === ref.id) dispatch({ type: "inbox.cancelled", sessionKey, id: event.data.inboxID })
+          }))
           onCleanup(data.on("session.deleted", event => {
             if (event.data.sessionID === ref.id) dispatch({type:"session.removed", sessionKeys:[sessionKey]})
           }))
@@ -501,6 +546,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       )
 
       // The shell list is a view, not a deletion log. It can disappear during re-authentication or a refresh.
+      createKeyed(() => layout.side.opened(ref) ? "open" : "closed", side => dispatch({
+        type: "side.changed", sessionKey, open: side === "open",
+        running: sessions.current()?.key === sessionKey && ref.server.data.session.status(ref.id) === "running",
+      }))
+      createKeyed(() => ref.server.data.session.status(ref.id) !== "running", () => dispatch({ type: "execution.ended", sessionKey }))
+
       createKeyed(() => sessions.list().some(item => item.key === sessionKey && item.server.compatible) ? "listed" : "absent",
         value => dispatch({ type:"session.presence", sessionKey, listed:value === "listed" }))
 
@@ -515,12 +566,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         () => !!ref.location,
         () => dispatch({ type: "session.located", sessionKey, located: true }),
         { otherwise: () => dispatch({ type: "session.located", sessionKey, located: false }) },
-      )
-
-      // Previews made while another session was on screen open once the user returns to this one.
-      createKeyed(
-        () => sessions.current()?.key === sessionKey && ctx.screen.current(),
-        () => drive.previews.splice(0).forEach((path) => preview(drive, path)),
       )
 
       return dispose
@@ -594,25 +639,32 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (current) openURL(session, workspaceFileURL(current.root, path, session.server.builtin ? undefined : session.id))
   }
 
-  // Main handles browser documents itself. File panel requests wait for the session's file model.
-  const preview = (drive: Drive, path: string) => {
-    const view = sessions.current()
-
-    if (view?.key === drive.ref.key && ctx.screen.current()) {
-      links.open({ href: path, session: view, background: true })
-
-      return
-    }
-
-    if (!drive.previews.includes(path)) drive.previews.push(path)
-  }
-
   return {
     available,
     attached,
     canOpen,
     openFile,
     openURL,
+    async createTab(sessionKey: string, owner: string, url: string) {
+      if (sessions.current()?.key !== sessionKey) throw new Error("browser.pane.notOnScreen")
+      const ref = sessions.list().find(item => item.key === sessionKey)
+
+      if (ref?.server.compatible) attach(ref)
+      dispatch({ type: "session.wake", sessionKey })
+      const target = registrations.get(sessionKey)
+
+      if (!target) throw new Error("browser.pane.unavailable")
+
+      return target.registration.createTab(owner, url, () => sessions.current()?.key === sessionKey)
+    },
+    async closeOwned(sessionKey: string, owner: string, id: ExperimentalBrowserTab) {
+      dispatch({ type: "session.wake", sessionKey })
+      const target = registrations.get(sessionKey)
+
+      if (!target) return false
+
+      return target.registration.closeTab(owner, id)
+    },
     command,
     tab,
     /** Opens a blank tab for the user, whose pane then focuses the address field. */
@@ -686,9 +738,20 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     /** What the tab waits on the user for. */
     prompt: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.prompt,
-    /** A tab behind another one waits on the user, which its strip tab shows. */
-    asking: (session: Session, tabID: string) =>
-      !!state.chrome[session.key]?.[tabID]?.prompt && sessionBrowser(machine(), session.key)?.focusedTabID !== tabID,
+    /**
+     * A tab the pane does not show waits on the user, which its strip tab shows. The layout decides, not the
+     * desktop's focused tab: Review or a file in front hides the browser's focused tab too.
+     */
+    asking(session: Session, tabID: string) {
+      const ref = drives.get(session.key)?.ref
+
+      return !!ref && !!state.chrome[session.key]?.[tabID]?.prompt && layout.state(key(tabID), ref) !== "visible"
+    },
+    unseen: (session: Session, tabID: string) => unseenActivity(machine(), session.key, tabID),
+    seen: (session: Session, tabID: Browser.TabID) => dispatch({ type: "activity.seen", sessionKey: session.key, tabID }),
+    revealGuard: (session: Session, tabID: string) => revealGuard(machine(), session.key, tabID),
+    /** The pane would now draw the page an agent's show request revealed, which starts its delay. */
+    revealDrawn: (session: Session, token: number) => dispatch({ type: "reveal.drawn", sessionKey: session.key, token }),
     answer(session: Session, tabID: Browser.TabID, id: number, answer: PromptAnswer) {
       return registration(session)?.answer(tabID, id, answer) ?? Promise.reject(new Error("browser.pane.unavailable"))
     },
@@ -705,6 +768,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     clearSite: (session: Session, tabID: Browser.TabID) => registration(session)?.clearSite(tabID),
     clearCache: (session: Session, tabID: Browser.TabID, address: string) => registration(session)?.clearCache(tabID, address),
     revealFile: (session: Session, tabID: Browser.TabID) => registration(session)?.reveal(tabID),
+    openPage: (session: Session, tabID: Browser.TabID, expected: string) =>
+      registration(session)?.openPage(tabID, expected) ?? Promise.reject(new Error("browser.pane.unavailable")),
     /** Pages the browser showed, newest first. */
     visits: () => history.value.visits.filter((visit) => {
       const session = sessions.current()
@@ -755,6 +820,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     focusTab(session: Session, tabID: string) {
       const item = tab(session, tabID)
+
+      if (item) dispatch({ type: "activity.seen", sessionKey: session.key, tabID: item.id })
 
       if (item && item.id !== sessionBrowser(machine(), session.key)?.focusedTabID)
         command(session, { type: "tabs.focus", tabID: item.id })
