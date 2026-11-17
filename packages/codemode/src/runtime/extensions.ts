@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { type Extension, isAsync, StreamingResponse } from "../extension.js"
+import { type Extension, isAsync, isWritingBytes, StreamingResponse } from "../extension.js"
 import { BufferObj } from "../stdlib/buffer.js"
 import { hooked } from "../tool-runtime.js"
 import { errorMessage, errorType } from "./errors.js"
@@ -254,11 +254,18 @@ export const extensionGlobals = <R>(
         const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
         const invocation =
           within !== undefined && root === undefined ? { extension: extension!, name: label, args } : undefined
+        const writeBack = isWritingBytes(value)
+          ? values.flatMap((item, index) => (item instanceof Bytes ? [[item, args[index]] as const] : []))
+          : []
         // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
         if (isAsync(value)) {
-          return pending(ctx, { stage: "run", label, extension, invocation, host: value, args, threw: false }, site)
+          return pending(
+            ctx,
+            { stage: "run", label, extension, invocation, host: value, args, threw: false, writeBack },
+            site,
+          )
         }
-        return new Push("extension call", [value, args, label, invocation, extension])
+        return new Push("extension call", [value, args, label, invocation, extension, writeBack])
       },
     })
     if (root !== undefined && within!.path !== undefined) {
@@ -338,10 +345,23 @@ export const extensionGlobals = <R>(
             ),
         }),
       )
-    if (request.stage === "settle") return settle(outcome<R>(request.host, request.threw))
-    return Effect.andThen(
-      before ?? Effect.void,
-      settle(Effect.suspend(() => outcome<R>(...callHost(request.host as Function, request.args)))),
+    // However the call ends, the bytes the host changed in its copies reach the program's arrays.
+    const written = (effect: Effect.Effect<Value, Throw, R>) =>
+      request.writeBack === undefined || request.writeBack.length === 0
+        ? effect
+        : Effect.ensuring(
+            effect,
+            Effect.sync(() => {
+              for (const [program, host] of request.writeBack!)
+                if (host instanceof Uint8Array) program.bytes.set(host.subarray(0, program.bytes.length))
+            }),
+          )
+    if (request.stage === "settle") return written(settle(outcome<R>(request.host, request.threw)))
+    return written(
+      Effect.andThen(
+        before ?? Effect.void,
+        settle(Effect.suspend(() => outcome<R>(...callHost(request.host as Function, request.args)))),
+      ),
     )
   }
 
@@ -369,7 +389,7 @@ export const startExtensionCall = <R>(
   ctx: Interpreter<R>,
   host: Function,
   args: ReadonlyArray<unknown>,
-  call: Pick<ExtensionRequest, "label" | "extension" | "invocation">,
+  call: Pick<ExtensionRequest, "label" | "extension" | "invocation" | "writeBack">,
   site: AstNode | undefined,
 ): PromiseObj | ExtensionRequest => {
   const [result, threw] = callHost(host, args)

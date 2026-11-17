@@ -274,6 +274,7 @@ export const callExtension = (
     label,
     invocation: slots[3] as ExtensionInvocation | undefined,
     extension: slots[4] as string | undefined,
+    writeBack: slots[5] as ExtensionRequest["writeBack"],
   }
   if (call.host instanceof Lost) throw lostError(`The function ${label}`)
   const run = (): HostResult => {

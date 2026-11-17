@@ -80,3 +80,17 @@ export const async = <F extends Function>(global: F): F => {
 }
 
 export const isAsync = (global: Function) => global instanceof AsyncFunction || asyncGlobals.has(global)
+
+const writingGlobals = new WeakSet<Function>()
+
+/**
+ * Marks a function that writes into byte arrays it is given, as `fs.readSync(fd, buffer)` does. Arguments still cross
+ * as copies; when the call settles, the host's writes to each `Uint8Array` copy are written back into the program's
+ * array. Other functions never change what they were passed.
+ */
+export const writesBytes = <F extends Function>(global: F): F => {
+  writingGlobals.add(global)
+  return global
+}
+
+export const isWritingBytes = (global: Function) => writingGlobals.has(global)
