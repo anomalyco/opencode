@@ -109,9 +109,21 @@ export function createPopups(input: { partition: string; tabs: ExtensionTabs }) 
           page.off("before-input-event", pageEscape)
         }
 
-        if (!window.isDestroyed()) window.contentView.removeChildView(view)
+        // The view stays in the window until its web contents is gone. Taken out earlier, and always when the page
+        // closed itself (uBlock Origin's element picker does), which reaches here from inside the destruction,
+        // Electron 44 detaches the page's native view with no window left and its main process crashes on macOS.
+        const remove = () =>
+          setImmediate(() => {
+            if (!window.isDestroyed()) window.contentView.removeChildView(view)
+          })
 
-        if (!contents.isDestroyed()) contents.close()
+        if (contents.isDestroyed()) remove()
+
+        if (!contents.isDestroyed()) {
+          view.setVisible(false)
+          contents.once("destroyed", remove)
+          contents.close()
+        }
 
         if (focused && !page.isDestroyed()) page.focus()
       }
