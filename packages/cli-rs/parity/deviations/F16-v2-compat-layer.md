@@ -33,7 +33,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   reload ends and begins again keeps its components, which do not run again, as TS takes a registration without a
   remount (CT-21: opencode-navigator named a binding anew on each mount, `P.8/navigator`); a mount begun 250 ms after
   its end renders anew. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
-  next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`) and
+  next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`; a
+  mode of the plugin's own, such as `modal` or one it pushes, binds its commands everywhere, and they decline unless it
+  is the input mode, CT-31: opencode-usage-report's `r`, `P.8/usage-report-keys`) and
   a command's `enabled` are kept; its `priority`, `bindings` and slash `aliases` are not mapped. Its `target` holds
   its commands to the plugin's focus in that node, elsewhere they decline (CT-20: @slkiser/opencode-quota's window
   Escape kept Goal's select open), but the focus is the layer's record of what the plugin focused or the user edited:

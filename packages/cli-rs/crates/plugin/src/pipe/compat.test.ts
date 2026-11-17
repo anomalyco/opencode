@@ -563,6 +563,18 @@ test("a disabled, declining or ended command answers false", () => {
   expect(run("t.refresh")).toBe(false)
 })
 
+// CT-31: a layer of a mode of the plugin's own (`modal`, one it pushes) is active only while that is the input mode:
+// elsewhere its commands decline, so opencode-usage-report's `r` goes on to the composer.
+test("a layer of the plugin's own mode declines in another", () => {
+  const fake = host()
+  const ctx = plugin("t.mode", fake)
+  ctx.keymap.layer(() => ({ mode: "modal", commands: [{ id: "t.refresh", bind: "r", run: () => "refreshed" }] }))
+  const run = () => fake.commands.get("t.refresh")!()
+  expect(run()).toBe(false)
+  fake.push("input-mode", "modal")
+  expect(run()).toBe("refreshed")
+})
+
 // CT-20: a layer's `target` holds its commands to the plugin's focus in that node: elsewhere they decline, so a key
 // such as @slkiser/opencode-quota's window Escape goes on to the dialog on screen (Goal's select stayed open).
 test("a layer with a target declines while its node lacks the focus", () => {
