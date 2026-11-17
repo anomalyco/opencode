@@ -180,8 +180,19 @@ const layer = Layer.effect(
       }
     })
 
-    const run = (tool: Tool.Info, name: string, input: unknown, context: Tool.Context) =>
-      beforeExecute(name, input, context).pipe(Effect.flatMap((event) => executeTool(tool, name, event.input, context)))
+    // A plugin may rename a call in a Code Mode program, as it may a direct call, to another of the program's tools.
+    const run = Effect.fnUntraced(function* (
+      tools: ReadonlyMap<string, Tool.Info>,
+      tool: Tool.Info,
+      name: string,
+      input: unknown,
+      context: Tool.Context,
+    ) {
+      const event = yield* beforeExecute(name, input, context)
+      const selected = event.tool === name ? tool : tools.get(event.tool)
+      if (!selected) return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
+      return yield* executeTool(selected, event.tool, event.input, context)
+    })
 
     // Keyed by the visible tool names. Sessions whose agents see different tool sets, such as one denied the browser
     // and one not, alternate steps; with one entry each step rebuilt a large catalog (about 90 ms for 3,000 tools).
@@ -277,7 +288,7 @@ const layer = Layer.effect(
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
                 codeModeInventory,
-                (name, tool, input, context) => run(tool, name, input, context),
+                (name, tool, input, context) => run(codeModeInventory.tools, tool, name, input, context),
                 permission,
               )
             : undefined
@@ -361,7 +372,7 @@ const layer = Layer.effect(
                 ...input.context,
                 id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
               }
-              return yield* run(tool, name, toolInput, context)
+              return yield* run(tools, tool, name, toolInput, context)
             }),
         )
       }),

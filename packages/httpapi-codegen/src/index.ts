@@ -124,10 +124,11 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
      */
     readonly namespace?: (endpoint: HttpApiEndpoint.Top) => string | undefined
     /**
-     * Keeps each namespaced endpoint's pre-namespace client path and generated type names as deprecated aliases of
-     * the namespaced ones, so moving an endpoint into a namespace does not break callers.
+     * Pre-namespace client paths that shipped, such as `generate.text`. Each keeps its path and generated type names
+     * as deprecated aliases of the namespaced endpoint, so moving it into a namespace does not break callers.
+     * Endpoints added after the move have no old path to keep.
      */
-    readonly aliases?: boolean
+    readonly aliases?: ReadonlySet<string>
   },
 ): Contract {
   const endpoints: Array<Endpoint> = []
@@ -334,14 +335,17 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
     for (const [name, child] of node.children) visit(child, [...path, name])
   }
   visit(groupTree(groups), [])
-  if (options?.aliases !== true) return { groups }
+  const shipped = options?.aliases
+  if (shipped === undefined) return { groups }
   const aliases = groups.flatMap((group) =>
     group.endpoints.flatMap((endpoint): Array<Alias> => {
       const previous = unnamespaced.get(endpoint)
       if (previous === undefined) return []
+      const from = [...previous.path, ...endpoint.clientPath]
+      if (!shipped.has(from.join("."))) return []
       return [
         {
-          from: [...previous.path, ...endpoint.clientPath],
+          from,
           to: [...group.path, ...endpoint.clientPath],
           fromGroup: previous.group,
           group,
@@ -524,7 +528,7 @@ function renderEffectShape(
     if (groups.some((group) => group.identifier === fromGroup)) continue
     const moved = aliases.filter((alias) => alias.fromGroup === fromGroup)
     const target = moved[0].group
-    if (moved.some((alias) => alias.group !== target) || moved.length !== target.endpoints.length) continue
+    if (moved.some((alias) => alias.group !== target)) continue
     aliasTypes.push({ name: `${identifierPart(fromGroup)}Api`, target: groupShapeName(target), generic: true })
   }
   const takenNames = new Set([...externalNames, ...generatedNames])
