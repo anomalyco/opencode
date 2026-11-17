@@ -449,6 +449,8 @@ programs.push(
   during(objects, "for (let j = 0; j < 1000; j++) { new Error(s); Error(s); new Date(o); new Date(o, o); Date.UTC(2000, o); dt.setMonth(o); [1, 2, 3].slice(o); [1, 2].includes(2, o); [3, 1].fill(0, o); see(j) }"),
   during(objects, "for (let j = 0; j < 1000; j++) { [1, [2, o], s].join(s); String([o, [o]]); [n, 1].toString(); [1, 2].join(); see(j) }"),
   during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.slice(v); Math.min(v, v); new Error(v); [1, 2].at(v); see(j) }"),
+  during(objects, "for (let j = 0; j < 1000; j++) { [s, 'a', o].sort(); [n, 2, 1].toSorted(); [3, 1].sort(); see(j) }"),
+  after(objects, "const big = Array.from({ length: 5000 }, (_, i) => i % 2 ? { toString: () => 'x' + i } : 'y' + i); big.sort()"),
 )
 
 // JSON.stringify with a replacer, a property list or a toJSON of the program's runs the reference's internal walk.

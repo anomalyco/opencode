@@ -5917,6 +5917,48 @@
       ]
     },
     {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const o = { valueOf: () => 1 }, s = { toString: () => 'b' }, n = {}, t = { toString: () => '[1]' }, dt = new Date(0)\n   const v = { valueOf: () => see(1) }\n   const p = r.text(); for (let j = 0; j < 1000; j++) { [s, 'a', o].sort(); [n, 2, 1].toSorted(); [3, 1].sort(); see(j) }\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 38
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const o = { valueOf: () => 1 }, s = { toString: () => 'b' }, n = {}, t = { toString: () => '[1]' }, dt = new Date(0)\n   const v = { valueOf: () => see(1) }\n   const big = Array.from({ length: 5000 }, (_, i) => i % 2 ? { toString: () => 'x' + i } : 'y' + i); big.sort(); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 4697
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
       "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const doc = { a: d.slice(0, 50), b: { c: 1, d: [1, { e: 2 }], f: undefined, g: () => 1 }, h: 'x', i: null, j: new Date(0), k: new Map() }\n   const p = r.text(); for (let j = 0; j < 300; j++) { JSON.stringify(doc, (key, v) => see(v)); see(j) }\n   await p.catch(() => 0); return flip",
       "outcome": {
         "ok": true,

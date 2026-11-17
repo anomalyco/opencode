@@ -1032,16 +1032,21 @@ pub(super) fn sort_values(vm: &mut Vm, list: Vec<Value>, cmp: &Value) -> Result<
     let (mut defined, undefs): (Vec<Value>, Vec<Value>) =
         list.into_iter().partition(|v| !matches!(v, Value::Undef));
     if let Value::Undef = cmp {
-        // Over `SORT_RUN` values the reference sorts in bounded native steps in its prelude (`sortDefault`).
+        // The values are one list of conversions with the string hint (see `fuel::Conversions`). Over `SORT_RUN` the
+        // reference sorts in bounded native steps in its prelude (`sortDefault`).
         let stepped = defined.len() > SORT_RUN;
-        let mut keyed = Vec::with_capacity(defined.len());
-        for v in defined {
-            let s = vm.string_of(&v)?;
-            keyed.push((s, v));
+        let mut c = fuel::Conversions::default();
+        let primitives = c.converted(vm, &[Hint::String], &defined, false)?;
+        let mut keys = Vec::with_capacity(primitives.len());
+        for p in primitives.iter() {
+            keys.push(vm.string_of(p)?);
         }
+        drop(primitives);
+        let keyed: Vec<(StrId, Value)> = keys.into_iter().zip(defined).collect();
         if stepped {
-            sort_default_fuel(vm, keyed.len());
+            sort_default_fuel(vm, &c, keyed.len());
         }
+        c.finish(vm, Ok(()))?;
         let mut sorted = merge_sort(
             vm,
             keyed,
@@ -1065,8 +1070,8 @@ const MERGE_STEP: usize = 65_536;
 /// The fuel of the reference's `sortDefault` over `n` values: `$SortState`, a `$SortStep` per run of `SORT_RUN` and
 /// per `MERGE_STEP` values of each merge pass, a back-edge after each step that leaves work, `$SortResult` and
 /// `$Sorted`, after the native's own call.
-fn sort_default_fuel(vm: &mut Vm, n: usize) {
-    fuel::handoff(vm);
+fn sort_default_fuel(vm: &mut Vm, c: &fuel::Conversions, n: usize) {
+    c.handoff(vm);
     fuel::native(vm);
     let mut steps = n.div_ceil(SORT_RUN);
     let mut width = SORT_RUN;
