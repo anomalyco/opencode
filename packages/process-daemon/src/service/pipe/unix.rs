@@ -3,10 +3,8 @@
 //! The child runs in its own process group with stdin on `/dev/null`. Three
 //! choices keep the daemon safe from what the child leaves behind:
 //!
-//! - The waiter observes the exit with `WNOWAIT` and leaves the child as a
-//!   zombie until shutdown. While the zombie exists, its PID and process group
-//!   ID cannot be reused, so killing the group can never hit an unrelated
-//!   process, even long after the exit.
+//! - The waiter observes the exit with `WNOWAIT` so it can signal a failed
+//!   command's group while the leader still reserves its ID, then reaps it.
 //! - The reader polls a cancel pipe as well as the output pipe, so shutdown
 //!   never waits on a pipe that a descendant which left the process group
 //!   still holds open.
@@ -18,15 +16,16 @@ use std::io::{self, PipeReader, PipeWriter, Read};
 use std::os::fd::AsFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
+use crossbeam_utils::sync::WaitGroup;
 use nix::errno::Errno;
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
-use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, start_pipe};
+use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, exit_message, start_pipe};
 use crate::service::{CreatePipe, ProcessSignal, TerminalHandle, TerminalId};
 
 /// Serializes pipe creation against `spawn`. macOS has no `pipe2`, so std
@@ -72,6 +71,7 @@ impl TerminalHandle {
         id: TerminalId,
         order: u64,
         request: CreatePipe,
+        escalations: WaitGroup,
     ) -> Result<Self> {
         let Pipes {
             output,
@@ -121,12 +121,9 @@ impl TerminalHandle {
         drop(command);
         let process = Arc::new(Process {
             pid: child.id(),
-            reaped: Mutex::new(false),
+            child: Mutex::new(Some(child)),
         });
-        // Dropping `Child` neither waits nor kills; `Process` reaps it.
-        drop(child);
 
-        let pid = process.pid;
         start_pipe(
             id,
             order,
@@ -134,10 +131,9 @@ impl TerminalHandle {
             Arc::clone(&process),
             Box::new(cancel_writer),
             move |actor| read_output(output, OutputSink::new(sink, actor), cancel, exited),
-            move || super::Waiter {
-                exit: wait_exit(pid),
-                // Starts the reader's drain deadline, after the exit message.
-                after: Box::new(exited_writer),
+            move |actor| {
+                let _ = actor.send(exit_message(process.wait(escalations)));
+                drop(exited_writer); // start the reader's drain deadline
             },
         )
     }
@@ -170,11 +166,11 @@ fn reset_signals() -> io::Result<()> {
     Ok(())
 }
 
-/// A pipe child that stays a zombie after it exits, until `reap`.
+/// The PID is metadata. Only the live child under the lock can be signalled.
 #[derive(Debug)]
 pub(in crate::service) struct Process {
     pid: u32,
-    reaped: Mutex<bool>,
+    child: Mutex<Option<Child>>,
 }
 
 impl Process {
@@ -182,11 +178,31 @@ impl Process {
         self.pid
     }
 
+    fn wait(&self, escalations: WaitGroup) -> io::Result<Exit> {
+        let exit = wait_exit(self.pid);
+        // Like the old spawner, leave background processes alone on a signal
+        // death (no numeric code). Only a non-zero exit code stops them.
+        let failed = matches!(exit, Ok(Exit::Code(code)) if code != 0);
+        let pgid = self.pid as libc::pid_t;
+        if failed {
+            // SAFETY: the unreaped leader still reserves its group ID.
+            unsafe { libc::killpg(pgid, libc::SIGTERM) };
+        }
+        self.reap();
+        if failed && unsafe { libc::killpg(pgid, 0) } == 0 {
+            escalate(pgid, escalations);
+        }
+        exit
+    }
+
     /// Kills the whole process group. Never signals after `reap`, when the
     /// group ID may belong to someone else.
     pub(super) fn kill(&self) {
-        let reaped = self.reaped.lock().unwrap_or_else(PoisonError::into_inner);
-        if !*reaped && let Ok(pid) = i32::try_from(self.pid) {
+        let child = self.child.lock().unwrap_or_else(PoisonError::into_inner);
+        if child.is_some()
+            && !has_exited(self.pid)
+            && let Ok(pid) = i32::try_from(self.pid)
+        {
             // SAFETY: the unreaped child keeps its PID and group ID reserved.
             // Signal the child directly too, in case it moved to another group.
             unsafe {
@@ -196,17 +212,16 @@ impl Process {
         }
     }
 
-    /// Sends `signal` to the process group and the child. Allowed after the
-    /// exit, to reach what is left of the group; refused after `reap`.
+    /// Sends `signal` to the process group and the child until the waiter reaps it.
     pub(in crate::service) fn signal(&self, signal: ProcessSignal) -> Result<()> {
         let signal = match signal {
             ProcessSignal::Term => libc::SIGTERM,
             ProcessSignal::Int => libc::SIGINT,
             ProcessSignal::Kill => libc::SIGKILL,
         };
-        let reaped = self.reaped.lock().unwrap_or_else(PoisonError::into_inner);
-        if *reaped {
-            bail!("process has been reaped");
+        let child = self.child.lock().unwrap_or_else(PoisonError::into_inner);
+        if child.is_none() || has_exited(self.pid) {
+            return Ok(());
         }
         let pid = i32::try_from(self.pid).context("invalid pid")?;
         // SAFETY: the unreaped child keeps its PID and group ID reserved.
@@ -216,24 +231,31 @@ impl Process {
         check_signal(unsafe { libc::kill(pid, signal) }, self.pid)
     }
 
-    /// Call only after the waiter has returned: kill the group first, so the
-    /// child has exited and this does not block.
+    /// Called by the waiter after observing exit, or after a startup failure
+    /// has killed the child. Serialize waitpid with all client signals.
     pub(super) fn reap(&self) {
-        let mut reaped = self.reaped.lock().unwrap_or_else(PoisonError::into_inner);
-        if *reaped {
-            return;
+        let mut child = self.child.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(mut child) = child.take() {
+            let _ = child.wait();
         }
-        let Ok(pid) = i32::try_from(self.pid) else {
-            return;
-        };
-        loop {
-            // SAFETY: waits only for this daemon's own child.
-            let result = unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
-            if result != -1 || Errno::last() != Errno::EINTR {
-                break;
-            }
-        }
-        *reaped = true;
+    }
+}
+
+/// Like the spawner after Node reaped its child, escalate by numeric PGID.
+/// The PGID stays reserved while the original group has members. If it empties
+/// during the grace, killpg gives ESRCH unless the number has been recycled.
+fn escalate(pgid: libc::pid_t, pending: WaitGroup) {
+    let deadline = Instant::now() + Duration::from_secs(3);
+    if let Err(error) = std::thread::Builder::new()
+        .name(format!("opencode-pty-escalate-{pgid}"))
+        .spawn(move || {
+            std::thread::sleep(deadline.saturating_duration_since(Instant::now()));
+            unsafe { libc::killpg(pgid, libc::SIGKILL) };
+            drop(pending);
+        })
+    {
+        eprintln!("process group {pgid}: cannot schedule SIGKILL: {error}");
+        unsafe { libc::killpg(pgid, libc::SIGKILL) };
     }
 }
 

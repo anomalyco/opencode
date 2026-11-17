@@ -10,7 +10,7 @@ import { Effect, Stream } from "effect"
 import path from "node:path"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ContentHeaders } from "../content-headers"
-import { parseRange } from "./fs"
+import { ByteRange } from "../range"
 import { missingSession } from "./session-error"
 
 export const makePreviewRead = Effect.gen(function* () {
@@ -83,7 +83,7 @@ export const makePreviewRead = Effect.gen(function* () {
       }).pipe(Effect.provide(locations.get(session.location)), Effect.orElseSucceed(() => false))
       if (!allowed) return HttpServerResponse.empty({ status: 404, headers: { ...headers, "x-opencode-preview-denied": "1" } })
     }
-    const range = req.headers.range ? parseRange(req.headers.range, opened.size) : undefined
+    const range = req.headers.range ? ByteRange.parse(req.headers.range, opened.size) : undefined
     if (range === "unsatisfiable")
       return HttpServerResponse.empty({
         status: 416,
