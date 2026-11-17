@@ -160,7 +160,7 @@ mins and means are shown for spread, never compared.
 
 - CPU: $CPU, $(nproc) cores, $MEM RAM, Linux $(uname -r)
 - Reference: anomalyco/opencode $(git -C "$REF_PKG" rev-parse HEAD), \`packages/codemode\`
-- PsychoScript: $(git rev-parse HEAD)$(git diff --quiet HEAD -- crates bench conformance || echo " (with uncommitted changes)")
+- PsychoScript: $(git rev-parse HEAD)$(git diff --quiet HEAD -- crates bench conformance ':!bench/RESULTS.md' || echo " (with uncommitted changes)")
 - bun $(bun --version); $(rustc --version); $(cargo --version)
 
 ## (a) Per-case wall time, $ITERATIONS iterations after one warm-up
