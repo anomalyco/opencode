@@ -604,6 +604,22 @@ test("a layer of the plugin's own mode declines in another", () => {
   expect(run()).toBe("refreshed")
 })
 
+// Ports trio (oc-context-grid): a mode a component pushes is its mount's on the host, so the plugin's own read of the
+// input mode says `base`; the layer of that mode still runs its command while the plugin's push holds, and declines
+// once it is popped.
+test("a layer of a mode the plugin pushed runs while the push holds", () => {
+  const fake = host(() => "base")
+  const ctx = plugin("t.pushed", fake)
+  const ran: string[] = []
+  ctx.keymap.layer(() => ({ mode: "t-page", commands: [{ id: "t.close", bind: "escape", run: () => ran.push("close") }] }))
+  expect(fake.commands.get("t.close")!()).toBe(false)
+  const pop = ctx.keymap.mode.push("t-page")
+  fake.commands.get("t.close")!()
+  pop()
+  expect(fake.commands.get("t.close")!()).toBe(false)
+  expect(ran).toEqual(["close"])
+})
+
 // CT-20: a layer's `target` holds its commands to the plugin's focus in that node: elsewhere they decline, so a key
 // such as @slkiser/opencode-quota's window Escape goes on to the dialog on screen (Goal's select stayed open).
 test("a layer with a target declines while its node lacks the focus", () => {

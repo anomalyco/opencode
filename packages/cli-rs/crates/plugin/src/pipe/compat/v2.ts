@@ -1028,6 +1028,10 @@ export function context(base: Base, carrier: Carrier) {
   // only while the target has the focus; elsewhere they decline. The focus is the layer's own record: what the plugin
   // focused, or a field the user edits.
   const registrations = new Map<string, Registration[]>()
+  // The modes the plugin pushed (`keymap.mode.push`), latest last. The host answers `input-mode` for the running call's
+  // owner, and a mode a component pushes as it mounts is its mount's: a command, which runs as the plugin, reads `base`
+  // there (oc-context-grid's escape never left its page). TS has one input mode.
+  const modes: string[] = []
   const dispatch = (name: string, input?: string) => {
     const live = (registrations.get(name) ?? []).filter((at) => !at.retired && at.commands.has(name))
     const command = live.at(-1)?.commands.get(name)
@@ -1035,7 +1039,8 @@ export function context(base: Base, carrier: Carrier) {
     const target = live.at(-1)?.target
     if (target && !within(target(), focusedNode)) return false
     const mode = live.at(-1)?.mode
-    if (mode !== undefined && (read("input-mode", { type: "input-mode" }) ?? "base") !== mode) return false
+    if (mode !== undefined && modes.at(-1) !== mode && (read("input-mode", { type: "input-mode" }) ?? "base") !== mode)
+      return false
     const enabled = typeof command.enabled === "function" ? command.enabled() : command.enabled !== false
     return enabled ? command.run(input) : false
   }
@@ -1237,8 +1242,13 @@ export function context(base: Base, carrier: Carrier) {
       mode: {
         current: () => read("input-mode", { type: "input-mode" }) ?? "base",
         push(mode: string) {
+          modes.push(mode)
           void carrier.effect({ type: "set-mode", mode })
-          return () => void carrier.effect({ type: "set-mode" })
+          return () => {
+            const at = modes.lastIndexOf(mode)
+            if (at >= 0) modes.splice(at, 1)
+            void carrier.effect({ type: "set-mode" })
+          }
         },
       },
     },
