@@ -1551,7 +1551,8 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     #[cfg(feature = "luau")]
     let loader = match opencode_plugin::luau::enabled() {
         true => {
-            // A walk of a Luau plugin's files that found something new is taken as a change of the plugin directories.
+            // A walk of a Luau plugin's files that found something new, or a build compiled off this thread, is taken as
+            // a change of the plugin directories.
             let proxy = tui.app.proxy();
             loader.with_luau(move || {
                 let _ = proxy.send(PluginsChanged);
