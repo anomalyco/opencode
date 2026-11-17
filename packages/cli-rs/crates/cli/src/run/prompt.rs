@@ -356,10 +356,13 @@ impl Run {
             let mark = self.ended_mark();
             self.session_wait().await?;
             let pending = self.background().await?;
-            // Image jobs can't be cancelled through the API, so waiting on them would only hold the exit.
+            // Image and Code Mode jobs can't be cancelled through the API, so waiting on them would only hold the exit.
             match pending {
                 None => return Ok(()),
-                Some(pending) if !pending.is_empty() && pending.iter().all(|job| job["kind"] == "image") => {
+                Some(pending)
+                    if !pending.is_empty()
+                        && pending.iter().all(|job| matches!(text(&job["kind"]), "image" | "codemode")) =>
+                {
                     return Ok(());
                 }
                 Some(_) => {}
