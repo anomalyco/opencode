@@ -257,12 +257,12 @@ impl Runtime {
     }
 
     /// A program ready to run once; nothing runs until [`Program::run`] or [`Program::run_async`]. Host calls get the keys `<run_id>:<callId>`; a random run id by default.
-    pub fn program(
-        &self,
-        code: &str,
+    pub fn program<'a>(
+        &'a self,
+        code: &'a str,
         bindings: &serde_json::Map<String, Json>,
         run_id: Option<&str>,
-    ) -> Program<'_> {
+    ) -> Program<'a> {
         Program::new(self, code, bindings, run_id)
     }
 

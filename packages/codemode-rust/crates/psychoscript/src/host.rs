@@ -95,11 +95,18 @@ pub struct Failed {
 
 impl Settlement {
     fn failure(kind: DiagnosticKind, message: String) -> Self {
-        Settlement::Failure(Box::new(Failed {
+        Settlement::Failure(Failed::new(kind, message))
+    }
+}
+
+impl Failed {
+    #[cold]
+    fn new(kind: DiagnosticKind, message: String) -> Box<Self> {
+        Box::new(Failed {
             kind,
             message,
             suggestions: Vec::new(),
-        }))
+        })
     }
 }
 
@@ -115,10 +122,11 @@ pub struct FnEntry {
 /// The host state of one run.
 pub struct RunHost<'rt> {
     pub setup: &'rt Setup,
-    pub run_id: Arc<str>,
+    /// Names the run's host calls; made on first use when the host gave none.
+    run_id: Option<Arc<str>>,
     next_call: u64,
     /// The context handed to synchronous tools, its call id set for each call.
-    ctx: ToolContext,
+    ctx: Option<ToolContext>,
     pub tasks: Tasks<'rt, Settlement>,
     functions: Vec<FnEntry>,
     /// Suggestions attached to failure values, by error object.
@@ -129,11 +137,11 @@ pub struct RunHost<'rt> {
 }
 
 impl<'rt> RunHost<'rt> {
-    pub fn new(setup: &'rt Setup, run_id: String) -> Self {
+    pub fn new(setup: &'rt Setup, run_id: Option<String>) -> Self {
         Self {
             setup,
-            ctx: ToolContext::new(Arc::from(run_id.as_str()), 0),
-            run_id: Arc::from(run_id),
+            ctx: None,
+            run_id: run_id.map(Arc::from),
             next_call: 0,
             tasks: Tasks::default(),
             functions: Vec::new(),
@@ -155,9 +163,25 @@ impl<'rt> RunHost<'rt> {
         id
     }
 
+    pub fn run_id(&mut self) -> Arc<str> {
+        self.run_id
+            .get_or_insert_with(|| Arc::from(crate::run::random_run_id()))
+            .clone()
+    }
+
     fn context(&mut self) -> ToolContext {
         let id = self.next_call();
-        ToolContext::new(self.run_id.clone(), id)
+        ToolContext::new(self.run_id(), id)
+    }
+
+    /// The shared context for a synchronous call, without a reference count change per call.
+    fn sync_context(&mut self, call: u64) -> &ToolContext {
+        if self.ctx.is_none() {
+            self.ctx = Some(ToolContext::new(self.run_id(), 0));
+        }
+        let ctx = self.ctx.as_mut().expect("context");
+        ctx.call = call;
+        ctx
     }
 }
 
@@ -206,20 +230,8 @@ fn native(vm: &mut Vm, name: &str, length: u8, f: crate::vm::NativeFn, data: Val
 /// `tools.<path>(...args)`: returns a promise at once; the call starts now and settles it later.
 pub fn call_tool(vm: &mut Vm, path: &str, args: &[Value]) -> Res {
     let p = vm.new_promise();
-    match start_tool(vm, path, args) {
-        Started::Now(s) => vm.inbox.push_back((p, s)),
-        Started::Later(future) => {
-            if let Poll::Ready(s) = vm.host.tasks.spawn(p, future) {
-                vm.inbox.push_back((p, s));
-            }
-        }
-    }
+    start_tool(vm, p, path, args);
     Ok(Value::Obj(p))
-}
-
-enum Started<'rt> {
-    Now(Settlement),
-    Later(BoxFuture<'rt, Settlement>),
 }
 
 /// Everything about a call that happens before its tool runs: the reference's `decode` and `admit`.
@@ -229,42 +241,54 @@ struct Admitted<'rt> {
     call: u64,
 }
 
-fn start_tool<'rt>(vm: &mut Vm<'rt>, path: &str, args: &[Value]) -> Started<'rt> {
+/// Starts a call whose promise is `p`. A call that ends at once queues its outcome; the rest become tasks.
+fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: &[Value]) {
     let setup = vm.host.setup;
     // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
     if path == "search" && !setup.registry.exists("search") {
-        return match run_search(vm, args) {
-            Ok(json) => Started::Now(Settlement::Json(json)),
-            Err(s) => Started::Now(s),
+        let s = match run_search(vm, args) {
+            Ok(json) => Settlement::Json(json),
+            Err(f) => Settlement::Failure(f),
         };
+        vm.inbox.push_back((p, s));
+        return;
     }
     let admitted = match admit(vm, path, args) {
         Ok(a) => a,
-        Err(s) => return Started::Now(s),
+        Err(f) => {
+            vm.inbox.push_back((p, Settlement::Failure(f)));
+            return;
+        }
     };
     let hooks = &setup.hooks;
     if hooks.tool_before.is_none()
         && hooks.tool_after.is_none()
         && let Execute::Sync(f) = &admitted.tool.execute
     {
-        vm.host.ctx.call = admitted.call;
-        let raw = f(admitted.input, &vm.host.ctx);
-        return Started::Now(finish(path, admitted.tool, raw));
+        let raw = f(admitted.input, vm.host.sync_context(admitted.call));
+        let s = finish(path, admitted.tool, raw);
+        vm.inbox.push_back((p, s));
+        return;
     }
-    let ctx = ToolContext::new(vm.host.run_id.clone(), admitted.call);
-    Started::Later(Box::pin(hooked_tool(hooks, path.to_owned(), admitted, ctx)))
+    let ctx = ToolContext::new(vm.host.run_id(), admitted.call);
+    let future = Box::pin(hooked_tool(hooks, path.to_owned(), admitted, ctx));
+    if let Poll::Ready(s) = vm.host.tasks.spawn(p, future) {
+        vm.inbox.push_back((p, s));
+    }
 }
 
-fn admit<'rt>(vm: &mut Vm<'rt>, path: &str, args: &[Value]) -> Result<Admitted<'rt>, Settlement> {
+#[inline]
+fn admit<'rt>(vm: &mut Vm<'rt>, path: &str, args: &[Value]) -> Result<Admitted<'rt>, Box<Failed>> {
     let setup = vm.host.setup;
     let Some(tool) = setup.registry.get(path) else {
         return Err(unknown_tool(setup, path));
     };
     let tool: &'rt Tool = tool;
-    let entry_field = tool
-        .freeform
-        .then(|| schema::string_parameter(tool.input.document()).map(|(name, _)| name))
-        .flatten();
+    let entry_field = if tool.freeform {
+        schema::string_parameter(tool.input.document()).map(|(name, _)| name)
+    } else {
+        None
+    };
     let input = decode(vm, path, &tool.input, entry_field.as_deref(), args, false)?;
     admit_call(vm, path, &input)?;
     let call = vm.host.next_call();
@@ -272,6 +296,7 @@ fn admit<'rt>(vm: &mut Vm<'rt>, path: &str, args: &[Value]) -> Result<Admitted<'
 }
 
 /// Copies the call's argument out as JSON and decodes it with the tool's input schema.
+#[inline]
 fn decode(
     vm: &mut Vm,
     name: &str,
@@ -279,9 +304,9 @@ fn decode(
     string_field: Option<&str>,
     args: &[Value],
     search: bool,
-) -> Result<Json, Settlement> {
+) -> Result<Json, Box<Failed>> {
     if args.len() > 1 {
-        return Err(Settlement::failure(
+        return Err(Failed::new(
             DiagnosticKind::InvalidToolInput,
             format!("Tool '{name}' expects at most one input object."),
         ));
@@ -292,7 +317,7 @@ fn decode(
             Ok(j) => j,
             Err(e) => {
                 let msg = vm.error_text(&e);
-                return Err(Settlement::failure(
+                return Err(Failed::new(
                     DiagnosticKind::InvalidDataValue,
                     format!("Invalid input for tool '{name}': {msg}"),
                 ));
@@ -309,7 +334,7 @@ fn decode(
     };
     schema
         .validate(input)
-        .map_err(|e| Settlement::Failure(Box::new(Failed {
+        .map_err(|e| Box::new(Failed {
             kind: DiagnosticKind::InvalidToolInput,
             message: format!("Invalid input for tool '{name}': {e}"),
             suggestions: vec![if search {
@@ -317,15 +342,16 @@ fn decode(
             } else {
                 "The signature may have changed. Use search to get the current signature.".into()
             }],
-        })))
+        }))
 }
 
 /// Counts a call against `max_tool_calls` and records it.
-fn admit_call(vm: &mut Vm, path: &str, input: &Json) -> Result<(), Settlement> {
+#[inline]
+fn admit_call(vm: &mut Vm, path: &str, input: &Json) -> Result<(), Box<Failed>> {
     if let Some(max) = vm.limits.max_tool_calls
         && vm.tool_calls.len() as u64 >= max
     {
-        return Err(Settlement::failure(
+        return Err(Failed::new(
             DiagnosticKind::ToolCallLimitExceeded,
             format!("Execution exceeded its tool-call limit of {max}."),
         ));
@@ -338,6 +364,7 @@ fn admit_call(vm: &mut Vm, path: &str, input: &Json) -> Result<(), Settlement> {
 }
 
 /// A tool's raw result as the program receives it.
+#[inline]
 fn finish(name: &str, tool: &Tool, raw: Result<Json, crate::ToolError>) -> Settlement {
     match raw {
         Err(e) => Settlement::failure(DiagnosticKind::ToolFailure, e.message),
@@ -407,7 +434,8 @@ async fn hooked_tool(hooks: &Hooks, name: String, a: Admitted<'_>, ctx: ToolCont
     s
 }
 
-fn unknown_tool(setup: &Setup, path: &str) -> Settlement {
+#[cold]
+fn unknown_tool(setup: &Setup, path: &str) -> Box<Failed> {
     let registry = &setup.registry;
     let entries = registry.entries();
     let index = registry.word_index();
@@ -437,11 +465,11 @@ fn unknown_tool(setup: &Setup, path: &str) -> Settlement {
             ),
             None => format!("Unknown tool '{path}'."),
         };
-        return Settlement::Failure(Box::new(Failed {
+        return Box::new(Failed {
             kind: DiagnosticKind::UnknownTool,
             message,
             suggestions: vec!["Use search to find available tools.".into()],
-        }));
+        });
     }
     let under = format!("{path}.");
     let scope: Vec<usize> = (0..entries.len())
@@ -480,11 +508,11 @@ fn unknown_tool(setup: &Setup, path: &str) -> Settlement {
     } else {
         "Use search to find available tools.".into()
     };
-    Settlement::Failure(Box::new(Failed {
+    Box::new(Failed {
         kind: DiagnosticKind::UnknownTool,
         message,
         suggestions: vec![suggestion],
-    }))
+    })
 }
 
 /// `Intl.ListFormat("en", { type: "disjunction" })`.
@@ -550,13 +578,12 @@ fn search_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res 
             }
             Ok(v)
         }
-        Err(Settlement::Failure(f)) => Err(failure_value(vm, f.kind, f.message, f.suggestions)),
-        Err(_) => Ok(Value::Undef),
+        Err(f) => Err(failure_value(vm, f.kind, f.message, f.suggestions)),
     }
 }
 
 /// The built-in search, blocking: decode, admit, the hooks, then the ranking.
-fn run_search(vm: &mut Vm, args: &[Value]) -> Result<Json, Settlement> {
+fn run_search(vm: &mut Vm, args: &[Value]) -> Result<Json, Box<Failed>> {
     let setup = vm.host.setup;
     let args: Vec<Value> = match args.first() {
         Some(Value::Str(s)) => {
@@ -583,7 +610,7 @@ fn run_search(vm: &mut Vm, args: &[Value]) -> Result<Json, Settlement> {
     if let Some(before) = &hooks.tool_before
         && let Err(e) = block_on(before(&call))
     {
-        return Err(Settlement::failure(DiagnosticKind::ToolFailure, e.message));
+        return Err(Failed::new(DiagnosticKind::ToolFailure, e.message));
     }
     let registry = &setup.registry;
     let result = search::search(registry.entries(), registry.word_index(), &input);

@@ -73,11 +73,7 @@ fn run_here(code: &str, timeout_ms: u64) -> Run {
         ..Limits::default()
     };
     let rt = crate::Runtime::new();
-    let mut vm = Vm::new(
-        crate::host::RunHost::new(rt.setup(), String::new()),
-        limits,
-        atoms,
-    );
+    let mut vm = Vm::new(crate::host::RunHost::new(rt.setup(), None), limits, atoms);
     vm.stack_base = &probe as *const u8 as usize;
     vm.stack_budget = STACK_BUDGET;
     vm.setup();

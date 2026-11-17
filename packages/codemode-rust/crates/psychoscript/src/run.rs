@@ -24,8 +24,7 @@ const THREAD_STACK_BUDGET: usize = 64 << 20;
 
 pub fn execute(rt: &Runtime, code: &str, bindings: &serde_json::Map<String, Json>) -> Outcome {
     if code.len() <= INLINE_SOURCE_BYTES && bracket_depth(code) <= INLINE_BRACKET_DEPTH {
-        let program = rt.program(code, bindings, None);
-        let run = AssertUnwindSafe(|| program.run());
+        let run = AssertUnwindSafe(|| rt.program(code, bindings, None).run());
         return std::panic::catch_unwind(run).unwrap_or_else(|_| internal_error());
     }
     std::thread::scope(|s| {
@@ -105,17 +104,17 @@ pub fn random_run_id() -> String {
 }
 
 /// Compiles a program and sets up its run, or the outcome when it does not compile.
-pub fn start<'rt>(
-    rt: &'rt Runtime,
-    code: String,
+pub fn start<'a>(
+    rt: &'a Runtime,
+    code: &'a str,
     bindings: &serde_json::Map<String, Json>,
-    run_id: String,
-) -> Result<Box<Running<'rt>>, Box<Outcome>> {
+    run_id: Option<String>,
+) -> Result<Box<Running<'a>>, Box<Outcome>> {
     let mut atoms = Strings::new();
-    let program = match compiler::compile(&code, &mut atoms) {
+    let program = match compiler::compile(code, &mut atoms) {
         Ok(p) => p,
         Err(e) => {
-            let location = e.offset.map(|o| line_col(&code, o));
+            let location = e.offset.map(|o| line_col(code, o));
             let message = format!("{}{}", e.message, suffix(location));
             return Err(Box::new(failed(Diagnostic {
                 kind: e.kind,
@@ -162,7 +161,6 @@ pub fn finish(r: Running<'_>) -> Outcome {
     let Running { mut vm, code, .. } = r;
     vm.host.tasks.clear();
     let vm = &mut vm;
-    let code = code.as_str();
     let result = match (vm.fatal.clone(), vm.outcome.take()) {
         (Some((kind, message)), _) => Err(diagnostic(kind, message)),
         (None, Some(Ok(v))) => match convert::to_json(vm, &v) {

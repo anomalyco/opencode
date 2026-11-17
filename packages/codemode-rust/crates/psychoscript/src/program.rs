@@ -9,45 +9,41 @@ use crate::run;
 use crate::vm::Vm;
 use crate::{Json, Outcome, Runtime};
 
-enum State<'rt> {
-    Ready {
-        code: String,
-        bindings: serde_json::Map<String, Json>,
-        run_id: String,
-    },
-    Running(Box<Running<'rt>>),
+enum State<'a> {
+    Running(Box<Running<'a>>),
+    /// It ended before running: the program did not compile.
+    Failed(Box<Outcome>),
     Done,
 }
 
-pub(crate) struct Running<'rt> {
-    pub vm: Vm<'rt>,
-    pub code: String,
+pub(crate) struct Running<'a> {
+    pub vm: Vm<'a>,
+    pub code: &'a str,
     started: bool,
     timer_armed: bool,
 }
 
 /// A program ready to run once. Dropping it interrupts the run and cancels every host call in flight.
-pub struct Program<'rt> {
-    rt: &'rt Runtime,
-    state: State<'rt>,
+pub struct Program<'a> {
+    state: State<'a>,
     /// How much of the native stack below the point it is driven from the run may use.
     pub(crate) stack_budget: usize,
 }
 
-impl<'rt> Program<'rt> {
+impl<'a> Program<'a> {
+    /// Compiles the program and sets up its globals; nothing runs yet.
     pub(crate) fn new(
-        rt: &'rt Runtime,
-        code: &str,
+        rt: &'a Runtime,
+        code: &'a str,
         bindings: &serde_json::Map<String, Json>,
         run_id: Option<&str>,
     ) -> Self {
+        let state = match run::start(rt, code, bindings, run_id.map(str::to_owned)) {
+            Ok(r) => State::Running(r),
+            Err(outcome) => State::Failed(outcome),
+        };
         Self {
-            rt,
-            state: State::Ready {
-                code: code.to_owned(),
-                bindings: bindings.clone(),
-                run_id: run_id.map_or_else(run::random_run_id, str::to_owned),
-            },
+            state,
             stack_budget: run::INLINE_STACK_BUDGET,
         }
     }
@@ -65,19 +61,11 @@ impl<'rt> Program<'rt> {
 
     fn advance(&mut self, cx: &mut Context<'_>) -> Poll<Outcome> {
         let probe = 0u8;
-        if let State::Ready { .. } = self.state {
-            let State::Ready {
-                code,
-                bindings,
-                run_id,
-            } = std::mem::replace(&mut self.state, State::Done)
-            else {
+        if let State::Failed(_) = self.state {
+            let State::Failed(outcome) = std::mem::replace(&mut self.state, State::Done) else {
                 unreachable!()
             };
-            match run::start(self.rt, code, &bindings, run_id) {
-                Ok(vm) => self.state = State::Running(vm),
-                Err(outcome) => return Poll::Ready(*outcome),
-            }
+            return Poll::Ready(*outcome);
         }
         let State::Running(r) = &mut self.state else {
             return Poll::Pending;
@@ -126,8 +114,8 @@ impl<'rt> Program<'rt> {
     }
 }
 
-impl<'rt> Running<'rt> {
-    pub fn new(vm: Vm<'rt>, code: String) -> Self {
+impl<'a> Running<'a> {
+    pub fn new(vm: Vm<'a>, code: &'a str) -> Self {
         Self {
             vm,
             code,

@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use psychoscript::{Json, Runtime};
+use psychoscript::{Json, Runtime, Schema, Tool};
 use serde_json::json;
 
 /// Case files and reference names, in the reference order.
@@ -30,13 +30,34 @@ const CASES: [(&str, &str); 9] = [
 /// `{ branch: string, dirty: boolean }` out); these Rust tools do not validate yet. Once `Runtime` takes tool schemas,
 /// register both with the equivalent validating schemas here, so each side pays for validation.
 fn tools(runtime: Runtime) -> Runtime {
+    // The reference's Effect Schemas, as the JSON Schema documents they render to.
     runtime
-        .tool("echo", |input| {
-            Ok(input.get("id").cloned().unwrap_or(Json::Null))
-        })
-        .tool("git.status", |_| {
-            Ok(json!({ "branch": "main", "dirty": true }))
-        })
+        .with_tool(
+            "echo",
+            Tool::new("Echo an id", |input, _| Ok(input["id"].clone()))
+                .input(Schema::validated(json!({
+                    "type": "object",
+                    "properties": { "id": { "type": "number" } },
+                    "required": ["id"],
+                    "additionalProperties": false
+                })))
+                .output(Schema::validated(json!({ "type": "number" }))),
+        )
+        .with_tool(
+            "git.status",
+            Tool::new("Working tree status", |_, _| {
+                Ok(json!({ "branch": "main", "dirty": true }))
+            })
+            .input(Schema::validated(
+                json!({ "type": "object", "properties": {}, "additionalProperties": false }),
+            ))
+            .output(Schema::validated(json!({
+                "type": "object",
+                "properties": { "branch": { "type": "string" }, "dirty": { "type": "boolean" } },
+                "required": ["branch", "dirty"],
+                "additionalProperties": false
+            }))),
+        )
 }
 
 fn main() {

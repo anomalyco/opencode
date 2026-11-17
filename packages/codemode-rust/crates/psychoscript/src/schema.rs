@@ -47,12 +47,19 @@ impl Schema {
     /// `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `minItems`, `maxItems` and
     /// `uniqueItems`: the constraints an Effect Schema's JSON Schema document is made of. `pattern` and `format` only
     /// render: the crate has no regular-expression engine, and Effect's `format` is an annotation.
+    #[inline]
     pub fn validate(&self, value: Json) -> Result<Json, String> {
-        let Some(v) = &self.validator else {
-            return Ok(value);
-        };
-        let mut path = Vec::new();
-        check(&v.root, value, v, &mut path, 0)
+        match &self.validator {
+            None => Ok(value),
+            Some(v) => v.validate(value),
+        }
+    }
+}
+
+impl Validator {
+    #[inline(never)]
+    fn validate(&self, value: Json) -> Result<Json, String> {
+        check(&self.root, value, self, 0)
             .map_err(|(message, path)| format!("SchemaError({message}{})", render_path(&path)))
     }
 }
@@ -754,8 +761,8 @@ struct Node {
     enumeration: Option<Vec<Json>>,
     any_of: Vec<Node>,
     all_of: Vec<Node>,
-    /// Type names, or empty for any type.
-    types: Vec<String>,
+    /// Type bits, or 0 for any type.
+    types: u8,
     expected: String,
     minimum: Option<f64>,
     maximum: Option<f64>,
@@ -768,8 +775,10 @@ struct Node {
     max_items: Option<f64>,
     unique_items: bool,
     items: Option<Box<Node>>,
-    properties: Vec<(String, Node)>,
-    required: Vec<String>,
+    /// Each property with whether it is required, in schema order.
+    properties: Vec<(String, Node, bool)>,
+    /// Required keys that are not among the properties.
+    required_only: Vec<String>,
     additional: Additional,
 }
 
@@ -852,7 +861,7 @@ fn compile(s: &Json, index: &dyn Fn(&str) -> Option<usize>, depth: usize) -> Nod
     if let Some(Json::Array(all)) = field(s, "allOf") {
         n.all_of = all.iter().map(sub).collect();
     }
-    n.types = types_of(s);
+    n.types = type_bits(&types_of(s));
     n.expected = expected(s);
     n.minimum = number(s, "minimum");
     n.maximum = number(s, "maximum");
@@ -865,15 +874,23 @@ fn compile(s: &Json, index: &dyn Fn(&str) -> Option<usize>, depth: usize) -> Nod
     n.max_items = number(s, "maxItems");
     n.unique_items = s.get("uniqueItems") == Some(&Json::Bool(true));
     n.items = field(s, "items").map(|i| Box::new(sub(i)));
-    if let Some(Json::Object(props)) = s.get("properties") {
-        n.properties = props.iter().map(|(k, v)| (k.clone(), sub(v))).collect();
-    }
-    if let Some(Json::Array(r)) = s.get("required") {
-        n.required = r
+    let required: Vec<String> = match s.get("required") {
+        Some(Json::Array(r)) => r
             .iter()
             .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect(),
+        _ => Vec::new(),
+    };
+    if let Some(Json::Object(props)) = s.get("properties") {
+        n.properties = props
+            .iter()
+            .map(|(k, v)| (k.clone(), sub(v), required.contains(k)))
             .collect();
     }
+    n.required_only = required
+        .into_iter()
+        .filter(|r| !n.properties.iter().any(|(k, _, _)| k == r))
+        .collect();
     n.additional = match s.get("additionalProperties") {
         Some(Json::Bool(false)) => Additional::Drop,
         Some(extra @ Json::Object(_)) => Additional::Check(Box::new(sub(extra))),
@@ -882,9 +899,10 @@ fn compile(s: &Json, index: &dyn Fn(&str) -> Option<usize>, depth: usize) -> Nod
     n
 }
 
+/// A failure's message and where it happened, innermost segment first: each level adds its own on the way out,
+/// so checking a valid value builds no path at all.
 type Failure = (String, Vec<PathPart>);
 
-#[derive(Clone)]
 enum PathPart {
     Key(String),
     Index(usize),
@@ -895,7 +913,7 @@ fn render_path(path: &[PathPart]) -> String {
         return String::new();
     }
     let mut out = String::from("\n  at ");
-    for p in path {
+    for p in path.iter().rev() {
         match p {
             PathPart::Key(k) => {
                 out.push('[');
@@ -908,22 +926,48 @@ fn render_path(path: &[PathPart]) -> String {
     out
 }
 
-fn json_type(v: &Json) -> &'static str {
-    match v {
-        Json::Null => "null",
-        Json::Bool(_) => "boolean",
-        Json::Number(_) => "number",
-        Json::String(_) => "string",
-        Json::Array(_) => "array",
-        Json::Object(_) => "object",
-    }
+fn at<T>(r: Result<T, Failure>, part: impl FnOnce() -> PathPart) -> Result<T, Failure> {
+    r.map_err(|(message, mut path)| {
+        path.push(part());
+        (message, path)
+    })
 }
 
-fn matches_type(t: &str, v: &Json) -> bool {
-    match t {
-        "integer" | "number" => v.is_number(),
-        other => json_type(v) == other,
-    }
+const T_NULL: u8 = 1;
+const T_BOOLEAN: u8 = 2;
+const T_NUMBER: u8 = 4;
+const T_INTEGER: u8 = 8;
+const T_STRING: u8 = 16;
+const T_ARRAY: u8 = 32;
+const T_OBJECT: u8 = 64;
+
+fn type_bits(types: &[String]) -> u8 {
+    types
+        .iter()
+        .map(|t| match t.as_str() {
+            "null" => T_NULL,
+            "boolean" => T_BOOLEAN,
+            "number" => T_NUMBER,
+            "integer" => T_INTEGER,
+            "string" => T_STRING,
+            "array" => T_ARRAY,
+            "object" => T_OBJECT,
+            _ => 0,
+        })
+        .fold(0, |a, b| a | b)
+}
+
+/// Whether a value is of one of the types; an `integer` type accepts any number here and is checked after.
+fn type_matches(bits: u8, v: &Json) -> bool {
+    let bit = match v {
+        Json::Null => T_NULL,
+        Json::Bool(_) => T_BOOLEAN,
+        Json::Number(_) => T_NUMBER | T_INTEGER,
+        Json::String(_) => T_STRING,
+        Json::Array(_) => T_ARRAY,
+        Json::Object(_) => T_OBJECT,
+    };
+    bits & bit != 0
 }
 
 /// What a schema accepts, for an `Expected ...` message.
@@ -958,92 +1002,81 @@ fn expected(s: &Json) -> String {
         .join(" | ")
 }
 
-fn fail<T>(message: impl Into<String>, path: &[PathPart]) -> Result<T, Failure> {
-    Err((message.into(), path.to_vec()))
+#[cold]
+fn fail<T>(message: impl Into<String>) -> Result<T, Failure> {
+    Err((message.into(), Vec::new()))
 }
 
-fn check(
-    n: &Node,
-    mut value: Json,
-    v: &Validator,
-    path: &mut Vec<PathPart>,
-    depth: usize,
-) -> Result<Json, Failure> {
+fn check(n: &Node, mut value: Json, v: &Validator, depth: usize) -> Result<Json, Failure> {
     if depth > 64 {
-        return fail("Schema nesting is too deep", path);
+        return fail("Schema nesting is too deep");
     }
     if n.never {
-        return fail("Expected never", path);
+        return fail("Expected never");
     }
     if let Some(r) = n.reference {
-        value = check(&v.defs[r], value, v, path, depth + 1)?;
+        value = check(&v.defs[r], value, v, depth + 1)?;
     }
     if let Some(c) = &n.constant
         && !json_eq(c, &value)
     {
-        return fail(format!("Expected {}", js_stringify(c)), path);
+        return fail(format!("Expected {}", js_stringify(c)));
     }
     if let Some(values) = &n.enumeration
         && !values.iter().any(|c| json_eq(c, &value))
     {
-        return fail(format!("Expected {}", n.expected), path);
+        return fail(format!("Expected {}", n.expected));
     }
     if !n.any_of.is_empty() {
-        value = check_union(n, value, v, path, depth)?;
+        value = check_union(n, value, v, depth)?;
     }
     for part in &n.all_of {
-        value = check(part, value, v, path, depth + 1)?;
+        value = check(part, value, v, depth + 1)?;
     }
-    if !n.types.is_empty() {
-        if !n.types.iter().any(|t| matches_type(t, &value)) {
-            return fail(format!("Expected {}", n.expected), path);
+    if n.types != 0 {
+        if !type_matches(n.types, &value) {
+            return fail(format!("Expected {}", n.expected));
         }
-        if n.types.iter().all(|t| t == "integer")
-            && value.as_f64().is_some_and(|x| x.fract() != 0.0)
-        {
-            return fail("Expected an integer", path);
+        if n.types == T_INTEGER && value.as_f64().is_some_and(|x| x.fract() != 0.0) {
+            return fail("Expected an integer");
         }
     }
     match &mut value {
-        Json::Number(x) => check_number(n, x.as_f64().unwrap_or(f64::NAN), path)?,
-        Json::String(text) => check_length(utf16_len(text), n.min_length, n.max_length, path)?,
+        Json::Number(x) => check_number(n, x.as_f64().unwrap_or(f64::NAN))?,
+        Json::String(text) if n.min_length.is_some() || n.max_length.is_some() => {
+            check_length(utf16_len(text), n.min_length, n.max_length)?
+        }
         Json::Array(items) => {
-            check_length(items.len(), n.min_items, n.max_items, path)?;
+            check_length(items.len(), n.min_items, n.max_items)?;
             if n.unique_items {
                 for i in 0..items.len() {
                     if items[..i].iter().any(|prev| json_eq(prev, &items[i])) {
-                        return fail("Expected an array of unique items", path);
+                        return fail("Expected an array of unique items");
                     }
                 }
             }
             if let Some(item_node) = &n.items {
                 for (i, item) in items.iter_mut().enumerate() {
-                    path.push(PathPart::Index(i));
-                    *item = check(item_node, std::mem::take(item), v, path, depth + 1)?;
-                    path.pop();
+                    *item = at(check(item_node, std::mem::take(item), v, depth + 1), || {
+                        PathPart::Index(i)
+                    })?;
                 }
             }
         }
-        Json::Object(map) => check_object(n, map, v, path, depth)?,
+        Json::Object(map) => check_object(n, map, v, depth)?,
         _ => {}
     }
     Ok(value)
 }
 
-fn check_union(
-    n: &Node,
-    value: Json,
-    v: &Validator,
-    path: &mut Vec<PathPart>,
-    depth: usize,
-) -> Result<Json, Failure> {
+fn check_union(n: &Node, value: Json, v: &Validator, depth: usize) -> Result<Json, Failure> {
     let mut candidate = None;
     let mut same_type = 0;
     for alt in &n.any_of {
-        match check(alt, value.clone(), v, path, depth + 1) {
+        match check(alt, value.clone(), v, depth + 1) {
             Ok(decoded) => return Ok(decoded),
             Err(e) => {
-                if alt.types.iter().any(|t| matches_type(t, &value)) {
+                if type_matches(alt.types, &value) {
                     same_type += 1;
                     candidate = Some(e);
                 }
@@ -1053,69 +1086,64 @@ fn check_union(
     // Like Effect, a single member of the value's own type explains the failure; otherwise the union does.
     match candidate {
         Some(e) if same_type == 1 => Err(e),
-        _ => fail(format!("Expected {}", n.expected), path),
+        _ => fail(format!("Expected {}", n.expected)),
     }
 }
 
-fn check_number(n: &Node, x: f64, path: &[PathPart]) -> Result<(), Failure> {
+fn check_number(n: &Node, x: f64) -> Result<(), Failure> {
     if let Some(m) = n.minimum
         && x < m
     {
-        return fail(
-            format!("Expected a value greater than or equal to {}", js_num(m)),
-            path,
-        );
+        return fail(format!(
+            "Expected a value greater than or equal to {}",
+            js_num(m)
+        ));
     }
     if let Some(m) = n.maximum
         && x > m
     {
-        return fail(
-            format!("Expected a value less than or equal to {}", js_num(m)),
-            path,
-        );
+        return fail(format!(
+            "Expected a value less than or equal to {}",
+            js_num(m)
+        ));
     }
     if let Some(m) = n.exclusive_minimum
         && x <= m
     {
-        return fail(format!("Expected a value greater than {}", js_num(m)), path);
+        return fail(format!("Expected a value greater than {}", js_num(m)));
     }
     if let Some(m) = n.exclusive_maximum
         && x >= m
     {
-        return fail(format!("Expected a value less than {}", js_num(m)), path);
+        return fail(format!("Expected a value less than {}", js_num(m)));
     }
     if let Some(m) = n.multiple_of
         && (x / m).fract() != 0.0
     {
-        return fail(
-            format!("Expected a value that is a multiple of {}", js_num(m)),
-            path,
-        );
+        return fail(format!(
+            "Expected a value that is a multiple of {}",
+            js_num(m)
+        ));
     }
     Ok(())
 }
 
-fn check_length(
-    len: usize,
-    min: Option<f64>,
-    max: Option<f64>,
-    path: &[PathPart],
-) -> Result<(), Failure> {
+fn check_length(len: usize, min: Option<f64>, max: Option<f64>) -> Result<(), Failure> {
     if let Some(m) = min
         && (len as f64) < m
     {
-        return fail(
-            format!("Expected a value with a length of at least {}", js_num(m)),
-            path,
-        );
+        return fail(format!(
+            "Expected a value with a length of at least {}",
+            js_num(m)
+        ));
     }
     if let Some(m) = max
         && (len as f64) > m
     {
-        return fail(
-            format!("Expected a value with a length of at most {}", js_num(m)),
-            path,
-        );
+        return fail(format!(
+            "Expected a value with a length of at most {}",
+            js_num(m)
+        ));
     }
     Ok(())
 }
@@ -1124,38 +1152,48 @@ fn check_object(
     n: &Node,
     map: &mut serde_json::Map<String, Json>,
     v: &Validator,
-    path: &mut Vec<PathPart>,
     depth: usize,
 ) -> Result<(), Failure> {
-    for name in &n.required {
+    for name in &n.required_only {
         if !map.contains_key(name) {
-            path.push(PathPart::Key(name.clone()));
-            return fail("Missing key", path);
+            return at(fail("Missing key"), || PathPart::Key(name.clone()));
         }
     }
-    for (name, prop) in &n.properties {
-        if let Some(item) = map.get_mut(name) {
-            path.push(PathPart::Key(name.clone()));
-            *item = check(prop, std::mem::take(item), v, path, depth + 1)?;
-            path.pop();
+    let mut present = 0;
+    // Tool inputs are small objects, where a scan beats hashing every key.
+    let small = map.len() <= 8;
+    for (name, prop, required) in &n.properties {
+        let item = if small {
+            map.iter_mut().find(|(k, _)| *k == name).map(|(_, v)| v)
+        } else {
+            map.get_mut(name)
+        };
+        match item {
+            Some(item) => {
+                present += 1;
+                *item = at(check(prop, std::mem::take(item), v, depth + 1), || {
+                    PathPart::Key(name.clone())
+                })?;
+            }
+            None if *required => return at(fail("Missing key"), || PathPart::Key(name.clone())),
+            None => {}
         }
     }
-    let known = |k: &str| n.properties.iter().any(|(p, _)| p == k);
+    if map.len() == present {
+        return Ok(());
+    }
+    let known = |k: &str| n.properties.iter().any(|(p, _, _)| p == k);
     match &n.additional {
         Additional::Keep => {}
-        Additional::Drop => {
-            if map.len() > n.properties.len() || map.keys().any(|k| !known(k)) {
-                map.retain(|k, _| known(k));
-            }
-        }
+        Additional::Drop => map.retain(|k, _| known(k)),
         Additional::Check(extra) => {
             for (name, item) in map.iter_mut() {
                 if known(name) {
                     continue;
                 }
-                path.push(PathPart::Key(name.clone()));
-                *item = check(extra, std::mem::take(item), v, path, depth + 1)?;
-                path.pop();
+                *item = at(check(extra, std::mem::take(item), v, depth + 1), || {
+                    PathPart::Key(name.clone())
+                })?;
             }
         }
     }
