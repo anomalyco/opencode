@@ -987,6 +987,32 @@ fn a_reused_input_table_shows_each_call_its_own_values() {
     assert_eq!(shown(&full, &changed), "ses_1 true ses_3 msg_1 nil true ses_1 false");
 }
 
+// Expected (luau-calls): a JSON value reaches Luau as tables built on the VM's stack: an object's `null` field left out,
+// `null` in an array mlua's `null`, numbers, strings and keys as they are; walked back it is the same JSON less the
+// fields left out. A value nested far deeper than the stack's first slots is built too.
+#[test]
+fn a_json_value_crosses_into_luau_and_back() {
+    let lua = mlua::Lua::new();
+    let value = serde_json::json!({
+        "a": [1, null, "x", { "b": null, "c": 2.5 }], "d": { "e": [] }, "é ü": true, "n": null, "s": "ß\u{0}t",
+    });
+    let back = |value: &mlua::Value| match json::Walk::new().json(&lua, value) {
+        Ok(value) => value,
+        Err(json::Refused::Bound(why) | json::Refused::Value(why)) => panic!("{why}"),
+    };
+    let crossed = json::luau(&lua, &value).unwrap();
+    let expected =
+        serde_json::json!({ "a": [1, null, "x", { "c": 2.5 }], "d": { "e": [] }, "é ü": true, "s": "ß\u{0}t" });
+    assert_eq!(back(&crossed), expected);
+    let mut deep = serde_json::json!("leaf");
+    for _ in 0..500 {
+        deep = serde_json::json!([deep]);
+    }
+    let crossed = json::luau(&lua, &deep).unwrap();
+    let depth = lua.load("local v, n = ..., 0 while type(v) == 'table' do v, n = v[1], n + 1 end return n, v");
+    assert_eq!(depth.call::<(u32, String)>(crossed).unwrap(), (500, "leaf".to_owned()));
+}
+
 // Expected (luau-calls): a reused list, set in place only where a call's list differs from the last one's, holds the
 // running call's items and no others: also as a table the plugin kept from an earlier call, after the list grew,
 // shrank, was reordered or emptied, or stayed as it was while a flag changed.

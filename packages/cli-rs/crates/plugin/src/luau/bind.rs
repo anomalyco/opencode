@@ -2,6 +2,7 @@
 //! `abi::Host` (`steps/luau-spike.md` 1.2). Tables cross as the contract's own types, through serde, with no JSON
 //! text. A Luau error in any call fails the plugin as a panic of a built-in does: none of the call's effects apply.
 
+use std::any::Any;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
@@ -93,8 +94,12 @@ fn fail(error: String) -> ! {
     std::panic::resume_unwind(Box::new(error))
 }
 
-/// A value of the contract as a Luau value: `None` is `nil`, a sequence a plain table ([`json::luau`]).
-pub(crate) fn out<T: Serialize + ?Sized>(lua: &Lua, value: &T) -> mlua::Result<Value> {
+/// A value of the contract as a Luau value: `None` is `nil`, a sequence a plain table ([`json::luau`]). A value that is
+/// JSON already (a reply, the messages read) is not copied first.
+pub(crate) fn out<T: Serialize + Any>(lua: &Lua, value: &T) -> mlua::Result<Value> {
+    if let Some(value) = (value as &dyn Any).downcast_ref::<serde_json::Value>() {
+        return json::luau(lua, value);
+    }
     let value = serde_json::to_value(value).map_err(|error| mlua::Error::runtime(error.to_string()))?;
     json::luau(lua, &value)
 }
